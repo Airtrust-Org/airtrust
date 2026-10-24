@@ -67,6 +67,7 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
       'href',
       'https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/',
     );
+    fireEvent.click(screen.getByText('Protocolo e referência científica'));
     expect(screen.queryByText(/PsyToolkit/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/NASA PVT\+/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/círculo azul/i)).not.toBeInTheDocument();
