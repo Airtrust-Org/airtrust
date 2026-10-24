@@ -1364,17 +1364,21 @@ async function notifyFlightUpdate(voo) {
   } catch {}
 }
 
-// Delegated action listener remains effective if the flight list is recreated.
-onlineFlights.addEventListener('click', (event) => {
+// Capture actions on the stable document, not the replaceable list/button subtree.
+// On mobile/PWA the list may be recreated after closing a completed RDV.
+document.addEventListener('click', (event) => {
   const button = event.target instanceof Element
     ? event.target.closest('button[data-flight-action-id]')
     : null;
-  if (!button || !onlineFlights.contains(button) || button.disabled) return;
+  if (!button || button.disabled) return;
+  const currentList = document.querySelector('#online-flights');
+  if (!currentList?.contains(button)) return;
   const flightId = Number(button.dataset.flightActionId);
   if (!Number.isSafeInteger(flightId) || flightId <= 0) return;
-  if (!onlineFlightRecords.some((voo) => Number(voo.id) === flightId)) return;
+  // Backend still verifies the caller's tenant and own-flight authorization.
+  // Do not depend on a potentially stale in-memory list after returning from a RDV.
   void openAuthorizedFlight(flightId);
-});
+}, { capture: true });
 
 function renderOnlineFlights() {
   const selectedDate = selectedFlightDateKey();
