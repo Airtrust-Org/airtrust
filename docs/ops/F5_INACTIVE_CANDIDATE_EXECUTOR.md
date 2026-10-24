@@ -53,13 +53,31 @@ The Worker creates candidate
 from the streamed intake response markers and exact SHA/scope readbacks rather
 than assuming those IDs are equal.
 
-The remaining staging prerequisites are operational: mount the private plan
-and ZIP source on the runner; supply the pinned F0 adapter module and its
-SHA-256; provision the protected staging access and QA readback secrets; and
-provide F0-issued single-candidate grant, receipt verifier, synthetic
-candidate-bound execution, ambiguous-intake resolution, and recovery/cleanup
-callbacks. Without any one of these, the workflow exits before treating the
-candidate as verified. No staging D1/R2 write was run by the local tests.
+The workflow now provides a **fail-closed private mount step** immediately after
+the GitHub F0 authorization guard and before the executor preflight. GitHub
+staging Environment secrets `F5_EXECUTOR_PLAN_B64` (base64-encoded private
+one-candidate JSON plan) and `F5_F0_ADAPTER_B64` (base64-encoded private
+executable F0 adapter source) are decoded only inside `${{ runner.temp }}`.
+The staging Environment variable `F5_F0_ADAPTER_SHA256` must be the hash of
+the exact decoded module; the mount verifies it before creating any file.
+Exclusive creation, owner-only permissions and unconditional cleanup protect
+the runner-local files. Empty, changed or missing values fail before ZIP
+materialization and before any remote D1/R2 write. The previous unusable
+path-only variables `F5_EXECUTOR_PLAN_PATH` and `F5_F0_ADAPTER_MODULE` are
+not required from the Environment.
+
+**This bridge does not implement the F0 adapter itself or create a grant.**
+The protected private adapter must still be supplied by an authorized F0
+operator and implement the Worker-backed receipt verifier, synthetic
+candidate-bound execution, ambiguous-intake resolution and recovery/cleanup
+callbacks. Staging also still requires `SCORM_QA_ACCESS_TOKEN` and
+`SCORM_QA_READBACK_SECRET`, along with the authorized synthetic tenant,
+enrollment/cycle and fresh, immutable single-candidate grant. The original
+ZIP #15 continues to use the already protected two-secret bridge. Do not
+place secrets or private adapter source in GitHub comments, repository files
+or runner logs. Without all required inputs the workflow exits before
+treating the candidate as verified. Tests use temporary local fixtures;
+no staging D1/R2 writes have been executed by this bridge.
 
 ```sh
 node --test scripts/__tests__/f5-inactive-candidate-executor.test.mjs

@@ -22,3 +22,25 @@ test('F5 preflight receives trusted dispatch and harness SHA before any private 
   assert.ok(block.includes('node scripts/staging/f5-provisioned-execution-preflight.mjs'));
   assert.ok(workflow.indexOf('node scripts/staging/f5-provisioned-execution-preflight.mjs') < materialization);
 });
+
+test('protected staging bridge materializes private artifacts before preflight, and destroys them after execution',()=>{
+  const grant=workflow.indexOf('      - name: Verify exact single-candidate F0 authorization');
+  const mount=workflow.indexOf('      - name: Materialize private F0 plan and adapter');
+  const preflight=workflow.indexOf('      - name: Verify provisioned F0 runner contract');
+  const zip=workflow.indexOf('      - name: Verify exact original ZIP from protected staging secrets');
+  assert.ok(grant>=0 && grant<mount && mount<preflight && preflight<zip);
+  const block=workflow.slice(mount,preflight);
+  for(const value of [
+    'node scripts/staging/f5-materialize-private-runner.mjs',
+    'F5_EXECUTOR_PLAN_B64: ${{ secrets.F5_EXECUTOR_PLAN_B64 }}',
+    'F5_F0_ADAPTER_B64: ${{ secrets.F5_F0_ADAPTER_B64 }}',
+    'F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}',
+  ]) assert.ok(block.includes(value),'Required private mount missing');
+  assert.ok(!workflow.includes('vars.F5_EXECUTOR_PLAN_PATH'));
+  assert.ok(!workflow.includes('vars.F5_F0_ADAPTER_MODULE'));
+  for(const artifact of ['f5-executor-plan.json','f5-provisioned-f0-adapter.mjs']){
+    assert.ok(workflow.includes('runner.temp }}/'+artifact));
+    const cleanup=workflow.indexOf('      - name: Destroy temporary private candidate source');
+    assert.ok(cleanup>zip && workflow.slice(cleanup).includes(artifact));
+  }
+});
