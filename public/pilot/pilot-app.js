@@ -1,5 +1,5 @@
 import { PilotVault } from '/pilot/pilot-vault.js';
-import { renderPilotWorkspace } from '/pilot/pilot-workspace.js';
+import { renderPilotWorkspace, renderPilotFlightDocuments } from '/pilot/pilot-workspace.js';
 import {
   hasTrustedPilotLeaseKeys,
   verifyPilotOfflineLease,
@@ -116,6 +116,7 @@ const rdvLocalSequenceLabel = document.querySelector('#rdv-local-sequence');
 const rdvLeaseUntilLabel = document.querySelector('#rdv-lease-until');
 const rdvCoreFields = document.querySelector('#rdv-core-fields');
 const rdvCrewSummary = document.querySelector('#rdv-crew-summary');
+const rdvFlightDocumentsContent = document.querySelector('#rdv-flight-documents-content');
 const rdvFormFields = document.querySelector('#rdv-form-fields');
 const rdvStageFields = document.querySelector('#rdv-stage-fields');
 const rdvFuelingFields = document.querySelector('#rdv-fueling-fields');
@@ -5125,6 +5126,12 @@ function renderOperationalEditor(options = {}) {
   rdvLocalSequenceLabel.textContent = String(operationalLocalSequence);
 
   renderPilotCrewSummary(packageData);
+  if (rdvFlightDocumentsContent) {
+    renderPilotFlightDocuments(rdvFlightDocumentsContent, packageData, {
+      openFlightDocument,
+      documentAvailability: documentAvailabilityMap(activePackageRecord),
+    });
+  }
   renderRdvFormFields();
   renderStageFields();
   renderFuelingFields();
