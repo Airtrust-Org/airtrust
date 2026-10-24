@@ -172,11 +172,20 @@ jobs:
             --list
           npm run test:run -- src/react-app/pages/lms/__tests__/lmsContentUpload.serial.test.ts
 
+      - name: Build exact uncertified two-position resume ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/qa/build-scorm-resume-synthetic.py \
+            --output qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip
+          test "$(sha256sum qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip | cut -d' ' -f1)" = \
+            'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f'
+
       - name: Prepare disposable SCORM courses and ZIP fixtures
         run: node scripts/staging/lms-scorm-staging-qa.mjs
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Exercise governed SCORM functional blocking, rejection and timeout in staging UI
         run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
