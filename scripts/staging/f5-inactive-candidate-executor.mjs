@@ -292,8 +292,17 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
     if (intakeStarted) {
-      try { await adapters.abortIntake({ tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId }); }
-      catch (recoveryError) { recoveryErrors.push(recoveryError); }
+      try {
+        const abort = await adapters.abortIntake({
+          tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
+        });
+        // A successful HTTP envelope alone does not prove multipart teardown.
+        // The Worker must attest abort for this exact operation (including an
+        // idempotent already-clean response), or require manual recovery.
+        if (abort?.aborted !== true || abort?.operationId !== c.operationId) {
+          fail('INTAKE_ABORT_RECEIPT_INVALID');
+        }
+      } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
     if (syntheticTouched) {
       try {

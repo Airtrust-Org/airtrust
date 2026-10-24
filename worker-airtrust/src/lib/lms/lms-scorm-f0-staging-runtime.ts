@@ -326,7 +326,7 @@ export async function recoverF0CandidateFixture(
     throw new ApiError('SCORM_F0_RECOVERY_SCOPE_INVALID', 400);
   }
   type State = {
-    binding_id: string; binding_status: string; run_id: string; ciclo_id: number;
+    binding_id: string; binding_status: string; run_id: string; ciclo_id: number; sc_row_present: number;
     package_sha256: string; runtime_sha: string; enrollment_status: string;
     progresso_pct: number | null; data_inicio: string | null; score_final: number | null;
     history_id: number | null; cycle_status: string; cmi_json: string | null;
@@ -342,7 +342,8 @@ export async function recoverF0CandidateFixture(
               b.package_sha256,b.staging_runtime_sha AS runtime_sha,
               m.status AS enrollment_status,m.progresso_pct,m.data_inicio,m.score_final,
               q.id AS history_id,cy.status AS cycle_status,
-              sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
+              CASE WHEN sc.matricula_id IS NULL THEN 0 ELSE 1 END AS sc_row_present,
+               sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
               sc.success_status,sc.score_raw,sc.score_max,sc.score_min,
               sc.score_scaled,sc.session_count
          FROM lms_scorm_qa_evidence_bindings b
@@ -384,7 +385,7 @@ export async function recoverF0CandidateFixture(
       (state.success_status!==null && state.success_status!=='unknown') ||
       [state.score_raw,state.score_max,state.score_min,state.score_scaled].some(value=>value!==null) ||
       (state.binding_status==='REVOKED' &&
-       (state.enrollment_status!=='NAO_INICIADO' || state.cycle_status!=='NAO_INICIADO' ||
+       (state.sc_row_present!==0 || state.enrollment_status!=='NAO_INICIADO' || state.cycle_status!=='NAO_INICIADO' ||
         state.progresso_pct!==0 || state.data_inicio!==null || state.cmi_json!==null ||
         state.suspend_data!==null || state.session_count!==null))) {
     throw new ApiError('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID', 409);
@@ -398,8 +399,9 @@ export async function recoverF0CandidateFixture(
           AND matricula_id=? AND ciclo_id=? AND run_id=? AND staging_runtime_sha=?
           AND synthetic=1 AND status='ACTIVE'`).bind(...args),
       db.prepare(`DELETE FROM lms_progresso_scorm WHERE empresa_id=? AND matricula_id=?
-        AND lesson_status IN ('incomplete',NULL) AND completion_status IN ('incomplete',NULL)
-        AND success_status IN ('unknown',NULL) AND score_raw IS NULL AND score_max IS NULL
+        AND (lesson_status='incomplete' OR lesson_status IS NULL)
+        AND (completion_status='incomplete' OR completion_status IS NULL)
+        AND (success_status='unknown' OR success_status IS NULL) AND score_raw IS NULL AND score_max IS NULL
         AND score_min IS NULL AND score_scaled IS NULL AND EXISTS(
           SELECT 1 FROM lms_scorm_qa_evidence_bindings b WHERE b.empresa_id=?
             AND b.curso_id=? AND b.package_id=? AND b.package_sha256=?

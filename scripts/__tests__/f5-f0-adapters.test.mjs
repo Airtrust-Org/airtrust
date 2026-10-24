@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -241,4 +241,95 @@ test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 s
     /COMMIT_READBACK_SESSION_MISMATCH/);
   // A SCO may legitimately auto-commit again before the readback.
   assert.equal(requireF5CommitReadbackCount({ sessionCount: 3, cmiSha256: 'c'.repeat(64) }, 2, 'c'.repeat(64)), true);
+});
+
+test('F5 does not initialize an authored SCO twice before synthetic Commit (SCORM 1.2/2004)', () => {
+  const original = globalThis.window;
+  try {
+    for (const is2004 of [false, true]) {
+      const marker = 'authored-slide-1', suspend = '{"authored":true}';
+      const loc = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+      const state = new Map([[loc, marker], ['cmi.suspend_data', suspend]]);
+      const events = [];
+      const api = {
+        [is2004 ? 'Initialize' : 'LMSInitialize']: () => {
+          events.push('duplicate-initialize'); return 'false';
+        },
+        [is2004 ? 'SetValue' : 'LMSSetValue']: (key, value) => {
+          events.push('set:' + key); state.set(key, value); return 'true';
+        },
+        [is2004 ? 'GetValue' : 'LMSGetValue']: key => state.get(key) ?? '',
+        [is2004 ? 'Commit' : 'LMSCommit']: () => { events.push('commit'); return 'true'; },
+      };
+      globalThis.window = is2004 ? { API_1484_11: api } : { API: api };
+      const result = commitIncompleteScormState({ is2004, marker, suspend, alreadyInitialized: true });
+      assert.equal(result.marker, marker);
+      assert.equal(events.includes('duplicate-initialize'), false);
+      assert.equal(events.at(-1), 'commit');
+    }
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else globalThis.window = original;
+  }
+});
+
+
+test('F5 resume observes authored CMI without a second Initialize (SCORM 1.2/2004)', () => {
+  const original = globalThis.window;
+  try {
+    for (const is2004 of [false, true]) {
+      let initializedAgain = false;
+      const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+      const api = {
+        [is2004 ? 'Initialize' : 'LMSInitialize']: () => {
+          initializedAgain = true; return 'false';
+        },
+        [is2004 ? 'GetValue' : 'LMSGetValue']: key => ({
+          [locationKey]: 'authored-slide-1', 'cmi.suspend_data': '{"authored":true}',
+        })[key] ?? '',
+      };
+      globalThis.window = is2004 ? { API_1484_11: api } : { API: api };
+      assert.deepEqual(readInitializedF5ResumeState({ is2004 }), {
+        location: 'authored-slide-1', suspend: '{"authored":true}',
+      });
+      assert.equal(initializedAgain, false);
+      const badApi = {
+        ...api,
+        [is2004 ? 'GetValue' : 'LMSGetValue']: () => '',
+      };
+      globalThis.window = is2004 ? { API_1484_11: badApi } : { API: badApi };
+      assert.throws(() => readInitializedF5ResumeState({ is2004 }),
+        /SCORM_RESUME_AUTHORED_STATE_NOT_OBSERVED/);
+    }
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else globalThis.window = original;
+  }
+});
+
+
+test('F5 authored-state polling retries a GetValue that throws until SCO Initialize', () => {
+  const original = globalThis.window;
+  try {
+    for (const is2004 of [false, true]) {
+      const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+      let ready = false;
+      const api = {
+        [is2004 ? 'GetValue' : 'LMSGetValue']: key => {
+          if (!ready) throw Error('SCORM_NOT_INITIALIZED');
+          return key === locationKey ? 'authored-slide-1' :
+            key === 'cmi.suspend_data' ? '{"authored":true}' : '';
+        },
+      };
+      globalThis.window = is2004 ? { API_1484_11: api } : { API: api };
+      assert.equal(hasAuthoredF5State(is2004), false);
+      ready = true;
+      assert.equal(hasAuthoredF5State(is2004), true);
+      globalThis.window = {};
+      assert.equal(hasAuthoredF5State(is2004), false);
+    }
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else globalThis.window = original;
+  }
 });

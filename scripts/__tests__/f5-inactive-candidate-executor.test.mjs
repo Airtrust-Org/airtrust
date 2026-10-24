@@ -93,7 +93,7 @@ function adaptersFor(plan, overrides = {}) {
     async beginIntake() { calls.push('begin'); },
     async putIntakePart(params) { calls.push(`part:${params.partNumber}`); },
     async completeIntake() { calls.push('complete'); return candidate; },
-    async abortIntake() { calls.push('abort'); },
+    async abortIntake() { calls.push('abort'); return { operationId: plan.candidate.operationId, aborted: true }; },
     async resolveAmbiguousIntake() {
       calls.push('resolve-intake'); return { verified: true, state: 'INTAKE_PRESENT' };
     },
@@ -237,6 +237,24 @@ test('attempts idempotent intake abort when begin may have committed before losi
     /simulated-begin-response-lost/);
   assert.ok(calls.includes('abort'));
   assert.ok(!calls.includes('part:1'));
+});
+
+test('requires a scoped confirmed abort receipt after a lost begin response', async () => {
+  const bytes = Buffer.from('synthetic package bytes for abort recovery');
+  const plan = planFor(bytes);
+  for (const bad of [
+    { operationId: plan.candidate.operationId, aborted: false },
+    { operationId: '223e4567-e89b-12d3-a456-426614174000', aborted: true },
+    null,
+  ]) {
+    const { calls, adapters } = adaptersFor(plan, {
+      async beginIntake() { calls.push('begin'); throw new Error('begin-response-lost'); },
+      async abortIntake() { calls.push('abort'); return bad; },
+    });
+    await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /F5_EXECUTOR_RECOVERY_REQUIRED/);
+    assert.ok(calls.includes('abort'));
+  }
 });
 
 test('re-hashes uploaded parts and aborts if the private source changes after preflight', async () => {
