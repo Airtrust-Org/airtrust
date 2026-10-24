@@ -8,7 +8,14 @@
  * must carry the receipt documents whose canonical digests it pins.
  */
 import { createHash } from 'node:crypto';
-import { chromium } from '@playwright/test';
+import { createRequire } from 'node:module';
+
+const require = createRequire(
+  process.env.GITHUB_WORKSPACE
+    ? `${process.env.GITHUB_WORKSPACE}/package.json`
+    : (process.cwd() + '/package.json')
+);
+const { chromium } = require('@playwright/test');
 
 const HEX64 = /^[a-f0-9]{64}$/;
 const HEX40 = /^[a-f0-9]{40}$/;

@@ -43,7 +43,10 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   assertF5RunnerDispatchScope(plan, env);
   let f0;
   try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch { fail('F0_ADAPTER_LOAD_FAILED'); }
+  catch (err) {
+    console.error('[F0_ADAPTER_LOAD_ERROR]', err);
+    fail('F0_ADAPTER_LOAD_FAILED');
+  }
   if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
   let source;
   try { source = await openF5PrivateZipSource(sourcePath); }
