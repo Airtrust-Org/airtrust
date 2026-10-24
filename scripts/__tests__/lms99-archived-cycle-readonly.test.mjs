@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,CYCLES_ONLY_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateCycleRows,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,CYCLES_ONLY_SQL,CYCLES_SCHEMA_PROBE_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateCycleRows,validateCyclesSchemaRows,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
  assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
@@ -146,6 +146,29 @@ test('cycles-only aggregate validator rejects conflicts, invalid bounds, duplica
  assert.throws(()=>validateCycleRows(Array.from({length:2},(_,i)=>({...valid,curso_id:i+1,pending_99:300,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0}))),/CYCLE_COHORT_LIMIT/);
 });
 
+test('physical cycle schema probe exposes only required column names and fails closed when one is missing',()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec(`CREATE TABLE lms_matricula_ciclos (
+   empresa_id INTEGER NOT NULL, matricula_id INTEGER, curso_id INTEGER,
+   status TEXT NOT NULL, ciclo_atual INTEGER NOT NULL, data_conclusao TEXT,
+   score_final REAL, qualificacao_historico_id INTEGER, deleted_at TEXT
+  )`);
+  const raw=db.prepare(CYCLES_SCHEMA_PROBE_SQL).all().map(row=>({...row}));
+  const checks=validateCyclesSchemaRows(raw);
+  assert.equal(checks.length,9);
+  assert.ok(checks.every(check=>check.present));
+  assert.equal(Object.hasOwn(checks[0],'sql'),false);
+  assertSqlTransportScope(CYCLES_SCHEMA_PROBE_SQL);
+  db.exec('DROP TABLE lms_matricula_ciclos');
+  db.exec(`CREATE TABLE lms_matricula_ciclos (
+   empresa_id INTEGER, matricula_id INTEGER, curso_id INTEGER, status TEXT,
+   ciclo_atual INTEGER, data_conclusao TEXT, score_final REAL, deleted_at TEXT
+  )`);
+  assert.throws(()=>validateCyclesSchemaRows(db.prepare(CYCLES_SCHEMA_PROBE_SQL).all().map(row=>({...row}))),/CYCLE_SCHEMA_REQUIRED_COLUMN_MISSING/);
+ }finally{db.close();}
+});
+
 test('historical completed cycle and immutable SCORM snapshot are merely evidence leads',()=>{
  const db=new DatabaseSync(':memory:');
  try {
@@ -203,5 +226,6 @@ test('sanitized counts fail closed and protected workflow is read-only',()=>{
  assert.match(workflow,/CLOUDFLARE_D1_READONLY_API_TOKEN/);
  assert.match(workflow,/options: \[tables-probe, schema-probe, cycles-only, read\]/);
  assert.match(workflow,/\.mode=="cycles-only"/);
+ assert.match(workflow,/\.schema_columns_present==true/);
  assert.doesNotMatch(workflow,/\bpush:|\bpull_request:/);
 });

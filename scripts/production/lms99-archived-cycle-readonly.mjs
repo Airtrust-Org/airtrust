@@ -112,6 +112,23 @@ SELECT curso_id,COUNT(*) AS pending_99,
  SUM(prior_score_recorded) AS prior_score_recorded,
  SUM(prior_qualification_link) AS prior_qualification_link
 FROM signals GROUP BY curso_id ORDER BY curso_id`;
+// Read the physical D1 CREATE TABLE definition first. The DDL stays in memory;
+// only required column names and availability are ever eligible for output.
+export const CYCLES_SCHEMA_PROBE_SQL="SELECT sql FROM sqlite_master WHERE type='table' AND name='lms_matricula_ciclos'";
+const CYCLE_REQUIRED_COLUMNS=['empresa_id','matricula_id','curso_id','status','ciclo_atual',
+ 'data_conclusao','score_final','qualificacao_historico_id','deleted_at'];
+export function validateCyclesSchemaRows(rows){
+ if(!Array.isArray(rows)||rows.length!==1||!rows[0]||Object.keys(rows[0]).length!==1||typeof rows[0].sql!=='string')
+  reject('CYCLE_SCHEMA_RESULT_INVALID');
+ const ddl=rows[0].sql;
+ if(!/^\s*CREATE\s+TABLE\b/i.test(ddl)||!/\blms_matricula_ciclos\b/i.test(ddl))reject('CYCLE_SCHEMA_RESULT_INVALID');
+ const checks=CYCLE_REQUIRED_COLUMNS.map(column=>({
+  column,
+  present:new RegExp(`(?:^|[,\\s(])\\s*["\u0060\\[]?${column}["\u0060\\]]?\\s+(?:INTEGER|TEXT|REAL|NUMERIC|BLOB|VARCHAR)\\b`,'i').test(ddl),
+ }));
+ if(checks.some(check=>!check.present))reject('CYCLE_SCHEMA_REQUIRED_COLUMN_MISSING');
+ return checks;
+}
 export function validateCycleRows(rows){
  if(!Array.isArray(rows)||rows.length>100)reject('CYCLE_ROW_LIMIT');
  const names=['pending_99','prior_completed_cycle','prior_dated_completed',
@@ -220,7 +237,7 @@ export const NON_PRODUCTION_D1_IDS=[
 ];
 export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
  if(statement===ARCHIVE_SQL)validateQuery();
- else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL && statement!==CYCLES_ONLY_SQL)reject('SQL_NOT_REVIEWED');
+ else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL && statement!==CYCLES_ONLY_SQL && statement!==CYCLES_SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
  if(databaseId!==PRODUCTION_D1_ID||NON_PRODUCTION_D1_IDS.includes(databaseId))
   reject('D1_TARGET_DENIED');
  if(/;|\\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA\\s+[\\w]+\\s*=)\\b/i.test(statement))
@@ -244,6 +261,7 @@ export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.
  if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
  if(statement===TABLES_PROBE_SQL)return validateTableNames(first.results);
  if(statement===CYCLES_ONLY_SQL)return validateCycleRows(first.results);
+ if(statement===CYCLES_SCHEMA_PROBE_SQL)return validateCyclesSchemaRows(first.results);
  return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
 }
 async function main(){
@@ -261,11 +279,13 @@ async function main(){
  const mode=String(process.env.LMS99_HISTORY_MODE||'read');
  if(!['read','schema-probe','tables-probe','cycles-only'].includes(mode))reject('MODE_INVALID');
  if(mode==='cycles-only'){
+  const schema=await d1(CYCLES_SCHEMA_PROBE_SQL);
   const rows=await d1(CYCLES_ONLY_SQL);
   const totals=Object.fromEntries(['pending_99','prior_completed_cycle','prior_dated_completed','prior_score_recorded','prior_qualification_link']
     .map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
   process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
    tenant:6,mode:'cycles-only',writes:0,personal_data:false,
+   schema_columns_present:true,schema_columns_checked:schema.map(x=>x.column),
    interpretation:'PRIOR_CYCLE_INDICATORS_ONLY_NOT_CURRENT_COURSE_PASS',
    totals,by_course:rows},null,2)+'\n');
   return;
