@@ -112,6 +112,62 @@ SELECT curso_id,COUNT(*) AS pending_99,
  SUM(prior_score_recorded) AS prior_score_recorded,
  SUM(prior_qualification_link) AS prior_qualification_link
 FROM signals GROUP BY curso_id ORDER BY curso_id`;
+// Aggregate status/course flags so D1-only candidates omitted from the active
+// admin roster can be routed without exposing enrollment or employee IDs.
+export const CANDIDATE_BREAKDOWN_SQL=`WITH pending AS (
+ SELECT m.empresa_id,m.curso_id,UPPER(TRIM(m.status)) AS enrollment_status,
+        c.ativo AS course_active,c.publicado AS course_published,
+        CASE WHEN c.deleted_at IS NULL THEN 0 ELSE 1 END AS course_deleted,
+        m.id AS matricula_id
+ FROM lms_matriculas m JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+ WHERE m.empresa_id=6 AND m.deleted_at IS NULL
+   AND UPPER(COALESCE(m.status,'')) IN ('EM_ANDAMENTO','REPROVADO')
+   AND COALESCE(m.progresso_pct,0)>=99 AND c.tipo_conteudo='scorm'
+), indicators AS (
+ SELECT p.curso_id,p.enrollment_status,p.course_active,p.course_published,p.course_deleted,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND UPPER(COALESCE(cy.status,''))='CONCLUIDO') AS prior_completed,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND UPPER(COALESCE(cy.status,''))='CONCLUIDO'
+      AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND cy.data_conclusao IS NOT NULL) AS prior_completion_date_recorded,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND cy.score_final IS NOT NULL) AS prior_score_recorded,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND cy.qualificacao_historico_id IS NOT NULL) AS prior_qualification_link
+ FROM pending p
+)
+SELECT curso_id,enrollment_status,course_active,course_published,course_deleted,
+ COUNT(*) AS pending_99,SUM(prior_completed) AS prior_completed_cycle,
+ SUM(prior_dated_completed) AS prior_dated_completed,
+ SUM(prior_completion_date_recorded) AS prior_completion_date_recorded,
+ SUM(prior_score_recorded) AS prior_score_recorded,
+ SUM(prior_qualification_link) AS prior_qualification_link
+FROM indicators GROUP BY curso_id,enrollment_status,course_active,course_published,course_deleted
+ORDER BY curso_id,enrollment_status`;
+export function validateCandidateBreakdownRows(rows){
+ const metrics=['pending_99','prior_completed_cycle','prior_dated_completed','prior_completion_date_recorded','prior_score_recorded','prior_qualification_link'];
+ if(!Array.isArray(rows)||rows.length>200)reject('CANDIDATE_ROW_LIMIT');
+ const seen=new Set();let total=0;
+ for(const row of rows){
+  if(!row||Object.keys(row).length!==11||Object.keys(row).some(k=>!['curso_id','enrollment_status','course_active','course_published','course_deleted',...metrics].includes(k)))reject('CANDIDATE_RESULT_SHAPE');
+  if(!Number.isSafeInteger(row.curso_id)||row.curso_id<1||!['EM_ANDAMENTO','REPROVADO'].includes(row.enrollment_status)||
+     ![0,1].includes(row.course_active)||![0,1].includes(row.course_published)||![0,1].includes(row.course_deleted))reject('CANDIDATE_RESULT_INVALID');
+  const key=[row.curso_id,row.enrollment_status,row.course_active,row.course_published,row.course_deleted].join(':');
+  if(seen.has(key))reject('CANDIDATE_DUPLICATE');seen.add(key);
+  for(const metric of metrics)if(!Number.isSafeInteger(row[metric])||row[metric]<0||row[metric]>500)reject('CANDIDATE_METRIC_INVALID');
+  if(row.pending_99<1||metrics.slice(1).some(k=>row[k]>row.pending_99))reject('CANDIDATE_BOUNDS');
+  total+=row.pending_99;
+ }
+ if(total>500)reject('CANDIDATE_COHORT_LIMIT');
+ return rows;
+}
 // Read the physical D1 CREATE TABLE definition first. The DDL stays in memory;
 // only required column names and availability are ever eligible for output.
 export const CYCLES_SCHEMA_PROBE_SQL="SELECT sql FROM sqlite_master WHERE type='table' AND name='lms_matricula_ciclos'";
@@ -239,7 +295,7 @@ export const NON_PRODUCTION_D1_IDS=[
 ];
 export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
  if(statement===ARCHIVE_SQL)validateQuery();
- else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL && statement!==CYCLES_ONLY_SQL && statement!==CYCLES_SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
+ else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL && statement!==CYCLES_ONLY_SQL && statement!==CYCLES_SCHEMA_PROBE_SQL && statement!==CANDIDATE_BREAKDOWN_SQL)reject('SQL_NOT_REVIEWED');
  if(databaseId!==PRODUCTION_D1_ID||NON_PRODUCTION_D1_IDS.includes(databaseId))
   reject('D1_TARGET_DENIED');
  if(/;|\\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA\\s+[\\w]+\\s*=)\\b/i.test(statement))
@@ -263,6 +319,7 @@ export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.
  if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
  if(statement===TABLES_PROBE_SQL)return validateTableNames(first.results);
  if(statement===CYCLES_ONLY_SQL)return validateCycleRows(first.results);
+ if(statement===CANDIDATE_BREAKDOWN_SQL)return validateCandidateBreakdownRows(first.results);
  if(statement===CYCLES_SCHEMA_PROBE_SQL)return validateCyclesSchemaRows(first.results);
  return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
 }
@@ -279,7 +336,7 @@ async function main(){
  const version=await response.json();
  if(String(version?.data?.sourceSha??'').toLowerCase()!==prod)reject('PROD_SHA_DRIFT');
  const mode=String(process.env.LMS99_HISTORY_MODE||'read');
- if(!['read','schema-probe','tables-probe','cycles-only'].includes(mode))reject('MODE_INVALID');
+ if(!['read','schema-probe','tables-probe','cycles-only','candidate-breakdown'].includes(mode))reject('MODE_INVALID');
  if(mode==='cycles-only'){
   const schema=await d1(CYCLES_SCHEMA_PROBE_SQL);
   const rows=await d1(CYCLES_ONLY_SQL);
@@ -290,6 +347,18 @@ async function main(){
    schema_columns_present:true,schema_columns_checked:schema.map(x=>x.column),
    interpretation:'PRIOR_CYCLE_INDICATORS_ONLY_NOT_CURRENT_COURSE_PASS',
    totals,by_course:rows},null,2)+'\n');
+  return;
+ }
+ if(mode==='candidate-breakdown'){
+  const schema=await d1(CYCLES_SCHEMA_PROBE_SQL);
+  const rows=await d1(CANDIDATE_BREAKDOWN_SQL);
+  const totals=Object.fromEntries(['pending_99','prior_completed_cycle','prior_dated_completed','prior_completion_date_recorded','prior_score_recorded','prior_qualification_link']
+    .map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
+  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
+   tenant:6,mode:'candidate-breakdown',writes:0,personal_data:false,
+   schema_columns_present:true,schema_columns_checked:schema.map(x=>x.column),
+   interpretation:'AGGREGATE_STATUS_AND_COURSE_FLAGS_ONLY_NO_INDIVIDUAL_COMPLETION_CREDIT',
+   totals,by_course_status:rows},null,2)+'\n');
   return;
  }
  if(mode==='tables-probe'){
