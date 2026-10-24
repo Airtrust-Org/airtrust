@@ -96,7 +96,9 @@ jobs:
             scripts/__tests__/f5-worker-adapters.test.mjs \
             scripts/__tests__/f5-runner-dispatch-scope.test.mjs \
             scripts/__tests__/f5-sanitize-execution-evidence.test.mjs \
-            scripts/__tests__/f5-materialize-private-zip.test.mjs
+            scripts/__tests__/f5-materialize-private-zip.test.mjs \
+            scripts/__tests__/f5-f0-adapters.test.mjs \
+            scripts/__tests__/f5-runner-error-redaction.test.mjs
       - name: validate CI schema bootstrap provenance / staleness
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs
