@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { safeF5RunnerErrorCode } from '../staging/run-f5-inactive-candidate.mjs';
+import { reserveF5EvidenceOutput, safeF5RunnerErrorCode } from '../staging/run-f5-inactive-candidate.mjs';
 
 test('F5 runner exposes only reviewed, fixed error identifiers', () => {
   assert.equal(
@@ -62,4 +64,38 @@ test('F5 runner CLI does not print raw import errors or nested exception objects
     '[F5_RUNNER_CAUSE]', '[F5_SUB_ERROR]',
   ]) assert.ok(!source.includes(unsafe), unsafe);
   assert.match(source, /process\.stderr\.write\(`\$\{safeF5RunnerErrorCode\(error\)\}/);
+});
+
+test('F5 evidence is reserved exclusively with private permissions before any Worker write', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'f5-evidence-preflight-'));
+  const output = join(dir, 'candidate-evidence.json');
+  try {
+    await assert.rejects(reserveF5EvidenceOutput(''), /F5_RUNNER_EVIDENCE_OUTPUT_PATH_REQUIRED/);
+    await assert.rejects(reserveF5EvidenceOutput(join(dir, 'missing', 'evidence.json')),
+      /F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE/);
+    const handle = await reserveF5EvidenceOutput(output);
+    try {
+      assert.equal((await stat(output)).mode & 0o777, 0o600);
+      await assert.rejects(reserveF5EvidenceOutput(output),
+        /F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE/);
+      await handle.writeFile('{"private":true}\n');
+    } finally {
+      await handle.close();
+    }
+    assert.equal(await readFile(output, 'utf8'), '{"private":true}\n');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('F5 runner reserves evidence before loading adapters or invoking remote intake', async () => {
+  const source = await readFile(new URL('../staging/run-f5-inactive-candidate.mjs', import.meta.url), 'utf8');
+  const reserveAt = source.indexOf('await reserveF5EvidenceOutput(outputPath)');
+  const importAt = source.indexOf('await import(pathToFileURL');
+  const remoteAt = source.indexOf('await executeF5InactiveCandidate({');
+  assert.ok(reserveAt > 0 && importAt > reserveAt && remoteAt > importAt);
+  assert.match(source, /await evidenceHandle\.sync\(\)/);
+  assert.match(source, /if \(!evidencePersisted\) await unlink\(outputPath\)/);
+  assert.equal(safeF5RunnerErrorCode(new Error('F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE')),
+    'F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE');
 });
