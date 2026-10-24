@@ -1593,7 +1593,9 @@ async function prepareFlightPackage(flightId, options = {}) {
       activePackageRecord = persisted;
       setFlightSelectionVisible(false);
       rdvEditorCard.classList.remove('hidden');
-    } else {
+    } else if (!isFlightClosedForEditing(packageData)) {
+      // The completed-flight consultation path opens the package exactly once,
+      // without temporarily launching the edit-lease controls.
       openPackageRecord(persisted, options.initialWorkspaceTab || 'summary');
     }
     await updateStorageEstimate();
@@ -5333,6 +5335,10 @@ function closePackageDetail() {
   completeSendRdvButton.disabled = true;
   setCoordinationMessage('Abra um pacote de voo para avaliar o fechamento.', 'attention');
   setCoordinationReceipt('');
+  // Recreate actionable list buttons after leaving a read-only workspace.
+  // Existing cached packages and unsent outbox records remain untouched.
+  renderOnlineFlights();
+  renderCachedPackages();
 }
 
 async function openWorkspace() {
