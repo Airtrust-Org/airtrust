@@ -357,14 +357,22 @@ const f5Visual = (index = 1) => ({
 const f5Suspend = index => 'opaque-authored-suspend-' + index;
 
 test('Score F5 guard requires authored CMI to change on actual Next navigation', () => {
-  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), 'opaque-slide-2', f5Suspend(1),
-    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(1),
+    { previousIndex: 0, previousLocation: '1/5',
       previousSuspend: f5Suspend(0) }), { index: 1, total: 5 });
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), 'opaque-slide-1', f5Suspend(0),
-    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/,
+  'new page marker with stale suspend_data cannot be accepted');
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '3/5', f5Suspend(1)),
+    /VISUAL_RESUME_WITNESS_INVALID/,
+  'cursor must match the real Score engine page/total bookmark');
+
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
       previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
-  assert.throws(() => requireF5ScoreVisualState(f5Visual(), 'opaque-slide-1', f5Suspend(0),
-    { previousIndex: 0, previousLocation: 'opaque-slide-1',
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '1/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
       previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
 });
 
@@ -383,10 +391,10 @@ test('Score F5 guard requires correct navigation, visible stage, model title and
     { stageVisible: false }, { modelLength: 4 }, { total: 0 },
     { contract: 'NOT_SCORE' }, { index: null }]) {
     assert.throws(() => requireF5ScoreVisualState({ ...f5Visual(), ...modified },
-      'opaque-slide-2', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
   }
   for (const invalid of ['', '  ', null, undefined]) {
-    assert.throws(() => requireF5ScoreVisualState(f5Visual(), 'opaque-slide-2', invalid),
+    assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', invalid),
       /VISUAL_RESUME_WITNESS_INVALID/);
   }
 });
