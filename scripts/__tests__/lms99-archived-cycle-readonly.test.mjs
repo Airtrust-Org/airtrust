@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 client matches the previously proven production SELECT transport',()=>{
  const source=readFileSync(new URL('../production/lms99-archived-cycle-readonly.mjs',import.meta.url),'utf8');
@@ -15,6 +15,22 @@ test('D1 client matches the previously proven production SELECT transport',()=>{
  assert.doesNotMatch(source,/\['--no-install','wrangler'/);
  assert.match(source,/validateQuery\(\)/);
  assert.match(source,/if\(r\.status!==0\)reject\(classifyD1Failure/);
+});
+
+test('protected schema probe reports only fixed table and column availability',()=>{
+ assert.match(SCHEMA_PROBE_SQL,/^SELECT 'lms_matriculas'/);
+ assert.doesNotMatch(SCHEMA_PROBE_SQL,/\bINSERT|\bUPDATE|\bDELETE/i);
+ const labels=['lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias',
+  'lms_ciclo_evidencias.scorm_json','lms_ciclo_evidencias.enrollment_json',
+  'lms_matricula_ciclos.ciclo_atual','lms_matriculas.progresso_pct'];
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec('CREATE TABLE lms_matriculas(id INTEGER, progresso_pct INTEGER); CREATE TABLE lms_cursos(id INTEGER);');
+  const rows=validateSchemaRows(db.prepare(SCHEMA_PROBE_SQL).all());
+  assert.deepEqual(rows.map(r=>r.check_name),labels);
+  assert.deepEqual(rows.map(r=>r.present),[1,1,0,0,0,0,0,1]);
+  assert.throws(()=>validateSchemaRows([{check_name:'private',present:1}]),/SCHEMA_ROW_COUNT/);
+ }finally{db.close();}
 });
 
 test('failures expose only fixed diagnostic categories, never provider messages',()=>{
