@@ -87,7 +87,7 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
       await source.close();
     }
     try {
-      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\\n`);
+      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\n`);
       await evidenceHandle.sync();
       await evidenceHandle.close();
     } catch { fail('EVIDENCE_OUTPUT_FAILED'); }
