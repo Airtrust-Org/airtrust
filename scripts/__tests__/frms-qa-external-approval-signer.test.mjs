@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {independentFrmsSigner as create} from
   '../../ops/frms-qa-repair/external-approval-signer.mjs';
 import {validatePrivateTransactionEntry as validate} from
@@ -124,6 +125,21 @@ test('OIDC denial, signer failure or redirect cannot return an approval',async()
       /FRMS_QA_EXTERNAL_SIGNER_DENIED/);
     assert.equal(f.calls.some(c=>c.url.endsWith('/sign')),false);
   }
+});
+test('single-run workflow holds staging mutex and never exposes an inline private signing key',()=>{
+  const yaml=readFileSync(new URL('../../.github/workflows/staging-frms-qa-private-transaction.yml',
+    import.meta.url),'utf8');
+  assert.match(yaml,/workflow_dispatch:/);
+  assert.match(yaml,/group: airtrust-staging-mutations-and-scorm-qa/);
+  assert.match(yaml,/cancel-in-progress: false/);
+  assert.match(yaml,/environment: staging/);
+  assert.match(yaml,/id-token: write/);
+  assert.match(yaml,/FRMS_QA_PREPARE_GRANT_ID:.*inputs.prepare_grant_id/);
+  assert.match(yaml,/FRMS_QA_PREPARE_EXPECTED_SHA:.*inputs.expected_main_sha/);
+  assert.match(yaml,/node ops\/frms-qa-repair\/run-protected-private-transaction.mjs/);
+  assert.doesNotMatch(yaml,/FRMS_QA_APPROVAL_PRIVATE_KEY_PEM:/);
+  assert.doesNotMatch(yaml,/\b(?:d1 execute|wrangler deploy --env production)\b/);
+  assert.equal((yaml.match(/\n  [a-z-]+:\n    runs-on:/g)||[]).length,1);
 });
 test('wrong SHA, public pin, receipt or tenant fails before any OIDC',async()=>{
   const f=fake(),signer=create({env,fetcher:f.fetcher});
