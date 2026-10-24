@@ -18,6 +18,7 @@ test('0529 SQL/plan pin matches committed artifacts and only approved staging ta
   assertHas(manifest.fileHash);
   assertHas(manifest.planHash);
   assertHas(manifest.filePath);
+  assertHas('          - hfa-integration-bridge-0529');
   assertHas('airtrust-staging-mutations-and-scorm-qa');
   assertHas('STAGING_DB_NAME: airtrust-db-staging-baseline-20260701');
   assertHas('PRODUCTION_TARGET_REJECTED');
