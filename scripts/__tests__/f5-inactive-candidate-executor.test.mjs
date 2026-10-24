@@ -346,3 +346,43 @@ test('rejects NOT_APPLICABLE, absent or failing F5 static gates before D1/R2 QA'
     }
   }
 });
+
+test('F5 rejects non-incomplete Worker D1 status before and after synthetic QA', async () => {
+  const bytes = Buffer.from('synthetic package bytes for status gate');
+  const plan = planFor(bytes);
+  for (const phase of ['BEFORE', 'AFTER']) {
+    for (const status of ['APROVADO', 'CANCELADO', undefined]) {
+      const { calls, adapters } = adaptersFor(plan);
+      const original = adapters.readQaEvidence;
+      adapters.readQaEvidence = async params => {
+        const row = await original(params);
+        if (params.phase === phase) row.completionStatus = status;
+        return row;
+      };
+      await assert.rejects(
+        executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+        new RegExp(phase + '_SYNTHETIC_D1_READBACK_MISMATCH'),
+        phase + ' ' + String(status),
+      );
+      assert.ok(calls.includes('remove-candidate'), 'candidate cleanup required');
+    }
+  }
+});
+
+test('F5 rejects non-incomplete synthetic browser status despite valid digests', async () => {
+  const bytes = Buffer.from('synthetic package bytes for execution status');
+  const plan = planFor(bytes);
+  for (const status of ['APROVADO', 'CANCELADO', undefined]) {
+    const { calls, adapters } = adaptersFor(plan);
+    const original = adapters.runSyntheticCandidate;
+    adapters.runSyntheticCandidate = async params => ({
+      ...(await original(params)), completionStatus: status,
+    });
+    await assert.rejects(
+      executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /CANDIDATE_EXECUTION_EVIDENCE_INVALID/, String(status),
+    );
+    assert.ok(calls.includes('recover'), 'synthetic recovery required');
+    assert.ok(calls.includes('remove-candidate'), 'candidate cleanup required');
+  }
+});
