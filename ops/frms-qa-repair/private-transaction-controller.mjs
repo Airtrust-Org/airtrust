@@ -77,6 +77,7 @@ async function oneReply({queue,keyHex,expected,now,sleep,maxPolls}){
 export async function coordinatePrivateF0Transaction({
   env={},publicKeyPem,publicKeySha256,producer,queue,signer,
   readback,now=Date.now,sleep=async()=>{},maxPolls=40,
+  completionMode='full',
 }={}){
   if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
      env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=='refs/heads/main'||
@@ -89,7 +90,10 @@ export async function coordinatePrivateF0Transaction({
      typeof queue?.pushSigned!=='function'||
      typeof queue?.consumeExpectedReply!=='function'||
      typeof signer?.assertReady!=='function'||typeof signer?.signReceipt!=='function'||
-     typeof readback!=='function')fail();
+     !['full','apply-stage'].includes(completionMode)||
+     (completionMode==='full'&&typeof readback!=='function')||
+     (completionMode==='apply-stage'&&
+       env.FRMS_QA_TRANSACTION_PHASE!=='queue-apply'))fail();
   assertIndependentSignerAnchor({publicKeyPem,publicKeySha256});
   // An independent remote signer must be READY *before* prepare can create
   // a private R2 preimage; never create orphan preimages awaiting authority.
@@ -145,6 +149,17 @@ export async function coordinatePrivateF0Transaction({
     expected:applyMatch,now,sleep,maxPolls});
   if(applied?.status!=='APPLY_VALIDATED'||applied.valid!==4||
      applied.updatedRows!==8)fail();
+
+  // Distinct GitHub Actions jobs must never share Worker and D1 migration
+  // credentials. The apply job finishes with a NON-ACCEPTANCE marker; only
+  // the following D1-only job (within the SAME workflow-level mutex) can
+  // establish the physical 4/4 postcondition. Do not expose a 4/4 claim here.
+  if(completionMode==='apply-stage')
+    return Object.freeze({
+      verdict:'APPLY_REPORTED_PENDING_INDEPENDENT_READBACK',
+      sha:env.GITHUB_SHA,tenantId:999013,
+      d1ReadbackComplete:false,productionAuthorized:false,
+    });
 
   // Queue confirmation alone is never independent physical D1 readback.
   const final=await readback({sha:env.GITHUB_SHA,dbId:TARGET.db_id,
