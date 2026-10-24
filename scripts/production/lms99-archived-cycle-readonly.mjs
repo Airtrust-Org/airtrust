@@ -88,6 +88,22 @@ export function validateRows(rows){
  if(total>500)reject('COHORT_LIMIT');
  return rows;
 }
+// Fixed-category errors only: no stderr, SQL, URL, token, roster or backend response
+// is ever logged. D1's official SELECT-only workflow remains the sole transport.
+export function classifyD1Failure(stderr){
+ const s=String(stderr??'').slice(0,16000);
+ if(/no such table[^\n]*lms_ciclo_evidencias|table[^\n]*lms_ciclo_evidencias[^\n]*does not exist/i.test(s))
+  return 'D1_ARCHIVE_SCHEMA_MISSING';
+ if(/no such column|SQLITE_ERROR[^\n]*column/i.test(s))return 'D1_COLUMN_SCHEMA_MISMATCH';
+ if(/unauthorized|forbidden|authentication error|permission denied|error[^\n]*code[^\n]*403/i.test(s))
+  return 'D1_ACCESS_DENIED';
+ if(/npx[^\n]*not found|wrangler[^\n]*not found/i.test(s))return 'D1_CLIENT_UNAVAILABLE';
+ return 'D1_SELECT_FAILED';
+}
+export function safePublicError(error){
+ const s=String(error?.message??'');
+ return /^LMS99_HISTORY_[A-Z0-9_]+$/.test(s)?s:'LMS99_HISTORY_FAILED';
+}
 function d1(){
  validateQuery();
  const r=spawnSync('npx',['--no-install','wrangler','d1','execute','airtrust-db',
@@ -95,7 +111,8 @@ function d1(){
    cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',
    env:process.env,timeout:120000,maxBuffer:5*1024*1024
  });
- if(r.status!==0)reject('D1_SELECT_FAILED');
+ if(r.error)reject('D1_EXECUTOR_ERROR');
+ if(r.status!==0)reject(classifyD1Failure(r.stderr));
  let parsed;try{parsed=JSON.parse(r.stdout)}catch{reject('D1_JSON')}
  return validateRows((Array.isArray(parsed)?parsed[0]:parsed)?.results);
 }
@@ -119,4 +136,4 @@ async function main(){
   totals,by_course:rows},null,2)+'\n');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
- main().catch(e=>{console.error(/^LMS99_HISTORY_[A-Z_]+$/.test(String(e.message))?e.message:'LMS99_HISTORY_FAILED');process.exitCode=1});
+ main().catch(e=>{console.error(safePublicError(e));process.exitCode=1});
