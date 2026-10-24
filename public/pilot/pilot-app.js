@@ -342,12 +342,25 @@ async function refreshPilotOnlineSession() {
     const body = await response.json().catch(() => null);
     const accessToken = body?.data?.accessToken;
     const refreshToken = body?.data?.refreshToken;
+    // Outra aba do AirTrust pode ter renovado a sessão durante esta chamada.
+    // Um 401 do token antigo não pode derrubar o par já rotacionado.
+    const newestRefresh = readCurrentRefreshToken().value;
+    if (newestRefresh && newestRefresh !== stored.value) {
+      const newestAccess = readCurrentAccessToken();
+      if (newestAccess) return newestAccess;
+    }
     if (!response.ok || !accessToken) {
       throw new PilotOnlineRequestError(
         body?.error || body?.message || 'Não foi possível renovar a sessão online.',
         response.status || 401,
         body?.code || 'REFRESH_FAILED',
       );
+    }
+    // Não sobrescrever credenciais recém-rotacionadas por outra aba.
+    if (readCurrentRefreshToken().value !== stored.value) {
+      const newestAccess = readCurrentAccessToken();
+      if (newestAccess) return newestAccess;
+      throw new PilotOnlineRequestError('Sessão alterada em outra aba. Atualize para continuar.', 401, 'AUTH_SESSION_CHANGED');
     }
     writeStoredAuthValue('airtrust_token', accessToken, stored.persistent);
     if (refreshToken) writeStoredAuthValue('airtrust_refresh_token', refreshToken, stored.persistent);
@@ -823,9 +836,14 @@ async function authenticatedRequest(method, path, payload, options = {}) {
   };
 
   let response = await doFetch(token);
-  if (response.status === 401 && readCurrentRefreshToken().value) {
-    token = await refreshPilotOnlineSession();
-    response = await doFetch(token);
+  if (response.status === 401) {
+    const updatedToken = readCurrentAccessToken();
+    if (updatedToken && updatedToken !== token) {
+      response = await doFetch(updatedToken);
+    } else if (readCurrentRefreshToken().value) {
+      token = await refreshPilotOnlineSession();
+      response = await doFetch(token);
+    }
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
@@ -852,9 +870,14 @@ async function authenticatedBlob(path, options = {}) {
     headers: { Accept: '*/*', Authorization: 'Bearer ' + accessToken },
   });
   let response = await doFetch(token);
-  if (response.status === 401 && readCurrentRefreshToken().value) {
-    token = await refreshPilotOnlineSession();
-    response = await doFetch(token);
+  if (response.status === 401) {
+    const updatedToken = readCurrentAccessToken();
+    if (updatedToken && updatedToken !== token) {
+      response = await doFetch(updatedToken);
+    } else if (readCurrentRefreshToken().value) {
+      token = await refreshPilotOnlineSession();
+      response = await doFetch(token);
+    }
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -1255,7 +1278,11 @@ function renderCachedPackages() {
         buttonText: 'Abrir voo',
         onClick: async () => {
           openPackageRecord(record);
-          await openExistingOperationalDraft();
+          if (!isFlightClosedForEditing(record.value?.package)) {
+            await openExistingOperationalDraft();
+          } else {
+            setSessionMessage('Voo concluído: consulta disponível somente para leitura.', 'ok');
+          }
         },
       }),
     );
@@ -1385,10 +1412,8 @@ function renderOnlineFlights() {
             : 'horário não informado'),
         badge: stale ? 'Alteração da Coordenação — atualize o voo' : (cached ? 'Já preparado neste tablet' : null),
         buttonText: stale ? 'Atualizar voo' : 'Abrir voo',
-        secondaryButtonText: 'Fazer plano de voo',
         disabled: !navigator.onLine,
         onClick: () => void openAuthorizedFlight(voo.id),
-        onSecondaryClick: () => void openFlightPlanning(voo.id),
       }),
     );
   }
@@ -1615,13 +1640,24 @@ async function ensurePilotShellReadyForFlight() {
   }
 }
 
-async function openFlightPlanning(flightId) {
-  return Boolean(await prepareFlightPackage(flightId, { initialWorkspaceTab: 'planning' }));
+function isFlightClosedForEditing(packageData) {
+  const rdv = packageData?.rdv;
+  return Boolean(rdv && (
+    rdv.status === 'preenchimento_finalizado' ||
+    !['rascunho', 'devolvido'].includes(String(rdv.workflow_status || '')) ||
+    rdv.workflow_status === 'enviado'
+  ));
 }
 
 async function openAuthorizedFlight(flightId) {
   const record = await prepareFlightPackage(flightId);
   if (!record) return false;
+  if (isFlightClosedForEditing(record.value?.package)) {
+    // O lease é exclusivo para edição; RDVs enviados continuam consultáveis.
+    openPackageRecord(record);
+    setSessionMessage('Voo concluído: consulta disponível somente para leitura.', 'ok');
+    return true;
+  }
 
   try {
     await ensurePilotShellReadyForFlight();
@@ -4377,21 +4413,14 @@ function renderRdvFormFields() {
       note: 'Vem do cadastro da aeronave; exibido simultaneamente em lb e kg.',
     }),
     createEditorField({
-      label: 'Ocorrências',
+      label: 'Observações do voo',
       value: form.ocorrencias || '',
       type: 'textarea',
       wide: true,
       onInput: (value) => { form.ocorrencias = value; scheduleOperationalSave(); },
       onBlur: () => void flushOperationalSave(),
     }),
-    createEditorField({
-      label: 'Divergências do planejado',
-      value: form.divergencias || '',
-      type: 'textarea',
-      wide: true,
-      onInput: (value) => { form.divergencias = value; scheduleOperationalSave(); },
-      onBlur: () => void flushOperationalSave(),
-    }),
+    // Divergências históricas permanecem no pacote/sync; não apagar dados existentes.
   );
 
   const summaryFields = [
@@ -4727,7 +4756,7 @@ function renderStageFields() {
       index > 0 ? 'Integrado ao combustível final da etapa anterior' : null,
     ],
     ['Combustível final', 'combustivel_fim', 'number', 'decimal', false, false, null],
-    ['Observações da etapa', 'observacoes', 'textarea', null, false, true, null],
+    // Observações novas são registradas somente no campo comum do voo.
   ];
 
   const dualWeightLabels = {
