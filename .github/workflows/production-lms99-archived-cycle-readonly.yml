@@ -5,6 +5,7 @@ on:
       expected_main_sha: {required: true, type: string}
       expected_production_sha: {required: true, type: string}
       confirmation: {required: true, type: string}
+      mode: {required: true, type: choice, default: schema-probe, options: [schema-probe, read]}
 permissions: {contents: read, checks: read, statuses: read}
 concurrency:
   group: production-lms99-archived-cycle-readonly
@@ -43,6 +44,7 @@ jobs:
           EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
           EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          LMS99_HISTORY_MODE: ${{ inputs.mode }}
           # Prefer least-privilege D1 token. Production has not provisioned one;
           # use only the existing governed D1 token as SELECT transport, as in the
           # already-reviewed production-lms99-embedded-cmi-readonly workflow.
@@ -52,8 +54,8 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/production/lms99-archived-cycle-readonly.mjs > "$RUNNER_TEMP/lms99-history.json"
-          jq -e '.schema_version==1 and .tenant==6 and .mode=="read-only" and .writes==0 and .personal_data==false' "$RUNNER_TEMP/lms99-history.json" >/dev/null
-          jq '{source_sha,production_sha,totals,by_course,writes}' "$RUNNER_TEMP/lms99-history.json" >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.schema_version==1 and .tenant==6 and (.mode=="read-only" or .mode=="schema-probe") and .writes==0 and .personal_data==false' "$RUNNER_TEMP/lms99-history.json" >/dev/null
+          jq '{source_sha,production_sha,mode,missing_required,checks,totals,by_course,writes}' "$RUNNER_TEMP/lms99-history.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized historical summary
         uses: actions/upload-artifact@v7
         with:
