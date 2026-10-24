@@ -35,6 +35,7 @@ function fixture() {
       funcionario_id INTEGER NOT NULL, status TEXT NOT NULL,
       observacoes TEXT, qualificacao_historico_id INTEGER,
       score_final REAL, progresso_pct REAL, tentativas INTEGER, deleted_at TEXT
+      ,data_inicio TEXT
     );
     CREATE TABLE lms_matricula_ciclos(
       id INTEGER PRIMARY KEY, matricula_id INTEGER NOT NULL,
@@ -75,6 +76,7 @@ function fixture() {
     prepare(sql: string) {
       return { bind: (...values: unknown[]) => ({
         execute: () => db.prepare(sql).run(...values as Array<string|number|null>),
+        first: async <T>() => (db.prepare(sql).get(...values as Array<string|number|null>) ?? null) as T | null,
       }) };
     }
     async batch(statements: Array<{ execute: () => {changes: bigint|number} }>) {
@@ -96,6 +98,8 @@ describe('F0 atomic protected D1 synthetic binding, actual schema 0568', () => {
     const f = fixture();
     try {
       const proof = await provisionScormF0QaBinding(f.shim, request, now);
+      const retry = await provisionScormF0QaBinding(f.shim, request, now);
+      expect(retry.bindingId).toBe(proof.bindingId);
       expect(proof).toMatchObject({
         source: 'SCORM_F0_STAGING_CANDIDATE_BINDING_V1',
         packageSha256: sha, enrollmentId: 23, cycleId: 24,
@@ -139,11 +143,12 @@ describe('F0 atomic protected D1 synthetic binding, actual schema 0568', () => {
       expect(f.count('audit_logs')).toBe(0);
     } finally { f.db.close(); }
   });
-  it('replay cannot duplicate binding or audit; DB trigger prevents forged edition mutation', async () => {
+  it('replay returns the same binding without duplicating audit; trigger rejects forged mutation', async () => {
     const f = fixture();
     try {
-      await provisionScormF0QaBinding(f.shim, request, now);
-      await expect(provisionScormF0QaBinding(f.shim, request, now)).rejects.toThrow();
+      const first = await provisionScormF0QaBinding(f.shim, request, now);
+      const retry = await provisionScormF0QaBinding(f.shim, request, now);
+      expect(retry.bindingId).toBe(first.bindingId);
       expect(f.count('lms_scorm_qa_evidence_bindings')).toBe(1);
       expect(f.count('audit_logs')).toBe(1);
       expect(() => f.db.exec(

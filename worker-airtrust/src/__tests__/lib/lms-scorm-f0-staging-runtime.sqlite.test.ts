@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { provisionScormF0QaBinding } from '../../lib/lms/lms-scorm-f0-staging-provision';
 import { commitF0CandidateSuspend, readF0CandidateRuntimeState,
-  validateF0IncompleteCommit, witnessF0CandidateLaunch,
+  validateF0IncompleteCommit, witnessF0CandidateLaunch, recoverF0CandidateFixture,
 } from '../../lib/lms/lms-scorm-f0-staging-runtime';
 
 const SqliteDatabaseSync=createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
@@ -181,6 +181,29 @@ describe('F0 staging-only real candidate launch/commit/resume with Schema V2 056
       expect(f.count('audit_logs')).toBe(2); // bind + launch, no commit audit
       expect((f.db.prepare('SELECT status FROM lms_matriculas WHERE id=23')
         .get() as {status:string}).status).toBe('NAO_INICIADO');
+    }finally{f.db.close();}
+  });
+  it('recovers the exact synthetic preimage and is idempotent after incomplete commits',async()=>{
+    const f=fixture();
+    const recoveryReceiptSha256='d'.repeat(64);
+    try{
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      const before=await readF0CandidateRuntimeState(f.d1,scope);
+      await witnessF0CandidateLaunch(f.d1,scope,before);
+      await commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','suspend-state'));
+      const params={...scope,cycleId:24,runId:run,recoveryReceiptSha256};
+      const recovered=await recoverF0CandidateFixture(f.d1,params);
+      expect(recovered).toMatchObject({verified:true,syntheticFixtureRecovered:true,
+        candidatePreservedInactive:true});
+      expect(f.count('lms_progresso_scorm')).toBe(0);
+      expect(f.count('qualificacoes_historico')).toBe(0);
+      expect((f.db.prepare('SELECT status,progresso_pct,data_inicio FROM lms_matriculas WHERE id=23')
+        .get() as Record<string,unknown>)).toMatchObject({status:'NAO_INICIADO',progresso_pct:0,data_inicio:null});
+      expect((f.db.prepare('SELECT status FROM lms_matricula_ciclos WHERE id=24')
+        .get() as {status:string}).status).toBe('NAO_INICIADO');
+      const retried=await recoverF0CandidateFixture(f.d1,params);
+      expect(retried.receiptSha256).toBe(recovered.receiptSha256);
+      expect(f.count('audit_logs')).toBe(4);
     }finally{f.db.close();}
   });
   it('rejects bad CMI payloads and enforces candidate edition immutability',()=>{

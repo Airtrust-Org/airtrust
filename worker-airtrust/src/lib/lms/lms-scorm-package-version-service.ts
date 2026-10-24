@@ -19,7 +19,7 @@ import {
 
 type PackageRow = {
   id: string; empresa_id: number; curso_id: number; package_sha256: string; r2_prefix: string;
-  launch_file: string; status: string; validation_result_json: string | null;
+  launch_file: string; status: string; scorm_versao?: string | null; validation_result_json: string | null;
   active_prefix?: string | null;
 };
 
@@ -71,7 +71,7 @@ export async function createScormPackageCandidate(params: {
   const packageSha256 = await sha256(params.bytes);
   const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
   const existing = await params.db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
        FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
   ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
   if (existing) {
@@ -195,7 +195,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
     throw new ApiError('Identidade da importação SCORM inválida', 400);
   }
   const existing = await params.db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
        FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
   ).bind(params.empresaId, params.cursoId, params.expectedSha256).first<PackageRow>();
   if (existing) {
@@ -311,7 +311,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
     } catch (error) {
       // A concurrent retry with the same tenant/course/SHA is idempotent.
       const duplicate = await params.db.prepare(
-        `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+        `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
            FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
       ).bind(params.empresaId, params.cursoId, params.expectedSha256).first<PackageRow>();
       if (duplicate) {
@@ -325,6 +325,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
     return { packageId: id, packageSha256: params.expectedSha256, status, ...quality,
       alreadyExisted: false, createdByOperation: true,
       r2Prefix: prefix, launchFile: metadata.launchFile,
+      scormVersion: metadata.scormVersao,
       arquivoNome: originalFilename, zipBytes: result.zipBytes, expandedBytes: result.expandedBytes,
       members: result.members, r2ReadStats: result.r2ReadStats,
       r2Readback: {
@@ -350,6 +351,7 @@ export function packageReadModel(row: PackageRow) {
     packageId: row.id,
     packageSha256: row.package_sha256,
     status: row.status,
+    scormVersion: row.scorm_versao ?? null,
     validatorVersion: validation?.validatorVersion ?? null,
     ...validation,
     r2Prefix: row.r2_prefix,
@@ -361,7 +363,7 @@ export function packageReadModel(row: PackageRow) {
 export async function listScormPackageVersions(db: D1Database, empresaId: number, cursoId: number) {
   const rows = await db.prepare(
     `SELECT p.id, p.empresa_id, p.curso_id, p.package_sha256, p.r2_prefix,
-            p.launch_file, p.status, p.validation_result_json,
+            p.launch_file, p.scorm_versao, p.status, p.validation_result_json,
             c.scorm_package_r2_prefix AS active_prefix
        FROM lms_scorm_package_versions p
        JOIN lms_cursos c ON c.id = p.curso_id AND c.empresa_id = p.empresa_id
@@ -376,6 +378,80 @@ export async function listScormPackageVersions(db: D1Database, empresaId: number
     cursoId: row.curso_id,
     active: row.status === 'ACTIVE' || row.r2_prefix === row.active_prefix,
   }));
+}
+
+/** Tombstone and remove R2 members only for the exact inactive streamed F5 operation. */
+export async function removeFailedScormPackageCandidate(params: {
+  db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
+  packageId: string; packageSha256: string; operationId: string; actorId: number | null;
+}) {
+  if (!/^[a-f0-9-]{36}$/i.test(params.packageId) ||
+      !/^[a-f0-9-]{36}$/i.test(params.operationId) ||
+      !/^[a-f0-9]{64}$/.test(params.packageSha256)) {
+    throw new ApiError('F5 candidate cleanup identity invalid',400);
+  }
+  const prefix=`lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${params.packageId}/`;
+  const row=await params.db.prepare(
+    `SELECT p.id,p.status,p.package_sha256,p.r2_prefix,p.validation_result_json,
+            c.scorm_package_r2_prefix AS active_prefix
+       FROM lms_scorm_package_versions p
+       JOIN lms_cursos c ON c.id=p.curso_id AND c.empresa_id=p.empresa_id
+      WHERE p.id=? AND p.empresa_id=? AND p.curso_id=?`,
+  ).bind(params.packageId,params.empresaId,params.cursoId).first<{
+    id:string;status:string;package_sha256:string;r2_prefix:string;
+    validation_result_json:string|null;active_prefix:string|null;
+  }>();
+  if (!row || row.package_sha256!==params.packageSha256 || row.r2_prefix!==prefix ||
+      row.active_prefix===prefix || !['VALIDATED','REJECTED'].includes(row.status) ||
+      readScormUploadFilename(row.validation_result_json)!==
+        `f5-${params.packageSha256}-${params.operationId}.zip`) {
+    throw new ApiError('F5 candidate ownership or inactive scope unproven',409);
+  }
+  const prior=await params.db.prepare(
+    `SELECT 1 AS found FROM lms_scorm_qa_evidence_bindings
+      WHERE empresa_id=? AND curso_id=? AND package_id=? AND package_sha256=?
+        AND status='ACTIVE' AND synthetic=1 LIMIT 1`,
+  ).bind(params.empresaId,params.cursoId,params.packageId,params.packageSha256)
+    .first<{found:number}>();
+  if (prior) throw new ApiError('F5 candidate still has an active QA binding',409);
+  if (row.status==='VALIDATED') {
+    const writes=await params.db.batch([
+      params.db.prepare(`UPDATE lms_scorm_package_versions SET status='REJECTED'
+        WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
+          AND r2_prefix=? AND status='VALIDATED'
+          AND NOT EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
+              AND b.status='ACTIVE')`).bind(params.packageId,params.empresaId,
+          params.cursoId,params.packageSha256,prefix,params.empresaId,params.cursoId,params.packageId),
+      params.db.prepare(`INSERT INTO lms_scorm_package_audit_log
+        (id,empresa_id,curso_id,package_id,action,actor_id,reason,created_at)
+        SELECT ?,?,?,?,'ROLLED_BACK',?,? ,datetime('now')
+        WHERE EXISTS(SELECT 1 FROM lms_scorm_package_versions WHERE id=?
+          AND empresa_id=? AND curso_id=? AND package_sha256=? AND status='REJECTED')`)
+        .bind(crypto.randomUUID(),params.empresaId,params.cursoId,params.packageId,
+          params.actorId,`F5_OPERATION:${params.operationId}`,params.packageId,
+          params.empresaId,params.cursoId,params.packageSha256),
+    ]);
+    if (Number(writes[0]?.meta?.changes)!==1 || Number(writes[1]?.meta?.changes)!==1) {
+      throw new ApiError('F5 candidate tombstone did not commit atomically',409);
+    }
+  }
+  let cursor:string|undefined;
+  do {
+    const page=await params.bucket.list({prefix,cursor,limit:1000});
+    if (page.objects.length) await params.bucket.delete(page.objects.map(object=>object.key));
+    cursor=page.truncated?page.cursor:undefined;
+  } while(cursor);
+  const remaining=await params.bucket.list({prefix,limit:1});
+  if (remaining.objects.length) throw new ApiError('F5 R2 candidate cleanup readback failed',409);
+  const receiptSha256=[...new Uint8Array(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(JSON.stringify({source:'F5_FAILED_CANDIDATE_CLEANUP_V1',
+      tenantId:params.empresaId,courseId:params.cursoId,packageId:params.packageId,
+      packageSha256:params.packageSha256,operationId:params.operationId,
+      candidateTombstoned:true,r2PrefixEmpty:true}))))]
+    .map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  return {verified:true,candidateRemoved:true,receiptSha256,
+    candidateTombstoned:true,r2PrefixEmpty:true};
 }
 
 export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null; attestationSecret?: string; runtimeSha?: string }) {

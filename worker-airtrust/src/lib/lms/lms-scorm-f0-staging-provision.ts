@@ -58,6 +58,32 @@ export async function provisionScormF0QaBinding(
   now = Date.now(),
 ) {
   const input = assertScormF0ProvisionRequest(requested, now);
+  const existing = await db.prepare(
+    `SELECT id,expires_at,staging_runtime_sha,approval_receipt_sha256
+       FROM lms_scorm_qa_evidence_bindings
+      WHERE empresa_id=? AND curso_id=? AND package_id=? AND package_sha256=?
+        AND matricula_id=? AND ciclo_id=? AND run_id=? AND status='ACTIVE'
+        AND synthetic=1 LIMIT 1`,
+  ).bind(input.tenantId,input.courseId,input.packageId,input.packageSha256,
+    input.enrollmentId,input.cycleId,input.runId).first<{
+      id:string;expires_at:string;staging_runtime_sha:string;approval_receipt_sha256:string;
+    }>();
+  if (existing) {
+    if (existing.expires_at!==input.expiresAt || existing.staging_runtime_sha!==input.runtimeSha ||
+        existing.approval_receipt_sha256!==input.approvalReceiptSha256) {
+      throw new ApiError('SCORM_F0_EXISTING_BINDING_SCOPE_MISMATCH',409);
+    }
+    return {
+      source: 'SCORM_F0_STAGING_CANDIDATE_BINDING_V1',
+      bindingId: existing.id, tenantId: input.tenantId, courseId: input.courseId,
+      packageId: input.packageId, packageSha256: input.packageSha256,
+      enrollmentId: input.enrollmentId, cycleId: input.cycleId,
+      runId: input.runId, expiresAt: input.expiresAt,
+      runtimeSha: input.runtimeSha, grantId: input.grantId,
+      activePackageChanged: false, certificateIssued: false,
+      completionWritten: false, sourceOfActualCandidateCommit: false,
+    };
+  }
   const id = crypto.randomUUID();
   const audit = JSON.stringify({
     source: 'SCORM_F0_STAGING_CANDIDATE_BINDING_V1',
@@ -93,7 +119,7 @@ export async function provisionScormF0QaBinding(
           AND p.r2_prefix!=COALESCE(c.scorm_package_r2_prefix,'')
           AND m.id=? AND m.status='NAO_INICIADO' AND m.deleted_at IS NULL
           AND m.observacoes=? AND m.qualificacao_historico_id IS NULL
-          AND m.score_final IS NULL AND COALESCE(m.progresso_pct,0)=0
+          AND m.score_final IS NULL AND m.progresso_pct=0 AND m.data_inicio IS NULL
           AND COALESCE(m.tentativas,0)=0
           AND f.deleted_at IS NULL AND f.nome LIKE 'QA-PARTICIPANTE-%'
           AND cy.id=? AND cy.ciclo_atual=1 AND cy.numero_ciclo=1

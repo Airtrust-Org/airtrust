@@ -26,7 +26,8 @@ async function fixture() {
       approvalReceiptSha256: 'c'.repeat(64),
       provisioningReceiptSha256: 'd'.repeat(64),
       recoveryReceiptSha256: 'e'.repeat(64),
-      cleanupContractSha256: 'f'.repeat(64) },
+      cleanupContractSha256: 'f'.repeat(64),
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() },
   };
   await writeFile(module, moduleBytes, { mode: 0o600 });
   await writeFile(planPath, JSON.stringify(plan), { mode: 0o600 });
