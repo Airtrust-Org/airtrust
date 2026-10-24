@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Governed CLI binding private source and provisioned F0 callbacks to the core. */
 import { createHash } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { open, readFile, stat, unlink } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { executeF5InactiveCandidate } from './f5-inactive-candidate-executor.mjs';
@@ -9,6 +9,24 @@ import { assertF5RunnerDispatchScope } from './f5-runner-dispatch-scope.mjs';
 import { createF5WorkerAdapters, openF5PrivateZipSource } from './f5-worker-adapters.mjs';
 
 const fail = code => { throw new Error(`F5_RUNNER_${code}`); };
+
+/** Reserve the private evidence artifact before any Worker-side effects.
+ * Exclusive creation prevents overwriting an existing audit artifact or
+ * discovering a missing/unwritable output path after a successful intake.
+ */
+export async function reserveF5EvidenceOutput(outputPath) {
+  if (typeof outputPath !== 'string' || !outputPath.trim()) {
+    fail('EVIDENCE_OUTPUT_PATH_REQUIRED');
+  }
+  try { return await open(outputPath, 'wx', 0o600); }
+  catch { fail('EVIDENCE_OUTPUT_UNAVAILABLE'); }
+}
+
+/** Best-effort removal even if close itself rejects; never log private paths. */
+export async function discardF5EvidenceOutput(evidenceHandle, outputPath) {
+  await evidenceHandle.close().catch(() => {});
+  await unlink(outputPath).catch(() => {});
+}
 
 export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   const planPath = env.F5_EXECUTOR_PLAN_PATH;
@@ -41,28 +59,45 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   // Validate all workflow-dispatch IDs before importing any executable F0 module
   // or reading/uploading the private ZIP. The later GitHub grant check remains mandatory.
   assertF5RunnerDispatchScope(plan, env);
-  let f0;
-  try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch {
-    // Imported adapter exceptions may contain protected runner paths or secrets.
-    fail('F0_ADAPTER_LOAD_FAILED');
-  }
-  if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
-  let source;
-  try { source = await openF5PrivateZipSource(sourcePath); }
-  catch { fail('PRIVATE_ZIP_SOURCE_UNAVAILABLE'); }
+  const outputPath = env.F5_EVIDENCE_OUTPUT_PATH;
+  const evidenceHandle = await reserveF5EvidenceOutput(outputPath);
+  // Only publish a successful QA artifact after source teardown and evidence
+  // close both succeed. A failed teardown must never leave a PASS-looking file.
+  let evidenceComplete = false;
   try {
-    const f0Adapters = await f0.createF0Adapters({ plan, env });
-    if (!f0Adapters || typeof f0Adapters !== 'object') fail('F0_ADAPTERS_MISSING');
-    const adapters = createF5WorkerAdapters({ env, ...f0Adapters });
-    const evidence = await executeF5InactiveCandidate({ plan, source, adapters });
-    const output = env.F5_EVIDENCE_OUTPUT_PATH;
-    if (!output) fail('EVIDENCE_OUTPUT_PATH_REQUIRED');
-    try { await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600, flag: 'wx' }); }
-    catch { fail('EVIDENCE_OUTPUT_FAILED'); }
+    let f0;
+    try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
+    catch {
+      // Imported adapter exceptions may contain protected runner paths or secrets.
+      fail('F0_ADAPTER_LOAD_FAILED');
+    }
+    if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
+    let source;
+    try { source = await openF5PrivateZipSource(sourcePath); }
+    catch { fail('PRIVATE_ZIP_SOURCE_UNAVAILABLE'); }
+    let evidence;
+    try {
+      const f0Adapters = await f0.createF0Adapters({ plan, env });
+      if (!f0Adapters || typeof f0Adapters !== 'object') fail('F0_ADAPTERS_MISSING');
+      const adapters = createF5WorkerAdapters({ env, ...f0Adapters });
+      evidence = await executeF5InactiveCandidate({ plan, source, adapters });
+    } finally {
+      // Closing the private source is part of successful teardown, not a
+      // post-success best effort. Never publish evidence if teardown fails.
+      await source.close();
+    }
+    try {
+      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\n`);
+      await evidenceHandle.sync();
+      await evidenceHandle.close();
+    } catch { fail('EVIDENCE_OUTPUT_FAILED'); }
+    evidenceComplete = true;
     return evidence;
   } finally {
-    await source.close();
+    if (!evidenceComplete) {
+      // Closing can itself fail; still attempt removal of partial evidence.
+      await discardF5EvidenceOutput(evidenceHandle, outputPath);
+    }
   }
 }
 
@@ -78,6 +113,8 @@ const PUBLIC_RUNNER_FAILURE_CODES = new Set([
   'F5_RUNNER_F0_ADAPTER_LOAD_FAILED',
   'F5_RUNNER_PRIVATE_ZIP_SOURCE_UNAVAILABLE',
   'F5_RUNNER_EVIDENCE_OUTPUT_FAILED',
+  'F5_RUNNER_EVIDENCE_OUTPUT_PATH_REQUIRED',
+  'F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE',
   'F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED',
   'F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH',
   'F5_EXECUTOR_F0_RECEIPTS_NOT_VERIFIED',
