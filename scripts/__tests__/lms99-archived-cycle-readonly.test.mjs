@@ -35,6 +35,31 @@ test('historical completed cycle and immutable SCORM snapshot are merely evidenc
    numeric:rows[1].archived_numeric_score}, {complete:1,archived:1,enrollment:1,terminal:1,numeric:1});
  }finally{db.close();}
 });
+
+test('SCORM 2004 completion_status passes only without explicit failure',()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec(`CREATE TABLE lms_cursos(id INTEGER,empresa_id INTEGER,tipo_conteudo TEXT);
+  CREATE TABLE lms_matriculas(id INTEGER,curso_id INTEGER,empresa_id INTEGER,status TEXT,progresso_pct REAL,deleted_at TEXT);
+  CREATE TABLE lms_matricula_ciclos(id INTEGER,matricula_id INTEGER,empresa_id INTEGER,status TEXT,ciclo_atual INTEGER);
+  CREATE TABLE lms_ciclo_evidencias(id INTEGER,empresa_id INTEGER,matricula_id INTEGER,ciclo_id INTEGER,enrollment_json TEXT,scorm_json TEXT);`);
+  db.exec(`INSERT INTO lms_cursos VALUES(8,6,'scorm');
+  INSERT INTO lms_matriculas VALUES(102,8,6,'EM_ANDAMENTO',99,NULL),(103,8,6,'EM_ANDAMENTO',99,NULL);
+  INSERT INTO lms_matricula_ciclos VALUES(202,102,6,'EM_ANDAMENTO',0),(203,103,6,'EM_ANDAMENTO',0);`);
+  const add=db.prepare('INSERT INTO lms_ciclo_evidencias VALUES(?,6,?,?,?,?)');
+  add.run(300,102,202,'{"status":"EM_ANDAMENTO"}',JSON.stringify({
+   lesson_status:null,completion_status:'completed',success_status:'passed',score_raw:82,
+  }));
+  add.run(301,103,203,'{"status":"EM_ANDAMENTO"}',JSON.stringify({
+   lesson_status:'failed',completion_status:'completed',success_status:'passed',score_raw:82,
+  }));
+  const [row]=validateRows(db.prepare(ARCHIVE_SQL).all());
+  assert.equal(row.curso_id,8);
+  assert.equal(row.pending_99,2);
+  assert.equal(row.archived_scorm_terminal,1);
+ }finally{db.close();}
+});
+
 test('sanitized counts fail closed and protected workflow is read-only',()=>{
  const row={curso_id:43,pending_99:1,prior_completed_cycle:1,archived_cycle_snapshot:1,
  archived_enrollment_complete:1,archived_scorm_terminal:1,archived_numeric_score:1};
