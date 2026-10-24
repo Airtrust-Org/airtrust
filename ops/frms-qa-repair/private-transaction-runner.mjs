@@ -12,9 +12,30 @@ import {readbackReviewedF0} from './private-transaction-readback.mjs';
 
 const ACCOUNT=/^[a-f0-9]{32}$/,QUEUE=/^[a-f0-9]{32}$/;
 const SHA=/^[a-f0-9]{40}$/,KEY=/^[a-f0-9]{64}$/;
+const APPLY_GRANT=/^[1-9][0-9]{5,13}$/;
 const PREPARE='airtrust-frms-qa-private-prepare-staging';
 const RESULTS='airtrust-frms-qa-private-results-staging';
 const deny=()=>{throw Error('FRMS_QA_TRANSACTION_RUNNER_DENIED');};
+
+/**
+ * The phase marker only selects the independent GET verifier; it is NOT an
+ * authorization. The signer must provide a fresh apply grant ID, and the
+ * verifier still checks its exact unedited #776 comment, admin, receipt,
+ * signature, workflow, SHA and all eight gates before any Queue publish.
+ * No workflow_dispatch input or inherited environment may pre-approve apply.
+ */
+export function buildApplyGrantVerificationEnv({env={},applyGrantId}={}){
+  const id=String(applyGrantId??'');
+  if(!env||typeof env!=='object'||Array.isArray(env)||
+     !SHA.test(env.GITHUB_SHA||'')||!APPLY_GRANT.test(id)||
+     ['FRMS_QA_APPLY_GRANT_ID','FRMS_QA_APPLY_CONFIRM',
+       'FRMS_QA_APPLY_EXPECTED_SHA'].some(key=>Object.hasOwn(env,key)))deny();
+  return Object.freeze({...env,
+    FRMS_QA_APPLY_GRANT_ID:id,
+    FRMS_QA_APPLY_CONFIRM:'AIRTRUST_FRMS_QA_APPLY_F0_APPROVED',
+    FRMS_QA_APPLY_EXPECTED_SHA:env.GITHUB_SHA,
+  });
+}
 
 /** GET only; never accept queue IDs from workflow_dispatch inputs. */
 export async function resolvePrivateTransactionQueues({
@@ -131,8 +152,7 @@ export async function runProtectedPrivateTransaction({
   const producer=Object.freeze({
     prepare:()=>createTrustedQueuePrepareMessage({env,fetcher,now:now()}),
     apply:({manifest,receiptId,signatureBase64,applyGrantId})=>
-      createTrustedQueueApplyMessage({env:{...env,
-        FRMS_QA_APPLY_GRANT_ID:applyGrantId},
+      createTrustedQueueApplyMessage({env:buildApplyGrantVerificationEnv({env,applyGrantId}),
         manifest,receiptId,signatureBase64,fetcher,now:now()}),
   });
   const transport=Object.freeze({

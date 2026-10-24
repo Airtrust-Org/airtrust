@@ -2,7 +2,8 @@
 // bypass of security-restricted Queue REST consumer test execution.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvePrivateTransactionQueues,runProtectedPrivateTransaction} from
+import {resolvePrivateTransactionQueues,runProtectedPrivateTransaction,
+  buildApplyGrantVerificationEnv} from
   '../../ops/frms-qa-repair/private-transaction-runner.mjs';
 
 const ACCOUNT='a'.repeat(32),TOKEN='synthetic-existing-worker-token';
@@ -106,4 +107,27 @@ test('no external signer or public Ed25519 key can start transaction',async()=>{
       env,fetcher:f.fetcher,...extra}),/FRMS_QA_TRANSACTION_RUNNER_DENIED/);
   }
   assert.equal(f.calls.length,0);
+});
+
+test('apply phase binds fresh signer grant to current SHA without granting writes',()=>{
+  const sha='b'.repeat(40),grantId='6374255192';
+  const base={GITHUB_SHA:sha,GITHUB_TOKEN:'synthetic-github'};
+  const scoped=buildApplyGrantVerificationEnv({env:base,applyGrantId:grantId});
+  assert.equal(scoped.FRMS_QA_APPLY_GRANT_ID,grantId);
+  assert.equal(scoped.FRMS_QA_APPLY_EXPECTED_SHA,sha);
+  assert.equal(scoped.FRMS_QA_APPLY_CONFIRM,'AIRTRUST_FRMS_QA_APPLY_F0_APPROVED');
+  assert.equal(scoped.GITHUB_TOKEN,base.GITHUB_TOKEN);
+  assert.equal(base.FRMS_QA_APPLY_CONFIRM,undefined);
+  assert.equal(Object.isFrozen(scoped),true);
+  // A phase marker is not a grant: the downstream verifier still performs
+  // authenticated GitHub GET checks before emitting the apply Queue message.
+  for(const bad of [
+    {env:base,applyGrantId:'not-a-comment'},
+    {env:{...base,GITHUB_SHA:'invalid'},applyGrantId:grantId},
+    {env:{...base,FRMS_QA_APPLY_GRANT_ID:'6374255191'},applyGrantId:grantId},
+    {env:{...base,FRMS_QA_APPLY_CONFIRM:'AIRTRUST_FRMS_QA_APPLY_F0_APPROVED'},applyGrantId:grantId},
+    {env:{...base,FRMS_QA_APPLY_EXPECTED_SHA:sha},applyGrantId:grantId},
+    {env:null,applyGrantId:grantId},
+  ]) assert.throws(()=>buildApplyGrantVerificationEnv(bad),
+    /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
 });
