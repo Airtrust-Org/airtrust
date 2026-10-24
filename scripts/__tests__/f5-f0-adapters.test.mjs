@@ -195,17 +195,19 @@ test('F5 readback diagnostics do not log CMI, enrollment scope or raw Worker pay
 });
 
 test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 sessions', () => {
+  const expectedSuspendSha256 = digest('{"authored":true}');
   const params = {
     packageSha256: 'a'.repeat(64), runId: '123e4567-e89b-12d3-a456-426614174001',
     cycleId: 8201,
   };
   const receipt = sessionCount => ({ success: true, data: {
     source: 'F0_CANDIDATE_INCOMPLETE_COMMIT_V1', ...params,
+    suspendSha256: expectedSuspendSha256, cmiSha256: 'c'.repeat(64),
     completionWritten: false, scoreWritten: false, certificateIssued: false,
     sessionCount,
   } });
-  assert.equal(requireF5CommitReceipt(receipt(1), params), 1);
-  assert.equal(requireF5CommitReceipt(receipt(2), params, 1), 2);
+  assert.equal(requireF5CommitReceipt(receipt(1), params, expectedSuspendSha256), 1);
+  assert.equal(requireF5CommitReceipt(receipt(2), params, expectedSuspendSha256, 1), 2);
   assert.equal(requireF5CommitReadbackCount({ sessionCount: 2 }, 2), true);
   for (const bad of [
     { ...receipt(2), success: false },
@@ -216,8 +218,15 @@ test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 s
     { ...receipt(2), data: { ...receipt(2).data, completionWritten: true } },
     { ...receipt(2), data: { ...receipt(2).data, certificateIssued: true } },
     { ...receipt(2), data: { ...receipt(2).data, source: 'UNTRUSTED' } },
+    { ...receipt(2), data: { ...receipt(2).data, suspendSha256: 'd'.repeat(64) } },
+    { ...receipt(2), data: { ...receipt(2).data, suspendSha256: undefined } },
+    { ...receipt(2), data: { ...receipt(2).data, cmiSha256: undefined } },
     receipt(1), // Replayed Finish receipt after the first Commit.
-  ]) assert.throws(() => requireF5CommitReceipt(bad, params, 1), /COMMIT_RECEIPT_INVALID/);
+  ]) assert.throws(() => requireF5CommitReceipt(bad, params, expectedSuspendSha256, 1), /COMMIT_RECEIPT_INVALID/);
+  assert.throws(() => requireF5CommitReceipt(receipt(2), params, undefined, 1),
+    /COMMIT_RECEIPT_INVALID/);
+  assert.throws(() => requireF5CommitReceipt(receipt(2), params, 'd'.repeat(64), 1),
+    /COMMIT_RECEIPT_INVALID/);
   assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 1 }, 2),
     /COMMIT_READBACK_SESSION_MISMATCH/);
   // A SCO may legitimately auto-commit again before the readback.
