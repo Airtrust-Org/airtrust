@@ -106,12 +106,15 @@ export function requireAuthoredF5State(location, suspend) {
 }
 
 /** A successful HTTP response is not proof of a scoped D1 Commit. */
-export function requireF5CommitReceipt(envelope, params, priorSessionCount = 0) {
+export function requireF5CommitReceipt(envelope, params, expectedSuspendSha256, priorSessionCount = 0) {
   const receipt = envelope?.data;
   if (envelope?.success !== true ||
       receipt?.source !== 'F0_CANDIDATE_INCOMPLETE_COMMIT_V1' ||
       receipt?.packageSha256 !== params.packageSha256 ||
       receipt?.runId !== params.runId || receipt?.cycleId !== params.cycleId ||
+      !HEX64.test(expectedSuspendSha256 ?? '') ||
+      receipt?.suspendSha256 !== expectedSuspendSha256 ||
+      !HEX64.test(receipt?.cmiSha256 ?? '') ||
       receipt?.completionWritten !== false || receipt?.scoreWritten !== false ||
       receipt?.certificateIssued !== false ||
       !Number.isSafeInteger(receipt?.sessionCount) ||
@@ -205,7 +208,8 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       console.error('[COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(firstCommit));
       fail('WORKER_COMMIT_HTTP_FAILED');
     }
-    const firstSessionCount = requireF5CommitReceipt(await firstCommit.json(), params);
+    const expectedSuspendSha256 = sha256(first.suspend);
+    const firstSessionCount = requireF5CommitReceipt(await firstCommit.json(), params, expectedSuspendSha256);
     const firstReadback = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(firstReadback, params, first, plan.releaseSha);
     requireF5CommitReadbackCount(firstReadback, firstSessionCount);
@@ -222,7 +226,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(finishCommit));
       fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
     }
-    const finishSessionCount = requireF5CommitReceipt(await finishCommit.json(), params, firstSessionCount);
+    const finishSessionCount = requireF5CommitReceipt(await finishCommit.json(), params, expectedSuspendSha256, firstSessionCount);
     await page.close();
 
     // A fresh context rules out local storage as the source of a successful
