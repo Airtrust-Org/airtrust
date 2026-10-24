@@ -72,6 +72,8 @@ test('entrypoint requires exact workflow/main/grant and all independent inputs',
   for(const bad of [
     {FRMS_QA_PREPARE_GRANT_ID:'0'},
     {GITHUB_REF:'refs/heads/preview'},
+    {GITHUB_JOB:'frms-d1-readonly-postcondition'},
+    {GITHUB_OUTPUT:''},
     {FRMS_QA_PREPARE_EXPECTED_SHA:'d'.repeat(40)},
     {FRMS_QA_PREPARE_CONFIRM:'approved'},
     {FRMS_QA_SIGNER_ORIGIN:''},
