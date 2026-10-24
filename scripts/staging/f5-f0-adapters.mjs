@@ -87,7 +87,14 @@ export function commitIncompleteScormState({ is2004, marker, suspend }) {
       set(exitKey, 'suspend') !== 'true') throw Error('SCORM_INCOMPLETE_SET_REJECTED');
   const committed = is2004 ? api.Commit('') : api.LMSCommit('');
   if (committed !== 'true') throw Error('SCORM_INCOMPLETE_COMMIT_REJECTED');
-  return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
+  const get = is2004 ? api.GetValue : api.LMSGetValue;
+  const actualSuspend = typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : null;
+  const actualMarker = typeof get === 'function' ? get.call(api, locationKey) : null;
+  return {
+    marker: (typeof actualMarker === 'string' && actualMarker.length > 0) ? actualMarker : marker,
+    suspend: (typeof actualSuspend === 'string' && actualSuspend.length > 0) ? actualSuspend : suspend,
+    apiVersion: is2004 ? '2004' : '1.2',
+  };
 }
 
 /** Failure diagnostics must never log response bodies, tokens or learner state. */
@@ -182,7 +189,10 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       function locationValue(api, use2004) { return api[use2004 ? 'GetValue' : 'LMSGetValue'](use2004 ? 'cmi.location' : 'cmi.core.lesson_location'); }
       function suspendValue(api) { return api.GetValue ? api.GetValue('cmi.suspend_data') : api.LMSGetValue('cmi.suspend_data'); }
     }, { is2004 });
-    if (resumed.location !== first.marker || resumed.suspend !== first.suspend) fail('SCORM_RESUME_STATE_MISMATCH');
+    if (resumed.location !== first.marker || resumed.suspend !== first.suspend) {
+      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', { resumed, first });
+      fail('SCORM_RESUME_STATE_MISMATCH');
+    }
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
     return {
@@ -212,21 +222,43 @@ async function browserExecution({ plan, params, request, env, browserType }) {
 }
 
 function assertReadback(data, params, expected, runtimeSha) {
-  if (data?.source !== 'WORKER_D1_STAGING_READBACK' ||
-      Number(data.empresaId ?? data.tenantId) !== params.tenantId ||
-      Number(data.cursoId ?? data.courseId) !== params.courseId ||
-      data.packageId !== params.packageId || data.packageSha256 !== params.packageSha256 ||
-      data.runtimeSha !== runtimeSha || data.enrollmentId !== params.enrollmentId ||
-      data.cycleId !== params.cycleId || data.runId !== params.runId || data.synthetic !== true ||
-      data.servedPackageSha256 !== params.packageSha256 ||
-      data.committedPackageSha256 !== params.packageSha256 ||
-      !HEX64.test(data.cmiSha256 ?? '') ||
-      !HEX64.test(data.suspendSha256 ?? '') || data.suspendSha256 !== sha256(expected.suspend) ||
-      !Number.isSafeInteger(data.sessionCount) ||
-      data.sessionCount < 1 || data.qualificationHistoryCount !== 0 ||
-      data.certificateDocument !== null || data.scormScoreRaw !== null ||
-      !['EM_ANDAMENTO', 'NAO_INICIADO'].includes(data.completionStatus) ||
-      expected.marker.length < 1 || expected.suspend.length < 1) fail('D1_READBACK_SCOPE_OR_STATE_INVALID');
+  const failed = [];
+  if (data?.source !== 'WORKER_D1_STAGING_READBACK') failed.push('source');
+  if (Number(data?.empresaId ?? data?.tenantId) !== params.tenantId) failed.push('tenantId');
+  if (Number(data?.cursoId ?? data?.courseId) !== params.courseId) failed.push('courseId');
+  if (data?.packageId !== params.packageId) failed.push('packageId');
+  if (data?.packageSha256 !== params.packageSha256) failed.push('packageSha256');
+  if (data?.runtimeSha !== runtimeSha) failed.push('runtimeSha');
+  if (data?.enrollmentId !== params.enrollmentId) failed.push('enrollmentId');
+  if (data?.cycleId !== params.cycleId) failed.push('cycleId');
+  if (data?.runId !== params.runId) failed.push('runId');
+  if (data?.synthetic !== true) failed.push('synthetic');
+  if (data?.servedPackageSha256 !== params.packageSha256) failed.push('servedPackageSha256');
+  if (data?.committedPackageSha256 !== params.packageSha256) failed.push('committedPackageSha256');
+  if (!HEX64.test(data?.cmiSha256 ?? '')) failed.push('cmiSha256_format');
+  if (!HEX64.test(data?.suspendSha256 ?? '')) failed.push('suspendSha256_format');
+  if (data?.suspendSha256 !== sha256(expected.suspend)) {
+    failed.push(`suspendSha256_mismatch(got=${data?.suspendSha256},expected=${sha256(expected.suspend)})`);
+  }
+  if (!Number.isSafeInteger(data?.sessionCount)) failed.push('sessionCount_type');
+  if ((data?.sessionCount ?? 0) < 1) failed.push('sessionCount_value');
+  if (data?.qualificationHistoryCount !== 0) failed.push('qualificationHistoryCount');
+  if (data?.certificateDocument !== null) failed.push('certificateDocument');
+  if (data?.scormScoreRaw !== null) failed.push('scormScoreRaw');
+  if (!['EM_ANDAMENTO', 'NAO_INICIADO'].includes(data?.completionStatus)) failed.push('completionStatus');
+  if (expected.marker.length < 1) failed.push('expected_marker_empty');
+  if (expected.suspend.length < 1) failed.push('expected_suspend_empty');
+
+  if (failed.length > 0) {
+    console.error('[ASSERT_READBACK_FAILURES]', {
+      failed,
+      data,
+      expected: { marker: expected.marker, suspendLen: expected.suspend?.length, suspendSha: sha256(expected.suspend) },
+      params,
+      runtimeSha,
+    });
+    fail('D1_READBACK_SCOPE_OR_STATE_INVALID');
+  }
   return data;
 }
 
