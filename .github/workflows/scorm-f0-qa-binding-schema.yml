@@ -1,0 +1,19 @@
+name: SCORM F0 QA Binding Schema Contract
+on:
+  pull_request:
+    paths:
+      - 'worker-airtrust/schema-v2/changes/0568_lms_scorm_qa_evidence_bindings.sql'
+      - 'worker-airtrust/schema-v2/plans/lms-scorm-qa-evidence-bindings-0568.md'
+      - 'worker-airtrust/schema-v2/lms-scorm-qa-evidence-bindings-0568.json'
+      - 'scripts/__tests__/test_scorm_qa_binding_schema_0568.py'
+      - '.github/workflows/scorm-f0-qa-binding-schema.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-binding-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact manifest and fail-closed SQLite integrity
+        run: python3 scripts/__tests__/test_scorm_qa_binding_schema_0568.py
