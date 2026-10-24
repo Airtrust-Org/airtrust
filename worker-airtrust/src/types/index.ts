@@ -369,6 +369,7 @@ export interface Variables {
   empresaId: number;
   userEmail: string;
   userRole: string;
+  canonicalTenantRole?: string;
   funcionarioId?: number | null;
   platformAccessState?: PlatformAccessState;
   tenantContext: {
