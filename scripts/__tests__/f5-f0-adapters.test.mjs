@@ -208,7 +208,17 @@ test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 s
   } });
   assert.equal(requireF5CommitReceipt(receipt(1), params, expectedSuspendSha256), 1);
   assert.equal(requireF5CommitReceipt(receipt(2), params, expectedSuspendSha256, 1), 2);
-  assert.equal(requireF5CommitReadbackCount({ sessionCount: 2 }, 2), true);
+  assert.equal(requireF5CommitReadbackCount({
+    sessionCount: 2, cmiSha256: 'c'.repeat(64),
+  }, 2, 'c'.repeat(64)), true);
+  // HTTP success and an advancing D1 counter are insufficient when the
+  // Worker receipt and the authenticated D1 CMI digests disagree.
+  assert.throws(() => requireF5CommitReadbackCount({
+    sessionCount: 3, cmiSha256: 'd'.repeat(64),
+  }, 2, 'c'.repeat(64)), /COMMIT_READBACK_CMI_MISMATCH/);
+  assert.throws(() => requireF5CommitReadbackCount({
+    sessionCount: 3, cmiSha256: 'c'.repeat(64),
+  }, 2, undefined), /COMMIT_READBACK_CMI_MISMATCH/);
   for (const bad of [
     { ...receipt(2), success: false },
     { ...receipt(2), data: { ...receipt(2).data, packageSha256: 'b'.repeat(64) } },
@@ -227,8 +237,8 @@ test('F5 requires scoped Commit and Finish receipts with strictly advancing D1 s
     /COMMIT_RECEIPT_INVALID/);
   assert.throws(() => requireF5CommitReceipt(receipt(2), params, 'd'.repeat(64), 1),
     /COMMIT_RECEIPT_INVALID/);
-  assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 1 }, 2),
+  assert.throws(() => requireF5CommitReadbackCount({ sessionCount: 1, cmiSha256: 'c'.repeat(64) }, 2, 'c'.repeat(64)),
     /COMMIT_READBACK_SESSION_MISMATCH/);
   // A SCO may legitimately auto-commit again before the readback.
-  assert.equal(requireF5CommitReadbackCount({ sessionCount: 3 }, 2), true);
+  assert.equal(requireF5CommitReadbackCount({ sessionCount: 3, cmiSha256: 'c'.repeat(64) }, 2, 'c'.repeat(64)), true);
 });
