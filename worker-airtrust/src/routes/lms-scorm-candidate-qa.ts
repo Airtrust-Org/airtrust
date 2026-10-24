@@ -110,9 +110,9 @@ export function registerScormCandidateQaRoutes(
     }
     const candidate=await readScormQaCandidate(c.env.DB,{
       empresaId:tenantId,cursoId:courseId,
-      packageId:c.req.param('candidate_id'),
+      packageId:c.req.param('candidate_id')??'',
     });
-    assertCandidateQaScope(payload,{empresaId:tenantId,cursoId,candidate});
+    assertCandidateQaScope(payload,{empresaId:tenantId,cursoId:courseId,candidate});
     await ensureCourseAssetAccess(c.env.DB,payload,tenantId,courseId);
     const scope={
       tenantId,courseId,enrollmentId,packageId:candidate.id,
