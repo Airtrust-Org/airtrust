@@ -1682,6 +1682,7 @@ function appendPendingCoordinationSendAction(packageData) {
   if (!isFlightPendingCoordinationSend(packageData)) return;
   const flightId = Number(packageData.voo?.id || 0);
   const panel = document.createElement('section');
+  panel.id = 'pilot-send-retry-action';
   panel.className = 'card';
   panel.setAttribute('aria-label', 'Envio pendente à Coordenação');
   const heading = document.createElement('h3');
@@ -1740,7 +1741,8 @@ function appendPendingCoordinationSendAction(packageData) {
     }
   });
   panel.append(heading, description, retry, feedback);
-  flightDetail.append(panel);
+  // O botão deve estar visível na consulta; o detalhe técnico fica recolhido.
+  flightDetailCard.insertBefore(panel, flightDetailCard.querySelector('.technical-package'));
 }
 
 function openCompletedFlightForConsultation(record) {
@@ -5290,6 +5292,7 @@ function openPackageRecord(record, initialWorkspaceTab = 'summary') {
     airportLabel(packageData.origem, voo.origem_id) +
     ' → ' +
     airportLabel(packageData.destino, voo.destino_id);
+  flightDetailCard.querySelector('#pilot-send-retry-action')?.remove();
   detailStatus.textContent =
     'Pacote local cifrado · preparado em ' +
     formatTimestamp(record.value.prepared_at) +
