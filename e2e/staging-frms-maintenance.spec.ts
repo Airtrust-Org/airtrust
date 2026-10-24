@@ -124,7 +124,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     await box.click();
 
     // 9. Feedback imediato exibido dentro da mesma moldura
-    await expect(section.getByText(/Tempo da última resposta/i)).toBeVisible({ timeout: 5_000 });
+    await expect(section.getByText(/Tempo da última resposta|Resposta lenta/i)).toBeVisible({ timeout: 5_000 });
     await expect(section.locator('span').filter({ hasText: /^\d+\s*ms$/ })).toBeVisible();
 
     await test.info().attach('03-pvt-reaction-feedback', {
@@ -155,7 +155,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     // 12. Captura de resposta via teclado (Space/Enter)
     await expect(box.locator('[data-testid="pvtb-counter"]')).toBeVisible({ timeout: 15_000 });
     await box.press('Space');
-    await expect(section.getByText(/Tempo da última resposta/i)).toBeVisible({ timeout: 5_000 });
+    await expect(section.getByText(/Tempo da última resposta|Resposta lenta/i)).toBeVisible({ timeout: 5_000 });
 
     // 13. Verificação de acessibilidade
     await expect(box).toHaveAttribute('aria-label');

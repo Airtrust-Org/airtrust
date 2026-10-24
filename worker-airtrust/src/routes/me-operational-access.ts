@@ -210,9 +210,29 @@ async function resolveMaintenanceManagerScope(
   const empresaId = getEmpresaId(c);
   const userId = getUserId(c);
   const userRole = (c.get as (key: string) => unknown)('userRole');
+  const canonicalTenantRole = (c.get as (key: string) => unknown)('canonicalTenantRole');
+  let effectiveRole = userRole;
+
+  if (normalizeTenantRole(canonicalTenantRole) === 'admin') {
+    effectiveRole = 'ADMINISTRADOR';
+  } else if (userId > 0 && empresaId > 0 && normalizeTenantRole(userRole) !== 'admin') {
+    const row = await db
+      .prepare(
+        `SELECT role FROM usuarios_empresas
+          WHERE usuario_id = ? AND empresa_id = ?
+          LIMIT 1`,
+      )
+      .bind(userId, empresaId)
+      .first<{ role: string | null }>()
+      .catch(() => null);
+    if (normalizeTenantRole(row?.role) === 'admin') {
+      effectiveRole = 'ADMINISTRADOR';
+    }
+  }
+
   const resolvedAccess =
     access || (await resolveOperationalAccess({ db, empresaId, userId, userRole }));
-  const policy = resolveMaintenanceManagementPolicy(userRole, resolvedAccess);
+  const policy = resolveMaintenanceManagementPolicy(effectiveRole, resolvedAccess);
 
   // A gestão central de fadiga e o administrador precisam enxergar o recorte
   // completo de manutenção do próprio tenant. O escopo continua tenant-bound
