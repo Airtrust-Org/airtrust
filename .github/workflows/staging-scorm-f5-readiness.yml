@@ -107,6 +107,16 @@ jobs:
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
         run: node scripts/staging/f5-candidate-approval-guard.mjs
+      - name: Materialize private F0 plan and adapter from protected staging secrets
+        shell: bash
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_EXECUTOR_PLAN_B64: ${{ secrets.F5_EXECUTOR_PLAN_B64 }}
+          F5_F0_ADAPTER_B64: ${{ secrets.F5_F0_ADAPTER_B64 }}
+          F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-materialize-private-runner.mjs
       - name: Verify provisioned F0 runner contract before reading private ZIP
         shell: bash
         env:
@@ -115,8 +125,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF: ${{ github.ref }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
-          F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
-          F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
+          F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
+          F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
           F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
           SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
           SCORM_QA_READBACK_SECRET: ${{ secrets.SCORM_QA_READBACK_SECRET }}
@@ -151,9 +161,9 @@ jobs:
       - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
         env:
-          F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
+          F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
           F5_PRIVATE_ZIP_PATH: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' && format('{0}/f5-private-candidate.zip', runner.temp) || vars.F5_PRIVATE_ZIP_PATH }}
-          F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
+          F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
           F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
           SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
@@ -197,4 +207,4 @@ jobs:
       - name: Destroy temporary private candidate source
         if: always()
         shell: bash
-        run: rm -f "${{ runner.temp }}/f5-private-candidate.zip"
+        run: rm -f "${{ runner.temp }}/f5-private-candidate.zip" "${{ runner.temp }}/f5-executor-plan.json" "${{ runner.temp }}/f5-provisioned-f0-adapter.mjs"
