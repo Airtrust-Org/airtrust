@@ -6,15 +6,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
-test('D1 client matches the previously proven production SELECT transport',()=>{
- const source=readFileSync(new URL('../production/lms99-archived-cycle-readonly.mjs',import.meta.url),'utf8');
- assert.match(source,/fileURLToPath\(new URL\('\.\.\/\.\.\/worker-airtrust\/'/);
- assert.match(source,/spawnSync\('npx',\['wrangler','d1','execute','airtrust-db'/);
- assert.doesNotMatch(source,/\['--no-install','wrangler'/);
- assert.match(source,/validateQuery\(\)/);
- assert.match(source,/if\(r\.status!==0\)reject\(classifyD1Failure/);
+test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
+ assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
+ for(const id of NON_PRODUCTION_D1_IDS)
+  assert.throws(()=>assertSqlTransportScope(SCHEMA_PROBE_SQL,id),/D1_TARGET_DENIED/);
+ assert.throws(()=>assertSqlTransportScope('UPDATE lms_matriculas SET status=1'),/SQL_NOT_REVIEWED/);
+ let seen=null;
+ const mockFetch=async(url,options)=>{
+  seen={url,method:options.method,sql:JSON.parse(options.body).sql};
+  return {ok:true,json:async()=>({success:true,result:[{success:true,results:[
+   {check_name:'lms_matriculas',present:1},{check_name:'lms_cursos',present:1},
+   {check_name:'lms_matricula_ciclos',present:1},{check_name:'lms_ciclo_evidencias',present:1},
+   {check_name:'lms_ciclo_evidencias.scorm_json',present:1},
+   {check_name:'lms_ciclo_evidencias.enrollment_json',present:1},
+   {check_name:'lms_matricula_ciclos.ciclo_atual',present:1},
+   {check_name:'lms_matriculas.progresso_pct',present:1}]}]})};
+ };
+ const rows=await d1(SCHEMA_PROBE_SQL,{fetcher:mockFetch,accountId:'test-account',token:'not-a-secret'});
+ assert.equal(rows.length,8);
+ assert.equal(seen.method,'POST');
+ assert.match(seen.url,/\/d1\/database\/7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae\/query$/);
+ assert.equal(seen.sql,SCHEMA_PROBE_SQL);
+ await assert.rejects(d1(SCHEMA_PROBE_SQL,{fetcher:async()=>({ok:false,json:async()=>({errors:[{message:'SECRET_SHOULD_NOT_LOG'}]})}),accountId:'test-account',token:'test'}),/D1_READ_REJECTED/);
 });
 
 test('protected schema probe reports only fixed table and column availability',()=>{

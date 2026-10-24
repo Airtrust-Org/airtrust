@@ -2,8 +2,6 @@
 // source_reference: issue #1325; Schema V2 0557 lms_ciclo_evidencias and previous cycle history.
 // dry_run_required: SELECT-only tenant 6 aggregate; no student ID, CMI, score or archival content in output.
 // rollback_plan_required: no remote writes; any later credit requires distinct reviewed recovery/approval.
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
 import {pathToFileURL} from 'node:url';
 import process from 'node:process';
 const reject = code => { throw Error('LMS99_HISTORY_' + code); };
@@ -129,22 +127,38 @@ export function safePublicError(error){
  const s=String(error?.message??'');
  return /^LMS99_HISTORY_[A-Z0-9_]+$/.test(s)?s:'LMS99_HISTORY_FAILED';
 }
-function d1(statement=ARCHIVE_SQL){
+// Same pinned production D1 REST read transport as frms-assignment-readonly-inventory.mjs.
+// Static reviewed statements only; this function cannot execute a caller-supplied query.
+export const PRODUCTION_D1_ID='7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
+export const NON_PRODUCTION_D1_IDS=[
+ 'bf9963f4-eb12-439b-a830-20bbf577ac22',
+ 'a72fb05b-0912-4ad9-9686-e7948c8b09eb',
+];
+export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
  if(statement===ARCHIVE_SQL)validateQuery();
  else if(statement!==SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
- // Mirror the D1 client transport proven by production-lms99-embedded-cmi-readonly (#40099058169).
- // Do not broaden the SQL contract or add a mutation fallback.
- const cwd=fileURLToPath(new URL('../../worker-airtrust/',import.meta.url));
- const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db',
-   '--env','production','--remote','--json','--command',statement],{
-   cwd,encoding:'utf8',env:process.env,timeout:120000,maxBuffer:5*1024*1024
- });
- if(r.error)reject('D1_EXECUTOR_ERROR');
- if(r.status!==0)reject(classifyD1Failure((r.stderr||'')+'\n'+(r.stdout||'')));
- // Never echo raw provider output: it can contain SQL text, personal data or secrets.
- let parsed;try{parsed=JSON.parse(r.stdout)}catch{reject('D1_JSON')}
- const rows=(Array.isArray(parsed)?parsed[0]:parsed)?.results;
- return statement===SCHEMA_PROBE_SQL?validateSchemaRows(rows):validateRows(rows);
+ if(databaseId!==PRODUCTION_D1_ID||NON_PRODUCTION_D1_IDS.includes(databaseId))
+  reject('D1_TARGET_DENIED');
+ if(/;|\\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA\\s+[\\w]+\\s*=)\\b/i.test(statement))
+  reject('D1_SQL_MUTATION_OR_MULTI_STATEMENT');
+}
+export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN}={}){
+ assertSqlTransportScope(statement);
+ if(!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(PRODUCTION_D1_ID))reject('D1_TARGET_DENIED');
+ if(!accountId||!token)reject('CREDENTIALS');
+ const endpoint=`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/d1/database/${PRODUCTION_D1_ID}/query`;
+ let response;
+ try{
+  response=await fetcher(endpoint,{
+   method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',Accept:'application/json'},
+   body:JSON.stringify({sql:statement}),signal:AbortSignal.timeout(25000),
+  });
+ }catch{reject('D1_TRANSPORT_FAILED')}
+ let data;try{data=await response.json()}catch{reject('D1_RESPONSE_INVALID')}
+ if(!response.ok||data?.success!==true)reject('D1_READ_REJECTED');
+ const first=Array.isArray(data?.result)?data.result[0]:data?.result;
+ if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
+ return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
 }
 async function main(){
  const src=String(process.env.EXPECTED_MAIN_SHA||'').toLowerCase();
@@ -161,14 +175,14 @@ async function main(){
  const mode=String(process.env.LMS99_HISTORY_MODE||'read');
  if(!['read','schema-probe'].includes(mode))reject('MODE_INVALID');
  if(mode==='schema-probe'){
-  const checks=d1(SCHEMA_PROBE_SQL);
+  const checks=await d1(SCHEMA_PROBE_SQL);
   process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
    tenant:6,mode:'schema-probe',writes:0,personal_data:false,
    missing_required:checks.filter(x=>x.present===0).map(x=>x.check_name),
    checks},null,2)+'\n');
   return;
  }
- const rows=d1();
+ const rows=await d1();
  const totals=Object.fromEntries(fields.map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
   tenant:6,mode:'read-only',writes:0,personal_data:false,
