@@ -1,3 +1,7 @@
+// source_reference: scripts/production/lms99-embedded-cmi-readonly.mjs; issue #1325 recovery of 99% SCORM.
+ // operational_decision: the INSERT statements below populate only disposable Node SQLite :memory: fixtures.
+ // dry_run_required: production probe is SELECT-only; never import fixture writes or infer pass from its counts.
+ // rollback_plan_required: test closes its isolated in-memory DB; no remote connection, tenant write or rollback necessary.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
