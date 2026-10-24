@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-17",
-    "last_reconciled_against": "0554 individual simulator evidence, 0557 LMS cycle and 0560 immutable simulator DELETE protection queued; no remote 0560 application asserted",
-    "schema_v2_digest": "da646ac76bfec8519d429c842669e7014af9a213e1235634861c07e7a259a421",
+    "last_reconciled_at": "2026-10-23",
+    "last_reconciled_against": "0568 SCORM F5 staging-only binding applied via workflow run 40045168335; production scope and all other change classifications preserved",
+    "schema_v2_digest": "199522d80e29ae0270569ef67757adab05d70a2d6689626ca2bf1e93c79a530b",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1611,6 +1611,34 @@
       "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
     },
     {
+      "change_file": "0563_controle_voos_pilot_fueling_identity.sql",
+      "change_id": "controle-voos-pilot-fueling-identity-0563",
+      "sha256": "f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: durable physical fueling event identity across independently versioned snapshots",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
+      "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
+    },
+    {
+      "change_file": "0568_lms_scorm_qa_evidence_bindings.sql",
+      "change_id": "lms-scorm-qa-evidence-bindings-0568",
+      "sha256": "6f85d5e3d141e140c54ea5b62c2dc3143447187960b8d89d7b6ed6dc4f3eb197",
+      "targets": [
+        "lms_scorm_qa_evidence_bindings"
+      ],
+      "domain": "SCORM F5 synthetic QA: staging-only immutable candidate/enrollment/cycle evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "STAGING_APPLIED",
+      "reviewed_manifest": "lms-scorm-qa-evidence-bindings-0568.json",
+      "evidence": "docs/ops/SCORM_F0_SCHEMA_0568_STAGING_APPLY_EVIDENCE.md",
+      "note": "Applied exclusively in pinned staging D1 by official workflow run 40045168335 on exact reviewed SHA ca9039f24ff484daa926b9e23ccd517bcddfbd23, with verified recovery bookmark and all physical postchecks. No production apply, ZIP intake or activation."
+    },
+    {
       "change_file": "ead-category-reconciliation-executor-0453.sql",
       "change_id": null,
       "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
@@ -1621,6 +1649,20 @@
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REPO_EXPECTED",
       "reviewed_manifest": null
+    },
+    {
+      "change_file": "0566_lms_scorm_edition_handoffs.sql",
+      "change_id": "lms-scorm-edition-handoff-0566",
+      "sha256": "ebfcb95de6f2a6fee7e07e155697d67157ed96821f23c1cc36b15c5caf352fba",
+      "targets": [
+        "lms_scorm_edition_handoffs"
+      ],
+      "domain": "LMS SCORM: immutable in-cycle edition handoff evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-handoff-0566.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
+      "note": "DDL only, no archive/reset/user write. Writer default-off until governed schema, authenticated handoff and end-to-end browser validation."
     }
   ]
 }

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { FrmsOverview, FrmsScoreExplanation, FrmsEvidenceActions, FrmsScoreMeter, matchesFrmsOverviewFilter } from '../components/FrmsVisualTriage';
-import { frmsAttentionFacts, hasFrmsOtherConfidenceGaps, isFrmsRoutineDutyClosurePending } from '../frmsEvidenceContext';
+import { frmsAttentionFacts, frmsOperationalEvidenceLabel, hasFrmsOtherConfidenceGaps, isFrmsRoutineDutyClosurePending } from '../frmsEvidenceContext';
 
 const baseline = (): FrmsOperationalSnapshotItem => ({
   empresa_id: 1, data_operacional: '2026-10-14', funcionario_id: 7, tripulante_id: 7,
@@ -107,6 +107,23 @@ describe('FRMS triagem visual sem inventar métricas', () => {
     expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
     a.estado_operacional = 'CRITICO_VIOLACAO';
     expect(isFrmsRoutineDutyClosurePending(a, '2026-10-14')).toBe(false);
+  });
+
+  it('não apresenta confiança alta da fonte como ausência de inconsistência atual', () => {
+    const item = baseline();
+    item.alertas = ['DADO_INCONSISTENTE'];
+    const warning = frmsOperationalEvidenceLabel(item, '2026-10-14');
+    expect(warning).toMatchObject({ label: 'Dados inconsistentes — conferir', hasWarning: true });
+    expect(warning.title).toContain('Confiança da fonte');
+    expect(warning.label).not.toContain('alta');
+
+    item.alertas = [];
+    item.snapshot_status = 'INCOMPLETO';
+    expect(frmsOperationalEvidenceLabel(item, '2026-10-14')).toMatchObject({ hasWarning: true });
+    item.snapshot_status = 'ATENCAO';
+    expect(frmsOperationalEvidenceLabel(item, '2026-10-14')).toMatchObject({
+      label: 'Jornada aguardando fechamento', hasWarning: true,
+    });
   });
 
   it('discrimina check-in histórico de check-in recebido hoje sem inventar limite', () => {

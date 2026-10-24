@@ -31,7 +31,7 @@ export function encryptQaPreimage({plan,rows,key}){
   const plainHash=validateQaPreimage(plan,rows);
   if(!Buffer.isBuffer(key)||key.length!==32)die('QA_AES256_KEY_REQUIRED');
   const iv=randomBytes(12), cipher=createCipheriv('aes-256-gcm',key,iv);
-  const ciphertext=Buffer.concat([cipher.update(JSON.stringify(rows)),cipher.final()]);
+  const ciphertext=Buffer.concat([cipher.update(Buffer.from(JSON.stringify(rows),'utf8')),cipher.final()]);
   return {format:'AES-256-GCM',iv:iv.toString('base64'),
     tag:cipher.getAuthTag().toString('base64'),
     ciphertext:ciphertext.toString('base64'),sha256:digest(ciphertext),

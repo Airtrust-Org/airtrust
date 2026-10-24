@@ -1,0 +1,36 @@
+name: F5 Private ZIP Batch Static Verifier
+
+on:
+  pull_request:
+    paths:
+      - scripts/scorm/verify-private-f5-batch.py
+      - scripts/scorm/verify-f5-worker-intake-limits.py
+      - scripts/scorm/validate-f5-streamed-zip.mjs
+      - scripts/scorm/test-f5-streamed-zip.py
+      - scripts/scorm/validate-f5-r2-archive.mjs
+      - scripts/scorm/test-f5-r2-reader.mjs
+      - .github/workflows/f5-private-batch-static.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f5-static-self-test:
+    name: f5-static-self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax and fail-closed synthetic cases
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/scorm/verify-private-f5-batch.py
+          python3 scripts/scorm/verify-private-f5-batch.py --self-test
+          python3 -m py_compile scripts/scorm/verify-f5-worker-intake-limits.py
+          python3 scripts/scorm/verify-f5-worker-intake-limits.py --self-test
+          node --check scripts/scorm/validate-f5-streamed-zip.mjs
+          python3 -m py_compile scripts/scorm/test-f5-streamed-zip.py
+          python3 scripts/scorm/test-f5-streamed-zip.py
+          node --check scripts/scorm/validate-f5-r2-archive.mjs
+          node --check scripts/scorm/test-f5-r2-reader.mjs
+          node scripts/scorm/test-f5-r2-reader.mjs

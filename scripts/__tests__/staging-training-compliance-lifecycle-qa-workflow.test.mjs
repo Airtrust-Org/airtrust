@@ -10,6 +10,7 @@ import test from 'node:test';
 const workflow = readFileSync('.github/workflows/staging-training-compliance-lifecycle-qa.yml', 'utf8');
 const seed = readFileSync('scripts/staging/seed-qa-training-compliance-lifecycle.mjs', 'utf8');
 const spec = readFileSync('e2e/frontend-pr-ui-qa/training-compliance-lifecycle.spec.ts', 'utf8');
+const cycleEvidence = readFileSync('scripts/staging/qa-training-compliance-cycle-evidence.mjs', 'utf8');
 
 test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and always cleans up', () => {
   assert.match(workflow, /refs\/heads\/main/);
@@ -26,6 +27,9 @@ test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and alway
   assert.doesNotMatch(workflow, /api\.airtrust\.online/);
   assert.match(workflow, /if: always\(\) && needs\.d1_fixture\.result != 'skipped'/);
   assert.match(workflow, /--rollback --apply/);
+  assert.match(workflow, /airtrust-staging-mutations-and-scorm-qa/);
+  assert.match(workflow, /expired synthetic evidence renews cycle two and issues an authorized PDF/);
+  assert.match(workflow, /needs\.d1_renewal_browser\.result/);
 });
 
 test('lifecycle fixture is reserved to the canonical synthetic tenant and fails closed', () => {
@@ -35,7 +39,28 @@ test('lifecycle fixture is reserved to the canonical synthetic tenant and fails 
   assert.match(seed, /airtrust-db-staging-baseline-20260701/);
   assert.match(seed, /DELETE FROM lms_xapi_statements/);
   assert.match(seed, /scorm_package_r2_prefix/);
+  assert.match(seed, /'--command', sql, '--json'/);
+  assert.doesNotMatch(seed, /`--file=\$\{file\}`/);
+  assert.match(seed, /lms_integrada=1 AND ativo=1 AND deleted_at IS NULL/);
+  assert.match(seed, /const lmsCategoryId =/);
+  assert.doesNotMatch(seed, /INSERT INTO qualificacoes_categorias/);
+  assert.doesNotMatch(seed, /UPDATE qualificacoes_categorias/);
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance-lifecycle.mjs']);
+  execFileSync('node', ['--check', 'scripts/staging/qa-training-compliance-cycle-evidence.mjs']);
+});
+
+test('controlled expiry is limited to this synthetic E1 LMS qualification and cycle proof is read-only', () => {
+  assert.match(cycleEvidence, /airtrust-db-staging-baseline-20260701/);
+  assert.match(cycleEvidence, /AIRTRUST_STAGING_TRAINING_COMPLIANCE_LIFECYCLE_QA/);
+  assert.match(cycleEvidence, /qa_examiner_training/);
+  assert.match(cycleEvidence, /f\.matricula=\$\{q\(\`\$\{code\}-E1\`\)\}/);
+  assert.match(cycleEvidence, /c\.observacoes=\$\{q\(marker\)\}/);
+  assert.match(cycleEvidence, /AUTO_RENOVACAO/);
+  assert.match(cycleEvidence, /archived_xapi/);
+  assert.match(cycleEvidence, /lms_ciclo_evidencias/);
+  assert.match(cycleEvidence, /certificate_count/);
+  assert.match(workflow, /--expire --apply/);
+  assert.match(workflow, /--verify/);
 });
 
 test('staging fixture binds both QA courses to manager-visible sector and cleans them up', () => {
@@ -47,6 +72,19 @@ test('staging fixture binds both QA courses to manager-visible sector and cleans
   assert.match(seed, /UPDATE lms_cursos_setores\s+SET deleted_at=COALESCE/);
   assert.match(seed, /AND curso_id IN \(\s+SELECT id FROM lms_cursos WHERE empresa_id=/);
   assert.match(seed, /AND c\.observacoes=\$\{esc\(marker\)\} AND lcs\.deleted_at IS NULL/);
+});
+
+test('EAD lifecycle explicitly opts in after proving defaults and NULL modality do not enroll', () => {
+  assert.equal((seed.match(/qc\.id,'EAD',1,12/g) || []).length, 2);
+  assert.equal((seed.match(/,'EAD',60,/g) || []).length, 2);
+  assert.match(spec, /mandatory alone cannot auto-enroll/);
+  assert.match(spec, /NULL modality must fail closed/);
+  assert.match(spec, /opt-in=0 must fail closed/);
+  assert.match(spec, /setExplicitEadEnrollment\(page, sectorRuleId, true, 'EAD'\)/);
+  assert.match(spec, /repeated eligible rule must not duplicate/);
+  assert.match(spec, /orphanOptIn\.json\.data\.auto_enrollment\.created\)\.toBe\(1\)/);
+  assert.match(spec, /evidencia_modalidade\)\.toBe\('EAD'\)/);
+  assert.match(spec, /data_validade\)\.toMatch/);
 });
 
 test('browser simulation covers organization, enrollment, progress, completion and reconciliation transitions', () => {
@@ -70,4 +108,10 @@ test('browser simulation covers organization, enrollment, progress, completion a
   assert.doesNotMatch(spec, /getByRole\('button', \{ name: 'Matricular gaps \(sem e-mail\)'/);
   assert.match(spec, /PRODUCTION_TARGET_REJECTED/);
   assert.match(spec, /describe\.configure\(\{ retries: 0 \}\)/);
+  assert.match(spec, /status_compliance: 'VENCIDO'/);
+  assert.match(spec, /reactivated: 1, created: 0/);
+  assert.match(spec, /%PDF-/);
+  assert.match(spec, /application\/pdf/);
+  assert.match(spec, /SHA-256/);
+  assert.match(spec, /renewal-cycle-2/);
 });

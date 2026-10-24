@@ -1,0 +1,39 @@
+name: F0 Player3 Staging via Trusted GitHub Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+# The workflow only dispatches the already-governed official staging workflow.
+# It never receives Cloudflare secrets, runs SQL or bypasses protected reviewers.
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  actions: write
+
+concurrency:
+  group: airtrust-f0-player3-staging-cloud-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch official Player3 staging release from F0 admin request
+    if: >-
+      ${{
+        github.event.issue.number == 776 &&
+        !github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, 'AIRTRUST_F0_PLAYER3_STAGING_V1 ')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout trusted default-branch commit only
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Authorize exact reviewed F4 PR and dispatch OFFICIAL staging release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/dispatch-f0-player3-staging-from-comment.mjs

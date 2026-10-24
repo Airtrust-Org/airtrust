@@ -1,8 +1,9 @@
 import { hasSchemaTable } from '../utils/db-schema';
 import { buildTrainingComplianceRosterPlan, type RosterPlan, type RosterEnrollment, type RosterCourse } from './training-compliance-roster-plan';
-import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
+import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { registrarAuditoria } from '../utils/auditoria';
+import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
 
 export const ROSTER_RECONCILIATION_TENANT = 6;
@@ -23,7 +24,7 @@ export async function readTrainingRosterPlan(
     buildSnapshot(db, empresaId, ALL_ACCESS),
     db.prepare(`SELECT c.id,c.qualificacao_tipo_id,c.ativo,c.publicado FROM lms_cursos c
       JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id
-      WHERE c.empresa_id=? AND c.deleted_at IS NULL
+      WHERE c.empresa_id=? AND c.ativo=1 AND c.publicado=1 AND c.deleted_at IS NULL
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')`)
       .bind(empresaId).all<RosterCourse>(),
@@ -75,6 +76,7 @@ export async function readTrainingRosterPlan(
       cursos_ambiguos_ou_indisponiveis: plan.skippedAmbiguousCourses,
       comprovacoes_em_revisao: plan.skippedPendingEvidence,
       modalidade_nao_ead: plan.skippedManualModality,
+      politica_sem_opt_in: plan.skippedPolicyOptOut,
       por_curso: [...countByCourse.values()].sort((a,b)=>a.curso_id-b.curso_id),
     },
   };
@@ -103,14 +105,14 @@ async function retireUnusedEnrollment(db: D1Database, empresaId: number, id: num
       SELECT NULL,'LMS_ROSTER_RECONCILIATION','lms_matriculas',?,
          '{"status":"NAO_INICIADO"}',?, ?,datetime('now') WHERE changes()=1`)
       .bind(id,JSON.stringify({status:'CANCELADO',deleted_at:true,reason}),empresaId),
+    db.prepare(`UPDATE notificacoes_inapp SET deleted_at=COALESCE(deleted_at,datetime('now'))
+      WHERE changes()=1 AND empresa_id=? AND referencia_tipo='lms_matricula' AND referencia_id=?
+        AND tipo IN ('lms_nova_matricula','lms_renovacao_automatica') AND deleted_at IS NULL`)
+      .bind(empresaId,String(id)),
     db.prepare(`UPDATE lms_matricula_ciclos SET status='CANCELADO',updated_at=datetime('now')
       WHERE empresa_id=? AND matricula_id=? AND ciclo_atual=1 AND deleted_at IS NULL
         AND EXISTS(SELECT 1 FROM lms_matriculas m WHERE m.id=? AND m.empresa_id=? AND m.deleted_at IS NOT NULL)`)
       .bind(empresaId,id,id,empresaId),
-    db.prepare(`UPDATE notificacoes_inapp SET deleted_at=COALESCE(deleted_at,datetime('now'))
-      WHERE empresa_id=? AND referencia_tipo='lms_matricula' AND referencia_id=?
-        AND tipo IN ('lms_nova_matricula','lms_renovacao_automatica') AND deleted_at IS NULL`)
-      .bind(empresaId,String(id)),
   ]);
   return Number(batch[0]?.meta?.changes || 0) === 1;
 }
@@ -134,14 +136,13 @@ async function ensureRequiredEnrollment(
     if (!cycle) throw new Error('ROSTER_REACTIVATION_CYCLE_MISSING');
     id=existing.id;
   } else {
-    const inserted = await db.prepare(`INSERT INTO lms_matriculas
-      (empresa_id,funcionario_id,curso_id,observacoes)
-      VALUES (?,?,?,'Matrícula necessária conforme cargo/matriz e evidência do Compliance (sem e-mail)')`)
-      .bind(empresaId,action.funcionarioId,action.cursoId).run();
-    id=Number(inserted.meta.last_row_id || 0);
-    if (!id || !(await ensureMatriculaCycle(db,{empresaId,matriculaId:id,origin:'AUTO_RENOVACAO'}))) {
-      throw new Error('ROSTER_ENROLLMENT_CYCLE_MISSING');
-    }
+    const created=await createComplianceEnrollmentAtomic(db,{
+      empresaId,funcionarioId:action.funcionarioId,cursoId:action.cursoId,
+      qualificacaoTipoId:action.tipoId,regraId:action.regraId,
+      observacoes:'Matrícula necessária conforme cargo/matriz e evidência do Compliance (sem e-mail)',
+      origin:'CARGO_COMPLIANCE',
+    });
+    return created!==null;
   }
   await stampLmsEnrollmentEvidenceProfile(db,{
     empresaId,matriculaId:id,funcionarioId:action.funcionarioId,

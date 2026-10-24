@@ -1131,7 +1131,33 @@ function ModalEditarUsuario({
   const [alunoTambemAlterado, setAlunoTambemAlterado] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState<number | null>(usuario.funcionario_id);
   const [setorIds, setSetorIds] = useState<number[]>([]);
+  const [setoresCarregados, setSetoresCarregados] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (perfil !== 'GESTOR') return;
+    setSetoresCarregados(false);
+    (async () => {
+      try {
+        const res = await httpClient.get<{ success: boolean; data: Array<{ setor_id: number }> }>(
+          `/setores-gestores/por-gestor/${usuario.id}`,
+          { retry: 0 },
+        );
+        const payload = res.data;
+        if (!res.success || !payload?.success || !Array.isArray(payload.data)) {
+          throw new Error('Falha ao consultar setores do gestor');
+        }
+        if (!cancelled) {
+          setSetorIds([...new Set(payload.data.map((v) => Number(v.setor_id)).filter((v) => Number.isInteger(v) && v > 0))]);
+          setSetoresCarregados(true);
+        }
+      } catch {
+        if (!cancelled) toast.error('Não foi possível carregar os setores já atribuídos. A edição foi bloqueada.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [usuario.id, perfil]);
 
   const promovendoParaGestor = perfil === 'GESTOR' && normalizePerfil(usuario.perfil) !== 'GESTOR';
 
@@ -1162,6 +1188,10 @@ function ModalEditarUsuario({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (perfil === 'GESTOR' && (!setoresCarregados || setorIds.length === 0)) {
+      toast.error('Selecione ao menos um setor e confirme o carregamento antes de salvar.');
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiFetch(`/admin/usuarios/${usuario.id}`, {
@@ -1297,7 +1327,7 @@ function ModalEditarUsuario({
             </button>
             <button
               type="submit"
-              disabled={saving || (promovendoParaGestor && setorIds.length === 0)}
+              disabled={saving || (perfil === 'GESTOR' && (!setoresCarregados || setorIds.length === 0))}
               className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
             >
               {saving ? 'Salvando...' : 'Salvar'}

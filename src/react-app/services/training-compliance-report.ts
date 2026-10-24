@@ -18,6 +18,7 @@ export type TrainingCompliancePendingRow = {
   critico_operacional: boolean;
   referencia_normativa: string | null;
   curso_ead_titulo: string | null;
+  progresso_pct?: number | null;
   tem_email: boolean;
   tem_whatsapp: boolean;
   avisos_enviados: number;

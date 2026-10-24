@@ -977,6 +977,7 @@ export type ScormPackageVersionRow = {
   packageSha256?: string;
   publishable?: boolean;
   structural?: { status?: string };
+  functionalCertification?: { status?: 'CERTIFIED' | 'UNCERTIFIED'; missing?: string[] };
   runtime?: { status?: string; errors?: string[] };
   conformance?: { status?: string };
   completionManifest?: { errors?: string[] };
@@ -1164,6 +1165,7 @@ export interface PostXapiStatementResult {
 
 export interface PostScormCommitDTO {
   matricula_id: number;
+  ciclo_id: number;
   lesson_status?: string | null;
   completion_status?: string | null;
   success_status?: string | null;

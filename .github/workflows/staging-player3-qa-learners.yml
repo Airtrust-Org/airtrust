@@ -1,0 +1,177 @@
+name: Player3 QA Independent Learner Bootstrap (Governed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_STAGING_PLAYER3_QA_LEARNERS'
+        required: true
+        type: string
+      release_sha:
+        description: 'Exact approved OPEN/DRAFT Player 3 PR #1389 HEAD SHA deployed in staging'
+        required: true
+        type: string
+      grant_id:
+        description: 'Unedited, fresh admin issue #776 grant comment ID for exact SHA/tenant/course'
+        required: true
+        type: string
+
+# Do not overlap any staging D1/R2 write, Worker deploy, or SCORM QA.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+env:
+  PLAYER3_QA_RELEASE_SHA: ${{ inputs.release_sha }}
+  PLAYER3_QA_GRANT_ID: ${{ inputs.grant_id }}
+  NODE_VERSION: '24'
+
+jobs:
+  guard:
+    name: Recheck exact owner/admin grant, Player3 SHA, CI, live staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify trusted dispatch inputs
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_PLAYER3_QA_LEARNERS' ]] || exit 1
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || exit 1
+          [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || exit 1
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Inspect grants and live deployed F4 SHA without write credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/player3-qa-learners.mjs guard
+
+  preflight:
+    name: SELECT-only fixed synthetic staging employee and enrollment preflight
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    outputs:
+      alpha_id: ${{ steps.query.outputs.alpha_id }}
+      bravo_id: ${{ steps.query.outputs.bravo_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install locked staging Wrangler without lifecycle scripts
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Read exact tenant and existing enrollment scope, reject any mutation
+        id: query
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-learners.mjs preflight
+
+  provision:
+    name: Two distinct student invitations and two Native enrollments via Worker only
+    needs: [guard, preflight]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    outputs:
+      chromium_enrollment_id: ${{ steps.apply.outputs.chromium_enrollment_id }}
+      chromium_cycle_id: ${{ steps.apply.outputs.chromium_cycle_id }}
+      webkit_enrollment_id: ${{ steps.apply.outputs.webkit_enrollment_id }}
+      webkit_cycle_id: ${{ steps.apply.outputs.webkit_cycle_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Explicit mutation scope and protected learner secret readiness
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_PLAYER3_QA_LEARNERS' ]] || exit 1
+          [[ -n "$CHROMIUM_PASSWORD" && -n "$WEBKIT_PASSWORD" ]] || exit 1
+          [[ "$CHROMIUM_PASSWORD" != "$WEBKIT_PASSWORD" ]] || exit 1
+          echo 'PLAYER3_QA_DISTINCT_PROTECTED_SECRETS_PRESENT'
+      - name: Authenticated Worker-only learner/account/Native enrollment operations
+        id: apply
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONFIRM_STAGING_PLAYER3_QA_LEARNERS: AIRTRUST_STAGING_PLAYER3_QA_LEARNERS
+          PLAYER3_QA_ALPHA_ID: ${{ needs.preflight.outputs.alpha_id }}
+          PLAYER3_QA_BRAVO_ID: ${{ needs.preflight.outputs.bravo_id }}
+          QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          QA_EXAMINER_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          PLAYER3_QA_CHROMIUM_PASSWORD: ${{ secrets.PLAYER3_QA_CHROMIUM_PASSWORD }}
+          PLAYER3_QA_WEBKIT_PASSWORD: ${{ secrets.PLAYER3_QA_WEBKIT_PASSWORD }}
+        run: node scripts/staging/player3-qa-learners.mjs provision
+
+  d1_verify:
+    name: Read back two employee-scoped and edition-bound Native enrollments
+    needs: [guard, preflight, provision]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: SELECT-only physical verification
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/staging/player3-qa-learners.mjs verify
+
+  summary:
+    name: Record narrow Player3 QA bootstrap result (never six-journey acceptance)
+    needs: [guard, preflight, provision, d1_verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail closed and record scope
+        shell: bash
+        env:
+          GUARD_RESULT: ${{ needs.guard.result }}
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          PROVISION_RESULT: ${{ needs.provision.result }}
+          VERIFY_RESULT: ${{ needs.d1_verify.result }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Player3 independent synthetic learners / staging'
+            echo "- exact F4 SHA: $PLAYER3_QA_RELEASE_SHA"
+            echo '- tenant: 999006; only course: 327; physical edition: 1'
+            echo "- guard: $GUARD_RESULT"
+            echo "- SELECT-only preflight: $PREFLIGHT_RESULT"
+            echo "- Worker API synthetic enrollment: $PROVISION_RESULT"
+            echo "- SELECT-only edition pin readback: $VERIFY_RESULT"
+            echo '- 6/6 Chromium/WebKit browser acceptance: NOT ATTESTED'
+            echo '- Completion, qualification, PDF and legacy SCORM: NOT ATTESTED'
+            echo '- Production, migrations, R2/Pages writes: NONE'
+            echo '- Failed or partial executions require governed review; never auto-replay'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$GUARD_RESULT" == success && "$PREFLIGHT_RESULT" == success &&
+             "$PROVISION_RESULT" == success && "$VERIFY_RESULT" == success ]]

@@ -34,6 +34,38 @@ export function hasFrmsOtherConfidenceGaps(item: FrmsOperationalSnapshotItem, to
     !isFrmsRoutineDutyClosurePending(item, todayIso);
 }
 
+/**
+ * Purely presentational evidence label. High confidence in a recorded source
+ * does NOT resolve a separate current-day inconsistency or authorize duty.
+ */
+export function frmsOperationalEvidenceLabel(item: FrmsOperationalSnapshotItem, todayIso: string): {
+  label: string;
+  title: string;
+  hasWarning: boolean;
+} {
+  const confidence = operationalConfidence(item).toLowerCase();
+  const sourceNote = `Confiança da fonte: ${confidence}; não substitui avaliação de risco ou decisão humana.`;
+  if (item.alertas.includes('DADO_INCONSISTENTE') || item.snapshot_status === 'INCOMPLETO') {
+    return {
+      label: 'Dados inconsistentes — conferir',
+      title: `Inconsistências ou lacunas atuais precisam de revisão. ${sourceNote}`,
+      hasWarning: true,
+    };
+  }
+  if (isFrmsRoutineDutyClosurePending(item, todayIso)) {
+    return {
+      label: 'Jornada aguardando fechamento',
+      title: `Fechamento operacional ainda não recebido. ${sourceNote}`,
+      hasWarning: true,
+    };
+  }
+  return {
+    label: `Fonte: confiança ${confidence}`,
+    title: sourceNote,
+    hasWarning: false,
+  };
+}
+
 /** Independent facts from the canonical snapshot, not a new risk classifier. */
 export function frmsAttentionFacts(item: FrmsOperationalSnapshotItem): string[] {
   const period = item.fortnight_indicator;

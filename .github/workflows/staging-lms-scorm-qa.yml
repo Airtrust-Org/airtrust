@@ -11,6 +11,14 @@ on:
         description: 'Exact already-deployed staging release SHA to validate'
         required: true
         type: string
+      qa_scope:
+        description: 'Full original QA or strictly inactive SCORM resume preview'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - resume-inactive-preview
       pr_number:
         description: 'Open reviewed same-repository release PR (required only when SHA is not yet in main)'
         required: false
@@ -172,14 +180,33 @@ jobs:
             --list
           npm run test:run -- src/react-app/pages/lms/__tests__/lmsContentUpload.serial.test.ts
 
+      - name: Build exact uncertified two-position resume ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/qa/build-scorm-resume-synthetic.py \
+            --output qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip
+          test "$(sha256sum qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip | cut -d' ' -f1)" = \
+            'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f'
+
       - name: Prepare disposable SCORM courses and ZIP fixtures
         run: node scripts/staging/lms-scorm-staging-qa.mjs
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
-      - name: Exercise real SCORM success, rejection, timeout and progress in staging UI
-        run: npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
+      - name: Exercise governed SCORM functional blocking, rejection and timeout in staging UI
+        shell: bash
+        env:
+          QA_SCOPE: ${{ inputs.qa_scope }}
+        run: |
+          set -euo pipefail
+          if [[ "$QA_SCOPE" == 'resume-inactive-preview' ]]; then
+            npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium \
+              --grep 'LMS SCORM resume:'
+          else
+            npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
+          fi
 
       - name: Cleanup disposable LMS SCORM fixtures
         if: always()
@@ -195,7 +222,7 @@ jobs:
           fi
 
       - name: Publish sanitized LMS SCORM QA summary
-        if: success()
+        if: ${{ success() && inputs.qa_scope == 'all' }}
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -208,7 +235,8 @@ jobs:
             '- exact Worker/frontend release provenance: PASS',
             `- real synthetic ZIP upload: ${browser.success?.real_zip_upload ? 'PASS' : 'FAIL'}`,
             `- visible upload progress/status: ${Array.isArray(browser.success?.visible_progress) ? 'PASS' : 'FAIL'}`,
-            `- Browser Rendering conformance success: ${browser.success?.runtime_conformance || 'FAIL'}`,
+            `- Browser Rendering protocol conformance: ${browser.success?.runtime_conformance || 'FAIL'}`,
+            `- Functional certification pending (no false PASS): ${browser.success?.functional_certification === 'UNCERTIFIED' && !browser.success?.activated ? 'PASS' : 'FAIL'}`,
             `- static rejection path: ${browser.rejection?.static_gate || 'FAIL'}`,
             `- runtime timeout path: ${browser.timeout?.runtime_conformance || 'FAIL'}`,
             `- rejected/timeout package activation blocked: ${!browser.rejection?.activated && !browser.timeout?.activated ? 'PASS' : 'FAIL'}`,
@@ -228,6 +256,7 @@ jobs:
             playwright-report
             test-results/frontend-pr-ui-qa/results.json
             qa-state/staging-lms-scorm/browser-summary.json
+            qa-state/staging-lms-scorm/resume-preview-summary.json
             qa-state/staging-lms-scorm/cleanup-summary.json
           if-no-files-found: ignore
           retention-days: 30

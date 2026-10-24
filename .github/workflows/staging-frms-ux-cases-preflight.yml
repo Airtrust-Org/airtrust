@@ -20,6 +20,14 @@ on:
         description: Exact source SHA for that artifact
         required: true
         type: string
+      case_scope:
+        description: Latest source cohort, or pinned 9–12 Oct reviewed fixture with fresh eligibility check
+        required: true
+        type: choice
+        default: source_latest
+        options:
+          - source_latest
+          - reviewed_historical_4case
 
 permissions:
   contents: read
@@ -40,6 +48,7 @@ jobs:
           EXPECTED_MAIN: ${{ inputs.expected_main_sha }}
           SOURCE_RUN: ${{ inputs.aggregate_run_id }}
           SOURCE_SHA: ${{ inputs.source_aggregate_sha }}
+          CASE_SCOPE: ${{ inputs.case_scope }}
           CONFIRM: ${{ inputs.confirmation }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -49,6 +58,7 @@ jobs:
           [[ "$EXPECTED_MAIN" =~ ^[0-9a-f]{40}$ ]] || exit 1
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
           [[ "$SOURCE_RUN" =~ ^[0-9]{8,14}$ ]] || exit 1
+          [[ "$CASE_SCOPE" == source_latest || "$CASE_SCOPE" == reviewed_historical_4case ]] || exit 1
           [[ "$CONFIRM" == AIRTRUST_STAGING_FRMS_CASES_READONLY ]] || exit 1
           [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED_MAIN" ]] || exit 1
           run="$(gh api repos/Airtrust-Org/airtrust/actions/runs/"$SOURCE_RUN" --jq '[.conclusion,.event,.head_sha,.path] | @tsv')"
@@ -88,9 +98,16 @@ jobs:
           STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
           CONFIRM_FRMS_QA_CASES_INSPECT: ${{ inputs.confirmation }}
           SOURCE_AGGREGATE_SHA: ${{ inputs.source_aggregate_sha }}
+          FRMS_QA_CASE_SCOPE: ${{ inputs.case_scope }}
+          FRMS_QA_EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
           SANITIZED_AGGREGATE_PATH: ${{ github.workspace }}/_frms_qa_aggregate/frms-ux-30d-aggregates.json
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          node scripts/staging/inspect-frms-ux-cases.mjs
+          if [[ "$FRMS_QA_CASE_SCOPE" == "reviewed_historical_4case" ]]; then
+            node scripts/staging/inspect-frms-ux-cases.mjs --reviewed-current-source
+          else
+            [[ "$FRMS_QA_CASE_SCOPE" == "source_latest" ]] || exit 1
+            node scripts/staging/inspect-frms-ux-cases.mjs
+          fi

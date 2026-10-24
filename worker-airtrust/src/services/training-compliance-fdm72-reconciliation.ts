@@ -1,18 +1,8 @@
 import { extrairUsuarioAuditoria } from '../utils/auditoria';
 import { reconcileTrainingComplianceRuleEnrollment } from './training-compliance-rule-enrollment';
+import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
 
-type FdmSnapshot = {
-  rules: Array<{
-    id: number;
-    qualificacao_tipo_id: number;
-    obrigatoriedade: string;
-    modalidade_requerida: string | null;
-  }>;
-  people: Array<{
-    id: number;
-    requisitos: Array<{ regra_id: number; obrigatoriedade: string; status_compliance: string }>;
-  }>;
-};
+type FdmSnapshot = Pick<TrainingComplianceSnapshot, 'rules' | 'people'>;
 
 type Summary = {
   created: number;

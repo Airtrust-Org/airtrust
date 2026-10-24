@@ -1,0 +1,40 @@
+name: F0 Player3 Readback via Trusted GitHub Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: read
+  actions: write
+
+concurrency:
+  group: airtrust-f0-player3-readback-cloud-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Gate exact admin command and dispatch existing protected read-only QA
+    if: >-
+      ${{
+        github.event.issue.number == 776 &&
+        !github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, 'AIRTRUST_F0_PLAYER3_READBACK_V1 ')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify no duplicate run, 10 checks and exact live staging F4 SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging/dispatch-f0-player3-readback-from-comment.mjs

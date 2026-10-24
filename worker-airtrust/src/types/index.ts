@@ -39,6 +39,9 @@ export interface Env {
   EDB_SHADOW_PILOT_TENANTS?: string;
   // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
   CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
+  // SCORM in-cycle edition handoff. Keep disabled until Schema V2 0566 is
+  // applied and exact-SHA staging acceptance is complete.
+  LMS_SCORM_EDITION_HANDOFF_ENABLED?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
@@ -126,6 +129,15 @@ export interface Env {
   // Browser Run binding. It is intentionally separate from the PDF API token:
   // SCORM conformance launches a clean Chromium with no AirTrust credentials.
   SCORM_BROWSER?: unknown;
+  // Shared only between governed staging QA attestation signer and Worker;
+  // missing secret fails closed; never inject in browser/frontend.
+  SCORM_QA_ATTESTATION_SECRET?: string;
+  // Exact, short-lived F5 staging grant. A missing or malformed grant keeps
+  // streamed large-package intake closed; it is never enabled in production.
+  SCORM_F5_STREAMED_INTAKE_GRANT?: string;
+  // Dedicated F5 staging readback; never share with signer or client.
+  SCORM_QA_READBACK_SECRET?: string;
+  SCORM_QA_SYNTHETIC_TENANT_ID?: string;
 
   // Maintenance routes secret (wrangler secret put MAINTENANCE_SECRET)
   MAINTENANCE_SECRET?: string;
@@ -379,7 +391,11 @@ export interface JwtPayload {
   asset_scope?: 'pptx_viewer' | 'course_assets';
   asset_curso_id?: number;
   asset_matricula_id?: number;
+  asset_cycle_id?: number;
+  asset_handoff_id?: number | null;
   asset_scorm_package_prefix?: string;
+  asset_qa_candidate_id?: string; // Short-lived non-production preview scope only
+  asset_qa_candidate_sha256?: string; // Exact staged candidate ZIP identity
   asset_preview?: boolean;
   nome?: string;
   empresa_id?: number; // Multi-tenant: ID da empresa ativa

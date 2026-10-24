@@ -320,6 +320,7 @@ export function LmsModuleTabs({ canManage }: { canManage: boolean }) {
     { label: canManage ? 'Catálogo' : 'Cursos em lista', to: '/lms/cursos', visible: true },
     { label: 'Legado EdApp', to: '/lms/legado-edapp', visible: canManage },
     { label: 'Configurações', to: '/lms/admin/cursos', visible: canManage },
+    { label: 'Em andamento', to: '/lms/matriculas/em-andamento', visible: canManage },
     { label: 'Relatórios', to: '/lms/relatorios', visible: canManage },
   ].filter((item) => item.visible);
 

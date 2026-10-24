@@ -63,8 +63,16 @@ jobs:
           node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
           node --test scripts/ci/check-frontend-entry-chunks.test.mjs
-      - name: validate SCORM source-map package guard
-        run: node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
+      - name: validate Native Player 3 F5 QA approval gate
+        run: node --test scripts/__tests__/player3-native-qa-approval-gate.test.mjs
+      - name: validate Player3 independent synthetic learner workflow
+        run: node --test scripts/__tests__/player3-qa-learners.test.mjs
+      - name: validate SCORM package and duplicate inventory contracts
+        run: |
+          node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
+          node --test scripts/__tests__/scorm-duplicate-reference-inventory.test.mjs
+      - name: validate legacy qualification comparison CLI compatibility
+        run: node --test scripts/__tests__/legacy-qualification-comparison-entrypoint.test.mjs
       - name: tenant mutations guard
         run: node scripts/guard-tenant-mutations.mjs
       - name: validate 0438 on disposable real-base SQLite
@@ -79,6 +87,18 @@ jobs:
           npm run guard:schema-contract-staleness
       - name: prevent obsolete Player 3 staging schema pins
         run: node --test scripts/__tests__/staging-player3-schema-v2-pins.test.mjs
+      - name: validate SCORM 0566 staging schema trusted workflow and physical guards
+        run: node --test scripts/__tests__/staging-scorm-handoff-0566-workflow.test.mjs
+      - name: validate F5 single-candidate staging authorization guard
+        run: |
+          node --test scripts/__tests__/f5-candidate-approval-guard.test.mjs \
+            scripts/__tests__/f5-inactive-candidate-executor.test.mjs \
+            scripts/__tests__/f5-worker-adapters.test.mjs \
+            scripts/__tests__/f5-runner-dispatch-scope.test.mjs \
+            scripts/__tests__/f5-sanitize-execution-evidence.test.mjs \
+            scripts/__tests__/f5-materialize-private-zip.test.mjs \
+            scripts/__tests__/f5-f0-adapters.test.mjs \
+            scripts/__tests__/f5-runner-error-redaction.test.mjs
       - name: validate CI schema bootstrap provenance / staleness
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs
@@ -92,6 +112,8 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance
         run: node --test scripts/__tests__/staging-frms-0464-bootstrap-repair.test.mjs
+      - name: validate FRMS staging QA uses the shared mutation mutex
+        run: node --test scripts/__tests__/staging-frms-auth-qa.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
       - name: validate production LMS SCORM enrollment review read-only contract
@@ -108,6 +130,8 @@ jobs:
         run: node --test scripts/__tests__/lms-fdm13-reassignment-preflight-readonly.test.mjs
       - name: verify SCORM 99 percent production proof is read only
         run: node --test scripts/__tests__/lms-scorm99-proof-readonly.test.mjs
+      - name: Validate LMS99 embedded CMI evidence read-only scanner
+        run: node --test scripts/__tests__/lms99-embedded-cmi-readonly.test.mjs
       - name: validate LMS active-course certification across SCORM, PDF, PPTX and H5P
         run: |
           node --test scripts/__tests__/production-lms-active-course-certification-readonly.test.mjs
@@ -119,6 +143,12 @@ jobs:
         run: node --test scripts/__tests__/lms-scorm-answer-plan.test.mjs
       - name: ensure staging success fixture requires real learner interactions
         run: node --test scripts/__tests__/lms-scorm-m8-fixture.test.mjs
+      - name: verify Player3 governed staging no-write grant contract
+        run: node --test scripts/__tests__/player3-staging-governance.test.mjs
+      - name: validate F0 GitHub-native staging dispatch privileges and exact candidate
+        run: node --test scripts/__tests__/f0-player3-staging-issueops.test.mjs
+      - name: validate F0 delegated bot release requires original admin issue command
+        run: node --test scripts/__tests__/f0-delegated-staging-attestation.test.mjs
       - name: verify frozen Factory SCORM core lock is fail-closed
         run: python3 -m unittest scripts/__tests__/test_scorm_golden_core_lock.py -v
       - name: validate 0438 legacy staging workflow guards

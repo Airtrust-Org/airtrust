@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   getSchemaColumns,
+  getSchemaTriggerNames,
   hasSchemaColumn,
   hasSchemaTable,
   resetSchemaCache,
@@ -37,6 +38,39 @@ function makeDb(schema: FakeSchema) {
 
 describe('D1 schema metadata cache', () => {
   beforeEach(() => resetSchemaCache());
+
+  it('caches physical trigger metadata per D1 binding and clears it explicitly', async () => {
+    let probes = 0;
+    function binding() {
+      return {
+        prepare(sql: string) {
+          expect(sql).toContain('sqlite_schema');
+          return {
+            bind(table: string) {
+              expect(table).toBe('sessoes_checks_resultados_individuais');
+              return {
+                async all() {
+                  probes += 1;
+                  return { results: [{ name: 'trg_checks_individuais_scope_insert' }] };
+                },
+              };
+            },
+          };
+        },
+      } as unknown as D1Database;
+    }
+    const first = binding();
+    const second = binding();
+    expect(await getSchemaTriggerNames(first, 'sessoes_checks_resultados_individuais'))
+      .toEqual(new Set(['trg_checks_individuais_scope_insert']));
+    await getSchemaTriggerNames(first, 'sessoes_checks_resultados_individuais');
+    expect(probes).toBe(1);
+    await getSchemaTriggerNames(second, 'sessoes_checks_resultados_individuais');
+    expect(probes).toBe(2);
+    resetSchemaCache();
+    await getSchemaTriggerNames(first, 'sessoes_checks_resultados_individuais');
+    expect(probes).toBe(3);
+  });
 
   it('caches table and column probes for the same D1 binding', async () => {
     const { db, calls } = makeDb({ funcionarios: ['id', 'empresa_id', 'nome'] });

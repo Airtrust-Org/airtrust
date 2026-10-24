@@ -64,9 +64,26 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(capabilities.data.scopes).toEqual(
     expect.arrayContaining(['EMPRESA', 'SETOR', 'FUNCAO', 'SETOR_FUNCAO', 'FUNCIONARIO']),
   );
-  expect(catalogs.data.access_mode).toBe('all');
+  // The real QA login selects its server-authorized Gestor profile. Global
+  // access here would be privilege escalation, not a healthy test.
+  expect(catalogs.data.access_mode).toBe('restricted');
   expect(Array.isArray(catalogs.data.setores)).toBe(true);
   expect(Array.isArray(catalogs.data.funcoes)).toBe(true);
+  const managedSector = catalogs.data.setores.find(
+    (sector: { id: number; codigo: string }) => sector.codigo === 'QA-SETOR-EXA',
+  );
+  expect(managedSector, 'QA manager must have its actual synthetic sector grant').toBeTruthy();
+  expect(Array.isArray(catalogs.data.funcionarios)).toBe(true);
+  expect(catalogs.data.funcionarios.length).toBeGreaterThan(0);
+  const accessibleSectorIds = new Set(
+    catalogs.data.setores.map((sector: { id: number }) => Number(sector.id)),
+  );
+  expect(catalogs.data.funcionarios.some((person: { setor_id: number | null }) =>
+    Number(person.setor_id) === Number(managedSector.id)),
+  ).toBe(true);
+  for (const person of catalogs.data.funcionarios) {
+    expect(accessibleSectorIds.has(Number(person.setor_id))).toBe(true);
+  }
   expect(Array.isArray(pendings.data)).toBe(true);
 
   const s = summary.data;
@@ -82,9 +99,10 @@ test('training compliance intelligent staging flow is live and read-only', async
     expect(s.compliance_pct).toBeNull();
   }
 
-  const qaPending = pendings.data.find((row: any) => row.qualificacao_tipo_codigo === QA_CODE);
+  const qaPending = pendings.data.find((row: { qualificacao_tipo_codigo: string }) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaPending, 'synthetic never-realized requirement must be in Pendências').toBeTruthy();
   expect(qaPending.status_compliance).toBe('NAO_REALIZADO');
+  expect(Number(qaPending.setor_id)).toBe(Number(managedSector.id));
   expect(qaPending.avisos_enviados).toBeGreaterThanOrEqual(0);
   expect(typeof qaPending.tem_email).toBe('boolean');
   expect(typeof qaPending.tem_whatsapp).toBe('boolean');
@@ -101,7 +119,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
   await page.getByRole('main').getByRole('button', { name: 'Treinamentos', exact: true }).click();
   const trainings = await trainingsP.then(payload);
-  const qaTraining = trainings.data.find((row: any) => row.qualificacao_tipo_codigo === QA_CODE);
+  const qaTraining = trainings.data.find((row: { qualificacao_tipo_codigo: string }) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaTraining, 'synthetic never-realized training must be visible').toBeTruthy();
   expect(qaTraining.pessoas).toBeGreaterThan(0);
   expect(qaTraining.nao_realizados).toBe(qaTraining.pessoas);
@@ -123,6 +141,9 @@ test('training compliance intelligent staging flow is live and read-only', async
   await trainingRow.locator('td').nth(7).getByRole('button').click();
   const people = await peopleP.then(payload);
   expect(people.data.length).toBe(qaTraining.pessoas);
+  for (const person of people.data) {
+    expect(Number(person.setor_id)).toBe(Number(managedSector.id));
+  }
   await expect(page.getByText(/^Pessoas de .* · NUNCA FEZ$/i)).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
@@ -218,5 +239,18 @@ test('training compliance intelligent staging flow is live and read-only', async
   const rules = await rulesP.then(payload);
   expect(Array.isArray(rules.data)).toBe(true);
 
+  // Prove the backend rejects a requested sector outside the real Gestor
+  // assignment; a merely permissive assertion of 'restricted' is insufficient.
+  const deniedStatus = await page.evaluate(async () => {
+    const token = sessionStorage.getItem('airtrust_token') ||
+      localStorage.getItem('airtrust_token');
+    if (!token) throw new Error('QA_AUTH_TOKEN_MISSING');
+    const response = await fetch(
+      'https://airtrust-api-staging.airtrust.workers.dev/api/compliance-treinamentos/matriz-organizacao?setor_id=2147483647',
+      { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' },
+    );
+    return response.status;
+  });
+  expect(deniedStatus, 'QA manager may not inspect out-of-scope sectors').toBe(403);
   guard.assertClean();
 });

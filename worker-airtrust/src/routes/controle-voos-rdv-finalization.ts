@@ -30,10 +30,12 @@ function parseHhMmMinutes(value: string | null | undefined): number {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function plannedFlightMinutes(flight: { horario_previsto_partida?: string | null; horario_previsto_chegada?: string | null }): number {
+function plannedFlightMinutes(flight: { horario_previsto_partida?: string | null; horario_previsto_chegada?: string | null }): number | null {
   const start = Date.parse(String(flight.horario_previsto_partida || ''));
   const end = Date.parse(String(flight.horario_previsto_chegada || ''));
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  // Missing, malformed or inverted planned timestamps do not represent a
+  // legitimate zero-minute plan. The deviation is not measurable in that case.
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   return Math.round((end - start) / 60_000);
 }
 
@@ -42,6 +44,10 @@ export async function assertPlanningDeviationJustified(
   empresaId: number,
   flight: { id: number; horario_previsto_partida?: string | null; horario_previsto_chegada?: string | null },
 ): Promise<void> {
+  const plannedMinutes = plannedFlightMinutes(flight);
+  // This guard reconciles *deviations from a valid plan*. Other required-field
+  // checks are independent and must not treat an absent plan as zero minutes.
+  if (plannedMinutes === null) return;
   const stages = await db
     .prepare(
       `SELECT horario_motor_ligado, horario_decolagem, horario_pouso, horario_motor_desligado
@@ -68,7 +74,7 @@ export async function assertPlanningDeviationJustified(
     realizedMinutes += parseHhMmMinutes(computed.tempo_total);
   }
 
-  const requiredMinutes = Math.max(0, realizedMinutes - plannedFlightMinutes(flight));
+  const requiredMinutes = Math.max(0, realizedMinutes - plannedMinutes);
   if (requiredMinutes <= 0) return;
 
   const sumRow = await db

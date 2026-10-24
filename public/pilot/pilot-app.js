@@ -13,6 +13,7 @@ import {
   buildCommonFlightFields,
   assertVerifiedLeaseAllowsDraft,
   buildDraftSnapshot,
+  requireStableFuelingIdentity,
   calcConsumoCombustivel,
   calcStageTotalWeight,
   convertWeight,
@@ -2591,6 +2592,11 @@ function refreshDraftValidationPresentation() {
     if (!String(fueling.empresa_abastecimento_codigo || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': selecione a empresa de abastecimento.');
     if (!String(fueling.numero_nota || '').trim()) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe o número da nota.');
     if (parseNumber(fueling.litros_abastecidos) === null) supplementalErrors.push('Abastecimento ' + (index + 1) + ': informe os litros abastecidos.');
+    try {
+      requireStableFuelingIdentity(fueling, activeRdvDraft.form?.data_voo);
+    } catch (error) {
+      supplementalErrors.push('Abastecimento ' + (index + 1) + ': ' + String(error?.message || error));
+    }
   }
   supplementalErrors.push(
     ...validatePlanningJustifications(
@@ -5027,6 +5033,17 @@ function renderFuelingFields() {
         },
       }),
     );
+    grid.append(createEditorField({
+      label: 'Hora do abastecimento',
+      value: fueling.hora || '',
+      type: 'time',
+      onInput: (value) => {
+        fueling.hora = value;
+        scheduleOperationalSave();
+        refreshDraftValidationPresentation();
+      },
+      onBlur: () => void flushOperationalSave(),
+    }));
     for (const [label, key, type, inputMode] of [
       ['Número da nota', 'numero_nota', 'text', null],
       ['Litros abastecidos', 'litros_abastecidos', 'number', 'decimal'],

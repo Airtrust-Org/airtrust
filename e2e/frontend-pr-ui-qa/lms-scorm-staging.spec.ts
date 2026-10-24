@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { chromium, expect, test, webkit, type Page, type Route } from '@playwright/test';
 
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 
@@ -16,6 +16,7 @@ type QaState = {
     success: QaCourse;
     reject: QaCourse;
     timeout: QaCourse;
+    resume: QaCourse;
   };
 };
 
@@ -23,6 +24,8 @@ type ApiEnvelope = {
   success?: boolean;
   data?: {
     status?: string;
+    packageId?: string;
+    packageSha256?: string;
     publishable?: boolean;
     structural?: { status?: string };
     completionManifest?: { status?: string };
@@ -31,6 +34,7 @@ type ApiEnvelope = {
       status?: string;
       tests?: Array<{ name?: string; status?: string; detail?: string }>;
     };
+    functionalCertification?: { status?: string; missing?: string[] };
     runtime?: {
       status?: string;
       functionalCompletionVerified?: boolean;
@@ -82,8 +86,18 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   }, { timeout: 45_000 });
   await page.goto('/lms/cursos', { waitUntil: 'domcontentloaded' });
   const draftResponse = await draftQuery;
+  // A 200 HTML shell (Pages fallback/redirect) is not a valid Worker catalog.
+  // Require the actual trusted staging API origin, never a same-path proxy.
+  const draftUrl = new URL(draftResponse.url());
+  if (draftUrl.protocol !== 'https:' || draftUrl.hostname !== STAGING_API_HOST) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_UNTRUSTED_ORIGIN');
+  }
   if (draftResponse.status() !== 200) {
     throw new Error('QA_SCORM_DRAFT_CATALOG_API_HTTP_' + draftResponse.status());
+  }
+  const responseType = (draftResponse.headers()['content-type'] ?? '').toLowerCase();
+  if (!/(?:^|[+\/])json(?:[;\s]|$)/.test(responseType)) {
+    throw new Error('QA_SCORM_DRAFT_CATALOG_NON_JSON_200');
   }
   const draftPayload = await draftResponse.json().catch(() => null) as {
     success?: boolean;
@@ -91,7 +105,19 @@ async function openCourseEditor(page: Page, course: QaCourse) {
     pagination?: { total?: number };
   } | null;
   if (!draftPayload?.success || !Array.isArray(draftPayload.data)) {
-    throw new Error('QA_SCORM_DRAFT_CATALOG_API_INVALID');
+    // Emit only a bounded schema classification; never catalog data, tenant IDs,
+    // course names, response bodies, auth headers, or backend error strings.
+    const successClass = draftPayload?.success === true ? 'true'
+      : draftPayload?.success === false ? 'false' : 'missing';
+    const dataValue: unknown = draftPayload?.data;
+    const dataClass = Array.isArray(dataValue) ? 'array'
+      : dataValue === null ? 'null'
+      : dataValue === undefined ? 'missing'
+      : typeof dataValue === 'object' ? 'object' : 'scalar';
+    throw new Error(
+      'QA_SCORM_DRAFT_CATALOG_API_INVALID:success_' + successClass +
+      ':data_' + dataClass,
+    );
   }
   if (!draftPayload.data.some((item) => Number(item.id) === Number(course.id))) {
     // Only sanitized aggregate dimensions and a reason code; no employee or
@@ -134,8 +160,8 @@ async function submitCourse(page: Page) {
     .click();
 }
 
-test('LMS SCORM staging: real success, rejection, timeout and visible progress', async ({ page }) => {
-  test.setTimeout(150_000);
+test('LMS SCORM staging: protocol pass stays uncertified, static reject and timeout stay blocked', async ({ page }) => {
+  test.setTimeout(240_000);
 
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const mutations: Array<{ method: string; url: string }> = [];
@@ -201,23 +227,27 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     finished: conformanceVerdict?.runtime?.finishObserved ?? false,
     completion_reached: conformanceVerdict?.runtime?.completionReached ?? false,
   };
-  // Do not print URLs, learner identities, tokens, SCORM CMI or uploaded content.
-  expect(conformanceVerdict?.publishable, 
-    `SCORM_STAGING_CONFORMANCE_NOT_PUBLISHABLE:${JSON.stringify(safeDiagnostic)}`,
-  ).toBe(true);
-  await expect(page.getByText('Ativando nova versão...', { exact: true })).toBeVisible({
-    timeout: 30_000,
+  // Protocol/interactive driver PASS does not cover two browsers, resume,
+  // rejected assessment, tenant/cycle isolation or persisted qualifications.
+  // The currently active version must remain unchanged. This QA is not a
+  // full functional certification and must never report the ZIP as activated.
+  expect(conformanceVerdict?.conformance?.status,
+    `SCORM_PROTOCOL_FAILURE:${JSON.stringify(safeDiagnostic)}`,
+  ).toBe('PASS');
+  expect(conformanceVerdict?.publishable).toBe(false);
+  expect(conformanceVerdict?.functionalCertification?.status).toBe('UNCERTIFIED');
+  await expect(page.getByText(/aguarda certificação funcional completa/i)).toBeVisible({
+    timeout: 20_000,
   });
-  await expect(page.getByText('85%', { exact: true })).toBeVisible();
-
-  await expect(page.getByText('Curso atualizado.', { exact: true })).toBeVisible({ timeout: 20_000 });
   expect(successUpload?.success).toBe(true);
   expect(successUpload?.data?.status).toBe('VALIDATED');
   expect(successConformance?.success).toBe(true);
-  expect(successConformance?.data?.publishable).toBe(true);
   expect(successConformance?.data?.runtime?.status).toBe('PASS');
-  expect(successActivate?.success).toBe(true);
-  expect(successActivate?.data?.status).toBe('ACTIVE');
+  expect(successActivate).toBeNull();
+  expect(mutations.some((entry) =>
+    entry.url.includes(`/cursos/${state.courses.success.id}/scorm-package-versions/`) &&
+    entry.url.includes('/activate'),
+  )).toBe(false);
 
   await page.unroute(`**/api/lms/cursos/${state.courses.success.id}/scorm-upload**`);
   await page.unroute(
@@ -312,9 +342,11 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     live_frontend_provenance: 'PASS',
     success: {
       real_zip_upload: true,
-      visible_progress: [25, 65, 85],
+      visible_progress: [25, 65],
       runtime_conformance: 'PASS',
-      activated: true,
+      functional_certification: 'UNCERTIFIED',
+      activated: false,
+      previous_package_preserved: true,
     },
     rejection: {
       real_zip_upload: true,
@@ -333,4 +365,115 @@ test('LMS SCORM staging: real success, rejection, timeout and visible progress',
     production_mutations: 0,
   };
   writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+});
+
+test('LMS SCORM resume: exact inactive candidate upload and Chromium WebKit preview', async ({ page }) => {
+  test.setTimeout(180_000);
+  const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
+  const mutations: string[] = [];
+  page.on('request', request => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
+    mutations.push(request.url());
+  });
+  // Upload the exact SHA-pinned resume fixture through the REAL staging UI.
+  // Keep the candidate inactive/uncertified. QA preview cannot persist CMI;
+  // authenticated Chromium/WebKit persistence is covered separately by #1730.
+  let resumeUpload: ApiEnvelope | null = null;
+  const resume = state.courses.resume;
+  await page.route(`**/api/lms/cursos/${resume.id}/scorm-upload**`,
+    (route) => delayedRealResponse(route, 600, (json) => { resumeUpload = json; }));
+  await openCourseEditor(page, resume);
+  await submitCourse(page);
+  await expect.poll(() => resumeUpload !== null, {
+    timeout: 45_000,
+    message: 'O upload real da fixture de retomada não retornou da API',
+  }).toBe(true);
+  const resumeData = resumeUpload?.data;
+  expect(resumeUpload?.success).toBe(true);
+  expect(resumeData?.status).toBe('VALIDATED');
+  expect(resumeData?.packageSha256).toBe(
+    'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
+  );
+  const resumeCandidate = String(resumeData?.packageId ?? '');
+  expect(resumeCandidate).toMatch(/^[0-9a-f-]{36}$/i);
+
+  const qaOrigin = 'https://' + STAGING_API_HOST;
+  const previews: string[] = [];
+  for (const [label, engine] of [['CHROMIUM', chromium], ['WEBKIT', webkit]] as const) {
+    const browser = await engine.launch({ headless: true });
+    try {
+      const context = await browser.newContext({ serviceWorkers: 'block' });
+      try {
+        const email = process.env.QA_EXAMINER_ADMIN_EMAIL ||
+          'qa-examiner-admin@staging.airtrust.invalid';
+        const password = process.env.QA_EXAMINER_ADMIN_PASSWORD ||
+          process.env.QA_ADMIN_PASSWORD || '';
+        expect(password.length).toBeGreaterThan(0);
+        const logged = await context.request.post(qaOrigin + '/api/auth/login',
+          { data: { email, senha: password } });
+        expect(logged.status()).toBe(200);
+        let token = String((await logged.json())?.data?.accessToken ?? '');
+        expect(token.length).toBeGreaterThan(20);
+        const enterprises = await context.request.get(qaOrigin + '/api/auth/empresas',
+          { headers: { Authorization: 'Bearer ' + token } });
+        expect(enterprises.status()).toBe(200);
+        const list = (await enterprises.json())?.data;
+        const qaTenant = (list?.empresas ?? []).find(
+          (item: { codigo?: string }) => item.codigo === 'qa_examiner_training');
+        expect(Number(qaTenant?.id)).toBeGreaterThan(0);
+        if (Number(list?.empresaAtualId) !== Number(qaTenant.id)) {
+          const switched = await context.request.post(qaOrigin + '/api/auth/select-empresa', {
+            headers: { Authorization: 'Bearer ' + token },
+            data: { empresaId: Number(qaTenant.id) },
+          });
+          expect(switched.status()).toBe(200);
+          token = String((await switched.json())?.data?.accessToken ?? '');
+          expect(token.length).toBeGreaterThan(20);
+        }
+        const session = await context.request.post(qaOrigin + '/api/lms/assets/session', {
+          headers: { Authorization: 'Bearer ' + token },
+          data: { curso_id: resume.id, preview: true,
+            candidate_package_id: resumeCandidate,
+            candidate_package_sha256: resumeData.packageSha256 },
+        });
+        expect(session.status()).toBe(200);
+        const candidatePage = await context.newPage();
+        const preview = await candidatePage.goto(
+          qaOrigin + '/api/lms/scorm/qa-preview/' + resume.id + '/' + resumeCandidate,
+          { waitUntil: 'domcontentloaded' },
+        );
+        expect(preview?.status()).toBe(200);
+        const frame = candidatePage.frameLocator('#scorm-frame');
+        await expect(frame.getByRole('heading', { name: 'QA SCORM — Retomada Sintética' }))
+          .toBeVisible({ timeout: 25_000 });
+        await expect(frame.locator('[data-qa-position]'))
+          .toHaveText('Posição 1 de 2');
+        previews.push(label);
+      } finally {
+        await context.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  }
+  expect(previews).toEqual(['CHROMIUM', 'WEBKIT']);
+  await page.unroute(`**/api/lms/cursos/${resume.id}/scorm-upload**`);
+
+
+  expect(mutations.every(url => {
+    try { return new URL(url).hostname === STAGING_API_HOST; } catch { return false; }
+  })).toBe(true);
+  const summary = {
+    source: 'GOVERNED_STAGING_REAL_WORKER_PAGES_INACTIVE_PREVIEW',
+    scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
+    exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
+    uploadStatus: 'VALIDATED',
+    previewRendered: ['CHROMIUM', 'WEBKIT'],
+    active: false,
+    certified: false,
+    committedCmiProven: false,
+    productionMutations: 0,
+  };
+  writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
+    JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });

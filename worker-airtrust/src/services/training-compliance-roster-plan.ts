@@ -33,6 +33,7 @@ export type RosterEnrollAction = {
   cursoId: number;
   tipoId: number;
   existingId: number | null;
+  regraId: number;
 };
 export type RosterRemoveAction = {
   matriculaId: number;
@@ -47,6 +48,7 @@ export type RosterPlan = {
   skippedAmbiguousCourses: number;
   skippedPendingEvidence: number;
   skippedManualModality: number;
+  skippedPolicyOptOut: number;
 };
 
 export function rosterEnrollmentHasEvidence(row: RosterEnrollment): boolean {
@@ -63,7 +65,7 @@ export function buildTrainingComplianceRosterPlan(
 ): RosterPlan {
   const byType = new Map<number, number[]>();
   for (const course of courses) {
-    if (course.ativo === 0 || course.publicado === 0) continue;
+    if (course.ativo !== 1 || course.publicado !== 1) continue;
     const typeId = Number(course.qualificacao_tipo_id);
     byType.set(typeId, [...(byType.get(typeId) || []), Number(course.id)]);
   }
@@ -90,6 +92,7 @@ export function buildTrainingComplianceRosterPlan(
   const plan: RosterPlan = {
     enroll: [], remove: [], protectedCount: 0,
     skippedAmbiguousCourses: 0, skippedPendingEvidence: 0, skippedManualModality: 0,
+    skippedPolicyOptOut: 0,
   };
 
   for (const person of snapshot.people) {
@@ -103,8 +106,12 @@ export function buildTrainingComplianceRosterPlan(
         plan.skippedPendingEvidence++;
         continue;
       }
-      if (req.modalidade_requerida && req.modalidade_requerida !== 'EAD') {
+      if (req.modalidade_requerida !== 'EAD') {
         plan.skippedManualModality++;
+        continue;
+      }
+      if (req.auto_matricular_ead !== 1) {
+        plan.skippedPolicyOptOut++;
         continue;
       }
       if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;
@@ -122,6 +129,7 @@ export function buildTrainingComplianceRosterPlan(
         cursoId: courseId,
         tipoId: Number(req.qualificacao_tipo_id),
         existingId: existing[0]?.id || null,
+        regraId: req.regra_id,
       });
     }
   }
@@ -164,4 +172,44 @@ export function buildTrainingComplianceRosterPlan(
   plan.enroll.sort((a, b) => a.cursoId - b.cursoId || a.funcionarioId - b.funcionarioId);
   plan.remove.sort((a, b) => a.matriculaId - b.matriculaId);
   return plan;
+}
+
+/**
+ * Fair, bounded traversal of a fresh Compliance roster preview.
+ * Cursor orders actions only: it never grants applicability or authorization.
+ * The plan is rebuilt and policy-checked for every tick. Do not persist IDs
+ * of people outside the existing tenant-scoped cron state.
+ */
+export function selectTrainingComplianceRosterBatch(
+  plan: RosterPlan,
+  cursor: string | null,
+  limit = 8,
+): { batch: RosterPlan; cursorAfter: string | null; selectedCount: number; totalActions: number } {
+  const padded = (id: number) => String(id).padStart(16, '0');
+  const ordered = [
+    ...plan.remove.map(action => ({
+      key: `0:${padded(action.matriculaId)}`, kind: 'remove' as const, action,
+    })),
+    ...plan.enroll.map(action => ({
+      key: `1:${padded(action.cursoId)}:${padded(action.funcionarioId)}`,
+      kind: 'enroll' as const, action,
+    })),
+  ].sort((a, b) => a.key.localeCompare(b.key));
+  const validCursor = typeof cursor === 'string' &&
+    /^[01]:[0-9]{16}(?::[0-9]{16})?$/.test(cursor) ? cursor : null;
+  let start = validCursor ? ordered.findIndex(item => item.key > validCursor) : 0;
+  if (start < 0) start = 0;
+  const size = Number.isFinite(limit) ? Math.min(20, Math.max(1, Math.trunc(limit))) : 8;
+  const selected = [...ordered.slice(start), ...ordered.slice(0, start)].slice(0, size);
+  const batch: RosterPlan = { ...plan, enroll: [], remove: [] };
+  for (const item of selected) {
+    if (item.kind === 'remove') batch.remove.push(item.action);
+    else batch.enroll.push(item.action);
+  }
+  return {
+    batch,
+    cursorAfter: selected.at(-1)?.key ?? null,
+    selectedCount: selected.length,
+    totalActions: ordered.length,
+  };
 }

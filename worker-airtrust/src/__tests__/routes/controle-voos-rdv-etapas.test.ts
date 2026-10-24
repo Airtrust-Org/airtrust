@@ -10,6 +10,7 @@ import { errorHandler } from '../../middleware/error-handler';
 import {
   computeEtapaTempos,
   computeFlightTotalsFromEtapas,
+  validateEtapaInput,
 } from '../../services/controle-voos/rdv-etapas';
 
 vi.mock('../../middleware/auth', () => ({
@@ -395,6 +396,38 @@ describe('rdv-etapas — compute helpers', () => {
     const tempos = computeEtapaTempos('23:30', '00:45', '23:20', '00:55');
     expect(tempos.tempo_decolagem_pouso).toBe('01:15');
     expect(tempos.tempo_total).toBe('01:35');
+  });
+
+  it('rejects mixed HH:MM and ISO instants instead of fabricating decades of flight hours', () => {
+    const mixed = computeEtapaTempos(
+      '2026-06-14T10:00:00Z', '11:00', '09:50', '2026-06-14T11:10:00Z',
+    );
+    expect(mixed).toEqual({ tempo_decolagem_pouso: null, tempo_total: null });
+    const reverse = computeEtapaTempos(
+      '10:00', '2026-06-14T11:00:00Z', '2026-06-14T09:50:00Z', '11:10',
+    );
+    expect(reverse).toEqual({ tempo_decolagem_pouso: null, tempo_total: null });
+  });
+
+  it('blocks a mixed-format leg at input validation, including partially filled leg times', () => {
+    expect(() => validateEtapaInput({
+      horario_motor_ligado: '10:00',
+      horario_decolagem: '2026-06-14T10:10:00Z',
+    })).toThrow(/mesmo formato/);
+    expect(() => validateEtapaInput({
+      horario_motor_ligado: '10:00',
+      horario_motor_desligado: '2026-06-14T11:00:00Z',
+    })).toThrow(/mesmo formato/);
+    expect(() => validateEtapaInput({
+      horario_motor_ligado: '23:40', horario_decolagem: '23:50',
+      horario_pouso: '00:30', horario_motor_desligado: '00:40',
+    })).not.toThrow();
+    expect(() => validateEtapaInput({
+      horario_motor_ligado: '2026-06-14T23:40:00Z',
+      horario_decolagem: '2026-06-14T23:50:00Z',
+      horario_pouso: '2026-06-15T00:30:00Z',
+      horario_motor_desligado: '2026-06-15T00:40:00Z',
+    })).not.toThrow();
   });
 
   it('computeEtapaTempos usa pouso como fechamento provisório quando ainda não houve corte', () => {

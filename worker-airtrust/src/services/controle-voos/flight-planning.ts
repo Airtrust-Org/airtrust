@@ -145,6 +145,29 @@ export async function applyAircraftBasicWeightToFlightStages(
   const planningUnit: 'KG' | 'LB' = unidadePesoPlanejado === 'KG' ? 'KG' : 'LB';
   const pesoVazio = convertWeight(aircraftWeight.pesoVazio, aircraftWeight.unidadePeso, planningUnit);
   try {
+    // Bulk relabelling a stage's unit without converting existing component
+    // numbers would silently change the meaning of crew/pax/baggage weights.
+    const currentStages = await db.prepare(`SELECT unidade_peso, peso_tripulacao,
+        peso_passageiros, peso_bagagem
+        FROM cv_voo_etapas
+        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
+      .bind(empresaId, vooId).all<{
+        unidade_peso: string | null;
+        peso_tripulacao: number | null;
+        peso_passageiros: number | null;
+        peso_bagagem: number | null;
+      }>();
+    for (const stage of currentStages.results || []) {
+      const unit = String(stage.unidade_peso || '').trim().toUpperCase();
+      const hasComponents = [stage.peso_tripulacao, stage.peso_passageiros,
+        stage.peso_bagagem].some(value => value != null);
+      if (hasComponents && unit !== planningUnit) {
+        throw new ApiError(
+          'Unidade de peso da etapa incompatível com a propagação do peso básico',
+          409, 'CONTROLE_VOOS_WEIGHT_UNIT_MISMATCH',
+        );
+      }
+    }
     await db.prepare(
       `UPDATE cv_voo_etapas
           SET peso_vazio = ?, unidade_peso = ?, updated_at = datetime('now')
@@ -177,35 +200,68 @@ export async function updateFlightStagePlanningIfSupported(
       ? convertWeight(aircraftWeight.pesoVazio, aircraftWeight.unidadePeso, planningUnit)
       : null;
 
-  if (
-    planning.pesoPlanejado == null &&
-    planning.paxPlanejado == null &&
-    planning.pesoPassageiros == null &&
-    planning.pesoBagagem == null &&
-    planning.pesoCarga == null &&
-    aircraftWeightInPlanningUnit == null
-  ) return;
+  const updatesComponents =
+    planning.pesoPassageiros != null ||
+    planning.pesoBagagem != null ||
+    planning.pesoCarga != null;
+  // Editing PAX is not a request to erase a stage's certified empty/basic
+  // weight, change its unit, or recompute its weight from incomplete inputs.
+  if (aircraftWeightInPlanningUnit == null && !updatesComponents) {
+    if (planning.paxPlanejado != null) {
+      await db.prepare(`UPDATE cv_voo_etapas
+          SET pax = ?, updated_at = datetime('now')
+          WHERE empresa_id = ? AND voo_id = ? AND numero_etapa = 1 AND deleted_at IS NULL`)
+        .bind(planning.paxPlanejado, empresaId, vooId).run();
+    }
+    return;
+  }
+
+  // An existing stage's other weights are expressed in unidade_peso.
+  // Relabelling them KG/LB without converting their values is unsafe.
+  // Reject a mismatched unit BEFORE performing any weight writes.
+  const currentStages = await db.prepare(`SELECT unidade_peso,
+      peso_vazio, peso_tripulacao, peso_passageiros, peso_bagagem
+      FROM cv_voo_etapas
+      WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`)
+    .bind(empresaId, vooId).all<{
+      unidade_peso: string | null;
+      peso_vazio: number | null;
+      peso_tripulacao: number | null;
+      peso_passageiros: number | null;
+      peso_bagagem: number | null;
+    }>();
+  for (const stage of currentStages.results || []) {
+    const unit = String(stage.unidade_peso || '').trim().toUpperCase();
+    const hasStoredWeight = [stage.peso_vazio, stage.peso_tripulacao,
+      stage.peso_passageiros, stage.peso_bagagem].some(value => value != null);
+    if (hasStoredWeight && unit !== planningUnit) {
+      throw new ApiError(
+        'Unidade de peso da etapa incompatível com o planejamento; conversão explícita necessária',
+        409, 'CONTROLE_VOOS_WEIGHT_UNIT_MISMATCH',
+      );
+    }
+  }
 
   try {
     await db.prepare(
       `UPDATE cv_voo_etapas
-          SET pax = CASE WHEN numero_etapa = 1 THEN ? ELSE pax END,
-              peso_passageiros = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_passageiros END,
-              peso_bagagem = CASE WHEN numero_etapa = 1 THEN ? ELSE peso_bagagem END,
-              payload = CASE WHEN numero_etapa = 1 THEN ? ELSE payload END,
-              peso_vazio = ?,
-              unidade_peso = ?,
+          SET pax = CASE WHEN numero_etapa = 1 AND ? IS NOT NULL THEN ? ELSE pax END,
+              peso_passageiros = CASE WHEN numero_etapa = 1 AND ? IS NOT NULL THEN ? ELSE peso_passageiros END,
+              peso_bagagem = CASE WHEN numero_etapa = 1 AND ? IS NOT NULL THEN ? ELSE peso_bagagem END,
+              payload = CASE WHEN numero_etapa = 1 AND ? IS NOT NULL THEN ? ELSE payload END,
+              peso_vazio = COALESCE(?, peso_vazio),
+              unidade_peso = CASE WHEN ? IS NOT NULL OR unidade_peso IS NULL THEN ? ELSE unidade_peso END,
               updated_at = datetime('now')
         WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL`,
     ).bind(
-      planning.paxPlanejado,
-      planning.pesoPassageiros,
-      planning.pesoBagagem,
+      planning.paxPlanejado, planning.paxPlanejado,
+      planning.pesoPassageiros, planning.pesoPassageiros,
+      planning.pesoBagagem, planning.pesoBagagem,
+      planning.pesoCarga == null ? null : convertWeight(planning.pesoCarga, planningUnit, 'KG'),
       planning.pesoCarga == null ? null : convertWeight(planning.pesoCarga, planningUnit, 'KG'),
       aircraftWeightInPlanningUnit,
-      planningUnit,
-      empresaId,
-      vooId,
+      aircraftWeightInPlanningUnit, planningUnit,
+      empresaId, vooId,
     ).run();
     // Same certified weight formula used by server-side RDV stage edits and Pilot App.
     // Payload is stored in KG; other values are expressed in unidade_peso.
