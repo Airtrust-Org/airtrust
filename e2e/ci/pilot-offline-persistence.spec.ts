@@ -203,6 +203,63 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
+test('reopens a completed flight for consultation without requesting an edit lease', async ({ page }) => {
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+  });
+  let editLeaseRequests = 0;
+  await page.addInitScript(() => localStorage.setItem('airtrust_token', 'synthetic-access'));
+  await page.route('**/api/controle-voos/voos/meus', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: [{
+      id: 42, prefixo: 'PR-QA', numero_voo: 'QA-42',
+      data_programacao: today, origem_id: 1, destino_id: 2,
+      versao: 4, rdv_versao: 2,
+    }] }),
+  }));
+  await page.route('**/api/controle-voos/voos/42/offline-lease', (route) => {
+    editLeaseRequests += 1;
+    return route.fulfill({ status: 409, contentType: 'application/json',
+      body: JSON.stringify({ success: false, error: 'Read-only RDV' }) });
+  });
+  await page.route('**/api/controle-voos/voos/42/offline-package', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: {
+      contract: { name: 'airtrust-pilot-offline-package', version: 1,
+        read_only: true, sync_supported: true, regulated_edb: false,
+        package_id: 'qa-flight-42-v4' },
+      identity: { tenant_id: 7, user_id: 70, funcionario_id: 77 },
+      voo: { id: 42, prefixo: 'PR-QA', numero_voo: 'QA-42',
+        data_programacao: today, origem_id: 1, destino_id: 2,
+        status: 'concluido_operacionalmente', versao: 4 },
+      rdv: { id: 90, numero: 'RDV-QA-42',
+        status: 'preenchimento_finalizado', workflow_status: 'enviado', versao: 2 },
+      origem: { codigo_icao: 'SBME' }, destino: { codigo_icao: 'SBAA' },
+      tripulantes: [], etapas: [], abastecimentos: [],
+      aeronave: { modelo: 'Helicóptero de teste' },
+      workspace: { contract: { name: 'airtrust-pilot-workspace' }, planning: { documentos: [] } },
+    } }),
+  }));
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir voo' })).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Abrir voo' }).click();
+  await expect(page.locator('#flight-detail-card')).toBeVisible();
+  await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
+  await expect(page.locator('#rdv-editor-card')).toBeHidden();
+  await expect(page.locator('#pilot-workspace-view')).toContainText('RDV-QA-42');
+  expect(editLeaseRequests).toBe(0);
+
+  await page.locator('#close-detail').click();
+  await expect(page.locator('#flight-detail-card')).toBeHidden();
+  await page.getByRole('button', { name: 'Abrir voo' }).click();
+  await expect(page.locator('#flight-detail-card')).toBeVisible();
+  await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
+  expect(editLeaseRequests).toBe(0);
+});
+
 test('skips the legacy PIN prompt only when old encrypted stores are empty', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
