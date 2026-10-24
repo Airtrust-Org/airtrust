@@ -78,7 +78,7 @@ function fixture(){
     constructor(private query:string,private vals:unknown[]=[]){}
     bind(...v:unknown[]){return new Prepared(this.query,v);}
     run(){
-      if(/^\\s*SELECT\\b/i.test(this.query)) {
+      if(/^\s*SELECT\b/i.test(this.query)) {
         const results=db.prepare(this.query).all(...this.vals as (string|number|null)[]);
         return {meta:{changes:0},results};
       }
