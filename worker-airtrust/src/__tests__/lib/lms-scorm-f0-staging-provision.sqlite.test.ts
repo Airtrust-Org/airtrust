@@ -1,21 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
+import type { DatabaseSync } from 'node:sqlite';
+const SqliteDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as { new (path: string): DatabaseSync };
 import { readFileSync } from 'node:fs';
 import { provisionScormF0QaBinding, type ScormF0ProvisionRequest } from '../../lib/lms/lms-scorm-f0-staging-provision';
 
 const id = '12345678-1234-1234-1234-123456789abc';
 const runId = 'abcdefab-1234-1234-1234-abcdefabcdef';
 const sha = 'a'.repeat(64);
-const now = Date.parse('2026-10-23T23:00:00Z');
+const now = Date.now();
 const request: ScormF0ProvisionRequest = {
   tenantId: 111, courseId: 15, packageId: id, packageSha256: sha,
   enrollmentId: 23, cycleId: 24, runId,
   approvalReceiptSha256: 'b'.repeat(64), runtimeSha: 'c'.repeat(40),
-  expiresAt: '2026-10-23T23:30:00Z', grantId: '6378307802', actorId: 3,
+  expiresAt: new Date(now + 30 * 60_000).toISOString(), grantId: '6378307802', actorId: 3,
 };
 
 function fixture() {
-  const db = new DatabaseSync(':memory:');
+  const db = new SqliteDatabaseSync(':memory:');
   db.exec(`
     PRAGMA foreign_keys=ON;
     CREATE TABLE lms_cursos(
@@ -130,7 +132,7 @@ describe('F0 atomic protected D1 synthetic binding, actual schema 0568', () => {
       await expect(provisionScormF0QaBinding(f.shim, { ...request, tenantId: 112 }, now))
         .rejects.toThrow('SCORM_F0_SYNTHETIC_ENROLLMENT_NOT_ELIGIBLE');
       await expect(provisionScormF0QaBinding(f.shim,
-        { ...request, expiresAt: '2026-10-23T22:00:00Z' }, now))
+        { ...request, expiresAt: new Date(now - 60_000).toISOString() }, now))
         .rejects.toThrow('SCORM_F0_PROVISION_SCOPE_OR_EXPIRY_INVALID');
       expect(f.count('lms_scorm_qa_evidence_bindings')).toBe(0);
       expect(f.count('audit_logs')).toBe(0);
