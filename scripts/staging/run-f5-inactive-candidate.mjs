@@ -92,12 +92,15 @@ const PUBLIC_RUNNER_FAILURE_CODES = new Set([
 
 export function safeF5RunnerErrorCode(error) {
   try {
-    return PUBLIC_RUNNER_FAILURE_CODES.has(error?.message)
-      ? error.message
-      : 'F5_RUNNER_OPERATION_FAILED';
+    const code = error?.message;
+    if (PUBLIC_RUNNER_FAILURE_CODES.has(code)) return code;
+    // Numeric status only: never echo untrusted Worker response bodies.
+    if (typeof code === 'string' &&
+        /^F5_WORKER_ADAPTER_WORKER_HTTP_[1-5][0-9]{2}$/.test(code)) return code;
   } catch {
-    return 'F5_RUNNER_OPERATION_FAILED';
+    // Untrusted Error getters must not break fail-closed logging.
   }
+  return 'F5_RUNNER_OPERATION_FAILED';
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
