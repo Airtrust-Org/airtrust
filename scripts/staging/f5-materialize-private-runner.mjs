@@ -43,11 +43,13 @@ export async function materializeF5RunnerArtifacts(env) {
   }
   const paths = [join(temp, names.plan), join(temp, names.adapter)];
   const handles = [];
+  const created = [];
   try {
     for (const [index, bytes] of [plan, adapter].entries()) {
       // Exclusive create rejects existing files/symlinks. Owner only, no logs.
       const handle = await open(paths[index], 'wx', 0o600);
       handles.push(handle);
+      created.push(paths[index]);
       await handle.writeFile(bytes);
       await handle.close();
     }
@@ -56,7 +58,7 @@ export async function materializeF5RunnerArtifacts(env) {
       remoteWritesExecuted: false };
   } catch (error) {
     for (const handle of handles) await handle.close().catch(() => {});
-    for (const path of paths) await unlink(path).catch(() => {});
+    for (const path of created) await unlink(path).catch(() => {});
     throw error;
   }
 }
