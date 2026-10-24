@@ -3,7 +3,7 @@
  * Build runner-local F5 plan and F0 executable module from protected staging
  * secrets. Never print either artifact, and never read ZIP/call Worker here.
  */
-import { lstat, open, unlink } from 'node:fs/promises';
+import { lstat, open, readFile, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -13,8 +13,6 @@ const names = Object.freeze({
   plan: 'f5-executor-plan.json',
   adapter: 'f5-provisioned-f0-adapter.mjs',
 });
-const hex64 = /^[a-f0-9]{64}$/;
-
 function decodeSecret(value, maxBytes) {
   if (typeof value !== 'string' || !value.length || value.length % 4 !== 0 ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
@@ -34,13 +32,20 @@ export async function materializeF5RunnerArtifacts(env) {
   }
   const dir = await lstat(temp).catch(() => fail('RUNNER_TEMP_NOT_FOUND'));
   if (!dir.isDirectory() || dir.isSymbolicLink()) fail('RUNNER_TEMP_UNTRUSTED');
-  // Validate both sources before creating either file.
-  const plan = decodeSecret(env.F5_EXECUTOR_PLAN_B64, 128 * 1024);
-  const adapter = decodeSecret(env.F5_F0_ADAPTER_B64, 2 * 1024 * 1024);
-  if (!hex64.test(env.F5_F0_ADAPTER_SHA256 ?? '') ||
-      createHash('sha256').update(adapter).digest('hex') !== env.F5_F0_ADAPTER_SHA256) {
-    fail('PINNED_ADAPTER_SHA_MISMATCH');
+  const workspace=resolve(String(env.GITHUB_WORKSPACE??''));
+  const adapterSource=resolve(String(env.F5_F0_ADAPTER_SOURCE??''));
+  if (!env.GITHUB_WORKSPACE || adapterSource!==join(workspace,'scripts/staging/f5-f0-adapters.mjs')) {
+    fail('TRACKED_F0_ADAPTER_SOURCE_REQUIRED');
   }
+  const sourceStat=await lstat(adapterSource).catch(()=>fail('TRACKED_F0_ADAPTER_NOT_FOUND'));
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink() || sourceStat.size<1 || sourceStat.size>2*1024*1024) {
+    fail('TRACKED_F0_ADAPTER_UNTRUSTED');
+  }
+  // The private plan is protected configuration. Executable adapter code is
+  // reviewed at the exact checked-out main SHA, then copied owner-only.
+  const plan = decodeSecret(env.F5_EXECUTOR_PLAN_B64, 128 * 1024);
+  const adapter=await readFile(adapterSource);
+  const adapterSha256=createHash('sha256').update(adapter).digest('hex');
   const paths = [join(temp, names.plan), join(temp, names.adapter)];
   const handles = [];
   const created = [];
@@ -54,7 +59,7 @@ export async function materializeF5RunnerArtifacts(env) {
       await handle.close();
     }
     return { status: 'MOUNTED', scope: 'STAGING_RUNNER_ONLY',
-      files: paths.length, adapterSha256: env.F5_F0_ADAPTER_SHA256,
+      files: paths.length, adapterSha256,
       remoteWritesExecuted: false };
   } catch (error) {
     for (const handle of handles) await handle.close().catch(() => {});

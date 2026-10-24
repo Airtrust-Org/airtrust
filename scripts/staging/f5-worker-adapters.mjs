@@ -67,11 +67,11 @@ export function createF5WorkerAdapters({
   env = process.env,
   fetchImpl = fetch,
   verifyF0Receipts,
+  provisionF0Binding,
   runSyntheticCandidate,
   recoverSyntheticCandidate,
   cleanupSyntheticCandidate,
   removeFailedCandidate,
-  resolveAmbiguousIntake,
 } = {}) {
   const origin = String(env.F5_STAGING_API_ORIGIN || API_DEFAULT).replace(/\/$/, '');
   const pagesOrigin = String(env.F5_STAGING_PAGES_ORIGIN || PAGES_DEFAULT).replace(/\/$/, '');
@@ -152,7 +152,7 @@ export function createF5WorkerAdapters({
       return json(`${coursePath(courseId)}/scorm-upload/streamed/init`, {
         method: 'POST', body: { operation_id: params.operationId,
           expected_sha256: params.packageSha256, zip_bytes: params.zipBytes,
-          arquivo_nome: `f5-${params.packageSha256}.zip` },
+          arquivo_nome: `f5-${params.packageSha256}-${params.operationId}.zip` },
       });
     },
 
@@ -177,8 +177,22 @@ export function createF5WorkerAdapters({
     },
 
     async resolveAmbiguousIntake(params) {
-      if (typeof resolveAmbiguousIntake !== 'function') fail('AMBIGUOUS_INTAKE_RESOLVER_NOT_PROVISIONED');
-      return resolveAmbiguousIntake(params, { request, json });
+      const { courseId } = ids(params);
+      if (!UUID.test(params.operationId ?? '') || !HEX64.test(params.packageSha256 ?? '')) {
+        fail('AMBIGUOUS_INTAKE_IDENTITY_INVALID');
+      }
+      const result = await json(`${coursePath(courseId)}/scorm-upload/streamed/${params.operationId}/status?sha256=${params.packageSha256}`,
+        { method: 'GET' });
+      if (result?.source !== 'WORKER_F5_INTAKE_STATUS' ||
+          !['INTAKE_PRESENT', 'CANDIDATE_PRESENT', 'CLEAN'].includes(result.state)) {
+        fail('AMBIGUOUS_INTAKE_READBACK_INVALID');
+      }
+      if (result.state === 'CANDIDATE_PRESENT' &&
+          (result.candidate?.packageSha256 !== params.packageSha256 ||
+           result.candidate?.createdByOperation !== true || result.candidate?.alreadyExisted !== false)) {
+        fail('AMBIGUOUS_CANDIDATE_OWNERSHIP_UNPROVEN');
+      }
+      return { ...result, verified: true };
     },
 
     async readCandidateD1(params) {
@@ -195,6 +209,7 @@ export function createF5WorkerAdapters({
         source: 'WORKER_D1_CANDIDATE_READBACK', tenantId: empresaId, courseId: cursoId,
         packageId: row.packageId, packageSha256: row.packageSha256, status: row.status,
         active: row.active === true, r2Prefix: row.r2Prefix, launchFile: row.launchFile,
+        scormVersion: row.scormVersion,
       };
     },
 
@@ -226,6 +241,10 @@ export function createF5WorkerAdapters({
     async readQaEvidence(params) {
       const { courseId } = ids(params);
       if (!readbackSecret || readbackSecret.length < 32) fail('READBACK_SECRET_NOT_PROVISIONED');
+      if (params.phase === 'BEFORE') {
+        if (typeof provisionF0Binding !== 'function') fail('F0_BINDING_PROVISIONER_NOT_PROVISIONED');
+        await provisionF0Binding(params, { request, json });
+      }
       const data = await json(`${coursePath(courseId)}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, {
         method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': readbackSecret },
       });

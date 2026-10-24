@@ -310,3 +310,162 @@ export async function commitF0CandidateSuspend(
     completionWritten:false,scoreWritten:false,certificateIssued:false,
   };
 }
+
+/**
+ * Idempotently restore only the clean preimage that the F0 binding contract
+ * requires. The candidate and append-only binding/audit rows remain available
+ * for forensic review; no learner outside this synthetic run can match scope.
+ */
+export async function recoverF0CandidateFixture(
+  db: D1Database,
+  scope: F0Scope & { cycleId: number; runId: string; recoveryReceiptSha256: string },
+) {
+  checkScope(scope);
+  if (!positive(scope.cycleId) || !/^[0-9a-f-]{36}$/i.test(scope.runId) ||
+      !HEX64.test(scope.recoveryReceiptSha256)) {
+    throw new ApiError('SCORM_F0_RECOVERY_SCOPE_INVALID', 400);
+  }
+  type State = {
+    binding_id: string; binding_status: string; run_id: string; ciclo_id: number;
+    package_sha256: string; runtime_sha: string; enrollment_status: string;
+    progresso_pct: number | null; data_inicio: string | null; score_final: number | null;
+    history_id: number | null; cycle_status: string; cmi_json: string | null;
+    suspend_data: string | null; lesson_status: string | null;
+    completion_status: string | null; success_status: string | null;
+    score_raw: number | null; score_max: number | null; score_min: number | null;
+    score_scaled: number | null; session_count: number | null;
+  };
+  let state: State | null;
+  try {
+    state = await db.prepare(
+      `SELECT b.id AS binding_id,b.status AS binding_status,b.run_id,b.ciclo_id,
+              b.package_sha256,b.staging_runtime_sha AS runtime_sha,
+              m.status AS enrollment_status,m.progresso_pct,m.data_inicio,m.score_final,
+              q.id AS history_id,cy.status AS cycle_status,
+              sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
+              sc.success_status,sc.score_raw,sc.score_max,sc.score_min,
+              sc.score_scaled,sc.session_count
+         FROM lms_scorm_qa_evidence_bindings b
+         JOIN lms_scorm_package_versions p ON p.id=b.package_id
+           AND p.empresa_id=b.empresa_id AND p.curso_id=b.curso_id
+           AND p.package_sha256=b.package_sha256 AND p.status='VALIDATED'
+         JOIN lms_cursos c ON c.id=b.curso_id AND c.empresa_id=b.empresa_id
+           AND c.deleted_at IS NULL AND c.publicado=0
+           AND c.scorm_package_r2_prefix IS NOT p.r2_prefix
+         JOIN lms_matriculas m ON m.id=b.matricula_id
+           AND m.empresa_id=b.empresa_id AND m.curso_id=b.curso_id
+           AND m.deleted_at IS NULL AND m.observacoes='QA_SCORM_F0:' || b.run_id
+         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=b.empresa_id
+           AND f.deleted_at IS NULL AND f.nome LIKE 'QA-PARTICIPANTE-%'
+         JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id
+           AND cy.matricula_id=m.id AND cy.empresa_id=b.empresa_id
+           AND cy.curso_id=b.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+         LEFT JOIN lms_progresso_scorm sc ON sc.empresa_id=b.empresa_id
+           AND sc.matricula_id=b.matricula_id
+         LEFT JOIN qualificacoes_historico q ON q.empresa_id=b.empresa_id
+           AND q.lms_matricula_id=b.matricula_id AND q.deleted_at IS NULL
+        WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
+          AND b.package_sha256=? AND b.matricula_id=? AND b.ciclo_id=?
+          AND b.run_id=? AND b.staging_runtime_sha=? AND b.synthetic=1
+          AND b.status IN ('ACTIVE','REVOKED')
+        LIMIT 1`,
+    ).bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
+      scope.enrollmentId,scope.cycleId,scope.runId,scope.runtimeSha).first<State>();
+  } catch {
+    throw new ApiError('SCORM_F0_RECOVERY_SCHEMA_OR_READ_FAILED', 409);
+  }
+  if (!state || state.package_sha256!==scope.packageSha256 || state.run_id!==scope.runId ||
+      state.ciclo_id!==scope.cycleId || !['ACTIVE','REVOKED'].includes(state.binding_status) ||
+      !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.enrollment_status) ||
+      !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.cycle_status) ||
+      state.progresso_pct===null || state.progresso_pct>1 || state.score_final!==null ||
+      state.history_id!==null || (state.lesson_status!==null && state.lesson_status!=='incomplete') ||
+      (state.completion_status!==null && state.completion_status!=='incomplete') ||
+      (state.success_status!==null && state.success_status!=='unknown') ||
+      [state.score_raw,state.score_max,state.score_min,state.score_scaled].some(value=>value!==null) ||
+      (state.binding_status==='REVOKED' &&
+       (state.enrollment_status!=='NAO_INICIADO' || state.cycle_status!=='NAO_INICIADO' ||
+        state.progresso_pct!==0 || state.data_inicio!==null || state.cmi_json!==null ||
+        state.suspend_data!==null || state.session_count!==null))) {
+    throw new ApiError('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID', 409);
+  }
+  if (state.binding_status==='ACTIVE') {
+    const args=[scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
+      scope.enrollmentId,scope.cycleId,scope.runId,scope.runtimeSha] as const;
+    const changes=await db.batch([
+      db.prepare(`UPDATE lms_scorm_qa_evidence_bindings SET status='REVOKED',updated_at=datetime('now')
+        WHERE empresa_id=? AND curso_id=? AND package_id=? AND package_sha256=?
+          AND matricula_id=? AND ciclo_id=? AND run_id=? AND staging_runtime_sha=?
+          AND synthetic=1 AND status='ACTIVE'`).bind(...args),
+      db.prepare(`DELETE FROM lms_progresso_scorm WHERE empresa_id=? AND matricula_id=?
+        AND lesson_status IN ('incomplete',NULL) AND completion_status IN ('incomplete',NULL)
+        AND success_status IN ('unknown',NULL) AND score_raw IS NULL AND score_max IS NULL
+        AND score_min IS NULL AND score_scaled IS NULL AND EXISTS(
+          SELECT 1 FROM lms_scorm_qa_evidence_bindings b WHERE b.empresa_id=?
+            AND b.curso_id=? AND b.package_id=? AND b.package_sha256=?
+            AND b.matricula_id=? AND b.ciclo_id=? AND b.run_id=? AND b.synthetic=1
+            AND b.status='REVOKED')`).bind(scope.tenantId,scope.enrollmentId,...args.slice(0,7)),
+      db.prepare(`UPDATE lms_matriculas SET status='NAO_INICIADO',progresso_pct=0,
+          data_inicio=NULL,updated_at=datetime('now')
+        WHERE id=? AND empresa_id=? AND curso_id=? AND deleted_at IS NULL
+          AND observacoes=? AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND score_final IS NULL AND COALESCE(progresso_pct,0)<=1
+          AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
+            WHERE q.empresa_id=lms_matriculas.empresa_id
+              AND q.lms_matricula_id=lms_matriculas.id AND q.deleted_at IS NULL)
+          AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            WHERE b.empresa_id=lms_matriculas.empresa_id AND b.curso_id=lms_matriculas.curso_id
+              AND b.package_id=? AND b.package_sha256=? AND b.matricula_id=lms_matriculas.id
+              AND b.ciclo_id=? AND b.run_id=? AND b.status='REVOKED' AND b.synthetic=1)`)
+        .bind(scope.enrollmentId,scope.tenantId,scope.courseId,`QA_SCORM_F0:${scope.runId}`,
+          scope.packageId,scope.packageSha256,scope.cycleId,scope.runId),
+      db.prepare(`UPDATE lms_matricula_ciclos SET status='NAO_INICIADO',updated_at=datetime('now')
+        WHERE id=? AND matricula_id=? AND empresa_id=? AND curso_id=? AND ciclo_atual=1
+          AND deleted_at IS NULL AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=? AND b.package_sha256=?
+              AND b.matricula_id=? AND b.ciclo_id=lms_matricula_ciclos.id
+              AND b.run_id=? AND b.status='REVOKED' AND b.synthetic=1)`)
+        .bind(scope.cycleId,scope.enrollmentId,scope.tenantId,scope.courseId,
+          scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
+          scope.enrollmentId,scope.runId),
+      db.prepare(`INSERT INTO audit_logs(action,entity_type,entity_id,new_values,empresa_id,created_at)
+        SELECT 'SCORM_F0_STAGING_FIXTURE_RECOVERED','lms_scorm_qa_evidence_bindings',NULL,?,
+          b.empresa_id,datetime('now') FROM lms_scorm_qa_evidence_bindings b
+        WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=? AND b.matricula_id=?
+          AND b.ciclo_id=? AND b.run_id=? AND b.status='REVOKED' AND b.synthetic=1`)
+        .bind(JSON.stringify({source:'SCORM_F0_PREIMAGE_RECOVERY_V1',runId:scope.runId,
+          packageSha256:scope.packageSha256,receiptSha256:scope.recoveryReceiptSha256}),
+          scope.tenantId,scope.courseId,scope.packageId,scope.enrollmentId,scope.cycleId,scope.runId),
+      db.prepare(`SELECT CASE WHEN
+          EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            JOIN lms_matriculas m ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id
+            JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id AND cy.matricula_id=m.id
+            WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=? AND b.package_sha256=?
+              AND b.matricula_id=? AND b.ciclo_id=? AND b.run_id=? AND b.status='REVOKED'
+              AND b.synthetic=1 AND m.status='NAO_INICIADO' AND m.progresso_pct=0
+              AND m.data_inicio IS NULL AND m.score_final IS NULL
+              AND cy.status='NAO_INICIADO' AND cy.ciclo_atual=1
+              AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm sc
+                WHERE sc.empresa_id=b.empresa_id AND sc.matricula_id=b.matricula_id)
+              AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
+                WHERE q.empresa_id=b.empresa_id AND q.lms_matricula_id=b.matricula_id
+                  AND q.deleted_at IS NULL))
+          THEN 1 ELSE json_extract('INVALID_JSON_F0_RECOVERY_SENTINEL','$.impossible') END AS verified`)
+        .bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
+          scope.enrollmentId,scope.cycleId,scope.runId),
+    ]);
+    if (Number(changes[0]?.meta?.changes)!==1 ||
+        [2,3].some(index=>Number(changes[index]?.meta?.changes)!==1) ||
+        Number((changes[5]?.results?.[0] as {verified?:number}|undefined)?.verified)!==1) {
+      throw new ApiError('SCORM_F0_RECOVERY_ATOMIC_READBACK_FAILED',409);
+    }
+  }
+  const receiptSha256=(await sha256(JSON.stringify({source:'SCORM_F0_PREIMAGE_RECOVERY_V1',tenantId:scope.tenantId,
+      courseId:scope.courseId,packageId:scope.packageId,packageSha256:scope.packageSha256,
+      enrollmentId:scope.enrollmentId,cycleId:scope.cycleId,runId:scope.runId,
+      runtimeSha:scope.runtimeSha,recoveryReceiptSha256:scope.recoveryReceiptSha256,
+      recovered:true,candidatePreservedInactive:true})))!;
+  return {verified:true,syntheticFixtureRecovered:true,candidatePreservedInactive:true,
+    receiptSha256,completionWritten:false,assessmentApproved:false,certificateIssued:false};
+}
