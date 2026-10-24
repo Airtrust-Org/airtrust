@@ -166,6 +166,28 @@ export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): bool
   );
 }
 
+/**
+ * Presentation only: a daily check-in is required by active fortnight
+ * membership OR positive operational signals. Do not treat an explicit false
+ * in a legacy decision flag as an exemption from recorded activity.
+ */
+export function requiresDailyFrmsCheckin(item: FrmsOperationalSnapshotItem): boolean {
+  return hasResolvedFortnightMembership(item) || Boolean(
+    item.escalado || item.operacao_requer_decisao || item.teve_jornada ||
+    item.teve_atividade_frms || item.hora_apresentacao,
+  );
+}
+
+/** Absence of a period indicator is NOT evidence of a check-in exemption. */
+export function hasVerifiedFrmsCheckinExemption(item: FrmsOperationalSnapshotItem): boolean {
+  if (requiresDailyFrmsCheckin(item)) return false;
+  if (item.na_quinzena_ativa === false) return true;
+  const period = item.fortnight_indicator;
+  return Boolean(period?.periodo_inicio && period?.periodo_fim &&
+    (item.data_operacional < period.periodo_inicio ||
+      item.data_operacional > period.periodo_fim));
+}
+
 export interface FrmsCoordinationGuidance {
   requiresCheckin: boolean;
   checkinComplete: boolean;
@@ -180,13 +202,11 @@ export function resolveFrmsCoordinationGuidance(
   todayIso: string,
 ): FrmsCoordinationGuidance {
   const pertenceQuinzenaAtiva = hasResolvedFortnightMembership(item);
-  const requiresCheckin = pertenceQuinzenaAtiva || Boolean(
-    item.escalado || item.operacao_requer_decisao || item.teve_jornada ||
-    item.teve_atividade_frms || item.hora_apresentacao,
-  );
+  const requiresCheckin = requiresDailyFrmsCheckin(item);
+  const verifiedExemption = hasVerifiedFrmsCheckinExemption(item);
   const checkinComplete = item.checkin_status === 'RECEBIDO';
   const checkinLabel = checkinComplete ? 'Recebido'
-    : !requiresCheckin && item.checkin_status === 'NAO_APLICAVEL' ? 'Não exigido'
+    : verifiedExemption && item.checkin_status === 'NAO_APLICAVEL' ? 'Não exigido'
       : item.checkin_status === 'PENDENTE' ||
           (pertenceQuinzenaAtiva && item.checkin_status === 'NAO_APLICAVEL') ? 'Pendente'
         : item.checkin_status === 'NAO_APLICAVEL' ? 'Não confirmado'
@@ -269,6 +289,17 @@ export function resolveFrmsCoordinationGuidance(
       ...base,
       reason: primaryReason || 'Indicador de fadiga requer atenção.',
       action: item.acao_recomendada_texto || 'Revisar a condição antes da próxima missão e registrar a providência.',
+    };
+  }
+  if (item.checkin_status === 'NAO_APLICAVEL' && !requiresCheckin) {
+    return verifiedExemption ? {
+      ...base,
+      reason: 'Sem vínculo com a quinzena vigente e sem atividade operacional registrada nesta data.',
+      action: 'Check-in não exigido neste recorte; reavaliar se houver nova escala ou atividade. Isso não equivale a aptidão.',
+    } : {
+      ...base,
+      reason: 'A ausência de indicador de quinzena não comprova dispensa de check-in.',
+      action: 'Confirmar o vínculo com a quinzena e a escala antes de concluir que o check-in não é exigido.',
     };
   }
   return {
