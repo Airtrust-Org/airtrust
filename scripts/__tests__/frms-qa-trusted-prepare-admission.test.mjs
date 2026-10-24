@@ -15,6 +15,8 @@ const env=Object.freeze({
   FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
   FRMS_QA_PREPARE_EXPECTED_SHA:SHA,FRMS_QA_PREPARE_GRANT_ID:GRANT,
   FRMS_QA_CALLER_KEY_HEX:'b'.repeat(64),GITHUB_TOKEN:TOKEN,
+  CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
+  CLOUDFLARE_WORKER_API_TOKEN:'synthetic-cloudflare-token-never-logs',
 });
 const getFixture=(change={})=>{
   let calls=[],bound=0;
@@ -25,8 +27,10 @@ const getFixture=(change={})=>{
     calls.push({uri,method:args?.method,redirect:args?.redirect});
     assert.equal(args?.method,'GET');
     assert.equal(args?.redirect,'manual');
-    assert.equal(args?.headers?.Authorization,'Bearer '+TOKEN);
-    const path=new URL(uri).pathname;
+    const parsed=new URL(uri),path=parsed.pathname;
+    const expectedToken=parsed.hostname==='api.cloudflare.com'?
+      env.CLOUDFLARE_WORKER_API_TOKEN:TOKEN;
+    assert.equal(args?.headers?.Authorization,'Bearer '+expectedToken);
     if(change.deniedPath&&path.endsWith(change.deniedPath))
       return Response.json({message:'deny'},{status:403});
     if(path.endsWith('/branches/main'))
@@ -47,6 +51,8 @@ const getFixture=(change={})=>{
         name,head_sha:SHA,status:'completed',conclusion:'success',app:{slug:'github-actions'},
       }]});
     }
+    if(path.endsWith('/time_travel/bookmark'))
+      return Response.json({success:true,result:{bookmark:'private-bookmark-must-not-be-exposed'}});
     throw Error('Unexpected GET path');
   };
   const used=new Map();
@@ -65,10 +71,13 @@ const getFixture=(change={})=>{
   const binding={
     prepare:async input=>{
       bound++;
-      assert.deepEqual(Object.keys(input),['callerAuth']);
+      assert.deepEqual(Object.keys(input),['callerAuth','recoveryProof']);
       assert.equal(input.callerAuth.claims.operation,'prepare');
       assert.equal(input.callerAuth.claims.sha,SHA);
+      assert.equal(input.recoveryProof.claims.bookmark,
+        'private-bookmark-must-not-be-exposed');
       assert.equal(JSON.stringify(input).includes(TOKEN),false);
+      assert.equal(JSON.stringify(input).includes(env.CLOUDFLARE_WORKER_API_TOKEN),false);
       if(change.transportFails)throw Error('secret transport exception '+TOKEN);
       return {receiptId:'c'.repeat(64),
         receipt:{dbId:DB,tenantId:999013,writes:0,
@@ -94,7 +103,9 @@ test('authenticated GitHub GET-only gates allow one scoped private prepare',asyn
   assert.equal(f.bound,1);
   assert.equal(f.used.size,1);
   assert.equal(f.calls.filter(x=>x.uri.includes('/check-runs')).length,8);
-  assert.ok(f.calls.every(x=>x.uri.startsWith('https://api.github.com/repos/'+REPO+'/')&&x.method==='GET'));
+  assert.ok(f.calls.every(x=>x.method==='GET'));
+  assert.ok(f.calls.filter(x=>x.uri.includes('api.github.com')).every(x=>
+    x.uri.startsWith('https://api.github.com/repos/'+REPO+'/')));
   assert.equal(JSON.stringify(result).includes(TOKEN),false);
   assert.equal(JSON.stringify(result).includes('private-bookmark'),false);
 });

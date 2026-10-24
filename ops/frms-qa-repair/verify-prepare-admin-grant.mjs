@@ -9,7 +9,8 @@ import {EXPECTED} from './verify-readiness.mjs';
 
 const REPO='Airtrust-Org/airtrust',ISSUE=776;
 const WORKFLOW='.github/workflows/staging-frms-qa-private-prepare.yml';
-const WORKFLOW_REF=REPO+'/'+WORKFLOW+'@refs/heads/main';
+const TX_WORKFLOW='.github/workflows/staging-frms-qa-private-transaction.yml';
+const ALLOWED_WORKFLOWS=[WORKFLOW,TX_WORKFLOW];
 const MUTEX='airtrust-staging-mutations-and-scorm-qa';
 const SCOPE='FRMS_QA_999013_4_CASES_4_JOURNEYS';
 const PLAN_SHA='38a81ed05821919d87b424ddfc7b731bfc8d7d759dadebbb6a21d11edb349ed3';
@@ -22,8 +23,8 @@ const exact=(obj,reference)=>obj&&typeof obj==='object'&&!Array.isArray(obj)&&
   Object.keys(obj).sort().join('|')===Object.keys(reference).sort().join('|')&&
   Object.entries(reference).every(([k,v])=>obj[k]===v);
 
-export function exactPreparePlan({sha}={}){
-  if(!SHA.test(sha||''))deny();
+export function exactPreparePlan({sha,workflowPath=WORKFLOW}={}){
+  if(!SHA.test(sha||'')||!ALLOWED_WORKFLOWS.includes(workflowPath))deny();
   return {
     schema:'AIRTRUST_FRMS_QA_PREPARE_GRANT_V1',
     repository:REPO,coordination_issue:ISSUE,frms_issue:1426,
@@ -34,7 +35,7 @@ export function exactPreparePlan({sha}={}){
     r2_prefix:EXPECTED.prefix,global_mutex:MUTEX,
     r2_preimage_object_write_authorized:true,
     r2_lifecycle_max_age_seconds:86400,
-    workflow_path:WORKFLOW,
+    workflow_path:workflowPath,
     operation:'ENCRYPTED_PREIMAGE_PREPARE_ONLY',
     d1_writes_authorized:0,apply_authorized:false,
     worker_deploy_authorized:false,production_authorized:false,
@@ -96,18 +97,24 @@ export async function verifyPrepareAdminGrant({
 }={}){
   const sha=env.GITHUB_SHA,grantId=String(env.FRMS_QA_PREPARE_GRANT_ID||''),
     runId=String(env.GITHUB_RUN_ID||''),attempt=Number(env.GITHUB_RUN_ATTEMPT);
+  // A single protected workflow must own prepare, independent signing,
+  // apply and final readback while holding the global staging mutex.
+  // Each phase still needs its own exact, newly issued admin grant.
+  const workflowPath=env.GITHUB_WORKFLOW_REF===
+    REPO+'/'+TX_WORKFLOW+'@refs/heads/main'?TX_WORKFLOW:WORKFLOW;
   if(env.GITHUB_ACTIONS!=='true'||
      env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
      env.GITHUB_REF!=='refs/heads/main'||
      env.GITHUB_REPOSITORY!==REPO||
-     env.GITHUB_WORKFLOW_REF!==WORKFLOW_REF||
+     !ALLOWED_WORKFLOWS.includes(workflowPath)||
+     env.GITHUB_WORKFLOW_REF!==REPO+'/'+workflowPath+'@refs/heads/main'||
      env.FRMS_QA_PREPARE_CONFIRM!=='AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED'||
      env.FRMS_QA_PREPARE_EXPECTED_SHA!==sha||
      !SHA.test(sha||'')||!POS.test(grantId)||!POS.test(runId)||
      !Number.isSafeInteger(attempt)||attempt<1||
      !USER.test(env.GITHUB_ACTOR||'')||
      !Number.isFinite(now)||typeof api!=='function')deny();
-  const plan=exactPreparePlan({sha});
+  const plan=exactPreparePlan({sha,workflowPath});
   let main,run,comment;
   try{
     [main,run,comment]=await Promise.all([
@@ -119,7 +126,7 @@ export async function verifyPrepareAdminGrant({
   if(main?.commit?.sha!==sha||
      run?.id!==Number(runId)||run?.head_sha!==sha||
      run?.head_branch!=='main'||run?.event!=='workflow_dispatch'||
-     run?.path!==WORKFLOW||run?.run_attempt!==attempt||
+     run?.path!==workflowPath||run?.run_attempt!==attempt||
      run?.actor?.login!==env.GITHUB_ACTOR||
      !['queued','in_progress','waiting','requested'].includes(run?.status))
     deny();
