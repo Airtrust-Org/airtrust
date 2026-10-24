@@ -107,6 +107,22 @@ export function shouldVerifyCanonicalProgress(status: string | null | undefined)
   return status === 'CONCLUIDO';
 }
 
+export function shouldRefreshMatriculaAfterScormSaveError(reason: unknown) {
+  return reason === 'http-409';
+}
+
+/** A ciclo renewal must recreate the SCORM iframe so its next launch is bound to the active cycle. */
+export function buildScormPlayerSessionKey(params: {
+  matriculaId: number;
+  reviewMode: boolean;
+  userId: number | string | null | undefined;
+  empresaId: number | null | undefined;
+  activeCycleId: number | null | undefined;
+  handoffId: number | null | undefined;
+}) {
+  return `${params.matriculaId}:${params.reviewMode ? 'review' : 'normal'}:${params.userId ?? 'anon'}:${params.empresaId ?? 'none'}:${params.activeCycleId ?? 'none'}:${params.handoffId ?? 'none'}`;
+}
+
 /**
  * Quantas reconsultas canônicas toleramos após o SCORM sinalizar conclusão.
  * Se a mesma resposta `candidate` permanecer após esse limite, o player sai
@@ -242,6 +258,12 @@ export default function LmsPlayer() {
     isLoading: matriculaLoading,
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
+  // Keep the asset-session effect scoped to session identity. Query hook
+  // implementations or test doubles may expose a fresh refetch function per
+  // render; the 409 recovery path still needs the latest function without
+  // restarting the asset-session request on unrelated renders.
+  const refetchMatriculaRef = useRef(refetchMatricula);
+  refetchMatriculaRef.current = refetchMatricula;
   const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
   const reviewParam = searchParams.get('review') === '1';
   const effectiveReviewMode = reviewParam || matricula?.status === 'CONCLUIDO';
@@ -269,6 +291,16 @@ export default function LmsPlayer() {
     edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
+  // Server suggestion is read-only: never credit units or unlock commits from a bookmark.
+  const activeResumeProposal = (matricula as (typeof matricula & {
+    active_resume_proposal?: {
+      status: 'MATCHED_ANCHOR' | 'SUGGESTED_ANCHOR' | 'START_ACTIVE' | 'INVALID_ACTIVE_PACKAGE';
+      targetPosition: number;
+      activeTotal: number;
+      reviewRequired: boolean;
+      canMarkComplete: false;
+    } | null;
+  }) | undefined)?.active_resume_proposal ?? null;
   const isTenantAdmin = ['admin', 'administrador'].includes(
     String(user?.role ?? '').trim().toLowerCase(),
   );
@@ -370,7 +402,7 @@ export default function LmsPlayer() {
   // recreated during progress saves, refetches, or token rotations.
   //
   // Included in identity:
-  //   - matricula ID
+  //   - matricula ID and active cycle (a cycle renewal must replace the old SCO)
   //   - review mode
   //   - authenticated user ID
   //   - current tenant (empresa)
@@ -378,7 +410,20 @@ export default function LmsPlayer() {
   // NOT included (must NOT recreate the iframe):
   //   - progresso_pct, lesson_location, status, updated_at, nota
   //   - token value, timestamp
-  const sessionKey = `${id}:${reviewParam ? 'review' : 'normal'}:${user?.id ?? 'anon'}:${empresaAtualId ?? 'none'}`;
+  const activeHandoffId = (matricula as (typeof matricula & {
+    active_scorm_handoff_id?: number | null;
+  }) | undefined)?.active_scorm_handoff_id ?? null;
+  const activeCycleId = (matricula as (typeof matricula & {
+    active_lms_cycle_id?: number | null;
+  }) | undefined)?.active_lms_cycle_id ?? null;
+  const sessionKey = buildScormPlayerSessionKey({
+    matriculaId: id,
+    reviewMode: reviewParam,
+    userId: user?.id,
+    empresaId: empresaAtualId,
+    activeCycleId,
+    handoffId: activeHandoffId,
+  });
   const sessionKeyRef = useRef<string | null>(null);
   const stableLaunchUrlRef = useRef<string | null>(null);
   const assetSessionKeyRef = useRef<string | null>(null);
@@ -526,7 +571,7 @@ export default function LmsPlayer() {
       try {
         const response = await fetchWithAuth('/api/lms/assets/session', {
           method: 'POST',
-          body: JSON.stringify({ matricula_id: id }),
+          body: JSON.stringify({ matricula_id: id, expected_handoff_id: activeHandoffId }),
         });
         if (cancelled) return;
 
@@ -536,8 +581,22 @@ export default function LmsPlayer() {
           return;
         }
 
-        // A failed refresh cannot destroy an already running SCORM iframe.
-        // Only an initial failure keeps the player blocked from launching.
+        // A 409 means the server rejected this session's handoff/cycle scope.
+        // Unlike a transient refresh failure, this must unmount the old SCO:
+        // otherwise it could keep displaying (and attempting to commit) stale
+        // edition state after the server has invalidated its asset session.
+        if (response.status === 409) {
+          assetSessionKeyRef.current = null;
+          sessionKeyRef.current = null;
+          stableLaunchUrlRef.current = null;
+          setAssetSessionReady(false);
+          setIframeLoaded(false);
+          void refetchMatriculaRef.current();
+          return;
+        }
+
+        // For transient connectivity failures, keep an existing cookie/session
+        // alive; only initial asset-session failure blocks first launch.
         if (assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
         }
@@ -555,7 +614,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
@@ -763,6 +822,21 @@ export default function LmsPlayer() {
       ) {
         return;
       }
+
+      if (
+        event.data &&
+        typeof event.data === 'object' &&
+        event.data.type === 'lms:save-error' &&
+        event.data.matriculaId === id
+      ) {
+        // A stale-cycle commit returns 409. Refresh the authoritative cycle so
+        // the session identity can replace the old iframe and relaunch safely.
+        if (shouldRefreshMatriculaAfterScormSaveError(event.data.reason)) {
+          void refetchMatricula();
+        }
+        return;
+      }
+
       if (
         event.data &&
         typeof event.data === 'object' &&
@@ -877,7 +951,7 @@ export default function LmsPlayer() {
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
     const confirmed = window.confirm(
-      `Iniciar a nova edição do curso? O histórico e as evidências do ciclo anterior serão preservados. O progresso desta matrícula (${displayProgress}%) pertence à edição anterior e não será transferido automaticamente para as ${editionMismatch.active_total} unidades da nova edição.`, 
+      `Esta é uma reinscrição excepcional, e NÃO a retomada normal. Deseja abrir um novo ciclo auditado? A matrícula anterior manterá seu histórico, mas o progresso (${displayProgress}%) não será creditado automaticamente na nova edição com ${editionMismatch.active_total} unidades.`,
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -897,6 +971,31 @@ export default function LmsPlayer() {
       window.location.reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar a nova edição.');
+      setStartingNewEdition(false);
+    }
+  }
+
+  async function preserveAndResumeActiveEdition() {
+    if (!isTenantAdmin || startingNewEdition) return;
+    const confirmed = window.confirm(
+      'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?',
+    );
+    if (!confirmed) return;
+    setStartingNewEdition(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/scorm-edition-handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const result = await res.json() as { success?: boolean; code?: string; error?: string };
+      if (!res.ok || result.success !== true) {
+        throw new Error(result.error || result.code || `HTTP ${res.status}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['lms'] });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível preservar e retomar a edição ativa.');
       setStartingNewEdition(false);
     }
   }
@@ -1214,32 +1313,61 @@ export default function LmsPlayer() {
       </header>
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100">
+        <div className="flex w-full shrink-0 flex-col items-stretch gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100 sm:flex-row sm:items-start">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Nova edição do curso — matrícula anterior incompatível</p>
+          <div className="w-full min-w-0 flex-1 break-words sm:w-auto" style={{ overflowWrap: 'anywhere' }}>
+            <p className="text-sm font-semibold">Nova edição do curso — progresso em reconciliação</p>
             <p className="text-xs text-amber-200/90">
               {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
                 ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
                 : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
               O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
               na nova edição. As evidências serão preservadas; não é permitido reaproveitar
-              automaticamente essa conclusão. É necessário iniciar um novo ciclo auditado.
+              automaticamente essa conclusão. A continuidade na edição ativa exige preservar
+              o histórico antes da primeira gravação; não é necessário presumir um novo ciclo.
             </p>
+            {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
+              <p className="mt-1 text-xs font-medium text-amber-100">
+                Posição sugerida na edição ativa: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}.
+                Esse marcador é apenas para navegação; não comprova unidades estudadas nem autorização para concluir.
+              </p>
+            )}
           </div>
           {isTenantAdmin ? (
-            <button
-              onClick={() => void startVerifiedNewEdition()}
-              disabled={startingNewEdition}
-              className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
-            >
-              {startingNewEdition ? 'Preparando novo ciclo...' : 'Iniciar nova edição'}
-            </button>
+            <div className="flex flex-col gap-2 sm:items-end">
+              {(matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)?.scorm_handoff_available === true && (
+                <button
+                  onClick={() => void preserveAndResumeActiveEdition()}
+                  disabled={startingNewEdition}
+                  className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
+                >
+                  {startingNewEdition ? 'Preservando e preparando retomada...' : 'Preservar histórico e retomar edição ativa'}
+                </button>
+              )}
+              <button
+                onClick={() => void startVerifiedNewEdition()}
+                disabled={startingNewEdition}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+              >
+                {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
+              </button>
+            </div>
           ) : (
-            <span className="text-xs font-medium">Solicite nova matrícula à Gerência de Treinamento.</span>
+            <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
           )}
         </div>
       )}
+
+      {!newEditionRequired && activeHandoffId != null && (() => {
+        const bookmark = (matricula as (typeof matricula & {
+          active_scorm_resume_position?: { position: number; total: number } | null;
+        }) | undefined)?.active_scorm_resume_position;
+        return bookmark ? (
+          <div className="shrink-0 border-b border-emerald-400/30 bg-emerald-950/80 px-4 py-2 text-xs text-emerald-100">
+            Histórico anterior preservado. Retomada sugerida na unidade {bookmark.position}/{bookmark.total}; o marcador serve para navegação e não concede crédito de estudo.
+          </div>
+        ) : null;
+      })()}
 
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
@@ -1266,14 +1394,20 @@ export default function LmsPlayer() {
             ) : null}
 
             {newEditionRequired && !effectiveReviewMode ? (
-              <div role="alert" className="absolute inset-0 flex items-center justify-center bg-slate-950 px-8 text-center">
+              <div role="alert" className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-slate-950 px-4 py-6 text-center sm:px-8">
                 <div className="max-w-lg space-y-3 text-white">
                   <AlertTriangle className="mx-auto h-9 w-9 text-amber-300" />
                   <p className="text-base font-semibold">Treinamento temporariamente bloqueado para preservar o progresso anterior</p>
                   <p className="text-sm text-white/70">
-                    Esta matrícula pertence a outra edição. O pacote atualizado não será aberto
-                    até a criação de um novo ciclo auditado, evitando sobrescrever respostas ou
-                    registros anteriores.
+                    A edição atual foi identificada, mas o histórico SCORM anterior deve ser
+                    preservado em uma transição auditável antes da primeira gravação.
+                    Não é necessário apagar o progresso nem exigir uma nova matrícula.
+                    {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
+                      <span className="mt-2 block text-amber-200">
+                        Retomada proposta: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}
+                        {' '}— somente referência de navegação, não uma conclusão certificada.
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1314,7 +1448,7 @@ export default function LmsPlayer() {
               </h3>
               <div className="space-y-1.5 text-xs text-white/75">
                 <p>{newEditionRequired ? 'Progresso da edição anterior' : 'Progresso'}: {displayProgress}%</p>
-                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Nova edição: execução bloqueada até a abertura de novo ciclo.</p>}
+                {!newEditionRequired ? <p>Restante: {remainingProgress}%</p> : <p>Edição ativa: retomada aguardando preservação auditável do histórico.</p>}
                 <p>{newEditionRequired ? 'Posição anterior' : 'Posição'}: {liveLocation || persistedLocation || 'sem marcador'}</p>
                 <p>
                   Carga horária:{' '}

@@ -104,11 +104,13 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
       const entry = handlers.find(([matcher]) => query.includes(matcher));
-      if (!entry) {
+      const handler = entry?.[1] ?? (query.includes('SELECT id FROM lms_matricula_ciclos')
+        ? { first: () => ({ id: 202 }) }
+        : undefined);
+      if (!handler) {
         throw new Error(`Unhandled query: ${query}`);
       }
 
-      const handler = entry[1];
       const executeFirst = async (args: unknown[]) => {
         calls.push({ query, args, method: 'first' });
         return handler.first ? handler.first(args) : null;
@@ -447,6 +449,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 501,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 12,
           score_max: 100,
@@ -564,6 +567,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           cmi_json: staleCmi,
@@ -664,6 +668,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 912,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 62,
           score_max: 100,
@@ -764,6 +769,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 913,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 12,
           score_max: 100,
@@ -844,6 +850,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 163,
+          ciclo_id: 202,
           commit_event: 'SCORM_USER_FINALIZE',
           lesson_status: 'completed',
           score_raw: 85,
@@ -937,6 +944,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 164,
+          ciclo_id: 202,
           commit_event: 'SCORM_USER_FINALIZE',
           completion_status: 'completed',
           success_status: 'passed',
@@ -1021,6 +1029,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 165,
+          ciclo_id: 202,
           lesson_status: 'completed',
           score_raw: 45,
           score_max: 100,
@@ -1120,6 +1129,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           score_max: 100,
@@ -1213,6 +1223,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 326,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 96,
           score_max: 100,
@@ -1626,6 +1637,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 700,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 100,
           score_max: 100,
@@ -1695,6 +1707,7 @@ describe('lms matriculas progress integrity', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           matricula_id: 701,
+          ciclo_id: 202,
           lesson_status: 'incomplete',
           score_raw: 40,
           score_max: 100,

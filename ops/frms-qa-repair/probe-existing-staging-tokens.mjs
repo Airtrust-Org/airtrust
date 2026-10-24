@@ -1,3 +1,4 @@
+import {probeExistingTokenPolicy} from './probe-existing-token-policy.mjs';
 // GET-only capability inventory of already provisioned GitHub staging tokens.
 // Read-only probes are NOT authorization to reuse broad tokens in restricted FRMS runtime.
 const account=process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -35,5 +36,12 @@ for(const [name,path] of endpoints){
   }catch {checks[name]='GET_NETWORK_ERROR';}
 }
 console.log(`FRMS_STAGING_GET_ONLY_CAPABILITY_${kind}=`+JSON.stringify(checks));
+// Token policy inspection is strictly optional; 403 means audit limitation.
+// Never claim a runtime grant, permission restriction, or token scope from GET.
+if(kind==='worker'||kind==='d1_backup'){
+  const candidate=await probeExistingTokenPolicy({accountId:account,token,kind});
+  console.log('FRMS_STAGING_TOKEN_POLICY_'+kind+'='+candidate.verdict);
+  console.log('FRMS_STAGING_TOKEN_POLICY_AUTHORIZES_RUNTIME=false');
+}
 console.log('No WRITE/DELETE/PUT/POST, no token values, no grant, no permission escalation.');
 // A failed or missing permission is diagnostic data, never a claim of readiness.

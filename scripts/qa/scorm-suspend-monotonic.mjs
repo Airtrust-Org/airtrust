@@ -12,8 +12,29 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
   }catch{return {ok:false,reason:'SUSPEND_NOT_VALID_JSON'};}
   if(!before||!after||typeof before!=='object'||typeof after!=='object')
     return {ok:false,reason:'SUSPEND_NOT_OBJECT'};
-  if(!Number.isSafeInteger(before.s)||!Number.isSafeInteger(after.s)||
-      before.s!==after.s||before.s<0)
+  // This dedicated two-step QA fixture has no course assessment state.
+  // Admit only its exact scope and shape, never arbitrary JSON cursors.
+  const QA_SCOPE = 'AIRTRUST_SCORM_RESUME_QA_V1';
+  if (before.scope === QA_SCOPE || after.scope === QA_SCOPE) {
+    const valid = x => x.scope === QA_SCOPE &&
+      Object.keys(x).sort().join(',') === 'position,scope' &&
+      Number.isSafeInteger(x.position) && [1,2].includes(x.position);
+    if (!valid(before) || !valid(after) || before.position !== after.position)
+      return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
+    return {ok:true,reason:beforeRaw===afterRaw?'BYTE_IDENTICAL':'MONOTONIC_CHECKPOINT'};
+  }
+  // Two real on-wire schemas are supported. Newer certification fixtures use
+  // `s` as cursor while F5 Unified packages persist the 0-based cursor in
+  // numeric `c`. In CFIT, `c` is instead a boolean completion flag, so
+  // prefer `s` whenever it exists and never reinterpret boolean `c`.
+  const cursor=(state)=>{
+    if(Object.prototype.hasOwnProperty.call(state,'s'))
+      return Number.isSafeInteger(state.s)&&state.s>=0?{key:'s',value:state.s}:null;
+    return Number.isSafeInteger(state.c)&&state.c>=0?{key:'c',value:state.c}:null;
+  };
+  const beforeCursor=cursor(before),afterCursor=cursor(after);
+  if(!beforeCursor||!afterCursor||beforeCursor.key!==afterCursor.key||
+      beforeCursor.value!==afterCursor.value)
     return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
   if(before.v!==after.v)return {ok:false,reason:'SUSPEND_VERSION_DRIFT'};
   // Real ZIPs differ in on-wire serialization: course #15 uses an array

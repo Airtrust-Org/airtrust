@@ -1,8 +1,11 @@
 import { ApiError } from '../../middleware/error-handler';
-import { extractAndValidateLmsPackage, extractScormStaticGateMetadata } from './lms-package-validator';
+import { guessMime } from '../../routes/lms-scorm-asset-paths';
+import { extractAndValidateLmsPackage, extractScormStaticGateMetadata, normalizeLmsArchivePath, validateStructuredScormMetadata } from './lms-package-validator';
 import { canActivateCertifiedScormPackage, validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
+import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
+import { validateF5R2ArchiveReadOnly } from './lms-scorm-r2-reader.mjs';
 import {
   verifyTrustedScormAttestation,
   type TrustedScormAttestation,
@@ -16,7 +19,8 @@ import {
 
 type PackageRow = {
   id: string; empresa_id: number; curso_id: number; package_sha256: string; r2_prefix: string;
-  launch_file: string; status: string; validation_result_json: string | null;
+  launch_file: string; status: string; scorm_versao?: string | null; validation_result_json: string | null;
+  active_prefix?: string | null;
 };
 
 // Large SCORM packages can contain hundreds of small visual assets. Serial R2
@@ -34,9 +38,12 @@ async function sha256(bytes: Uint8Array) {
   return hex(await crypto.subtle.digest('SHA-256', bytes));
 }
 
-function mimeType(path: string) {
-  const extension = path.split('.').pop()?.toLowerCase();
-  return extension === 'html' ? 'text/html; charset=utf-8' : extension === 'js' ? 'application/javascript' : extension === 'css' ? 'text/css' : extension === 'xml' ? 'application/xml' : extension === 'json' ? 'application/json' : 'application/octet-stream';
+function sha256Bytes(hexDigest: string) {
+  const bytes = new Uint8Array(hexDigest.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(hexDigest.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 function errors(result: ScormQualityGateResult) {
@@ -64,7 +71,7 @@ export async function createScormPackageCandidate(params: {
   const packageSha256 = await sha256(params.bytes);
   const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
   const existing = await params.db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
        FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
   ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
   if (existing) {
@@ -132,7 +139,7 @@ export async function createScormPackageCandidate(params: {
           batch.map((item) =>
             params.bucket.put(`${prefix}${item.path}`, item.data, {
               httpMetadata: {
-                contentType: mimeType(item.path),
+                contentType: guessMime(item.path),
                 cacheControl: 'public, max-age=86400',
               },
             }),
@@ -167,12 +174,184 @@ export async function createScormPackageCandidate(params: {
   return { packageId: id, packageSha256, status, ...quality, arquivoNome: originalFilename };
 }
 
+/**
+ * Creates a static, INACTIVE SCORM candidate from a completed multipart ZIP
+ * already staged in the tenant/course _intake prefix. The original ZIP is
+ * verified by the shared bounded R2 reader; members are CRC/SHA checked while
+ * being written one at a time. This never invokes conformance, attestation or
+ * activation and keeps only Quality Gate inputs resident in memory.
+ */
+export async function createScormPackageCandidateFromR2Intake(params: {
+  db: D1Database;
+  bucket: R2Bucket;
+  empresaId: number;
+  cursoId: number;
+  userId: number | null;
+  operationId: string;
+  expectedSha256: string;
+  arquivoNome: string | null;
+}) {
+  if (!/^[a-f0-9-]{36}$/i.test(params.operationId) || !/^[a-f0-9]{64}$/.test(params.expectedSha256)) {
+    throw new ApiError('Identidade da importação SCORM inválida', 400);
+  }
+  const existing = await params.db.prepare(
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
+       FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
+  ).bind(params.empresaId, params.cursoId, params.expectedSha256).first<PackageRow>();
+  if (existing) {
+    await params.bucket.delete(`lms/scorm/${params.empresaId}/${params.cursoId}/_intake/${params.operationId}/package.zip`);
+    return { ...packageReadModel(existing), alreadyExisted: true, active: existing.status === 'ACTIVE' };
+  }
+  const course = await params.db.prepare(
+    'SELECT id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+  ).bind(params.cursoId, params.empresaId).first<{ id: number }>();
+  if (!course) throw new ApiError('Curso não encontrado', 404);
+
+  const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
+  const intakePrefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_intake/${params.operationId}/`;
+  const intakeKey = `${intakePrefix}package.zip`;
+  // Intake operation UUID scopes transient R2 data; package ID is an independent
+  // server-issued identity, just as in the regular candidate creation path.
+  const id = crypto.randomUUID();
+  const prefix = `lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${id}/`;
+  const descriptors: Array<{ path: string; size: number }> = [];
+  const memberSha256ByPath = new Map<string, string>();
+  const qualityEntries: Array<{ path: string; data: Uint8Array }> = [];
+  let qualityBytes = 0;
+  const MAX_QUALITY_GATE_BYTES = 32 * 1024 * 1024;
+  let registered = false;
+  try {
+    const result = await validateF5R2ArchiveReadOnly({
+      bucket: params.bucket,
+      key: intakeKey,
+      expectedPrefix: intakePrefix,
+      expectedSha256: params.expectedSha256,
+      onMember: async (member: { path: string; data: Uint8Array; sha256: string; bytes: number }) => {
+        const path = normalizeLmsArchivePath(member.path);
+        if (!path) return;
+        descriptors.push({ path, size: member.bytes });
+        memberSha256ByPath.set(path, member.sha256);
+        const basename = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+        const qualityInput = basename === 'imsmanifest.xml' ||
+          basename === 'airtrust-completion-manifest.json' ||
+          basename === 'airtrust-completion-diagnostics.json' ||
+          basename === 'course-model.js' || /\.(?:js|css)$/.test(basename);
+        let data: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+        if (qualityInput) {
+          qualityBytes += member.bytes;
+          if (qualityBytes > MAX_QUALITY_GATE_BYTES) {
+            throw new ApiError('Arquivos de validação excedem o limite de memória do Quality Gate', 413);
+          }
+          data = member.data;
+        }
+        qualityEntries.push({ path, data });
+        await params.bucket.put(`${prefix}${path}`, member.data, {
+          sha256: member.sha256,
+          httpMetadata: { contentType: guessMime(path), cacheControl: 'public, max-age=86400' },
+        });
+      },
+    });
+    if (result.zipSha256 !== params.expectedSha256 || result.r2ReadStats.rangeRequests > 6) {
+      throw new ApiError('Readback do ZIP SCORM não corresponde ao candidato esperado', 409);
+    }
+    const manifest = qualityEntries.find((item) => item.path.toLowerCase() === 'imsmanifest.xml');
+    if (!manifest) throw new ApiError('imsmanifest.xml ausente no candidato', 400);
+    const metadata = validateStructuredScormMetadata({
+      entries: descriptors,
+      manifestPath: manifest.path,
+      manifestBytes: manifest.data,
+      limits: { maxFileBytes: 32 * 1024 * 1024, maxTotalBytes: 250 * 1024 * 1024 },
+    });
+    const pkg = {
+      tipoConteudo: 'scorm' as const,
+      entries: qualityEntries,
+      totalUncompressedBytes: result.expandedBytes,
+      launchFile: metadata.launchFile,
+      scormVersao: metadata.scormVersao,
+      tipoH5p: null,
+    };
+    const quality = validateScormPackageQuality(pkg);
+    const launchAssetSha256 = memberSha256ByPath.get(metadata.launchFile);
+    if (!launchAssetSha256 || !/^[a-f0-9]{64}$/.test(launchAssetSha256)) {
+      throw new ApiError('Readback R2 do launch SCORM não comprovado', 409);
+    }
+    const rejected = quality.structural.status === 'FAIL' ||
+      quality.completionManifest.status === 'FAIL' || quality.diagnostics.status === 'FAIL';
+    const status = rejected ? 'REJECTED' : 'VALIDATED';
+    if (rejected) {
+      const objects = await params.bucket.list({ prefix });
+      if (objects.objects.length) await params.bucket.delete(objects.objects.map((item) => item.key));
+    }
+    const storedQuality = withScormUploadMetadata(quality, originalFilename);
+    try {
+      await params.db.batch([
+        params.db.prepare(
+        `INSERT INTO lms_scorm_package_versions (
+          id, empresa_id, curso_id, package_version, package_sha256, zip_size_bytes, r2_prefix, launch_file, scorm_versao,
+          uploaded_by, uploaded_at, status, validation_version, validation_started_at, validation_finished_at,
+          validation_result_json, rejection_reasons_json, previous_active_package_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'), datetime('now'), ?, ?,
+          (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'))`,
+        ).bind(id, params.empresaId, params.cursoId, `${new Date().toISOString()}-${params.expectedSha256.slice(0, 12)}`,
+          params.expectedSha256, result.zipBytes, prefix, metadata.launchFile, metadata.scormVersao, params.userId, status,
+          quality.validatorVersion, JSON.stringify(storedQuality), JSON.stringify(errors(quality)), params.empresaId,
+          params.cursoId),
+        params.db.prepare(
+          `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
+           VALUES (?, ?, ?, ?, 'UPLOAD', ?, datetime('now'))`,
+        ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, id, params.userId),
+        params.db.prepare(
+          `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, id,
+          rejected ? 'VALIDATION_FAILED' : 'VALIDATION_PASSED', params.userId,
+          rejected ? errors(quality).join('; ') : 'STREAMED_ZIP_SHA_CRC_VALIDATED'),
+      ]);
+      registered = true;
+    } catch (error) {
+      // A concurrent retry with the same tenant/course/SHA is idempotent.
+      const duplicate = await params.db.prepare(
+        `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
+           FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
+      ).bind(params.empresaId, params.cursoId, params.expectedSha256).first<PackageRow>();
+      if (duplicate) {
+        const objects = await params.bucket.list({ prefix });
+        if (objects.objects.length) await params.bucket.delete(objects.objects.map((item) => item.key));
+        return { ...packageReadModel(duplicate), alreadyExisted: true,
+          createdByOperation: false, active: duplicate.status === 'ACTIVE' };
+      }
+      throw error;
+    }
+    return { packageId: id, packageSha256: params.expectedSha256, status, ...quality,
+      alreadyExisted: false, createdByOperation: true,
+      r2Prefix: prefix, launchFile: metadata.launchFile,
+      scormVersion: metadata.scormVersao,
+      arquivoNome: originalFilename, zipBytes: result.zipBytes, expandedBytes: result.expandedBytes,
+      members: result.members, r2ReadStats: result.r2ReadStats,
+      r2Readback: {
+        source: 'WORKER_R2_STREAMED_ZIP_READBACK', zipSha256: result.zipSha256,
+        zipBytes: result.zipBytes, rangeRequests: result.r2ReadStats.rangeRequests,
+        etagStable: true, memberIntegrityVerified: true, launchAssetSha256,
+      },
+      active: false, completionWritten: false, certificateIssued: false };
+  } catch (error) {
+    if (!registered) {
+      const objects = await params.bucket.list({ prefix });
+      if (objects.objects.length) await params.bucket.delete(objects.objects.map((item) => item.key));
+    }
+    throw error;
+  } finally {
+    await params.bucket.delete(intakeKey).catch(() => {});
+  }
+}
+
 export function packageReadModel(row: PackageRow) {
   const validation = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   return {
     packageId: row.id,
     packageSha256: row.package_sha256,
     status: row.status,
+    scormVersion: row.scorm_versao ?? null,
     validatorVersion: validation?.validatorVersion ?? null,
     ...validation,
     r2Prefix: row.r2_prefix,
@@ -183,10 +362,96 @@ export function packageReadModel(row: PackageRow) {
 
 export async function listScormPackageVersions(db: D1Database, empresaId: number, cursoId: number) {
   const rows = await db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
-       FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? ORDER BY uploaded_at DESC`,
+    `SELECT p.id, p.empresa_id, p.curso_id, p.package_sha256, p.r2_prefix,
+            p.launch_file, p.scorm_versao, p.status, p.validation_result_json,
+            c.scorm_package_r2_prefix AS active_prefix
+       FROM lms_scorm_package_versions p
+       JOIN lms_cursos c ON c.id = p.curso_id AND c.empresa_id = p.empresa_id
+      WHERE p.empresa_id = ? AND p.curso_id = ? AND c.deleted_at IS NULL
+      ORDER BY p.uploaded_at DESC`,
   ).bind(empresaId, cursoId).all<PackageRow>();
-  return (rows.results ?? []).map(packageReadModel);
+  return (rows.results ?? []).map((row) => ({
+    ...packageReadModel(row),
+    // Keep candidate readback self-describing for authenticated staging
+    // verification; both IDs came from the tenant-filtered D1 row above.
+    empresaId: row.empresa_id,
+    cursoId: row.curso_id,
+    active: row.status === 'ACTIVE' || row.r2_prefix === row.active_prefix,
+  }));
+}
+
+/** Tombstone and remove R2 members only for the exact inactive streamed F5 operation. */
+export async function removeFailedScormPackageCandidate(params: {
+  db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
+  packageId: string; packageSha256: string; operationId: string; actorId: number | null;
+}) {
+  if (!/^[a-f0-9-]{36}$/i.test(params.packageId) ||
+      !/^[a-f0-9-]{36}$/i.test(params.operationId) ||
+      !/^[a-f0-9]{64}$/.test(params.packageSha256)) {
+    throw new ApiError('F5 candidate cleanup identity invalid',400);
+  }
+  const prefix=`lms/scorm/${params.empresaId}/${params.cursoId}/_candidates/${params.packageId}/`;
+  const row=await params.db.prepare(
+    `SELECT p.id,p.status,p.package_sha256,p.r2_prefix,p.validation_result_json,
+            c.scorm_package_r2_prefix AS active_prefix
+       FROM lms_scorm_package_versions p
+       JOIN lms_cursos c ON c.id=p.curso_id AND c.empresa_id=p.empresa_id
+      WHERE p.id=? AND p.empresa_id=? AND p.curso_id=?`,
+  ).bind(params.packageId,params.empresaId,params.cursoId).first<{
+    id:string;status:string;package_sha256:string;r2_prefix:string;
+    validation_result_json:string|null;active_prefix:string|null;
+  }>();
+  if (!row || row.package_sha256!==params.packageSha256 || row.r2_prefix!==prefix ||
+      row.active_prefix===prefix || !['VALIDATED','REJECTED'].includes(row.status) ||
+      readScormUploadFilename(row.validation_result_json)!==
+        `f5-${params.packageSha256}-${params.operationId}.zip`) {
+    throw new ApiError('F5 candidate ownership or inactive scope unproven',409);
+  }
+  const prior=await params.db.prepare(
+    `SELECT 1 AS found FROM lms_scorm_qa_evidence_bindings
+      WHERE empresa_id=? AND curso_id=? AND package_id=? AND package_sha256=?
+        AND status='ACTIVE' AND synthetic=1 LIMIT 1`,
+  ).bind(params.empresaId,params.cursoId,params.packageId,params.packageSha256)
+    .first<{found:number}>();
+  if (prior) throw new ApiError('F5 candidate still has an active QA binding',409);
+  if (row.status==='VALIDATED') {
+    const writes=await params.db.batch([
+      params.db.prepare(`UPDATE lms_scorm_package_versions SET status='REJECTED'
+        WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
+          AND r2_prefix=? AND status='VALIDATED'
+          AND NOT EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
+              AND b.status='ACTIVE')`).bind(params.packageId,params.empresaId,
+          params.cursoId,params.packageSha256,prefix,params.empresaId,params.cursoId,params.packageId),
+      params.db.prepare(`INSERT INTO lms_scorm_package_audit_log
+        (id,empresa_id,curso_id,package_id,action,actor_id,reason,created_at)
+        SELECT ?,?,?,?,'ROLLED_BACK',?,? ,datetime('now')
+        WHERE EXISTS(SELECT 1 FROM lms_scorm_package_versions WHERE id=?
+          AND empresa_id=? AND curso_id=? AND package_sha256=? AND status='REJECTED')`)
+        .bind(crypto.randomUUID(),params.empresaId,params.cursoId,params.packageId,
+          params.actorId,`F5_OPERATION:${params.operationId}`,params.packageId,
+          params.empresaId,params.cursoId,params.packageSha256),
+    ]);
+    if (Number(writes[0]?.meta?.changes)!==1 || Number(writes[1]?.meta?.changes)!==1) {
+      throw new ApiError('F5 candidate tombstone did not commit atomically',409);
+    }
+  }
+  let cursor:string|undefined;
+  do {
+    const page=await params.bucket.list({prefix,cursor,limit:1000});
+    if (page.objects.length) await params.bucket.delete(page.objects.map(object=>object.key));
+    cursor=page.truncated?page.cursor:undefined;
+  } while(cursor);
+  const remaining=await params.bucket.list({prefix,limit:1});
+  if (remaining.objects.length) throw new ApiError('F5 R2 candidate cleanup readback failed',409);
+  const receiptSha256=[...new Uint8Array(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(JSON.stringify({source:'F5_FAILED_CANDIDATE_CLEANUP_V1',
+      tenantId:params.empresaId,courseId:params.cursoId,packageId:params.packageId,
+      packageSha256:params.packageSha256,operationId:params.operationId,
+      candidateTombstoned:true,r2PrefixEmpty:true}))))]
+    .map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  return {verified:true,candidateRemoved:true,receiptSha256,
+    candidateTombstoned:true,r2PrefixEmpty:true};
 }
 
 export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null; attestationSecret?: string; runtimeSha?: string }) {
@@ -212,28 +477,21 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
   const originalFilename = readScormUploadFilename(quality);
-  // Atomic D1 batch switches the course pointer only after the stored, exact SHA result is publishable.
-  await params.db.batch([
-    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'SUPERSEDED' WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'`).bind(params.empresaId, params.cursoId),
-    params.db.prepare(`UPDATE lms_scorm_package_versions SET status = 'ACTIVE', activated_at = datetime('now'), activated_by = ? WHERE id = ? AND empresa_id = ? AND curso_id = ? AND package_sha256 = ? AND status = 'VALIDATED'`).bind(params.userId, candidate.id, params.empresaId, params.cursoId, candidate.package_sha256),
-    params.db.prepare(`UPDATE lms_cursos SET tipo_conteudo = 'scorm', scorm_package_r2_prefix = ?, scorm_launch_file = ?, scorm_versao = '1.2', conteudo_arquivo_nome = COALESCE(?, conteudo_arquivo_nome), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?`).bind(candidate.r2_prefix, candidate.launch_file, originalFilename, params.cursoId, params.empresaId),
-  ]);
-  await params.db.prepare(
-    `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
-     VALUES (?, ?, ?, ?, 'ACTIVATED', ?, datetime('now'))`,
-  ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, candidate.id, params.userId).run();
-  // O snapshot informativo de diagnóstico (lms_completion_diagnostics_snapshots)
-  // é chaveado por empresa/matrícula/curso/tentativa — não por identidade do
-  // pacote. Ao trocar efetivamente o pacote SCORM ativo, invalidamos os
-  // snapshots do curso (tenant-scoped) para que um 68% antigo não fique preso ao
-  // novo pacote. É read model puramente informativo: não toca matrícula,
-  // progresso, conclusão nem qualificação.
-  await params.db
-    .prepare(
-      `DELETE FROM lms_completion_diagnostics_snapshots WHERE empresa_id = ? AND curso_id = ?`,
-    )
-    .bind(params.empresaId, params.cursoId)
-    .run();
+  // The preflight can race with another activation of the same certified ZIP.
+  // Enforce a second immutable validation check inside the D1 transaction.
+  const activated = await commitCertifiedScormActivation({
+    db: params.db, empresaId: params.empresaId, cursoId: params.cursoId,
+    packageId: candidate.id, packageSha256: candidate.package_sha256,
+    prefix: candidate.r2_prefix, launchFile: candidate.launch_file,
+    originalFilename, actorId: params.userId,
+    auditId: crypto.randomUUID(),
+    validationJson: candidate.validation_result_json,
+  });
+  if (!activated) {
+    throw new ApiError('A edição SCORM mudou durante a ativação; revalide o pacote', 409);
+  }
+  // Activation receipt and tenant-scoped diagnostic invalidation were already
+  // committed in the same D1 batch as the certified course pointer switch.
   return packageReadModel({ ...candidate, status: 'ACTIVE' });
 }
 

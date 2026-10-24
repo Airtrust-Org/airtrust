@@ -58,6 +58,23 @@ no momento autorizado deve parar, nunca motivar outro token ou bypass.
 A opção `dedicated` mantém o contrato V1 inalterado. Nenhuma operação
 remota foi autorizada pelo simples registro desta alternativa.
 
+**Opção V3 em análise — deploy do Worker sem novo token de deploy:**
+`credential_mode=existing_staging_worker_deploy_only` reutiliza
+`CLOUDFLARE_WORKER_API_TOKEN` **somente no job efêmero de implantação**
+para fazer GET da configuração e publicar **exclusivamente** o Worker
+`airtrust-frms-qa-repair-staging-private`. Exige uma concessão administrativa
+**V3** (`AIRTRUST_FRMS_QA_PROVISION_V3`) nova, não editada e vinculada ao
+SHA atual, à fase `worker`, aos recursos privados fixos e ao prazo de 12h.
+O verificador rejeita V3 na fase `bucket`, V2 na fase `worker`, mudança
+não autorizada de configuração e grants V1/V2 reaproveitados. O token amplo
+permanece apenas no runner de Actions; **não** é gravado em secret/runtime
+nem substitui `FRMS_QA_D1_READ_TOKEN`. A publicação continua bloqueada se
+não houver a credencial D1 read-only de runtime, autoridade pública Ed25519
+independente, bucket privado comprovado e concessão V3 específica.
+Esta exceção amplia temporariamente a autoridade da credencial no *runner*
+e exige revisão explícita de risco; não equivale a credencial de deploy
+com escopo mínimo e **não constitui autorização para despachar a fase**.
+
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
 precisa ser administrador. Não é permitido reaproveitar a concessão de
@@ -84,6 +101,7 @@ Inputs por dispatch:
 - `phase=bucket` ou `phase=worker`;
 - `credential_mode=dedicated` (V1), ou
   `credential_mode=existing_staging_worker_bucket_only` (somente bucket, V2).
+- `credential_mode=existing_staging_worker_deploy_only` (somente worker, V3; exige revisão de risco e grant novo).
 
 A operação `bucket` vem primeiro, isolada da implantação do Worker.
 O provisionador verifica D1 existente com GET e bucket privado. Se o
@@ -133,6 +151,28 @@ continua exigindo grants por fase e tokens com escopo independente;
 a exceção não o modifica. Um `GET_404` do bucket mantém readiness FAIL
 closed, não permite criar ou reutilizar bucket compartilhado.
 
+
+## Auditoria opcional das políticas dos tokens já existentes — GET-only
+
+O workflow `.github/workflows/staging-frms-existing-token-capabilities.yml`
+é estritamente diagnóstico. Além dos GETs de D1/R2, para os secrets staging
+`CLOUDFLARE_WORKER_API_TOKEN` e `CLOUDFLARE_D1_BACKUP_API_TOKEN`, o
+script opcional `probe-existing-token-policy.mjs` consulta somente
+`GET /accounts/{account}/tokens/verify` ou `GET /user/tokens/verify` e
+`GET .../tokens/{id}`, quando os privilégios de leitura de token permitem.
+Apenas o veredicto sanitizado aparece nos logs: **jamais** token, ID,
+políticas, e-mail ou nome. Cloudflare pode responder 403 ao GET de detalhes:
+nesse caso o escopo fica **não atestado**, sem tentativa de alterar as
+permissões ou gerar tokens novos. **Os resultados não autorizam deploy nem uso no runtime.**
+
+Um candidato de leitura requer exclusivamente `D1 Read`, um único
+recurso de conta explícito e token ativo. Mesmo o veredicto
+`D1_READ_ONLY_CANDIDATE_REQUIRES_INDEPENDENT_ATTESTATION` é somente
+indício para análise externa, não comprova isolamento no banco único,
+não autoriza copiar bearer para o Worker, não substitui assinatura Ed25519,
+nem concede prepare/apply. Mistura de permissões, outro recurso, erro,
+redirect ou API 403 falham fechado. Todos os testes negativos usam tokens
+sintéticos e fetcher em memória; nenhum token real é exibido.
 
 ## Comprovantes físicos e sequência posterior
 

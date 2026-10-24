@@ -5,8 +5,8 @@ import {
   parseScormLocationMarker,
   parseScormLocationPair,
   resolveScormResumeTargetSlide,
-  buildScormLaunchState,
 } from '../../routes/lms-assets';
+import { buildScormLaunchState, readScormNavigationBookmark } from '../../services/lms-scorm-launch-state';
 
 describe('SCORM resume restore helpers', () => {
   it('parseia marcadores numericos simples usados por alguns pacotes AW', () => {
@@ -127,5 +127,31 @@ describe('completed enrollment review virtual CMI', () => {
     expect(cmi['cmi.core.lesson_location']).toBe('17/55');
     expect(cmi['cmi.suspend_data']).toBe('active-checkpoint');
     expect(cmi['cmi.core.entry']).toBe('resume');
+  });
+
+  it('uses a verified handoff bookmark for navigation without restoring old learner evidence', () => {
+    const result = buildScormLaunchState(null, null, false, false, { position: 33, total: 43 });
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(true);
+    expect(cmi['cmi.core.lesson_location']).toBe('33/43');
+    expect(cmi['cmi.core.entry']).toBe('resume');
+    expect(cmi['cmi.suspend_data']).toBeUndefined();
+    expect(cmi['cmi.core.lesson_status']).toBeUndefined();
+    expect(cmi['cmi.core.score.raw']).toBeUndefined();
+  });
+
+  it('rejects malformed, completion-capable, or out-of-range handoff bookmarks', () => {
+    expect(readScormNavigationBookmark(JSON.stringify({
+      status: 'MATCHED_ANCHOR', targetPosition: 33, activeTotal: 43,
+      canMarkComplete: false, canTransferScore: false,
+    }))).toEqual({ position: 33, total: 43 });
+    expect(readScormNavigationBookmark(JSON.stringify({
+      status: 'MATCHED_ANCHOR', targetPosition: 33, activeTotal: 43,
+      canMarkComplete: true, canTransferScore: false,
+    }))).toBeNull();
+    expect(readScormNavigationBookmark(JSON.stringify({
+      status: 'MATCHED_ANCHOR', targetPosition: 44, activeTotal: 43,
+      canMarkComplete: false, canTransferScore: false,
+    }))).toBeNull();
   });
 });

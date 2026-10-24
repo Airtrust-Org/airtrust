@@ -6,6 +6,7 @@ import { buildReviewPlan, TARGET } from '../../scripts/staging/frms-qa-cases-rep
 import { expectedQaCases } from '../../scripts/staging/inspect-frms-ux-cases.mjs';
 import { durableCoordinator, privateR2Store, d1ScopeAdapter, timeTravelReader, LOCK } from './adapters.mjs';
 import { authorizePrivateCaller } from './caller-auth.mjs';
+import { assertPrivateApprovalAnchor } from './assert-private-approval-anchor.mjs';
 
 const DAYS = Array.from({ length: 30 }, (_, i) => ({
   day: new Date(Date.parse('2026-09-14T00:00:00Z') + i * 86400000).toISOString().slice(0, 10),
@@ -29,6 +30,10 @@ export class FrmsQaCoordinator extends DurableObject {
       !env.PREIMAGES?.put || !env.PREIMAGES?.get ||
       !env.COORDINATOR?.get || !env.COORDINATOR?.idFromName ||
       env.PRIVATE_STORAGE_VERIFIED !== 'restricted-r2-lifecycle-1d') throw new Error('QA_DEPLOYMENT_NOT_READY');
+    // Check the actual Ed25519 key and pin, not just the fingerprint shape.
+    // Must happen before the one-use caller capability is consumed or R2 is touched.
+    assertPrivateApprovalAnchor({publicKeyPem:env.APPROVAL_PUBLIC_KEY_PEM,
+      expectedSha256:env.APPROVAL_KEY_SHA256});
     if (!['prepare', 'apply'].includes(operation)) throw new Error('QA_OPERATION_REJECTED');
     // Input never chooses an ID, SQL statement, binding or authorization anchor.
     const fields = operation === 'prepare' ? ['callerAuth'] :

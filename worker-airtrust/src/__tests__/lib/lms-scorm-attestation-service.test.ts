@@ -30,6 +30,8 @@ function quality(){
     completionManifest:{status:'PASS',errors:[],warnings:[]},
     diagnostics:{status:'PASS',errors:[],warnings:[]},
     conformance:{status:'PASS',tests:[]},runtime,
+    // Validated server-side as a non-EXTERNAL scored training.
+    authoringReview:{externalExam:false,reviewed:true},
     functionalCertification:{status:'UNCERTIFIED',packageSha256:sha,
       missing:['CHROMIUM:RUN_REQUIRED_UNIQUE'],requiresAssessment:true,runs:[]},
     publishable:false,
@@ -83,7 +85,7 @@ function fixture(){
         bind?:never; // implementation of D1 mock records through SQL strings below
       };
       void statement;
-      return [];
+      return statements.map(() => ({ success:true, results:[], meta:{changes:1} }));
     },
   };
   // Capture bound statements accurately to simulate D1's update.
@@ -107,7 +109,7 @@ function fixture(){
       if(sql.includes('SET validation_result_json'))row.validation_result_json=String(args[0]);
       if(sql.includes("SET status = 'ACTIVE'"))row.status='ACTIVE';
     }
-    return [];
+    return (statements as unknown[]).map(() => ({ success:true, results:[], meta:{changes:1} }));
   };
   return {db:db as unknown as D1Database,row,writes,
     get batchCalls(){return batchCalls;}};
@@ -120,6 +122,18 @@ describe('SCORM imported certification and activation trust boundary',()=>{
     await expect(importScormFunctionalAttestation({
       ...base,db:f.db,attestation:{payload:seal().payload},
     })).rejects.toMatchObject({statusCode:409});
+    expect(f.batchCalls).toBe(0);
+    await expect(activateScormPackageVersion({...base,db:f.db}))
+      .rejects.toMatchObject({statusCode:409});
+    expect(f.batchCalls).toBe(0);
+  });
+  it('rejects signed proof on historical blobs without a trusted classification',async()=>{
+    const f=fixture();
+    const legacy=JSON.parse(f.row.validation_result_json);
+    delete legacy.authoringReview;
+    f.row.validation_result_json=JSON.stringify(legacy);
+    await expect(importScormFunctionalAttestation({...base,db:f.db,attestation:seal()}))
+      .rejects.toMatchObject({statusCode:409});
     expect(f.batchCalls).toBe(0);
     await expect(activateScormPackageVersion({...base,db:f.db}))
       .rejects.toMatchObject({statusCode:409});
