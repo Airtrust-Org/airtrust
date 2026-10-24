@@ -8,7 +8,7 @@
  * must carry the receipt documents whose canonical digests it pins.
  */
 import { createHash } from 'node:crypto';
-import { chromium } from '@playwright/test';
+import { chromium, webkit } from '@playwright/test';
 
 const HEX64 = /^[a-f0-9]{64}$/;
 const HEX40 = /^[a-f0-9]{40}$/;
@@ -60,12 +60,12 @@ function verifyReceiptDocuments(plan) {
 function locationValue(api, is2004) {
   return api[is2004 ? 'GetValue' : 'LMSGetValue'](is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
 }
-async function browserExecution({ plan, params, request, env }) {
+async function browserExecution({ plan, params, request, env, browserType }) {
   const origin = String(env.F5_STAGING_API_ORIGIN || 'https://airtrust-api-staging.airtrust.workers.dev').replace(/\/$/, '');
   const token = env.SCORM_QA_ACCESS_TOKEN;
   if (!token || token.length <= 40) fail('STAGING_ADMIN_TOKEN_NOT_PROVISIONED');
   const path = `/api/lms/scorm/qa-f0/launch/${params.courseId}/${encodeURIComponent(params.packageId)}/${params.enrollmentId}`;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await browserType.launch({ headless: true });
   try {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     const assetSession = await request('/api/lms/assets/session', { method: 'POST', body: {
@@ -196,6 +196,37 @@ function assertReadback(data, params, expected, runtimeSha) {
   return data;
 }
 
+
+/**
+ * Both browser engines must exercise the same candidate against the staging
+ * Worker. Each invocation performs its own Commit, Finish, fresh-context
+ * resume and authenticated D1 readback. One engine passing is insufficient.
+ */
+export async function runF5BrowserPair(runBrowser) {
+  const results = [];
+  for (const [engine, browserType] of [['chromium', chromium], ['webkit', webkit]]) {
+    const evidence = await runBrowser({ engine, browserType });
+    if (evidence?.source !== 'WORKER_CANDIDATE_QA_EXECUTION' ||
+        evidence?.resumeVerified !== true ||
+        evidence?.locationPersisted !== true ||
+        evidence?.suspendDataPersisted !== true) fail('BROWSER_' + engine.toUpperCase() + '_EVIDENCE_INVALID');
+    results.push(evidence);
+  }
+  const [chromiumEvidence, webkitEvidence] = results;
+  for (const key of [
+    'source', 'candidateId', 'packageSha256', 'enrollmentId', 'cycleId', 'runId',
+    'servedPackageSha256', 'committedPackageSha256', 'suspendSha256', 'runtimeVersion',
+  ]) {
+    if (chromiumEvidence[key] !== webkitEvidence[key]) fail('BROWSER_PAIR_SCOPE_MISMATCH');
+  }
+  if (!Number.isSafeInteger(chromiumEvidence.sessionCount) ||
+      !Number.isSafeInteger(webkitEvidence.sessionCount) ||
+      webkitEvidence.sessionCount < chromiumEvidence.sessionCount) {
+    fail('BROWSER_PAIR_READBACK_REGRESSION');
+  }
+  return { ...webkitEvidence, browserEngines: ['chromium', 'webkit'] };
+}
+
 /** Creates actual production callbacks; absent recovery/cleanup routes fail closed. */
 export async function createF0Adapters({ plan, env = process.env }) {
   return {
@@ -222,7 +253,7 @@ export async function createF0Adapters({ plan, env = process.env }) {
     },
     async runSyntheticCandidate(params, { request }) {
       checkedScope(plan, params);
-      return browserExecution({ plan, params, request, env });
+      return runF5BrowserPair(({ browserType }) => browserExecution({ plan, params, request, env, browserType }));
     },
     async recoverSyntheticCandidate(params, { json }) {
       checkedScope(plan, params);
