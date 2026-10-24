@@ -203,6 +203,52 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
+test('skips the legacy PIN prompt only when old encrypted stores are empty', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const legacy = await PilotVault.open();
+    await legacy.provision('654321');
+    // An old vault config alone does not mean flight records require recovery.
+  });
+
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.locator('#workspace')).toBeVisible();
+
+  const proof = await page.evaluate(async () => {
+    const open = (name: string) => new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const get = (db: IDBDatabase, id: string) => new Promise<any>((resolve, reject) => {
+      const request = db.transaction('meta', 'readonly').objectStore('meta').get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const v1 = await open('airtrust-pilot-v1');
+    const v2 = await open('airtrust-pilot-v2');
+    const legacy = await get(v1, 'vault-config');
+    const current = await get(v2, 'vault-config');
+    const receipt = await get(v2, 'legacy-pin-v1-recovery-proof');
+    return {
+      legacyPreserved: legacy?.version === 1,
+      currentReady: current?.version === 2 && current.device_key?.extractable === false,
+      emptyRecoveryVerified: receipt?.completed === true && receipt.records_verified === 0,
+    };
+  });
+  expect(proof).toEqual({
+    legacyPreserved: true,
+    currentReady: true,
+    emptyRecoveryVerified: true,
+  });
+
+  await page.reload();
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.locator('#workspace')).toBeVisible();
+});
+
 test('recovers encrypted legacy draft and outbox only after PIN, with verified V2 read-back and intact V1', async ({ page }) => {
   const legacyPin = '654321';
   const marker = `pilot-legacy-recovery-${Date.now()}`;
