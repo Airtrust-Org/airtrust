@@ -23,7 +23,8 @@ const evidence = Object.freeze({
   r2CandidateAssetSha256: 'e'.repeat(64),
   d1ReadbackSource: 'WORKER_D1_CANDIDATE_READBACK',
   execution: { servedPackageSha256: packageSha256, committedPackageSha256: packageSha256,
-    cmiSha256: 'c'.repeat(64), suspendSha256: 'f'.repeat(64), sessionCount: 1 },
+    cmiSha256: 'c'.repeat(64), suspendSha256: 'f'.repeat(64), sessionCount: 1,
+    browserEngines: ['chromium', 'webkit'] },
   cleanupReceiptSha256: '9'.repeat(64), activationAuthorized: false,
   assessmentApproved: false, certificationIssued: false, certificateIssued: false,
   syntheticEnrollmentId: 8101, privateCredential: 'secret-must-never-appear',
@@ -35,6 +36,7 @@ test('emits a narrowly scoped audit artifact with no credential or synthetic par
   assert.equal(actual.privateEvidenceSha256, rawHash);
   assert.equal(actual.candidateActive, false);
   assert.equal(actual.certificateIssued, false);
+  assert.deepEqual(actual.browserEngines, ['chromium', 'webkit']);
   const text = JSON.stringify(actual);
   for (const forbidden of ['secret-must-never-appear', 'privateCredential',
     'syntheticEnrollmentId', '8101', '9201', '7301', 'cmiSha256', 'suspendSha256']) {
@@ -48,6 +50,8 @@ test('rejects failed, incomplete, activated or certifying outcomes without publi
     { r2Readback: { ...evidence.r2Readback, zipBytes: 1 } },
     { execution: { ...evidence.execution, committedPackageSha256: 'f'.repeat(64) } },
     { cleanupReceiptSha256: null },
+    { execution: { ...evidence.execution, browserEngines: ['chromium'] } },
+    { execution: { ...evidence.execution, browserEngines: ['chromium', 'webkit', 'firefox'] } },
   ]) {
     assert.throws(() => sanitizeF5Evidence({ ...evidence, ...changed }, env, rawHash),
       /F5_SANITIZED_EVIDENCE_INVALID/);
