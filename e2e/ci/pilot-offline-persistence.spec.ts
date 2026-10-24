@@ -288,7 +288,26 @@ test('reopens a completed flight without edit lease when secure vault is support
   // Normalize the selected day on WebKit regardless of browser timezone.
   await page.locator('#authorized-flight-date').fill(today);
   await page.locator('#authorized-flight-date').dispatchEvent('change');
-  await expect(page.getByRole('button', { name: 'Abrir voo' })).toHaveCount(1);
+  try {
+    await expect(page.getByRole('button', { name: 'Abrir voo' })).toHaveCount(1);
+  } catch (error) {
+    // Only emitted on an actual failure. Distinguishes auth, date filtering,
+    // failed bootstrap, missing API data and hidden controls on WebKit.
+    const diagnostic = await page.evaluate(() => {
+      const get = (selector: string) => document.querySelector(selector);
+      return {
+        session: get('#session-status')?.textContent,
+        onlineList: get('#online-flights')?.textContent,
+        onlineListHtml: get('#online-flights')?.innerHTML?.slice(0, 1000),
+        selectedDate: (get('#authorized-flight-date') as HTMLInputElement | null)?.value,
+        connectivity: get('#connectivity')?.textContent,
+        listHidden: get('#online-flights-card')?.className,
+        flightDetailHidden: get('#flight-detail-card')?.className,
+      };
+    });
+    console.log('PILOT_READONLY_WEBKIT_DIAGNOSTIC', JSON.stringify(diagnostic));
+    throw error;
+  }
 
   await page.getByRole('button', { name: 'Abrir voo' }).click();
   await expect(page.locator('#flight-detail-card')).toBeVisible();
