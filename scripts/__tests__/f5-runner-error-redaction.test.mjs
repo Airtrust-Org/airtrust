@@ -12,6 +12,10 @@ test('F5 runner exposes only reviewed, fixed error identifiers', () => {
     safeF5RunnerErrorCode(new Error('F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH')),
     'F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH'
   );
+  for (const code of ['F5_F0_ADAPTER_AUTHORED_STATE_NOT_OBSERVED',
+    'F5_F0_ADAPTER_SCORM_INCOMPLETE_READBACK_MISMATCH']) {
+    assert.equal(safeF5RunnerErrorCode(new Error(code)), code);
+  }
   assert.equal(safeF5RunnerErrorCode(new Error('F5_WORKER_ADAPTER_WORKER_HTTP_500')),
     'F5_WORKER_ADAPTER_WORKER_HTTP_500');
   assert.equal(safeF5RunnerErrorCode(new Error('F5_WORKER_ADAPTER_WORKER_HTTP_500:secret')),
