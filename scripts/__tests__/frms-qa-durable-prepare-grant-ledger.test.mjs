@@ -5,6 +5,8 @@ import {prepareViaPrivateServiceBinding} from '../../ops/frms-qa-repair/private-
 import {TARGET} from '../staging/frms-qa-cases-repair-plan.mjs';
 
 const sha='a'.repeat(40),grantId='6373988992',runId='40018273616';
+const recoveryFetcher=async()=>Response.json({success:true,
+  result:{bookmark:'local-runner-synthetic-bookmark'}});
 const key='frms-qa-prepare-grant:'+sha+':'+grantId;
 const claim={sha,runId,runAttempt:1,phase:'prepare'};
 
@@ -119,6 +121,8 @@ test('prepare caller consumes grant before private binding; rejection never auto
     GITHUB_SHA:sha,GITHUB_RUN_ID:runId,GITHUB_RUN_ATTEMPT:'1',
     FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
     FRMS_QA_PREPARE_GRANT_ID:grantId,FRMS_QA_CALLER_KEY_HEX:'f'.repeat(64),
+    CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
+    CLOUDFLARE_WORKER_API_TOKEN:'local-test-get-only-token',
   };
   let calls=0;
   const binding={prepare:async()=>{calls++;throw Error('synthetic transport failed');}};
@@ -128,7 +132,8 @@ test('prepare caller consumes grant before private binding; rejection never auto
     sha:req.sha,dbId:TARGET.db_id,tenantId:999013,
     grantId:req.grantId,runId:req.runId,runAttempt:req.runAttempt,
   });
-  const args={env,binding,independentGrantVerifier:verifier,grantLedger:ledger};
+  const args={env,binding,independentGrantVerifier:verifier,grantLedger:ledger,
+    fetcher:recoveryFetcher};
   await assert.rejects(prepareViaPrivateServiceBinding(args),/QA_PRIVATE_CALLER_TRANSPORT_DENIED/);
   assert.equal(calls,1);
   assert.equal(storage.persisted.size,1);

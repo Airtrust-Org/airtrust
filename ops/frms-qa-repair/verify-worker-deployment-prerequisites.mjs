@@ -15,7 +15,7 @@ export function inspectPrivateWorkerPrerequisites(env={}){
     accountId:ACCOUNT.test(env.CLOUDFLARE_ACCOUNT_ID||'')?'FORMAT_VALID':'MISSING_OR_INVALID',
     metadataReadToken:status(env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN),
     workerDeployToken:status(env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN),
-    runtimeD1ReadToken:status(env.FRMS_QA_D1_READ_TOKEN),
+    runtimeCloudflareBearer:present(env.FRMS_QA_D1_READ_TOKEN)?'FORBIDDEN':'ABSENT_EXPECTED',
     callerHmacKey:HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')?'FORMAT_VALID':'MISSING_OR_INVALID',
     preimageAesKey:HEX64.test(env.FRMS_QA_PREIMAGE_KEY_HEX||'')?'FORMAT_VALID':'MISSING_OR_INVALID',
     keySeparation:HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')&&
@@ -35,14 +35,15 @@ export function inspectPrivateWorkerPrerequisites(env={}){
     checks.publicApprovalKey==='ED25519_FORMAT_VALID'&&
     checks.metadataReadToken==='PRESENT_SCOPE_NOT_ATTESTED'&&
     checks.workerDeployToken==='PRESENT_SCOPE_NOT_ATTESTED'&&
-    checks.runtimeD1ReadToken==='PRESENT_SCOPE_NOT_ATTESTED';
+    checks.runtimeCloudflareBearer==='ABSENT_EXPECTED';
   return {
     contract:'FRMS_PRIVATE_WORKER_STAGING_PREFLIGHT_V1',
     verdict:formatReady?'INPUTS_PRESENT_EXTERNAL_AUTHORIZATION_REQUIRED':'BLOCKED_MISSING_OR_INVALID_INPUT',
     checks,
     // Never treat GET success as proof of D1 Read-only; D1 Write also allows GET.
     pendingIndependentEvidence:[
-      'D1_RUNTIME_TOKEN_READ_ONLY_SCOPE',
+      'RUNNER_TIME_TRAVEL_GET_AND_RECOVERY_PROOF_PROVENANCE',
+      'RESULTS_QUEUE_PULL_ACK_CREDENTIAL_ONLY_IN_RUNNER',
       'ED25519_INDEPENDENT_SIGNING_AUTHORITY',
       'EXACT_F0_WORKER_PHASE_GRANT',
       'AUTHORIZED_PRIVATE_SERVICE_BINDING_CALLER',

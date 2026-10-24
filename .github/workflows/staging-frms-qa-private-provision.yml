@@ -118,7 +118,8 @@ jobs:
           FRMS_QA_PREIMAGE_KEY_HEX: ${{ secrets.FRMS_QA_PREIMAGE_KEY_HEX }}
           FRMS_QA_CALLER_KEY_HEX: ${{ secrets.FRMS_QA_CALLER_KEY_HEX }}
           FRMS_QA_APPROVAL_PUBLIC_KEY_PEM: ${{ secrets.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM }}
-          FRMS_QA_D1_READ_TOKEN: ${{ secrets.FRMS_QA_D1_READ_TOKEN }}
+          # Time Travel GET executes only in the protected runner; no Cloudflare
+          # bearer is installed in the private Worker runtime.
         run: node ops/frms-qa-repair/provision-private-resources.mjs worker
       - name: Report private deployment without claiming operational 4/4
         if: success()

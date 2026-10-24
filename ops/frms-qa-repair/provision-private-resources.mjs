@@ -172,16 +172,14 @@ export async function createPrivateBucket({accountId,token,readToken,fetcher=fet
 export function buildPrivateRuntimeSecrets({env,sha}){
   const approved=env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM;
   const caller=env.FRMS_QA_CALLER_KEY_HEX,preimage=env.FRMS_QA_PREIMAGE_KEY_HEX;
-  const d1read=env.FRMS_QA_D1_READ_TOKEN;
+  // Recovery is supplied through the one-use private runner proof. No
+  // Cloudflare bearer belongs in the repair Worker, including a dedicated
+  // D1 read token or an alias of an existing deploy/migration credential.
+  if(env.FRMS_QA_D1_READ_TOKEN)fail('FRMS_QA_RUNTIME_CLOUDFLARE_TOKEN_FORBIDDEN');
   if(!HEX40.test(sha||'')||!HEX64.test(caller||'')||
-     !HEX64.test(preimage||'')||!d1read||!approved||
+     !HEX64.test(preimage||'')||caller===preimage||!approved||
      !ACCOUNT.test(env.CLOUDFLARE_ACCOUNT_ID||''))
     fail('FRMS_QA_PRIVATE_RUNTIME_SECRETS_MISSING');
-  // Never install the deployment/metadata API credential as the D1 runtime
-  // recovery credential, including when a V3 grant permits ephemeral reuse.
-  if(d1read===env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN||
-     d1read===env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN)
-    fail('FRMS_QA_RUNTIME_TOKEN_MUST_BE_INDEPENDENT');
   let der;
   try{der=createPublicKey(approved).export({type:'spki',format:'der'});}
   catch{fail('FRMS_QA_ED25519_PUBLIC_KEY_INVALID');}
@@ -194,7 +192,6 @@ export function buildPrivateRuntimeSecrets({env,sha}){
     PREIMAGE_KEY_HEX:preimage,
     CALLER_KEY_HEX:caller,
     CALLER_KEY_SHA256:hash(Buffer.from(caller,'hex')),
-    D1_READ_TOKEN:d1read,
     CLOUDFLARE_ACCOUNT_ID:env.CLOUDFLARE_ACCOUNT_ID,
     PRIVATE_STORAGE_VERIFIED:'restricted-r2-lifecycle-1d',
   };

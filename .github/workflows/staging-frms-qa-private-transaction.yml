@@ -1,0 +1,95 @@
+name: FRMS F0 Staging Private Transaction (Mutex, Separated Cloudflare Scopes)
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact main SHA passing all eight gates
+        required: true
+        type: string
+      prepare_grant_id:
+        description: Fresh administrator prepare-phase comment ID from issue 776
+        required: true
+        type: string
+      confirmation:
+        description: Exact prepare-phase F0 approval (does not grant apply)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  issues: read
+  id-token: write
+
+# Workflow-level concurrency keeps the SAME global mutex for both jobs:
+# Queue prepare -> independent signer -> apply -> D1-only physical readback.
+# Separate jobs deliberately prevent a Worker bearer and D1 migration bearer
+# from coexisting on one runner, as required by cloudflare-secret-contract.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  frms-queue-apply:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 18
+    outputs:
+      apply_validation: ${{ steps.queue_apply.outputs.apply_validation }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Verify signer, separated-scopes transaction and grant contracts (synthetic)
+        run: |
+          node --test \
+            scripts/__tests__/frms-qa-private-transaction-controller.test.mjs \
+            scripts/__tests__/frms-qa-private-transaction-runner.test.mjs \
+            scripts/__tests__/frms-qa-private-transaction-readback.test.mjs \
+            scripts/__tests__/frms-qa-external-approval-signer.test.mjs
+      - name: One-use Queue prepare and apply under exact grants; NO physical 4/4 claim
+        id: queue_apply
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FRMS_QA_TRANSACTION_PHASE: queue-apply
+          FRMS_QA_PREPARE_EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          FRMS_QA_PREPARE_GRANT_ID: ${{ inputs.prepare_grant_id }}
+          FRMS_QA_PREPARE_CONFIRM: ${{ inputs.confirmation }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          FRMS_QA_CALLER_KEY_HEX: ${{ secrets.FRMS_QA_CALLER_KEY_HEX }}
+          FRMS_QA_APPROVAL_PUBLIC_KEY_PEM: ${{ secrets.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM }}
+          FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256: ${{ vars.FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256 }}
+          FRMS_QA_SIGNER_ORIGIN: ${{ vars.FRMS_QA_SIGNER_ORIGIN }}
+          FRMS_QA_SIGNER_ORIGIN_SHA256: ${{ vars.FRMS_QA_SIGNER_ORIGIN_SHA256 }}
+        run: node ops/frms-qa-repair/run-protected-private-transaction.mjs
+
+  frms-d1-readonly-postcondition:
+    needs: [frms-queue-apply]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Independently verify actual D1 4/4 after successful Queue apply
+        env:
+          FRMS_QA_APPLY_STAGE_RESULT: ${{ needs.frms-queue-apply.outputs.apply_validation }}
+          FRMS_QA_EXPECTED_APPLY_SHA: ${{ inputs.expected_main_sha }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_MIGRATION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+        run: node ops/frms-qa-repair/run-protected-private-d1-readback.mjs
+      - name: Reconcile on uncertain outcome; never redispatch blindly
+        if: always()
+        run: |
+          echo 'FRMS D1-only physical postcondition finished or failed closed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Workflow-wide staging mutex remains held until the final job terminates.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A partial failure is INDETERMINATE: inspect evidence before any new run.' >> "$GITHUB_STEP_SUMMARY"
