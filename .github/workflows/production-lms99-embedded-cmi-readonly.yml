@@ -19,7 +19,7 @@ concurrency:
   group: production-lms99-embedded-cmi-readonly
   cancel-in-progress: false
 jobs:
-  inspect:
+  d1_evidence:
     name: Detect CMI recovery leads without learner data
     runs-on: ubuntu-latest
     environment: production
