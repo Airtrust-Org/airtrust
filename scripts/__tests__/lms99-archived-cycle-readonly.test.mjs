@@ -6,7 +6,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,validateQuery,validateRows} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+
+test('failures expose only fixed diagnostic categories, never provider messages',()=>{
+ assert.equal(classifyD1Failure('D1 error: no such table: lms_ciclo_evidencias'),'D1_ARCHIVE_SCHEMA_MISSING');
+ assert.equal(classifyD1Failure('SQLITE_ERROR: no such column: discarded_state'),'D1_COLUMN_SCHEMA_MISMATCH');
+ assert.equal(classifyD1Failure('HTTP 403 forbidden'),'D1_ACCESS_DENIED');
+ assert.equal(classifyD1Failure('unknown private detail bearer TOKEN_X'),'D1_SELECT_FAILED');
+ assert.equal(safePublicError(new Error('LMS99_HISTORY_D1_SELECT_FAILED')),'LMS99_HISTORY_D1_SELECT_FAILED');
+ assert.equal(safePublicError(new Error('SECRET_TOKEN_IN_ERROR')),'LMS99_HISTORY_FAILED');
+});
 
 test('static archive query denies writes and stays tenant scoped',()=>{
  assert.equal(validateQuery(),ARCHIVE_SQL);
