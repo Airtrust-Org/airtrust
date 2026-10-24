@@ -136,6 +136,15 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     await frame.locator('body').waitFor({ state: 'visible', timeout: 45_000 });
     const is2004 = params.scormVersion === '2004';
     if (!['1.2', '2004'].includes(params.scormVersion)) fail('SCORM_VERSION_UNAVAILABLE');
+
+    await page.waitForFunction(is2004 => {
+      const api = is2004 ? window.API_1484_11 : window.API;
+      if (!api) return false;
+      const get = is2004 ? api.GetValue : api.LMSGetValue;
+      const s = typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : '';
+      return typeof s === 'string' && s.length > 0;
+    }, is2004, { timeout: 15_000 }).catch(() => null);
+
     const initialLocation = await page.evaluate(is2004 => {
       const api = is2004 ? window.API_1484_11 : window.API;
       if (!api) return null;
@@ -143,10 +152,19 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
       return typeof get === 'function' ? get.call(api, locationKey) : null;
     }, is2004);
+    const initialSuspend = await page.evaluate(is2004 => {
+      const api = is2004 ? window.API_1484_11 : window.API;
+      if (!api) return null;
+      const get = is2004 ? api.GetValue : api.LMSGetValue;
+      return typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : null;
+    }, is2004);
+
     const marker = (typeof initialLocation === 'string' && initialLocation.length > 0)
       ? initialLocation
       : `F0:${params.runId}:tripulacao-1`;
-    const suspend = JSON.stringify({ runId: params.runId, checkpoint: 'tripulacao-1', resume: true });
+    const suspend = (typeof initialSuspend === 'string' && initialSuspend.length > 0)
+      ? initialSuspend
+      : JSON.stringify({ runId: params.runId, checkpoint: 'tripulacao-1', resume: true });
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
