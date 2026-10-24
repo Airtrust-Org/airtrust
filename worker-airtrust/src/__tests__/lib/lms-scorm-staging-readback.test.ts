@@ -72,6 +72,10 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     });
     expect(result.source).toBe('WORKER_D1_STAGING_READBACK');
     expect(result.cycleId).toBe(555);
+    // ISO-8601 and SQLite datetime text do not sort chronologically.
+    // Comparing numeric Julian days is mandatory for candidate expiry.
+    expect(statements.find(s=>s.sql.includes('FROM lms_scorm_qa_evidence_bindings b'))?.sql)
+      .toContain("julianday(b.expires_at) > julianday('now')");
     expect(result.servedPackageSha256).toBe(qsha);
     expect(result.committedPackageSha256).toBe(qsha);
     expect(result.qualificationHistoryId).toBe(700);

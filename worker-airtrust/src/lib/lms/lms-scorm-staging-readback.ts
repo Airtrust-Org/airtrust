@@ -80,7 +80,7 @@ export async function readScormQaBackendEvidence(params: {
         AND b.package_sha256 = ? AND b.matricula_id = ?
         AND b.status = 'ACTIVE' AND b.synthetic = 1
         AND b.staging_runtime_sha = ?
-        AND b.expires_at > datetime('now')
+        AND julianday(b.expires_at) > julianday('now')
       LIMIT 1`,
   ).bind(empresaId, cursoId, candidate.id, candidate.package_sha256,
     matriculaId, runtimeSha).first<{
