@@ -87,7 +87,7 @@ test('transport or token failures cannot emit a private queue message',async()=>
   await assert.rejects(resolvePrivateTransactionQueues({
     accountId:ACCOUNT,token:''}),/FRMS_QA_TRANSACTION_RUNNER_DENIED/);
 });
-test('no external signer, readback or public Ed25519 key can start transaction',async()=>{
+test('no external signer or public Ed25519 key can start transaction',async()=>{
   const f=source();
   const env={
     GITHUB_SHA:'b'.repeat(40),GITHUB_TOKEN:'synthetic-github',
