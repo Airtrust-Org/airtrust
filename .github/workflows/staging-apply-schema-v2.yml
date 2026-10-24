@@ -103,9 +103,19 @@ jobs:
             return response.json();
           }
           const pr = await github('/pulls/' + number);
-          if (pr.state !== 'open' || pr.base?.ref !== 'main' ||
-              pr.head?.repo?.full_name !== repo || pr.head?.repo?.fork ||
-              pr.head?.sha?.toLowerCase() !== sha) {
+          // A merged HFA 0529 release must be pinned to the CURRENT protected main;
+          // only this additive change may use the merged-PR staging path.
+          const sameRepo = pr.base?.ref === 'main' &&
+            pr.head?.repo?.full_name === repo && !pr.head?.repo?.fork;
+          const reviewedOpenHead = pr.state === 'open' &&
+            pr.head?.sha?.toLowerCase() === sha;
+          let reviewedMergedHfa = false;
+          if (sameRepo && process.env.CHANGE_ID === 'hfa-integration-bridge-0529' &&
+              pr.merged === true && pr.merge_commit_sha?.toLowerCase() === sha) {
+            const mainRef = await github('/git/refs/heads/main');
+            reviewedMergedHfa = mainRef.object?.sha?.toLowerCase() === sha;
+          }
+          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa)) {
             throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
           }
           if (process.env.CHANGE_ID === 'lms-scorm-qa-evidence-bindings-0568') {
