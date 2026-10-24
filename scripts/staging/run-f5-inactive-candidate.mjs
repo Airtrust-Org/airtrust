@@ -22,6 +22,12 @@ export async function reserveF5EvidenceOutput(outputPath) {
   catch { fail('EVIDENCE_OUTPUT_UNAVAILABLE'); }
 }
 
+/** Best-effort removal even if close itself rejects; never log private paths. */
+export async function discardF5EvidenceOutput(evidenceHandle, outputPath) {
+  await evidenceHandle.close().catch(() => {});
+  await unlink(outputPath).catch(() => {});
+}
+
 export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   const planPath = env.F5_EXECUTOR_PLAN_PATH;
   const sourcePath = env.F5_PRIVATE_ZIP_PATH;
@@ -90,8 +96,7 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   } finally {
     if (!evidenceComplete) {
       // Closing can itself fail; still attempt removal of partial evidence.
-      await evidenceHandle.close().catch(() => {});
-      await unlink(outputPath).catch(() => {});
+      await discardF5EvidenceOutput(evidenceHandle, outputPath);
     }
   }
 }
