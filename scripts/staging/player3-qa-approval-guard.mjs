@@ -11,7 +11,7 @@ export const REPO = 'Airtrust-Org/airtrust';
 export const BRANCH = 'feat/lms-native-course-contract-v1-20261010';
 export const DB_UUID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 export const LOCK = 'airtrust-staging-mutations-and-scorm-qa';
-export const ARTIFACT_SHA = '0dcbbb7d50235d2e37d2c1ddda16c1f55cb2482551a6cf3a3a420829cf642b8f';
+export const ARTIFACT_SHA = '07d9a165a7840b548aee339354054885d437d19909537ead6e5eab4b71449c8e';
 export const REQUIRED = Object.freeze([
   'lint','build-content-gates','worker-typecheck','frontend-coverage',
   'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'

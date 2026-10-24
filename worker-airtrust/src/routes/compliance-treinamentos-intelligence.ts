@@ -297,6 +297,7 @@ export function createTrainingComplianceIntelligenceRoutes({
               critico_operacional: requirement.critico_operacional,
               referencia_normativa: requirement.referencia_normativa,
               curso_ead_titulo: requirement.curso_ead_titulo,
+              progresso_pct: requirement.progresso_pct,
               tem_email: Boolean(person.email),
               tem_whatsapp: Boolean(person.telefone),
               avisos_enviados: stats?.count || 0,

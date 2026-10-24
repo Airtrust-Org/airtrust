@@ -12,7 +12,10 @@ import {pathToFileURL} from 'node:url';
 
 export const REPO='Airtrust-Org/airtrust';
 export const TENANT=999006;
-export const COURSE=327;
+// The legacy course 327 is intentionally outside the Native acceptance
+// matrix. Read only the governed synthetic V2 course and its exact edition.
+export const COURSE=328;
+export const NATIVE_QA_EDITION_SHA256='07d9a165a7840b548aee339354054885d437d19909537ead6e5eab4b71449c8e';
 export const API='https://airtrust-api-staging.airtrust.workers.dev';
 export const DATABASE='airtrust-db-staging-baseline-20260701';
 export const DATABASE_UUID='bf9963f4-eb12-439b-a830-20bbf577ac22';
@@ -65,7 +68,8 @@ export function assertRoster(rows,meta){
       row.ciclo_status===row.status&&row.ciclo_atual===1&&
       row.edition_status==='PUBLISHED'&&
       positive(row.matricula_id)&&positive(row.ciclo_id)&&
-      positive(row.funcionario_id)&&SHA64.test(row.edition_sha256||''),
+      positive(row.funcionario_id)&&
+      row.edition_sha256===NATIVE_QA_EDITION_SHA256,
       'PHYSICAL_LEARNER_EDITION_OR_CYCLE_INVALID');
     ids.add(row.matricula_id);cycles.add(row.ciclo_id);
     employees.add(row.funcionario_id);
@@ -123,15 +127,15 @@ const SQL=`SELECT lower(u.email) email, f.empresa_id, m.curso_id,
  JOIN funcionarios f ON f.id=u.funcionario_id AND f.empresa_id=999006
  AND f.ativo=1 AND f.deleted_at IS NULL
  JOIN lms_matriculas m ON m.funcionario_id=f.id AND m.empresa_id=999006
- AND m.curso_id=327 AND m.deleted_at IS NULL
+ AND m.curso_id=${COURSE} AND m.deleted_at IS NULL
  JOIN lms_native_matricula_edicoes b ON b.matricula_id=m.id
- AND b.empresa_id=999006 AND b.curso_id=327
+ AND b.empresa_id=999006 AND b.curso_id=${COURSE}
  JOIN lms_matricula_ciclos cy ON cy.id=b.ciclo_id
  AND cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
  AND cy.curso_id=m.curso_id AND cy.funcionario_id=m.funcionario_id
  AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL AND cy.status=m.status
  JOIN lms_native_edicoes ed ON ed.id=b.edicao_id
- AND ed.empresa_id=999006 AND ed.curso_id=327
+ AND ed.empresa_id=999006 AND ed.curso_id=${COURSE}
  WHERE u.active=1 AND u.deleted_at IS NULL
  AND lower(u.email) IN
  ('qa-player3-chromium@staging.airtrust.invalid',

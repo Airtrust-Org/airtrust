@@ -52,7 +52,6 @@
   "worker-airtrust/src/services/generate-certificate.ts:pasta_virtual",
   "worker-airtrust/src/services/generate-certificate.ts:qualificacoes_historico",
   "worker-airtrust/src/services/importacao/QualificacaoTipoImportacao.ts:qualificacoes_tipos",
-  "worker-airtrust/src/services/importacao/QualificacaoTipoImportacaoRefactored.ts:qualificacoes_tipos",
   "worker-airtrust/src/services/lms-completion.ts:qualificacoes_historico",
   "worker-airtrust/src/services/lms-ead-ssot.ts:qualificacoes_tipos",
   "worker-airtrust/src/services/lms-matricula-cycle.ts:qualificacoes_historico",

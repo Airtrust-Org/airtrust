@@ -36,8 +36,44 @@ nem libera operador, não aplica Schema V2, não mexe em D1 e não altera o LMS.
 `environment: staging`, mutex global
 `airtrust-staging-mutations-and-scorm-qa`, `cancel-in-progress=false`.
 Os oito gates oficiais do SHA corrente são exigidos no guard do workflow.
-A F0 precisa confirmar controle de reviewers do environment; se não
-houver aprovação humana exigida, não disparar a operação até configurá-la.
+O environment `staging` pode manter deploys rotineiros sem `Required reviewers`.
+A autorização para este provisionamento não depende dessa opção global:
+o workflow exige um comentário administrativo específico, novo e não editado
+na issue #776, validado por SHA, fase, recursos, identidade e prazo de 12h,
+além dos oito gates e do mutex compartilhado. A aprovação manual do
+environment é opcional e não substitui a concessão por fase. Nunca executar
+uma operação de dados real apenas com aprovação do environment.
+
+**Opção sem emissão de token adicional (exclusiva fase `bucket`):** o
+`credential_mode=existing_staging_worker_bucket_only` reutiliza o secret
+`CLOUDFLARE_WORKER_API_TOKEN` **apenas no job efêmero Actions de bucket**.
+A concessão deve ser **V2** (`AIRTRUST_FRMS_QA_PROVISION_V2`), incluindo
+`credential_mode`, SHA e recursos exatos. O workflow de `worker` rejeita
+esse modo; o token jamais entra em secret/runtime do Worker privado.
+É uma exceção controlada ao privilégio mínimo da *credencial*: as
+operações permanecem limitadas pelo código às URLs e payloads fixos de
+bucket staging, com grant administrativo vigente, oito gates e mutex.
+A leitura R2 200 anterior não comprova permissão POST/PUT: um HTTP 403
+no momento autorizado deve parar, nunca motivar outro token ou bypass.
+A opção `dedicated` mantém o contrato V1 inalterado. Nenhuma operação
+remota foi autorizada pelo simples registro desta alternativa.
+
+**Opção V3 em análise — deploy do Worker sem novo token de deploy:**
+`credential_mode=existing_staging_worker_deploy_only` reutiliza
+`CLOUDFLARE_WORKER_API_TOKEN` **somente no job efêmero de implantação**
+para fazer GET da configuração e publicar **exclusivamente** o Worker
+`airtrust-frms-qa-repair-staging-private`. Exige uma concessão administrativa
+**V3** (`AIRTRUST_FRMS_QA_PROVISION_V3`) nova, não editada e vinculada ao
+SHA atual, à fase `worker`, aos recursos privados fixos e ao prazo de 12h.
+O verificador rejeita V3 na fase `bucket`, V2 na fase `worker`, mudança
+não autorizada de configuração e grants V1/V2 reaproveitados. O token amplo
+permanece apenas no runner de Actions; **não** é gravado em secret/runtime
+nem substitui `FRMS_QA_D1_READ_TOKEN`. A publicação continua bloqueada se
+não houver a credencial D1 read-only de runtime, autoridade pública Ed25519
+independente, bucket privado comprovado e concessão V3 específica.
+Esta exceção amplia temporariamente a autoridade da credencial no *runner*
+e exige revisão explícita de risco; não equivale a credencial de deploy
+com escopo mínimo e **não constitui autorização para despachar a fase**.
 
 Cada fase precisa de **comentário novo e não editado** por administrador
 autorizado na issue #776, com idade máxima de 12h. O dispatcher também
@@ -62,7 +98,10 @@ Inputs por dispatch:
 - `confirmation=AIRTRUST_FRMS_QA_PRIVATE_STAGING_PROVISION`;
 - `expected_main_sha=<SHA EXATO DA MAIN APÓS MERGE>`;
 - `grant_id=<ID REAL DO COMENTÁRIO F0 EM #776>`;
-- `phase=bucket` ou `phase=worker`.
+- `phase=bucket` ou `phase=worker`;
+- `credential_mode=dedicated` (V1), ou
+  `credential_mode=existing_staging_worker_bucket_only` (somente bucket, V2).
+- `credential_mode=existing_staging_worker_deploy_only` (somente worker, V3; exige revisão de risco e grant novo).
 
 A operação `bucket` vem primeiro, isolada da implantação do Worker.
 O provisionador verifica D1 existente com GET e bucket privado. Se o
@@ -99,6 +138,41 @@ porque o bucket ainda não existe. F0 deve limitar conta, API, duração
 e armazenamento do token ao mínimo viável; **não** usar token de
 produção ou migrator D1. A existência dos nomes de secrets não
 comprova sua emissão/escopo.
+
+**Exceção estritamente diagnóstica e sem token novo (23/10/2026):**
+o workflow `staging-frms-qa-private-readiness.yml` usa o secret **já
+cadastrado** `CLOUDFLARE_WORKER_API_TOKEN` exclusivamente no passo de
+atestado remoto GET-only, no runner efêmero de staging. Esse acesso foi
+comprovado em #39892777613 para metadata D1, listagem R2 e bookmark,
+mas não autoriza gravação e não prova que o bucket FRMS exista.
+Não copiar, renomear ou injetar esse token no Worker privado, nem usá-lo
+como `FRMS_QA_D1_READ_TOKEN` de runtime. O workflow de **provisionamento**
+continua exigindo grants por fase e tokens com escopo independente;
+a exceção não o modifica. Um `GET_404` do bucket mantém readiness FAIL
+closed, não permite criar ou reutilizar bucket compartilhado.
+
+
+## Auditoria opcional das políticas dos tokens já existentes — GET-only
+
+O workflow `.github/workflows/staging-frms-existing-token-capabilities.yml`
+é estritamente diagnóstico. Além dos GETs de D1/R2, para os secrets staging
+`CLOUDFLARE_WORKER_API_TOKEN` e `CLOUDFLARE_D1_BACKUP_API_TOKEN`, o
+script opcional `probe-existing-token-policy.mjs` consulta somente
+`GET /accounts/{account}/tokens/verify` ou `GET /user/tokens/verify` e
+`GET .../tokens/{id}`, quando os privilégios de leitura de token permitem.
+Apenas o veredicto sanitizado aparece nos logs: **jamais** token, ID,
+políticas, e-mail ou nome. Cloudflare pode responder 403 ao GET de detalhes:
+nesse caso o escopo fica **não atestado**, sem tentativa de alterar as
+permissões ou gerar tokens novos. **Os resultados não autorizam deploy nem uso no runtime.**
+
+Um candidato de leitura requer exclusivamente `D1 Read`, um único
+recurso de conta explícito e token ativo. Mesmo o veredicto
+`D1_READ_ONLY_CANDIDATE_REQUIRES_INDEPENDENT_ATTESTATION` é somente
+indício para análise externa, não comprova isolamento no banco único,
+não autoriza copiar bearer para o Worker, não substitui assinatura Ed25519,
+nem concede prepare/apply. Mistura de permissões, outro recurso, erro,
+redirect ou API 403 falham fechado. Todos os testes negativos usam tokens
+sintéticos e fetcher em memória; nenhum token real é exibido.
 
 ## Comprovantes físicos e sequência posterior
 

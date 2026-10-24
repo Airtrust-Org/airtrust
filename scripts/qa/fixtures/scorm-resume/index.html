@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QA SCORM 1.2 — Retomada Sintética</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+    button { min-height: 2.75rem; padding: .5rem 1rem; margin: .25rem .35rem .25rem 0; font-size: 1rem; }
+    button:disabled { opacity: .5; }
+    #diagnostic { white-space: pre-wrap; overflow-wrap: anywhere; }
+    [role="alert"] { color: #a00000; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>QA SCORM — Retomada Sintética</h1>
+  <p>Pacote técnico descartável. Não certifica, não aprova e não representa curso do portfólio.</p>
+  <section aria-labelledby="position-title">
+    <h2 id="position-title" data-qa-position>Carregando…</h2>
+    <p id="position-description"></p>
+  </section>
+  <p id="diagnostic" role="status" aria-live="polite"></p>
+  <p id="error" role="alert" hidden></p>
+  <nav aria-label="Navegação do SCO">
+    <button id="previous" type="button" disabled>Voltar à posição 1</button>
+    <button id="next" type="button" disabled>Ir à posição 2</button>
+    <button id="finish" type="button" disabled>Encerrar sessão</button>
+  </nav>
+  <script src="resume-runtime.js"></script>
+</body>
+</html>

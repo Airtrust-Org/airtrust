@@ -1,0 +1,34 @@
+name: SCORM Resume Synthetic Fixture Static QA
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scorm-resume-synthetic-fixture.yml'
+      - 'scripts/qa/build-scorm-resume-synthetic.py'
+      - 'scripts/qa/fixtures/scorm-resume/**'
+      - 'scripts/qa/tests/test_scorm_resume_synthetic.py'
+      - 'scripts/__tests__/scorm-resume-synthetic-fixture.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scorm-resume-synthetic-static:
+    name: scorm-resume-synthetic-static
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Test SCORM 1.2 synthetic fixture protocol (Node VM)
+        run: node --test scripts/__tests__/scorm-resume-synthetic-fixture.test.mjs
+      - name: Test reproducible SCORM manifest and no-certification contract
+        run: python3 -m unittest discover -s scripts/qa/tests -p test_scorm_resume_synthetic.py -v
+      - name: Build only a disposable local QA ZIP
+        run: |
+          python3 scripts/qa/build-scorm-resume-synthetic.py \
+            --output "$RUNNER_TEMP/qa-scorm-resume-uncertified.zip" \
+            --json-output "$RUNNER_TEMP/qa-scorm-resume-metadata.json"

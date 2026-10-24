@@ -1,5 +1,6 @@
 import { buildSnapshot } from '../../routes/compliance-treinamentos';
 import { applyTrainingRosterPlan, readTrainingRosterPlan } from '../../services/training-compliance-roster-sync';
+import { selectTrainingComplianceRosterBatch } from '../../services/training-compliance-roster-plan';
 import { runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 /**
@@ -18,23 +19,29 @@ export async function runTrainingComplianceRosterJob(db:D1Database,logger:CronJo
       };
       const {plan,resumo} = await readTrainingRosterPlan(db,6,buildSnapshot);
       if (!plan.enroll.length && !plan.remove.length) return {
-        outcome:'SUCCEEDED' as const,processedCount:0,failedCount:0,
+        outcome:'SUCCEEDED' as const,processedCount:0,failedCount:0,cursorAfter:null,
         metadata:{to_enroll:0,to_retire:0,email_sent:false},
       };
       if (!context.hasBudget(8000)) return {
         outcome:'PARTIAL' as const,processedCount:0,failedCount:0,
         metadata:{stop_reason:'BUDGET_AFTER_SNAPSHOT',to_enroll:resumo.para_matricular,to_retire:resumo.para_retirar},
       };
-      const applied = await applyTrainingRosterPlan(db,6,plan,8);
+      // Round-robin across the freshly validated plan. A permanently unsafe
+      // first item must not starve otherwise eligible employees every tick.
+      const selection = selectTrainingComplianceRosterBatch(plan,context.state?.cursor_value ?? null,8);
+      const applied = await applyTrainingRosterPlan(db,6,selection.batch,8);
+      const outstanding = Math.max(0,selection.totalActions-applied.enrolled-applied.removed);
       return {
-        outcome:applied.remaining_estimate===0?'SUCCEEDED' as const:'PARTIAL' as const,
+        outcome:outstanding===0?'SUCCEEDED' as const:'PARTIAL' as const,
         processedCount:applied.removed+applied.enrolled,
         failedCount:0,
+        cursorAfter:outstanding===0?null:selection.cursorAfter,
         metadata:{
           created_or_reactivated:applied.enrolled,
           retired:applied.removed,
           skipped:applied.ignored,
-          outstanding:applied.remaining_estimate,
+          attempted:selection.selectedCount,
+          outstanding,
           email_sent:false,
         },
       };

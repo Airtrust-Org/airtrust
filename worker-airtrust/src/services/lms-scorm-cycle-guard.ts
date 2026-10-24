@@ -7,8 +7,9 @@ import { ApiError } from '../middleware/error-handler';
  * it cannot by itself protect the renewed enrollment from stale CMI.
  *
  * Only server-stored current-cycle identity may authorize that write.
- * Old integrations without a claimed cycle preserve their legacy behavior;
- * modern wrapper launches always send their server-rendered ciclo_id.
+ * A commit without a claimed cycle is ambiguous: it may be a delayed write
+ * from an iframe opened in an archived cycle. Require a fresh launch instead
+ * of preserving the legacy unscoped write path.
  */
 export async function assertScormCommitCycle(
   db: D1Database,
@@ -16,7 +17,13 @@ export async function assertScormCommitCycle(
   matriculaId: number,
   claimedCycleId: number | undefined,
 ): Promise<void> {
-  if (claimedCycleId === undefined) return;
+  if (claimedCycleId === undefined || !Number.isSafeInteger(claimedCycleId) || claimedCycleId <= 0) {
+    throw new ApiError(
+      'O commit SCORM não informa o ciclo da sessão. Reabra a matrícula para continuar.',
+      409,
+      'LMS_SCORM_CYCLE_MISMATCH',
+    );
+  }
   const active = await db.prepare(
     `SELECT id FROM lms_matricula_ciclos
        WHERE matricula_id = ? AND empresa_id = ?

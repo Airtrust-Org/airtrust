@@ -24,4 +24,13 @@ describe('Compliance designation auto-enrollment contract', () => {
     expect(source).toContain('hasActiveMatriculaCycle(existing)');
     expect(source).toContain("origin:'AUTO_DESIGNACAO'");
   });
+
+  it('logs only an allowlisted code when designation enrollment is deferred', () => {
+    const deferredCatch = source.match(
+      /catch\(error\)\{console\.error\('\[TRAINING_COMPLIANCE\][\s\S]*?autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';\}/,
+    )?.[0];
+
+    expect(deferredCatch).toContain('classifyComplianceEnrollmentFailure(error)');
+    expect(deferredCatch).not.toMatch(/console\.error\([^;]*,\s*error\s*\)/);
+  });
 });
