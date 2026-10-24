@@ -423,7 +423,7 @@ export default function OperationalVigilanceTest({
         ) : finished ? (
           <p className="text-emerald-800">Teste concluído. O resultado será enviado junto ao check-in.</p>
         ) : (
-          <p>Responda assim que o contador amarelo aparecer. O tempo é medido em milissegundos.</p>
+          <p>Responda assim que o estímulo aparecer. O tempo é medido em milissegundos.</p>
         )}
       </div>
 
