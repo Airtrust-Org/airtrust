@@ -1,8 +1,9 @@
 /**
  * Checks tracked text for R2 credential-shaped assignments without ever
- * returning the candidate value. Used by guard:sanitization (#500).
+ * returning candidate values. Used by guard:sanitization (#500).
  *
- * The input is a single "git grep -n" line. Fixtures must be synthetic.
+ * Input MUST be a "git grep -n -z" record (path NUL line NUL content).
+ * Reject ambiguous framing rather than exposing values in diagnostics.
  */
 const ASSIGNMENT = /(?:^|[\s"'\x60[{,])["'\x60]?(R2_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY|ACCOUNT_ID))["'\x60]?\s*[:=]\s*["'\x60]?([A-Za-z0-9_-]{24,})(?=$|[\s"'\x60,;#}\]])/gi;
 
@@ -18,17 +19,14 @@ function isPlaceholder(field, value) {
 }
 
 /** @returns {{ path: string, line: number, field: string } | null} */
-export function findR2LiteralAssignment(gitGrepLine) {
-  const marker = /^(.*):([0-9]+):(.*)$/.exec(gitGrepLine);
-  const content = marker ? marker[3] : gitGrepLine;
+export function findR2LiteralAssignment(gitGrepRecord) {
+  const framing = /^([^\x00\n]+)\x00([0-9]+)\x00([^\n]*)$/.exec(gitGrepRecord);
+  if (!framing) throw new Error('R2_GREP_FRAMING_INVALID');
+  const [, path, line, content] = framing;
   ASSIGNMENT.lastIndex = 0;
   for (const match of content.matchAll(ASSIGNMENT)) {
     if (!isPlaceholder(match[1], match[2])) {
-      return {
-        path: marker ? marker[1] : '(synthetic)',
-        line: marker ? Number(marker[2]) : 0,
-        field: match[1],
-      };
+      return { path, line: Number(line), field: match[1] };
     }
   }
   return null;
