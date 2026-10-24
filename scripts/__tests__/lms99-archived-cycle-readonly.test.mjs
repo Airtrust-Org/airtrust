@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,CYCLES_ONLY_SQL,CYCLES_SCHEMA_PROBE_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateCycleRows,validateCyclesSchemaRows,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,CYCLES_ONLY_SQL,CANDIDATE_BREAKDOWN_SQL,CYCLES_SCHEMA_PROBE_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateCandidateBreakdownRows,validateCycleRows,validateCyclesSchemaRows,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
  assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
@@ -147,6 +147,36 @@ test('cycles-only aggregate validator rejects conflicts, invalid bounds, duplica
  assert.throws(()=>validateCycleRows(Array.from({length:2},(_,i)=>({...valid,curso_id:i+1,pending_99:300,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0}))),/CYCLE_COHORT_LIMIT/);
 });
 
+test('candidate-breakdown aggregates status and course state without exposing enrollment identifiers',()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec(`CREATE TABLE lms_cursos(id INTEGER,empresa_id INTEGER,tipo_conteudo TEXT,ativo INTEGER,publicado INTEGER,deleted_at TEXT);
+   CREATE TABLE lms_matriculas(id INTEGER,curso_id INTEGER,empresa_id INTEGER,status TEXT,progresso_pct REAL,deleted_at TEXT);
+   CREATE TABLE lms_matricula_ciclos(empresa_id INTEGER,matricula_id INTEGER,curso_id INTEGER,status TEXT,ciclo_atual INTEGER,data_conclusao TEXT,score_final REAL,qualificacao_historico_id INTEGER,deleted_at TEXT);
+   INSERT INTO lms_cursos VALUES(28,6,'scorm',1,1,NULL),(29,6,'scorm',0,0,NULL),(28,7,'scorm',1,1,NULL);
+   INSERT INTO lms_matriculas VALUES(1,28,6,'EM_ANDAMENTO',99,NULL),(2,28,6,'REPROVADO',100,NULL),(3,29,6,'EM_ANDAMENTO',100,NULL),(4,28,7,'REPROVADO',100,NULL);
+   INSERT INTO lms_matricula_ciclos VALUES(6,1,28,'EM_ANDAMENTO',1,NULL,NULL,NULL,NULL),(6,2,28,'REPROVADO',1,NULL,NULL,NULL,NULL),(6,4,28,'CONCLUIDO',0,'2024-01-01',90,700,NULL);`);
+  assertSqlTransportScope(CANDIDATE_BREAKDOWN_SQL);
+  assert.doesNotMatch(CANDIDATE_BREAKDOWN_SQL,/\b(INSERT|UPDATE|DELETE|PRAGMA)\b/i);
+  const rows=validateCandidateBreakdownRows(db.prepare(CANDIDATE_BREAKDOWN_SQL).all().map(r=>({...r})));
+  assert.deepEqual(rows,[
+   {curso_id:28,enrollment_status:'EM_ANDAMENTO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:29,enrollment_status:'EM_ANDAMENTO',course_active:0,course_published:0,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+  ]);
+  assert.equal(rows.reduce((n,r)=>n+r.pending_99,0),3);
+  assert.ok(rows.every(r=>!Object.hasOwn(r,'id')&&!Object.hasOwn(r,'matricula_id')));
+ }finally{db.close();}
+});
+
+test('candidate-breakdown rejects personal fields, invalid statuses and inconsistent aggregates',()=>{
+ const valid={curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0};
+ assert.deepEqual(validateCandidateBreakdownRows([valid]),[valid]);
+ assert.throws(()=>validateCandidateBreakdownRows([{...valid,funcionario_id:12}]),/CANDIDATE_RESULT_SHAPE/);
+ assert.throws(()=>validateCandidateBreakdownRows([{...valid,enrollment_status:'CANCELADO'}]),/CANDIDATE_RESULT_INVALID/);
+ assert.throws(()=>validateCandidateBreakdownRows([{...valid,prior_score_recorded:2}]),/CANDIDATE_BOUNDS/);
+});
+
 test('physical cycle schema probe exposes only required column names and fails closed when one is missing',()=>{
  const db=new DatabaseSync(':memory:');
  try{
@@ -225,8 +255,9 @@ test('sanitized counts fail closed and protected workflow is read-only',()=>{
  assert.match(workflow,/environment: production/);
  assert.match(workflow,/verify-release-gates\.mjs/);
  assert.match(workflow,/CLOUDFLARE_D1_READONLY_API_TOKEN/);
- assert.match(workflow,/options: \[tables-probe, schema-probe, cycles-only, read\]/);
+ assert.match(workflow,/options: \[tables-probe, schema-probe, cycles-only, candidate-breakdown, read\]/);
  assert.match(workflow,/\.mode=="cycles-only"/);
+ assert.match(workflow,/\.mode=="candidate-breakdown"/);
  assert.match(workflow,/\.schema_columns_present==true/);
  assert.doesNotMatch(workflow,/\bpush:|\bpull_request:/);
 });
