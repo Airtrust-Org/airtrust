@@ -1,5 +1,6 @@
 import { ApiError } from '../../middleware/error-handler';
 import { readScormQaCandidate } from './lms-scorm-candidate-preview';
+import { assertScormF0BindingWitness } from './lms-scorm-f0-binding-contract';
 
 /**
  * Staging-only, read-only QA evidence. NO cross-tenant fallback, no learner
@@ -95,11 +96,10 @@ export async function readScormQaBackendEvidence(params: {
     // no evidence can be trusted. Never substitute a course/CMI-only read.
     throw new ApiError('SCORM_QA_BINDING_SCHEMA_NOT_READY', 409);
   }
-  if (!bind || !Number.isSafeInteger(bind.ciclo_id) ||
-      bind.ciclo_id <= 0 || !/^[a-f0-9]{64}$/.test(bind.approval_receipt_sha256) ||
-      !/^[0-9a-f-]{36}$/.test(bind.run_id)) {
-    throw new ApiError('SCORM_QA_EDITION_ENROLLMENT_BINDING_MISSING', 409);
-  }
+  assertScormF0BindingWitness(bind, {
+    packageSha256: candidate.package_sha256, runtimeSha,
+    observedAt: Date.now(),
+  });
   const state = await db.prepare(
     `SELECT cmi_json, suspend_data, lesson_status, completion_status,
             success_status, score_raw, session_count, last_commit_at
