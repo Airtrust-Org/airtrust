@@ -29,6 +29,7 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function validateF5ExecutionPlan(plan) {
   const c = plan?.candidate;
   const fixture = plan?.syntheticFixture;
+  const expiresAt = Date.parse(fixture?.expiresAt ?? '');
   if (plan?.schemaVersion !== 1 || plan?.scope !== 'ONE_INACTIVE_CANDIDATE' ||
       !HEX40.test(plan.releaseSha ?? '') || !HEX40.test(plan.harnessSha ?? '') ||
       plan?.mutex !== F5_EXECUTOR_LIMITS.mutex ||
@@ -42,7 +43,8 @@ export function validateF5ExecutionPlan(plan) {
       !HEX64.test(fixture?.provisioningReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.recoveryReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.cleanupContractSha256 ?? '') ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(fixture?.expiresAt ?? '')) {
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(fixture?.expiresAt ?? '') ||
+      !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     fail('PLAN_OR_F0_RECEIPT_INVALID');
   }
   return plan;
@@ -168,6 +170,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   if (await adapters.verifyF0Receipts(plan) !== true) fail('F0_RECEIPTS_NOT_VERIFIED');
   const sourceIdentity = await hashSource(source, c.zipBytes);
   if (sourceIdentity.sha256 !== c.packageSha256) fail('ORIGINAL_ZIP_SHA_MISMATCH');
+  // A long private ZIP hash may outlive the fixture lease. Recheck immediately
+  // before any side-effecting Worker request, not just at initial preflight.
+  validateF5ExecutionPlan(plan);
 
   let intakeStarted = false;
   let completionAttempted = false;
