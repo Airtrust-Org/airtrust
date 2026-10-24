@@ -121,6 +121,7 @@ function adaptersFor(plan, overrides = {}) {
         candidateId: candidate.packageId, packageSha256: plan.candidate.packageSha256,
         runtimeVersion: candidate.scormVersion, locationPersisted: true,
         suspendDataPersisted: true, resumeVerified: true,
+        browserEngines: ['chromium', 'webkit'],
         enrollmentId: plan.syntheticFixture.enrollmentId, cycleId: plan.syntheticFixture.cycleId,
         runId: plan.syntheticFixture.runId,
         servedPackageSha256: plan.candidate.packageSha256,
