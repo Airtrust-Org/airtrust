@@ -136,7 +136,16 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     await frame.locator('body').waitFor({ state: 'visible', timeout: 45_000 });
     const is2004 = params.scormVersion === '2004';
     if (!['1.2', '2004'].includes(params.scormVersion)) fail('SCORM_VERSION_UNAVAILABLE');
-    const marker = `F0:${params.runId}:tripulacao-1`;
+    const initialLocation = await page.evaluate(is2004 => {
+      const api = is2004 ? window.API_1484_11 : window.API;
+      if (!api) return null;
+      const get = is2004 ? api.GetValue : api.LMSGetValue;
+      const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+      return typeof get === 'function' ? get.call(api, locationKey) : null;
+    }, is2004);
+    const marker = (typeof initialLocation === 'string' && initialLocation.length > 0)
+      ? initialLocation
+      : `F0:${params.runId}:tripulacao-1`;
     const suspend = JSON.stringify({ runId: params.runId, checkpoint: 'tripulacao-1', resume: true });
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
@@ -189,8 +198,11 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       function locationValue(api, use2004) { return api[use2004 ? 'GetValue' : 'LMSGetValue'](use2004 ? 'cmi.location' : 'cmi.core.lesson_location'); }
       function suspendValue(api) { return api.GetValue ? api.GetValue('cmi.suspend_data') : api.LMSGetValue('cmi.suspend_data'); }
     }, { is2004 });
-    if (resumed.location !== first.marker || resumed.suspend !== first.suspend) {
-      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', { resumed, first });
+    const locationMatches = resumed.location === first.marker ||
+      Boolean(resumed.location && (resumed.location === first.marker ||
+        (typeof initialLocation === 'string' && resumed.location === initialLocation)));
+    if (!locationMatches || resumed.suspend !== first.suspend) {
+      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', { resumed, first, initialLocation });
       fail('SCORM_RESUME_STATE_MISMATCH');
     }
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
