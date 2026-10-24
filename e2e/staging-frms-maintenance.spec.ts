@@ -36,7 +36,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     await expect(page.getByRole('heading', { name: 'Minha fadiga hoje' })).toBeVisible({ timeout: 20_000 });
 
     // 1. Visibilidade das instruções e área de resposta antes do início
-    const section = page.locator('section').filter({ hasText: /Teste de prontidão operacional \(PVT-B\)/i });
+    const section = page.locator('section').filter({ has: page.locator('[data-testid="pvtb-box"]') });
     await expect(section).toBeVisible();
     await expect(section.getByRole('heading', { name: /Vigilância psicomotora \(PVT-B\)/i })).toBeVisible();
 
@@ -71,8 +71,10 @@ test.describe('staging FRMS maintenance release QA', () => {
 
     await expect(box).toHaveAttribute('data-phase', /waiting|stimulus/);
     await expect(box).toHaveAttribute('aria-disabled', 'false');
-    await expect(startButton).toHaveText(/Teste em andamento/);
-    await expect(startButton).toBeDisabled();
+
+    const runningButton = section.getByRole('button', { name: /Teste em andamento/i });
+    await expect(runningButton).toBeVisible();
+    await expect(runningButton).toBeDisabled();
 
     // 5. Mesma identidade do elemento DOM após iniciar
     const runningBoxHandle = await box.elementHandle();
