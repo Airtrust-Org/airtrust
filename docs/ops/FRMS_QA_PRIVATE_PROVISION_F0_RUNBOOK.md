@@ -1,6 +1,85 @@
 # F2 FRMS QA 999013 — governança de recursos Cloudflare privados
 
 **Status deste documento: revisão e integração, não autorização de execução.**
+
+## Contrato de transação única implementado na PR #1724
+
+O workflow `.github/workflows/staging-frms-qa-private-transaction.yml`
+está definido **na branch draft**, mas **não foi executado** no staging e
+não pode ser despachado até integração protegida em `main` e configuração
+da autoridade independente. O workflow usa **dois jobs sequenciais** sob **um único mutex em
+nível de workflow** (`airtrust-staging-mutations-and-scorm-qa`), com
+`environment: staging` e `cancel-in-progress: false`. A separação foi
+exigida por `guard-cloudflare-secret-contract` e NÃO altera o ratchet:
+o primeiro job `frms-queue-apply` tem `id-token: write` e recebe
+**somente** `CLOUDFLARE_WORKER_API_TOKEN`, para Queue push/pull/ack e
+Time Travel GET. Ele termina com o marcador **não conclusivo**
+`APPLY_REPORTED_PENDING_INDEPENDENT_READBACK`, mesmo após apply bem
+sucedido. Esse marcador não significa aceite 4/4.
+
+O segundo job `frms-d1-readonly-postcondition` depende de sucesso
+comprovado do primeiro e recebe **somente**
+`CLOUDFLARE_D1_MIGRATION_API_TOKEN` para o inspector SELECT-only
+dos quatro casos QA. Apenas esse job pode emitir
+`STAGING_FRMS_F0_4_OF_4_READONLY_VERIFIED` após leitura real D1.
+O mutex permanece retido entre os jobs, sem liberar staging entre
+apply e readback. Uma falha após Queue apply requer reconciliação, nunca
+redispatch automático. Não há emissão de novos tokens ou instalação de
+bearer Cloudflare no Worker.
+
+O signatário **não é inventado pelo workflow**. O cliente
+`ops/frms-qa-repair/external-approval-signer.mjs` precisa de uma
+autoridade HTTPS independente, configurada através das variáveis
+`FRMS_QA_SIGNER_ORIGIN` e `FRMS_QA_SIGNER_ORIGIN_SHA256`. A URL
+deve ser um origin HTTPS exclusivo e ter hash SHA-256 exato. O
+signatário recebe OIDC do GitHub com audience
+`airtrust-frms-qa-signing-staging` nos endpoints fixos
+`/api/frms-qa/v1/ready` e `/api/frms-qa/v1/sign`, devolvendo,
+respectivamente, readiness com chave pinada e
+`{manifest, signatureBase64, applyGrantId}`. O serviço deve validar
+independentemente emissor, audience, repo, branch, SHA, job/run e escopo,
+e exigir autorização administrativa de `apply` vinculada ao recibo.
+O controller confirma a assinatura Ed25519 localmente.
+A chave pública reside em `FRMS_QA_APPROVAL_PUBLIC_KEY_PEM`, com pin
+`FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256`. A chave **privada jamais
+passa por GitHub Actions, Worker ou repositório**.
+
+Antes da primeira Queue, exige metadata física de ambas as Queues:
+uma consumer Worker privada, outra HTTP pull, ambas com retenção de
+60–900 s. Após o prepare, uma falha ou resultado indeterminado não
+autoriza replay. O apply precisa de novo grant F0, assinatura válida,
+oito IDs CAS e readback real SELECT-only para 4/4. Um sucesso sintético
+não é evidência de staging.
+
+**Esta implementação não comprova existência do signatário**, das
+variáveis/chaves Ed25519 ou dos grants de #776. Não despachar workflow
+enquanto eles não existirem. Sem permissões físicas, interromper e
+registrar bloqueio preciso, jamais preencher valores simulados.
+
+## Atualização do contrato vigente — recovery proof sem bearer no Worker
+
+A arquitetura de código da PR #1724 substituiu a antiga dependência de
+`FRMS_QA_D1_READ_TOKEN` em runtime pelo `recoveryProof` de uso único,
+originado por GET Time Travel no **runner protegido**, autenticado por HMAC
+e vinculado ao SHA/tenant/DB/run/nonce/operação. O Worker privado verifica
+o proof e mantém replay ledger no Durable Object. A obtenção da prova depende
+de proveniência e identidade do runner, não apenas da posse de um HMAC.
+
+O provisionador de Worker agora **rejeita `FRMS_QA_D1_READ_TOKEN` preenchido**
+e jamais inclui `D1_READ_TOKEN` no `wrangler secret bulk`.
+O secret `CLOUDFLARE_WORKER_API_TOKEN` existente pode ser usado somente no
+runner efêmero, nos GETs fixos permitidos, sob grant exato; jamais no Worker.
+A chave pública Ed25519 independente e seu pin continuam obrigatórios, assim
+como o mutex contínuo, o transportador Queue/pull/ack com credenciais restritas,
+a custódia segura do receipt e a assinatura separada do apply.
+
+Trechos históricos abaixo que exigem `FRMS_QA_D1_READ_TOKEN` em runtime
+descrevem a arquitetura **anterior** à #1724 e não devem ser executados
+sobre a versão nova. Esta mudança de código ainda **não** equivale a
+aprovação de segurança de rede nem implantação física. A PR permanece DRAFT;
+não executar `prepare`, `apply` ou produção sem grants, recursos implantados,
+signer independente e workflow que mantenha o mutex até readback 4/4.
+
 Referência: issues #776 / #1426; #1476 é científica e permanece isolada.
 Código-base: PR #1631 já integrada. Este processo não atualiza casos FRMS
 nem libera operador, não aplica Schema V2, não mexe em D1 e não altera o LMS.

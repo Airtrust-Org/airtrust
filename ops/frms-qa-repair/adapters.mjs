@@ -19,7 +19,7 @@ export function durableCoordinator(storage) {
     async acquireLock(name) {
       if (name !== LOCK) fail('QA_LOCK_SCOPE_REJECTED');
       return storage.transaction(async tx => {
-        if (await tx.get('lock')) return { held: false };
+        if ((await tx.get('lock')) !== undefined) return { held: false };
         const lock = { held: true, token: randomUUID() };
         await tx.put('lock', lock);
         return lock;
@@ -34,7 +34,7 @@ export function durableCoordinator(storage) {
     async reserveNonce({ nonce, sha, scope }) {
       if (!/^[a-f0-9]{64}$/.test(nonce)) fail('QA_NONCE_INVALID');
       return storage.transaction(async tx => {
-        if (await tx.get('nonce:' + nonce)) return false;
+        if ((await tx.get('nonce:' + nonce)) !== undefined) return false;
         await tx.put('nonce:' + nonce, { sha, scope });
         return true;
       });

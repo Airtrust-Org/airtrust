@@ -49,6 +49,13 @@ jobs:
           FRMS_PROBE_KIND: worker
           FRMS_PROBE_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
         run: node ops/frms-qa-repair/probe-existing-staging-tokens.mjs
+      - name: Assert existing Queue metadata probe fail-closed (synthetic only)
+        run: node --test scripts/__tests__/frms-existing-queue-access.test.mjs
+      - name: Examine Queue names with existing Worker token (GET-only, sanitized)
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FRMS_PROBE_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+        run: node ops/frms-qa-repair/run-existing-queue-readonly.mjs
 
   pages_probe:
     needs: guard
