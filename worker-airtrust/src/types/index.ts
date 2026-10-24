@@ -94,6 +94,19 @@ export interface Env {
   // Explicit, single approved historical cohort. Absent = no data access.
   FRMS_V3_COHORT_APPROVED_WINDOW_DAYS?: string;
   FRMS_V3_COHORT_APPROVED_END_DATE?: string;
+  // BOA sensitive check-in/case QA write gate: single reviewed synthetic
+  // staging tenant ID, never 'all', no production. Absent = disabled.
+  // Must only be injected after scientific and LGPD approval plus staging
+  // release authorization; do not store the approval in source control.
+  BOA_FRMS_QA_SENSITIVE_WRITES_TENANT_ID?: string;
+  // Independent, operator-reviewed BOA QA documentary binding. Neither value
+  // is a substitute for scientific/legal approval. Missing means no writes.
+  // SHA-256 must match the tenant regulatory source document exactly and the
+  // revision must be the current persisted approved-policy revision.
+  BOA_FRMS_QA_REVIEWED_DOCUMENT_SHA256?: string;
+  BOA_FRMS_QA_REVIEWED_REVISION_ID?: string;
+  // UTC ISO expiry; an absent, expired or >24h lease disables sensitive QA writes.
+  BOA_FRMS_QA_REVIEWED_EXPIRES_AT?: string;
 
 
   // CORS Origins (pode ser string separada por vírgula)

@@ -195,6 +195,18 @@ const FrmsAlertasPainel = lazyWithRetry(
   'FrmsAlertasPainel',
 );
 const FrmsRelatorios = lazyWithRetry(() => import('./pages/frms/FrmsRelatorios'), 'FrmsRelatorios');
+const BombeirosFrmsPage = lazyWithRetry(
+  () => import('./pages/bombeiros/BombeirosFrmsPage'),
+  'BombeirosFrmsPage',
+);
+const BombeirosCaseManagementPage = lazyWithRetry(
+  () => import('./pages/bombeiros/BombeirosCaseManagementPage'),
+  'BombeirosCaseManagementPage',
+);
+const BombeirosCheckinPage = lazyWithRetry(
+  () => import('./pages/bombeiros/BombeirosCheckinPage'),
+  'BombeirosCheckinPage',
+);
 const FrmsEscalas = lazyWithRetry(() => import('./pages/frms/FrmsEscalas'), 'FrmsEscalas');
 const FrmsConfiguracoes = lazyWithRetry(
   () => import('./pages/frms/FrmsConfiguracoes'),
@@ -839,6 +851,35 @@ export default function App() {
                     <Route
                       path="/escalas/evd"
                       element={<Navigate to={CANONICAL_DUPLICATE_ROUTE_TARGETS['/escalas/evd']} replace />}
+                    />
+
+                    {/* BOA/CBMMG — check-in exclusivo da tripulação, nunca offshore. */}
+                    <Route
+                      path="/bombeiros/frms/checkin"
+                      element={
+                        <ProtectedRoute requiredRole={['ALUNO', 'USUARIO', 'EDITOR', 'INSTRUTOR', 'GESTOR']}>
+                          <BombeirosCheckinPage />
+                        </ProtectedRoute>
+                      }
+                    />
+
+                    {/* BOA/CBMMG — portal FRMS dedicado: não reutiliza a UI offshore. */}
+                    <Route
+                      path="/bombeiros/frms"
+                      element={
+                        <ProtectedRoute requiredRole={['ADMIN']}>
+                          <BombeirosFrmsPage />
+                        </ProtectedRoute>
+                      }
+                    />
+                    {/* BOA — coordenação operacional; admin vê apenas o agregado. */}
+                    <Route
+                      path="/bombeiros/frms/casos"
+                      element={
+                        <ProtectedRoute requiredRole={['GESTOR']}>
+                          <BombeirosCaseManagementPage />
+                        </ProtectedRoute>
+                      }
                     />
 
                     {/* FRMS — Gestão de Fadiga e Jornada (protegido) */}
