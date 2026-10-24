@@ -8,11 +8,11 @@ on:
         required: true
         type: string
       pr_number:
-        description: Open same-repository PR containing the reviewed change
+        description: Same-repository reviewed PR; merged HFA 0529 must match current protected main
         required: true
         type: string
       release_sha:
-        description: Exact reviewed 40-character PR HEAD SHA
+        description: Exact reviewed PR HEAD SHA, or current main merge SHA for HFA 0529
         required: true
         type: string
       change_id:
@@ -20,6 +20,7 @@ on:
         required: true
         type: choice
         options:
+          - hfa-integration-bridge-0529
           - frms-sleep-opportunity-0552
           - simulator-individual-check-evidence-0554
           - simulator-individual-check-delete-guard-0560
