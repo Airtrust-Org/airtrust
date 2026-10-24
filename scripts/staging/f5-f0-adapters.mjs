@@ -67,6 +67,28 @@ function verifyReceiptDocuments(plan) {
 function locationValue(api, is2004) {
   return api[is2004 ? 'GetValue' : 'LMSGetValue'](is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
 }
+/**
+ * Browser-serializable SCORM write sequence. Commit MUST follow all SetValue
+ * calls; an early commit can return success while persisting stale CMI.
+ */
+export function commitIncompleteScormState({ is2004, marker, suspend }) {
+  const api = is2004 ? window.API_1484_11 : window.API;
+  if (!api) throw Error('SCORM_API_UNAVAILABLE');
+  const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
+  if (initialized !== 'true') throw Error('SCORM_INITIALIZE_REJECTED');
+  const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
+  const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+  const incompleteKey = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
+  const exitKey = is2004 ? 'cmi.exit' : 'cmi.core.exit';
+  if (set(locationKey, marker) !== 'true' ||
+      set('cmi.suspend_data', suspend) !== 'true' ||
+      set(incompleteKey, 'incomplete') !== 'true' ||
+      set(exitKey, 'suspend') !== 'true') throw Error('SCORM_INCOMPLETE_SET_REJECTED');
+  const committed = is2004 ? api.Commit('') : api.LMSCommit('');
+  if (committed !== 'true') throw Error('SCORM_INCOMPLETE_COMMIT_REJECTED');
+  return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
+}
+
 async function browserExecution({ plan, params, request, env, browserType }) {
   const origin = String(env.F5_STAGING_API_ORIGIN || 'https://airtrust-api-staging.airtrust.workers.dev').replace(/\/$/, '');
   const token = env.SCORM_QA_ACCESS_TOKEN;
@@ -100,21 +122,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
-    const first = await page.evaluate(({ is2004, marker, suspend }) => {
-      const api = is2004 ? window.API_1484_11 : window.API;
-      if (!api) throw Error('SCORM_API_UNAVAILABLE');
-      const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
-      const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
-      const commit = is2004 ? api.Commit('') : api.LMSCommit('');
-      const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
-      const incompleteKey = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
-      const exitKey = is2004 ? 'cmi.exit' : 'cmi.core.exit';
-      if (initialized !== 'true' || set(locationKey, marker) !== 'true' ||
-          set('cmi.suspend_data', suspend) !== 'true' ||
-          set(incompleteKey, 'incomplete') !== 'true' || set(exitKey, 'suspend') !== 'true' ||
-          commit !== 'true') throw Error('SCORM_INCOMPLETE_COMMIT_REJECTED');
-      return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
-    }, { is2004, marker, suspend });
+    const first = await page.evaluate(commitIncompleteScormState, { is2004, marker, suspend });
     const firstCommit = await responsePromise;
     if (!firstCommit || !firstCommit.ok()) fail('WORKER_COMMIT_HTTP_FAILED');
     const firstEnvelope = await firstCommit.json();
