@@ -161,9 +161,9 @@ test('candidate-breakdown aggregates status and course state without exposing en
   assert.doesNotMatch(CANDIDATE_BREAKDOWN_SQL,/\b(INSERT|UPDATE|DELETE|PRAGMA)\b/i);
   const rows=validateCandidateBreakdownRows(db.prepare(CANDIDATE_BREAKDOWN_SQL).all().map(r=>({...r})));
   assert.deepEqual(rows,[
-   {curso_id:28,enrollment_status:'EM_ANDAMENTO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
-   {curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:1,prior_qualification_link:0},
-   {curso_id:29,enrollment_status:'EM_ANDAMENTO',course_active:0,course_published:0,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:28,enrollment_status:'EM_ANDAMENTO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_completion_date_recorded:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_completion_date_recorded:1,prior_score_recorded:1,prior_qualification_link:0},
+   {curso_id:29,enrollment_status:'EM_ANDAMENTO',course_active:0,course_published:0,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_completion_date_recorded:0,prior_score_recorded:0,prior_qualification_link:0},
   ]);
   assert.equal(rows.reduce((n,r)=>n+r.pending_99,0),3);
   assert.ok(rows.every(r=>!Object.hasOwn(r,'id')&&!Object.hasOwn(r,'matricula_id')));
@@ -171,7 +171,7 @@ test('candidate-breakdown aggregates status and course state without exposing en
 });
 
 test('candidate-breakdown rejects personal fields, invalid statuses and inconsistent aggregates',()=>{
- const valid={curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0};
+ const valid={curso_id:28,enrollment_status:'REPROVADO',course_active:1,course_published:1,course_deleted:0,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_completion_date_recorded:0,prior_score_recorded:0,prior_qualification_link:0};
  assert.deepEqual(validateCandidateBreakdownRows([valid]),[valid]);
  assert.throws(()=>validateCandidateBreakdownRows([{...valid,funcionario_id:12}]),/CANDIDATE_RESULT_SHAPE/);
  assert.throws(()=>validateCandidateBreakdownRows([{...valid,enrollment_status:'CANCELADO'}]),/CANDIDATE_RESULT_INVALID/);

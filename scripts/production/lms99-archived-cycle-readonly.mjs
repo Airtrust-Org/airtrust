@@ -134,6 +134,9 @@ export const CANDIDATE_BREAKDOWN_SQL=`WITH pending AS (
       AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
       AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
+      AND cy.deleted_at IS NULL AND cy.data_conclusao IS NOT NULL) AS prior_completion_date_recorded,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
+      AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
       AND cy.deleted_at IS NULL AND cy.score_final IS NOT NULL) AS prior_score_recorded,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.empresa_id=p.empresa_id
       AND cy.matricula_id=p.matricula_id AND cy.curso_id=p.curso_id AND cy.ciclo_atual=0
@@ -142,16 +145,18 @@ export const CANDIDATE_BREAKDOWN_SQL=`WITH pending AS (
 )
 SELECT curso_id,enrollment_status,course_active,course_published,course_deleted,
  COUNT(*) AS pending_99,SUM(prior_completed) AS prior_completed_cycle,
- SUM(prior_dated_completed) AS prior_dated_completed,SUM(prior_score_recorded) AS prior_score_recorded,
+ SUM(prior_dated_completed) AS prior_dated_completed,
+ SUM(prior_completion_date_recorded) AS prior_completion_date_recorded,
+ SUM(prior_score_recorded) AS prior_score_recorded,
  SUM(prior_qualification_link) AS prior_qualification_link
 FROM indicators GROUP BY curso_id,enrollment_status,course_active,course_published,course_deleted
 ORDER BY curso_id,enrollment_status`;
 export function validateCandidateBreakdownRows(rows){
- const metrics=['pending_99','prior_completed_cycle','prior_dated_completed','prior_score_recorded','prior_qualification_link'];
+ const metrics=['pending_99','prior_completed_cycle','prior_dated_completed','prior_completion_date_recorded','prior_score_recorded','prior_qualification_link'];
  if(!Array.isArray(rows)||rows.length>200)reject('CANDIDATE_ROW_LIMIT');
  const seen=new Set();let total=0;
  for(const row of rows){
-  if(!row||Object.keys(row).length!==10||Object.keys(row).some(k=>!['curso_id','enrollment_status','course_active','course_published','course_deleted',...metrics].includes(k)))reject('CANDIDATE_RESULT_SHAPE');
+  if(!row||Object.keys(row).length!==11||Object.keys(row).some(k=>!['curso_id','enrollment_status','course_active','course_published','course_deleted',...metrics].includes(k)))reject('CANDIDATE_RESULT_SHAPE');
   if(!Number.isSafeInteger(row.curso_id)||row.curso_id<1||!['EM_ANDAMENTO','REPROVADO'].includes(row.enrollment_status)||
      ![0,1].includes(row.course_active)||![0,1].includes(row.course_published)||![0,1].includes(row.course_deleted))reject('CANDIDATE_RESULT_INVALID');
   const key=[row.curso_id,row.enrollment_status,row.course_active,row.course_published,row.course_deleted].join(':');
@@ -347,7 +352,7 @@ async function main(){
  if(mode==='candidate-breakdown'){
   const schema=await d1(CYCLES_SCHEMA_PROBE_SQL);
   const rows=await d1(CANDIDATE_BREAKDOWN_SQL);
-  const totals=Object.fromEntries(['pending_99','prior_completed_cycle','prior_dated_completed','prior_score_recorded','prior_qualification_link']
+  const totals=Object.fromEntries(['pending_99','prior_completed_cycle','prior_dated_completed','prior_completion_date_recorded','prior_score_recorded','prior_qualification_link']
     .map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
   process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
    tenant:6,mode:'candidate-breakdown',writes:0,personal_data:false,
