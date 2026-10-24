@@ -39,6 +39,12 @@ function fail(message: string, status = 400): never {
   throw new ApiError(message, status);
 }
 
+function cleanEtag(etag: string | undefined): string | undefined {
+  if (typeof etag !== 'string') return undefined;
+  const trimmed = etag.trim().replace(/^"+|"+$/g, '');
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function parseF5Grant(raw: string | undefined, params: {
   environment: string;
   runtimeSha: string | undefined;
@@ -120,8 +126,9 @@ export async function beginF5StreamedIntake(params: {
     }
   }
   const lockValue = JSON.stringify({ state: 'active', token: lockToken, operationId, expiresAt: Date.now() + F5_STREAMED_ZIP_LIMITS.leaseMs });
+  const lockEtag = cleanEtag(lockHead?.etag ?? lockHead?.httpEtag);
   const acquired = await params.bucket.put(keys.lock, lockValue, {
-    onlyIf: lockHead ? { etagMatches: lockHead.httpEtag } : { etagDoesNotMatch: '*' },
+    onlyIf: lockEtag ? { etagMatches: lockEtag } : { etagDoesNotMatch: '*' },
   });
   if (!acquired) fail('Mutex F5 ocupado por outra importação', 409);
 
@@ -151,8 +158,9 @@ export async function beginF5StreamedIntake(params: {
       packageSha256: params.packageSha256, zipBytes: params.zipBytes,
       grantId: params.grantId, runtimeSha: params.runtimeSha,
       arquivoNome: params.arquivoNome };
+    const markerEtag = cleanEtag(markerReceipt?.etag ?? markerReceipt?.httpEtag);
     const storedMarker = await params.bucket.put(keys.marker, JSON.stringify(marker), {
-      onlyIf: { etagMatches: markerReceipt.httpEtag },
+      onlyIf: markerEtag ? { etagMatches: markerEtag } : undefined,
     });
     if (!storedMarker) fail('Registro do multipart SCORM já existe; recuperação necessária', 409);
     return { operationId, zipBytes: params.zipBytes, partBytes: F5_STREAMED_ZIP_LIMITS.partBytes,

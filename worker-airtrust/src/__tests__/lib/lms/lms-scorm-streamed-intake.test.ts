@@ -58,17 +58,21 @@ class MemoryBucket {
     const prior = this.objects.get(key);
     if (options?.onlyIf) {
       const condition = options.onlyIf;
+      if (condition?.etagMatches && /^".*"$/.test(condition.etagMatches)) {
+        throw new TypeError(`Conditional ETag should not be wrapped in quotes (${condition.etagMatches}).`);
+      }
       if (condition?.etagDoesNotMatch === '*' && prior) return null;
       if (condition?.etagMatches && prior?.etag !== condition.etagMatches) return null;
     }
-    const etag = `"${this.objects.size + 1}"`;
+    const etag = `${this.objects.size + 1}`;
+    const httpEtag = `"${etag}"`;
     this.objects.set(key, { bytes: new Uint8Array(bytes), etag, customMetadata: options?.customMetadata, httpMetadata: options?.httpMetadata });
     this.puts.push(key);
-    return { key, size: bytes.length, httpEtag: etag, etag };
+    return { key, size: bytes.length, httpEtag, etag };
   }
   async head(key: string) {
     const value = this.objects.get(key);
-    return value ? { key, size: value.bytes.length, httpEtag: value.etag, etag: value.etag,
+    return value ? { key, size: value.bytes.length, httpEtag: `"${value.etag}"`, etag: value.etag,
       customMetadata: value.customMetadata } : null;
   }
   async get(key: string, options?: { range?: { offset?: number; length?: number } }) {
@@ -77,7 +81,7 @@ class MemoryBucket {
     const offset = options?.range?.offset ?? 0;
     const end = options?.range?.length === undefined ? value.bytes.length : offset + options.range.length;
     const bytes = value.bytes.subarray(offset, end);
-    return { key, size: value.bytes.length, httpEtag: value.etag, customMetadata: value.customMetadata,
+    return { key, size: value.bytes.length, httpEtag: `"${value.etag}"`, customMetadata: value.customMetadata,
       body: new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(bytes); controller.close(); } }),
       text: async () => new TextDecoder().decode(value.bytes),
       json: async <T>() => JSON.parse(new TextDecoder().decode(value.bytes)) as T,
