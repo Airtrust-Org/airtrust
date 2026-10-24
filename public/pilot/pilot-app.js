@@ -1191,7 +1191,7 @@ function setSessionMessage(message, kind = 'attention', offerLogin = false) {
   }
 }
 
-function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled = false, secondaryButtonText = null, onSecondaryClick = null }) {
+function makeFlightItem({ title, subtitle, badge, buttonText, onClick, flightActionId = null, disabled = false, secondaryButtonText = null, onSecondaryClick = null }) {
   const item = document.createElement('div');
   item.className = 'flight-item';
 
@@ -1216,7 +1216,8 @@ function makeFlightItem({ title, subtitle, badge, buttonText, onClick, disabled 
   button.type = 'button';
   button.textContent = buttonText;
   button.disabled = disabled;
-  button.addEventListener('click', onClick);
+  if (flightActionId != null) button.dataset.flightActionId = String(flightActionId);
+  if (typeof onClick === 'function') button.addEventListener('click', onClick);
 
   const actions = document.createElement('div');
   actions.className = 'flight-item-actions';
@@ -1363,6 +1364,18 @@ async function notifyFlightUpdate(voo) {
   } catch {}
 }
 
+// Delegated action listener remains effective if the flight list is recreated.
+onlineFlights.addEventListener('click', (event) => {
+  const button = event.target instanceof Element
+    ? event.target.closest('button[data-flight-action-id]')
+    : null;
+  if (!button || !onlineFlights.contains(button) || button.disabled) return;
+  const flightId = Number(button.dataset.flightActionId);
+  if (!Number.isSafeInteger(flightId) || flightId <= 0) return;
+  if (!onlineFlightRecords.some((voo) => Number(voo.id) === flightId)) return;
+  void openAuthorizedFlight(flightId);
+});
+
 function renderOnlineFlights() {
   const selectedDate = selectedFlightDateKey();
   if (authorizedFlightHeading) {
@@ -1414,7 +1427,9 @@ function renderOnlineFlights() {
         badge: stale ? 'Alteração da Coordenação — atualize o voo' : (cached ? 'Já preparado neste tablet' : null),
         buttonText: stale ? 'Atualizar voo' : 'Abrir voo',
         disabled: !navigator.onLine,
-        onClick: () => void openAuthorizedFlight(voo.id),
+        // Delegation on the stable container survives iOS/Safari list re-rendering.
+        // Avoid attaching a second handler to the button itself.
+        flightActionId: voo.id,
       }),
     );
   }
