@@ -5,7 +5,7 @@ on:
       expected_main_sha: {required: true, type: string}
       expected_production_sha: {required: true, type: string}
       confirmation: {required: true, type: string}
-      mode: {required: true, type: choice, default: tables-probe, options: [tables-probe, schema-probe, cycles-only, read]}
+      mode: {required: true, type: choice, default: tables-probe, options: [tables-probe, schema-probe, cycles-only, candidate-breakdown, read]}
 permissions: {contents: read, checks: read, statuses: read}
 concurrency:
   group: production-lms99-archived-cycle-readonly
@@ -54,9 +54,10 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/production/lms99-archived-cycle-readonly.mjs > "$RUNNER_TEMP/lms99-history.json"
-          jq -e '.schema_version==1 and .tenant==6 and (.mode=="read-only" or .mode=="schema-probe" or .mode=="tables-probe" or .mode=="cycles-only") and .writes==0 and .personal_data==false' "$RUNNER_TEMP/lms99-history.json" >/dev/null
+          jq -e '.schema_version==1 and .tenant==6 and (.mode=="read-only" or .mode=="schema-probe" or .mode=="tables-probe" or .mode=="cycles-only" or .mode=="candidate-breakdown") and .writes==0 and .personal_data==false' "$RUNNER_TEMP/lms99-history.json" >/dev/null
           jq -e '(.mode!="cycles-only") or (.schema_columns_present==true and (.schema_columns_checked|length)==9)' "$RUNNER_TEMP/lms99-history.json" >/dev/null
-          jq '{source_sha,production_sha,mode,missing_required,checks,schema_columns_present,schema_columns_checked,totals,by_course,writes}' "$RUNNER_TEMP/lms99-history.json" >> "$GITHUB_STEP_SUMMARY"
+          jq -e '(.mode!="candidate-breakdown") or (.schema_columns_present==true and (.schema_columns_checked|length)==9)' "$RUNNER_TEMP/lms99-history.json" >/dev/null
+          jq '{source_sha,production_sha,mode,missing_required,checks,schema_columns_present,schema_columns_checked,totals,by_course,by_course_status,writes}' "$RUNNER_TEMP/lms99-history.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized historical summary
         uses: actions/upload-artifact@v7
         with:
