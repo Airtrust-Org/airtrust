@@ -77,8 +77,14 @@ function fixture(){
   class Prepared {
     constructor(private query:string,private vals:unknown[]=[]){}
     bind(...v:unknown[]){return new Prepared(this.query,v);}
-    run(){const data=db.prepare(this.query).run(...this.vals as (string|number|null)[]);
-      return {meta:{changes:Number(data.changes)}};}
+    run(){
+      if(/^\\s*SELECT\\b/i.test(this.query)) {
+        const results=db.prepare(this.query).all(...this.vals as (string|number|null)[]);
+        return {meta:{changes:0},results};
+      }
+      const data=db.prepare(this.query).run(...this.vals as (string|number|null)[]);
+      return {meta:{changes:Number(data.changes)},results:[]};
+    }
     async first<T>(){return (db.prepare(this.query).get(
       ...this.vals as (string|number|null)[])??null) as T|null;}
   }
@@ -154,6 +160,27 @@ describe('F0 staging-only real candidate launch/commit/resume with Schema V2 056
       expect(f.count('lms_progresso_scorm')).toBe(0);
       expect(f.count('qualificacoes_historico')).toBe(0);
       expect(f.count('audit_logs')).toBe(2);
+    }finally{f.db.close();}
+  });
+  it('rolls back the entire D1 batch when the current synthetic cycle cannot update',async()=>{
+    const f=fixture();
+    try{
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      const original=await readF0CandidateRuntimeState(f.d1,scope);
+      await witnessF0CandidateLaunch(f.d1,scope,original);
+      // Deliberately change the cycle status after F0 launch to reproduce a
+      // concurrent state change. Previously the binding and CMI could commit
+      // while the cycle update touched zero rows, then JS threw too late.
+      f.db.exec("UPDATE lms_matricula_ciclos SET status='CONCLUIDO' WHERE id=24");
+      await expect(commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','held')))
+        .rejects.toThrow();
+      const row=f.db.prepare(`SELECT last_committed_package_sha256 AS committed
+        FROM lms_scorm_qa_evidence_bindings LIMIT 1`).get() as {committed:string|null};
+      expect(row.committed).toBeNull();
+      expect(f.count('lms_progresso_scorm')).toBe(0);
+      expect(f.count('audit_logs')).toBe(2); // bind + launch, no commit audit
+      expect((f.db.prepare('SELECT status FROM lms_matriculas WHERE id=23')
+        .get() as {status:string}).status).toBe('NAO_INICIADO');
     }finally{f.db.close();}
   });
   it('rejects bad CMI payloads and enforces candidate edition immutability',()=>{
