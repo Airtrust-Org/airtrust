@@ -291,6 +291,24 @@ test('resolves a lost complete response before deciding whether to abort or remo
   assert.ok(!calls.includes('abort'));
 });
 
+test('resolves an HTTP 200 completion with incomplete candidate receipt before teardown', async () => {
+  const bytes = Buffer.from('synthetic package bytes for incomplete 200 receipt');
+  const plan = planFor(bytes);
+  const owned = adaptersFor(plan).candidate;
+  const { calls, adapters } = adaptersFor(plan, {
+    async completeIntake() { calls.push('complete'); return { status: 'VALIDATED' }; },
+    async resolveAmbiguousIntake() {
+      calls.push('resolve-intake');
+      return { verified: true, state: 'CANDIDATE_PRESENT', candidate: owned };
+    },
+  });
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /CANDIDATE_NOT_VALIDATED_INACTIVE/);
+  assert.ok(calls.includes('resolve-intake'), 'HTTP 200 is not proof of candidate ownership');
+  assert.ok(calls.includes('remove-candidate'), 'owned candidate must be removed');
+  assert.ok(!calls.includes('abort'), 'candidate already materialized');
+});
+
 test('refuses to clean up a candidate with unproven operation ownership after lost completion', async () => {
   const bytes = Buffer.from('synthetic package bytes');
   const plan = planFor(bytes);
