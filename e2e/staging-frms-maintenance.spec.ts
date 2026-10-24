@@ -161,6 +161,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     await expect(box).toHaveAttribute('aria-label');
     const details = section.locator('details');
     await expect(details).toBeVisible();
+    await details.locator('summary').click();
     await expect(details.getByRole('link', { name: /NASA Ames/i })).toHaveAttribute(
       'href',
       /nasa\.gov/,
