@@ -6,7 +6,8 @@
 import {createTrustedQueuePrepareMessage,
   createTrustedQueueApplyMessage} from './queue-prepare-transport.mjs';
 import {privateQueueRunnerApi} from './queue-runner-api.mjs';
-import {coordinatePrivateF0Transaction} from './private-transaction-controller.mjs';
+import {coordinatePrivateF0Transaction,
+  assertIndependentSignerAnchor} from './private-transaction-controller.mjs';
 import {readbackReviewedF0} from './private-transaction-readback.mjs';
 
 const ACCOUNT=/^[a-f0-9]{32}$/,QUEUE=/^[a-f0-9]{32}$/;
@@ -92,7 +93,14 @@ export async function runProtectedPrivateTransaction({
   const key=env.FRMS_QA_CALLER_KEY_HEX,sha=env.GITHUB_SHA,
     accountId=env.CLOUDFLARE_ACCOUNT_ID,
     token=env.CLOUDFLARE_WORKER_API_TOKEN;
-  if(!SHA.test(sha||'')||!ACCOUNT.test(accountId||'')||
+  // Enforce workflow identity and the independent public-key pin BEFORE
+  // the first Cloudflare GET. A missing signer cannot lease or inspect Queues.
+  if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
+     env.GITHUB_REPOSITORY!=='Airtrust-Org/airtrust'||
+     env.GITHUB_REF!=='refs/heads/main'||
+     env.GITHUB_WORKFLOW_REF!==
+       'Airtrust-Org/airtrust/.github/workflows/staging-frms-qa-private-transaction.yml@refs/heads/main'||
+     !SHA.test(sha||'')||!ACCOUNT.test(accountId||'')||
      !KEY.test(key||'')||typeof token!=='string'||!token.trim()||
      typeof env.GITHUB_TOKEN!=='string'||!env.GITHUB_TOKEN.trim()||
      typeof signer?.assertReady!=='function'||
@@ -102,6 +110,12 @@ export async function runProtectedPrivateTransaction({
      typeof now!=='function'||typeof sleep!=='function'||
      // This runner never stores a signing private key or D1 bearer.
      env.FRMS_QA_APPROVAL_PRIVATE_KEY_PEM||env.FRMS_QA_D1_READ_TOKEN)deny();
+  try{
+    assertIndependentSignerAnchor({
+      publicKeyPem:env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM,
+      publicKeySha256:env.FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256,
+    });
+  }catch{deny();}
   const pinned=await resolvePrivateTransactionQueues({
     accountId,token,fetcher});
   const outbound=privateQueueRunnerApi({
