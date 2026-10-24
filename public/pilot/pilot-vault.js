@@ -135,6 +135,17 @@ async function legacyVaultFingerprint(database) {
   return bytesToBase64(new Uint8Array(finalDigest));
 }
 
+// A legacy PIN is necessary only to decrypt actual protected flight data.
+async function hasLegacyEncryptedRecords(database) {
+  for (const storeName of PILOT_VAULT_STORES.filter((name) => name !== 'meta')) {
+    const transaction = database.transaction(storeName, 'readonly');
+    const count = await requestResult(transaction.objectStore(storeName).count());
+    await transactionDone(transaction);
+    if (count > 0) return true;
+  }
+  return false;
+}
+
 export class PilotVault {
   constructor(database) {
     this.database = database;
@@ -154,7 +165,21 @@ export class PilotVault {
       const proof = await current.getMetaRecord(LEGACY_RECOVERY_PROOF_ID);
       if (proof?.source_fingerprint === sourceFingerprint && proof?.completed === true) {
         primaryDatabase.close();
+      } else if (!(await hasLegacyEncryptedRecords(primaryDatabase))) {
+        // Nothing needs decrypting. Provision V2 without asking for a PIN,
+        // retain the old database and commit a fingerprinted empty recovery proof.
+        const transaction = current.database.transaction('meta', 'readwrite');
+        transaction.objectStore('meta').put({
+          id: LEGACY_RECOVERY_PROOF_ID,
+          completed: true,
+          source_fingerprint: sourceFingerprint,
+          records_verified: 0,
+          completed_at: new Date().toISOString(),
+        });
+        await transactionDone(transaction);
+        primaryDatabase.close();
       } else {
+        // Never bypass PIN for unsent or historical encrypted flight records.
         current.legacyVault = primaryVault;
         current.legacyFingerprint = sourceFingerprint;
       }
