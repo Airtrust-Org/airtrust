@@ -73,11 +73,13 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
     visual.index < visual.total && visual.modelLength === visual.total &&
     visual.navIndex === visual.index && visual.stageVisible === true &&
     visual.titleMatchesModel === true &&
-    typeof location === 'string' && location.trim().length > 0 &&
+    // The reviewed Score R4 engine writes its real 1-based page/total marker
+    // on every Commit. Do not accept changed but unrelated CMI as slide proof.
+    location === String(visual.index + 1) + '/' + String(visual.total) &&
     typeof suspend === 'string' && suspend.trim().length > 0 &&
     (previousIndex === null || (Number.isSafeInteger(previousIndex) &&
       visual.index === previousIndex + 1 &&
-      (location !== previousLocation || suspend !== previousSuspend)));
+      location !== previousLocation && suspend !== previousSuspend));
   // SCORM bookmark encoding belongs to the authored SCO. Treat it as opaque;
   // prove navigation changed authored CMI and that the rendered slide survives
   // a fresh context, rather than inventing a private suspend_data schema.
