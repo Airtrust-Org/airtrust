@@ -387,7 +387,7 @@ export default function OperationalVigilanceTest({
             ? 'Contador em andamento; responda agora'
             : running
               ? 'Área do teste; aguarde o contador amarelo'
-              : 'Área do teste pronta; pressione Iniciar teste para começar'
+              : 'Área de resposta preparada; aguarde o início da medição'
         }
       >
         <span
