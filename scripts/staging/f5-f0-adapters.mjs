@@ -419,6 +419,10 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       cycleId: params.cycleId, runId: params.runId,
       servedPackageSha256: params.packageSha256, committedPackageSha256: params.packageSha256,
       cmiSha256: final.cmiSha256, suspendSha256: final.suspendSha256,
+      // Cross-browser handoff must prove that WebKit loaded exactly Chromium's
+      // persisted bookmark before independently advancing its own Score cursor.
+      initialResumeWitnessSha256: sha256(JSON.stringify([initialLocation, initialSuspend])),
+      committedResumeWitnessSha256: sha256(JSON.stringify([first.marker, first.suspend])),
       sessionCount: final.sessionCount, completionStatus: final.completionStatus,
       qualificationHistoryCount: final.qualificationHistoryCount,
       certificateDocument: final.certificateDocument, assessmentAttempted: false,
@@ -494,7 +498,7 @@ export async function runF5BrowserPair(runBrowser) {
   const [chromiumEvidence, webkitEvidence] = results;
   for (const key of [
     'source', 'candidateId', 'packageSha256', 'enrollmentId', 'cycleId', 'runId',
-    'servedPackageSha256', 'committedPackageSha256', 'suspendSha256', 'runtimeVersion',
+    'servedPackageSha256', 'committedPackageSha256', 'runtimeVersion',
   ]) {
     if (chromiumEvidence[key] !== webkitEvidence[key]) fail('BROWSER_PAIR_SCOPE_MISMATCH');
   }
@@ -502,6 +506,21 @@ export async function runF5BrowserPair(runBrowser) {
       !Number.isSafeInteger(webkitEvidence.sessionCount) ||
       webkitEvidence.sessionCount <= chromiumEvidence.sessionCount) {
     fail('BROWSER_PAIR_READBACK_REGRESSION');
+  }
+  // Both engines advance the SAME synthetic enrollment serially. Their
+  // suspend digests MUST differ, but WebKit's initial location+suspend must
+  // exactly equal Chromium's authenticated committed location+suspend.
+  const a = chromiumEvidence, b = webkitEvidence;
+  if (!HEX64.test(a.initialResumeWitnessSha256 ?? '') ||
+      !HEX64.test(a.committedResumeWitnessSha256 ?? '') ||
+      !HEX64.test(b.initialResumeWitnessSha256 ?? '') ||
+      !HEX64.test(b.committedResumeWitnessSha256 ?? '') ||
+      !HEX64.test(a.suspendSha256 ?? '') || !HEX64.test(b.suspendSha256 ?? '') ||
+      a.initialResumeWitnessSha256 === a.committedResumeWitnessSha256 ||
+      b.initialResumeWitnessSha256 !== a.committedResumeWitnessSha256 ||
+      b.initialResumeWitnessSha256 === b.committedResumeWitnessSha256 ||
+      b.suspendSha256 === a.suspendSha256) {
+    fail('BROWSER_PAIR_RESUME_CHAIN_MISMATCH');
   }
   return { ...webkitEvidence, browserEngines: ['chromium', 'webkit'] };
 }
