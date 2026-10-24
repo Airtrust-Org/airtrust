@@ -79,6 +79,17 @@ export function requireF5ScoreVisualState(visual, location, suspend, {
   return { index: visual.index, total: visual.total };
 }
 
+
+/** Reject a fresh-context render that disagrees with the pre-close slide. */
+export function requireF5ScoreResumeMatch(before, after) {
+  if (!before || !after || !Number.isSafeInteger(before.index) ||
+      before.index < 1 || before.index !== after.index ||
+      before.total !== after.total || before.modelLength !== after.modelLength) {
+    throw Error('F5_VISUAL_RESUME_WITNESS_INVALID');
+  }
+  return true;
+}
+
 function checkedScope(plan, params) {
   const c = plan?.candidate, f = plan?.syntheticFixture;
   if (!c || !f || params.tenantId !== c.tenantId || params.courseId !== c.courseId ||
@@ -362,7 +373,8 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     }
     try { requireF5ScoreVisualState(resumeRendered, resumed.location, resumed.suspend); }
     catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
-    if (resumeRendered.index !== advancedRendered.index) fail('VISUAL_RESUME_WITNESS_INVALID');
+    try { requireF5ScoreResumeMatch(advancedRendered, resumeRendered); }
+    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
     requireF5CommitReadbackCount(final, finishSessionCount, finishCommitReceipt.data.cmiSha256);
