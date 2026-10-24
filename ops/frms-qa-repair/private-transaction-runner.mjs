@@ -7,6 +7,7 @@ import {createTrustedQueuePrepareMessage,
   createTrustedQueueApplyMessage} from './queue-prepare-transport.mjs';
 import {privateQueueRunnerApi} from './queue-runner-api.mjs';
 import {coordinatePrivateF0Transaction} from './private-transaction-controller.mjs';
+import {readbackReviewedF0} from './private-transaction-readback.mjs';
 
 const ACCOUNT=/^[a-f0-9]{32}$/,QUEUE=/^[a-f0-9]{32}$/;
 const SHA=/^[a-f0-9]{40}$/,KEY=/^[a-f0-9]{64}$/;
@@ -96,7 +97,8 @@ export async function runProtectedPrivateTransaction({
      typeof env.GITHUB_TOKEN!=='string'||!env.GITHUB_TOKEN.trim()||
      typeof signer?.assertReady!=='function'||
      typeof signer?.signReceipt!=='function'||
-     typeof readback!=='function'||typeof fetcher!=='function'||
+     (readback!==undefined&&typeof readback!=='function')||
+     typeof fetcher!=='function'||
      typeof now!=='function'||typeof sleep!=='function'||
      // This runner never stores a signing private key or D1 bearer.
      env.FRMS_QA_APPROVAL_PRIVATE_KEY_PEM||env.FRMS_QA_D1_READ_TOKEN)deny();
@@ -119,8 +121,10 @@ export async function runProtectedPrivateTransaction({
     pushSigned:message=>outbound.pushSigned(message),
     consumeExpectedReply:params=>inbound.consumeExpectedReply(params),
   });
+  const independentReadback=readback||((scope)=>readbackReviewedF0({env,...scope}));
   return coordinatePrivateF0Transaction({env,
     publicKeyPem:env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM,
     publicKeySha256:env.FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256,
-    producer,queue:transport,signer,readback,now,sleep,maxPolls:12});
+    producer,queue:transport,signer,readback:independentReadback,
+    now,sleep,maxPolls:12});
 }
