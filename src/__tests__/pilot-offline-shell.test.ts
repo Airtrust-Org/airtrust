@@ -579,7 +579,9 @@ describe('Pilot Offline shell', () => {
     expect(stageFieldsBlock).not.toContain('Peso da tripulação');
     expect(stageFieldsBlock).not.toContain('Peso vazio da aeronave');
     expect(pilotApp).toContain("['Peso total', 'peso_total'");
-    expect(pilotApp).toContain("['Observações da etapa', 'observacoes'");
+    expect(pilotApp).not.toContain("['Observações da etapa', 'observacoes'");
+    expect(pilotApp).toContain("label: 'Observações do voo'");
+    expect(pilotApp).toContain('observacoes_predefinidas');
     expect(pilotSync).toContain('fuelings:');
     expect(pilotSync).toContain('numero_voo: optionalText(rdvDraft.common?.numero_voo)');
     expect(pilotSync).toContain('numero_db: optionalText(rdvDraft.common?.numero_db)');
@@ -606,7 +608,7 @@ describe('Pilot Offline shell', () => {
     expect(pilotApp).toContain('fields.peso_padrao_ativo = false;');
     expect(pilotApp).toContain('applyStandardPassengerBaggageWeight(fields)');
     expect(pilotIndex).toContain('.pilot-standard-weight-toggle');
-    expect(pilotSw).toContain('airtrust-pilot-shell-v37');
+    expect(pilotSw).toContain('airtrust-pilot-shell-v38');
     expect(pilotApp).not.toContain("['Hora', 'hora', 'time'");
     expect(pilotApp).not.toContain("['Nota do combustível', 'nota'");
     expect(pilotSync).not.toContain('nota: optionalText(fueling?.nota)');
@@ -659,6 +661,41 @@ describe('Pilot Offline shell', () => {
     expect(pilotVault).toContain('async migrateLegacyPin(pin)');
     expect(pilotVault).toContain("name: 'PBKDF2'");
     expect(pilotVault).toContain('wrapped_key');
+  });
+
+  it('permite consulta do RDV enviado sem solicitar novo lease de edição', () => {
+    expect(pilotApp).toContain('function isFlightClosedForEditing(packageData)');
+    expect(pilotApp).toContain('openCompletedFlightForConsultation(record)');
+    expect(pilotIndex).toContain('aria-label="Consulta do voo"');
+    expect(pilotIndex).not.toContain('class="card hidden technical-only"');
+    expect(pilotApp).toContain("flightDetailCard.classList.remove('hidden')");
+  });
+
+  it('mantém documentos da Coordenação acessíveis durante o preenchimento', () => {
+    expect(pilotIndex).toContain('id="rdv-flight-documents-content"');
+    expect(pilotApp).toContain('renderPilotFlightDocuments(rdvFlightDocumentsContent');
+    expect(pilotWorkspace).toContain('export function renderPilotFlightDocuments(');
+    expect(pilotWorkspace).toContain('Não disponível offline neste tablet');
+  });
+
+  it('não força opções fixas de divergência e usa cadastro da Coordenação', () => {
+    expect(pilotApp).not.toContain("['Divergência operacional',");
+    expect(pilotApp).toContain('templates: Array.isArray(packageData?.catalogos?.observacoes_predefinidas)');
+    expect(pilotApp).not.toContain("label: 'Divergências do planejado'");
+    expect(pilotApp).not.toContain("secondaryButtonText: 'Fazer plano de voo'");
+  });
+
+  it('não pede PIN para vault legado vazio e preserva cifrados antes da recuperação', () => {
+    expect(pilotVault).toContain('async function hasLegacyEncryptedRecords(database)');
+    expect(pilotVault).toContain('records_verified: 0');
+    expect(pilotVault).toContain('current.legacyVault = primaryVault');
+    expect(pilotVault).toContain('async recoverLegacyPin(pin)');
+  });
+
+  it('reconhece rotação de sessão por outra aba e evita sobrescrever tokens novos', () => {
+    expect(pilotApp).toContain('const newestRefresh = readCurrentRefreshToken().value');
+    expect(pilotApp).toContain('if (readCurrentRefreshToken().value !== stored.value)');
+    expect(pilotApp).toContain('if (updatedToken && updatedToken !== token)');
   });
 
   it('prioriza o voo do dia e mantém a seleção técnica fora da tela operacional', () => {
