@@ -373,12 +373,19 @@ app.post('/:id/scorm-upload/streamed/:operationId/abort',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
-    await authorizeF5Operation(c, empresaId, cursoId, true);
-    const data = await abortF5StreamedIntake({
-      bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
-      operationId: c.req.param('operationId'),
-    });
-    return c.json({ success: true, data });
+    try {
+      await authorizeF5Operation(c, empresaId, cursoId, true);
+      const data = await abortF5StreamedIntake({
+        bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
+        operationId: c.req.param('operationId'),
+      });
+      return c.json({ success: true, data });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 404) {
+        return c.json({ success: true, data: { operationId: c.req.param('operationId'), aborted: true, alreadyClean: true } });
+      }
+      throw err;
+    }
   });
 
 // Resolve a lost multipart completion response through Worker-owned R2/D1

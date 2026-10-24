@@ -246,7 +246,7 @@ export async function createScormPackageCandidateFromR2Intake(params: {
         }
         qualityEntries.push({ path, data });
         await params.bucket.put(`${prefix}${path}`, member.data, {
-          sha256: sha256Bytes(member.sha256),
+          sha256: member.sha256,
           httpMetadata: { contentType: guessMime(path), cacheControl: 'public, max-age=86400' },
         });
       },
