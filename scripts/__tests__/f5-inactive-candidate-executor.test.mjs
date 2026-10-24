@@ -454,3 +454,31 @@ test('rejects R2 candidate readback without an explicit inactive boolean', async
     );
   }
 });
+
+test('rejects expired synthetic fixture before any staging mutation', async () => {
+  const bytes = Buffer.from('synthetic F5 expired fixture');
+  const plan = planFor(bytes);
+  plan.syntheticFixture.expiresAt = new Date(Date.now() - 60_000).toISOString();
+  const { calls, adapters } = adaptersFor(plan);
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('rechecks fixture expiry after private ZIP hashing and before first Worker write', async () => {
+  const bytes = Buffer.from('synthetic F5 fixture that expires during source hashing');
+  const plan = planFor(bytes);
+  const source = sourceFor(bytes);
+  const read = source.read.bind(source);
+  source.read = async (...args) => {
+    const chunk = await read(...args);
+    plan.syntheticFixture.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    return chunk;
+  };
+  const { calls, adapters } = adaptersFor(plan);
+  await assert.rejects(executeF5InactiveCandidate({ plan, source, adapters }),
+    /PLAN_OR_F0_RECEIPT_INVALID/);
+  assert.ok(!calls.includes('begin'));
+});
