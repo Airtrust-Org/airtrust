@@ -19,6 +19,9 @@ export const F5_EXECUTOR_LIMITS = Object.freeze({
 const HEX64 = /^[a-f0-9]{64}$/;
 const HEX40 = /^[a-f0-9]{40}$/;
 const UUID = /^[0-9a-f-]{36}$/i;
+// F0 is a deliberately incomplete synthetic exercise: never accept a final,
+// unknown or missing enrollment status as proof of safe non-certification.
+const INCOMPLETE_SCORM_STATUSES = new Set(['NAO_INICIADO', 'EM_ANDAMENTO']);
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const fail = code => { throw new Error(`F5_EXECUTOR_${code}`); };
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -106,7 +109,7 @@ function verifyQaEvidence(row, plan, candidate, phase) {
       row.enrollmentId !== fixture.enrollmentId || row.cycleId !== fixture.cycleId ||
       row.runId !== fixture.runId || row.approvalReceiptSha256 !== fixture.approvalReceiptSha256 ||
       row.qualificationHistoryCount !== 0 || row.certificateDocument !== null ||
-      row.completionStatus === 'CONCLUIDO' ||
+      !INCOMPLETE_SCORM_STATUSES.has(row.completionStatus) ||
       !Number.isSafeInteger(row.sessionCount) || row.sessionCount < 0 ||
       row.scormScoreRaw !== null ||
       (row.cmiSha256 !== null && !HEX64.test(row.cmiSha256 ?? '')) ||
@@ -125,7 +128,7 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       evidence.runId !== fixture.runId || evidence.servedPackageSha256 !== plan.candidate.packageSha256 ||
       evidence.committedPackageSha256 !== plan.candidate.packageSha256 ||
       !HEX64.test(evidence.cmiSha256 ?? '') || !HEX64.test(evidence.suspendSha256 ?? '') ||
-      !positive(evidence.sessionCount) || evidence.completionStatus === 'CONCLUIDO' ||
+      !positive(evidence.sessionCount) || !INCOMPLETE_SCORM_STATUSES.has(evidence.completionStatus) ||
       evidence.qualificationHistoryCount !== 0 || evidence.certificateDocument !== null ||
       evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
       evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
