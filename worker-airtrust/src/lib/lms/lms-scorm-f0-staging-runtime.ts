@@ -146,3 +146,136 @@ export function validateF0IncompleteCommit(raw:unknown, expectedEnrollment:numbe
   }
   return d;
 }
+
+
+async function sha256(value:string|null) {
+  if(value===null)return null;
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
+/**
+ * Save an actual browser-driven SCORM incomplete/suspend commit from the
+ * candidate-scoped cookie. All D1 mutations are guarded by the same immutable
+ * F0 binding; never change completion, scores or qualification history.
+ */
+export async function commitF0CandidateSuspend(
+  db:D1Database, scope:F0Scope, raw:unknown,
+) {
+  const before=await readF0CandidateRuntimeState(db,scope);
+  if(before.launchedSha!==scope.packageSha256) {
+    throw new ApiError('SCORM_F0_CANDIDATE_NOT_LAUNCHED',409);
+  }
+  const d=validateF0IncompleteCommit(raw,scope.enrollmentId,before.cycleId);
+  const merged=mergeScormRuntimeState({
+    currentCmiJson:before.cmiJson,incomingCmiJson:d.cmi_json??null,
+    currentSuspendData:before.suspendData,incomingSuspendData:d.suspend_data??null,
+  });
+  if(merged.decisions.blockedTerminalRegression ||
+     !merged.cmiJson || merged.cmiJson.length>65535 ||
+     (merged.suspendData!==null && merged.suspendData.length>65535)) {
+    throw new ApiError('SCORM_F0_COMMIT_RUNTIME_INVALID',409);
+  }
+  const cmiHash=await sha256(merged.cmiJson);
+  const suspendHash=await sha256(merged.suspendData);
+  const cmiJson=merged.cmiJson, suspendData=merged.suspendData;
+  const args=[
+    before.id,scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
+    scope.enrollmentId,before.cycleId,before.runId,scope.runtimeSha,
+  ] as const;
+  const changes=await db.batch([
+    db.prepare(
+      `UPDATE lms_scorm_qa_evidence_bindings
+          SET last_committed_package_sha256=?,updated_at=datetime('now')
+        WHERE id=? AND empresa_id=? AND curso_id=? AND package_id=?
+          AND package_sha256=? AND matricula_id=? AND ciclo_id=?
+          AND run_id=? AND staging_runtime_sha=?
+          AND launched_package_sha256=? AND synthetic=1
+          AND status='ACTIVE' AND julianday(expires_at)>julianday('now')
+          AND (last_committed_package_sha256 IS NULL OR last_committed_package_sha256=?)`,
+    ).bind(scope.packageSha256,...args,scope.packageSha256,scope.packageSha256),
+    db.prepare(
+      `INSERT INTO lms_progresso_scorm
+         (matricula_id,empresa_id,lesson_status,completion_status,success_status,
+          score_raw,score_max,score_min,score_scaled,session_time,total_time,
+          suspend_data,launch_data,cmi_json,session_count,last_commit_at)
+       SELECT b.matricula_id,b.empresa_id,'incomplete','incomplete','unknown',
+              NULL,NULL,NULL,NULL,NULL,NULL,?,NULL,?,1,datetime('now')
+         FROM lms_scorm_qa_evidence_bindings b
+        WHERE b.id=? AND b.empresa_id=? AND b.curso_id=? AND b.package_id=?
+          AND b.package_sha256=? AND b.matricula_id=? AND b.ciclo_id=?
+          AND b.run_id=? AND b.staging_runtime_sha=?
+          AND b.synthetic=1 AND b.status='ACTIVE'
+          AND b.launched_package_sha256=b.package_sha256
+          AND b.last_committed_package_sha256=b.package_sha256
+          AND julianday(b.expires_at)>julianday('now')
+       ON CONFLICT(matricula_id) DO UPDATE SET
+         lesson_status='incomplete',completion_status='incomplete',
+         success_status='unknown',
+         suspend_data=COALESCE(excluded.suspend_data,lms_progresso_scorm.suspend_data),
+         cmi_json=COALESCE(excluded.cmi_json,lms_progresso_scorm.cmi_json),
+         session_count=lms_progresso_scorm.session_count+1,
+         last_commit_at=datetime('now'),updated_at=datetime('now')`,
+    ).bind(suspendData,cmiJson,...args),
+    db.prepare(
+      `UPDATE lms_matriculas
+          SET status='EM_ANDAMENTO',
+              progresso_pct=MAX(COALESCE(progresso_pct,0),1),
+              data_inicio=COALESCE(data_inicio,datetime('now')),
+              updated_at=datetime('now')
+        WHERE id=? AND empresa_id=? AND curso_id=? AND deleted_at IS NULL
+          AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND observacoes=?
+          AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+              WHERE b.empresa_id=lms_matriculas.empresa_id
+                AND b.matricula_id=lms_matriculas.id
+                AND b.id=? AND b.package_sha256=? AND b.status='ACTIVE'
+                AND b.last_committed_package_sha256=b.package_sha256
+                AND julianday(b.expires_at)>julianday('now'))`,
+    ).bind(scope.enrollmentId,scope.tenantId,scope.courseId,
+      `QA_SCORM_F0:${before.runId}`,before.id,scope.packageSha256),
+    db.prepare(
+      `UPDATE lms_matricula_ciclos
+          SET status='EM_ANDAMENTO',updated_at=datetime('now')
+        WHERE id=? AND matricula_id=? AND empresa_id=? AND curso_id=?
+          AND ciclo_atual=1 AND deleted_at IS NULL
+          AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
+          AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+              WHERE b.empresa_id=lms_matricula_ciclos.empresa_id
+                AND b.ciclo_id=lms_matricula_ciclos.id
+                AND b.id=? AND b.package_sha256=? AND b.status='ACTIVE'
+                AND julianday(b.expires_at)>julianday('now'))`,
+    ).bind(before.cycleId,scope.enrollmentId,scope.tenantId,
+      scope.courseId,before.id,scope.packageSha256),
+    db.prepare(
+      `INSERT INTO audit_logs(action,entity_type,entity_id,new_values,empresa_id,created_at)
+       SELECT 'SCORM_F0_STAGING_CANDIDATE_COMMIT',
+              'lms_scorm_qa_evidence_bindings',NULL,?,
+              b.empresa_id,datetime('now')
+         FROM lms_scorm_qa_evidence_bindings b
+        WHERE b.id=? AND b.empresa_id=? AND b.package_id=?
+          AND b.matricula_id=? AND b.ciclo_id=?
+          AND b.last_committed_package_sha256=b.package_sha256
+          AND b.status='ACTIVE' AND julianday(b.expires_at)>julianday('now')`,
+    ).bind(JSON.stringify({
+      source:'F0_CANDIDATE_INCOMPLETE_COMMIT_V1',
+      packageSha256:scope.packageSha256,runId:before.runId,
+      cycleId:before.cycleId,cmiSha256:cmiHash,suspendSha256:suspendHash,
+      assessment:false,certificate:false,
+    }),before.id,scope.tenantId,scope.packageId,
+    scope.enrollmentId,before.cycleId),
+  ]);
+  if(changes.some(change=>Number(change?.meta?.changes)!==1)){
+    throw new ApiError('SCORM_F0_ATOMIC_COMMIT_NOT_PROVEN',409);
+  }
+  const after=await readF0CandidateRuntimeState(db,scope);
+  if(after.committedSha!==scope.packageSha256 || after.sessionCount<=before.sessionCount){
+    throw new ApiError('SCORM_F0_BACKEND_COMMIT_READBACK_FAILED',409);
+  }
+  return {
+    source:'F0_CANDIDATE_INCOMPLETE_COMMIT_V1',packageSha256:scope.packageSha256,
+    runId:before.runId,cycleId:before.cycleId,
+    sessionCount:after.sessionCount,cmiSha256:cmiHash,suspendSha256:suspendHash,
+    completionWritten:false,scoreWritten:false,certificateIssued:false,
+  };
+}
