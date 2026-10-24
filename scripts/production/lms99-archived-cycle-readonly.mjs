@@ -144,7 +144,7 @@ export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
 }
 export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN}={}){
  assertSqlTransportScope(statement);
- if(!/^[a-f0-9]{32}$/.test(PRODUCTION_D1_ID))reject('D1_TARGET_DENIED');
+ if(!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(PRODUCTION_D1_ID))reject('D1_TARGET_DENIED');
  if(!accountId||!token)reject('CREDENTIALS');
  const endpoint=`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/d1/database/${PRODUCTION_D1_ID}/query`;
  let response;
