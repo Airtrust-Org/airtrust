@@ -181,6 +181,34 @@ test('reply TTL ends polling before acceptance even with many remaining attempts
   assert.equal(calls.length,1);
   assert.equal(f.calls.includes('verify-apply-grant'),false);
 });
+test('Queue apply stage emits only pending marker without any D1-only readback',async()=>{
+  const f=fixture();
+  const output=await transact({env:{...env,FRMS_QA_TRANSACTION_PHASE:'queue-apply'},
+    publicKeyPem,publicKeySha256,producer:f.producer,queue:f.queue,
+    signer:f.signer,completionMode:'apply-stage',now:()=>NOW,maxPolls:1});
+  assert.deepEqual(output,{
+    verdict:'APPLY_REPORTED_PENDING_INDEPENDENT_READBACK',
+    sha:SHA,tenantId:999013,d1ReadbackComplete:false,
+    productionAuthorized:false,
+  });
+  assert.equal(f.calls.includes('independent-readonly-4of4'),false);
+  assert.equal(f.calls.at(-1),'queue-pull:apply');
+});
+test('apply-only mode denies missing phase marker, bad mode and false D1 success',async()=>{
+  for(const options of [
+    {env,completionMode:'apply-stage'},
+    {env:{...env,FRMS_QA_TRANSACTION_PHASE:'wrong'},completionMode:'apply-stage'},
+    {env,completionMode:'skip-readback'},
+    {env,completionMode:'full'},
+  ]){
+    const f=fixture();
+    await assert.rejects(transact({
+      publicKeyPem,publicKeySha256,producer:f.producer,queue:f.queue,
+      signer:f.signer,now:()=>NOW,maxPolls:1,...options,
+    }),/FRMS_QA_PRIVATE_TRANSACTION_DENIED/);
+    assert.equal(f.calls.length,0);
+  }
+});
 test('reported Queue apply validation is insufficient when physical readback fails',async()=>{
   const f=fixture({readbackReturn:{verdict:'READONLY_ACCEPTANCE_READY',
     valid:3,writes:0,tenantId:999013,dbId:DB,sha:SHA}});
