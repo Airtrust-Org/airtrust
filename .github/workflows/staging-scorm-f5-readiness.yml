@@ -176,11 +176,29 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/staging/f5-materialize-private-zip.mjs
+      # Larger R5 ZIPs use an administrator-provisioned, one-use HTTPS source.
+      # The URL is an environment secret, never a dispatch input or artifact.
+      - name: Fetch and hash exact private R5 ZIP on ephemeral runner
+        if: ${{ inputs.package_sha256 != '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' || inputs.zip_bytes != '40644' }}
+        shell: bash
+        env:
+          F5_ENVIRONMENT: staging
+          GITHUB_REF: ${{ github.ref }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
+          F5_PRIVATE_ZIP_DOWNLOAD_URL: ${{ secrets.F5_PRIVATE_ZIP_DOWNLOAD_URL }}
+          F5_PRIVATE_ZIP_ALLOWED_HOST: ${{ vars.F5_PRIVATE_ZIP_ALLOWED_HOST }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-fetch-private-candidate.mjs
       - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
         env:
           F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
-          F5_PRIVATE_ZIP_PATH: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' && format('{0}/f5-private-candidate.zip', runner.temp) || vars.F5_PRIVATE_ZIP_PATH }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
           F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
           F5_F0_ADAPTER_SHA256: ${{ steps.f0-mount.outputs.adapter_sha256 }}
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
