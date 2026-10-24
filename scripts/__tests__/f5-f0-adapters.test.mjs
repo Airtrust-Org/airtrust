@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { commitIncompleteScormState, createF0Adapters, requireAuthoredF5State, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -110,11 +110,15 @@ test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', ()
       const status = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
       const exit = is2004 ? 'cmi.exit' : 'cmi.core.exit';
       const initialize = () => { events.push('initialize'); return 'true'; };
-      const setValue = (key, value) => { events.push(`set:${key}`); assert.ok(value); return 'true'; };
+      const values = new Map();
+      const setValue = (key, value) => {
+        events.push(`set:${key}`); assert.ok(value); values.set(key, value); return 'true';
+      };
+      const getValue = key => values.get(key) ?? '';
       const commit = () => { events.push('commit'); return 'true'; };
       const api = is2004
-        ? { Initialize: initialize, SetValue: setValue, Commit: commit }
-        : { LMSInitialize: initialize, LMSSetValue: setValue, LMSCommit: commit };
+        ? { Initialize: initialize, SetValue: setValue, GetValue: getValue, Commit: commit }
+        : { LMSInitialize: initialize, LMSSetValue: setValue, LMSGetValue: getValue, LMSCommit: commit };
       globalThis.window = is2004 ? { API_1484_11: api } : { API: api };
       const args = { is2004, marker: 'F0:run:checkpoint', suspend: '{"checkpoint":1}' };
       const result = commitIncompleteScormState(args);
@@ -149,4 +153,39 @@ test('F5 HTTP diagnostics expose only status and validated request id, never res
     headers: () => ({ 'x-request-id': 'Bearer secret token with PII' }),
   }), { status: 409, requestId: null });
   assert.deepEqual(safeF5HttpFailure(null), { status: null, requestId: null });
+});
+
+test('F5 rejects absent authored state rather than fabricating a suspend marker', () => {
+  for (const [location, suspend] of [['', '{}'], ['slide-1', ''], [null, '{}'],
+    ['slide-1', null], ['  ', '{"a":1}']]) {
+    assert.throws(() => requireAuthoredF5State(location, suspend),
+      /F5_F0_ADAPTER_AUTHORED_STATE_NOT_OBSERVED/);
+  }
+  assert.deepEqual(requireAuthoredF5State('authored-slide-1', '{"authored":true}'),
+    { marker: 'authored-slide-1', suspend: '{"authored":true}' });
+});
+
+test('F5 Commit rejects CMI getters that cannot prove the persisted authored state', () => {
+  const previous = globalThis.window;
+  try {
+    globalThis.window = { API: {
+      LMSInitialize: () => 'true', LMSSetValue: () => 'true', LMSCommit: () => 'true',
+      LMSGetValue: () => '',
+    } };
+    assert.throws(() => commitIncompleteScormState({
+      is2004: false, marker: 'authored-slide-1', suspend: '{"authored":true}',
+    }), /SCORM_INCOMPLETE_READBACK_MISMATCH/);
+  } finally {
+    if (previous === undefined) delete globalThis.window;
+    else globalThis.window = previous;
+  }
+});
+
+test('F5 readback diagnostics do not log CMI, enrollment scope or raw Worker payloads', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../staging/f5-f0-adapters.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /console\.error\('\[RESUME_STATE_MISMATCH_DIAGNOSTIC\]', \{ resumed, first/);
+  assert.doesNotMatch(source, /console\.error\('\[ASSERT_READBACK_FAILURES\]', \{[\s\S]*?\bdata,\s*expected:/);
+  assert.doesNotMatch(source, /checkpoint: 'tripulacao-1', resume: true/);
+  assert.match(source, /if \(!authoredStateObserved\) fail\('AUTHORED_STATE_NOT_OBSERVED'\)/);
 });

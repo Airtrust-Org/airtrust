@@ -263,3 +263,23 @@ test('runs the executor end to end through real Worker adapters against an isola
     assert.ok(serverCalls.some(call => call.includes('/qa-evidence/8101')));
   });
 });
+
+test('Worker HTTP failure never reads or includes sensitive response bodies', async () => {
+  let bodyReads = 0;
+  const adapters = createF5WorkerAdapters({
+    env: { SCORM_QA_ACCESS_TOKEN: token, F5_STAGING_API_ORIGIN: 'https://staging.invalid' },
+    fetchImpl: async () => ({
+      ok: false, status: 500,
+      async text() { bodyReads++; return 'Bearer SECRET learnerId=8101'; },
+    }),
+  });
+  await assert.rejects(
+    adapters.beginIntake({
+      tenantId: 9201, courseId: 7301,
+      operationId: '123e4567-e89b-12d3-a456-426614174000',
+      packageSha256: 'a'.repeat(64), zipBytes: 40644,
+    }),
+    error => error.message === 'F5_WORKER_ADAPTER_WORKER_HTTP_500'
+  );
+  assert.equal(bodyReads, 0, 'response body must not be read');
+});
