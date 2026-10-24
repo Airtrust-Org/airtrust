@@ -117,7 +117,12 @@ async function browserExecution({ plan, params, request, env }) {
       return { marker, suspend, apiVersion: is2004 ? '2004' : '1.2' };
     }, { is2004, marker, suspend });
     const firstCommit = await responsePromise;
-    if (!firstCommit || !firstCommit.ok()) fail('WORKER_COMMIT_HTTP_FAILED');
+    if (!firstCommit || !firstCommit.ok()) {
+      const status = firstCommit?.status();
+      const body = await firstCommit?.text().catch(() => '');
+      console.error('[COMMIT_FAIL_DIAGNOSTIC]', { status, body });
+      fail('WORKER_COMMIT_HTTP_FAILED');
+    }
     const firstEnvelope = await firstCommit.json();
     if (firstEnvelope?.success !== true || firstEnvelope?.data?.completionWritten !== false ||
         firstEnvelope?.data?.certificateIssued !== false) fail('WORKER_COMMIT_RECEIPT_INVALID');
@@ -131,7 +136,13 @@ async function browserExecution({ plan, params, request, env }) {
       const result = is2004 ? api.Terminate('') : api.LMSFinish('');
       if (result !== 'true') throw Error('SCORM_FINISH_REJECTED');
     }, is2004);
-    if (!(await finishPromise).ok()) fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
+    const finishCommit = await finishPromise;
+    if (!finishCommit || !finishCommit.ok()) {
+      const status = finishCommit?.status();
+      const body = await finishCommit?.text().catch(() => '');
+      console.error('[FINISH_COMMIT_FAIL_DIAGNOSTIC]', { status, body });
+      fail('WORKER_FINISH_COMMIT_HTTP_FAILED');
+    }
     await page.close();
 
     // A fresh context rules out local storage as the source of a successful

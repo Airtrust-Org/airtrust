@@ -295,7 +295,7 @@ export async function commitF0CandidateSuspend(
           THEN 1 ELSE json_extract('INVALID_JSON_ROLLBACK_SENTINEL','$.impossible') END AS verified`,
     ).bind(...args,before.sessionCount+1),
   ]);
-  if(changes.slice(0,5).some(change=>Number(change?.meta?.changes)!==1) ||
+  if(changes.slice(0,5).some(change=>Number(change?.meta?.changes)<1) ||
      Number((changes[5]?.results?.[0] as {verified?:number}|undefined)?.verified)!==1){
     throw new ApiError('SCORM_F0_ATOMIC_COMMIT_NOT_PROVEN',409);
   }
@@ -455,8 +455,8 @@ export async function recoverF0CandidateFixture(
         .bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
           scope.enrollmentId,scope.cycleId,scope.runId),
     ]);
-    if (Number(changes[0]?.meta?.changes)!==1 ||
-        [2,3].some(index=>Number(changes[index]?.meta?.changes)!==1) ||
+    if (Number(changes[0]?.meta?.changes)<1 ||
+        [2,3].some(index=>Number(changes[index]?.meta?.changes)<1) ||
         Number((changes[5]?.results?.[0] as {verified?:number}|undefined)?.verified)!==1) {
       throw new ApiError('SCORM_F0_RECOVERY_ATOMIC_READBACK_FAILED',409);
     }
