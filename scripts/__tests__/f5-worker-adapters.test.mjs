@@ -283,3 +283,43 @@ test('Worker HTTP failure never reads or includes sensitive response bodies', as
   );
   assert.equal(bodyReads, 0, 'response body must not be read');
 });
+
+test('HTTP 500 completion recovery accepts only the exact operation and inactive candidate', async () => {
+  const operationId = '123e4567-e89b-12d3-a456-426614174000';
+  const packageSha256 = 'a'.repeat(64);
+  const packageId = '223e4567-e89b-12d3-a456-426614174000';
+  const valid = { source: 'WORKER_F5_INTAKE_STATUS', operationId,
+    state: 'CANDIDATE_PRESENT', candidate: {
+      packageId, packageSha256, active: false,
+      createdByOperation: true, alreadyExisted: false } };
+  let status = valid;
+  await withServer((req, res) => {
+    assert.equal(req.method, 'GET');
+    assert.equal(req.headers.authorization, 'Bearer ' + token);
+    assert.ok(req.url.includes(operationId + '/status?sha256=' + packageSha256));
+    json(res, status);
+  }, async origin => {
+    const adapters = createF5WorkerAdapters({
+      env: { SCORM_QA_ACCESS_TOKEN: token, F5_STAGING_API_ORIGIN: origin },
+    });
+    const params = { tenantId: 9201, courseId: 7301, operationId, packageSha256 };
+    assert.equal((await adapters.resolveAmbiguousIntake(params)).verified, true);
+    for (const bad of [
+      { ...valid, operationId: '223e4567-e89b-12d3-a456-426614174001' },
+      { ...valid, operationId: undefined },
+      { ...valid, state: 'INTAKE_PRESENT', packageSha256: 'b'.repeat(64) },
+      { ...valid, state: 'CLEAN', operationId: undefined },
+      { ...valid, candidate: { ...valid.candidate, active: true } },
+      { ...valid, candidate: { ...valid.candidate, active: undefined } },
+      { ...valid, candidate: { ...valid.candidate, createdByOperation: false } },
+    ]) {
+      status = bad;
+      await assert.rejects(adapters.resolveAmbiguousIntake(params),
+        /AMBIGUOUS_(INTAKE_READBACK_INVALID|CANDIDATE_OWNERSHIP_UNPROVEN)/);
+    }
+    status = { source: valid.source, operationId, state: 'INTAKE_PRESENT', packageSha256 };
+    assert.equal((await adapters.resolveAmbiguousIntake(params)).state, 'INTAKE_PRESENT');
+    status = { source: valid.source, operationId, state: 'CLEAN' };
+    assert.equal((await adapters.resolveAmbiguousIntake(params)).state, 'CLEAN');
+  });
+});
