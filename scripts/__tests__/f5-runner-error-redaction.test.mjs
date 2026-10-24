@@ -95,7 +95,16 @@ test('F5 runner reserves evidence before loading adapters or invoking remote int
   const remoteAt = source.indexOf('await executeF5InactiveCandidate({');
   assert.ok(reserveAt > 0 && importAt > reserveAt && remoteAt > importAt);
   assert.match(source, /await evidenceHandle\.sync\(\)/);
-  assert.match(source, /if \(!evidencePersisted\) await unlink\(outputPath\)/);
+  const sourceCloseAt = source.indexOf('await source.close();');
+  const evidenceWriteAt = source.indexOf('await evidenceHandle.writeFile(');
+  const evidenceCloseAt = source.indexOf('await evidenceHandle.close();');
+  const successAt = source.indexOf('evidenceComplete = true;');
+  assert.ok(sourceCloseAt > remoteAt && evidenceWriteAt > sourceCloseAt,
+    'source teardown must precede successful QA evidence');
+  assert.ok(evidenceCloseAt > evidenceWriteAt && successAt > evidenceCloseAt,
+    'evidence close must succeed before QA success');
+  assert.match(source, /if \(!evidenceComplete\)/);
+  assert.match(source, /await discardF5EvidenceOutput\(evidenceHandle, outputPath\)/);
   assert.equal(safeF5RunnerErrorCode(new Error('F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE')),
     'F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE');
 });
@@ -105,7 +114,7 @@ test('F5 partial evidence is removed even when closing the reserved handle fails
   const output = join(dir, 'partial-evidence.json');
   try {
     const handle = await reserveF5EvidenceOutput(output);
-    await handle.writeFile('{"status":"PASS"}\\n');
+    await handle.writeFile('{"status":"PASS"}\n');
     await discardF5EvidenceOutput({
       async close() {
         await handle.close();
