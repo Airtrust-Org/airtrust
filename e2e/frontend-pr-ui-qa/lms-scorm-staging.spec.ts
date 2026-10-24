@@ -328,6 +328,53 @@ test('LMS SCORM staging: protocol pass stays uncertified, static reject and time
     ),
   ).toBe(false);
 
+  const mutationViolations = mutations.filter((entry) => {
+    try {
+      return new URL(entry.url).hostname !== STAGING_API_HOST;
+    } catch {
+      return true;
+    }
+  });
+  expect(mutationViolations).toEqual([]);
+
+  const summary = {
+    ok: true,
+    live_frontend_provenance: 'PASS',
+    success: {
+      real_zip_upload: true,
+      visible_progress: [25, 65],
+      runtime_conformance: 'PASS',
+      functional_certification: 'UNCERTIFIED',
+      activated: false,
+      previous_package_preserved: true,
+    },
+    rejection: {
+      real_zip_upload: true,
+      static_gate: 'REJECTED',
+      conformance_called: false,
+      activated: false,
+      visible_error: true,
+    },
+    timeout: {
+      real_zip_upload: true,
+      visible_progress: [25, 65],
+      runtime_conformance: 'TIMEOUT',
+      activated: false,
+      visible_error: true,
+    },
+    production_mutations: 0,
+  };
+  writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+});
+
+test('LMS SCORM resume: exact inactive candidate upload and Chromium WebKit preview', async ({ page }) => {
+  test.setTimeout(180_000);
+  const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
+  const mutations: string[] = [];
+  page.on('request', request => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
+    mutations.push(request.url());
+  });
   // Upload the exact SHA-pinned resume fixture through the REAL staging UI.
   // Keep the candidate inactive/uncertified. QA preview cannot persist CMI;
   // authenticated Chromium/WebKit persistence is covered separately by #1730.
@@ -412,49 +459,21 @@ test('LMS SCORM staging: protocol pass stays uncertified, static reject and time
   expect(previews).toEqual(['CHROMIUM', 'WEBKIT']);
   await page.unroute(`**/api/lms/cursos/${resume.id}/scorm-upload**`);
 
-  const mutationViolations = mutations.filter((entry) => {
-    try {
-      return new URL(entry.url).hostname !== STAGING_API_HOST;
-    } catch {
-      return true;
-    }
-  });
-  expect(mutationViolations).toEqual([]);
 
+  expect(mutations.every(url => {
+    try { return new URL(url).hostname === STAGING_API_HOST; } catch { return false; }
+  })).toBe(true);
   const summary = {
-    ok: true,
-    live_frontend_provenance: 'PASS',
-    success: {
-      real_zip_upload: true,
-      visible_progress: [25, 65],
-      runtime_conformance: 'PASS',
-      functional_certification: 'UNCERTIFIED',
-      activated: false,
-      previous_package_preserved: true,
-    },
-    rejection: {
-      real_zip_upload: true,
-      static_gate: 'REJECTED',
-      conformance_called: false,
-      activated: false,
-      visible_error: true,
-    },
-    timeout: {
-      real_zip_upload: true,
-      visible_progress: [25, 65],
-      runtime_conformance: 'TIMEOUT',
-      activated: false,
-      visible_error: true,
-    },
-    resume: {
-      real_zip_upload: true,
-      exact_zip_sha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-      inactive_candidate_status: 'VALIDATED',
-      preview_rendered_in: ['CHROMIUM', 'WEBKIT'],
-      activation_authorized: false,
-      backend_resume_certified: false,
-    },
-    production_mutations: 0,
+    source: 'GOVERNED_STAGING_REAL_WORKER_PAGES_INACTIVE_PREVIEW',
+    scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
+    exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
+    uploadStatus: 'VALIDATED',
+    previewRendered: ['CHROMIUM', 'WEBKIT'],
+    active: false,
+    certified: false,
+    committedCmiProven: false,
+    productionMutations: 0,
   };
-  writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+  writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
+    JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
