@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { reserveF5EvidenceOutput, safeF5RunnerErrorCode } from '../staging/run-f5-inactive-candidate.mjs';
+import { discardF5EvidenceOutput, reserveF5EvidenceOutput, safeF5RunnerErrorCode } from '../staging/run-f5-inactive-candidate.mjs';
 
 test('F5 runner exposes only reviewed, fixed error identifiers', () => {
   assert.equal(
@@ -98,4 +98,22 @@ test('F5 runner reserves evidence before loading adapters or invoking remote int
   assert.match(source, /if \(!evidencePersisted\) await unlink\(outputPath\)/);
   assert.equal(safeF5RunnerErrorCode(new Error('F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE')),
     'F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE');
+});
+
+test('F5 partial evidence is removed even when closing the reserved handle fails', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'f5-evidence-teardown-'));
+  const output = join(dir, 'partial-evidence.json');
+  try {
+    const handle = await reserveF5EvidenceOutput(output);
+    await handle.writeFile('{"status":"PASS"}\\n');
+    await discardF5EvidenceOutput({
+      async close() {
+        await handle.close();
+        throw new Error('private teardown detail must not be logged');
+      },
+    }, output);
+    await assert.rejects(stat(output), { code: 'ENOENT' });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
