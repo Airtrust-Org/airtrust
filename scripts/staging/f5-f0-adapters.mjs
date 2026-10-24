@@ -90,11 +90,19 @@ export function commitIncompleteScormState({ is2004, marker, suspend }) {
   const get = is2004 ? api.GetValue : api.LMSGetValue;
   const actualSuspend = typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : null;
   const actualMarker = typeof get === 'function' ? get.call(api, locationKey) : null;
-  return {
-    marker: (typeof actualMarker === 'string' && actualMarker.length > 0) ? actualMarker : marker,
-    suspend: (typeof actualSuspend === 'string' && actualSuspend.length > 0) ? actualSuspend : suspend,
-    apiVersion: is2004 ? '2004' : '1.2',
-  };
+  if (actualMarker !== marker || actualSuspend !== suspend) {
+    throw Error('SCORM_INCOMPLETE_READBACK_MISMATCH');
+  }
+  return { marker: actualMarker, suspend: actualSuspend, apiVersion: is2004 ? '2004' : '1.2' };
+}
+
+/** Reject missing authored CMI; synthetic placeholders cannot certify resume. */
+export function requireAuthoredF5State(location, suspend) {
+  if (typeof location !== 'string' || location.trim().length === 0 ||
+      typeof suspend !== 'string' || suspend.trim().length === 0) {
+    fail('AUTHORED_STATE_NOT_OBSERVED');
+  }
+  return { marker: location, suspend };
 }
 
 /** Failure diagnostics must never log response bodies, tokens or learner state. */
@@ -137,13 +145,19 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const is2004 = params.scormVersion === '2004';
     if (!['1.2', '2004'].includes(params.scormVersion)) fail('SCORM_VERSION_UNAVAILABLE');
 
-    await page.waitForFunction(is2004 => {
+    // Wait for both values from the authored SCO. A timeout is a failed
+    // probe, never permission to synthesize suspend_data or a slide marker.
+    const authoredStateObserved = await page.waitForFunction(is2004 => {
       const api = is2004 ? window.API_1484_11 : window.API;
       if (!api) return false;
       const get = is2004 ? api.GetValue : api.LMSGetValue;
-      const s = typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : '';
-      return typeof s === 'string' && s.length > 0;
-    }, is2004, { timeout: 15_000 }).catch(() => null);
+      if (typeof get !== 'function') return false;
+      const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
+      const suspend = get.call(api, 'cmi.suspend_data');
+      return typeof location === 'string' && location.trim().length > 0 &&
+        typeof suspend === 'string' && suspend.trim().length > 0;
+    }, is2004, { timeout: 15_000 }).then(() => true, () => false);
+    if (!authoredStateObserved) fail('AUTHORED_STATE_NOT_OBSERVED');
 
     const initialLocation = await page.evaluate(is2004 => {
       const api = is2004 ? window.API_1484_11 : window.API;
@@ -159,12 +173,7 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       return typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : null;
     }, is2004);
 
-    const marker = (typeof initialLocation === 'string' && initialLocation.length > 0)
-      ? initialLocation
-      : `F0:${params.runId}:tripulacao-1`;
-    const suspend = (typeof initialSuspend === 'string' && initialSuspend.length > 0)
-      ? initialSuspend
-      : JSON.stringify({ runId: params.runId, checkpoint: 'tripulacao-1', resume: true });
+    const { marker, suspend } = requireAuthoredF5State(initialLocation, initialSuspend);
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
@@ -220,7 +229,9 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       Boolean(resumed.location && (resumed.location === first.marker ||
         (typeof initialLocation === 'string' && resumed.location === initialLocation)));
     if (!locationMatches || resumed.suspend !== first.suspend) {
-      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', { resumed, first, initialLocation });
+      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', {
+        locationMatches, suspendMatches: resumed.suspend === first.suspend,
+      });
       fail('SCORM_RESUME_STATE_MISMATCH');
     }
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
@@ -268,7 +279,7 @@ function assertReadback(data, params, expected, runtimeSha) {
   if (!HEX64.test(data?.cmiSha256 ?? '')) failed.push('cmiSha256_format');
   if (!HEX64.test(data?.suspendSha256 ?? '')) failed.push('suspendSha256_format');
   if (data?.suspendSha256 !== sha256(expected.suspend)) {
-    failed.push(`suspendSha256_mismatch(got=${data?.suspendSha256},expected=${sha256(expected.suspend)})`);
+    failed.push('suspendSha256_mismatch');
   }
   if (!Number.isSafeInteger(data?.sessionCount)) failed.push('sessionCount_type');
   if ((data?.sessionCount ?? 0) < 1) failed.push('sessionCount_value');
@@ -280,13 +291,8 @@ function assertReadback(data, params, expected, runtimeSha) {
   if (expected.suspend.length < 1) failed.push('expected_suspend_empty');
 
   if (failed.length > 0) {
-    console.error('[ASSERT_READBACK_FAILURES]', {
-      failed,
-      data,
-      expected: { marker: expected.marker, suspendLen: expected.suspend?.length, suspendSha: sha256(expected.suspend) },
-      params,
-      runtimeSha,
-    });
+    // Emit only fixed field names, never raw D1/CMI, learner scope or digests.
+    console.error('[ASSERT_READBACK_FAILURES]', { failed });
     fail('D1_READBACK_SCOPE_OR_STATE_INVALID');
   }
   return data;
