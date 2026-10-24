@@ -8,6 +8,15 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {ARCHIVE_SQL,validateQuery,validateRows,classifyD1Failure,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
+test('D1 client matches the previously proven production SELECT transport',()=>{
+ const source=readFileSync(new URL('../production/lms99-archived-cycle-readonly.mjs',import.meta.url),'utf8');
+ assert.match(source,/fileURLToPath\(new URL\('\.\.\/\.\.\/worker-airtrust\/'/);
+ assert.match(source,/spawnSync\('npx',\['wrangler','d1','execute','airtrust-db'/);
+ assert.doesNotMatch(source,/\['--no-install','wrangler'/);
+ assert.match(source,/validateQuery\(\)/);
+ assert.match(source,/if\(r\.status!==0\)reject\(classifyD1Failure/);
+});
+
 test('failures expose only fixed diagnostic categories, never provider messages',()=>{
  assert.equal(classifyD1Failure('D1 error: no such table: lms_ciclo_evidencias'),'D1_ARCHIVE_SCHEMA_MISSING');
  assert.equal(classifyD1Failure('SQLITE_ERROR: no such column: discarded_state'),'D1_COLUMN_SCHEMA_MISMATCH');
