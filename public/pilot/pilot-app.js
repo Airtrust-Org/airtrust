@@ -1670,14 +1670,93 @@ function isFlightClosedForEditing(packageData) {
   ));
 }
 
+function isFlightPendingCoordinationSend(packageData) {
+  const rdv = packageData?.rdv;
+  return Boolean(
+    rdv?.status === 'preenchimento_finalizado' &&
+    ['rascunho', 'devolvido'].includes(String(rdv.workflow_status || '')),
+  );
+}
+
+function appendPendingCoordinationSendAction(packageData) {
+  if (!isFlightPendingCoordinationSend(packageData)) return;
+  const flightId = Number(packageData.voo?.id || 0);
+  const panel = document.createElement('section');
+  panel.className = 'card';
+  panel.setAttribute('aria-label', 'Envio pendente à Coordenação');
+  const heading = document.createElement('h3');
+  heading.textContent = 'Envio à Coordenação pendente';
+  const description = document.createElement('p');
+  description.textContent =
+    'O preenchimento já foi finalizado, mas o recebimento pela Coordenação ainda não está confirmado. ' +
+    'Os campos estão bloqueados para edição. Atualize o status antes de repetir o envio.';
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = 'Atualizar status e reenviar à Coordenação';
+  retry.disabled = !navigator.onLine;
+  const feedback = document.createElement('p');
+  feedback.className = 'statusline attention';
+  feedback.textContent = navigator.onLine
+    ? 'O servidor será consultado antes de qualquer nova tentativa.'
+    : 'Conecte-se à internet para confirmar o recebimento e tentar novamente.';
+  retry.addEventListener('click', async () => {
+    if (!navigator.onLine || coordinationInFlight || !Number.isSafeInteger(flightId) || flightId <= 0) return;
+    retry.disabled = true;
+    feedback.className = 'statusline attention';
+    feedback.textContent = 'Conferindo o estado atual do servidor…';
+    try {
+      const refreshed = await prepareFlightPackage(flightId);
+      if (!refreshed) throw new Error('Não foi possível atualizar o pacote do servidor.');
+      const updated = refreshed.value?.package;
+      openCompletedFlightForConsultation(refreshed);
+      if (updated?.rdv?.workflow_status === 'enviado') {
+        setSessionMessage('O recebimento pela Coordenação já está confirmado. Não houve novo envio.', 'ok');
+        return;
+      }
+      if (!isFlightPendingCoordinationSend(updated)) {
+        setSessionMessage('Estado do RDV alterado no servidor. Atualize a consulta antes de prosseguir.', 'attention');
+        return;
+      }
+      const state = await getCoordinationState();
+      if (!state.canSend) {
+        setSessionMessage(state.reason || 'Reenvio ainda não autorizado pelo servidor.', 'attention');
+        return;
+      }
+      const confirmed = await sendCanonicalRdvToCoordination();
+      if (!confirmed) {
+        setSessionMessage(
+          'Recebimento não confirmado. O RDV permanece finalizado e poderá ser reenviado após atualizar o status.',
+          'error',
+        );
+      }
+    } catch (error) {
+      setSessionMessage(
+        error instanceof Error ? error.message : 'Não foi possível confirmar o estado do voo.',
+        'error',
+      );
+    } finally {
+      // A nova consulta recria o botão; se não ocorreu, permitir tentativa posterior.
+      if (retry.isConnected) retry.disabled = !navigator.onLine;
+    }
+  });
+  panel.append(heading, description, retry, feedback);
+  flightDetail.append(panel);
+}
+
 function openCompletedFlightForConsultation(record) {
   openPackageRecord(record, 'summary');
-  // A consulta não solicita lease de edição e não altera os dados enviados.
+  // A consulta não solicita lease de edição nem altera dados já finalizados.
   flightDetailCard.classList.add('read-only-flight');
   flightDetailCard.classList.remove('hidden');
   setFlightSelectionVisible(false);
   rdvEditorCard.classList.add('hidden');
-  setSessionMessage('Voo concluído: consulta somente para leitura.', 'ok');
+  appendPendingCoordinationSendAction(record.value?.package);
+  setSessionMessage(
+    isFlightPendingCoordinationSend(record.value?.package)
+      ? 'RDV finalizado, mas ainda não recebido pela Coordenação. Atualize o status e reenvie.'
+      : 'Voo concluído: consulta somente para leitura.',
+    isFlightPendingCoordinationSend(record.value?.package) ? 'attention' : 'ok',
+  );
 }
 
 async function openAuthorizedFlight(flightId) {
