@@ -217,7 +217,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     if (r2Candidate?.source !== 'WORKER_R2_CANDIDATE_ASSET_READBACK' ||
         r2Candidate.packageId !== candidate.packageId || r2Candidate.packageSha256 !== c.packageSha256 ||
         r2Candidate.assetSha256 !== candidate.r2Readback.launchAssetSha256 ||
-        r2Candidate.active === true) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
+        r2Candidate.active !== false) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
 
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
@@ -235,7 +235,8 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'AFTER',
     }), plan, candidate, 'AFTER');
     if (after.cmiSha256 !== execution.cmiSha256 || after.suspendSha256 !== execution.suspendSha256 ||
-        after.sessionCount < before.sessionCount + 1 || after.servedPackageSha256 !== c.packageSha256 ||
+        after.sessionCount < before.sessionCount + 1 || after.sessionCount < execution.sessionCount ||
+        after.servedPackageSha256 !== c.packageSha256 ||
         after.committedPackageSha256 !== c.packageSha256) fail('D1_EXECUTION_EVIDENCE_NOT_PERSISTED');
 
     const cleanupReceipt = await adapters.cleanupSyntheticCandidate({
