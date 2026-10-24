@@ -1,7 +1,7 @@
 /**
- * OFFLINE SECURITY PROTOTYPE ONLY — NOT CONNECTED TO PRIVATE WORKER, NOT A DEPLOY PATH.
- * A trusted staging runner may capture a real D1 Time Travel bookmark using its
- * existing secret inside ephemeral Actions, then authenticate the claim below.
+ * Authenticated staging runner handoff for a fresh D1 Time Travel bookmark.
+ * The HMAC attests the trusted runner's bounded GET claim; it is not a
+ * Cloudflare-signed receipt or authorization to apply.
  * HMAC proves the trusted runner *claimed* a bookmark; it does not establish
  * Cloudflare provenance on its own. Deployment needs independent provenance,
  * caller transport, reviewed F0 grant and the separate Ed25519 apply signature.
@@ -20,6 +20,11 @@ const FIELDS=['accountId','bookmark','callerNonce','capturedAt','dbId','expiresA
 const reject=()=>{throw new Error(FAIL);};
 const utc=x=>typeof x==='string'&&x.endsWith('Z')&&Number.isFinite(Date.parse(x));
 const stamp=t=>t instanceof Date?t.getTime():NaN;
+export function deriveRecoveryBridgeKey(callerKeyHex){
+  if(!HEX64.test(callerKeyHex||''))reject();
+  return createHmac('sha256',Buffer.from(callerKeyHex,'hex'))
+    .update('AIRTRUST_FRMS_QA_RECOVERY_BRIDGE_V1').digest('hex');
+}
 const str=x=>typeof x==='string'&&x.length>0&&x.length<=160&&
   /^[a-zA-Z0-9-]+$/.test(x);
 
@@ -64,8 +69,7 @@ export function signRecoveryHandoff({keyHex,accountId,bookmark,callerNonce,
   contract(claims,+now);
   return {claims,mac:mac(keyHex,claims)};
 }
-/** Verification adapter prototype: fail-closed, replay-denied, not wired to
- * prepare()/apply(). Calls only the test's injected transactional storage. */
+/** Fail-closed, replay-denied verification in the private coordinator DO. */
 export async function verifyRecoveryHandoff({proof,keyHex,expected,storage,
   now=new Date()}){
   if(!HEX64.test(keyHex||'')||!Number.isFinite(stamp(now))||
@@ -87,7 +91,7 @@ export async function verifyRecoveryHandoff({proof,keyHex,expected,storage,
   try{
     fresh=await storage.transaction(async tx=>{
       const key='recovery-handoff-nonce:'+c.nonce;
-      if(await tx.get(key))return false;
+      if((await tx.get(key))!==undefined)return false;
       await tx.put(key,{sha:c.releaseSha,operation:c.operation,runId:c.runId,
         issuedAt:c.issuedAt});
       return true;

@@ -13,6 +13,7 @@ import { expectedQaCases } from '../staging/inspect-frms-ux-cases.mjs';
 import { d1ScopeAdapter, timeTravelReader } from '../../ops/frms-qa-repair/adapters.mjs';
 import { prepareQaEvidence } from '../staging/frms-qa-repair-controller.mjs';
 import { signPrivateCaller } from '../../ops/frms-qa-repair/caller-auth.mjs';
+import { deriveRecoveryBridgeKey, signRecoveryHandoff } from '../../ops/frms-qa-repair/recovery-handoff-prototype.mjs';
 import { prepareViaPrivateServiceBinding } from '../../ops/frms-qa-repair/private-binding-prepare-prototype.mjs';
 import {verifyPrepareAdminGrant,exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
 
@@ -22,6 +23,8 @@ const {privateKey,publicKey} = generateKeyPairSync('ed25519');
 const pub = publicKey.export({type:'spki',format:'pem'});
 const hash = value => createHash('sha256').update(value).digest('hex');
 const pin = hash(publicKey.export({type:'spki',format:'der'}));
+const recoveryFetcher=async()=>Response.json({success:true,
+  result:{bookmark:'local-runner-synthetic-bookmark'}});
 const bundle = await build({entryPoints:['ops/frms-qa-repair/worker.mjs'],bundle:true,format:'esm',platform:'node',external:['cloudflare:workers'],write:false});
 
 // Synthetic fixture mirrors the reviewed legacy baseline; never a production dump.
@@ -90,10 +93,18 @@ async function setup(t, extra = {}) {
     (await mf.dispatchFetch('https://local.invalid',{
       method:'POST',body:JSON.stringify({op,input}),
     })).json();
-  const call = (op,input={}) => rawCall(op,{
-    ...input,callerAuth:signPrivateCaller({keyHex:callerKey,operation:op,
-      sha,runId:'39301760305'}),
-  });
+  const call = (op,input={}) => {
+    const callerAuth=signPrivateCaller({keyHex:callerKey,operation:op,
+      sha,runId:'39301760305'});
+    const now=new Date();
+    const recoveryProof=signRecoveryHandoff({
+      keyHex:deriveRecoveryBridgeKey(callerKey),accountId:'a'.repeat(32),
+      bookmark:'local-synthetic-bookmark',callerNonce:callerAuth.claims.nonce,
+      operation:op,releaseSha:sha,runId:callerAuth.claims.runId,
+      runAttempt:callerAuth.claims.runAttempt,now,
+    });
+    return rawCall(op,{...input,callerAuth,recoveryProof});
+  };
   return {mf,db,call,rawCall,callerKey,get recoveryCalls(){return recoveryCalls;}};
 }
 function grant(prepared, overrides={}) {
@@ -120,7 +131,7 @@ test('private RPC prepares encrypted R2 evidence, applies actual D1 batch and ve
   assert.ok(!stored.includes('tripulante_id'));
   assert.ok(!stored.includes('QA-FRMS-UX-01'));
   assert.equal((await s.call('apply',grant(p))).valid,4);
-  assert.equal(s.recoveryCalls,2);
+  assert.equal(s.recoveryCalls,0);
   const adapter=d1ScopeAdapter({db:s.db,plan,expected:expectedQaCases(days)});
   assert.equal((await adapter.postcheck({tenantId:999013,ids:plan.operations.map(x=>x.id)})).valid,4);
   const external=await s.db.prepare('SELECT empresa_id FROM funcionarios WHERE id=100').first();
@@ -223,15 +234,21 @@ test('private service binding rejects missing, forged and replayed runner capabi
   assert.match((await s.rawCall('prepare',{})).error,/QA_CALLER_AUTH_REJECTED/);
   const valid=signPrivateCaller({keyHex:s.callerKey,operation:'prepare',
     sha,runId:'39301760305'});
+  const validProof=signRecoveryHandoff({
+    keyHex:deriveRecoveryBridgeKey(s.callerKey),accountId:'a'.repeat(32),
+    bookmark:'local-synthetic-bookmark',callerNonce:valid.claims.nonce,
+    operation:'prepare',releaseSha:sha,runId:valid.claims.runId,
+    runAttempt:valid.claims.runAttempt,now:new Date(),
+  });
   const forged={...valid,claims:{...valid.claims,tenantId:6}};
   assert.match((await s.rawCall('prepare',{callerAuth:forged})).error,/QA_CALLER_AUTH_REJECTED/);
   const wrongOp=signPrivateCaller({keyHex:s.callerKey,operation:'apply',
     sha,runId:'39301760305'});
   assert.match((await s.rawCall('prepare',{callerAuth:wrongOp})).error,/QA_CALLER_AUTH_REJECTED/);
-  const first=await s.rawCall('prepare',{callerAuth:valid});
+  const first=await s.rawCall('prepare',{callerAuth:valid,recoveryProof:validProof});
   assert.ok(first.receipt,first.error);
-  assert.match((await s.rawCall('prepare',{callerAuth:valid})).error,/QA_CALLER_AUTH_REJECTED/);
-  assert.match((await s.rawCall('prepare',{callerAuth:valid,sql:'DELETE FROM funcionarios'})).error,/QA_CALLER_INPUT_REJECTED/);
+  assert.match((await s.rawCall('prepare',{callerAuth:valid,recoveryProof:validProof})).error,/QA_CALLER_AUTH_REJECTED|QA_RECOVERY_BRIDGE_DENIED/);
+  assert.match((await s.rawCall('prepare',{callerAuth:valid,recoveryProof:validProof,sql:'DELETE FROM funcionarios'})).error,/QA_CALLER_INPUT_REJECTED/);
 });
 
 test('private worker rejects caller key drift even with a valid formerly signed request',async t=>{
@@ -247,6 +264,8 @@ const prepareContext=callerKey=>({
   FRMS_QA_PREPARE_CONFIRM:'AIRTRUST_FRMS_QA_PREPARE_ONLY_F0_APPROVED',
   FRMS_QA_PREPARE_GRANT_ID:PREPARE_GRANT,
   FRMS_QA_CALLER_KEY_HEX:callerKey,
+  CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
+  CLOUDFLARE_WORKER_API_TOKEN:'local-test-get-only-token',
 });
 const disposableGrantLedger=()=>{
   const grants=new Map();
@@ -275,13 +294,13 @@ test('private binding-only prepare prototype uses real disposable Worker RPC, ne
   const prepared=await prepareViaPrivateServiceBinding({
     env:prepareContext(s.callerKey),binding,
     independentGrantVerifier:syntheticGrantVerifier,
-    grantLedger:disposableGrantLedger(),
+    grantLedger:disposableGrantLedger(),fetcher:recoveryFetcher,
   });
   assert.match(prepared.receiptId,/^[0-9a-f]{64}$/);
   assert.equal(prepared.receipt.writes,0);
   assert.equal(prepared.receipt.dbId,plan.target.db_id);
   assert.equal(prepared.receipt.tenantId,999013);
-  assert.equal(s.recoveryCalls,1);
+  assert.equal(s.recoveryCalls,0);
   assert.deepEqual(await rows(s.db),before);
   const bucket=await s.mf.getR2Bucket('PREIMAGES','repair');
   const cipher=await (await bucket.get(prepared.receipt.artifactReference)).text();
@@ -319,7 +338,7 @@ test('binding transport never calls private RPC without external verified prepar
   }
   assert.equal(calls,0);
 });
-test('synthetic binding caller only sends scoped HMAC: no bookmark, bearer token or SQL',async()=>{
+test('synthetic binding caller sends scoped HMAC and recovery proof, never bearer token or SQL',async()=>{
   const key='a'.repeat(64),env=prepareContext(key);
   const marker='SYNTHETIC_BEARER_DO_NOT_PASS';
   env.CLOUDFLARE_WORKER_API_TOKEN=marker;
@@ -331,9 +350,9 @@ test('synthetic binding caller only sends scoped HMAC: no bookmark, bearer token
   }};
   const result=await prepareViaPrivateServiceBinding({
     env,binding,independentGrantVerifier:syntheticGrantVerifier,
-    grantLedger:disposableGrantLedger()});
+    grantLedger:disposableGrantLedger(),fetcher:recoveryFetcher});
   assert.ok(result);
-  assert.deepEqual(Object.keys(captured),['callerAuth']);
+  assert.deepEqual(Object.keys(captured),['callerAuth','recoveryProof']);
   assert.equal(captured.callerAuth.claims.operation,'prepare');
   assert.equal(captured.callerAuth.claims.tenantId,999013);
   assert.equal(captured.callerAuth.claims.dbId,plan.target.db_id);
@@ -341,7 +360,8 @@ test('synthetic binding caller only sends scoped HMAC: no bookmark, bearer token
   assert.equal(JSON.stringify(captured).includes(key),false);
   assert.equal(JSON.stringify(captured).includes(marker),false);
   assert.equal(JSON.stringify(captured).includes('signatureBase64'),false);
-  assert.equal(JSON.stringify(captured).includes('bookmark'),false);
+  assert.equal(captured.recoveryProof.claims.bookmark,
+    'local-runner-synthetic-bookmark');
 });
 
 test('prepare grant is transactionally one-use even when caller HMAC changes',async()=>{
@@ -355,6 +375,7 @@ test('prepare grant is transactionally one-use even when caller HMAC changes',as
         dbId:plan.target.db_id,tenantId:999013,writes:0}};
     }},
     independentGrantVerifier:syntheticGrantVerifier,grantLedger,
+    fetcher:recoveryFetcher,
   };
   await prepareViaPrivateServiceBinding(args);
   assert.equal(calls,1);
@@ -426,7 +447,8 @@ test('real GitHub verifier contract gates disposable prepare RPC (all upstream A
     return verifyPrepareAdminGrant({env:context,api,now});
   };
   const first=await prepareViaPrivateServiceBinding({
-    env:context,binding,independentGrantVerifier,grantLedger:ledger});
+    env:context,binding,independentGrantVerifier,grantLedger:ledger,
+    fetcher:recoveryFetcher});
   assert.equal(first.receipt.writes,0);
   assert.equal(first.receipt.dbId,plan.d1_uuid);
   assert.deepEqual(await rows(s.db),before);

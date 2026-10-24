@@ -70,6 +70,17 @@ test('lost ledger and replay checker are fail-closed rather than accepting evide
     /QA_RECOVERY_BRIDGE_DENIED/);
   await assert.rejects(check(proof,{storage:null}),/QA_RECOVERY_BRIDGE_DENIED/);
 });
+test('corrupt or falsy persisted recovery nonce is consumed and never overwritten',async()=>{
+  const proof=issue();
+  const key='recovery-handoff-nonce:'+proof.claims.nonce;
+  for(const corrupt of [null,false,0,'']){
+    const state=storage();
+    state.records.set(key,corrupt);
+    await assert.rejects(check(proof,{storage:state}),/QA_RECOVERY_BRIDGE_DENIED/);
+    assert.equal(state.records.get(key),corrupt);
+    assert.equal(state.records.size,1);
+  }
+});
 test('HMAC evidence alone never claims independent Ed25519 approval or recovery provenance',async()=>{
   const proof=issue();
   assert.equal(Object.keys(proof).sort().join(','),'claims,mac');
