@@ -416,7 +416,7 @@ export default function OperationalVigilanceTest({
       <div className="min-h-10 text-center text-xs leading-5 text-slate-500" aria-live="polite">
         {interrupted ? (
           <div role="alert" className="text-amber-800">
-            <strong>Teste interrompido.</strong> {invalidReason || 'O teste perdeu as condições necessárias de medição.'}
+            <strong>Teste interrompido</strong>. {invalidReason || 'O teste perdeu as condições necessárias de medição.'}
             {' '}Nenhum resultado parcial será usado. Reinicie quando puder manter esta tela ativa até o final.
           </div>
         ) : finished ? (
