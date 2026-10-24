@@ -12,25 +12,41 @@ const P='1'.repeat(32),R='2'.repeat(32);
 function source({queues=[
   {queue_name:PREPARE,queue_id:P},
   {queue_name:RESULTS,queue_id:R},
-],status=200,success=true,redirected=false,total=queues.length}={}){
+],status=200,success=true,redirected=false,total=queues.length,
+  badConsumer=false,longRetention=false}={}){
   const calls=[];
+  const base='https://api.cloudflare.com/client/v4/accounts/'+ACCOUNT+'/queues';
   const fetcher=async(uri,request)=>{
     calls.push(uri);
-    assert.equal(uri,'https://api.cloudflare.com/client/v4/accounts/'+
-      ACCOUNT+'/queues?per_page=100');
     assert.equal(request.method,'GET');
     assert.equal(request.redirect,'manual');
     assert.equal(request.headers.Authorization,'Bearer '+TOKEN);
-    return {status,redirected,json:async()=>({success,result:queues,
-      result_info:{total_count:total}})};
+    if(uri===base+'?per_page=100')
+      return {status,redirected,json:async()=>({success,result:queues,
+        result_info:{total_count:total}})};
+    const item=queues.find(q=>uri===base+'/'+q.queue_id);
+    assert.ok(item,'No arbitrary Cloudflare endpoint');
+    return {status,redirected,json:async()=>({success,result:{
+      ...item,settings:{message_retention_period:longRetention?345600:900},
+      consumers:[item.queue_name===PREPARE?{
+        queue_name:PREPARE,type:'worker',
+        script_name:badConsumer?'untrusted-worker':
+          'airtrust-frms-qa-caller-staging-private',
+        settings:{batch_size:1},
+      }:{
+        queue_name:RESULTS,type:badConsumer?'worker':'http_pull',
+        settings:{batch_size:1,visibility_timeout_ms:30000},
+      }],
+    }})};
   };
   return {calls,fetcher};
 }
 test('pin exactly two distinct private queue IDs from GET-only inventory',async()=>{
   const f=source(),resolved=await resolvePrivateTransactionQueues({
     accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher});
-  assert.deepEqual(resolved,{prepareQueueId:P,resultsQueueId:R,namesPinned:true});
-  assert.equal(f.calls.length,1);
+  assert.deepEqual(resolved,{prepareQueueId:P,resultsQueueId:R,
+    namesPinned:true,privateConsumersVerified:true});
+  assert.equal(f.calls.length,3);
   assert.equal(Object.isFrozen(resolved),true);
   assert.equal(JSON.stringify(resolved).includes(TOKEN),false);
   assert.equal(JSON.stringify(resolved).includes(ACCOUNT),false);
@@ -49,6 +65,15 @@ test('missing, duplicate, swapped, malformed or ambiguous queues fail closed',as
     await assert.rejects(resolvePrivateTransactionQueues({
       accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher}),
     /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+  }
+});
+test('wrong private consumer or retention blocks before publishing',async()=>{
+  for(const opts of [{badConsumer:true},{longRetention:true}]){
+    const f=source(opts);
+    await assert.rejects(resolvePrivateTransactionQueues({
+      accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher}),
+    /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+    assert.ok(f.calls.length<=3);
   }
 });
 test('transport or token failures cannot emit a private queue message',async()=>{
