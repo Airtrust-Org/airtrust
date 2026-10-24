@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { captureF5ScoreVisualState, requireF5ScoreVisualState, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -345,4 +345,63 @@ test('rejects expired but otherwise digest-valid F0 receipt documents', async ()
   }
   const adapters = await createF0Adapters({ plan, env: {} });
   await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_EXPIRED/);
+});
+
+
+// The F5 runner may not call a SCO resumed merely because CMI is present:
+// real Score navigation must advance and re-render the same authored bookmark.
+const f5Visual = (index = 1) => ({
+  contract: 'F5_SCORE_RENDERED_DOM_V1', index, total: 5, navIndex: index,
+  stageVisible: true, titleMatchesModel: true, modelLength: 5,
+});
+const f5Suspend = index => JSON.stringify({ v: 2, p: 'fixed-test-edition',
+  a: index, d: [0], f: [], x: 'AA', y: 'AA' });
+
+test('Score F5 visual guard requires authored second slide after a real Next action', () => {
+  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(1),
+    { previousIndex: 0 }), { index: 1, total: 5 });
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 0 }), /VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 visual guard rejects persisted second bookmark with first slide rendered', () => {
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '2/5', f5Suspend(1)),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(0)),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 visual guard requires correct navigation, visible stage, model title and total', () => {
+  for (const modified of [{ navIndex: 0 }, { titleMatchesModel: false },
+    { stageVisible: false }, { modelLength: 4 }, { total: 0 },
+    { contract: 'NOT_SCORE' }, { index: null }]) {
+    assert.throws(() => requireF5ScoreVisualState({ ...f5Visual(), ...modified },
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+  }
+  for (const invalid of ['', '{}', 'not-json', f5Suspend(0)]) {
+    assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', invalid),
+      /VISUAL_RESUME_WITNESS_INVALID/);
+  }
+});
+
+test('Score F5 DOM witness reads visible course title, counter and active slide', () => {
+  const originalWindow = globalThis.window, originalDocument = globalThis.document;
+  const stage = { querySelector: () => ({ textContent: 'Segurança' }),
+    getBoundingClientRect: () => ({ width: 400, height: 270 }) };
+  globalThis.window = { COURSE_DATA: { slides: [
+    { title: 'Início' }, { title: 'Segurança' }, { title: 'Encerramento' },
+    { title: 'Revisão' }, { title: 'Fim' }] } };
+  globalThis.document = { querySelector: selector => ({
+    '#counter': { textContent: '2 / 5' },
+    '#chapters [aria-current="step"][data-slide]': {
+      getAttribute: () => '1' },
+    '#stage > article.slide': stage,
+  })[selector] ?? null };
+  try {
+    assert.deepEqual(requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), { index: 1, total: 5 });
+    stage.querySelector = () => ({ textContent: 'Início' });
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+  } finally { globalThis.window = originalWindow; globalThis.document = originalDocument; }
 });
