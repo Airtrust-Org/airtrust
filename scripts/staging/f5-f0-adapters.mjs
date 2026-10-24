@@ -28,6 +28,54 @@ const canonical = value => {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
 };
 
+
+/** Score-family browser witness, evaluated inside the actual SCO iframe.
+ * Reading a persisted lesson_location alone cannot prove visual restoration.
+ * Unsupported/non-Score packages are deliberately inconclusive, not PASS.
+ */
+export function captureF5ScoreVisualState() {
+  const slides = window.COURSE_DATA?.slides;
+  const counterText = document.querySelector('#counter')?.textContent?.trim() ?? '';
+  const counterMatch = /^([1-9]\d*)\s*\/\s*([1-9]\d*)$/.exec(counterText);
+  const index = counterMatch ? Number(counterMatch[1]) - 1 : null;
+  const total = counterMatch ? Number(counterMatch[2]) : null;
+  const active = document.querySelector('#chapters [aria-current="step"][data-slide]');
+  const navIndexText = active?.getAttribute('data-slide');
+  const navIndex = navIndexText != null && /^(0|[1-9]\d*)$/.test(navIndexText)
+    ? Number(navIndexText) : null;
+  const stage = document.querySelector('#stage > article.slide');
+  const heading = stage?.querySelector('.slideHead h1');
+  const bounds = stage?.getBoundingClientRect();
+  const title = Number.isSafeInteger(index) && Array.isArray(slides)
+    ? slides[index]?.title : null;
+  return {
+    contract: 'F5_SCORE_RENDERED_DOM_V1', index, total, navIndex,
+    stageVisible: Boolean(bounds && bounds.width > 0 && bounds.height > 0),
+    titleMatchesModel: typeof title === 'string' && title.trim().length > 0 &&
+      heading?.textContent?.trim() === title.trim(),
+    modelLength: Array.isArray(slides) ? slides.length : null,
+  };
+}
+
+/** Bind rendered slide title + counter + active navigation to authored CMI. */
+export function requireF5ScoreVisualState(visual, location, suspend, { previousIndex = null } = {}) {
+  let state;
+  try { state = JSON.parse(suspend); } catch { state = null; }
+  const valid = visual?.contract === 'F5_SCORE_RENDERED_DOM_V1' &&
+    Number.isSafeInteger(visual.index) && visual.index >= 0 &&
+    Number.isSafeInteger(visual.total) && visual.total > 1 &&
+    visual.index < visual.total && visual.modelLength === visual.total &&
+    visual.navIndex === visual.index && visual.stageVisible === true &&
+    visual.titleMatchesModel === true &&
+    location === (visual.index + 1) + '/' + visual.total &&
+    state?.v === 2 && state?.a === visual.index &&
+    Array.isArray(state.d) &&
+    (previousIndex === null || (Number.isSafeInteger(previousIndex) &&
+      visual.index === previousIndex + 1));
+  if (!valid) throw Error('F5_VISUAL_RESUME_WITNESS_INVALID');
+  return { index: visual.index, total: visual.total };
+}
+
 function checkedScope(plan, params) {
   const c = plan?.candidate, f = plan?.syntheticFixture;
   if (!c || !f || params.tenantId !== c.tenantId || params.courseId !== c.courseId ||
@@ -231,7 +279,28 @@ async function browserExecution({ plan, params, request, env, browserType }) {
       return typeof get === 'function' ? get.call(api, 'cmi.suspend_data') : null;
     }, is2004);
 
-    const { marker, suspend } = requireAuthoredF5State(initialLocation, initialSuspend);
+    // Browser-first proof: do not commit a synthetic bookmark on the first page.
+    // Advance with the SCO's own navigation so authored CMI and visible content move together.
+    const initial = requireAuthoredF5State(initialLocation, initialSuspend);
+    const initialRendered = await frame.locator('body').evaluate(captureF5ScoreVisualState);
+    let startingCursor;
+    try { startingCursor = requireF5ScoreVisualState(initialRendered, initial.marker, initial.suspend); }
+    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
+    const next = frame.locator('#next');
+    if (!(await next.isVisible()) || !(await next.isEnabled())) fail('VISUAL_NAVIGATION_UNAVAILABLE');
+    await next.click({ timeout: 15_000 });
+    const moved = await page.evaluate(is2004 => {
+      const api = is2004 ? window.API_1484_11 : window.API;
+      const get = is2004 ? api?.GetValue : api?.LMSGetValue;
+      if (typeof get !== 'function') return null;
+      return { location: get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location'),
+        suspend: get.call(api, 'cmi.suspend_data') };
+    }, is2004);
+    const { marker, suspend } = requireAuthoredF5State(moved?.location, moved?.suspend);
+    const advancedRendered = await frame.locator('body').evaluate(captureF5ScoreVisualState);
+    try { requireF5ScoreVisualState(advancedRendered, marker, suspend,
+      { previousIndex: startingCursor.index }); }
+    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
@@ -280,15 +349,16 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     // resume state instead of invoking Initialize a second time.
     await resumedPage.waitForFunction(hasAuthoredF5State, is2004, { timeout: 15_000 });
     const resumed = await resumedPage.evaluate(readInitializedF5ResumeState, { is2004 });
-    const locationMatches = resumed.location === first.marker ||
-      Boolean(resumed.location && (resumed.location === first.marker ||
-        (typeof initialLocation === 'string' && resumed.location === initialLocation)));
-    if (!locationMatches || resumed.suspend !== first.suspend) {
-      console.error('[RESUME_STATE_MISMATCH_DIAGNOSTIC]', {
-        locationMatches, suspendMatches: resumed.suspend === first.suspend,
-      });
+    // A D1 bookmark can survive while the SCO visibly resets to page one.
+    // Verify the rendered title, active menu selection and counter after relaunch.
+    const resumeRendered = await resumedPage.frameLocator('#scorm-frame')
+      .locator('body').evaluate(captureF5ScoreVisualState);
+    if (resumed.location !== first.marker || resumed.suspend !== first.suspend) {
       fail('SCORM_RESUME_STATE_MISMATCH');
     }
+    try { requireF5ScoreVisualState(resumeRendered, resumed.location, resumed.suspend); }
+    catch { fail('VISUAL_RESUME_WITNESS_INVALID'); }
+    if (resumeRendered.index !== advancedRendered.index) fail('VISUAL_RESUME_WITNESS_INVALID');
     const final = await json(`/api/lms/cursos/${params.courseId}/scorm-package-versions/${encodeURIComponent(params.packageId)}/qa-evidence/${params.enrollmentId}?sha256=${params.packageSha256}`, { method: 'GET', headers: { 'X-Airtrust-F5-QA-Readback': env.SCORM_QA_READBACK_SECRET } });
     assertReadback(final, params, first, plan.releaseSha);
     requireF5CommitReadbackCount(final, finishSessionCount, finishCommitReceipt.data.cmiSha256);
