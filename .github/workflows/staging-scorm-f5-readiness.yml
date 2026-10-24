@@ -107,6 +107,25 @@ jobs:
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
         run: node scripts/staging/f5-candidate-approval-guard.mjs
+      - name: Verify provisioned F0 runner contract before reading private ZIP
+        shell: bash
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
+          F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
+          F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
+          SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
+          SCORM_QA_READBACK_SECRET: ${{ secrets.SCORM_QA_READBACK_SECRET }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_OPERATION_ID: ${{ inputs.operation_id }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-provisioned-execution-preflight.mjs
       # Only the exact first pilot ZIP uses the two-secrets bridge. Preserve
       # the existing private runner mount contract for larger F5 candidates.
       - name: Verify exact original ZIP from protected staging secrets
