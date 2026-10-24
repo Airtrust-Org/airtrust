@@ -7,15 +7,25 @@
 O workflow `.github/workflows/staging-frms-qa-private-transaction.yml`
 está definido **na branch draft**, mas **não foi executado** no staging e
 não pode ser despachado até integração protegida em `main` e configuração
-da autoridade independente. O workflow usa **um único job**,
-`environment: staging`, `id-token: write`, `cancel-in-progress: false`
-e mutex `airtrust-staging-mutations-and-scorm-qa` por toda a cadeia.
+da autoridade independente. O workflow usa **dois jobs sequenciais** sob **um único mutex em
+nível de workflow** (`airtrust-staging-mutations-and-scorm-qa`), com
+`environment: staging` e `cancel-in-progress: false`. A separação foi
+exigida por `guard-cloudflare-secret-contract` e NÃO altera o ratchet:
+o primeiro job `frms-queue-apply` tem `id-token: write` e recebe
+**somente** `CLOUDFLARE_WORKER_API_TOKEN`, para Queue push/pull/ack e
+Time Travel GET. Ele termina com o marcador **não conclusivo**
+`APPLY_REPORTED_PENDING_INDEPENDENT_READBACK`, mesmo após apply bem
+sucedido. Esse marcador não significa aceite 4/4.
 
-A execução não solicita emissão de credencial estática adicional:
-usa somente `CLOUDFLARE_WORKER_API_TOKEN` existente no runner para
-Queue push/pull/ack e Time Travel GET, além de
-`CLOUDFLARE_D1_MIGRATION_API_TOKEN` existente **apenas nos SELECTs
-verificados de staging**. Nenhum bearer Cloudflare vai para o Worker.
+O segundo job `frms-d1-readonly-postcondition` depende de sucesso
+comprovado do primeiro e recebe **somente**
+`CLOUDFLARE_D1_MIGRATION_API_TOKEN` para o inspector SELECT-only
+dos quatro casos QA. Apenas esse job pode emitir
+`STAGING_FRMS_F0_4_OF_4_READONLY_VERIFIED` após leitura real D1.
+O mutex permanece retido entre os jobs, sem liberar staging entre
+apply e readback. Uma falha após Queue apply requer reconciliação, nunca
+redispatch automático. Não há emissão de novos tokens ou instalação de
+bearer Cloudflare no Worker.
 
 O signatário **não é inventado pelo workflow**. O cliente
 `ops/frms-qa-repair/external-approval-signer.mjs` precisa de uma
