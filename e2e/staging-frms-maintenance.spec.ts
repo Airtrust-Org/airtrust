@@ -13,18 +13,22 @@ async function loginThroughUi(page: import('@playwright/test').Page, email: stri
     name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
   }).first();
 
-  await Promise.race([
-    page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 }),
-    gestorRole.waitFor({ state: 'visible', timeout: 15_000 }).then(async () => {
-      await gestorRole.click();
-      await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
-    }),
-  ]).catch(async () => {
-    if (await gestorRole.isVisible().catch(() => false)) {
-      await gestorRole.click();
-      await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
-    }
-  });
+  await page.waitForFunction(
+    () => {
+      if (!window.location.pathname.startsWith('/login')) return true;
+      return Array.from(document.querySelectorAll('button')).some((button) =>
+        /^Entrar como /i.test((button.textContent || '').trim()),
+      );
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+
+  if (await gestorRole.isVisible().catch(() => false)) {
+    await gestorRole.click();
+  }
+
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
 }
 
 test.describe('staging FRMS maintenance release QA', () => {
