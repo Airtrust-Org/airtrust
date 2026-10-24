@@ -12,6 +12,10 @@ test('F5 runner exposes only reviewed, fixed error identifiers', () => {
     safeF5RunnerErrorCode(new Error('F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH')),
     'F5_F0_ADAPTER_SCORM_RESUME_STATE_MISMATCH'
   );
+  assert.equal(safeF5RunnerErrorCode(new Error('F5_WORKER_ADAPTER_WORKER_HTTP_500')),
+    'F5_WORKER_ADAPTER_WORKER_HTTP_500');
+  assert.equal(safeF5RunnerErrorCode(new Error('F5_WORKER_ADAPTER_WORKER_HTTP_500:secret')),
+    'F5_RUNNER_OPERATION_FAILED');
   for (const value of [
     new Error('Bearer private-access-token'),
     new Error('F5_RUNNER_PRIVATE_ACCESS_TOKEN_123456'),
