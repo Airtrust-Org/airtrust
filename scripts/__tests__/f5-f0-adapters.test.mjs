@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
+import { captureF5ScoreVisualState, chooseF5ScoreNavigation, requireF5ScoreVisualState, requireF5ScoreResumeMatch, commitIncompleteScormState, createF0Adapters, hasAuthoredF5State, requireAuthoredF5State, requireF5CommitReceipt, requireF5CommitReadbackCount, readInitializedF5ResumeState, runF5BrowserPair, safeF5HttpFailure } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -58,7 +58,7 @@ test('rejects plan substitution and policy-changing F0 receipts', async () => {
   await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_POLICY_INVALID/);
 });
 
-test('F5 physical candidate QA requires Chromium and WebKit with the same scope and D1 state', async () => {
+test('F5 physical candidate QA chains sequential Chromium and WebKit on the same enrollment', async () => {
   const engines = [];
   const expected = {
     source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
@@ -71,11 +71,18 @@ test('F5 physical candidate QA requires Chromium and WebKit with the same scope 
   const result = await runF5BrowserPair(async ({ engine, browserType }) => {
     assert.equal(typeof browserType.launch, 'function');
     engines.push(engine);
-    return { ...expected, sessionCount: engines.length };
+    return { ...expected, sessionCount: engines.length,
+      suspendSha256: engine === 'chromium' ? 'b'.repeat(64) : 'c'.repeat(64),
+      initialResumeWitnessSha256: engine === 'chromium' ? '1'.repeat(64) : '2'.repeat(64),
+      committedResumeWitnessSha256: engine === 'chromium' ? '2'.repeat(64) : '3'.repeat(64),
+      navigationMode: 'FORWARD',
+    };
   });
   assert.deepEqual(engines, ['chromium', 'webkit']);
   assert.deepEqual(result.browserEngines, ['chromium', 'webkit']);
   assert.equal(result.sessionCount, 2);
+  assert.equal(result.suspendSha256, 'c'.repeat(64),
+    'WebKit final suspend must differ from Chromium after sequential Next');
 });
 
 test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium readback', async () => {
@@ -103,6 +110,80 @@ test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium rea
   await assert.rejects(runF5BrowserPair(async () => ({
     ...baseline, sessionCount: 2,
   })), /BROWSER_PAIR_READBACK_REGRESSION/);
+});
+
+test('F5 browser pair rejects a WebKit resume disconnected from Chromium committed CMI', async () => {
+  const scope = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001',
+    runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
+    suspendDataPersisted: true, navigationMode: 'FORWARD',
+  };
+  const browser = async ({ engine }) => engine === 'chromium'
+    ? { ...scope, sessionCount: 1, suspendSha256: 'b'.repeat(64),
+        initialResumeWitnessSha256: '1'.repeat(64),
+        committedResumeWitnessSha256: '2'.repeat(64) }
+    : { ...scope, sessionCount: 2, suspendSha256: 'c'.repeat(64),
+        initialResumeWitnessSha256: '9'.repeat(64),
+        committedResumeWitnessSha256: '3'.repeat(64) };
+  await assert.rejects(runF5BrowserPair(browser),
+    /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/);
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => {
+    const state = await browser({ engine });
+    return engine === 'webkit'
+      ? { ...state, initialResumeWitnessSha256: '2'.repeat(64),
+          suspendSha256: 'b'.repeat(64) } : state;
+  }), /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/,
+  'WebKit replay of Chromium suspend digest is not independent progress');
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => {
+    const state = await browser({ engine });
+    return engine === 'webkit'
+      ? { ...state, initialResumeWitnessSha256: '2'.repeat(64),
+          committedResumeWitnessSha256: '2'.repeat(64) } : state;
+  }), /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/,
+  'WebKit cannot claim success without its own new rendered bookmark');
+});
+
+test('F5 browser pair permits only authenticated resume-only evidence at locked authored slide', async () => {
+  const scope = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001',
+    runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
+    suspendDataPersisted: true,
+  };
+  const chromium = { ...scope, sessionCount: 1, suspendSha256: 'b'.repeat(64),
+    initialResumeWitnessSha256: '1'.repeat(64),
+    committedResumeWitnessSha256: '2'.repeat(64), navigationMode: 'FORWARD' };
+  const webkit = { ...scope, sessionCount: 2, suspendSha256: 'b'.repeat(64),
+    initialResumeWitnessSha256: '2'.repeat(64),
+    committedResumeWitnessSha256: '2'.repeat(64),
+    navigationMode: 'RESUME_ONLY_AUTHORED_INTERACTION',
+    interactionRequiredWitness: true, witnessedResumeIndex: 1 };
+  const run = async ({ engine }) => engine === 'chromium' ? chromium : webkit;
+  const paired = await runF5BrowserPair(run);
+  assert.equal(paired.navigationMode, 'RESUME_ONLY_AUTHORED_INTERACTION');
+  for (const changes of [
+    { interactionRequiredWitness: false },
+    { witnessedResumeIndex: 0 },
+    { witnessedResumeIndex: null },
+    { navigationMode: 'FORWARD' },
+    { committedResumeWitnessSha256: '3'.repeat(64) },
+    { suspendSha256: 'c'.repeat(64) },
+    { initialResumeWitnessSha256: '9'.repeat(64) },
+    { sessionCount: 1 },
+  ]) {
+    await assert.rejects(runF5BrowserPair(async ({ engine }) =>
+      engine === 'chromium' ? chromium : { ...webkit, ...changes }),
+    /BROWSER_PAIR_(RESUME_CHAIN_MISMATCH|READBACK_REGRESSION)/);
+  }
+  await assert.rejects(runF5BrowserPair(async ({ engine }) =>
+    engine === 'chromium' ? { ...chromium,
+      navigationMode: 'RESUME_ONLY_AUTHORED_INTERACTION' } : webkit),
+  /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/);
 });
 
 test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', () => {
@@ -345,4 +426,121 @@ test('rejects expired but otherwise digest-valid F0 receipt documents', async ()
   }
   const adapters = await createF0Adapters({ plan, env: {} });
   await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_EXPIRED/);
+});
+
+
+// The F5 runner may not call a SCO resumed merely because CMI is present:
+// real Score navigation must advance and re-render the same authored bookmark.
+const f5Visual = (index = 1) => ({
+  contract: 'F5_SCORE_RENDERED_DOM_V1', index, total: 5, navIndex: index,
+  stageVisible: true, titleMatchesModel: true, modelLength: 5,
+});
+const f5Suspend = index => 'opaque-authored-suspend-' + index;
+
+test('Score F5 guard requires authored CMI to change on actual Next navigation', () => {
+  assert.deepEqual(requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(1),
+    { previousIndex: 0, previousLocation: '1/5',
+      previousSuspend: f5Suspend(0) }), { index: 1, total: 5 });
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/,
+  'new page marker with stale suspend_data cannot be accepted');
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '3/5', f5Suspend(1)),
+    /VISUAL_RESUME_WITNESS_INVALID/,
+  'cursor must match the real Score engine page/total bookmark');
+
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(), '1/5', f5Suspend(0),
+    { previousIndex: 0, previousLocation: '1/5',
+      previousSuspend: f5Suspend(0) }), /VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 holds a locked authored slide for real Commit/Finish without regress', () => {
+  const locked = { ...f5Visual(1), interactionRequired: true };
+  const args = { nextVisible: true, nextEnabled: false,
+    prevEnabled: true, initialRendered: locked };
+  assert.equal(chooseF5ScoreNavigation(args), 0,
+    'authored interaction must not be bypassed by regressing the Worker location');
+  assert.equal(chooseF5ScoreNavigation({ ...args, nextEnabled: true }), 1);
+  for (const changes of [
+    { nextVisible: false }, { prevEnabled: false },
+    { initialRendered: { ...locked, interactionRequired: false } },
+    { initialRendered: { ...locked, index: 0 } },
+    { initialRendered: { ...locked, index: null } },
+  ]) assert.throws(() => chooseF5ScoreNavigation({ ...args, ...changes }),
+    /F5_VISUAL_NAVIGATION_UNAVAILABLE/);
+  assert.deepEqual(requireF5ScoreVisualState(locked, '2/5', f5Suspend(1)),
+    { index: 1, total: 5 });
+  assert.equal(requireF5ScoreResumeMatch(locked, locked), true);
+  assert.throws(() => requireF5ScoreVisualState(f5Visual(0), '1/5', f5Suspend(0),
+    { previousIndex: 1, previousLocation: '2/5', previousSuspend: f5Suspend(1) }),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/,
+  'regression from slide 2 to 1 is never proof of an advanced state');
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0)),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreResumeMatch(locked, f5Visual(0)),
+    /F5_VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 cross-context guard rejects persisted bookmark with first slide rendered', () => {
+  assert.equal(requireF5ScoreResumeMatch(f5Visual(), f5Visual()), true);
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(), f5Visual(0)),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(), { ...f5Visual(), total: 6 }),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+  assert.throws(() => requireF5ScoreResumeMatch(f5Visual(0), f5Visual(0)),
+    /VISUAL_RESUME_WITNESS_INVALID/);
+});
+
+test('Score F5 guard requires correct navigation, visible stage, model title and total', () => {
+  for (const modified of [{ navIndex: 0 }, { titleMatchesModel: false },
+    { stageVisible: false }, { modelLength: 4 }, { total: 0 },
+    { contract: 'NOT_SCORE' }, { index: null }]) {
+    assert.throws(() => requireF5ScoreVisualState({ ...f5Visual(), ...modified },
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+  }
+  for (const invalid of ['', '  ', null, undefined]) {
+    assert.throws(() => requireF5ScoreVisualState(f5Visual(), '2/5', invalid),
+      /VISUAL_RESUME_WITNESS_INVALID/);
+  }
+});
+
+test('Score F5 DOM witness reads visible course title, counter and active slide', () => {
+  const originalWindow = globalThis.window, originalDocument = globalThis.document;
+  const stage = { querySelector: () => ({ textContent: 'Segurança' }),
+    getBoundingClientRect: () => ({ width: 400, height: 270 }) };
+  const nav = Array.from({ length: 5 }, (_, i) => ({
+    getAttribute: name => name === 'aria-current' ? (i === 1 ? 'step' : 'false') : null,
+  }));
+  globalThis.window = { COURSE_DATA: { slides: [
+    { title: 'Início' }, { title: 'Segurança' }, { title: 'Encerramento' },
+    { title: 'Revisão' }, { title: 'Fim' }] } };
+  globalThis.document = {
+    querySelector: selector => ({
+      '#counterText[data-slide-counter="true"]': { textContent: '2 / 5' },
+      '#airtrust-app .score-stage-scroll': stage,
+    })[selector] ?? null,
+    querySelectorAll: selector => selector === '.score-sidebar-list button.score-nav-item'
+      ? nav : [],
+  };
+  try {
+    assert.deepEqual(requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), { index: 1, total: 5 });
+    stage.querySelector = () => ({ textContent: 'Início' });
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/);
+    stage.querySelector = () => ({ textContent: 'Segurança' });
+    nav[0].getAttribute = name => name === 'aria-current' ? 'step' : null;
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/,
+    'two current sidebar buttons must not yield a synthetic cursor');
+    nav[0].getAttribute = name => name === 'aria-current' ? 'false' : null;
+    const fullNav = globalThis.document.querySelectorAll;
+    globalThis.document.querySelectorAll = selector => fullNav(selector).slice(0, 4);
+    assert.throws(() => requireF5ScoreVisualState(captureF5ScoreVisualState(),
+      '2/5', f5Suspend(1)), /VISUAL_RESUME_WITNESS_INVALID/,
+    'missing real navigation buttons must fail closed');
+  } finally { globalThis.window = originalWindow; globalThis.document = originalDocument; }
 });
