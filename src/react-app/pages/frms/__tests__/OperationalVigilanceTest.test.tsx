@@ -20,6 +20,36 @@ function startAndReachStimulus() {
 }
 
 describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
+
+  it('renders the response box before starting and retains the exact same surface and height when started', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+
+    const box = screen.getByTestId('pvtb-box');
+    const frame = screen.getByTestId('pvtb-stimulus-frame');
+    expect(box).toHaveAttribute('data-phase', 'instructions');
+    expect(box).toHaveAttribute('aria-disabled', 'true');
+    expect(box.className).toMatch(/h-72/);
+    expect(frame).toBeEmptyDOMElement();
+
+    // Tapping the preview cannot generate a false start before the session.
+    fireEvent.pointerDown(box);
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+    expect(screen.getByTestId('pvtb-box')).toBe(box);
+    expect(screen.getByTestId('pvtb-stimulus-frame')).toBe(frame);
+    expect(box).toHaveAttribute('data-phase', 'waiting');
+    expect(box).toHaveAttribute('aria-disabled', 'false');
+    expect(box.className).toMatch(/h-72/);
+    expect(screen.getByRole('heading', { name: /vigilância psicomotora/i })).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(PVTB_V2_PROTOCOL.feedbackHoldMs + 20);
+    });
+    expect(screen.getByTestId('pvtb-box')).toBe(box);
+    expect(box).toHaveAttribute('data-phase', 'stimulus');
+  });
+
   it('pins the PVT-B response window at 30 seconds', () => {
     expect(PVTB_V2_PROTOCOL.responseWindowMs).toBe(30_000);
   });
@@ -33,6 +63,7 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(screen.getByText(/retângulo com borda vermelha fica visível sobre fundo preto/i)).toBeInTheDocument();
     expect(screen.getByText(/contador amarelo/i)).toBeInTheDocument();
     expect(screen.getByText(/referência científica: psychomotor vigilance task/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Protocolo e referência científica'));
     expect(screen.getByRole('link', { name: /NASA Ames Fatigue Countermeasures Laboratory/i })).toHaveAttribute(
       'href',
       'https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/',
