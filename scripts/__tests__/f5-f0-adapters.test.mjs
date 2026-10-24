@@ -58,7 +58,7 @@ test('rejects plan substitution and policy-changing F0 receipts', async () => {
   await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_POLICY_INVALID/);
 });
 
-test('F5 physical candidate QA requires Chromium and WebKit with the same scope and D1 state', async () => {
+test('F5 physical candidate QA chains sequential Chromium and WebKit on the same enrollment', async () => {
   const engines = [];
   const expected = {
     source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
@@ -71,11 +71,17 @@ test('F5 physical candidate QA requires Chromium and WebKit with the same scope 
   const result = await runF5BrowserPair(async ({ engine, browserType }) => {
     assert.equal(typeof browserType.launch, 'function');
     engines.push(engine);
-    return { ...expected, sessionCount: engines.length };
+    return { ...expected, sessionCount: engines.length,
+      suspendSha256: engine === 'chromium' ? 'b'.repeat(64) : 'c'.repeat(64),
+      initialResumeWitnessSha256: engine === 'chromium' ? '1'.repeat(64) : '2'.repeat(64),
+      committedResumeWitnessSha256: engine === 'chromium' ? '2'.repeat(64) : '3'.repeat(64),
+    };
   });
   assert.deepEqual(engines, ['chromium', 'webkit']);
   assert.deepEqual(result.browserEngines, ['chromium', 'webkit']);
   assert.equal(result.sessionCount, 2);
+  assert.equal(result.suspendSha256, 'c'.repeat(64),
+    'WebKit final suspend must differ from Chromium after sequential Next');
 });
 
 test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium readback', async () => {
@@ -103,6 +109,40 @@ test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium rea
   await assert.rejects(runF5BrowserPair(async () => ({
     ...baseline, sessionCount: 2,
   })), /BROWSER_PAIR_READBACK_REGRESSION/);
+});
+
+test('F5 browser pair rejects a WebKit resume disconnected from Chromium committed CMI', async () => {
+  const scope = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001',
+    runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
+    suspendDataPersisted: true,
+  };
+  const browser = async ({ engine }) => engine === 'chromium'
+    ? { ...scope, sessionCount: 1, suspendSha256: 'b'.repeat(64),
+        initialResumeWitnessSha256: '1'.repeat(64),
+        committedResumeWitnessSha256: '2'.repeat(64) }
+    : { ...scope, sessionCount: 2, suspendSha256: 'c'.repeat(64),
+        initialResumeWitnessSha256: '9'.repeat(64),
+        committedResumeWitnessSha256: '3'.repeat(64) };
+  await assert.rejects(runF5BrowserPair(browser),
+    /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/);
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => {
+    const state = await browser({ engine });
+    return engine === 'webkit'
+      ? { ...state, initialResumeWitnessSha256: '2'.repeat(64),
+          suspendSha256: 'b'.repeat(64) } : state;
+  }), /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/,
+  'WebKit replay of Chromium suspend digest is not independent progress');
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => {
+    const state = await browser({ engine });
+    return engine === 'webkit'
+      ? { ...state, initialResumeWitnessSha256: '2'.repeat(64),
+          committedResumeWitnessSha256: '2'.repeat(64) } : state;
+  }), /BROWSER_PAIR_RESUME_CHAIN_MISMATCH/,
+  'WebKit cannot claim success without its own new rendered bookmark');
 });
 
 test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', () => {
