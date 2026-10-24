@@ -339,14 +339,27 @@ export class PilotVault {
       'decrypt',
     ]);
     const transaction = this.database.transaction('meta', 'readwrite');
-    transaction.objectStore('meta').put({
-      id: VAULT_CONFIG_ID,
-      version: DEVICE_CONFIG_VERSION,
-      cipher: 'AES-GCM-256',
-      key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
-      device_key: deviceKey,
-      created_at: new Date().toISOString(),
-    });
+    try {
+      transaction.objectStore('meta').put({
+        id: VAULT_CONFIG_ID,
+        version: DEVICE_CONFIG_VERSION,
+        cipher: 'AES-GCM-256',
+        key_protection: 'NON_EXTRACTABLE_DEVICE_CRYPTOKEY',
+        device_key: deviceKey,
+        created_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      // Some WebKit engines cannot structured-clone ANY CryptoKey into IndexedDB.
+      // Never downgrade to a plaintext/exportable key or claim offline readiness.
+      try { transaction.abort(); } catch {}
+      if (error?.name === 'DataCloneError') {
+        throw new Error(
+          'Este navegador não permite guardar com segurança a chave offline do Pilot App. ' +
+          'Os dados existentes foram preservados. Contate a Coordenação antes de utilizar o modo offline.',
+        );
+      }
+      throw error;
+    }
     await transactionDone(transaction);
     this.masterKey = deviceKey;
   }
