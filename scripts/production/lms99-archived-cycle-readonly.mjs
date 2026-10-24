@@ -76,6 +76,79 @@ UNION ALL SELECT 'lms_ciclo_evidencias.enrollment_json', EXISTS(SELECT 1 FROM pr
 UNION ALL SELECT 'lms_matricula_ciclos.ciclo_atual', EXISTS(SELECT 1 FROM pragma_table_info('lms_matricula_ciclos') WHERE name='ciclo_atual')
 UNION ALL SELECT 'lms_matriculas.progresso_pct', EXISTS(SELECT 1 FROM pragma_table_info('lms_matriculas') WHERE name='progresso_pct')`;
 // Minimal D1 metadata probe: no UNION, virtual pragma table, learner rows, or private data.
+// Migration 0346 defines the six selected cycle columns. Production table probes
+// confirmed this table exists; query only its existing prior-cycle rows.
+export const CYCLES_ONLY_SQL=`WITH pending AS (
+ SELECT m.id, m.curso_id, m.empresa_id
+ FROM lms_matriculas m
+ JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+ WHERE m.empresa_id=6 AND m.deleted_at IS NULL
+   AND UPPER(COALESCE(m.status,'')) IN ('EM_ANDAMENTO','REPROVADO')
+   AND COALESCE(m.progresso_pct,0)>=99 AND c.tipo_conteudo='scorm'
+), signals AS (
+ SELECT p.curso_id,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
+       AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
+       AND UPPER(COALESCE(cy.status,''))='CONCLUIDO') AS prior_completed,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
+       AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
+       AND UPPER(COALESCE(cy.status,''))='CONCLUIDO'
+       AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
+       AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
+       AND cy.score_final IS NOT NULL) AS prior_score_recorded,
+   EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
+       AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
+       AND cy.qualificacao_historico_id IS NOT NULL) AS prior_qualification_link
+ FROM pending p
+)
+SELECT curso_id,COUNT(*) AS pending_99,
+ SUM(prior_completed) AS prior_completed_cycle,
+ SUM(prior_dated_completed) AS prior_dated_completed,
+ SUM(prior_score_recorded) AS prior_score_recorded,
+ SUM(prior_qualification_link) AS prior_qualification_link
+FROM signals GROUP BY curso_id ORDER BY curso_id`;
+// Read the physical D1 CREATE TABLE definition first. The DDL stays in memory;
+// only required column names and availability are ever eligible for output.
+export const CYCLES_SCHEMA_PROBE_SQL="SELECT sql FROM sqlite_master WHERE type='table' AND name='lms_matricula_ciclos'";
+const CYCLE_REQUIRED_COLUMNS=['empresa_id','matricula_id','curso_id','status','ciclo_atual',
+ 'data_conclusao','score_final','qualificacao_historico_id','deleted_at'];
+export function validateCyclesSchemaRows(rows){
+ if(!Array.isArray(rows)||rows.length!==1||!rows[0]||Object.keys(rows[0]).length!==1||typeof rows[0].sql!=='string')
+  reject('CYCLE_SCHEMA_RESULT_INVALID');
+ const ddl=rows[0].sql;
+ if(!/^\s*CREATE\s+TABLE\b/i.test(ddl)||!/\blms_matricula_ciclos\b/i.test(ddl))reject('CYCLE_SCHEMA_RESULT_INVALID');
+ const checks=CYCLE_REQUIRED_COLUMNS.map(column=>({
+  column,
+  present:new RegExp(`(?:^|[,\\s(])\\s*["\u0060\\[]?${column}["\u0060\\]]?\\s+(?:INTEGER|TEXT|REAL|NUMERIC|BLOB|VARCHAR)\\b`,'i').test(ddl),
+ }));
+ if(checks.some(check=>!check.present))reject('CYCLE_SCHEMA_REQUIRED_COLUMN_MISSING');
+ return checks;
+}
+export function validateCycleRows(rows){
+ if(!Array.isArray(rows)||rows.length>100)reject('CYCLE_ROW_LIMIT');
+ const names=['pending_99','prior_completed_cycle','prior_dated_completed',
+ 'prior_score_recorded','prior_qualification_link'];
+ const seen=new Set();let total=0;
+ for(const row of rows){
+  if(!row||Object.keys(row).length!==6||Object.keys(row).some(key=>!['curso_id',...names].includes(key)))
+   reject('CYCLE_RESULT_SHAPE');
+  if(!Number.isSafeInteger(row.curso_id)||row.curso_id<1||seen.has(row.curso_id))reject('CYCLE_ID_INVALID');
+  seen.add(row.curso_id);
+  for(const key of names){
+   if(!Number.isSafeInteger(row[key])||row[key]<0||row[key]>500)reject('CYCLE_METRIC_INVALID');
+  }
+  if(row.pending_99<1 || names.slice(1).some(k=>row[k]>row.pending_99))reject('CYCLE_BOUNDS');
+  total+=row.pending_99;
+ }
+ if(total>500)reject('CYCLE_COHORT_LIMIT');
+ return rows;
+}
+
 export const TABLES_PROBE_SQL="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias') ORDER BY name";
 export function validateTableNames(rows) {
  const allowed=['lms_matriculas','lms_cursos','lms_matricula_ciclos','lms_ciclo_evidencias'];
@@ -166,7 +239,7 @@ export const NON_PRODUCTION_D1_IDS=[
 ];
 export function assertSqlTransportScope(statement,databaseId=PRODUCTION_D1_ID){
  if(statement===ARCHIVE_SQL)validateQuery();
- else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL)reject('SQL_NOT_REVIEWED');
+ else if(statement!==SCHEMA_PROBE_SQL && statement!==TABLES_PROBE_SQL && statement!==CYCLES_ONLY_SQL && statement!==CYCLES_SCHEMA_PROBE_SQL)reject('SQL_NOT_REVIEWED');
  if(databaseId!==PRODUCTION_D1_ID||NON_PRODUCTION_D1_IDS.includes(databaseId))
   reject('D1_TARGET_DENIED');
  if(/;|\\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA\\s+[\\w]+\\s*=)\\b/i.test(statement))
@@ -189,6 +262,8 @@ export async function d1(statement=ARCHIVE_SQL,{fetcher=fetch,accountId=process.
  const first=Array.isArray(data?.result)?data.result[0]:data?.result;
  if(!first||first.success===false||!Array.isArray(first.results))reject('D1_STATEMENT_REJECTED');
  if(statement===TABLES_PROBE_SQL)return validateTableNames(first.results);
+ if(statement===CYCLES_ONLY_SQL)return validateCycleRows(first.results);
+ if(statement===CYCLES_SCHEMA_PROBE_SQL)return validateCyclesSchemaRows(first.results);
  return statement===SCHEMA_PROBE_SQL?validateSchemaRows(first.results):validateRows(first.results);
 }
 async function main(){
@@ -204,7 +279,19 @@ async function main(){
  const version=await response.json();
  if(String(version?.data?.sourceSha??'').toLowerCase()!==prod)reject('PROD_SHA_DRIFT');
  const mode=String(process.env.LMS99_HISTORY_MODE||'read');
- if(!['read','schema-probe','tables-probe'].includes(mode))reject('MODE_INVALID');
+ if(!['read','schema-probe','tables-probe','cycles-only'].includes(mode))reject('MODE_INVALID');
+ if(mode==='cycles-only'){
+  const schema=await d1(CYCLES_SCHEMA_PROBE_SQL);
+  const rows=await d1(CYCLES_ONLY_SQL);
+  const totals=Object.fromEntries(['pending_99','prior_completed_cycle','prior_dated_completed','prior_score_recorded','prior_qualification_link']
+    .map(k=>[k,rows.reduce((n,r)=>n+r[k],0)]));
+  process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
+   tenant:6,mode:'cycles-only',writes:0,personal_data:false,
+   schema_columns_present:true,schema_columns_checked:schema.map(x=>x.column),
+   interpretation:'PRIOR_CYCLE_INDICATORS_ONLY_NOT_CURRENT_COURSE_PASS',
+   totals,by_course:rows},null,2)+'\n');
+  return;
+ }
  if(mode==='tables-probe'){
   const checks=await d1(TABLES_PROBE_SQL);
   process.stdout.write(JSON.stringify({schema_version:1,source_sha:src,production_sha:prod,
