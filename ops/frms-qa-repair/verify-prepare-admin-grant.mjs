@@ -11,7 +11,6 @@ const REPO='Airtrust-Org/airtrust',ISSUE=776;
 const WORKFLOW='.github/workflows/staging-frms-qa-private-prepare.yml';
 const TX_WORKFLOW='.github/workflows/staging-frms-qa-private-transaction.yml';
 const ALLOWED_WORKFLOWS=[WORKFLOW,TX_WORKFLOW];
-const WORKFLOW_REF=REPO+'/'+WORKFLOW+'@refs/heads/main';
 const MUTEX='airtrust-staging-mutations-and-scorm-qa';
 const SCOPE='FRMS_QA_999013_4_CASES_4_JOURNEYS';
 const PLAN_SHA='38a81ed05821919d87b424ddfc7b731bfc8d7d759dadebbb6a21d11edb349ed3';
