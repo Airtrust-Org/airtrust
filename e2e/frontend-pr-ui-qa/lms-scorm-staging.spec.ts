@@ -475,5 +475,5 @@ test('LMS SCORM resume: exact inactive candidate upload and Chromium WebKit prev
     productionMutations: 0,
   };
   writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
-    JSON.stringify(summary, null, 2) + '\\n', { mode: 0o600 });
+    JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
