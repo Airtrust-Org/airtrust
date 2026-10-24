@@ -3,6 +3,7 @@
 // dry_run_required: SELECT-only tenant 6 aggregate; no student ID, CMI, score or archival content in output.
 // rollback_plan_required: no remote writes; any later credit requires distinct reviewed recovery/approval.
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {pathToFileURL} from 'node:url';
 import process from 'node:process';
 const reject = code => { throw Error('LMS99_HISTORY_' + code); };
@@ -106,10 +107,12 @@ export function safePublicError(error){
 }
 function d1(){
  validateQuery();
- const r=spawnSync('npx',['--no-install','wrangler','d1','execute','airtrust-db',
+ // Mirror the D1 client transport proven by production-lms99-embedded-cmi-readonly (#40099058169).
+ // Do not broaden the SQL contract or add a mutation fallback.
+ const cwd=fileURLToPath(new URL('../../worker-airtrust/',import.meta.url));
+ const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db',
    '--env','production','--remote','--json','--command',ARCHIVE_SQL],{
-   cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',
-   env:process.env,timeout:120000,maxBuffer:5*1024*1024
+   cwd,encoding:'utf8',env:process.env,timeout:120000,maxBuffer:5*1024*1024
  });
  if(r.error)reject('D1_EXECUTOR_ERROR');
  if(r.status!==0)reject(classifyD1Failure(r.stderr));
