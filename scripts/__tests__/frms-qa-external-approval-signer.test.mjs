@@ -20,6 +20,7 @@ const env={
   GITHUB_WORKFLOW_REF:REPO+
     '/.github/workflows/staging-frms-qa-private-transaction.yml@refs/heads/main',
   GITHUB_SHA:SHA,GITHUB_TOKEN:'synthetic-github-job-token',
+  GITHUB_JOB:'frms-queue-apply',GITHUB_OUTPUT:'/tmp/synthetic-github-output',
   GITHUB_RUN_ID:'40019815631',GITHUB_RUN_ATTEMPT:'1',
   FRMS_QA_CALLER_KEY_HEX:KEY,
   FRMS_QA_PREPARE_GRANT_ID:GRANT,
