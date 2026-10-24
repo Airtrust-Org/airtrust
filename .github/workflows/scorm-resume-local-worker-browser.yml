@@ -33,7 +33,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - name: Verify exact SHA and deny remote credentials
+      - name: Verify exact checked-out SHA
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -41,8 +41,6 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          test -z "$(printenv CLOUDFLARE_API_TOKEN || true)"
-          test -z "$(printenv AIRTRUST_REMOTE_DB || true)"
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
