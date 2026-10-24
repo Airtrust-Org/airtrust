@@ -86,8 +86,28 @@ export function classifyScormBrowserError(error: unknown): string {
   return 'BROWSER_OTHER';
 }
 
+/** Stable diagnostic for infrastructure failures, never raw exception messages. */
+export function scormBrowserFailureCode(error: unknown): string {
+  const typed = error && typeof error === 'object' ? error as { name?: unknown; code?: unknown } : null;
+  const code = typed?.code;
+  if (typeof code === 'string') {
+    const allowed = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN',
+      'ERR_CONNECTION_CLOSED', 'ERR_HTTP2_STREAM_ERROR']);
+    if (allowed.has(code)) return code;
+  }
+  const name = typed?.name;
+  if (name === 'TypeError') return 'TYPE_ERROR';
+  if (name === 'TimeoutError') return 'TIMEOUT_ERROR';
+  if (name === 'AbortError') return 'ABORT_ERROR';
+  if (name === 'ProtocolError') return 'PROTOCOL_ERROR';
+  if (name === 'Error') return 'GENERIC_ERROR';
+  return 'UNKNOWN_ERROR';
+}
+
 export async function runScormBrowserConformance(params: {
   browserBinding: unknown; candidateSha256: string; launchFile: string; assets: CandidateAsset[];
+  /** Injectable ONLY for focused infrastructure-failure tests; default is real Cloudflare Browser Rendering. */
+  launchBrowser?: (binding: BrowserWorker) => Promise<Browser>;
 }): Promise<ScormRuntimeConformance> {
   const startedAt = new Date().toISOString();
   if (!params.browserBinding) return { status: 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: ['SCORM_BROWSER não configurado'], failureStage: 'BINDING_MISSING', failureCategory: 'BROWSER_ACCESS', runnerVersion: RUNNER_VERSION };
@@ -97,7 +117,17 @@ export async function runScormBrowserConformance(params: {
   let browser: Browser | undefined;
   let failureStage = 'BROWSER_LAUNCH';
   try {
-    browser = await puppeteer.launch(params.browserBinding as BrowserWorker);
+    const launch = params.launchBrowser ?? ((binding: BrowserWorker) => puppeteer.launch(binding));
+    try {
+      browser = await launch(params.browserBinding as BrowserWorker);
+    } catch (firstError) {
+      const category = classifyScormBrowserError(firstError);
+      // One bounded retry exclusively during browser startup; access/quota
+      // failures remain fail-closed. Never retry SCORM writes or an active session.
+      if (category === 'BROWSER_QUOTA' || category === 'BROWSER_ACCESS') throw firstError;
+      await new Promise(resolve => setTimeout(resolve, 350));
+      browser = await launch(params.browserBinding as BrowserWorker);
+    }
     failureStage = 'CREATE_PAGE';
     const page = await browser.newPage();
     failureStage = 'SET_REQUEST_INTERCEPTION';
@@ -171,7 +201,12 @@ export async function runScormBrowserConformance(params: {
     };
   } catch (error) {
     const timedOut = error instanceof Error && /timeout/i.test(error.message);
-    return { status: timedOut ? 'TIMEOUT' : 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: [error instanceof Error ? error.message : 'Browser Run falhou'], failureStage, failureCategory: classifyScormBrowserError(error), runnerVersion: RUNNER_VERSION };
+    const failureCategory = classifyScormBrowserError(error);
+    const failureCode = scormBrowserFailureCode(error);
+    // This result is persisted in candidate validation JSON and may reach QA
+    // artifacts. NEVER record arbitrary browser exception text: some runtimes
+    // include internal addresses, request headers or authentication fragments.
+    return { status: timedOut ? 'TIMEOUT' : 'ERROR', candidateSha256: params.candidateSha256, startedAt, finishedAt: new Date().toISOString(), initializeObserved: false, commitObserved: false, finishObserved: false, completionReached: false, lessonStatus: null, scoreRaw: null, masteryScore: null, lessonLocation: null, trace: [], errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'], failureStage, failureCategory, failureCode, runnerVersion: RUNNER_VERSION };
   } finally {
     if (browser) await browser.close().catch(() => undefined);
   }
