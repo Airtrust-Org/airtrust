@@ -140,5 +140,5 @@ export async function runProtectedPrivateTransaction({
     publicKeyPem:env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM,
     publicKeySha256:env.FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256,
     producer,queue:transport,signer,readback:independentReadback,
-    now,sleep,maxPolls:12});
+    now,sleep,maxPolls:40});
 }
