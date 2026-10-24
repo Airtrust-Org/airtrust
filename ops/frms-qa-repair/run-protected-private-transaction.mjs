@@ -12,6 +12,8 @@ export function validatePrivateTransactionEntry(env={}){
   if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
      env.GITHUB_REPOSITORY!=='Airtrust-Org/airtrust'||
      env.GITHUB_REF!=='refs/heads/main'||
+     env.GITHUB_JOB!=='frms-queue-apply'||
+     typeof env.GITHUB_OUTPUT!=='string'||!env.GITHUB_OUTPUT.trim()||
      env.GITHUB_WORKFLOW_REF!==
        'Airtrust-Org/airtrust/.github/workflows/staging-frms-qa-private-transaction.yml@refs/heads/main'||
      !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA||'')||
