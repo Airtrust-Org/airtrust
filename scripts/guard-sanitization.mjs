@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { isValidCpf } from './pii-delta-lib.mjs';
+import { findR2LiteralAssignment } from './r2-literal-guard.mjs';
 /**
  * guard:sanitization
  *
@@ -23,9 +24,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-function gitGrep(pattern, pathspecs = []) {
+function gitGrep(pattern, pathspecs = [], { nullDelimited = false } = {}) {
   const result = spawnSync('git', [
-    'grep', '-nEI', '--',
+    'grep', '-nEI', ...(nullDelimited ? ['-z'] : []), '--',
     pattern,
     ...pathspecs,
   ], { cwd: ROOT, encoding: 'utf8' });
@@ -159,25 +160,20 @@ check(
 );
 
 // ─── 4b. Credenciais R2 literais ───────────────────────────────────────────
-// Diferente do guard genérico, esta verificação varre também Markdown: fontes
-// documentais e arquivos .example não podem conter credenciais reais.
+// Varre TODO o texto rastreado (incluindo Markdown, JSON, YAML e exemplos),
+// sem imprimir ou retornar valores encontrados. Placeholder so vale se for
+// exatamente o valor da atribuicao, nao outra palavra no mesmo comentario.
 {
-  let raw = gitGrep(
-    '(R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|R2_ACCOUNT_ID)[[:space:]]*=[[:space:]]*[A-Za-z0-9_-]{24,}',
-    [],
-  );
+  const raw = gitGrep('R2_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|ACCOUNT_ID)', [], { nullDelimited: true });
+  const findings = raw
+    ? raw.split('\n').map(findR2LiteralAssignment).filter(Boolean)
+    : [];
 
-  if (raw) {
-    const allowed = /\$\{|YOUR[-_]|PLACEHOLDER|EXAMPLE|CHANGEME|<[^>]+>|=\s*$/i;
-    raw = raw
-      .split('\n')
-      .filter((line) => line && !allowed.test(line))
-      .join('\n');
-  }
-
-  if (raw?.trim()) {
+  if (findings.length) {
     console.error('\n[guard:sanitization] FAIL: Credencial R2 literal rastreada');
-    raw.split('\n').slice(0, 20).forEach((line) => console.error('  ' + line.replace(/=(.*)$/, '=[REDACTED]')));
+    findings.slice(0, 20).forEach(({ path, line, field }) =>
+      console.error('  ' + path + ':' + line + ': ' + field + '=[REDACTED]')
+    );
     violations++;
   }
 }

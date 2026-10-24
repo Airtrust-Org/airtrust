@@ -57,6 +57,8 @@ jobs:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm ci
+      - name: verify R2 credential guard with synthetic format and redaction cases
+        run: node --test scripts/__tests__/r2-literal-guard.test.mjs
       - name: validate release-gate verifier and deploy wiring
         run: |
           node --test scripts/ci/verify-release-gates.test.mjs
