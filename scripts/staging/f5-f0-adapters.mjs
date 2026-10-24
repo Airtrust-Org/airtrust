@@ -39,7 +39,7 @@ export function captureF5ScoreVisualState() {
   // not from a synthetic harness DOM. Keep the SCO's slide model read-only.
   const counterText = document.querySelector('#counterText[data-slide-counter="true"]')
     ?.textContent?.trim() ?? '';
-  const counterMatch = /^([1-9]\\d*)\\s*\\/\\s*([1-9]\\d*)$/.exec(counterText);
+  const counterMatch = /^([1-9]\d*)\s*\/\s*([1-9]\d*)$/.exec(counterText);
   const index = counterMatch ? Number(counterMatch[1]) - 1 : null;
   const total = counterMatch ? Number(counterMatch[2]) : null;
   const navigation = Array.from(document.querySelectorAll(
