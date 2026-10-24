@@ -117,16 +117,16 @@ export async function runScormBrowserConformance(params: {
   let browser: Browser | undefined;
   let failureStage = 'BROWSER_LAUNCH';
   try {
-    const launch = params.launchBrowser ?? ((binding: BrowserWorker) => puppeteer.launch(binding));
+    const browserLauncher = params.launchBrowser ?? ((binding: BrowserWorker) => puppeteer.launch(binding));
     try {
-      browser = await launch(params.browserBinding as BrowserWorker);
+      browser = await browserLauncher(params.browserBinding as BrowserWorker);
     } catch (firstError) {
       const category = classifyScormBrowserError(firstError);
       // One bounded retry exclusively during browser startup; access/quota
       // failures remain fail-closed. Never retry SCORM writes or an active session.
       if (category === 'BROWSER_QUOTA' || category === 'BROWSER_ACCESS') throw firstError;
       await new Promise(resolve => setTimeout(resolve, 350));
-      browser = await launch(params.browserBinding as BrowserWorker);
+      browser = await browserLauncher(params.browserBinding as BrowserWorker);
     }
     failureStage = 'CREATE_PAGE';
     const page = await browser.newPage();
