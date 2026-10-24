@@ -87,7 +87,7 @@ export async function resolvePrivateTransactionQueues({
  * workflow can satisfy the controller's workflow/branch/SHA checks.
  */
 export async function runProtectedPrivateTransaction({
-  env={},signer,readback,fetcher=fetch,
+  env={},signer,readback,fetcher=fetch,completionMode='full',
   now=Date.now,sleep=async()=>new Promise(resolve=>setTimeout(resolve,1000)),
 }={}){
   const key=env.FRMS_QA_CALLER_KEY_HEX,sha=env.GITHUB_SHA,
@@ -106,6 +106,10 @@ export async function runProtectedPrivateTransaction({
      typeof signer?.assertReady!=='function'||
      typeof signer?.signReceipt!=='function'||
      (readback!==undefined&&typeof readback!=='function')||
+     !['full','apply-stage'].includes(completionMode)||
+     (completionMode==='apply-stage'&&
+        (env.FRMS_QA_TRANSACTION_PHASE!=='queue-apply'||
+         env.CLOUDFLARE_D1_MIGRATION_API_TOKEN))||
      typeof fetcher!=='function'||
      typeof now!=='function'||typeof sleep!=='function'||
      // This runner never stores a signing private key or D1 bearer.
@@ -135,10 +139,11 @@ export async function runProtectedPrivateTransaction({
     pushSigned:message=>outbound.pushSigned(message),
     consumeExpectedReply:params=>inbound.consumeExpectedReply(params),
   });
-  const independentReadback=readback||((scope)=>readbackReviewedF0({env,...scope}));
+  const independentReadback=completionMode==='apply-stage'
+    ?undefined:(readback||((scope)=>readbackReviewedF0({env,...scope})));
   return coordinatePrivateF0Transaction({env,
     publicKeyPem:env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM,
     publicKeySha256:env.FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256,
     producer,queue:transport,signer,readback:independentReadback,
-    now,sleep,maxPolls:40});
+    now,sleep,maxPolls:40,completionMode});
 }
