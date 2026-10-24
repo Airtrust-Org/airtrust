@@ -33,7 +33,7 @@ describe('F0 candidate-run-cycle immutable witness', () => {
     [{ ...base, last_committed_package_sha256: sha }, 'commit without launch'],
     [{ ...base, launched_package_sha256: sha, last_committed_package_sha256: 'd'.repeat(64) }, 'wrong commit SHA'],
     [{ ...base, approval_receipt_sha256: 'not-a-receipt' }, 'missing grant receipt'],
-  ])('rejects %s (%s) without treating it as evidence', (row) => {
+  ])('rejects %s (%s) without treating it as evidence', (row, _reason) => {
     expect(() => assertScormF0BindingWitness(row as ScormF0BindingWitness | null, expected))
       .toThrow('SCORM_QA_F0_BINDING_WITNESS_INVALID');
   });
