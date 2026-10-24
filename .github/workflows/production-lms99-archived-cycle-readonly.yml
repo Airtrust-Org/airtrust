@@ -1,0 +1,65 @@
+name: Production LMS99 Historical Cycle Evidence Readonly
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha: {required: true, type: string}
+      expected_production_sha: {required: true, type: string}
+      confirmation: {required: true, type: string}
+      mode: {required: true, type: choice, default: schema-probe, options: [schema-probe, read]}
+permissions: {contents: read, checks: read, statuses: read}
+concurrency:
+  group: production-lms99-archived-cycle-readonly
+  cancel-in-progress: false
+jobs:
+  d1_evidence:
+    name: Inspect immutable prior cycles without student data
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify pinned main and eight release gates
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[a-f0-9]{40}$ && "$EXPECTED_PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CONFIRMATION" == AIRTRUST_LMS99_HISTORY_READONLY ]]
+          node scripts/ci/verify-release-gates.mjs
+          node --test scripts/__tests__/lms99-archived-cycle-readonly.test.mjs
+      - name: Install pinned D1 SELECT-only client
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+      - name: Inspect tenant-scoped archive evidence
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          LMS99_HISTORY_MODE: ${{ inputs.mode }}
+          # Prefer least-privilege D1 token. Production has not provisioned one;
+          # use only the existing governed D1 token as SELECT transport, as in the
+          # already-reviewed production-lms99-embedded-cmi-readonly workflow.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN || secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms99-archived-cycle-readonly.mjs > "$RUNNER_TEMP/lms99-history.json"
+          jq -e '.schema_version==1 and .tenant==6 and (.mode=="read-only" or .mode=="schema-probe") and .writes==0 and .personal_data==false' "$RUNNER_TEMP/lms99-history.json" >/dev/null
+          jq '{source_sha,production_sha,mode,missing_required,checks,totals,by_course,writes}' "$RUNNER_TEMP/lms99-history.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized historical summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-lms99-history-${{ github.sha }}
+          path: ${{ runner.temp }}/lms99-history.json
+          retention-days: 14
+          if-no-files-found: error
