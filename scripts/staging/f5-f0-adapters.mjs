@@ -31,7 +31,8 @@ const canonical = value => {
 function checkedScope(plan, params) {
   const c = plan?.candidate, f = plan?.syntheticFixture;
   if (!c || !f || params.tenantId !== c.tenantId || params.courseId !== c.courseId ||
-      params.packageSha256 !== c.packageSha256 || params.enrollmentId !== f.enrollmentId ||
+      (params.packageSha256 !== undefined && params.packageSha256 !== c.packageSha256) ||
+      (params.enrollmentId !== undefined && params.enrollmentId !== f.enrollmentId) ||
       (params.cycleId !== undefined && params.cycleId !== f.cycleId) ||
       (params.runId !== undefined && params.runId !== f.runId)) fail('SCOPE_MISMATCH');
   if (!UUID.test(params.packageId ?? '') || !HEX64.test(c.packageSha256 ?? '') ||
