@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeTrace, classifyScormBrowserError } from '../../lib/lms/lms-scorm-browser-run';
+import { analyzeTrace, classifyScormBrowserError, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
 
 const startedAt = '2026-08-22T00:00:00.000Z';
 const lifecycle = [
@@ -20,6 +20,58 @@ describe('SCORM Browser Run failure reporting', () => {
   });
   it('does not echo sensitive or unknown exception messages', () => {
     expect(classifyScormBrowserError(new Error('sensitive@example.invalid token=secret'))).toBe('BROWSER_OTHER');
+  });
+});
+
+describe('SCORM Browser Rendering staging infrastructure failure boundaries', () => {
+  const fixture = {
+    browserBinding: {},
+    candidateSha256: 'a'.repeat(64),
+    launchFile: 'index.html',
+    assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
+  };
+  it('retries one recoverable browser connection launch and never persists raw exceptions', async () => {
+    let launchCount = 0;
+    const secret = 'authorization=Bearer sensitive-personal-token@example.com';
+    const runtime = await runScormBrowserConformance({
+      ...fixture,
+      launchBrowser: async () => {
+        launchCount++;
+        throw new Error('WebSocket disconnected ' + secret);
+      },
+    });
+    expect(launchCount).toBe(2);
+    expect(runtime).toMatchObject({
+      status: 'ERROR',
+      failureStage: 'BROWSER_LAUNCH',
+      failureCategory: 'BROWSER_CONNECTION',
+      failureCode: 'GENERIC_ERROR',
+      errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+    });
+    expect(JSON.stringify(runtime)).not.toContain(secret);
+    expect(JSON.stringify(runtime)).not.toContain('sensitive-personal-token');
+  });
+
+  it.each(['403 Forbidden', '429 Too many requests'])(
+    'never retries access/quota failures: %s',
+    async message => {
+      let launchCount = 0;
+      const runtime = await runScormBrowserConformance({
+        ...fixture,
+        launchBrowser: async () => { launchCount++; throw new Error(message); },
+      });
+      expect(launchCount).toBe(1);
+      expect(runtime.status).toBe('ERROR');
+      expect(runtime.failureCategory).toMatch(/^BROWSER_(ACCESS|QUOTA)$/);
+      expect(runtime.errors).toEqual(['SCORM_BROWSER_INFRASTRUCTURE_ERROR']);
+    },
+  );
+
+  it('keeps exception names and codes on a finite allowlist', () => {
+    expect(scormBrowserFailureCode(Object.assign(new Error('token=bad'), { code: 'ECONNRESET' }))).toBe('ECONNRESET');
+    expect(scormBrowserFailureCode(Object.assign(new Error('token=bad'), { code: 'secret-embedded-code' }))).toBe('GENERIC_ERROR');
+    expect(scormBrowserFailureCode({ name: 'UnexpectedPersonalName', code: 'secret-embedded-code' })).toBe('UNKNOWN_ERROR');
+    expect(scormBrowserFailureCode(new TypeError('some private URL'))).toBe('TYPE_ERROR');
   });
 });
 
