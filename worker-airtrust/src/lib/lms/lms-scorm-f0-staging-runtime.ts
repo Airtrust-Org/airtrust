@@ -264,8 +264,56 @@ export async function commitF0CandidateSuspend(
       assessment:false,certificate:false,
     }),before.id,scope.tenantId,scope.packageId,
     scope.enrollmentId,before.cycleId),
+    // D1.batch commits before it returns changes. An after-the-fact result
+    // check cannot roll back a partially applied candidate commit. Force a
+    // SQL error *inside the same batch transaction* unless all required
+    // side effects are observable on the exact synthetic cycle and edition.
+    db.prepare(
+      `SELECT CASE WHEN
+          EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
+            JOIN lms_progresso_scorm sp
+              ON sp.matricula_id=b.matricula_id AND sp.empresa_id=b.empresa_id
+            JOIN lms_matriculas m
+              ON m.id=b.matricula_id AND m.empresa_id=b.empresa_id
+            JOIN lms_matricula_ciclos cy
+              ON cy.id=b.ciclo_id AND cy.empresa_id=b.empresa_id
+             AND cy.matricula_id=b.matricula_id
+            WHERE b.id=? AND b.empresa_id=? AND b.curso_id=?
+              AND b.package_id=? AND b.package_sha256=?
+              AND b.matricula_id=? AND b.ciclo_id=?
+              AND b.run_id=? AND b.staging_runtime_sha=?
+              AND b.status='ACTIVE' AND b.synthetic=1
+              AND b.launched_package_sha256=b.package_sha256
+              AND b.last_committed_package_sha256=b.package_sha256
+              AND m.status='EM_ANDAMENTO'
+              AND cy.status='EM_ANDAMENTO' AND cy.ciclo_atual=1
+              AND sp.session_count>=?
+              AND sp.lesson_status='incomplete'
+              AND sp.score_raw IS NULL
+              AND m.score_final IS NULL
+              AND m.qualificacao_historico_id IS NULL)
+          THEN 1 ELSE json_extract('F0_ATOMIC_COMMIT_MISSING_REQUIRED_WRITE','
+    throw new ApiError('SCORM_F0_ATOMIC_COMMIT_NOT_PROVEN',409);
+  }
+  const after=await readF0CandidateRuntimeState(db,scope);
+  if(after.committedSha!==scope.packageSha256 || after.sessionCount<=before.sessionCount){
+    throw new ApiError('SCORM_F0_BACKEND_COMMIT_READBACK_FAILED',409);
+  }
+  return {
+    source:'F0_CANDIDATE_INCOMPLETE_COMMIT_V1',packageSha256:scope.packageSha256,
+    runId:before.runId,cycleId:before.cycleId,
+    sessionCount:after.sessionCount,cmiSha256:cmiHash,suspendSha256:suspendHash,
+    completionWritten:false,scoreWritten:false,certificateIssued:false,
+  };
+}
+) END AS verified`,
+    ).bind(...args,before.sessionCount+1),
   ]);
-  if(changes.some(change=>Number(change?.meta?.changes)!==1)){
+  // The final SELECT above has no D1 meta.changes; its failure must abort
+  // the batch before D1 commits. The five write statements must each touch
+  // exactly one synthetic row.
+  if(changes.slice(0,5).some(change=>Number(change?.meta?.changes)!==1) ||
+     Number((changes[5]?.results?.[0] as {verified?:number}|undefined)?.verified)!==1){
     throw new ApiError('SCORM_F0_ATOMIC_COMMIT_NOT_PROVEN',409);
   }
   const after=await readF0CandidateRuntimeState(db,scope);
