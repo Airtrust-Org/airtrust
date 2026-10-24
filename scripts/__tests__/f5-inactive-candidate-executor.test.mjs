@@ -404,3 +404,53 @@ test('F5 rejects non-incomplete synthetic browser status despite valid digests',
     assert.ok(calls.includes('remove-candidate'), 'candidate cleanup required');
   }
 });
+
+test('rejects stale final D1 readback when Chromium and WebKit receipts advanced further', async () => {
+  const bytes = Buffer.from('synthetic F5 candidate with two browser commits');
+  const plan = planFor(bytes);
+  const { adapters } = adaptersFor(plan);
+  const run = adapters.runSyntheticCandidate;
+  adapters.runSyntheticCandidate = async (...args) => ({
+    ...(await run(...args)), sessionCount: 2,
+  });
+  // Existing AFTER mock is sessionCount=1 with the same CMI digest. A
+  // digest-only match must not masquerade as WebKit's persisted readback.
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /D1_EXECUTION_EVIDENCE_NOT_PERSISTED/,
+  );
+});
+
+test('accepts D1 readback only after both browser receipts are observable', async () => {
+  const bytes = Buffer.from('synthetic F5 candidate with verified browser readback');
+  const plan = planFor(bytes);
+  const { adapters } = adaptersFor(plan);
+  const run = adapters.runSyntheticCandidate;
+  const read = adapters.readQaEvidence;
+  adapters.runSyntheticCandidate = async (...args) => ({
+    ...(await run(...args)), sessionCount: 2,
+  });
+  adapters.readQaEvidence = async (args) => ({
+    ...(await read(args)),
+    sessionCount: args.phase === 'AFTER' ? 2 : 0,
+  });
+  const result = await executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters });
+  assert.equal(result.status, 'INACTIVE_CANDIDATE_VERIFIED');
+  assert.equal(result.execution.sessionCount, 2);
+});
+
+test('rejects R2 candidate readback without an explicit inactive boolean', async () => {
+  const bytes = Buffer.from('synthetic inactive candidate with ambiguous R2 flag');
+  const plan = planFor(bytes);
+  for (const active of [undefined, null, 0, 'false', 1, true]) {
+    const { adapters } = adaptersFor(plan);
+    const read = adapters.readCandidateR2;
+    adapters.readCandidateR2 = async (...args) => ({
+      ...(await read(...args)), active,
+    });
+    await assert.rejects(
+      executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /R2_CANDIDATE_ASSET_READBACK_MISMATCH/,
+    );
+  }
+});
