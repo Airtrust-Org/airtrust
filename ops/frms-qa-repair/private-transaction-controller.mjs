@@ -20,7 +20,7 @@ const fail=()=>{throw Error(DENIED);};
 const match=(x,keys)=>x&&typeof x==='object'&&!Array.isArray(x)&&
   Object.keys(x).sort().join('|')===keys.slice().sort().join('|');
 const fingerprint=key=>createHash('sha256').update(
-  createPublicKey(key).export({format:'der',type:'spki'})).digest('hex');
+  key.export({format:'der',type:'spki'})).digest('hex');
 const receiptHash=receipt=>createHash('sha256').update(
   JSON.stringify(receipt)).digest('hex');
 const requestCorrelation=(message,operation)=>{
