@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Governed CLI binding private source and provisioned F0 callbacks to the core. */
 import { createHash } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { open, readFile, stat, unlink } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { executeF5InactiveCandidate } from './f5-inactive-candidate-executor.mjs';
@@ -9,6 +9,18 @@ import { assertF5RunnerDispatchScope } from './f5-runner-dispatch-scope.mjs';
 import { createF5WorkerAdapters, openF5PrivateZipSource } from './f5-worker-adapters.mjs';
 
 const fail = code => { throw new Error(`F5_RUNNER_${code}`); };
+
+/** Reserve the private evidence artifact before any Worker-side effects.
+ * Exclusive creation prevents overwriting an existing audit artifact or
+ * discovering a missing/unwritable output path after a successful intake.
+ */
+export async function reserveF5EvidenceOutput(outputPath) {
+  if (typeof outputPath !== 'string' || !outputPath.trim()) {
+    fail('EVIDENCE_OUTPUT_PATH_REQUIRED');
+  }
+  try { return await open(outputPath, 'wx', 0o600); }
+  catch { fail('EVIDENCE_OUTPUT_UNAVAILABLE'); }
+}
 
 export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   const planPath = env.F5_EXECUTOR_PLAN_PATH;
@@ -41,6 +53,10 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   // Validate all workflow-dispatch IDs before importing any executable F0 module
   // or reading/uploading the private ZIP. The later GitHub grant check remains mandatory.
   assertF5RunnerDispatchScope(plan, env);
+  const outputPath = env.F5_EVIDENCE_OUTPUT_PATH;
+  const evidenceHandle = await reserveF5EvidenceOutput(outputPath);
+  let evidencePersisted = false;
+  try {
   let f0;
   try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
   catch {
@@ -56,13 +72,19 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
     if (!f0Adapters || typeof f0Adapters !== 'object') fail('F0_ADAPTERS_MISSING');
     const adapters = createF5WorkerAdapters({ env, ...f0Adapters });
     const evidence = await executeF5InactiveCandidate({ plan, source, adapters });
-    const output = env.F5_EVIDENCE_OUTPUT_PATH;
-    if (!output) fail('EVIDENCE_OUTPUT_PATH_REQUIRED');
-    try { await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600, flag: 'wx' }); }
-    catch { fail('EVIDENCE_OUTPUT_FAILED'); }
+    try {
+      await evidenceHandle.writeFile(`${JSON.stringify(evidence, null, 2)}\n`);
+      await evidenceHandle.sync();
+    } catch { fail('EVIDENCE_OUTPUT_FAILED'); }
+    evidencePersisted = true;
     return evidence;
   } finally {
     await source.close();
+  }
+  } finally {
+    await evidenceHandle.close();
+    // An unsuccessful run must not leave a partial or empty audit artifact.
+    if (!evidencePersisted) await unlink(outputPath).catch(() => {});
   }
 }
 
@@ -78,6 +100,8 @@ const PUBLIC_RUNNER_FAILURE_CODES = new Set([
   'F5_RUNNER_F0_ADAPTER_LOAD_FAILED',
   'F5_RUNNER_PRIVATE_ZIP_SOURCE_UNAVAILABLE',
   'F5_RUNNER_EVIDENCE_OUTPUT_FAILED',
+  'F5_RUNNER_EVIDENCE_OUTPUT_PATH_REQUIRED',
+  'F5_RUNNER_EVIDENCE_OUTPUT_UNAVAILABLE',
   'F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED',
   'F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH',
   'F5_EXECUTOR_F0_RECEIPTS_NOT_VERIFIED',
