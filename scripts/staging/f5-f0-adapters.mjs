@@ -65,20 +65,27 @@ function verifyReceiptDocuments(plan) {
   return true;
 }
 
-function locationValue(api, is2004) {
-  return api[is2004 ? 'GetValue' : 'LMSGetValue'](is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
-}
 /**
  * Browser-serializable SCORM write sequence. Commit MUST follow all SetValue
  * calls; an early commit can return success while persisting stale CMI.
  */
-export function commitIncompleteScormState({ is2004, marker, suspend }) {
+export function commitIncompleteScormState({ is2004, marker, suspend, alreadyInitialized = false }) {
   const api = is2004 ? window.API_1484_11 : window.API;
   if (!api) throw Error('SCORM_API_UNAVAILABLE');
-  const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
-  if (initialized !== 'true') throw Error('SCORM_INITIALIZE_REJECTED');
-  const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
   const locationKey = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+  if (alreadyInitialized) {
+    // The authored SCO has already initialized the API: GetValue succeeded
+    // before this probe. Calling Initialize again violates the SCORM lifecycle.
+    const get = is2004 ? api.GetValue : api.LMSGetValue;
+    if (typeof get !== 'function' || get.call(api, locationKey) !== marker ||
+        get.call(api, 'cmi.suspend_data') !== suspend) {
+      throw Error('SCORM_AUTHORED_SESSION_NOT_INITIALIZED');
+    }
+  } else {
+    const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
+    if (initialized !== 'true') throw Error('SCORM_INITIALIZE_REJECTED');
+  }
+  const set = (key, value) => is2004 ? api.SetValue(key, value) : api.LMSSetValue(key, value);
   const incompleteKey = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
   const exitKey = is2004 ? 'cmi.exit' : 'cmi.core.exit';
   if (set(locationKey, marker) !== 'true' ||
@@ -103,6 +110,33 @@ export function requireAuthoredF5State(location, suspend) {
     fail('AUTHORED_STATE_NOT_OBSERVED');
   }
   return { marker: location, suspend };
+}
+
+/** Resume is driven by the authored SCO; never Initialize its API twice. */
+/** A compliant SCO may throw GetValue until its own Initialize completes. */
+export function hasAuthoredF5State(is2004) {
+  const api = is2004 ? window.API_1484_11 : window.API;
+  const get = is2004 ? api?.GetValue : api?.LMSGetValue;
+  if (typeof get !== 'function') return false;
+  try {
+    const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
+    const suspend = get.call(api, 'cmi.suspend_data');
+    return typeof location === 'string' && location.trim().length > 0 &&
+      typeof suspend === 'string' && suspend.trim().length > 0;
+  } catch { return false; }
+}
+
+export function readInitializedF5ResumeState({ is2004 }) {
+  const api = is2004 ? window.API_1484_11 : window.API;
+  const get = is2004 ? api?.GetValue : api?.LMSGetValue;
+  if (typeof get !== 'function') throw Error('SCORM_RESUME_API_UNAVAILABLE');
+  const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
+  const suspend = get.call(api, 'cmi.suspend_data');
+  if (typeof location !== 'string' || !location.trim() ||
+      typeof suspend !== 'string' || !suspend.trim()) {
+    throw Error('SCORM_RESUME_AUTHORED_STATE_NOT_OBSERVED');
+  }
+  return { location, suspend };
 }
 
 /** A successful HTTP response is not proof of a scoped D1 Commit. */
@@ -176,16 +210,9 @@ async function browserExecution({ plan, params, request, env, browserType }) {
 
     // Wait for both values from the authored SCO. A timeout is a failed
     // probe, never permission to synthesize suspend_data or a slide marker.
-    const authoredStateObserved = await page.waitForFunction(is2004 => {
-      const api = is2004 ? window.API_1484_11 : window.API;
-      if (!api) return false;
-      const get = is2004 ? api.GetValue : api.LMSGetValue;
-      if (typeof get !== 'function') return false;
-      const location = get.call(api, is2004 ? 'cmi.location' : 'cmi.core.lesson_location');
-      const suspend = get.call(api, 'cmi.suspend_data');
-      return typeof location === 'string' && location.trim().length > 0 &&
-        typeof suspend === 'string' && suspend.trim().length > 0;
-    }, is2004, { timeout: 15_000 }).then(() => true, () => false);
+    const authoredStateObserved = await page.waitForFunction(
+      hasAuthoredF5State, is2004, { timeout: 15_000 },
+    ).then(() => true, () => false);
     if (!authoredStateObserved) fail('AUTHORED_STATE_NOT_OBSERVED');
 
     const initialLocation = await page.evaluate(is2004 => {
@@ -206,7 +233,9 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const responsePromise = page.waitForResponse(response =>
       response.url().includes('/api/lms/scorm/qa-f0/commit/') && response.request().method() === 'POST',
       { timeout: 30_000 });
-    const first = await page.evaluate(commitIncompleteScormState, { is2004, marker, suspend });
+    const first = await page.evaluate(commitIncompleteScormState, {
+      is2004, marker, suspend, alreadyInitialized: true,
+    });
     const firstCommit = await responsePromise;
     if (!firstCommit || !firstCommit.ok()) {
       console.error('[COMMIT_FAIL_DIAGNOSTIC]', safeF5HttpFailure(firstCommit));
@@ -245,18 +274,10 @@ async function browserExecution({ plan, params, request, env, browserType }) {
     const resumedPage = await resumedContext.newPage();
     await resumedPage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await resumedPage.frameLocator('#scorm-frame').locator('body').waitFor({ state: 'visible', timeout: 45_000 });
-    const resumed = await resumedPage.evaluate(({ is2004 }) => {
-      const api = is2004 ? window.API_1484_11 : window.API;
-      if (!api) throw Error('SCORM_API_UNAVAILABLE');
-      const initialized = is2004 ? api.Initialize('') : api.LMSInitialize('');
-      if (initialized !== 'true') throw Error('SCORM_RESUME_INITIALIZE_FAILED');
-      return {
-        location: locationValue(api, is2004),
-        suspend: suspendValue(api),
-      };
-      function locationValue(api, use2004) { return api[use2004 ? 'GetValue' : 'LMSGetValue'](use2004 ? 'cmi.location' : 'cmi.core.lesson_location'); }
-      function suspendValue(api) { return api.GetValue ? api.GetValue('cmi.suspend_data') : api.LMSGetValue('cmi.suspend_data'); }
-    }, { is2004 });
+    // The SCO owns Initialize on a fresh launch. Wait for its authored
+    // resume state instead of invoking Initialize a second time.
+    await resumedPage.waitForFunction(hasAuthoredF5State, is2004, { timeout: 15_000 });
+    const resumed = await resumedPage.evaluate(readInitializedF5ResumeState, { is2004 });
     const locationMatches = resumed.location === first.marker ||
       Boolean(resumed.location && (resumed.location === first.marker ||
         (typeof initialLocation === 'string' && resumed.location === initialLocation)));
