@@ -333,3 +333,16 @@ test('F5 authored-state polling retries a GetValue that throws until SCO Initial
     else globalThis.window = original;
   }
 });
+
+test('rejects expired but otherwise digest-valid F0 receipt documents', async () => {
+  const plan = planFor();
+  const f = plan.syntheticFixture;
+  f.expiresAt = new Date(Date.now() - 60_000).toISOString();
+  for (const [name, doc] of Object.entries(f.receiptDocuments)) {
+    doc.expiresAt = f.expiresAt;
+    const field = name === 'cleanupContract' ? 'cleanupContractSha256' : `${name}ReceiptSha256`;
+    f[field] = digest(canonical(doc));
+  }
+  const adapters = await createF0Adapters({ plan, env: {} });
+  await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_EXPIRED/);
+});

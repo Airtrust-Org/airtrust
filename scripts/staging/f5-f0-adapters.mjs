@@ -44,6 +44,8 @@ function verifyReceiptDocuments(plan) {
   const { candidate: c, syntheticFixture: f } = plan ?? {};
   const docs = f?.receiptDocuments;
   if (!docs || typeof docs !== 'object') fail('RECEIPT_DOCUMENTS_MISSING');
+  const expiresAt = Date.parse(f?.expiresAt ?? '');
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) fail('RECEIPT_EXPIRED');
   const expected = {
     approval: f.approvalReceiptSha256,
     provisioning: f.provisioningReceiptSha256,
