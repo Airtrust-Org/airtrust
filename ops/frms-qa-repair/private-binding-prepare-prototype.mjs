@@ -4,16 +4,18 @@
  * verifier MUST independently authenticate the GitHub admin's fresh exact F0
  * grant, current SHA, execution identity, and mutex. An injected callback's
  * return value alone is NOT independent proof of that authentication.
- * No Cloudflare token, Time Travel bookmark or signer key crosses this RPC.
+ * A bounded recovery proof crosses the private RPC; bearer token and signer key do not.
  */
 import {signPrivateCaller} from './caller-auth.mjs';
+import {deriveRecoveryBridgeKey} from './recovery-handoff-prototype.mjs';
+import {captureTrustedRunnerRecoveryHandoff} from './trusted-runner-bookmark-acquisition.mjs';
 import {TARGET} from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 
 const deny=()=>{throw Error('QA_PRIVATE_CALLER_TRANSPORT_DENIED');};
 const HEX40=/^[0-9a-f]{40}$/,HEX64=/^[0-9a-f]{64}$/;
 const EXACT=['status','schema','sha','dbId','tenantId','grantId','runId','runAttempt'];
 export async function prepareViaPrivateServiceBinding({
-  env={},binding,independentGrantVerifier,grantLedger,
+  env={},binding,independentGrantVerifier,grantLedger,fetcher=fetch,
 }={}){
   const sha=env.GITHUB_SHA,runId=String(env.GITHUB_RUN_ID||''),
     attempt=Number(env.GITHUB_RUN_ATTEMPT);
@@ -70,9 +72,17 @@ export async function prepareViaPrivateServiceBinding({
       keyHex:env.FRMS_QA_CALLER_KEY_HEX,operation:'prepare',
       sha,runId,runAttempt:attempt,
     });
+    const recoveryProof=await captureTrustedRunnerRecoveryHandoff({
+      accountId:env.CLOUDFLARE_ACCOUNT_ID,
+      apiToken:env.CLOUDFLARE_WORKER_API_TOKEN,
+      bridgeKeyHex:deriveRecoveryBridgeKey(env.FRMS_QA_CALLER_KEY_HEX),
+      callerKeyHex:env.FRMS_QA_CALLER_KEY_HEX,
+      callerNonce:callerAuth.claims.nonce,operation:'prepare',
+      releaseSha:sha,runId,runAttempt:attempt,fetcher,
+    });
     // The private service binding, never an HTTP address, chooses the target.
-    // The caller supplies no SQL, target ID, bookmark, receipt or signature.
-    result=await binding.prepare({callerAuth});
+    // The caller supplies no SQL, target ID, receipt or apply signature.
+    result=await binding.prepare({callerAuth,recoveryProof});
   }catch{deny();}
   if(!result||typeof result!=='object'||typeof result.receiptId!=='string'||
      !HEX64.test(result.receiptId)||result.receipt?.dbId!==TARGET.db_id||

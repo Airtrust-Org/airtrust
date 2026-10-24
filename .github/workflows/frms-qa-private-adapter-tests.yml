@@ -6,6 +6,11 @@ on:
       - 'ops/frms-qa-repair/**'
       - '.github/workflows/staging-frms-qa-private-readiness.yml'
       - '.github/workflows/staging-frms-qa-private-provision.yml'
+      - '.github/workflows/staging-frms-qa-private-queues.yml'
+      - '.github/workflows/staging-frms-qa-private-caller.yml'
+      - '.github/workflows/staging-frms-qa-private-transaction.yml'
+      - '.github/workflows/staging-frms-existing-token-capabilities.yml'
+      - 'scripts/__tests__/frms-existing-queue-access.test.mjs'
       - 'scripts/staging/frms-qa-*.mjs'
       - 'scripts/staging/seed-frms-ux-30d.mjs'
       - 'scripts/__tests__/frms-qa-*.test.mjs'
@@ -32,8 +37,15 @@ jobs:
           node-version-file: '.node-version'
           cache: npm
       - run: npm ci
+      - name: Validate private Queue consumer bundle only (Wrangler offline dry-run)
+        run: |
+          npx wrangler deploy --dry-run --config ops/frms-qa-repair/wrangler.caller.staging.toml --outdir "$RUNNER_TEMP/frms-qa-queue-caller-dryrun"
       - name: Authenticate GitHub F0 admin grant before one-use private prepare RPC (offline fixtures)
-        run: node --test scripts/__tests__/frms-qa-trusted-prepare-admission.test.mjs
+        run: node --test scripts/__tests__/frms-qa-trusted-prepare-admission.test.mjs scripts/__tests__/frms-qa-apply-admin-grant.test.mjs scripts/__tests__/frms-qa-private-queue-transport.test.mjs
+      - name: Prove exact existing-token Queue provisioning grant without remote writes
+        run: node --test scripts/__tests__/frms-qa-private-queue-provision.test.mjs scripts/__tests__/frms-qa-private-caller-provision.test.mjs scripts/__tests__/frms-existing-queue-access.test.mjs
+      - name: Verify one-mutex transaction protocol and independent Ed25519 signing (synthetic only)
+        run: node --test scripts/__tests__/frms-qa-private-transaction-controller.test.mjs scripts/__tests__/frms-qa-private-transaction-runner.test.mjs scripts/__tests__/frms-qa-private-transaction-readback.test.mjs scripts/__tests__/frms-qa-external-approval-signer.test.mjs scripts/__tests__/frms-qa-private-d1-postcondition.test.mjs
       - name: Disposable DO SQLite grant persistence and restart contract
         run: node --test scripts/__tests__/frms-qa-durable-prepare-grant-ledger.test.mjs scripts/__tests__/frms-qa-durable-ledger-do-persistence.test.mjs
       - name: Disposable Workerd, D1, R2, Durable Object and private ACL integration
