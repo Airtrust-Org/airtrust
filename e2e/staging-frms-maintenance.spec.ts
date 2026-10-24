@@ -8,7 +8,23 @@ async function loginThroughUi(page: import('@playwright/test').Page, email: stri
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.getByRole('button', { name: /entrar|sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
+
+  const gestorRole = page.getByRole('button', {
+    name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
+  }).first();
+
+  await Promise.race([
+    page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 }),
+    gestorRole.waitFor({ state: 'visible', timeout: 15_000 }).then(async () => {
+      await gestorRole.click();
+      await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
+    }),
+  ]).catch(async () => {
+    if (await gestorRole.isVisible().catch(() => false)) {
+      await gestorRole.click();
+      await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
+    }
+  });
 }
 
 test.describe('staging FRMS maintenance release QA', () => {
@@ -36,7 +52,7 @@ test.describe('staging FRMS maintenance release QA', () => {
     await expect(page.getByRole('heading', { name: 'Minha fadiga hoje' })).toBeVisible({ timeout: 20_000 });
 
     // 1. Visibilidade das instruções e área de resposta antes do início
-    const section = page.locator('section').filter({ has: page.locator('[data-testid="pvtb-box"]') });
+    const section = page.getByRole('region', { name: /vigilância/i });
     await expect(section).toBeVisible();
     await expect(section.getByRole('heading', { name: /Vigilância psicomotora \(PVT-B\)/i })).toBeVisible();
 
