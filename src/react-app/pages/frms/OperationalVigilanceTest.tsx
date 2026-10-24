@@ -349,17 +349,16 @@ export default function OperationalVigilanceTest({
         </p>
       </div>
 
-      <div className="flex min-h-10 flex-wrap items-center gap-3">
-        <Button
-          onClick={start}
-          disabled={running || finished}
-        >
-          {running ? 'Teste em andamento' : interrupted ? 'Reiniciar teste' : finished ? 'Teste concluído' : 'Iniciar teste'}
-        </Button>
-        {phase === 'instructions' && onCancel ? (
-          <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
+      <div className="flex min-h-24 flex-col items-start justify-center gap-2 sm:min-h-12 sm:flex-row sm:items-center sm:justify-start">
+        <span className="inline-flex w-44 shrink-0 [&>button]:w-full">
+          <Button onClick={start} disabled={running || finished}>
+            {running ? 'Teste em andamento' : interrupted ? 'Reiniciar teste' : finished ? 'Teste concluído' : 'Iniciar teste'}
+          </Button>
+        </span>
+        {onCancel ? (
+          <Button variant="secondary" onClick={onCancel} disabled={running || finished}>Cancelar</Button>
         ) : null}
-        <span className="text-sm text-slate-600" aria-live="polite">
+        <span className="min-w-44 text-sm text-slate-600" aria-live="polite">
           {running ? String(secondsRemaining) + 's restantes' : finished ? 'Concluído' : '60 segundos de atenção'}
         </span>
       </div>
