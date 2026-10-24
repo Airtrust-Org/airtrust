@@ -223,6 +223,11 @@ function timeoutHtml() {
 }
 
 function makeZip(kind) {
+  if (kind === 'resume') {
+    const source = path.join(ROOT, 'qa-scorm-resume-uncertified.zip');
+    assert(fs.existsSync(source), 'QA_SCORM_RESUME_FIXTURE_MISSING');
+    return fs.readFileSync(source);
+  }
   const id = `AIRTRUST-QA-SCORM-${kind.toUpperCase()}-${RUN_MARKER}`;
   const files = {
     'imsmanifest.xml': strToU8(manifest(id)),
@@ -276,6 +281,7 @@ async function prepare() {
     created.push(await createCourse(token, 'success', 'Success', setorId));
     created.push(await createCourse(token, 'reject', 'Reject', setorId));
     created.push(await createCourse(token, 'timeout', 'Timeout', setorId));
+    created.push(await createCourse(token, 'resume', 'Resume', setorId));
 
     const state = {
       schema_version: 1,
