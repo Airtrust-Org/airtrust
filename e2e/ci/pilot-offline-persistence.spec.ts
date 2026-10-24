@@ -203,7 +203,12 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
-test('reopens a completed flight without edit lease when secure vault is supported; otherwise fails closed', async ({ page }) => {
+test.describe('Completed RDV online consultation with mocked authorization', () => {
+  // Online API mocks must remain observable in WebKit; the Service Worker path
+  // is exercised independently by the real vault/offline tests below.
+  test.use({ serviceWorkers: 'block' });
+
+  test('reopens a completed flight without edit lease when secure vault is supported; otherwise fails closed', async ({ page }) => {
   // Playwright WebKit builds differ in whether IndexedDB can persist a non-extractable
   // CryptoKey. Do not fake an encrypted vault or weaken production crypto to hide this.
   await page.goto('/');
@@ -322,6 +327,7 @@ test('reopens a completed flight without edit lease when secure vault is support
   await expect(page.locator('#flight-detail-card')).toBeVisible();
   await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
   expect(editLeaseRequests).toBe(0);
+  });
 });
 
 test('skips the legacy PIN prompt only when old encrypted stores are empty', async ({ page }) => {
