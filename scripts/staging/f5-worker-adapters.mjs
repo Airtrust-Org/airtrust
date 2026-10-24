@@ -91,8 +91,11 @@ export function createF5WorkerAdapters({
     const response = await fetchImpl(`${origin}${path}`, { ...options, headers,
       redirect: 'error', signal: options.signal || AbortSignal.timeout(30_000) });
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      fail(`WORKER_HTTP_${response.status}:${body.slice(0, 120).replace(/[\r\n]/g, ' ')}`);
+      // A Worker error body can contain request/learner data. Do not read or
+      // embed it in an exception that could reach Actions or another caller.
+      const status = Number.isInteger(response.status) &&
+        response.status >= 100 && response.status <= 599 ? response.status : 0;
+      fail(`WORKER_HTTP_${status}`);
     }
     return response;
   }
