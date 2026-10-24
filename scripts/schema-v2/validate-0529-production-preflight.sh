@@ -20,7 +20,7 @@ done
 query_count() {
   local sql="$1"
   (cd worker-airtrust && npx wrangler d1 execute "$target" --env production --remote --json --command "$sql") |
-    node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const p=JSON.parse(s);const r=p?.[0]?.results?.[0];const n=r&&(r.count??r.total);if(!Number.isSafeInteger(Number(n))||Number(n)<0||n===undefined){throw Error("HFA_0529_READBACK_INVALID");}console.log(Number(n));})'
+    node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const p=JSON.parse(s);const r=p?.[0]?.results?.[0];const n=r&&(r.count??r.total);if(typeof n!=="number"||!Number.isSafeInteger(n)||n<0){throw Error("HFA_0529_READBACK_INVALID");}console.log(Number(n));})'
 }
 assert_count() {
   local label="$1" expected="$2" sql="$3" actual
