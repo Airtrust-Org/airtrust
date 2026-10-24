@@ -43,7 +43,10 @@ export async function runF5InactiveCandidateFromEnvironment(env = process.env) {
   assertF5RunnerDispatchScope(plan, env);
   let f0;
   try { f0 = await import(pathToFileURL(resolve(f0ModulePath)).href); }
-  catch { fail('F0_ADAPTER_LOAD_FAILED'); }
+  catch (err) {
+    console.error('[F0_ADAPTER_LOAD_ERROR]', err);
+    fail('F0_ADAPTER_LOAD_FAILED');
+  }
   if (typeof f0.createF0Adapters !== 'function') fail('F0_ADAPTER_CONTRACT_MISSING');
   let source;
   try { source = await openF5PrivateZipSource(sourcePath); }
@@ -69,6 +72,13 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     process.stdout.write(`${JSON.stringify({ status: evidence.status,
       packageSha256: evidence.candidate.packageSha256, active: evidence.candidate.active })}\n`);
   } catch (error) {
+    console.error('[F5_RUNNER_ERROR_DETAILS]', error);
+    if (error?.cause) {
+      console.error('[F5_RUNNER_CAUSE]', error.cause);
+      if (error.cause.errors) {
+        for (const sub of error.cause.errors) console.error('[F5_SUB_ERROR]', sub);
+      }
+    }
     const message = String(error?.message || error);
     const safeCode = /^F5_[A-Z0-9_]{1,180}$/.test(message) ? message : 'F5_RUNNER_OPERATION_FAILED';
     process.stderr.write(`${safeCode}\n`);
