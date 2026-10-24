@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createF0Adapters, runF5BrowserPair } from '../staging/f5-f0-adapters.mjs';
+import { commitIncompleteScormState, createF0Adapters, runF5BrowserPair } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -99,4 +99,41 @@ test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium rea
   await assert.rejects(runF5BrowserPair(async ({ engine }) => ({
     ...baseline, sessionCount: engine === 'webkit' ? 0 : 1,
   })), /BROWSER_PAIR_READBACK_REGRESSION/);
+});
+
+test('F5 browser writes all CMI values before Commit for SCORM 1.2 and 2004', () => {
+  const originalWindow = globalThis.window;
+  try {
+    for (const is2004 of [false, true]) {
+      const events = [];
+      const location = is2004 ? 'cmi.location' : 'cmi.core.lesson_location';
+      const status = is2004 ? 'cmi.completion_status' : 'cmi.core.lesson_status';
+      const exit = is2004 ? 'cmi.exit' : 'cmi.core.exit';
+      const initialize = () => { events.push('initialize'); return 'true'; };
+      const setValue = (key, value) => { events.push(`set:${key}`); assert.ok(value); return 'true'; };
+      const commit = () => { events.push('commit'); return 'true'; };
+      const api = is2004
+        ? { Initialize: initialize, SetValue: setValue, Commit: commit }
+        : { LMSInitialize: initialize, LMSSetValue: setValue, LMSCommit: commit };
+      globalThis.window = is2004 ? { API_1484_11: api } : { API: api };
+      const args = { is2004, marker: 'F0:run:checkpoint', suspend: '{"checkpoint":1}' };
+      const result = commitIncompleteScormState(args);
+      assert.equal(result.apiVersion, is2004 ? '2004' : '1.2');
+      assert.deepEqual(events, ['initialize', `set:${location}`, 'set:cmi.suspend_data',
+        `set:${status}`, `set:${exit}`, 'commit']);
+
+      const rejected = [];
+      const rejectingApi = is2004
+        ? { ...api, SetValue: (key) => { rejected.push(`set:${key}`); return 'false'; },
+            Commit: () => { rejected.push('commit'); return 'true'; } }
+        : { ...api, LMSSetValue: (key) => { rejected.push(`set:${key}`); return 'false'; },
+            LMSCommit: () => { rejected.push('commit'); return 'true'; } };
+      globalThis.window = is2004 ? { API_1484_11: rejectingApi } : { API: rejectingApi };
+      assert.throws(() => commitIncompleteScormState(args), /SCORM_INCOMPLETE_SET_REJECTED/);
+      assert.equal(rejected.includes('commit'), false, 'failed SetValue must never trigger Commit');
+    }
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
 });
