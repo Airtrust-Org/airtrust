@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createF0Adapters } from '../staging/f5-f0-adapters.mjs';
+import { createF0Adapters, runF5BrowserPair } from '../staging/f5-f0-adapters.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const canonical = value => {
@@ -56,4 +56,47 @@ test('rejects plan substitution and policy-changing F0 receipts', async () => {
   plan.syntheticFixture.receiptDocuments.approval.activation = true;
   plan.syntheticFixture.approvalReceiptSha256 = digest(canonical(plan.syntheticFixture.receiptDocuments.approval));
   await assert.rejects(adapters.verifyF0Receipts(plan), /RECEIPT_POLICY_INVALID/);
+});
+
+test('F5 physical candidate QA requires Chromium and WebKit with the same scope and D1 state', async () => {
+  const engines = [];
+  const expected = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001', suspendSha256: 'b'.repeat(64),
+    runtimeVersion: '1.2', resumeVerified: true, locationPersisted: true,
+    suspendDataPersisted: true,
+  };
+  const result = await runF5BrowserPair(async ({ engine, browserType }) => {
+    assert.equal(typeof browserType.launch, 'function');
+    engines.push(engine);
+    return { ...expected, sessionCount: engines.length };
+  });
+  assert.deepEqual(engines, ['chromium', 'webkit']);
+  assert.deepEqual(result.browserEngines, ['chromium', 'webkit']);
+  assert.equal(result.sessionCount, 2);
+});
+
+test('F5 candidate QA fails closed if WebKit fails or diverges from Chromium readback', async () => {
+  const baseline = {
+    source: 'WORKER_CANDIDATE_QA_EXECUTION', candidateId: 'candidate-1',
+    packageSha256: 'a'.repeat(64), servedPackageSha256: 'a'.repeat(64),
+    committedPackageSha256: 'a'.repeat(64), enrollmentId: 17, cycleId: 19,
+    runId: '123e4567-e89b-12d3-a456-426614174001',
+    suspendSha256: 'b'.repeat(64), runtimeVersion: '1.2',
+    resumeVerified: true, locationPersisted: true, suspendDataPersisted: true,
+    sessionCount: 1,
+  };
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => {
+    if (engine === 'webkit') throw Error('WEBKIT_LAUNCH_FAILED');
+    return baseline;
+  }), /WEBKIT_LAUNCH_FAILED/);
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => ({
+    ...baseline, packageSha256: engine === 'webkit' ? 'c'.repeat(64) : 'a'.repeat(64),
+    sessionCount: engine === 'webkit' ? 2 : 1,
+  })), /BROWSER_PAIR_SCOPE_MISMATCH/);
+  await assert.rejects(runF5BrowserPair(async ({ engine }) => ({
+    ...baseline, sessionCount: engine === 'webkit' ? 0 : 1,
+  })), /BROWSER_PAIR_READBACK_REGRESSION/);
 });
