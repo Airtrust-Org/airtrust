@@ -63,6 +63,15 @@ MATRICULA_ID="$(sql "SELECT id
   ORDER BY id DESC
   LIMIT 1;")"
 [[ "$MATRICULA_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Disposable LMS enrollment fixture not found." >&2; exit 1; }
+CICLO_ID="$(sql "SELECT id
+  FROM lms_matricula_ciclos
+  WHERE empresa_id=$EMPRESA_ID
+    AND matricula_id=$MATRICULA_ID
+    AND ciclo_atual=1
+    AND deleted_at IS NULL
+  ORDER BY id DESC
+  LIMIT 1;")"
+[[ "$CICLO_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Active cycle for disposable LMS fixture not found." >&2; exit 1; }
 
 # The parent smoke has already proved that this qualifying PDF fails closed.
 # From this point onward the same disposable rows are repurposed to isolate the
@@ -99,9 +108,11 @@ echo "[smoke:lms:scorm] Persisting non-terminal progress first"
 PARTIAL_CMI='{"cmi.core.lesson_location":"1/3","cmi.core.lesson_status":"incomplete"}'
 curl -fsS -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$(node -e '
     const id=Number(process.argv[1]);
-    const cmi=process.argv[2];
+    const cycleId=Number(process.argv[2]);
+    const cmi=process.argv[3];
     process.stdout.write(JSON.stringify({
       matricula_id:id,
+      ciclo_id:cycleId,
       lesson_status:"incomplete",
       score_raw:30,
       score_max:100,
@@ -110,7 +121,7 @@ curl -fsS -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: B
       cmi_json:cmi,
       commit_event:"smoke-progress"
     }));
-  ' "$MATRICULA_ID" "$PARTIAL_CMI")" >/dev/null
+  ' "$MATRICULA_ID" "$CICLO_ID" "$PARTIAL_CMI")" >/dev/null
 
 PARTIAL_ROW="$(sql "SELECT status || '|' || CAST(progresso_pct AS TEXT)
   FROM lms_matriculas WHERE id=$MATRICULA_ID AND empresa_id=$EMPRESA_ID;")"
@@ -134,11 +145,12 @@ FAILED_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR" \
   -d "$(node -e '
     process.stdout.write(JSON.stringify({
       matricula_id: Number(process.argv[1]),
+      ciclo_id: Number(process.argv[2]),
       lesson_status: "failed", completion_status: "incomplete", success_status: "failed",
       score_raw: 30, score_max: 100, score_min: 0,
-      cmi_json: process.argv[2], commit_event: "SCORM_COMMIT"
+      cmi_json: process.argv[3], commit_event: "SCORM_COMMIT"
     }));
-  ' "$MATRICULA_ID" "$FAILED_CMI")")"
+  ' "$MATRICULA_ID" "$CICLO_ID" "$FAILED_CMI")")"
 [[ "$FAILED_HTTP" == "200" ]] || { echo "Failed attempt was not recorded: HTTP $FAILED_HTTP" >&2; exit 1; }
 FAILED_DB_ROW="$(sql "SELECT status || '|' || COALESCE(data_conclusao,'') || '|' ||
   COALESCE(CAST(qualificacao_historico_id AS TEXT), '')
@@ -159,12 +171,13 @@ UNCERTIFIED_COMMIT_HTTP="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKI
   -d "$(node -e '
     process.stdout.write(JSON.stringify({
       matricula_id: Number(process.argv[1]),
+      ciclo_id: Number(process.argv[2]),
       lesson_status: "passed", completion_status: "completed", success_status: "passed",
       score_raw: 90, score_min: 0, score_max: 100,
-      cmi_json: process.argv[2],
+      cmi_json: process.argv[3],
       commit_event: "SCORM_COMMIT"
     }));
-  ' "$MATRICULA_ID" "$UNCERTIFIED_CMI")")"
+  ' "$MATRICULA_ID" "$CICLO_ID" "$UNCERTIFIED_CMI")")"
 [[ "$UNCERTIFIED_COMMIT_HTTP" == "200" ]] || {
   echo "Passive terminal SCORM evidence was not persisted: HTTP $UNCERTIFIED_COMMIT_HTTP" >&2
   exit 1
@@ -203,9 +216,11 @@ echo "[smoke:lms:scorm] Committing terminal passed/completed state"
 FINAL_CMI='{"cmi.core.lesson_location":"3/3","cmi.core.lesson_status":"passed","cmi.core.score.raw":"90","cmi.core.score.max":"100","airtrust.total_slides":3,"airtrust.viewed_slides":[3]}'
 HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "$(node -e '
     const id=Number(process.argv[1]);
-    const cmi=process.argv[2];
+    const cycleId=Number(process.argv[2]);
+    const cmi=process.argv[3];
     process.stdout.write(JSON.stringify({
       matricula_id:id,
+      ciclo_id:cycleId,
       lesson_status:"passed",
       completion_status:"completed",
       success_status:"passed",
@@ -221,7 +236,7 @@ HTTP_CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' -b "$COOKIE_JAR"   -X PO
       completion_candidate:true,
       completion_observed_at:new Date().toISOString()
     }));
-  ' "$MATRICULA_ID" "$FINAL_CMI")")"
+  ' "$MATRICULA_ID" "$CICLO_ID" "$FINAL_CMI")")"
 
 if [[ "$HTTP_CODE" != "200" ]]; then
   echo "Terminal SCORM commit failed with HTTP $HTTP_CODE" >&2
@@ -277,7 +292,7 @@ COVERAGE_JSON="$(sql "SELECT json_extract(cmi_json, '$.\"airtrust.viewed_slides\
 }
 
 echo "[smoke:lms:scorm] Replaying incomplete commit to prove completed enrollment cannot downgrade"
-curl -fsS -b "$COOKIE_JAR" -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID,\"lesson_status\":\"incomplete\",\"cmi_json\":\"{\\\"cmi.core.lesson_location\\\":\\\"1/3\\\"}\"}" >/dev/null
+curl -fsS -b "$COOKIE_JAR" -X POST "$API_BASE/lms/matriculas/scorm/commit"   -H "Authorization: Bearer $TOKEN"   -H 'Content-Type: application/json'   -d "{\"matricula_id\":$MATRICULA_ID,\"ciclo_id\":$CICLO_ID,\"lesson_status\":\"incomplete\",\"cmi_json\":\"{\\\"cmi.core.lesson_location\\\":\\\"1/3\\\"}\"}" >/dev/null
 
 POST_REPLAY_ROW="$(sql "SELECT status || '|' || CAST(progresso_pct AS TEXT) || '|' ||
   COALESCE(CAST(qualificacao_historico_id AS TEXT),'')

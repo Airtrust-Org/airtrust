@@ -385,6 +385,47 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(body.cmi_json).toContain('airtrust.viewed_slides');
   });
 
+  it('a finalização explícita SCORM 2004 preserva seus campos e não envia status 1.2', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 347,
+      titulo: 'Curso SCORM 2004',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/120/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: '',
+      isScorm2004: true,
+      initialCmiJson: JSON.stringify({
+        'cmi.completion_status': 'completed',
+        'cmi.success_status': 'passed',
+        'cmi.score.raw': '96',
+        'cmi.location': '37/37',
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API_1484_11 as Record<string, (...args: unknown[]) => unknown>;
+    api.Initialize('');
+    g.window.dispatchEvent(new g.MessageEvent('message', {
+      origin: '',
+      source: g.window.parent,
+      data: { type: 'lms:request-completion', matriculaId: 347 },
+    }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body).toMatchObject({
+      matricula_id: 347,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      completion_status: 'completed',
+      success_status: 'passed',
+      score_raw: 96,
+    });
+    expect(body.lesson_status).toBeUndefined();
+    expect(body.completion_observed_at).toEqual(expect.any(String));
+  });
+
   it('não deixa eventos de saída rebaixarem um SCORM_FINISH enfileirado durante autosave', async () => {
     const matriculaId = 987654;
     let releaseAutosave: (response: unknown) => void = () => {};
@@ -1062,6 +1103,48 @@ describe('SCORM final write — in-flight autosave must never acknowledge a queu
       await vi.waitFor(() => expect(messages.some(m =>
         m.type === 'lms:session-close:ack' && m.status === 'save-unconfirmed')).toBe(true));
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      g.window.parent = priorParent;
+    }
+  });
+
+  it('termina a API SCORM 2004 depois do commit de saída, sem chamar a API 1.2', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(persisted);
+    vi.stubGlobal('fetch', fetchMock);
+    const priorParent = g.window.parent;
+    const messages: Array<{type?: string; status?: string}> = [];
+    g.window.parent = { postMessage: (message: {type?: string; status?: string}) => messages.push(message) };
+    try {
+      const html = buildLaunchPage({
+        matriculaId: 99013,
+        titulo: 'Fechamento SCORM 2004',
+        launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/3/index.html',
+        commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+        token: '',
+        isScorm2004: true,
+        initialCmiJson: '{}',
+        hasResumeState: false,
+      });
+      new Function(extractWrapperScript(html))();
+      const api2004 = g.window.API_1484_11 as Record<string, (...args: unknown[]) => unknown>;
+      const api12 = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+      const terminate = vi.spyOn(api2004, 'Terminate');
+      const finish12 = vi.spyOn(api12, 'LMSFinish');
+      api2004.Initialize('');
+
+      g.window.dispatchEvent(new g.MessageEvent('message', {
+        origin: '', source: g.window.parent,
+        data: { type: 'lms:session-close', reason: 'user-exit', matriculaId: 99013 },
+      }));
+
+      await vi.waitFor(() => expect(messages.some(message =>
+        message.type === 'lms:session-close:ack' && message.status === 'closed')).toBe(true));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({
+        matricula_id: 99013, commit_event: 'SCORM_FINISH', completion_candidate: null,
+      });
+      expect(terminate).toHaveBeenCalledOnce();
+      expect(finish12).not.toHaveBeenCalled();
     } finally {
       g.window.parent = priorParent;
     }

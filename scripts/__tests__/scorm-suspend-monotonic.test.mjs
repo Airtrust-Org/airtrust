@@ -17,6 +17,20 @@ test('rejects cursor drift, including return to the first slide',()=>{
   assert.equal(observeMonotonicSuspend(state(),state({s:current})).ok,false);
  }
 });
+test('accepts the real F5 Unified numeric c cursor without confusing CFIT boolean c',()=>{
+ const f5=(overrides={})=>JSON.stringify({
+  v:1,p:'AIRTRUST-F5-V4D',c:1,a:1,m:1,d:[0,1],f:[],study:false,...overrides,
+ });
+ assert.deepEqual(observeMonotonicSuspend(f5(),f5()),{
+  ok:true,reason:'BYTE_IDENTICAL'});
+ assert.equal(observeMonotonicSuspend(f5(),f5({d:[0,1,2]})).ok,true);
+ for(const current of [0,2,-1,'1',null,true,false])
+  assert.equal(observeMonotonicSuspend(f5(),f5({c:current})).ok,false);
+ // A silent switch from F5's c cursor schema to the s cursor schema is unsafe.
+ const switched=JSON.stringify({v:1,p:'AIRTRUST-F5-V4D',s:1,d:[0,1],f:[],study:false});
+ assert.equal(observeMonotonicSuspend(f5(),switched).ok,false);
+});
+
 test('rejects loss of completed slides or scenarios',()=>{
  for(const key of ['d','sc']){
   const initial=state({[key]:[0,1]});
@@ -57,4 +71,21 @@ test('preserves CFIT keyed scenario state and rejects missing entries',()=>{
 test('never downgrades the CFIT completed flag',()=>{
  const first=state({sc:{scenario7:true},c:true});
  assert.equal(observeMonotonicSuspend(first,state({sc:{scenario7:true},c:false})).ok,false);
+});
+
+test('keeps synthetic navigation fixture cursor strict without broadening F5/CFIT schemas',()=>{
+ const qa=(position,scope='AIRTRUST_SCORM_RESUME_QA_V1')=>JSON.stringify({scope,position});
+ assert.deepEqual(observeMonotonicSuspend(qa(2),qa(2)),{
+  ok:true,reason:'BYTE_IDENTICAL'});
+ assert.deepEqual(observeMonotonicSuspend(qa(2),JSON.stringify({
+  position:2,scope:'AIRTRUST_SCORM_RESUME_QA_V1'})),{
+  ok:true,reason:'MONOTONIC_CHECKPOINT'});
+ for(const changed of [
+  qa(1),qa(0),qa(3),qa('2'),qa(null),qa(2,'BAD_SCOPE'),
+  JSON.stringify({scope:'AIRTRUST_SCORM_RESUME_QA_V1',position:2,completed:true}),
+  state({s:2}),
+ ]){
+  assert.equal(observeMonotonicSuspend(qa(2),changed).ok,false);
+ }
+ assert.equal(observeMonotonicSuspend(state(),qa(2)).ok,false);
 });
