@@ -38,7 +38,8 @@ export function validateF5ExecutionPlan(plan) {
       !HEX64.test(fixture?.approvalReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.provisioningReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.recoveryReceiptSha256 ?? '') ||
-      !HEX64.test(fixture?.cleanupContractSha256 ?? '')) {
+      !HEX64.test(fixture?.cleanupContractSha256 ?? '') ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(fixture?.expiresAt ?? '')) {
     fail('PLAN_OR_F0_RECEIPT_INVALID');
   }
   return plan;
@@ -62,6 +63,7 @@ async function hashSource(source, expectedBytes) {
 function verifyInactiveQualityGate(candidate, plan) {
   if (!candidate || candidate.packageSha256 !== plan.candidate.packageSha256 ||
       !UUID.test(candidate.packageId ?? '') || candidate.status !== 'VALIDATED' ||
+      !['1.2', '2004'].includes(candidate.scormVersion) ||
       candidate.createdByOperation !== true || candidate.alreadyExisted !== false ||
       candidate.active !== false || candidate.completionWritten !== false ||
       candidate.certificateIssued !== false || candidate.zipBytes !== plan.candidate.zipBytes) {
@@ -88,6 +90,7 @@ function verifyCandidateRow(row, candidate, plan) {
   if (!row || row.source !== 'WORKER_D1_CANDIDATE_READBACK' ||
       row.tenantId !== plan.candidate.tenantId || row.courseId !== plan.candidate.courseId ||
       row.packageId !== candidate.packageId || row.packageSha256 !== candidate.packageSha256 ||
+      row.scormVersion !== candidate.scormVersion ||
       row.status !== 'VALIDATED' || row.active !== false ||
       row.r2Prefix !== candidate.r2Prefix || row.launchFile !== candidate.launchFile) {
     fail('D1_CANDIDATE_READBACK_MISMATCH');
@@ -124,6 +127,10 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       !HEX64.test(evidence.cmiSha256 ?? '') || !HEX64.test(evidence.suspendSha256 ?? '') ||
       !positive(evidence.sessionCount) || evidence.completionStatus === 'CONCLUIDO' ||
       evidence.qualificationHistoryCount !== 0 || evidence.certificateDocument !== null ||
+      evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
+      evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
+      !Array.isArray(evidence.browserEngines) || evidence.browserEngines.length !== 2 ||
+      evidence.browserEngines[0] !== 'chromium' || evidence.browserEngines[1] !== 'webkit' ||
       evidence.assessmentAttempted !== false || evidence.assessmentApproved !== false ||
       evidence.externalAssessmentApproved !== false || evidence.certificateIssued !== false) {
     fail('CANDIDATE_EXECUTION_EVIDENCE_INVALID');
@@ -209,14 +216,15 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         r2Candidate.assetSha256 !== candidate.r2Readback.launchAssetSha256 ||
         r2Candidate.active === true) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
 
+    syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
-    syntheticTouched = true;
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
-      packageSha256: c.packageSha256, enrollmentId: f.enrollmentId,
+      packageSha256: c.packageSha256, scormVersion: candidate.scormVersion,
+      enrollmentId: f.enrollmentId,
       cycleId: f.cycleId, runId: f.runId,
     }), plan, candidate);
     const after = verifyQaEvidence(await adapters.readQaEvidence({
@@ -250,6 +258,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       d1ReadbackSource: d1Candidate.source,
       syntheticEnrollmentId: f.enrollmentId,
       execution: { cmiSha256: execution.cmiSha256, suspendSha256: execution.suspendSha256,
+        browserEngines: execution.browserEngines,
         sessionCount: after.sessionCount, servedPackageSha256: after.servedPackageSha256,
         committedPackageSha256: after.committedPackageSha256 },
       cleanupReceiptSha256: cleanupReceipt.receiptSha256,

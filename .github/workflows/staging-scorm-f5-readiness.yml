@@ -67,6 +67,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install reviewed staging QA browser dependencies
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium webkit
       - name: Verify main ancestry and eight canonical release gates
         shell: bash
         env:
@@ -107,13 +116,73 @@ jobs:
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
         run: node scripts/staging/f5-candidate-approval-guard.mjs
+      - name: Materialize protected F0 plan and exact-checkout adapter
+        id: f0-mount
+        shell: bash
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          F5_EXECUTOR_PLAN_B64: ${{ secrets.F5_EXECUTOR_PLAN_B64 }}
+          F5_F0_ADAPTER_SOURCE: ${{ github.workspace }}/scripts/staging/f5-f0-adapters.mjs
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-materialize-private-runner.mjs > "$RUNNER_TEMP/f5-mount.json"
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/f5-mount.json`, 'utf8'));
+          if (result.status !== 'MOUNTED' || !/^[a-f0-9]{64}$/.test(result.adapterSha256)) {
+            throw new Error('F5_ADAPTER_MOUNT_RECEIPT_INVALID');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `adapter_sha256=${result.adapterSha256}\n`);
+          NODE
+      - name: Verify provisioned F0 runner contract before reading private ZIP
+        shell: bash
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
+          F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
+          F5_F0_ADAPTER_SHA256: ${{ steps.f0-mount.outputs.adapter_sha256 }}
+          SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
+          SCORM_QA_READBACK_SECRET: ${{ secrets.SCORM_QA_READBACK_SECRET }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_OPERATION_ID: ${{ inputs.operation_id }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-provisioned-execution-preflight.mjs
+      # Only the exact first pilot ZIP uses the two-secrets bridge. Preserve
+      # the existing private runner mount contract for larger F5 candidates.
+      - name: Verify exact original ZIP from protected staging secrets
+        if: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' }}
+        shell: bash
+        env:
+          F5_ENVIRONMENT: staging
+          GITHUB_REF: ${{ github.ref }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_PRIVATE_ZIP_1_B64: ${{ secrets.F5_PRIVATE_ZIP_1_B64 }}
+          F5_PRIVATE_ZIP_2_B64: ${{ secrets.F5_PRIVATE_ZIP_2_B64 }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-materialize-private-zip.mjs
       - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
         env:
-          F5_EXECUTOR_PLAN_PATH: ${{ vars.F5_EXECUTOR_PLAN_PATH }}
-          F5_PRIVATE_ZIP_PATH: ${{ vars.F5_PRIVATE_ZIP_PATH }}
-          F5_F0_ADAPTER_MODULE: ${{ vars.F5_F0_ADAPTER_MODULE }}
-          F5_F0_ADAPTER_SHA256: ${{ vars.F5_F0_ADAPTER_SHA256 }}
+          F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
+          F5_PRIVATE_ZIP_PATH: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' && format('{0}/f5-private-candidate.zip', runner.temp) || vars.F5_PRIVATE_ZIP_PATH }}
+          F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
+          F5_F0_ADAPTER_SHA256: ${{ steps.f0-mount.outputs.adapter_sha256 }}
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
           SCORM_QA_ACCESS_TOKEN: ${{ secrets.SCORM_QA_ACCESS_TOKEN }}
           SCORM_QA_READBACK_SECRET: ${{ secrets.SCORM_QA_READBACK_SECRET }}
@@ -153,3 +222,7 @@ jobs:
           path: ${{ runner.temp }}/f5-inactive-candidate-summary.json
           if-no-files-found: error
           retention-days: 30
+      - name: Destroy temporary private candidate source
+        if: always()
+        shell: bash
+        run: rm -f "${{ runner.temp }}/f5-private-candidate.zip" "${{ runner.temp }}/f5-executor-plan.json" "${{ runner.temp }}/f5-provisioned-f0-adapter.mjs" "${{ runner.temp }}/f5-mount.json"

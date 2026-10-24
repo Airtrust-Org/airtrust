@@ -39,6 +39,12 @@ function fail(message: string, status = 400): never {
   throw new ApiError(message, status);
 }
 
+function cleanEtag(etag: string | undefined): string | undefined {
+  if (typeof etag !== 'string') return undefined;
+  const trimmed = etag.trim().replace(/^"+|"+$/g, '');
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function parseF5Grant(raw: string | undefined, params: {
   environment: string;
   runtimeSha: string | undefined;
@@ -120,8 +126,9 @@ export async function beginF5StreamedIntake(params: {
     }
   }
   const lockValue = JSON.stringify({ state: 'active', token: lockToken, operationId, expiresAt: Date.now() + F5_STREAMED_ZIP_LIMITS.leaseMs });
+  const lockEtag = cleanEtag(lockHead?.etag ?? lockHead?.httpEtag);
   const acquired = await params.bucket.put(keys.lock, lockValue, {
-    onlyIf: lockHead ? { etagMatches: lockHead.httpEtag } : { etagDoesNotMatch: '*' },
+    onlyIf: lockEtag ? { etagMatches: lockEtag } : { etagDoesNotMatch: '*' },
   });
   if (!acquired) fail('Mutex F5 ocupado por outra importação', 409);
 
@@ -151,8 +158,9 @@ export async function beginF5StreamedIntake(params: {
       packageSha256: params.packageSha256, zipBytes: params.zipBytes,
       grantId: params.grantId, runtimeSha: params.runtimeSha,
       arquivoNome: params.arquivoNome };
+    const markerEtag = cleanEtag(markerReceipt?.etag ?? markerReceipt?.httpEtag);
     const storedMarker = await params.bucket.put(keys.marker, JSON.stringify(marker), {
-      onlyIf: { etagMatches: markerReceipt.httpEtag },
+      onlyIf: markerEtag ? { etagMatches: markerEtag } : undefined,
     });
     if (!storedMarker) fail('Registro do multipart SCORM já existe; recuperação necessária', 409);
     return { operationId, zipBytes: params.zipBytes, partBytes: F5_STREAMED_ZIP_LIMITS.partBytes,
@@ -185,9 +193,7 @@ async function releaseF5Mutex(bucket: R2Bucket, lockKey: string, operationId: st
   try {
     const state = await current.json<{ operationId?: string }>();
     if (state.operationId !== operationId) return;
-    await bucket.put(lockKey, JSON.stringify({ state: 'released', operationId, expiresAt: 0 }), {
-      onlyIf: { etagMatches: current.httpEtag },
-    });
+    await bucket.put(lockKey, JSON.stringify({ state: 'released', operationId, expiresAt: 0 }));
   } catch { /* preserve an unreadable lock for explicit recovery */ }
 }
 
@@ -233,27 +239,42 @@ export async function putF5StreamedIntakePart(params: {
   const partLockKey = `${keys.part(params.partNumber)}.lock`;
   const partLock = await params.bucket.put(partLockKey, params.operationId, { onlyIf: { etagDoesNotMatch: '*' } });
   if (!partLock) fail('Parte já está sendo recebida; consulte o recibo antes de repetir', 409);
-  let bytes = 0;
-  const bounded = params.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      bytes += chunk.byteLength;
-      if (bytes > expected) controller.error(new Error('F5_STREAMED_PART_OVERFLOW'));
-      else controller.enqueue(chunk);
-    },
-  }));
+  const FixedLengthStreamClass = typeof FixedLengthStream !== 'undefined'
+    ? FixedLengthStream
+    : class extends TransformStream<Uint8Array, Uint8Array> {
+        constructor(expectedLength: number) {
+          let bytes = 0;
+          super({
+            transform(chunk, controller) {
+              bytes += chunk.byteLength;
+              if (bytes > expectedLength) controller.error(new ApiError('Parte SCORM truncada; multipart abortado', 400));
+              else controller.enqueue(chunk);
+            },
+            flush(controller) {
+              if (bytes !== expectedLength) controller.error(new ApiError('Parte SCORM truncada; multipart abortado', 400));
+            },
+          });
+        }
+      };
+
+  const stream = params.body.pipeThrough(new FixedLengthStreamClass(expected));
   const upload = params.bucket.resumeMultipartUpload(keys.zip, marker.uploadId);
   try {
-    const uploaded = await upload.uploadPart(params.partNumber, bounded);
-    if (bytes !== expected) fail('Parte SCORM truncada; multipart abortado', 400);
-    const receipt = { partNumber: params.partNumber, etag: uploaded.etag, bytes };
+    const uploaded = await upload.uploadPart(params.partNumber, stream);
+    const receipt = { partNumber: params.partNumber, etag: uploaded.etag, bytes: expected };
     const written = await params.bucket.put(keys.part(params.partNumber), JSON.stringify(receipt), {
       onlyIf: { etagDoesNotMatch: '*' },
     });
     if (!written) fail('Parte já registrada; recupere o recibo existente', 409);
     await params.bucket.delete(partLockKey);
     return receipt;
-  } catch (error) {
+  } catch (error: unknown) {
+    await params.bucket.delete(partLockKey).catch(() => {});
     await upload.abort().catch(() => {});
+    const msg = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    if (msg && /FixedLengthStream|truncada/i.test(msg)) {
+      fail('Parte SCORM truncada; multipart abortado', 400);
+    }
     throw error;
   }
 }

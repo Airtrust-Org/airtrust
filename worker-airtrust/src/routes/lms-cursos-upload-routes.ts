@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
 import {assertScormQaReadbackAccess, readScormQaBackendEvidence} from '../lib/lms/lms-scorm-staging-readback';
+import { readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
+import { provisionScormF0QaBinding } from '../lib/lms/lms-scorm-f0-staging-provision';
+import { recoverF0CandidateFixture } from '../lib/lms/lms-scorm-f0-staging-runtime';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -24,6 +27,7 @@ import {
   activateScormPackageVersion,
   createScormPackageCandidate,
   createScormPackageCandidateFromR2Intake,
+  removeFailedScormPackageCandidate,
   importScormFunctionalAttestation,
   listScormPackageVersions,
   runScormPackageConformance,
@@ -369,12 +373,184 @@ app.post('/:id/scorm-upload/streamed/:operationId/abort',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
-    await authorizeF5Operation(c, empresaId, cursoId, true);
-    const data = await abortF5StreamedIntake({
-      bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
-      operationId: c.req.param('operationId'),
+    try {
+      await authorizeF5Operation(c, empresaId, cursoId, true);
+      const data = await abortF5StreamedIntake({
+        bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
+        operationId: c.req.param('operationId'),
+      });
+      return c.json({ success: true, data });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 404) {
+        return c.json({ success: true, data: { operationId: c.req.param('operationId'), aborted: true, alreadyClean: true } });
+      }
+      throw err;
+    }
+  });
+
+// Resolve a lost multipart completion response through Worker-owned R2/D1
+// state. Candidate ownership is tied to the operation ID in upload metadata.
+app.get('/:id/scorm-upload/streamed/:operationId/status',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
+    const operationId = c.req.param('operationId');
+    const expectedSha = c.req.query('sha256') ?? '';
+    if (!/^[a-f0-9-]{36}$/i.test(operationId)) throw new ApiError('Operação F5 inválida', 400);
+    if (!/^[a-f0-9]{64}$/.test(expectedSha)) throw new ApiError('SHA F5 inválido', 400);
+    const versions = await listScormPackageVersions(c.env.DB, empresaId, cursoId);
+    const expectedName = `f5-${expectedSha}-${operationId}.zip`;
+    const candidate = versions.find(item => item.arquivoNome === expectedName &&
+      item.packageSha256 === expectedSha);
+    if (candidate) {
+      const source = await c.env.DB.prepare(`SELECT zip_size_bytes FROM lms_scorm_package_versions
+        WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=? AND status='VALIDATED'`)
+        .bind(candidate.packageId,empresaId,cursoId,candidate.packageSha256)
+        .first<{zip_size_bytes:number}>();
+      if (!Number.isSafeInteger(source?.zip_size_bytes) || Number(source?.zip_size_bytes)<22) {
+        throw new ApiError('Candidato F5 sem proveniência de tamanho',409);
+      }
+      f5Grant(c,empresaId,cursoId,candidate.packageSha256,Number(source!.zip_size_bytes));
+      return c.json({ success: true, data: { source: 'WORKER_F5_INTAKE_STATUS',
+      state: 'CANDIDATE_PRESENT', operationId, candidate: { packageId: candidate.packageId,
+        packageSha256: candidate.packageSha256, active: candidate.active,
+        createdByOperation: true, alreadyExisted: false } } });
+    }
+    try {
+      const marker = await authorizeF5Operation(c, empresaId, cursoId, true);
+      if (marker.packageSha256 !== expectedSha) throw new ApiError('SHA da operação F5 divergente', 409);
+      return c.json({ success: true, data: { source: 'WORKER_F5_INTAKE_STATUS',
+        state: 'INTAKE_PRESENT', operationId, packageSha256: marker.packageSha256 } });
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.statusCode !== 404) throw error;
+    }
+    return c.json({ success: true, data: { source: 'WORKER_F5_INTAKE_STATUS',
+      state: 'CLEAN', operationId } });
+  });
+
+
+const F0StagingProvisionSchema = z.object({
+  enrollmentId: z.number().int().positive(),
+  cycleId: z.number().int().positive(),
+  packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  approvalReceiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  runId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
+  expiresAt: z.string().min(20).max(35),
+}).strict();
+
+// F0 binding is restricted to the protected staging QA tenant, single
+// candidate Worker grant, tenant admin and dedicated QA readback secret.
+// This endpoint CANNOT activate a course, fabricate a commit or certify a ZIP.
+app.post('/:id/scorm-package-versions/:packageId/qa-f0/bind',
+  requirePermission('lms', 'editar', 'admin'),
+  requireOperacoesCurso('update'),
+  async (c) => {
+    const tenantId = getEmpresaIdSafe(c);
+    const courseId = validCourseId(c);
+    assertScormQaReadbackAccess({
+      environment: c.env.ENVIRONMENT, tenantId,
+      authorizedTenant: c.env.SCORM_QA_SYNTHETIC_TENANT_ID,
+      secret: c.env.SCORM_QA_READBACK_SECRET,
+      providedSecret: c.req.header('X-Airtrust-F5-QA-Readback'),
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
     });
-    return c.json({ success: true, data });
+    const parsed = F0StagingProvisionSchema.safeParse(await c.req.json<unknown>().catch(() => null));
+    if (!parsed.success) throw new ApiError('Escopo de vínculo F0 inválido', 400);
+    const payload = parsed.data;
+    const candidate = await readScormQaCandidate(c.env.DB, {
+      empresaId: tenantId, cursoId: courseId,
+      packageId: c.req.param('packageId'),
+      expectedSha: payload.packageSha256,
+    });
+    const source = await c.env.DB.prepare(
+      `SELECT zip_size_bytes FROM lms_scorm_package_versions
+         WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
+           AND status='VALIDATED'`,
+    ).bind(candidate.id, tenantId, courseId, candidate.package_sha256)
+      .first<{ zip_size_bytes: number }>();
+    if (!Number.isSafeInteger(source?.zip_size_bytes) || Number(source?.zip_size_bytes) < 22) {
+      throw new ApiError('Pacote F0 inválido', 409);
+    }
+    const grant = parseF5Grant(c.env.SCORM_F5_STREAMED_INTAKE_GRANT, {
+      environment: c.env.ENVIRONMENT,
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+      tenantId, courseId, packageSha256: candidate.package_sha256,
+      zipBytes: Number(source!.zip_size_bytes),
+    });
+    const actorId = Number(c.get('userId' as never));
+    const bound = await provisionScormF0QaBinding(c.env.DB, {
+      tenantId, courseId, packageId: candidate.id,
+      packageSha256: candidate.package_sha256,
+      enrollmentId: payload.enrollmentId, cycleId: payload.cycleId,
+      runId: payload.runId, approvalReceiptSha256: payload.approvalReceiptSha256,
+      runtimeSha: c.env.AIRTRUST_SOURCE_SHA ?? '',
+      expiresAt: payload.expiresAt, grantId: grant.grantId, actorId,
+    });
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({ success: true, data: bound }, 201);
+  },
+);
+
+const F0RecoverySchema = z.object({
+  enrollmentId: z.number().int().positive(), cycleId: z.number().int().positive(),
+  runId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
+  packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  receiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+// Restore only the clean synthetic preimage. Keep append-only binding and
+// audit rows, and retain the candidate package for later review.
+async function recoverF0Route(c: Context<{ Bindings: Env }>) {
+  const tenantId = getEmpresaIdSafe(c), courseId = validCourseId(c);
+  assertScormQaReadbackAccess({ environment: c.env.ENVIRONMENT, tenantId,
+    authorizedTenant: c.env.SCORM_QA_SYNTHETIC_TENANT_ID,
+    secret: c.env.SCORM_QA_READBACK_SECRET,
+    providedSecret: c.req.header('X-Airtrust-F5-QA-Readback'),
+    runtimeSha: c.env.AIRTRUST_SOURCE_SHA });
+  const parsed = F0RecoverySchema.safeParse(await c.req.json<unknown>().catch(() => null));
+  if (!parsed.success) throw new ApiError('Escopo de recuperação F0 inválido', 400);
+  const { enrollmentId, cycleId, runId, packageSha256, receiptSha256 } = parsed.data;
+  const packageId = c.req.param('packageId');
+  if (!packageId) throw new ApiError('Candidato F0 inválido', 400);
+  await readScormQaCandidate(c.env.DB, { empresaId: tenantId, cursoId: courseId, packageId,
+    expectedSha: packageSha256 });
+  const result = await recoverF0CandidateFixture(c.env.DB, { tenantId, courseId,
+    packageId, packageSha256, enrollmentId, cycleId, runId,
+    runtimeSha: c.env.AIRTRUST_SOURCE_SHA ?? '', recoveryReceiptSha256: receiptSha256 });
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ success: true, data: { ...result, syntheticFixtureCleaned: true } });
+}
+
+app.post('/:id/scorm-package-versions/:packageId/qa-f0/recover',
+  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), recoverF0Route);
+app.post('/:id/scorm-package-versions/:packageId/qa-f0/cleanup',
+  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), recoverF0Route);
+
+const F0FailedCandidateCleanupSchema=z.object({
+  packageSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  operationId:z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
+}).strict();
+app.post('/:id/scorm-package-versions/:packageId/qa-f0/remove-failed-candidate',
+  requirePermission('lms','editar','admin'),requireOperacoesCurso('update'),async c=>{
+    const tenantId=getEmpresaIdSafe(c),courseId=validCourseId(c);
+    assertScormQaReadbackAccess({environment:c.env.ENVIRONMENT,tenantId,
+      authorizedTenant:c.env.SCORM_QA_SYNTHETIC_TENANT_ID,
+      secret:c.env.SCORM_QA_READBACK_SECRET,
+      providedSecret:c.req.header('X-Airtrust-F5-QA-Readback'),
+      runtimeSha:c.env.AIRTRUST_SOURCE_SHA});
+    const parsed=F0FailedCandidateCleanupSchema.safeParse(await c.req.json<unknown>().catch(()=>null));
+    if(!parsed.success)throw new ApiError('Escopo de remoção do candidato inválido',400);
+    const {packageSha256,operationId}=parsed.data,packageId=c.req.param('packageId');
+    const source=await c.env.DB.prepare(`SELECT zip_size_bytes FROM lms_scorm_package_versions
+      WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?`)
+      .bind(packageId,tenantId,courseId,packageSha256).first<{zip_size_bytes:number}>();
+    if(!Number.isSafeInteger(source?.zip_size_bytes)||Number(source?.zip_size_bytes)<22)
+      throw new ApiError('Tamanho do candidato F5 inválido',409);
+    f5Grant(c,tenantId,courseId,packageSha256,Number(source!.zip_size_bytes));
+    const result=await removeFailedScormPackageCandidate({db:c.env.DB,bucket:c.env.BUCKET,
+      empresaId:tenantId,cursoId:courseId,packageId,packageSha256,operationId,
+      actorId:Number(c.get('userId' as never))||null});
+    c.header('Cache-Control','private, no-store');
+    return c.json({success:true,data:result});
   });
 
 // Only protected staging QA administrators with a dedicated F0-provisioned

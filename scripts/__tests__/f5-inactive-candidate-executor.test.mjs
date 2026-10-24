@@ -23,6 +23,7 @@ const planFor = bytes => ({
     provisioningReceiptSha256: receipt('d'),
     recoveryReceiptSha256: receipt('e'),
     cleanupContractSha256: receipt('f'),
+    expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
   },
 });
 
@@ -67,6 +68,7 @@ function adaptersFor(plan, overrides = {}) {
     // Worker package ID is generated independently from the intake operation ID.
     packageId: '223e4567-e89b-12d3-a456-426614174000',
     packageSha256: plan.candidate.packageSha256,
+    scormVersion: '1.2',
     status: 'VALIDATED', createdByOperation: true, alreadyExisted: false,
     active: false, completionWritten: false, certificateIssued: false,
     zipBytes: plan.candidate.zipBytes,
@@ -101,6 +103,7 @@ function adaptersFor(plan, overrides = {}) {
         tenantId: plan.candidate.tenantId, courseId: plan.candidate.courseId,
         packageId: candidate.packageId, packageSha256: candidate.packageSha256,
         status: 'VALIDATED', active: false,
+        scormVersion: candidate.scormVersion,
         r2Prefix: candidate.r2Prefix, launchFile: candidate.launchFile,
       };
     },
@@ -116,6 +119,9 @@ function adaptersFor(plan, overrides = {}) {
       calls.push('execute'); return {
         source: 'WORKER_CANDIDATE_QA_EXECUTION',
         candidateId: candidate.packageId, packageSha256: plan.candidate.packageSha256,
+        runtimeVersion: candidate.scormVersion, locationPersisted: true,
+        suspendDataPersisted: true, resumeVerified: true,
+        browserEngines: ['chromium', 'webkit'],
         enrollmentId: plan.syntheticFixture.enrollmentId, cycleId: plan.syntheticFixture.cycleId,
         runId: plan.syntheticFixture.runId,
         servedPackageSha256: plan.candidate.packageSha256,

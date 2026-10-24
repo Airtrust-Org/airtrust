@@ -38,8 +38,9 @@ provenance guards. It requires a private plan and ZIP path plus a SHA-pinned F0
 adapter module supplied by the protected staging environment. The F0 module
 must provide receipt verification, candidate-bound synthetic execution,
 recovery, cleanup, failed-candidate cleanup, and ambiguous-intake resolution.
-The repository currently has no such provisioned module. The preview-only
-candidate route cannot substitute for it. The workflow never calls the state
+The repository now includes the reviewed F0 adapter at
+`scripts/staging/f5-f0-adapters.mjs` (integrated by PR #1743). The preview-only
+candidate route cannot substitute for its real Worker-backed callbacks. The workflow never calls the state
 machine with mocks; offline mocks are used only by contract tests.
 
 `scripts/staging/f5-worker-adapters.mjs` binds the core to the authenticated
@@ -53,13 +54,34 @@ The Worker creates candidate
 from the streamed intake response markers and exact SHA/scope readbacks rather
 than assuming those IDs are equal.
 
-The remaining staging prerequisites are operational: mount the private plan
-and ZIP source on the runner; supply the pinned F0 adapter module and its
-SHA-256; provision the protected staging access and QA readback secrets; and
-provide F0-issued single-candidate grant, receipt verifier, synthetic
-candidate-bound execution, ambiguous-intake resolution, and recovery/cleanup
-callbacks. Without any one of these, the workflow exits before treating the
-candidate as verified. No staging D1/R2 write was run by the local tests.
+The workflow now provides a **fail-closed private mount step** immediately after
+the GitHub F0 authorization guard and before the executor preflight. GitHub
+staging Environment secret `F5_EXECUTOR_PLAN_B64` (base64-encoded private
+one-candidate JSON plan) is decoded only inside `${{ runner.temp }}`.
+The executable F0 adapter is copied from the reviewed `scripts/staging/f5-f0-adapters.mjs`
+file in the exact trusted-main checkout, with its computed SHA-256 pinned to
+the runner-local copy. No private `F5_F0_ADAPTER_B64` secret or external path
+variable is needed.
+Exclusive creation, owner-only permissions and unconditional cleanup protect
+the runner-local files. Empty, changed or missing values fail before ZIP
+materialization and before any remote D1/R2 write. The previous unusable
+path-only variables `F5_EXECUTOR_PLAN_PATH` and `F5_F0_ADAPTER_MODULE` are
+not required from the Environment.
+
+**This bridge does not create an authorization grant, private plan or QA
+credentials.** The versioned F0 adapter implements the Worker-backed receipt
+verifier, candidate-bound synthetic execution, ambiguous-intake resolution
+and recovery/cleanup callbacks. The F5 staging QA path exercises **Chromium
+and WebKit** for the same inactive ZIP SHA and synthetic enrollment/cycle;
+only their combined authenticated readback can satisfy the executor and
+its sanitized audit summary. Staging also still requires `SCORM_QA_ACCESS_TOKEN` and
+`SCORM_QA_READBACK_SECRET`, along with the authorized synthetic tenant,
+enrollment/cycle and fresh, immutable single-candidate grant. The original
+ZIP #15 continues to use the already protected two-secret bridge. Do not
+place secrets or private adapter source in GitHub comments, repository files
+or runner logs. Without all required inputs the workflow exits before
+treating the candidate as verified. Tests use temporary local fixtures;
+no staging D1/R2 writes have been executed by this bridge.
 
 ```sh
 node --test scripts/__tests__/f5-inactive-candidate-executor.test.mjs

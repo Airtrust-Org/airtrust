@@ -39,6 +39,10 @@ export function sanitizeF5Evidence(evidence, env, rawSha256) {
       execution?.committedPackageSha256 !== env.F5_PACKAGE_SHA256 ||
       !HEX64.test(execution?.cmiSha256 ?? '') ||
       !HEX64.test(execution?.suspendSha256 ?? '') ||
+      !Array.isArray(execution?.browserEngines) ||
+      execution.browserEngines.length !== 2 ||
+      execution.browserEngines[0] !== 'chromium' ||
+      execution.browserEngines[1] !== 'webkit' ||
       !positive(execution?.sessionCount) ||
       !HEX64.test(evidence?.cleanupReceiptSha256 ?? '') ||
       evidence?.activationAuthorized !== false ||
@@ -61,6 +65,7 @@ export function sanitizeF5Evidence(evidence, env, rawSha256) {
     workerD1Readback: 'PASS',
     workerR2Readback: 'PASS',
     syntheticProgressCommitted: true,
+    browserEngines: ['chromium', 'webkit'],
     cleanupReceiptSha256: evidence.cleanupReceiptSha256,
     activationAuthorized: false,
     assessmentApproved: false,

@@ -44,6 +44,7 @@ test('uses authenticated Worker multipart routes and tenant-scoped candidate lis
       } else if (req.url.endsWith('/parts/1')) json(res, { partNumber: 1 });
       else if (req.url.endsWith('/complete')) json(res, {
         packageId, packageSha256: sha(archive), status: 'VALIDATED', createdByOperation: true,
+        scormVersion: '1.2',
         alreadyExisted: false, active: false, completionWritten: false, certificateIssued: false,
         zipBytes: archive.length, structural: { status: 'PASS' },
         completionManifest: { status: 'PASS' }, diagnostics: { status: 'PASS' },
@@ -55,6 +56,8 @@ test('uses authenticated Worker multipart routes and tenant-scoped candidate lis
       else if (req.url === '/api/lms/cursos/7301/scorm-package-versions') json(res, [{
         empresaId: 9201, cursoId: 7301,
         packageId, packageSha256: sha(archive), status: 'VALIDATED', active: false,
+        scormVersion: '1.2',
+        scormVersion: '1.2',
         r2Prefix: `lms/scorm/9201/7301/_candidates/${packageId}/`, launchFile: 'index.html',
       }]);
       else if (req.url === '/api/lms/assets/session') {
@@ -188,6 +191,7 @@ test('runs the executor end to end through real Worker adapters against an isola
       else if (req.url.endsWith('/parts/1')) json(res, { accepted: true });
       else if (req.url.endsWith('/complete')) json(res, {
         packageId, packageSha256, status: 'VALIDATED', createdByOperation: true,
+        scormVersion: '1.2',
         alreadyExisted: false, active: false, completionWritten: false, certificateIssued: false,
         zipBytes: zip.length, structural: { status: 'PASS' },
         completionManifest: { status: 'PASS' }, diagnostics: { status: 'PASS' },
@@ -199,6 +203,7 @@ test('runs the executor end to end through real Worker adapters against an isola
       else if (req.url.endsWith('/scorm-package-versions')) json(res, [{ empresaId: 9201, cursoId: 7301,
         packageId, packageSha256,
         status: 'VALIDATED', active: false,
+        scormVersion: '1.2',
         r2Prefix: `lms/scorm/9201/7301/_candidates/${packageId}/`, launchFile: 'index.html' }]);
       else if (req.url === '/api/lms/assets/session') {
         res.writeHead(200, { 'content-type': 'application/json',
@@ -221,7 +226,7 @@ test('runs the executor end to end through real Worker adapters against an isola
   }, async origin => {
     const base = createF5WorkerAdapters({ env: { SCORM_QA_ACCESS_TOKEN: token,
       SCORM_QA_READBACK_SECRET: 'r'.repeat(48), F5_STAGING_API_ORIGIN: origin,
-      F5_STAGING_PAGES_ORIGIN: origin } });
+      F5_STAGING_PAGES_ORIGIN: origin }, provisionF0Binding: async () => ({ source: 'fixture' }) });
     const plan = { schemaVersion: 1, scope: 'ONE_INACTIVE_CANDIDATE', releaseSha, harnessSha,
       mutex: F5_EXECUTOR_LIMITS.mutex,
       candidate: { environment: 'staging', tenantId: 9201, courseId: 7301,
@@ -229,7 +234,8 @@ test('runs the executor end to end through real Worker adapters against an isola
       syntheticFixture: { enrollmentId: 8101, cycleId: 8201,
         runId: '123e4567-e89b-12d3-a456-426614174001', approvalReceiptSha256: 'c'.repeat(64),
         provisioningReceiptSha256: 'd'.repeat(64), recoveryReceiptSha256: 'e'.repeat(64),
-        cleanupContractSha256: 'f'.repeat(64) } };
+        cleanupContractSha256: 'f'.repeat(64),
+        expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() } };
     const adapters = { ...base, verifyAuthorization: async () => true,
       readRuntimeProvenance: async () => ({ workerSha: releaseSha, pagesSha: releaseSha.slice(0, 7), harnessSha }),
       verifyF0Receipts: async () => true,
@@ -238,6 +244,9 @@ test('runs the executor end to end through real Worker adapters against an isola
         servedPackageSha256: packageSha256, committedPackageSha256: packageSha256,
         cmiSha256: '1'.repeat(64), suspendSha256: '2'.repeat(64), sessionCount: 1,
         completionStatus: 'EM_ANDAMENTO', qualificationHistoryCount: 0, certificateDocument: null,
+        runtimeVersion: '1.2', locationPersisted: true,
+        suspendDataPersisted: true, resumeVerified: true,
+        browserEngines: ['chromium', 'webkit'],
         assessmentAttempted: false, assessmentApproved: false, externalAssessmentApproved: false,
         certificateIssued: false }),
       cleanupSyntheticCandidate: async () => ({ verified: true, syntheticFixtureCleaned: true,
@@ -253,4 +262,24 @@ test('runs the executor end to end through real Worker adapters against an isola
     assert.ok(serverCalls.some(call => call.endsWith('/complete')));
     assert.ok(serverCalls.some(call => call.includes('/qa-evidence/8101')));
   });
+});
+
+test('Worker HTTP failure never reads or includes sensitive response bodies', async () => {
+  let bodyReads = 0;
+  const adapters = createF5WorkerAdapters({
+    env: { SCORM_QA_ACCESS_TOKEN: token, F5_STAGING_API_ORIGIN: 'https://staging.invalid' },
+    fetchImpl: async () => ({
+      ok: false, status: 500,
+      async text() { bodyReads++; return 'Bearer SECRET learnerId=8101'; },
+    }),
+  });
+  await assert.rejects(
+    adapters.beginIntake({
+      tenantId: 9201, courseId: 7301,
+      operationId: '123e4567-e89b-12d3-a456-426614174000',
+      packageSha256: 'a'.repeat(64), zipBytes: 40644,
+    }),
+    error => error.message === 'F5_WORKER_ADAPTER_WORKER_HTTP_500'
+  );
+  assert.equal(bodyReads, 0, 'response body must not be read');
 });
