@@ -185,9 +185,7 @@ async function releaseF5Mutex(bucket: R2Bucket, lockKey: string, operationId: st
   try {
     const state = await current.json<{ operationId?: string }>();
     if (state.operationId !== operationId) return;
-    await bucket.put(lockKey, JSON.stringify({ state: 'released', operationId, expiresAt: 0 }), {
-      onlyIf: { etagMatches: current.httpEtag },
-    });
+    await bucket.put(lockKey, JSON.stringify({ state: 'released', operationId, expiresAt: 0 }));
   } catch { /* preserve an unreadable lock for explicit recovery */ }
 }
 
