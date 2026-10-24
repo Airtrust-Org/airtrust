@@ -76,8 +76,8 @@ UNION ALL SELECT 'lms_ciclo_evidencias.enrollment_json', EXISTS(SELECT 1 FROM pr
 UNION ALL SELECT 'lms_matricula_ciclos.ciclo_atual', EXISTS(SELECT 1 FROM pragma_table_info('lms_matricula_ciclos') WHERE name='ciclo_atual')
 UNION ALL SELECT 'lms_matriculas.progresso_pct', EXISTS(SELECT 1 FROM pragma_table_info('lms_matriculas') WHERE name='progresso_pct')`;
 // Minimal D1 metadata probe: no UNION, virtual pragma table, learner rows, or private data.
-// Production schema probe #40110575223 proved three LMS tables present,
-// but lms_ciclo_evidencias absent. Read existing immutable prior cycle rows only.
+// Migration 0346 defines the six selected cycle columns. Production table probes
+// confirmed this table exists; query only its existing prior-cycle rows.
 export const CYCLES_ONLY_SQL=`WITH pending AS (
  SELECT m.id, m.curso_id, m.empresa_id
  FROM lms_matriculas m
@@ -88,20 +88,20 @@ export const CYCLES_ONLY_SQL=`WITH pending AS (
 ), signals AS (
  SELECT p.curso_id,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
-     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
        AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
        AND UPPER(COALESCE(cy.status,''))='CONCLUIDO') AS prior_completed,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
-     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
        AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
        AND UPPER(COALESCE(cy.status,''))='CONCLUIDO'
        AND cy.data_conclusao IS NOT NULL) AS prior_dated_completed,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
-     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
        AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
        AND cy.score_final IS NOT NULL) AS prior_score_recorded,
    EXISTS(SELECT 1 FROM lms_matricula_ciclos cy
-     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id
+     WHERE cy.matricula_id=p.id AND cy.empresa_id=p.empresa_id AND cy.curso_id=p.curso_id
        AND cy.ciclo_atual=0 AND cy.deleted_at IS NULL
        AND cy.qualificacao_historico_id IS NOT NULL) AS prior_qualification_link
  FROM pending p

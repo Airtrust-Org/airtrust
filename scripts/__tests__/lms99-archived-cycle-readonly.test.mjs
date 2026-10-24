@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {ARCHIVE_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
+import {ARCHIVE_SQL,CYCLES_ONLY_SQL,SCHEMA_PROBE_SQL,TABLES_PROBE_SQL,validateCycleRows,validateTableNames,PRODUCTION_D1_ID,NON_PRODUCTION_D1_IDS,assertSqlTransportScope,d1,validateSchemaRows,validateQuery,validateRows,classifyD1Failure,classifyD1RestRejection,safePublicError} from '../production/lms99-archived-cycle-readonly.mjs';
 
 test('D1 REST transport is pinned to production database and reviewed SELECT statements',async()=>{
  assert.equal(PRODUCTION_D1_ID,'7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae');
@@ -91,6 +91,61 @@ test('static archive query denies writes and stays tenant scoped',()=>{
  assert.match(ARCHIVE_SQL,/GROUP BY curso_id/);
  assert.throws(()=>validateQuery(ARCHIVE_SQL+' UPDATE lms_matriculas SET status=1'),/SQL_SCOPE/);
 });
+
+test('cycles-only reports prior-cycle indicators from the canonical 0346 schema, tenant scoped',()=>{
+ const db=new DatabaseSync(':memory:');
+ try {
+  db.exec(`CREATE TABLE lms_cursos(id INTEGER,empresa_id INTEGER,tipo_conteudo TEXT);
+  CREATE TABLE lms_matriculas(id INTEGER,curso_id INTEGER,empresa_id INTEGER,status TEXT,progresso_pct REAL,deleted_at TEXT);
+  CREATE TABLE lms_matricula_ciclos(
+   id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,matricula_id INTEGER,historico_importado_id INTEGER,
+   curso_id INTEGER,funcionario_id INTEGER,numero_ciclo INTEGER NOT NULL DEFAULT 1,origem TEXT NOT NULL DEFAULT 'LMS',
+   status TEXT NOT NULL DEFAULT 'NAO_INICIADO',ciclo_atual INTEGER NOT NULL DEFAULT 1,observacoes TEXT,data_matricula TEXT,
+   data_inicio TEXT,data_conclusao TEXT,data_expiracao TEXT,progresso_pct INTEGER NOT NULL DEFAULT 0,
+   score_final REAL,tentativas INTEGER NOT NULL DEFAULT 0,qualificacao_historico_id INTEGER,
+   created_at TEXT NOT NULL DEFAULT (datetime('now')),updated_at TEXT NOT NULL DEFAULT (datetime('now')),deleted_at TEXT);
+  INSERT INTO lms_cursos VALUES(10,6,'scorm'),(11,6,'scorm'),(12,6,'scorm'),(13,6,'scorm'),(10,7,'scorm');
+  INSERT INTO lms_matriculas VALUES
+   (100,10,6,'EM_ANDAMENTO',99,NULL),(101,10,6,'REPROVADO',100,NULL),
+   (102,11,6,'EM_ANDAMENTO',99,NULL),(103,12,6,'EM_ANDAMENTO',99,NULL),
+   (104,13,6,'EM_ANDAMENTO',99,NULL),(100,10,7,'EM_ANDAMENTO',99,NULL);
+  INSERT INTO lms_matricula_ciclos
+   (id,empresa_id,matricula_id,curso_id,numero_ciclo,status,ciclo_atual,data_conclusao,score_final,qualificacao_historico_id,deleted_at)
+  VALUES
+   (200,6,100,10,1,'CONCLUIDO',0,'2024-01-01',85,500,NULL),
+   (201,6,101,10,1,'EM_ANDAMENTO',1,NULL,NULL,NULL,NULL),
+   (202,6,102,11,1,'EM_ANDAMENTO',0,NULL,40,NULL,NULL),
+   (205,6,102,11,2,'REPROVADO',0,'2024-02-01',40,501,NULL),
+   (203,7,100,10,1,'CONCLUIDO',0,'2024-01-01',95,501,NULL),
+   (204,6,104,13,1,'CONCLUIDO',0,'2024-02-01',NULL,NULL,'2024-03-01');`);
+
+  const columns=new Set(db.prepare('PRAGMA table_info(lms_matricula_ciclos)').all().map(row=>row.name));
+  for(const column of ['status','ciclo_atual','data_conclusao','score_final','qualificacao_historico_id','deleted_at'])
+   assert.ok(columns.has(column),`canonical cycle column ${column} must exist in the fixture schema`);
+  assert.doesNotMatch(CYCLES_ONLY_SQL,/\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bPRAGMA\b/i);
+
+  const rows=validateCycleRows(db.prepare(CYCLES_ONLY_SQL).all().map(row=>({...row})));
+  assert.deepEqual(rows,[
+   {curso_id:10,pending_99:2,prior_completed_cycle:1,prior_dated_completed:1,prior_score_recorded:1,prior_qualification_link:1},
+   {curso_id:11,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:1,prior_qualification_link:1},
+   {curso_id:12,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+   {curso_id:13,pending_99:1,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0,prior_qualification_link:0},
+  ]);
+  assert.equal(rows.reduce((sum,row)=>sum+row.pending_99,0),5);
+ }finally{db.close();}
+});
+
+test('cycles-only aggregate validator rejects conflicts, invalid bounds, duplicates and oversized cohorts',()=>{
+ const valid={curso_id:10,pending_99:2,prior_completed_cycle:1,prior_dated_completed:1,prior_score_recorded:2,prior_qualification_link:0};
+ assert.deepEqual(validateCycleRows([valid]),[valid]);
+ assert.throws(()=>validateCycleRows([{...valid,prior_dated_completed:3}]),/CYCLE_BOUNDS/);
+ assert.throws(()=>validateCycleRows([{...valid,prior_score_recorded:501}]),/CYCLE_METRIC_INVALID/);
+ assert.throws(()=>validateCycleRows([valid,{...valid}]),/CYCLE_ID_INVALID/);
+ assert.throws(()=>validateCycleRows(Array.from({length:101},(_,i)=>({...valid,curso_id:i+1,pending_99:1,prior_score_recorded:0}))),/CYCLE_ROW_LIMIT/);
+ assert.throws(()=>validateCycleRows([{...valid,pending_99:501,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0}]),/CYCLE_METRIC_INVALID/);
+ assert.throws(()=>validateCycleRows(Array.from({length:2},(_,i)=>({...valid,curso_id:i+1,pending_99:300,prior_completed_cycle:0,prior_dated_completed:0,prior_score_recorded:0}))),/CYCLE_COHORT_LIMIT/);
+});
+
 test('historical completed cycle and immutable SCORM snapshot are merely evidence leads',()=>{
  const db=new DatabaseSync(':memory:');
  try {
@@ -146,5 +201,7 @@ test('sanitized counts fail closed and protected workflow is read-only',()=>{
  assert.match(workflow,/environment: production/);
  assert.match(workflow,/verify-release-gates\.mjs/);
  assert.match(workflow,/CLOUDFLARE_D1_READONLY_API_TOKEN/);
+ assert.match(workflow,/options: \[tables-probe, schema-probe, cycles-only, read\]/);
+ assert.match(workflow,/\.mode=="cycles-only"/);
  assert.doesNotMatch(workflow,/\bpush:|\bpull_request:/);
 });
