@@ -2,6 +2,50 @@
 
 **Status deste documento: revisão e integração, não autorização de execução.**
 
+## Contrato de transação única implementado na PR #1724
+
+O workflow `.github/workflows/staging-frms-qa-private-transaction.yml`
+está definido **na branch draft**, mas **não foi executado** no staging e
+não pode ser despachado até integração protegida em `main` e configuração
+da autoridade independente. O workflow usa **um único job**,
+`environment: staging`, `id-token: write`, `cancel-in-progress: false`
+e mutex `airtrust-staging-mutations-and-scorm-qa` por toda a cadeia.
+
+A execução não solicita emissão de credencial estática adicional:
+usa somente `CLOUDFLARE_WORKER_API_TOKEN` existente no runner para
+Queue push/pull/ack e Time Travel GET, além de
+`CLOUDFLARE_D1_MIGRATION_API_TOKEN` existente **apenas nos SELECTs
+verificados de staging**. Nenhum bearer Cloudflare vai para o Worker.
+
+O signatário **não é inventado pelo workflow**. O cliente
+`ops/frms-qa-repair/external-approval-signer.mjs` precisa de uma
+autoridade HTTPS independente, configurada através das variáveis
+`FRMS_QA_SIGNER_ORIGIN` e `FRMS_QA_SIGNER_ORIGIN_SHA256`. A URL
+deve ser um origin HTTPS exclusivo e ter hash SHA-256 exato. O
+signatário recebe OIDC do GitHub com audience
+`airtrust-frms-qa-signing-staging` nos endpoints fixos
+`/api/frms-qa/v1/ready` e `/api/frms-qa/v1/sign`, devolvendo,
+respectivamente, readiness com chave pinada e
+`{manifest, signatureBase64, applyGrantId}`. O serviço deve validar
+independentemente emissor, audience, repo, branch, SHA, job/run e escopo,
+e exigir autorização administrativa de `apply` vinculada ao recibo.
+O controller confirma a assinatura Ed25519 localmente.
+A chave pública reside em `FRMS_QA_APPROVAL_PUBLIC_KEY_PEM`, com pin
+`FRMS_QA_APPROVAL_PUBLIC_KEY_SHA256`. A chave **privada jamais
+passa por GitHub Actions, Worker ou repositório**.
+
+Antes da primeira Queue, exige metadata física de ambas as Queues:
+uma consumer Worker privada, outra HTTP pull, ambas com retenção de
+60–900 s. Após o prepare, uma falha ou resultado indeterminado não
+autoriza replay. O apply precisa de novo grant F0, assinatura válida,
+oito IDs CAS e readback real SELECT-only para 4/4. Um sucesso sintético
+não é evidência de staging.
+
+**Esta implementação não comprova existência do signatário**, das
+variáveis/chaves Ed25519 ou dos grants de #776. Não despachar workflow
+enquanto eles não existirem. Sem permissões físicas, interromper e
+registrar bloqueio preciso, jamais preencher valores simulados.
+
 ## Atualização do contrato vigente — recovery proof sem bearer no Worker
 
 A arquitetura de código da PR #1724 substituiu a antiga dependência de
