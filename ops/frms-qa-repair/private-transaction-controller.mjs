@@ -50,11 +50,16 @@ export function assertIndependentSignerAnchor({publicKeyPem,publicKeySha256}={})
 }
 
 async function oneReply({queue,keyHex,expected,now,sleep,maxPolls}){
-  // HTTP pull is short polling; a legitimate empty pull is not a receipt.
-  // Bounded waiting stays inside the SAME Actions mutex.
+  // HTTP pull is short polling; an empty pull is not a receipt.
+  // The reply has a 90-second TTL and the global mutex stays held while
+  // polling. Never extend that TTL by waiting for additional attempts.
+  const started=now();
   for(let attempt=0;attempt<maxPolls;attempt++){
+    const current=now();
+    if(!Number.isFinite(current)||current<started-30000||
+       current-started>=90000)fail();
     const answer=await queue.consumeExpectedReply({
-      keyHex,expected,now:now()});
+      keyHex,expected,now:current});
     if(answer!==null&&answer!==undefined)return answer;
     if(attempt+1<maxPolls)await sleep();
   }
@@ -71,7 +76,7 @@ async function oneReply({queue,keyHex,expected,now,sleep,maxPolls}){
  */
 export async function coordinatePrivateF0Transaction({
   env={},publicKeyPem,publicKeySha256,producer,queue,signer,
-  readback,now=Date.now,sleep=async()=>{},maxPolls=12,
+  readback,now=Date.now,sleep=async()=>{},maxPolls=40,
 }={}){
   if(env.GITHUB_ACTIONS!=='true'||env.GITHUB_EVENT_NAME!=='workflow_dispatch'||
      env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=='refs/heads/main'||
@@ -79,7 +84,7 @@ export async function coordinatePrivateF0Transaction({
      !SHA.test(env.GITHUB_SHA||'')||
      !HEX64.test(env.FRMS_QA_CALLER_KEY_HEX||'')||
      typeof now!=='function'||typeof sleep!=='function'||
-     !Number.isSafeInteger(maxPolls)||maxPolls<1||maxPolls>12||
+     !Number.isSafeInteger(maxPolls)||maxPolls<1||maxPolls>40||
      typeof producer?.prepare!=='function'||typeof producer?.apply!=='function'||
      typeof queue?.pushSigned!=='function'||
      typeof queue?.consumeExpectedReply!=='function'||
