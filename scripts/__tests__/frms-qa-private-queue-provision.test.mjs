@@ -11,6 +11,7 @@ const REPO='Airtrust-Org/airtrust',RUN='40019815631',GRANT='6374255192';
 const TOKEN='synthetic-github-token-never-log',CF='synthetic-worker-existing-token';
 const NOW=Date.parse('2026-10-23T20:00:00Z');
 const WORKFLOW='.github/workflows/staging-frms-qa-private-queues.yml';
+const workflowSource=readFileSync(WORKFLOW,'utf8');
 const callerConfig=readFileSync('ops/frms-qa-repair/wrangler.caller.staging.toml','utf8');
 const PLAN=exactQueueProvisionPlan({sha:SHA,accountId:ACCOUNT,callerConfig});
 const NAMES=PLAN.queues;
@@ -77,6 +78,12 @@ test('plan is fixed to two Queues, existing Worker token, staging and zero D1/R2
   assert.equal(PLAN.workflow_path,WORKFLOW);
   assert.equal(PLAN.max_queue_retention_seconds,900);
   assert.equal(PLAN.results_http_pull_consumer_authorized,true);
+});
+test('workflow summary reports HTTP pull readback without claiming FRMS acceptance',()=>{
+  assert.match(workflowSource,/results HTTP pull metadata were provisioned and read back/);
+  assert.match(workflowSource,/No caller or repair Worker deploy/);
+  assert.match(workflowSource,/4\/4 acceptance/);
+  assert.doesNotMatch(workflowSource,/no HTTP pull consumer/i);
 });
 test('protected main runner verifies fresh unedited F0 admin and eight Actions gates',async()=>{
   const f=github();
