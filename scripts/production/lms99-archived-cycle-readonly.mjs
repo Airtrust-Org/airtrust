@@ -35,8 +35,19 @@ export const ARCHIVE_SQL=sql`WITH pending AS (
             AND cy.matricula_id=ev.matricula_id AND cy.ciclo_atual=0
           WHERE ev.empresa_id=p.empresa_id AND ev.matricula_id=p.id
             AND CASE WHEN json_valid(COALESCE(ev.scorm_json,''))
-               THEN LOWER(TRIM(CAST(json_extract(ev.scorm_json,'$.lesson_status') AS TEXT)))
-               ELSE '' END IN ('passed','completed')
+               THEN (
+                 -- Failed SCORM status always precedes a conflicting terminal signal.
+                 LOWER(TRIM(CAST(COALESCE(json_extract(ev.scorm_json,'$.lesson_status'),'') AS TEXT)))!='failed'
+                 AND LOWER(TRIM(CAST(COALESCE(json_extract(ev.scorm_json,'$.success_status'),'') AS TEXT)))!='failed'
+                 AND (
+                   LOWER(TRIM(CAST(COALESCE(json_extract(ev.scorm_json,'$.lesson_status'),'') AS TEXT))) IN ('passed','completed')
+                   OR (
+                     LOWER(TRIM(CAST(COALESCE(json_extract(ev.scorm_json,'$.completion_status'),'') AS TEXT))) IN ('completed','complete')
+                     AND LOWER(TRIM(CAST(COALESCE(json_extract(ev.scorm_json,'$.success_status'),'') AS TEXT))) IN ('passed','','unknown')
+                   )
+                 )
+               )
+               ELSE 0 END
           ) AS archived_scorm_terminal,
    EXISTS(SELECT 1 FROM lms_ciclo_evidencias ev JOIN lms_matricula_ciclos cy
              ON cy.id=ev.ciclo_id AND cy.empresa_id=ev.empresa_id
