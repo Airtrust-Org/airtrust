@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-23",
-    "last_reconciled_against": "0568 SCORM F5 staging-only binding applied via workflow run 40045168335; production scope and all other change classifications preserved",
-    "schema_v2_digest": "199522d80e29ae0270569ef67757adab05d70a2d6689626ca2bf1e93c79a530b",
+    "last_reconciled_at": "2026-10-24",
+    "last_reconciled_against": "0529 HFA integration bridge classified; current main 0530-0568 classifications preserved; HFA remote apply pending",
+    "schema_v2_digest": "ece117ccfb650579bdba2466265a65aa019b541ac15d0b218e7f84ceb590b879",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1271,6 +1271,21 @@
       "reviewed_manifest": "setor-compliance-responsibles-0528.json",
       "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0528.md",
       "note": "0528 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0529_hfa_integration_bridge.sql",
+      "change_id": "hfa-integration-bridge-0529",
+      "sha256": "09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4",
+      "targets": [
+        "integracoes_hfa_config",
+        "integracoes_hfa_eventos"
+      ],
+      "domain": "SGSO / external HFA Safety integration bridge",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "hfa-integration-bridge-0529.json",
+      "evidence": "worker-airtrust/schema-v2/plans/hfa-integration-bridge-0529.md",
+      "note": "0529 is an additive tenant-scoped integration boundary. It stores only encrypted HFA connection configuration and RELPREV-to-HFA link/status metadata, exports no event automatically, starts no HFA analysis, consumes no HFA credit, and rewrites no existing SGSO record. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
     },
     {
       "change_file": "0530_training_qualification_catalog_placeholders.sql",

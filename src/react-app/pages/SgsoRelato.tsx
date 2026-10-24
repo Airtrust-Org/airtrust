@@ -90,6 +90,19 @@ interface Relato {
   fatores_humanos: FatorHumano[];
 }
 
+interface HfaIntegrationStatus {
+  configured: boolean;
+  link: {
+    hfa_event_id?: string | null;
+    status?: string | null;
+    hfa_analysis_status?: string | null;
+    hfa_review_status?: string | null;
+    last_synced_at?: string | null;
+    last_checked_at?: string | null;
+    last_error?: string | null;
+  } | null;
+}
+
 interface Funcionario {
   id: number;
   nome: string;
@@ -181,6 +194,8 @@ export default function SgsoRelato() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [hfa, setHfa] = useState<HfaIntegrationStatus | null>(null);
+  const [hfaSyncing, setHfaSyncing] = useState(false);
 
   // Seção ativa
   type Secao = 'resumo' | 'risco' | 'hfacs' | 'acoes' | 'historico' | 'comentarios';
@@ -288,6 +303,8 @@ export default function SgsoRelato() {
       }
       if (histData.success) setHistorico(histData.data ?? []);
       if (funcsData.success) setFuncionarios(funcsData.data ?? []);
+      const hfaData = await apiCall(`/sgso/hfa/relprev/${id}`);
+      if (hfaData.success) setHfa(hfaData.data ?? null);
     } catch {
       setErro('Erro ao carregar relato');
     } finally {
@@ -420,6 +437,25 @@ export default function SgsoRelato() {
       body: JSON.stringify({ [campo]: valor }),
     });
     await carregar();
+  };
+
+  const syncHfa = async (refreshOnly = false) => {
+    if (!id) return;
+    setHfaSyncing(true);
+    setErro(null);
+    try {
+      const data = await apiCall(
+        refreshOnly ? `/sgso/hfa/relprev/${id}?refresh=1` : `/sgso/hfa/relprev/${id}/sync`,
+        refreshOnly ? {} : { method: 'POST' },
+      );
+      if (!data.success) throw new Error(data.error ?? 'Falha na integração HFA');
+      const status = await apiCall(`/sgso/hfa/relprev/${id}`);
+      if (status.success) setHfa(status.data ?? null);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Falha na integração HFA');
+    } finally {
+      setHfaSyncing(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────
@@ -572,6 +608,38 @@ export default function SgsoRelato() {
           </div>
         )}
       </div>
+
+      {hfa && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-blue-900">HFA · Investigação de Fatores Humanos</p>
+              <p className="mt-1 text-xs text-blue-800">
+                {hfa.link?.hfa_event_id
+                  ? `Evento sincronizado: ${hfa.link.hfa_event_id}`
+                  : hfa.configured
+                    ? 'Este RELPREV ainda não foi enviado ao HFA.'
+                    : 'Integração HFA ainda não configurada para esta empresa.'}
+              </p>
+              {hfa.link?.hfa_analysis_status && (
+                <p className="mt-1 text-xs text-blue-700">Análise HFA: {hfa.link.hfa_analysis_status}{hfa.link.hfa_review_status ? ` · revisão ${hfa.link.hfa_review_status}` : ''}</p>
+              )}
+              {hfa.link?.last_error && <p className="mt-1 text-xs text-red-700">Último erro: {hfa.link.last_error}</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!hfa.configured ? (
+                <button onClick={() => navigate('/sgso/hfa')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-medium text-blue-800">Configurar HFA</button>
+              ) : (
+                <>
+                  <button disabled={hfaSyncing} onClick={() => void syncHfa(false)} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">{hfaSyncing ? 'Sincronizando...' : hfa.link?.hfa_event_id ? 'Ressincronizar HFA' : 'Enviar ao HFA'}</button>
+                  {hfa.link?.hfa_event_id && <button disabled={hfaSyncing} onClick={() => void syncHfa(true)} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-medium text-blue-800 disabled:opacity-50">Atualizar status</button>}
+                </>
+              )}
+            </div>
+          </div>
+          <p className="mt-3 border-t border-blue-200 pt-3 text-[11px] text-blue-700">O envio não inicia análise nem consome crédito.</p>
+        </div>
+      )}
 
       <div className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="flex overflow-x-auto" role="tablist">
