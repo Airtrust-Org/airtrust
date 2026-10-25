@@ -950,3 +950,31 @@ test('F5 refuses a missing AFTER assessment witness despite successful browser c
   assert.ok(calls.includes('recover'), 'failed postcondition must recover synthetics');
   assert.ok(calls.includes('remove-candidate'), 'failed candidate must be compensated');
 });
+
+test('F5 refuses a contaminated F0 synthetic baseline before browser QA', async () => {
+  const bytes = Buffer.from('synthetic ZIP for fresh F0 baseline guard');
+  const mutations = [
+    ['prior session', row => { row.sessionCount = 1; }],
+    ['prior CMI', row => { row.cmiSha256 = receipt('1'); }],
+    ['prior suspend data', row => { row.suspendSha256 = receipt('2'); }],
+    ['prior launch', row => { row.servedPackageSha256 = row.packageSha256; }],
+    ['prior commit', row => { row.committedPackageSha256 = row.packageSha256; }],
+    ['in-progress enrollment', row => { row.completionStatus = 'EM_ANDAMENTO'; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const plan = planFor(bytes);
+    const { calls, adapters } = adaptersFor(plan);
+    const original = adapters.readQaEvidence;
+    adapters.readQaEvidence = async params => {
+      const row = await original(params);
+      if (params.phase === 'BEFORE') mutate(row);
+      return row;
+    };
+    await assert.rejects(executeF5InactiveCandidate({
+      plan, source: sourceFor(bytes), adapters,
+    }), /F5_EXECUTOR_BEFORE_SYNTHETIC_FIXTURE_NOT_PRISTINE/, label);
+    assert.ok(!calls.includes('execute'), label + ': no browser QA on stale F0 state');
+    assert.ok(calls.includes('recover'), label + ': recover synthetic fixture');
+    assert.ok(calls.includes('remove-candidate'), label + ': compensate inactive candidate');
+  }
+});
