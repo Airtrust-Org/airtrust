@@ -235,6 +235,30 @@ function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: stri
   return `${tipoConteudo}:${packageHash}`;
 }
 
+/**
+ * The "Substituir conteúdo" path includes activation. A private QA edition
+ * or externally assessed package must not even enter this path. The Worker
+ * remains authoritative for certification and activation.
+ */
+export function scormReplacementBlockReason(
+  files: ReadonlyArray<{ path: string; bytes: Uint8Array }>,
+): 'EXTERNAL_ASSESSMENT' | 'PRIVATE_QA_ONLY' | null {
+  const file = files.find(entry => entry.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (!file) return null;
+  try {
+    const value: unknown = JSON.parse(strFromU8(file.bytes));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const contract = value as { assessment?: { mode?: unknown }; release?: { status?: unknown } };
+    if (contract.assessment?.mode === 'EXTERNAL') return 'EXTERNAL_ASSESSMENT';
+    const status = typeof contract.release?.status === 'string'
+      ? contract.release.status.toUpperCase() : '';
+    if (status.startsWith('PRIVATE_') || status.includes('DO_NOT_ACTIVATE')) return 'PRIVATE_QA_ONLY';
+  } catch {
+    // Invalid authoring contracts are rejected by the Worker's static gate.
+  }
+  return null;
+}
+
 type ScormGateSection = { status?: string; errors?: string[] };
 type ScormQualityShape = {
   packageId?: string;
@@ -245,7 +269,7 @@ type ScormQualityShape = {
   diagnostics?: ScormGateSection;
   conformance?: ScormGateSection;
   functionalCertification?: { status?: string; missing?: string[] };
-  runtime?: { status?: string; errors?: string[] };
+  runtime?: { status?: string; errors?: string[]; failureStage?: string; failureCategory?: string; failureCode?: string };
 };
 
 function collectGateErrors(quality: ScormQualityShape): string[] {
@@ -257,6 +281,17 @@ function collectGateErrors(quality: ScormQualityShape): string[] {
   ];
   const errs = sections.flatMap((section) => section?.errors ?? []);
   errs.push(...(quality.runtime?.errors ?? []));
+  // Only allowlisted Worker diagnostics are displayed, never raw browser
+  // exceptions, worker endpoints, tokens, or user-authored SCORM values.
+  if (quality.runtime?.errors?.includes('SCORM_BROWSER_INFRASTRUCTURE_ERROR')) {
+    const stage = quality.runtime.failureStage;
+    const category = quality.runtime.failureCategory;
+    const code = quality.runtime.failureCode;
+    const safeStage = typeof stage === 'string' && /^(BROWSER_LAUNCH|CREATE_PAGE|SET_REQUEST_INTERCEPTION|LOAD_SCO_ASSETS|DRIVE_SCO_INTERACTIONS|CLOSE_SCO_SESSION|READ_SCORM_TRACE)$/.test(stage) ? stage : 'UNKNOWN';
+    const safeCategory = typeof category === 'string' && /^BROWSER_(QUOTA|ACCESS|SERVICE|TIMEOUT|CONNECTION|OTHER)$/.test(category) ? category : 'BROWSER_OTHER';
+    const safeCode = typeof code === 'string' && /^(ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ERR_CONNECTION_CLOSED|ERR_HTTP2_STREAM_ERROR|TYPE_ERROR|TIMEOUT_ERROR|ABORT_ERROR|PROTOCOL_ERROR|GENERIC_ERROR|UNKNOWN_ERROR)$/.test(code) ? code : 'UNKNOWN_ERROR';
+    errs.push(`Diagnóstico do navegador: ${safeStage} / ${safeCategory} / ${safeCode}`);
+  }
   // Functional E2E is independent of SCORM protocol conformance. Report
   // missing browser scenarios rather than a misleading generic player error.
   errs.push(...(quality.functionalCertification?.missing ?? [])
@@ -290,6 +325,14 @@ async function uploadScormZipPackage(params: {
   onStatus?: (status: string) => void;
 }) {
   const { cursoId, file, prepared, skipPurge, onProgress, onStatus } = params;
+
+  const blocked = scormReplacementBlockReason(prepared.files);
+  if (blocked === 'EXTERNAL_ASSESSMENT') {
+    throw new Error('Este curso exige avaliação externa e não pode ser substituído pelo upload automático. Use exclusivamente o fluxo governado de candidato inativo em staging, com revisão e QA autorizadas.');
+  }
+  if (blocked === 'PRIVATE_QA_ONLY') {
+    throw new Error('Este ZIP declara uso privado de QA ou NÃO ATIVAR. O fluxo Substituir conteúdo pode ativar uma versão e está bloqueado. Utilize candidato inativo em staging.');
+  }
 
   onStatus?.('Enviando ZIP...');
   onProgress?.(25);
