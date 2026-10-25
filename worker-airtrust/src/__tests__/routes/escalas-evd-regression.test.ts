@@ -264,6 +264,50 @@ describe('EVD operational regression coverage', () => {
     expect(calls.some((call) => call.method === 'run')).toBe(false);
   });
 
+  it('bloqueia publicação diária quando PIC pertence a outro tenant', async () => {
+    const dailyRows = [{
+      id: 'evd-cross-tenant',
+      escala_id: null,
+      data: '2026-07-10',
+      pic_id: 9001,
+      sic_id: 202,
+      repouso_minimo_ok: 1,
+    }];
+    const { db, calls } = createMockDb([
+      {
+        match: (q) => q.includes('FROM escala_voo_diaria e') && q.includes('ORDER BY COALESCE(e.hora_apresentacao'),
+        all: () => ({ results: dailyRows }),
+      },
+      {
+        match: (q) => q.includes('FROM escala_voo_diaria_justificativas') && q.includes('escala_voo_diaria_id IN ('),
+        all: () => ({ results: [] }),
+      },
+      {
+        match: (q) => q.includes('SELECT id FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: (args) => Number(args[0]) === 9001 ? null : { id: Number(args[0]) },
+      },
+    ]);
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/evd/publicacoes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-role': 'manager', 'x-empresa-id': '33' },
+        body: JSON.stringify({ data_ref: '2026-07-10' }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      code: 'EVD_REFERENCE_NOT_FOUND',
+      voo_id: 'evd-cross-tenant',
+    });
+    expect(calls.some((call) => call.method === 'run')).toBe(false);
+  });
+
   it('bloqueia POST /evd/publicacoes com conflito operacional crítico de tripulação', async () => {
     const dailyRows = [
       {
@@ -304,6 +348,14 @@ describe('EVD operational regression coverage', () => {
       {
         match: (q) => q.includes('FROM escala_voo_diaria_justificativas') && q.includes('escala_voo_diaria_id IN ('),
         all: () => ({ results: [] }),
+      },
+      {
+        match: (q) => q.includes('SELECT id FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: Number(args[0]) }),
+      },
+      {
+        match: (q) => q.includes('FROM escalas_mensais') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: String(args[0]) }),
       },
       {
         match: (q) => q.includes('pic_id IN (') && q.includes('OR sic_id IN ('),
@@ -386,6 +438,14 @@ describe('EVD operational regression coverage', () => {
       {
         match: (q) => q.includes('FROM escala_voo_diaria_justificativas') && q.includes('escala_voo_diaria_id IN ('),
         all: () => ({ results: [] }),
+      },
+      {
+        match: (q) => q.includes('SELECT id FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: Number(args[0]) }),
+      },
+      {
+        match: (q) => q.includes('FROM escalas_mensais') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: String(args[0]) }),
       },
       {
         match: (q) => q.includes('pic_id IN (') && q.includes('OR sic_id IN ('),

@@ -19,17 +19,19 @@ export async function hasTenantOwnedEvdReferences(params: {
   empresaId: number;
   crewIds: Array<number | null | undefined>;
   escalaId?: string | null;
+  includeDeleted?: boolean;
 }): Promise<boolean> {
+  const activeFilter = params.includeDeleted ? '' : ' AND deleted_at IS NULL';
   for (const id of new Set(params.crewIds.filter((value): value is number => value != null))) {
     const row = await params.db
-      .prepare('SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
+      .prepare(`SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ?${activeFilter} LIMIT 1`)
       .bind(id, params.empresaId)
       .first();
     if (!row) return false;
   }
   if (params.escalaId) {
     const row = await params.db
-      .prepare('SELECT id FROM escalas_mensais WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1')
+      .prepare(`SELECT id FROM escalas_mensais WHERE id = ? AND empresa_id = ?${activeFilter} LIMIT 1`)
       .bind(params.escalaId, params.empresaId)
       .first();
     if (!row) return false;

@@ -1003,6 +1003,20 @@ async function validateEvdItemForDailyPublication(params: {
     return { ok: false, error: `${MSG_PIC_SIC_SAME} [voo:${params.voo.id}]`, code: 'PIC_SIC_SAME' };
   }
 
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db: params.db,
+    empresaId: params.empresaId,
+    crewIds: [params.voo.pic_id, params.voo.sic_id],
+    escalaId: params.voo.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return {
+      ok: false,
+      error: `${MSG_EVD_REFERENCE_NOT_FOUND} [voo:${params.voo.id}]`,
+      code: 'EVD_REFERENCE_NOT_FOUND',
+    };
+  }
+
   const hasConflict = await hasCrewConflict({
     db: params.db,
     empresaId: params.empresaId,
@@ -1787,8 +1801,17 @@ evdRoutes.put('/:id', requirePermission('escalas', 'editar', 'admin', 'manager')
     empresaId,
     crewIds: [candidate.pic_id, candidate.sic_id],
     escalaId: existing.escala_id,
+    includeDeleted: true,
   });
-  if (!referencesBelongToTenant) {
+  const changedCrewIsActiveInTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [
+      d.pic_id !== undefined && d.pic_id !== existing.pic_id ? candidate.pic_id : null,
+      d.sic_id !== undefined && d.sic_id !== existing.sic_id ? candidate.sic_id : null,
+    ],
+  });
+  if (!referencesBelongToTenant || !changedCrewIsActiveInTenant) {
     return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
   }
 
