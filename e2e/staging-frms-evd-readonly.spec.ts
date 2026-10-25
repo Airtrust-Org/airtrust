@@ -112,9 +112,10 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     }
   });
 
-  // A real staging login is permitted before the EVD read phase. As soon as
-  // the authenticated route/profile is ready, every non-safe HTTP method is
-  // recorded and blocked, including auth refresh/logout POSTs.
+  // A real staging login is permitted before the EVD read phase. After the
+  // authenticated route/profile is ready, operational POSTs and other unsafe
+  // methods are recorded and blocked. Shared-policy `suppress` requests are
+  // also aborted locally, but counted separately from operational mutations.
   const blockedRequests: Array<{ method: string; path: string; reason: string }> = [];
   page.route('**/*', async (route) => {
     const request = route.request();
