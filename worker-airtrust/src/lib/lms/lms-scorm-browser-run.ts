@@ -104,6 +104,21 @@ export function scormBrowserFailureCode(error: unknown): string {
   return 'UNKNOWN_ERROR';
 }
 
+/**
+ * Conservative certification policy for the Browser Rendering trace.
+ * External exams are backend-scored and must NEVER be inferred absent from
+ * an empty SCORM interaction list (which only describes in-package exercises).
+ */
+export function requiresScormAssessmentEvidence(contract: unknown): boolean {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return true;
+  const assessment = (contract as { assessment?: unknown }).assessment;
+  if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) return true;
+  const declared = assessment as { mode?: unknown; requiredInteractions?: unknown };
+  if (declared.mode === 'EXTERNAL') return true;
+  return Array.isArray(declared.requiredInteractions)
+    ? declared.requiredInteractions.length > 0 : true;
+}
+
 export async function runScormBrowserConformance(params: {
   browserBinding: unknown; candidateSha256: string; launchFile: string; assets: CandidateAsset[];
   /** Injectable ONLY for focused infrastructure-failure tests; default is real Cloudflare Browser Rendering. */
@@ -182,9 +197,9 @@ export async function runScormBrowserConformance(params: {
         const declared = contract?.assessment?.masteryScore;
         expectedSuccessStatus = typeof contract?.assessment?.successStatus === 'string'
           ? contract.assessment.successStatus : null;
-        if (Array.isArray(contract?.assessment?.requiredInteractions)) {
-          requiresAssessmentEvidence = contract.assessment.requiredInteractions.length > 0;
-        }
+        // Empty requiredInteractions is not proof that a separate Worker
+        // exam is absent: assessment.mode=EXTERNAL must stay fail-closed.
+        requiresAssessmentEvidence = requiresScormAssessmentEvidence(contract);
         if (typeof declared === 'number' && Number.isFinite(declared) &&
             declared >= 0 && declared <= 100) masteryScore = declared;
       } catch {

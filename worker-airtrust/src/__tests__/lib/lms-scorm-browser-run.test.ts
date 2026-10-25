@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeTrace, classifyScormBrowserError, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
+import { analyzeTrace, classifyScormBrowserError, requiresScormAssessmentEvidence, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
 
 const startedAt = '2026-08-22T00:00:00.000Z';
 const lifecycle = [
@@ -73,6 +73,35 @@ describe('SCORM Browser Rendering staging infrastructure failure boundaries', ()
     expect(scormBrowserFailureCode({ name: 'UnexpectedPersonalName', code: 'secret-embedded-code' })).toBe('UNKNOWN_ERROR');
     expect(scormBrowserFailureCode(new TypeError('some private URL'))).toBe('TYPE_ERROR');
   });
+});
+
+describe('External assessment contract is never inferred absent from formative interactions', () => {
+  it('requires Worker assessment evidence for EXTERNAL with no SCO interactions', () => {
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'EXTERNAL', requiredInteractions: [] },
+    })).toBe(true);
+  });
+
+  it('requires Worker evidence for EXTERNAL when interactions are omitted', () => {
+    expect(requiresScormAssessmentEvidence({ assessment: { mode: 'EXTERNAL' } })).toBe(true);
+  });
+
+  it('preserves formative no-exam course policy without required interactions', () => {
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'NONE', requiredInteractions: [] },
+    })).toBe(false);
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'NONE', requiredInteractions: ['formative-1'] },
+    })).toBe(true);
+  });
+
+  it.each([null, [], 'malformed', {}, { assessment: null },
+    { assessment: { mode: 'UNKNOWN' } }])(
+    'fails closed on missing or malformed assessment declarations: %s',
+    contract => {
+      expect(requiresScormAssessmentEvidence(contract)).toBe(true);
+    },
+  );
 });
 
 describe('SCORM Browser Run trace analysis', () => {
