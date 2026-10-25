@@ -53,6 +53,7 @@ const MSG_PIC_ROLE_REVIEW =
   'Função PIC requer validação operacional: cadastro de função não é canônico.';
 const MSG_AIRCRAFT_UNRESOLVED =
   'Aeronave não resolvida no cadastro mestre; validações de modelo não aplicadas.';
+const MSG_EVD_REFERENCE_NOT_FOUND = 'Tripulante ou escala não encontrado para esta empresa.';
 
 const evdCreateSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -392,8 +393,49 @@ async function getRoleContext(
   return row || null;
 }
 
+async function hasTenantOwnedEvdReferences(params: {
+  db: D1Database;
+  empresaId: number;
+  crewIds: Array<number | null | undefined>;
+  escalaId?: string | null;
+}): Promise<boolean> {
+  const uniqueCrewIds = [...new Set(params.crewIds.filter((id): id is number => id != null))];
+  for (const funcionarioId of uniqueCrewIds) {
+    const funcionario = await params.db
+      .prepare(
+        `SELECT id
+           FROM funcionarios
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(funcionarioId, params.empresaId)
+      .first<{ id: number }>();
+    if (!funcionario) return false;
+  }
+
+  if (params.escalaId) {
+    const escala = await params.db
+      .prepare(
+        `SELECT id
+           FROM escalas_mensais
+          WHERE id = ?
+            AND empresa_id = ?
+            AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(params.escalaId, params.empresaId)
+      .first<{ id: string }>();
+    if (!escala) return false;
+  }
+
+  return true;
+}
+
 async function hasReliableQualificationSource(
   db: D1Database,
+  empresaId: number,
   funcionarioId: number,
 ): Promise<boolean> {
   const funcionario = await db
@@ -401,11 +443,12 @@ async function hasReliableQualificationSource(
       `SELECT modelo_aeronave_id, aeronave
          FROM funcionarios
         WHERE id = ?
+          AND empresa_id = ?
           AND deleted_at IS NULL
           AND COALESCE(ativo, 1) = 1
         LIMIT 1`,
     )
-    .bind(funcionarioId)
+    .bind(funcionarioId, empresaId)
     .first<{ modelo_aeronave_id: string | null; aeronave: string | null }>();
 
   if (!funcionario) return false;
@@ -414,13 +457,17 @@ async function hasReliableQualificationSource(
     .prepare(
       `SELECT 1
          FROM funcionarios_aeronaves fa
+         JOIN funcionarios f
+           ON CAST(f.id AS INTEGER) = CAST(fa.funcionario_id AS INTEGER)
+          AND f.empresa_id = ?
+          AND f.deleted_at IS NULL
         WHERE CAST(fa.funcionario_id AS INTEGER) = ?
           AND fa.deleted_at IS NULL
           AND COALESCE(fa.ativo, 1) = 1
           AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))
         LIMIT 1`,
     )
-    .bind(funcionarioId)
+    .bind(empresaId, funcionarioId)
     .first<{ 1: number }>();
 
   if (hasActiveAssociacao) return true;
@@ -652,7 +699,11 @@ async function collectOperationalWarningsAndBlocks(params: {
     const knownModel = ['AW139', 'SK76'].includes(String(aeronave.modeloNormalizado || ''));
     if (knownModel) {
       for (const crewId of crewIds) {
-        const reliableSource = await hasReliableQualificationSource(params.db, crewId);
+        const reliableSource = await hasReliableQualificationSource(
+          params.db,
+          params.empresaId,
+          crewId,
+        );
         if (!reliableSource) {
           warnings.push(
             `Habilitação de modelo não pôde ser confirmada no cadastro para tripulante ${crewId}; revisão operacional recomendada.`,
@@ -831,10 +882,10 @@ async function calcRepouso(
            AND empresa_id = ? AND data < ?
          UNION ALL
          SELECT hora_corte_motor, data FROM frms_jornada
-         WHERE CAST(tripulante_id AS INTEGER) = ? AND deleted_at IS NULL AND data < ?
+         WHERE CAST(tripulante_id AS INTEGER) = ? AND empresa_id = ? AND deleted_at IS NULL AND data < ?
        ) ORDER BY data DESC, hora_corte_motor DESC LIMIT 1`,
     )
-    .bind(pilotoId, pilotoId, empresaId, dataVoo, pilotoId, dataVoo)
+    .bind(pilotoId, pilotoId, empresaId, dataVoo, pilotoId, empresaId, dataVoo)
     .first<{ hora_corte_motor: string | null; data: string }>();
 
   if (!ultimoCorte?.hora_corte_motor) return { minutos: null, ok: null };
@@ -992,8 +1043,8 @@ async function listEvdItemsByDate(params: {
           e.observacoes,
           e.aprovado_em
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ?
          AND e.data = ?
          AND e.deleted_at IS NULL
@@ -1222,8 +1273,8 @@ evdRoutes.get('/', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ? AND e.data = ? AND e.deleted_at IS NULL
        ORDER BY e.hora_apresentacao ASC, e.hora_decolagem_prevista ASC`,
     )
@@ -1255,8 +1306,8 @@ evdRoutes.get('/semana', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ? AND e.data BETWEEN ? AND ? AND e.deleted_at IS NULL
        ORDER BY e.data ASC, e.hora_apresentacao ASC`,
     )
@@ -1376,8 +1427,8 @@ evdRoutes.get('/:id', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.id = ? AND e.empresa_id = ? AND e.deleted_at IS NULL`,
     )
     .bind(id, empresaId)
@@ -1600,6 +1651,16 @@ evdRoutes.post('/', requirePermission('escalas', 'criar', 'admin', 'manager'), a
   }
 
   const d = parsed.data;
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [d.pic_id, d.sic_id],
+    escalaId: d.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
+  }
+
   if (d.pic_id && d.sic_id && d.pic_id === d.sic_id) {
     return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
   }
@@ -1826,6 +1887,16 @@ evdRoutes.put('/:id', requirePermission('escalas', 'editar', 'admin', 'manager')
     tipo_missao: d.tipo_missao !== undefined ? d.tipo_missao : existing.tipo_missao,
     observacoes: d.observacoes !== undefined ? d.observacoes : existing.observacoes,
   };
+
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [candidate.pic_id, candidate.sic_id],
+    escalaId: existing.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
+  }
 
   if (
     typeof candidate.pic_id === 'number' &&
@@ -2058,6 +2129,16 @@ evdRoutes.post('/:id/publicar', requirePermission('escalas', 'editar', 'admin', 
 
   if (voo.pic_id === voo.sic_id) {
     return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [voo.pic_id, voo.sic_id],
+    escalaId: voo.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
   }
 
   const conflictOnPublish = await hasCrewConflict({

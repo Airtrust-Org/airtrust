@@ -139,6 +139,129 @@ describe('EVD operational regression coverage', () => {
         call.query.includes('WHERE e.empresa_id = ? AND e.data = ? AND e.deleted_at IS NULL'),
     );
     expect(listCall?.args).toEqual([33, '2026-07-09']);
+    expect(listCall?.query).toContain('fp.empresa_id = e.empresa_id');
+    expect(listCall?.query).toContain('fs.empresa_id = e.empresa_id');
+  });
+
+  it('bloqueia POST /evd quando o tripulante não pertence ao tenant autenticado', async () => {
+    const { db, calls } = createMockDb([
+      {
+        match: (q) => q.includes('SELECT id') && q.includes('FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: () => null,
+      },
+    ]);
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/evd', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-role': 'manager',
+          'x-empresa-id': '33',
+        },
+        body: JSON.stringify({ data: '2026-07-09', pic_id: 9001 }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Tripulante ou escala não encontrado para esta empresa.',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].args).toEqual([9001, 33]);
+    expect(calls.some((call) => call.method === 'run')).toBe(false);
+  });
+
+  it('bloqueia POST /evd quando a escala mensal não pertence ao tenant autenticado', async () => {
+    const { db, calls } = createMockDb([
+      {
+        match: (q) => q.includes('FROM escalas_mensais') && q.includes('empresa_id = ?'),
+        first: () => null,
+      },
+    ]);
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/evd', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-role': 'manager',
+          'x-empresa-id': '33',
+        },
+        body: JSON.stringify({ data: '2026-07-09', escala_id: 'escala-tenant-b' }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Tripulante ou escala não encontrado para esta empresa.',
+    });
+    expect(calls[0].args).toEqual(['escala-tenant-b', 33]);
+    expect(calls.some((call) => call.method === 'run')).toBe(false);
+  });
+
+  it('bloqueia PUT /evd/:id quando a tripulação vinculada é de outro tenant', async () => {
+    const { db, calls } = createMockDb([
+      {
+        match: (q) => q.includes('SELECT') && q.includes('FROM escala_voo_diaria') && q.includes('WHERE id = ? AND empresa_id = ?'),
+        first: () => ({
+          id: 'evd-tenant-a',
+          status: 'RASCUNHO',
+          data: '2026-07-09',
+          escala_id: null,
+          pic_id: 9001,
+          sic_id: null,
+          pic_funcao: null,
+          sic_funcao: null,
+          aeronave_prefixo: null,
+          aeronave_modelo: null,
+          hora_apresentacao: null,
+          hora_decolagem_prevista: null,
+          hora_pouso_previsto: null,
+          hora_decolagem_real: null,
+          hora_pouso_real: null,
+          hora_corte_motor: null,
+          origem: null,
+          destino: null,
+          tipo_missao: 'OFFSHORE',
+          observacoes: null,
+        }),
+      },
+      {
+        match: (q) => q.includes('SELECT id') && q.includes('FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: () => null,
+      },
+    ]);
+
+    const app = createApp();
+    const response = await app.fetch(
+      new Request('http://localhost/evd/evd-tenant-a', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-role': 'manager',
+          'x-empresa-id': '33',
+        },
+        body: JSON.stringify({ observacoes: 'atualizar' }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'Tripulante ou escala não encontrado para esta empresa.',
+    });
+    expect(calls.some((call) => call.method === 'run')).toBe(false);
   });
 
   it('bloqueia POST /evd/publicacoes com conflito operacional crítico de tripulação', async () => {
@@ -355,6 +478,10 @@ describe('EVD operational regression coverage', () => {
   it('rejeita criação em POST /evd quando conflito de tripulação é detectado', async () => {
     const { db, calls } = createMockDb([
       {
+        match: (q) => q.includes('SELECT id') && q.includes('FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: args[0] }),
+      },
+      {
         match: (q) => q.includes('pic_id IN (') && q.includes('OR sic_id IN ('),
         all: () => ({
           results: [
@@ -426,6 +553,14 @@ describe('EVD operational regression coverage', () => {
           hora_decolagem_prevista: '07:30',
           hora_pouso_previsto: '08:30',
         }),
+      },
+      {
+        match: (q) => q.includes('SELECT id') && q.includes('FROM funcionarios') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: args[0] }),
+      },
+      {
+        match: (q) => q.includes('SELECT id') && q.includes('FROM escalas_mensais') && q.includes('empresa_id = ?'),
+        first: (args) => ({ id: args[0] }),
       },
       {
         match: (q) => q.includes('pic_id IN (') && q.includes('OR sic_id IN ('),
