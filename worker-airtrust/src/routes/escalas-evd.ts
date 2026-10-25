@@ -28,6 +28,12 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import {
+  getRoleContext,
+  hasReliableQualificationSource,
+  hasTenantOwnedEvdReferences,
+  MSG_EVD_REFERENCE_NOT_FOUND,
+} from './escalas-evd-tenant-guards';
 import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
 import { CANCELLED_STATUS_VALUES, COMPLETED_STATUS_VALUES, TRAINING_CONFIRMED_STATUS_VALUES, TRAINING_IN_PROGRESS_STATUS_VALUES, isConfirmedTrainingStatus, isInProgressTrainingStatus, normalizeTrainingStatusForCompatibility, sqlStatusEqualsAny, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -53,7 +59,6 @@ const MSG_PIC_ROLE_REVIEW =
   'Função PIC requer validação operacional: cadastro de função não é canônico.';
 const MSG_AIRCRAFT_UNRESOLVED =
   'Aeronave não resolvida no cadastro mestre; validações de modelo não aplicadas.';
-const MSG_EVD_REFERENCE_NOT_FOUND = 'Tripulante ou escala não encontrado para esta empresa.';
 
 const evdCreateSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -218,11 +223,6 @@ type MonthlyAvailabilityResult = {
   conflict_code?: 'FERIAS_RH' | 'OTHER_ESCALA_OPERATIONAL' | 'OTHER_ESCALA_SITUACAO';
 };
 
-type RoleContext = {
-  funcao: string | null;
-  cargo: string | null;
-};
-
 type EvdPublicacaoItemRow = {
   id: string;
   escala_id: string | null;
@@ -370,112 +370,6 @@ async function resolveMasterAeronave(params: {
     active: isStatusAeronaveAtivo(aeronave.status),
     warnings: [],
   };
-}
-
-async function getRoleContext(
-  db: D1Database,
-  empresaId: number,
-  funcionarioId: number,
-): Promise<RoleContext | null> {
-  const row = await db
-    .prepare(
-      `SELECT funcao, cargo
-         FROM funcionarios
-        WHERE id = ?
-          AND deleted_at IS NULL
-          AND COALESCE(ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-          AND empresa_id = ?
-        LIMIT 1`,
-    )
-    .bind(funcionarioId, empresaId)
-    .first<RoleContext>();
-  return row || null;
-}
-
-async function hasTenantOwnedEvdReferences(params: {
-  db: D1Database;
-  empresaId: number;
-  crewIds: Array<number | null | undefined>;
-  escalaId?: string | null;
-}): Promise<boolean> {
-  const uniqueCrewIds = [...new Set(params.crewIds.filter((id): id is number => id != null))];
-  for (const funcionarioId of uniqueCrewIds) {
-    const funcionario = await params.db
-      .prepare(
-        `SELECT id
-           FROM funcionarios
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(funcionarioId, params.empresaId)
-      .first<{ id: number }>();
-    if (!funcionario) return false;
-  }
-
-  if (params.escalaId) {
-    const escala = await params.db
-      .prepare(
-        `SELECT id
-           FROM escalas_mensais
-          WHERE id = ?
-            AND empresa_id = ?
-            AND deleted_at IS NULL
-          LIMIT 1`,
-      )
-      .bind(params.escalaId, params.empresaId)
-      .first<{ id: string }>();
-    if (!escala) return false;
-  }
-
-  return true;
-}
-
-async function hasReliableQualificationSource(
-  db: D1Database,
-  empresaId: number,
-  funcionarioId: number,
-): Promise<boolean> {
-  const funcionario = await db
-    .prepare(
-      `SELECT modelo_aeronave_id, aeronave
-         FROM funcionarios
-        WHERE id = ?
-          AND empresa_id = ?
-          AND deleted_at IS NULL
-          AND COALESCE(ativo, 1) = 1
-        LIMIT 1`,
-    )
-    .bind(funcionarioId, empresaId)
-    .first<{ modelo_aeronave_id: string | null; aeronave: string | null }>();
-
-  if (!funcionario) return false;
-
-  const hasActiveAssociacao = await db
-    .prepare(
-      `SELECT 1
-         FROM funcionarios_aeronaves fa
-         JOIN funcionarios f
-           ON CAST(f.id AS INTEGER) = CAST(fa.funcionario_id AS INTEGER)
-          AND f.empresa_id = ?
-          AND f.deleted_at IS NULL
-        WHERE CAST(fa.funcionario_id AS INTEGER) = ?
-          AND fa.deleted_at IS NULL
-          AND COALESCE(fa.ativo, 1) = 1
-          AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))
-        LIMIT 1`,
-    )
-    .bind(empresaId, funcionarioId)
-    .first<{ 1: number }>();
-
-  if (hasActiveAssociacao) return true;
-
-  return (
-    String(funcionario.modelo_aeronave_id || '').trim().length > 0 ||
-    String(funcionario.aeronave || '').trim().length > 0
-  );
 }
 
 async function validateCrewAvailabilityOnMonthlyScale(params: {
