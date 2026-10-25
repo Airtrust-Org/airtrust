@@ -162,11 +162,15 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   // Every precondition is proven before the first Worker write.
   const authorized = await adapters.verifyAuthorization(plan);
   if (authorized !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
-  const runtime = await adapters.readRuntimeProvenance();
-  if (runtime?.workerSha !== plan.releaseSha || runtime?.pagesSha !== plan.releaseSha.slice(0, 7) ||
-      runtime?.harnessSha !== plan.harnessSha) {
-    fail('STAGING_RUNTIME_SHA_MISMATCH');
-  }
+  const requirePinnedRuntime = async () => {
+    const runtime = await adapters.readRuntimeProvenance();
+    if (runtime?.workerSha !== plan.releaseSha ||
+        runtime?.pagesSha !== plan.releaseSha.slice(0, 7) ||
+        runtime?.harnessSha !== plan.harnessSha) {
+      fail('STAGING_RUNTIME_SHA_MISMATCH');
+    }
+  };
+  await requirePinnedRuntime();
   if (await adapters.verifyF0Receipts(plan) !== true) fail('F0_RECEIPTS_NOT_VERIFIED');
   const sourceIdentity = await hashSource(source, c.zipBytes);
   if (sourceIdentity.sha256 !== c.packageSha256) fail('ORIGINAL_ZIP_SHA_MISMATCH');
@@ -231,6 +235,11 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         r2Candidate.assetSha256 !== candidate.r2Readback.launchAssetSha256 ||
         r2Candidate.active !== false) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
 
+    // Intake and R2 readback may take minutes. A staging release that changes
+    // after preflight must not receive a synthetic enrollment or browser QA.
+    // Compensate the operation-owned inactive candidate on provenance drift.
+    validateF5ExecutionPlan(plan);
+    await requirePinnedRuntime();
     validateF5ExecutionPlan(plan);
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
