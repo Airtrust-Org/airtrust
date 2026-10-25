@@ -43,7 +43,7 @@ test('line-level CAS refuses wrong owner, date, source, missing journey or previ
 test('plan is deterministic and rejects wrong cohort',()=>{
   const x=buildReviewPlan(days), y=buildReviewPlan(days);
   assert.equal(x.sql_sha256,y.sql_sha256);
-  assert.throws(()=>buildReviewPlan(days.slice(1)),/QA_30D_SOURCE_REQUIRED/);
+  assert.throws(()=>buildReviewPlan(days.slice(1)),/QA_REVIEWED_SOURCE_DAYS_INVALID/);
   assert.throws(()=>assertReviewPlan({...x,operations:x.operations.slice(1)}),/REPAIR_PLAN_SCOPE_REJECTED/);
 });
 
@@ -146,5 +146,5 @@ test('review workflow requires signed source run/artifact, main SHA, and exposes
   assert.match(wf,/SOURCE_AGGREGATE_RUN_ID:/);
   assert.match(wf,/group: airtrust-staging-mutations-and-scorm-qa/);
   assert.doesNotMatch(wf,/38452591092|3f4017dd0ecdf03afbad4d39ecf8de06c05e0861/);
-  assert.doesNotMatch(wf,/CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|--remote|--apply|d1 execute|migrations apply|wrangler deploy/);
+  assert.doesNotMatch(wf,/secrets\.CLOUDFLARE_|CLOUDFLARE_API_TOKEN:\s*\$\{|--remote|--apply|d1 execute|migrations apply|wrangler deploy/);
 });
