@@ -196,12 +196,16 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       const bytes = await source.read(offset, length);
       if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) fail('PRIVATE_SOURCE_SHORT_READ');
       uploadHash.update(bytes);
+      // A multipart transfer can outlive the synthetic fixture lease.
+      // Recheck before each new side-effect, not only before intake init.
+      validateF5ExecutionPlan(plan);
       await adapters.putIntakePart({
         tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
         partNumber: index + 1, contentLength: length, bytes,
       });
     }
     if (uploadHash.digest('hex') !== c.packageSha256) fail('PRIVATE_SOURCE_CHANGED_DURING_UPLOAD');
+    validateF5ExecutionPlan(plan);
     completionAttempted = true;
     const uploaded = await adapters.completeIntake({
       tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
@@ -227,11 +231,13 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         r2Candidate.assetSha256 !== candidate.r2Readback.launchAssetSha256 ||
         r2Candidate.active !== false) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
 
+    validateF5ExecutionPlan(plan);
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
+    validateF5ExecutionPlan(plan);
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       packageSha256: c.packageSha256, scormVersion: candidate.scormVersion,
