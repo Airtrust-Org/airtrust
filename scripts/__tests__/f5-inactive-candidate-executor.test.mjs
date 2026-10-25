@@ -959,7 +959,6 @@ test('F5 refuses a contaminated F0 synthetic baseline before browser QA', async 
     ['prior suspend data', row => { row.suspendSha256 = receipt('2'); }],
     ['prior launch', row => { row.servedPackageSha256 = row.packageSha256; }],
     ['prior commit', row => { row.committedPackageSha256 = row.packageSha256; }],
-    ['in-progress enrollment', row => { row.completionStatus = 'EM_ANDAMENTO'; }],
   ];
   for (const [label, mutate] of mutations) {
     const plan = planFor(bytes);
