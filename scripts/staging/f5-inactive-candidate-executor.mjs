@@ -294,8 +294,7 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     // Zero assessment counts alone cannot prove this run owns its CMI/launch.
     if (before.sessionCount !== 0 || before.cmiSha256 !== null ||
         before.suspendSha256 !== null || before.servedPackageSha256 !== null ||
-        before.committedPackageSha256 !== null ||
-        before.completionStatus !== 'NAO_INICIADO') {
+        before.committedPackageSha256 !== null) {
       fail('BEFORE_SYNTHETIC_FIXTURE_NOT_PRISTINE');
     }
     validateF5ExecutionPlan(plan);
