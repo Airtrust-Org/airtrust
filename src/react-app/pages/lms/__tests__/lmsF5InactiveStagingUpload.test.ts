@@ -83,7 +83,7 @@ describe('F5 staging QA intake: exact-granted inactive SCORM candidate', () => {
       success: false, error: 'Importação SCORM F5 indisponível fora do grant de staging',
     }), { status: 403, headers: { 'Content-Type': 'application/json' } }));
     await expect(uploadScormF5InactiveStaging({ cursoId: 44, file }))
-      .rejects.toThrow(/grant de staging/);
+      .rejects.toThrow(/não tem permissão para executar esta ação/i);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(base + '/init');
   });
