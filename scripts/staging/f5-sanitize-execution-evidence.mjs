@@ -21,6 +21,8 @@ export function sanitizeF5Evidence(evidence, env, rawSha256) {
       !HEX40.test(env?.GITHUB_SHA ?? '') || !HEX40.test(env?.F5_RELEASE_SHA ?? '') ||
       !/^\d{1,18}$/.test(env?.GITHUB_RUN_ID ?? '') ||
       !HEX64.test(env?.F5_PACKAGE_SHA256 ?? '') || !positive(zipBytes) ||
+      !/^[1-9][0-9]{0,15}$/.test(env?.F5_TENANT_ID ?? '') ||
+      !/^[1-9][0-9]{0,15}$/.test(env?.F5_COURSE_ID ?? '') ||
       !UUID.test(env?.F5_OPERATION_ID ?? '') || !HEX64.test(rawSha256 ?? '') ||
       evidence?.source !== 'F5_INACTIVE_CANDIDATE_EXECUTOR_V1' ||
       evidence?.status !== 'INACTIVE_CANDIDATE_VERIFIED' ||
@@ -28,6 +30,8 @@ export function sanitizeF5Evidence(evidence, env, rawSha256) {
       evidence?.operationId !== env.F5_OPERATION_ID ||
       c?.packageSha256 !== env.F5_PACKAGE_SHA256 || c?.status !== 'VALIDATED' ||
       c?.active !== false || !positive(c?.tenantId) || !positive(c?.courseId) ||
+      c.tenantId !== Number(env.F5_TENANT_ID) ||
+      c.courseId !== Number(env.F5_COURSE_ID) ||
       !UUID.test(c?.packageId ?? '') ||
       r2?.source !== 'WORKER_R2_STREAMED_ZIP_READBACK' ||
       r2?.zipSha256 !== env.F5_PACKAGE_SHA256 || r2?.zipBytes !== zipBytes ||
