@@ -373,7 +373,52 @@ test('reports recovery as required if cleanup compensation cannot be verified', 
   });
   await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
     /F5_EXECUTOR_RECOVERY_REQUIRED/);
-  assert.ok(calls.includes('remove-candidate'));
+  assert.ok(!calls.includes('remove-candidate'),
+    'unrecovered synthetic fixture must retain its candidate for manual reconciliation');
+});
+
+
+test('refuses destructive compensation when ambiguous operation readback is active', async () => {
+  const bytes = Buffer.from('synthetic ambiguous active candidate response');
+  const plan = planFor(bytes);
+  const owned = adaptersFor(plan).candidate;
+  for (const active of [true, null, undefined]) {
+    const { calls, adapters } = adaptersFor(plan, {
+      async completeIntake() { calls.push('complete'); throw Error('HTTP 500 lost completion'); },
+      async resolveAmbiguousIntake() {
+        calls.push('resolve-intake');
+        return { verified: true, state: 'CANDIDATE_PRESENT',
+          candidate: { ...owned, active } };
+      },
+    });
+    await assert.rejects(
+      executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /F5_EXECUTOR_RECOVERY_REQUIRED/,
+    );
+    assert.ok(calls.includes('resolve-intake'));
+    assert.ok(!calls.includes('remove-candidate'),
+      'active/unknown candidate must never be deleted after HTTP 500');
+  }
+});
+
+test('does not delete candidate when synthetic recovery receipt is unverified', async () => {
+  const bytes = Buffer.from('synthetic incomplete recovery receipt');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan, {
+    async runSyntheticCandidate() { calls.push('execute'); return { source: 'untrusted' }; },
+    async recoverSyntheticCandidate() {
+      calls.push('recover');
+      return { verified: false, syntheticFixtureRecovered: true,
+        receiptSha256: receipt('a') };
+    },
+  });
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_RECOVERY_REQUIRED/,
+  );
+  assert.ok(calls.includes('recover'));
+  assert.ok(!calls.includes('remove-candidate'),
+    'failed synthetic recovery must not trigger destructive package cleanup');
 });
 
 test('does not delete an existing idempotent candidate returned for a duplicate ZIP', async () => {
