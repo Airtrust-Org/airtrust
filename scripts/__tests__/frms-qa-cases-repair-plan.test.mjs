@@ -4,6 +4,7 @@
 // rollback_plan_required: encrypted preimage + per-row inverse CAS before any approved apply.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildReviewPlan, assertReviewPlan, EXPECTED_IDS } from '../staging/frms-qa-cases-repair-plan.mjs';
 const days=Array.from({length:30},(_,i)=>({
   day:new Date(Date.parse('2026-09-14T00:00:00Z')+i*86400000).toISOString().slice(0,10),
@@ -49,7 +50,7 @@ test('plan is deterministic and rejects wrong cohort',()=>{
 
 test('SQLite: single reviewed batch changes only 8 QA rows; a drift aborts the whole transaction', async()=>{
   const {DatabaseSync}=await import('node:sqlite');
-  const {LEGACY_CASE_BASELINE,expectedQaCases}=await import('../staging/inspect-frms-ux-cases.mjs');
+  const {LEGACY_CASE_BASELINE,expectedReviewedFixtureCases}=await import('../staging/inspect-frms-ux-cases.mjs');
   const setup=()=>{
     const db=new DatabaseSync(':memory:');
     db.exec(`CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, matricula TEXT NOT NULL, ativo INTEGER, deleted_at TEXT);
@@ -62,7 +63,7 @@ test('SQLite: single reviewed batch changes only 8 QA rows; a drift aborts the w
       .run(i,999013,'QA-FRMS-UX-'+String(i).padStart(2,'0'));
     db.prepare('INSERT INTO funcionarios(id,empresa_id,matricula,ativo) VALUES(100,7,?,1)')
       .run('QA-FRMS-UX-01');
-    const wants=expectedQaCases(days);
+    const wants=expectedReviewedFixtureCases(days);
     for(let i=0;i<4;i++){
       const want=wants[i], old=LEGACY_CASE_BASELINE[i], crew=Number(want.matricula.slice(-2));
       db.prepare(`INSERT INTO frms_jornada(id,empresa_id,tripulante_id,data,registrado_por,origem,observacao,duracao_jornada_minutos,updated_at)
