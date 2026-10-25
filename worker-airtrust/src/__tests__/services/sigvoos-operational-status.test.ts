@@ -70,6 +70,40 @@ describe('resolveSigvoosOperationalStatus', () => {
     ).toMatchObject({ status: 'healthy', usable_for_frms: true });
   });
 
+  it('preserva erros parciais da própria execução bem-sucedida mesmo se last_sync_at for posterior', () => {
+    expect(
+      resolveSigvoosOperationalStatus(
+        config({ last_sync_at: '2026-09-28T15:30:01.000Z' }),
+        {
+          status: 'SUCESSO',
+          updated_at: '2026-09-28T15:30:00.000Z',
+          resposta_json: JSON.stringify({ totalErros: 4 }),
+        },
+        0,
+        NOW,
+      ),
+    ).toMatchObject({
+      status: 'partial',
+      usable_for_frms: false,
+      reason: 'A execução SIGVOOS mais recente registrou 4 erro(s).',
+    });
+  });
+
+  it('mantém erro quando o timestamp do evento empata com last_sync_at', () => {
+    expect(
+      resolveSigvoosOperationalStatus(
+        config({ last_sync_at: '2026-09-28T15:30:00.000Z' }),
+        {
+          status: 'ERRO',
+          erro_ultima: 'falha da execução',
+          updated_at: '2026-09-28T15:30:00.000Z',
+        },
+        0,
+        NOW,
+      ),
+    ).toMatchObject({ status: 'failed', usable_for_frms: false });
+  });
+
   it('classifica pendências como fonte parcial e não apta para cálculo conclusivo', () => {
     expect(resolveSigvoosOperationalStatus(config(), { status: 'SUCESSO' }, 3, NOW)).toMatchObject({
       status: 'partial',

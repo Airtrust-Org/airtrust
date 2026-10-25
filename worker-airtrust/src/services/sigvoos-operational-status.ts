@@ -34,12 +34,15 @@ export function resolveSigvoosOperationalStatus(
   const configured = Boolean(config.username?.trim()) && config.password_configured;
   const lastSyncAt = config.last_sync_at ?? null;
   const lastSyncMs = parseSigvoosTimestamp(lastSyncAt);
+  const eventStatus = String(latestEvent?.status ?? '').toUpperCase();
   const eventUpdatedAt =
     typeof latestEvent?.updated_at === 'string' ? latestEvent.updated_at : null;
   const eventUpdatedMs = parseSigvoosTimestamp(eventUpdatedAt);
   const eventSupersededBySuccessfulSync =
-    lastSyncMs != null && eventUpdatedMs != null && eventUpdatedMs < lastSyncMs;
-  const eventStatus = String(latestEvent?.status ?? '').toUpperCase();
+    eventStatus === 'ERRO' &&
+    lastSyncMs != null &&
+    eventUpdatedMs != null &&
+    eventUpdatedMs < lastSyncMs;
   const effectiveEventStatus = eventSupersededBySuccessfulSync ? '' : eventStatus;
 
   if (!configured) {
@@ -87,7 +90,7 @@ export function resolveSigvoosOperationalStatus(
   }
 
   let latestSummary: Record<string, unknown> | null = null;
-  if (!eventSupersededBySuccessfulSync && typeof latestEvent?.resposta_json === 'string') {
+  if (typeof latestEvent?.resposta_json === 'string' && !eventSupersededBySuccessfulSync) {
     try {
       latestSummary = JSON.parse(latestEvent.resposta_json) as Record<string, unknown>;
     } catch {
