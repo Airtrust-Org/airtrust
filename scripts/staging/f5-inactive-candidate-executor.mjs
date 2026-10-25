@@ -113,6 +113,11 @@ function requireF5PhysicalAssessmentWitness(row, plan) {
       proof.tenantId !== c.tenantId || proof.courseId !== c.courseId ||
       proof.enrollmentId !== f.enrollmentId || proof.cycleId !== f.cycleId ||
       proof.runId !== f.runId ||
+      // The assessment witness must be bound to this exact candidate edition
+      // and live staging runtime, not only to a reusable enrollment/cycle.
+      proof.packageId !== row.packageId ||
+      proof.packageSha256 !== c.packageSha256 ||
+      proof.runtimeSha !== plan.releaseSha ||
       !Number.isFinite(Date.parse(proof.observedAt ?? '')) ||
       Math.abs(Date.now() - Date.parse(proof.observedAt)) > 120_000) {
     fail('ASSESSMENT_READBACK_UNPROVEN');

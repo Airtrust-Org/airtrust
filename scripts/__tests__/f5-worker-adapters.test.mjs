@@ -225,6 +225,7 @@ test('runs the executor end to end through real Worker adapters against an isola
             source: 'WORKER_D1_F0_ASSESSMENT_READBACK_V1',
             tenantId: 9201, courseId: 7301, enrollmentId: 8101, cycleId: 8201,
             runId: '123e4567-e89b-12d3-a456-426614174001',
+            packageId, packageSha256, runtimeSha: releaseSha,
             observedAt: new Date().toISOString(),
             assessmentAttemptCount: 0, assessmentApprovedCount: 0,
             externalAssessmentApprovedCount: 0, certificateIssuedCount: 0,
