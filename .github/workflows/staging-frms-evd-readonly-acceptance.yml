@@ -1,0 +1,176 @@
+name: Staging FRMS EVD Authenticated Read-only Acceptance
+
+# Browser coverage for the real tenant-scoped EVD screen. This workflow is
+# manually dispatched against an already-deployed main SHA and never provisions
+# fixture data, writes D1/R2, applies schema or deploys an application.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_FRMS_EVD_READONLY
+        required: true
+        type: string
+      expected_deployed_sha:
+        description: Exact current main SHA already served by staging Worker and Pages
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+env:
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+  STAGING_FRONTEND_BASE_URL: https://staging.airtrust.pages.dev
+
+jobs:
+  guard:
+    name: Verify current main gates and exact staging provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require exact current main SHA and explicit dispatch confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
+          EVENT_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY' >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_FRMS_EVD_READONLY' ]] || { echo 'CONFIRMATION_REJECTED' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_INVALID' >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$EVENT_SHA" ]] || { echo 'EXPECTED_SHA_NOT_DISPATCH_SHA' >&2; exit 1; }
+          LIVE_MAIN=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)
+          [[ "$LIVE_MAIN" == "$EXPECTED_SHA" ]] || { echo 'MAIN_CHANGED' >&2; exit 1; }
+          node scripts/ci/verify-release-gates.mjs
+
+      - name: Require Worker and Pages to serve the exact staging release
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected=String(process.env.EXPECTED_SHA||'').toLowerCase();
+          const worker=await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`,{
+            headers:{Accept:'application/json','Cache-Control':'no-cache'},
+          });
+          if(!worker.ok)throw Error(`STAGING_WORKER_VERSION_HTTP_${worker.status}`);
+          const version=await worker.json();
+          const sourceSha=String(version?.sourceSha??version?.data?.sourceSha??'').toLowerCase();
+          const environment=String(version?.environment??version?.data?.environment??'');
+          if(sourceSha!==expected||environment!=='staging')throw Error('STAGING_WORKER_SHA_OR_ENVIRONMENT_MISMATCH');
+          const pages=await fetch(`${process.env.STAGING_FRONTEND_BASE_URL}/`,{
+            headers:{Accept:'text/html','Cache-Control':'no-cache'},
+          });
+          if(!pages.ok)throw Error(`STAGING_PAGES_HTTP_${pages.status}`);
+          const html=await pages.text();
+          if(!html.includes(expected.slice(0,7)))throw Error('STAGING_PAGES_SHA_MARKER_MISMATCH');
+          console.log(`FRMS_EVD_STAGING_PROVENANCE_PASS; worker_sha=${sourceSha}; pages_marker=${expected.slice(0,7)}`);
+          NODE
+
+  browser:
+    name: Read EVD as the scoped synthetic tenant administrator
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE_URL: https://staging.airtrust.pages.dev
+      FRMS_QA_EMAIL: qa-frms-ux@staging.airtrust.invalid
+      FRMS_QA_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require the existing staging-only scoped account credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$FRMS_QA_EMAIL" == 'qa-frms-ux@staging.airtrust.invalid' && -n "$FRMS_QA_PASSWORD" ]] || {
+            echo 'FRMS_EVD_SCOPED_QA_CREDENTIAL_MISSING' >&2
+            exit 1
+          }
+      - run: npm ci
+      - name: Typecheck the read-only EVD browser contract
+        run: >-
+          npx --no-install tsc --noEmit --skipLibCheck
+          --target es2022 --module nodenext --moduleResolution nodenext
+          --esModuleInterop --types node
+          e2e/staging-frms-evd-readonly.spec.ts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Inspect EVD selected-day data and explicit empty state without writes
+        run: npx playwright test e2e/staging-frms-evd-readonly.spec.ts --project=chromium --no-deps
+      - name: Recheck staging Worker and Pages provenance after browser traversal
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const expected=String(process.env.EXPECTED_SHA||'').toLowerCase();
+          const worker=await fetch(`${process.env.STAGING_API_BASE_URL}/api/version`,{
+            headers:{Accept:'application/json','Cache-Control':'no-cache'},
+          });
+          if(!worker.ok)throw Error(`POSTCHECK_WORKER_HTTP_${worker.status}`);
+          const version=await worker.json();
+          if(String(version?.sourceSha??version?.data?.sourceSha??'').toLowerCase()!==expected||
+             String(version?.environment??version?.data?.environment??'')!=='staging') {
+            throw Error('POSTCHECK_WORKER_SHA_OR_ENVIRONMENT_MISMATCH');
+          }
+          const pages=await fetch(`${process.env.STAGING_FRONTEND_BASE_URL}/`,{
+            headers:{Accept:'text/html','Cache-Control':'no-cache'},
+          });
+          if(!pages.ok||!(await pages.text()).includes(expected.slice(0,7)))throw Error('POSTCHECK_PAGES_SHA_MARKER_MISMATCH');
+          console.log('FRMS_EVD_STAGING_PROVENANCE_POSTCHECK_PASS');
+          NODE
+      - name: Preserve sanitized EVD screenshot and read-only counts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-frms-evd-readonly-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/frms-evd-readonly.png
+            ${{ runner.temp }}/frms-evd-readonly-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Add sanitized acceptance summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary="$RUNNER_TEMP/frms-evd-readonly-summary.json"
+          [[ -f "$summary" ]] || exit 0
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const summary=JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/frms-evd-readonly-summary.json`,'utf8'));
+          const lines=[
+            '## Read-only staging EVD acceptance',
+            '',
+            `- tenant: \`${summary.tenantId}\``,
+            `- selected date: \`${summary.date}\``,
+            `- assignments: ${summary.assignments}`,
+            `- daily publications: ${summary.publications}`,
+            `- EVD HTTP: ${summary.evdHttpStatus}; publications HTTP: ${summary.publicationsHttpStatus}`,
+            `- mutation requests after login: ${summary.mutationRequestsAfterLogin}`,
+            `- ${summary.evidence}`,
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,lines.join('\n')+'\n');
+          NODE
