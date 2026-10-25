@@ -280,6 +280,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   } catch (error) {
     primaryError = error;
     const recoveryErrors = [];
+    // Do not remove a package while its synthetic enrollment/cycle may still
+    // reference it. A failed recovery requires operator reconciliation first.
+    let syntheticRecoveryVerified = !syntheticTouched;
     if (completionAttempted) {
       // The complete response may be HTTP 200 yet fail its quality/ownership
       // gate. Never delete by an unverified packageId from that response.
@@ -298,6 +301,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         if (resolution.state === 'CANDIDATE_PRESENT') {
           if (!UUID.test(resolution.candidate?.packageId ?? '') ||
               resolution.candidate?.packageSha256 !== c.packageSha256 ||
+              // Even a verified operation status cannot authorize deleting an
+              // active package. Require the inactive boolean in this core gate.
+              resolution.candidate?.active !== false ||
               resolution.candidate?.createdByOperation !== true ||
               resolution.candidate?.alreadyExisted !== false) fail('AMBIGUOUS_CANDIDATE_OWNERSHIP_UNPROVEN');
           candidate = resolution.candidate;
@@ -328,9 +334,13 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
             !HEX64.test(recovery?.receiptSha256 ?? '')) {
           fail('RECOVERY_RECEIPT_INVALID');
         }
+        syntheticRecoveryVerified = true;
       } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
-    if (candidate?.createdByOperation === true && candidate?.alreadyExisted === false) {
+    // No destructive compensation until both ownership and synthetic recovery
+    // are proven. Leave unresolved candidates intact for governed F0 recovery.
+    if (syntheticRecoveryVerified && candidate?.active === false &&
+        candidate?.createdByOperation === true && candidate?.alreadyExisted === false) {
       try {
         const cleanup = await adapters.removeFailedCandidate({
           tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
