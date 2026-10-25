@@ -10,6 +10,7 @@ const env = Object.freeze({
   GITHUB_RUN_ID: '12345678', GITHUB_SHA: 'b'.repeat(40),
   F5_RELEASE_SHA: releaseSha, F5_PACKAGE_SHA256: packageSha256,
   F5_ZIP_BYTES: '40644', F5_OPERATION_ID: '123e4567-e89b-12d3-a456-426614174000',
+  F5_TENANT_ID: '9201', F5_COURSE_ID: '7301',
 });
 const evidence = Object.freeze({
   source: 'F5_INACTIVE_CANDIDATE_EXECUTOR_V1',
@@ -65,5 +66,29 @@ test('rejects a different release, package, operation or untrusted GitHub run co
   ]) {
     assert.throws(() => sanitizeF5Evidence(evidence, { ...env, ...changed }, rawHash),
       /F5_SANITIZED_EVIDENCE_INVALID/);
+  }
+});
+
+test('refuses audit PASS when dispatch tenant/course do not match the physical candidate', () => {
+  const wrongScope = [
+    { F5_TENANT_ID: '9202' },
+    { F5_COURSE_ID: '7302' },
+    { F5_TENANT_ID: undefined },
+    { F5_COURSE_ID: undefined },
+    { F5_TENANT_ID: '09201' },
+    { F5_COURSE_ID: '0' },
+  ];
+  for (const changed of wrongScope) {
+    assert.throws(() => sanitizeF5Evidence(evidence, { ...env, ...changed }, rawHash),
+      /F5_SANITIZED_EVIDENCE_INVALID/,
+      'unmatched or invalid dispatch scope cannot publish PASS');
+  }
+  for (const candidate of [
+    { ...evidence.candidate, tenantId: 9202 },
+    { ...evidence.candidate, courseId: 7302 },
+  ]) {
+    assert.throws(() => sanitizeF5Evidence({ ...evidence, candidate }, env, rawHash),
+      /F5_SANITIZED_EVIDENCE_INVALID/,
+      'candidate identity must match the reviewed dispatch');
   }
 });
