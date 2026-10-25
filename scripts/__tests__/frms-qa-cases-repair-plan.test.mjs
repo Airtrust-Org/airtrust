@@ -108,3 +108,43 @@ test('SQLite: single reviewed batch changes only 8 QA rows; a drift aborts the w
   assert.equal(drift.db.prepare("SELECT COUNT(*) AS n FROM frms_jornada WHERE origem='SIGVOOS'").get().n,0);
   assert.equal(drift.db.prepare("SELECT COUNT(*) AS n FROM frms_alerta WHERE jornada_id IS NOT NULL").get().n,0);
 });
+
+test('fresh source never reassigns immutable case identities when 13 Oct becomes eligible', async()=>{
+  const {REVIEWED_READONLY_CASE_SNAPSHOT}=await import('../staging/inspect-frms-ux-cases.mjs');
+  const recent=days.map(d=>({...d,jornadas:d.day==='2026-10-13'?'5-9':'1-4'}));
+  const newSha='b'.repeat(40),runId='40145914141';
+  const plan=buildReviewPlan(recent,{sourceSha:newSha,aggregateRunId:runId});
+  assert.equal(plan.reviewed_source_sha,newSha);
+  assert.equal(plan.reviewed_aggregate_run,runId);
+  assert.deepEqual(plan.operations.filter(op=>op.table==='frms_alerta').map(op=>op.id), EXPECTED_IDS);
+  for(const {date,matricula} of REVIEWED_READONLY_CASE_SNAPSHOT){
+    assert.ok(plan.operations.some(op=>op.table==='frms_jornada' && op.id==='qa-frms-ux-j-'+date+'-'+matricula));
+  }
+  assert.equal(plan.sql_sha256,buildReviewPlan(days).sql_sha256);
+  assert.equal(plan.writes,0);
+  assert.equal(plan.apply_authorized,false);
+  assert.throws(()=>buildReviewPlan(recent,{sourceSha:newSha,aggregateRunId:'bad'}),/QA_REVIEW_SOURCE_IDENTITY_INVALID/);
+  assert.throws(()=>buildReviewPlan(recent,{sourceSha:'bad',aggregateRunId:runId}),/QA_REVIEW_SOURCE_IDENTITY_INVALID/);
+  for(const date of ['2026-10-09','2026-10-10','2026-10-11','2026-10-12']){
+    const drifting=recent.map(d=>d.day===date?{...d,jornadas:'0'}:d);
+    assert.throws(()=>buildReviewPlan(drifting,{sourceSha:newSha,aggregateRunId:runId}),/QA_REVIEWED_FIXTURE_DATE_INELIGIBLE/);
+  }
+});
+
+test('review workflow requires signed source run/artifact, main SHA, and exposes zero D1 writes',()=>{
+  const wf=readFileSync(new URL('../../.github/workflows/staging-frms-qa-case-repair-review.yml',import.meta.url),'utf8');
+  assert.match(wf,/refs\/heads\/main/);
+  assert.match(wf,/SOURCE_RUN.*inputs.aggregate_run_id/);
+  assert.match(wf,/SOURCE_SHA.*inputs.source_aggregate_sha/);
+  assert.match(wf,/aggregate_sha.*SOURCE_SHA/);
+  assert.match(wf,/source_branch.*main/);
+  assert.match(wf,/frms-ux-30d-production-aggregate\.yml/);
+  assert.match(wf,/FRMS_QA_AGGREGATE_ARTIFACT_UNAVAILABLE/);
+  assert.match(wf,/select\(\.name == "frms-ux-30d-deidentified-aggregates" and \.expired == false\)/);
+  assert.match(wf,/actions\/download-artifact@v7/);
+  assert.match(wf,/SOURCE_AGGREGATE_SHA:/);
+  assert.match(wf,/SOURCE_AGGREGATE_RUN_ID:/);
+  assert.match(wf,/group: airtrust-staging-mutations-and-scorm-qa/);
+  assert.doesNotMatch(wf,/38452591092|3f4017dd0ecdf03afbad4d39ecf8de06c05e0861/);
+  assert.doesNotMatch(wf,/CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|--remote|--apply|d1 execute|migrations apply|wrangler deploy/);
+});
