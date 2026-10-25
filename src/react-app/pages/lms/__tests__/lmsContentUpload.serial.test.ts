@@ -225,7 +225,8 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
       onStatus: status => statuses.push(status),
     })).rejects.toThrow(/bloqueada antes do upload.*conteúdo ativo permanece inalterado/i);
     expect(calls).toHaveLength(0);
-    expect(statuses).toHaveLength(0);
+    // Local archive validation runs before the preflight; no upload begins.
+    expect(statuses).toEqual(['Validando pacote...']);
   });
 
   it('surfaces ONLY allowlisted Browser Rendering diagnostic metadata and never activates', async () => {
