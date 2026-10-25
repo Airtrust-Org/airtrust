@@ -206,7 +206,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) fail('PRIVATE_SOURCE_SHORT_READ');
       uploadHash.update(bytes);
       // A multipart transfer can outlive the synthetic fixture lease.
-      // Recheck before each new side-effect, not only before intake init.
+      // Recheck both the synthetic fixture and F0 grant after each source
+      // read: a long multipart transfer can outlive either authorization.
+      validateF5ExecutionPlan(plan);
+      await requireFreshAuthorization();
       validateF5ExecutionPlan(plan);
       await adapters.putIntakePart({
         tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
@@ -214,6 +217,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       });
     }
     if (uploadHash.digest('hex') !== c.packageSha256) fail('PRIVATE_SOURCE_CHANGED_DURING_UPLOAD');
+    // Completion finalizes an intake even if the grant was revoked after
+    // the last part. Check again before the final side-effect.
+    validateF5ExecutionPlan(plan);
+    await requireFreshAuthorization();
     validateF5ExecutionPlan(plan);
     completionAttempted = true;
     const uploaded = await adapters.completeIntake({

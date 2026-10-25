@@ -264,6 +264,72 @@ test('revoked F0 grant during synthetic binding blocks browser execution and rec
   assert.ok(!calls.includes('execute'), 'browser QA must not run after grant revocation');
 });
 
+
+test('revoked F0 grant during begin aborts intake before the first part', async () => {
+  const bytes = Buffer.from('synthetic ZIP revoked during begin');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalBegin = adapters.beginIntake;
+  adapters.beginIntake = async (...args) => {
+    await originalBegin(...args);
+    valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('begin'));
+  assert.ok(!calls.includes('part:1'), 'no part upload after revocation');
+  assert.ok(!calls.includes('complete'));
+  assert.ok(calls.includes('abort'), 'operation-scoped multipart teardown');
+});
+
+test('revoked F0 grant after first multipart part blocks the second part', async () => {
+  const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalPut = adapters.putIntakePart;
+  adapters.putIntakePart = async params => {
+    await originalPut(params);
+    if (params.partNumber === 1) valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('part:1'));
+  assert.ok(!calls.includes('part:2'), 'no further multipart write after revocation');
+  assert.ok(!calls.includes('complete'));
+  assert.ok(calls.includes('abort'), 'partial intake must be aborted');
+});
+
+test('revoked F0 grant after final multipart part blocks completion', async () => {
+  const bytes = Buffer.from('synthetic ZIP revoked after final part');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalPut = adapters.putIntakePart;
+  adapters.putIntakePart = async params => {
+    await originalPut(params);
+    valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('part:1'));
+  assert.ok(!calls.includes('complete'), 'no intake finalization after revocation');
+  assert.ok(calls.includes('abort'), 'last part must still be compensated');
+});
+
 test('streams an archive over multiple bounded multipart requests', async () => {
   const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
   const plan = planFor(bytes);
