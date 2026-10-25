@@ -231,6 +231,37 @@ async function preparePackageUpload(file: File, tipoConteudo: UploadTipoConteudo
   return { files, packageBytes, totalBytes, launchFile: null, scormVersao: null, tipoH5p, packageHash };
 }
 
+/**
+ * The Replace Content button is a publication workflow, not the governed
+ * staging intake. Never POST a private/non-publishable F5 ZIP from this UI.
+ * The Worker still enforces independent certification and activation.
+ */
+function assertScormReplacementCandidate(prepared: PreparedPackage) {
+  const manifest = prepared.files.find(file =>
+    file.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (!manifest) return; // Server-side static quality gate remains authoritative.
+  let contract: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(strFromU8(manifest.bytes));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    contract = parsed as Record<string, unknown>;
+  } catch {
+    return; // The Worker rejects malformed authoring contracts.
+  }
+  const release = contract.release && typeof contract.release === 'object'
+    ? contract.release as Record<string, unknown> : null;
+  const assessment = contract.assessment && typeof contract.assessment === 'object'
+    ? contract.assessment as Record<string, unknown> : null;
+  if (release?.status === 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE' ||
+      assessment?.mode === 'EXTERNAL') {
+    throw new Error(
+      'Este SCORM exige aprovação editorial e prova externa independente ou está marcado NÃO ATIVAR. ' +
+      'A substituição foi bloqueada antes do upload; o conteúdo ativo permanece inalterado. ' +
+      'Use somente o fluxo governado de homologação em staging.',
+    );
+  }
+}
+
 function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: string) {
   return `${tipoConteudo}:${packageHash}`;
 }
@@ -245,7 +276,7 @@ type ScormQualityShape = {
   diagnostics?: ScormGateSection;
   conformance?: ScormGateSection;
   functionalCertification?: { status?: string; missing?: string[] };
-  runtime?: { status?: string; errors?: string[] };
+  runtime?: { status?: string; errors?: string[]; failureStage?: string; failureCategory?: string; failureCode?: string };
 };
 
 function collectGateErrors(quality: ScormQualityShape): string[] {
@@ -257,6 +288,26 @@ function collectGateErrors(quality: ScormQualityShape): string[] {
   ];
   const errs = sections.flatMap((section) => section?.errors ?? []);
   errs.push(...(quality.runtime?.errors ?? []));
+  // Browser Rendering returns only sanitized infrastructure diagnostics.
+  // Never interpolate arbitrary exception details, URLs, tokens or ZIP text.
+  if (quality.runtime?.errors?.includes('SCORM_BROWSER_INFRASTRUCTURE_ERROR')) {
+    const allowed = [
+      new Set(['BINDING_MISSING', 'BROWSER_LAUNCH', 'CREATE_PAGE',
+        'SET_REQUEST_INTERCEPTION', 'LOAD_SCO_ASSETS', 'DRIVE_SCO_INTERACTIONS',
+        'CLOSE_SCO_SESSION', 'READ_SCORM_TRACE']),
+      new Set(['BROWSER_QUOTA', 'BROWSER_ACCESS', 'BROWSER_SERVICE',
+        'BROWSER_TIMEOUT', 'BROWSER_CONNECTION', 'BROWSER_OTHER']),
+      new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND',
+        'EAI_AGAIN', 'ERR_CONNECTION_CLOSED', 'ERR_HTTP2_STREAM_ERROR',
+        'TYPE_ERROR', 'TIMEOUT_ERROR', 'ABORT_ERROR', 'PROTOCOL_ERROR',
+        'GENERIC_ERROR', 'UNKNOWN_ERROR']),
+    ];
+    const diagnostic = [quality.runtime.failureStage,
+      quality.runtime.failureCategory, quality.runtime.failureCode]
+      .map((value, index) => typeof value === 'string' && allowed[index]!.has(value)
+        ? value : null).filter(Boolean);
+    if (diagnostic.length) errs.push(`Diagnóstico seguro do navegador: ${diagnostic.join(' / ')}`);
+  }
   // Functional E2E is independent of SCORM protocol conformance. Report
   // missing browser scenarios rather than a misleading generic player error.
   errs.push(...(quality.functionalCertification?.missing ?? [])
@@ -290,6 +341,7 @@ async function uploadScormZipPackage(params: {
   onStatus?: (status: string) => void;
 }) {
   const { cursoId, file, prepared, skipPurge, onProgress, onStatus } = params;
+  assertScormReplacementCandidate(prepared);
 
   onStatus?.('Enviando ZIP...');
   onProgress?.(25);
