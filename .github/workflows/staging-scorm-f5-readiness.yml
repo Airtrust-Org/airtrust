@@ -231,6 +231,8 @@ jobs:
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
           F5_SANITIZED_EVIDENCE_PATH: ${{ runner.temp }}/f5-inactive-candidate-summary.json
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
           F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
