@@ -23,7 +23,7 @@
  * - JWT_SECRET: Secret para autenticação JWT
  */
 
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { Env, Variables } from './types';
 import { resolveAllowedOrigin } from './config/allowed-origins';
 import { createWorkerEntrypoint } from './runtime/worker-entrypoint';
@@ -42,6 +42,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import { rateLimiter, rateLimitPresets, tenantAwareKeyExtractor } from './middleware/rate-limit';
 import { requireRole } from './middleware/rbac';
 import { getTenantContext, tenantMiddleware } from './middleware/tenant';
+import { isBombeirosLegacyFrmsBlocked } from './lib/frms/bombeiros-legacy-boundary';
 import { domainEventProcessorMiddleware } from './middleware/domainEventProcessor';
 
 // Cron
@@ -110,6 +111,7 @@ import { empresasRoutes } from './routes/empresas';
 import { assetsRouter } from './routes/assets';
 // FRMS (Flight & Rest Management System)
 import frmsRoutes from './routes/frms';
+import frmsBombeiros from './routes/frms-bombeiros';
 import frmsFadigaCheckinRoutes from './routes/frms-fadiga-checkin';
 import frmsReadinessRoutes from './routes/frms-readiness';
 import frmsOperationalSnapshotRoutes from './routes/frms-operational-snapshot';
@@ -298,6 +300,25 @@ app.use('/api/*', async (c, next) => {
     await tenantMiddleware()(c as any, next);
   });
 });
+
+// BOA/CBMMG must NEVER run offshore/generic FRMS handlers. The shared global
+// auth + tenant guard above has already validated the membership and active
+// tenant. BOA endpoints are mounted ONLY under /api/bombeiros/frms.
+const rejectLegacyFrmsForBombeiros: MiddlewareHandler<{
+  Bindings: Env;
+  Variables: Variables;
+}> = async (c, next) => {
+  if (isBombeirosLegacyFrmsBlocked(getTenantContext(c).empresaCodigo, c.req.path)) {
+    return c.json({
+      success: false,
+      code: 'BOMBEIROS_LEGACY_FRMS_DISABLED',
+      error: 'Use a API específica de aviação dos Bombeiros.',
+    }, 403);
+  }
+  return next();
+};
+app.use('/api/frms', rejectLegacyFrmsForBombeiros);
+app.use('/api/frms/*', rejectLegacyFrmsForBombeiros);
 
 app.use('/api/*', domainEventProcessorMiddleware());
 
@@ -762,6 +783,10 @@ app.route('/api/backup', backupRoutes);
  */
 // tenantMiddleware já aplicado dentro do empresasRoutes
 app.route('/api/empresas', empresasRoutes);
+
+// BOA/CBMMG — router próprio, empresa e perfil FRMS separados da empresa 6.
+// O guard auth + tenant global antecede TODA a API, inclusive esta rota.
+app.route('/api/bombeiros/frms', frmsBombeiros);
 
 // FRMS — Gestão de Fadiga e Jornada
 app.route('/api/frms', frmsRoutes);
