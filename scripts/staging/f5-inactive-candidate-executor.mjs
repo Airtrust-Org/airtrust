@@ -102,6 +102,28 @@ function verifyCandidateRow(row, candidate, plan) {
   }
 }
 
+function requireF5PhysicalAssessmentWitness(row, plan) {
+  // The protected Worker readback must derive these counts from the scoped F0
+  // assessment/qualification stores. A caller-supplied boolean is not proof.
+  // The current Worker route does not yet implement this witness: fail closed
+  // rather than silently certify a synthetic run with unknown attempt history.
+  const proof = row?.assessmentEvidence;
+  const c = plan.candidate, f = plan.syntheticFixture;
+  if (proof?.source !== 'WORKER_D1_F0_ASSESSMENT_READBACK_V1' ||
+      proof.tenantId !== c.tenantId || proof.courseId !== c.courseId ||
+      proof.enrollmentId !== f.enrollmentId || proof.cycleId !== f.cycleId ||
+      proof.runId !== f.runId ||
+      !Number.isFinite(Date.parse(proof.observedAt ?? '')) ||
+      Math.abs(Date.now() - Date.parse(proof.observedAt)) > 120_000) {
+    fail('ASSESSMENT_READBACK_UNPROVEN');
+  }
+  for (const key of ['assessmentAttemptCount', 'assessmentApprovedCount',
+    'externalAssessmentApprovedCount', 'certificateIssuedCount']) {
+    if (proof[key] !== 0) fail('ASSESSMENT_READBACK_NOT_EMPTY');
+  }
+  return proof;
+}
+
 function verifyQaEvidence(row, plan, candidate, phase) {
   const fixture = plan.syntheticFixture;
   if (!row || row.source !== 'WORKER_D1_STAGING_READBACK' ||
@@ -118,6 +140,7 @@ function verifyQaEvidence(row, plan, candidate, phase) {
       (row.suspendSha256 !== null && !HEX64.test(row.suspendSha256 ?? ''))) {
     fail(`${phase}_SYNTHETIC_D1_READBACK_MISMATCH`);
   }
+  requireF5PhysicalAssessmentWitness(row, plan);
   return row;
 }
 
@@ -135,9 +158,7 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
       evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
       !Array.isArray(evidence.browserEngines) || evidence.browserEngines.length !== 2 ||
-      evidence.browserEngines[0] !== 'chromium' || evidence.browserEngines[1] !== 'webkit' ||
-      evidence.assessmentAttempted !== false || evidence.assessmentApproved !== false ||
-      evidence.externalAssessmentApproved !== false || evidence.certificateIssued !== false) {
+      evidence.browserEngines[0] !== 'chromium' || evidence.browserEngines[1] !== 'webkit') {
     fail('CANDIDATE_EXECUTION_EVIDENCE_INVALID');
   }
   return evidence;
