@@ -35,6 +35,18 @@ function scormZip(manifestXml?: string) {
   return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
 }
 
+function scormZipWithCompletionContract(contract: Record<string, unknown>) {
+  const base = scormZip();
+  const entries = [...base.entries, {
+    path: 'airtrust-completion-manifest.json',
+    bytes: strToU8(JSON.stringify(contract)),
+  }];
+  const files: Record<string, Uint8Array> = Object.fromEntries(
+    entries.map(({ path, bytes }) => [path, bytes]),
+  );
+  return { entries, zip: zipSync(files) };
+}
+
 // MEL V4: namespaced <ns0:resource> — parseLaunchFile must still resolve index.html.
 function namespacedMelZip() {
   const manifestXml =
@@ -195,6 +207,69 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
 
     expect(calls.filter((c) => c.includes('/conformance'))).toHaveLength(1);
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
+  it.each([
+    ['private R5 release', { release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', reviewed: false }, assessment: { mode: 'NONE' } }],
+    ['external examination R5', { release: { status: 'REVIEWED' }, assessment: { mode: 'EXTERNAL' } }],
+  ])('blocks %s before any network upload or activation', async (_label, contract) => {
+    const fixture = scormZipWithCompletionContract(contract);
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+    const statuses: string[] = [];
+
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm',
+      file: scormFile(fixture.zip, 'REAL_R5_NAO_ATIVAR.zip'),
+      onStatus: status => statuses.push(status),
+    })).rejects.toThrow(/bloqueada antes do upload.*conteúdo ativo permanece inalterado/i);
+    expect(calls).toHaveLength(0);
+    expect(statuses).toHaveLength(0);
+  });
+
+  it('surfaces ONLY allowlisted Browser Rendering diagnostic metadata and never activates', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'ERROR', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'BROWSER_LAUNCH', failureCategory: 'BROWSER_QUOTA',
+        failureCode: 'TIMEOUT_ERROR',
+      },
+    } });
+
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+    })).rejects.toThrow(/Diagnóstico seguro do navegador: BROWSER_LAUNCH \/ BROWSER_QUOTA \/ TIMEOUT_ERROR/);
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
+  });
+
+  it('does not reflect unrecognized diagnostic strings or browser exception details', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'ERROR', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'BROWSER_LAUNCH https://private.example/token=secret',
+        failureCategory: 'BROWSER_ACCESS',
+        failureCode: 'CREDENTIALS=secret',
+      },
+    } });
+
+    try {
+      await uploadStructuredLmsPackage({
+        cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+      });
+      throw new Error('must fail closed');
+    } catch (error) {
+      expect(String(error)).toContain('SCORM_BROWSER_INFRASTRUCTURE_ERROR');
+      expect(String(error)).toContain('BROWSER_ACCESS');
+      expect(String(error)).not.toContain('private.example');
+      expect(String(error)).not.toContain('CREDENTIALS=');
+    }
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
   });
 
   it('F: publishable=true calls activate exactly once and returns the active prefix/launch', async () => {
