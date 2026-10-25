@@ -373,7 +373,52 @@ test('reports recovery as required if cleanup compensation cannot be verified', 
   });
   await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
     /F5_EXECUTOR_RECOVERY_REQUIRED/);
-  assert.ok(calls.includes('remove-candidate'));
+  assert.ok(!calls.includes('remove-candidate'),
+    'unrecovered synthetic fixture must retain its candidate for manual reconciliation');
+});
+
+
+test('refuses destructive compensation when ambiguous operation readback is active', async () => {
+  const bytes = Buffer.from('synthetic ambiguous active candidate response');
+  const plan = planFor(bytes);
+  const owned = adaptersFor(plan).candidate;
+  for (const active of [true, null, undefined]) {
+    const { calls, adapters } = adaptersFor(plan, {
+      async completeIntake() { calls.push('complete'); throw Error('HTTP 500 lost completion'); },
+      async resolveAmbiguousIntake() {
+        calls.push('resolve-intake');
+        return { verified: true, state: 'CANDIDATE_PRESENT',
+          candidate: { ...owned, active } };
+      },
+    });
+    await assert.rejects(
+      executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /F5_EXECUTOR_RECOVERY_REQUIRED/,
+    );
+    assert.ok(calls.includes('resolve-intake'));
+    assert.ok(!calls.includes('remove-candidate'),
+      'active/unknown candidate must never be deleted after HTTP 500');
+  }
+});
+
+test('does not delete candidate when synthetic recovery receipt is unverified', async () => {
+  const bytes = Buffer.from('synthetic incomplete recovery receipt');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan, {
+    async runSyntheticCandidate() { calls.push('execute'); return { source: 'untrusted' }; },
+    async recoverSyntheticCandidate() {
+      calls.push('recover');
+      return { verified: false, syntheticFixtureRecovered: true,
+        receiptSha256: receipt('a') };
+    },
+  });
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_RECOVERY_REQUIRED/,
+  );
+  assert.ok(calls.includes('recover'));
+  assert.ok(!calls.includes('remove-candidate'),
+    'failed synthetic recovery must not trigger destructive package cleanup');
 });
 
 test('does not delete an existing idempotent candidate returned for a duplicate ZIP', async () => {
@@ -503,6 +548,63 @@ test('rejects R2 candidate readback without an explicit inactive boolean', async
       /R2_CANDIDATE_ASSET_READBACK_MISMATCH/,
     );
   }
+});
+
+
+test('stops further multipart writes if fixture lease expires after intake begins', async () => {
+  const bytes = Buffer.from('synthetic package whose lease expires after begin');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan, {
+    async beginIntake() {
+      calls.push('begin');
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    },
+  });
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.ok(calls.includes('abort'));
+  assert.ok(!calls.includes('part:1'));
+  assert.ok(!calls.includes('complete'));
+});
+
+test('does not complete multipart intake after lease expires during last part', async () => {
+  const bytes = Buffer.from('synthetic package whose lease expires during part');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan, {
+    async putIntakePart({ partNumber }) {
+      calls.push(`part:${partNumber}`);
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    },
+  });
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.ok(calls.includes('abort'));
+  assert.ok(!calls.includes('complete'));
+});
+
+test('does not launch browser QA after F0 binding outlives synthetic lease', async () => {
+  const bytes = Buffer.from('synthetic package with expired binding before browser');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  const read = adapters.readQaEvidence;
+  adapters.readQaEvidence = async params => {
+    const row = await read(params);
+    if (params.phase === 'BEFORE') {
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 60_000).toISOString();
+    }
+    return row;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.ok(calls.includes('readback:BEFORE'));
+  assert.ok(!calls.includes('execute'));
+  assert.ok(calls.includes('recover'));
 });
 
 test('rejects expired synthetic fixture before any staging mutation', async () => {
