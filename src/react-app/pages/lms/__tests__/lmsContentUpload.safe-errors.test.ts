@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseApiResponse } from '../lmsContentUpload';
+import { parseApiResponse, scormReplacementBlockReason } from '../lmsContentUpload';
 
 async function rejectionMessage(response: Response): Promise<string> {
   try {
@@ -73,5 +73,38 @@ describe('lmsContentUpload parseApiResponse visible error safety', () => {
     await expect(parseApiResponse<{ packageId: string }>(response)).resolves.toEqual({
       packageId: 'pkg-1',
     });
+  });
+});
+
+describe('SCORM replace preflight for immutable private course editions', () => {
+  const encoder = new TextEncoder();
+  const file = (contract: unknown) => [{
+    path: 'airtrust-completion-manifest.json',
+    bytes: encoder.encode(JSON.stringify(contract)),
+  }];
+
+  it('blocks EXTERNAL assessment before R2/D1 uploads or browser conformance', () => {
+    expect(scormReplacementBlockReason(file({
+      assessment: { mode: 'EXTERNAL', scoringBySCORM: false },
+      release: { status: 'PRIVATE_QA_UPLOAD_ONLY' },
+    }))).toBe('EXTERNAL_ASSESSMENT');
+  });
+
+  it.each(['PRIVATE_QA_UPLOAD_ONLY', 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', 'DO_NOT_ACTIVATE'])(
+    'blocks package with explicit QA/nonactivation release status %s', status => {
+      expect(scormReplacementBlockReason(file({
+        assessment: { mode: 'NONE' }, release: { status },
+      }))).toBe('PRIVATE_QA_ONLY');
+    },
+  );
+
+  it('does not invent a restriction for ordinary or legacy ZIPs; backend gate remains authoritative', () => {
+    expect(scormReplacementBlockReason(file({
+      assessment: { mode: 'INTERNAL' }, release: { status: 'APPROVED' },
+    }))).toBeNull();
+    expect(scormReplacementBlockReason([])).toBeNull();
+    expect(scormReplacementBlockReason([{
+      path: 'airtrust-completion-manifest.json', bytes: encoder.encode('{bad'),
+    }])).toBeNull();
   });
 });
