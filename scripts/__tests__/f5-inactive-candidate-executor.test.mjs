@@ -200,6 +200,62 @@ test('blocks synthetic binding if Worker or Pages SHA changes after private inta
   }
 });
 
+test('staging runtime drift during BEFORE readback blocks browser QA and recovers synthetic fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with runtime drift during BEFORE readback');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let drifted = false;
+  const originalReadback = adapters.readQaEvidence;
+  adapters.readQaEvidence = async params => {
+    const evidence = await originalReadback(params);
+    if (params.phase === 'BEFORE') drifted = true;
+    return evidence;
+  };
+  const originalRuntime = adapters.readRuntimeProvenance;
+  adapters.readRuntimeProvenance = async () => {
+    const runtime = await originalRuntime();
+    if (drifted) runtime.pagesSha = 'f'.repeat(7);
+    return runtime;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH/,
+  );
+  assert.equal(calls.filter(call => call === 'runtime').length, 3);
+  assert.ok(calls.includes('readback:BEFORE'));
+  assert.ok(!calls.includes('execute'), 'browser must not run on a changed staging release');
+  assert.ok(calls.includes('recover'), 'synthetic fixture must be recovered');
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
+});
+
+test('staging runtime drift during browser QA invalidates evidence and recovers fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with runtime drift during browser QA');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let drifted = false;
+  const originalExecute = adapters.runSyntheticCandidate;
+  adapters.runSyntheticCandidate = async params => {
+    const evidence = await originalExecute(params);
+    drifted = true;
+    return evidence;
+  };
+  const originalRuntime = adapters.readRuntimeProvenance;
+  adapters.readRuntimeProvenance = async () => {
+    const runtime = await originalRuntime();
+    if (drifted) runtime.workerSha = 'f'.repeat(40);
+    return runtime;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH/,
+  );
+  assert.equal(calls.filter(call => call === 'runtime').length, 4);
+  assert.ok(calls.includes('execute'), 'drift occurs during the execution itself');
+  assert.ok(!calls.includes('readback:AFTER'), 'do not accept QA readback from a changed runtime');
+  assert.ok(calls.includes('recover'), 'synthetic fixture must be recovered');
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
+});
+
 test('revoked F0 grant during private source hashing blocks the first Worker write', async () => {
   const bytes = Buffer.from('synthetic ZIP with authorization revoked during hashing');
   const plan = planFor(bytes);
