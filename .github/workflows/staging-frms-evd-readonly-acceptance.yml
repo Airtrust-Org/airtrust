@@ -164,6 +164,7 @@ jobs:
           const lines=[
             '## Read-only staging EVD acceptance',
             '',
+            `- outcome: ${summary.outcome}`,
             `- tenant: \`${summary.tenantId}\``,
             `- selected date: \`${summary.date}\``,
             `- assignments: ${summary.assignments}`,

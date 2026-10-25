@@ -51,6 +51,7 @@ function saveSanitizedEvidence(params: {
   publications: number;
   publicationStatus: number;
   evdStatus: number;
+  mutationRequestsAfterLogin: number;
 }) {
   const outputDirectory = process.env.RUNNER_TEMP || test.info().outputDir;
   fs.mkdirSync(outputDirectory, { recursive: true });
@@ -63,7 +64,8 @@ function saveSanitizedEvidence(params: {
       publications: params.publications,
       evdHttpStatus: params.evdStatus,
       publicationsHttpStatus: params.publicationStatus,
-      mutationRequestsAfterLogin: 0,
+      outcome: 'PASS',
+      mutationRequestsAfterLogin: params.mutationRequestsAfterLogin,
       evidence: 'read-only authenticated staging view; no D1/R2 writes',
     }, null, 2) + '\n',
   );
@@ -276,6 +278,13 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
       .toBeVisible();
   }
 
+  expect(serverFailures, 'Erros 5xx durante leitura EVD').toEqual([]);
+  expect(postLoginMutations, 'Nenhum método mutável pode sair após autenticação e validação do tenant')
+    .toEqual([]);
+  expect(blockedRequests, 'Nenhuma chamada fora da allowlist deve ocorrer')
+    .toEqual([]);
+
+  // Evidence is emitted only after every contract and read-only guard passes.
   const outputDirectory = process.env.RUNNER_TEMP || test.info().outputDir;
   fs.mkdirSync(outputDirectory, { recursive: true });
   await daySection.screenshot({
@@ -291,13 +300,8 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     publications: publications.length,
     evdStatus: evdResponse.status(),
     publicationStatus: publicationResponse.status(),
+    mutationRequestsAfterLogin: postLoginMutations.length,
   });
-
-  expect(serverFailures, 'Erros 5xx durante leitura EVD').toEqual([]);
-  expect(postLoginMutations, 'Nenhum método mutável pode sair após autenticação e validação do tenant')
-    .toEqual([]);
-  expect(blockedRequests, 'Nenhuma chamada fora da allowlist deve ocorrer')
-    .toEqual([]);
   console.log(
     `FRMS_EVD_READONLY_QA_END; tenant=${QA_TENANT_ID}; date=${selectedDate}; ` +
     `assignments=${assignments.length}; publications=${publications.length}; ` +
