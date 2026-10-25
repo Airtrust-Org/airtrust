@@ -54,6 +54,22 @@ describe('resolveSigvoosOperationalStatus', () => {
     ).toMatchObject({ status: 'failed', usable_for_frms: false });
   });
 
+  it('ignora evento de erro mais antigo quando há sincronização bem-sucedida posterior', () => {
+    expect(
+      resolveSigvoosOperationalStatus(
+        config({ last_sync_at: '2026-09-28T15:30:00.000Z' }),
+        {
+          status: 'ERRO',
+          erro_ultima: 'falha anterior',
+          updated_at: '2026-09-28T15:00:00.000Z',
+          resposta_json: JSON.stringify({ totalErros: 4 }),
+        },
+        0,
+        NOW,
+      ),
+    ).toMatchObject({ status: 'healthy', usable_for_frms: true });
+  });
+
   it('classifica pendências como fonte parcial e não apta para cálculo conclusivo', () => {
     expect(resolveSigvoosOperationalStatus(config(), { status: 'SUCESSO' }, 3, NOW)).toMatchObject({
       status: 'partial',
