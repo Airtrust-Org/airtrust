@@ -209,10 +209,11 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
   });
 
-  it.each([
+  const blockedR5Cases: Array<[string, Record<string, unknown>]> = [
     ['private R5 release', { release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', reviewed: false }, assessment: { mode: 'NONE' } }],
     ['external examination R5', { release: { status: 'REVIEWED' }, assessment: { mode: 'EXTERNAL' } }],
-  ])('blocks %s before any network upload or activation', async (_label, contract) => {
+  ];
+  it.each(blockedR5Cases)('blocks %s before any network upload or activation', async (_label, contract) => {
     const fixture = scormZipWithCompletionContract(contract);
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
     const calls = wireScorm({});
