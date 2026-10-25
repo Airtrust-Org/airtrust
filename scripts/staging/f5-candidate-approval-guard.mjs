@@ -71,7 +71,10 @@ export function checkGrantBody(body, v) {
 export function checkReleaseChecks(runs, sha) {
   const required = new Set([
     'lint', 'build-content-gates', 'worker-typecheck', 'frontend-coverage',
-    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e', '🧪 Check PR'
+    // F5-specific requirement beyond the eight generic release gates:
+    // browser proof must include Chromium and WebKit on the reviewed PR head.
+    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e',
+    'lms-scorm-browser-e2e', '🧪 Check PR'
   ]);
   if (!Array.isArray(runs)) throw Error('F5_RELEASE_GATES_UNAVAILABLE');
   for (const run of runs) {
@@ -82,8 +85,11 @@ export function checkReleaseChecks(runs, sha) {
   if (required.size) throw Error('F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN');
 }
 
-export async function verify(v, token, get, now = Date.now()) {
+export async function verify(v, token, get, now = () => Date.now()) {
   assertConfig(v);
+  // Production reads wall-clock time after each remote round trip, not only
+  // once before several GitHub requests. Numeric clocks remain test fixtures.
+  const currentTime = typeof now === 'function' ? now : () => now;
   if (!token) throw Error('F5_GITHUB_READ_TOKEN_REQUIRED');
   const pr = await get(`pulls/${PR}`);
   const isReviewedOpenHead = pr.state === 'open' && !pr.draft && pr.head?.sha === v.sha;
@@ -116,10 +122,13 @@ export async function verify(v, token, get, now = Date.now()) {
       grant.created_at !== grant.updated_at) {
     throw Error('F5_F0_GRANT_EDITED_OR_WRONG_ISSUE');
   }
-  const age = now - Date.parse(grant.created_at);
-  if (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60 * 1000) {
-    throw Error('F5_F0_GRANT_EXPIRED');
-  }
+  const requireFreshGrant = () => {
+    const age = currentTime() - Date.parse(grant.created_at);
+    if (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60 * 1000) {
+      throw Error('F5_F0_GRANT_EXPIRED');
+    }
+  };
+  requireFreshGrant();
   checkGrantBody(grant.body, v);
   for (const login of new Set([grant.user?.login, v.actor])) {
     if (!login || !/^[a-zA-Z0-9-]{1,39}$/.test(login)) {
@@ -128,6 +137,9 @@ export async function verify(v, token, get, now = Date.now()) {
     const permission = await get(`collaborators/${login}/permission`);
     if (permission.permission !== 'admin') throw Error('F5_REPOSITORY_ADMIN_REQUIRED');
   }
+  // Permission lookups can cross the 12-hour grant deadline. Never return a
+  // stale approval merely because the grant was fresh when the read began.
+  requireFreshGrant();
   return true;
 }
 

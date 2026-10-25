@@ -160,8 +160,13 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   if (!adapters || required.some(name => typeof adapters[name] !== 'function')) fail('ADAPTERS_INCOMPLETE');
 
   // Every precondition is proven before the first Worker write.
-  const authorized = await adapters.verifyAuthorization(plan);
-  if (authorized !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+  const requireFreshAuthorization = async () => {
+    if (await adapters.verifyAuthorization(plan) !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+    // GitHub grant verification is asynchronous: the synthetic lease may
+    // expire while the remote authorization check is still in progress.
+    validateF5ExecutionPlan(plan);
+  };
+  await requireFreshAuthorization();
   const requirePinnedRuntime = async () => {
     const runtime = await adapters.readRuntimeProvenance();
     if (runtime?.workerSha !== plan.releaseSha ||
@@ -177,6 +182,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   // A long private ZIP hash may outlive the fixture lease. Recheck immediately
   // before any side-effecting Worker request, not just at initial preflight.
   validateF5ExecutionPlan(plan);
+  // A private ZIP hash can outlive or invalidate the grant. Recheck the
+  // immutable GitHub F0 authorization before the first Worker mutation.
+  await requireFreshAuthorization();
 
   let intakeStarted = false;
   let completionAttempted = false;
@@ -201,7 +209,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) fail('PRIVATE_SOURCE_SHORT_READ');
       uploadHash.update(bytes);
       // A multipart transfer can outlive the synthetic fixture lease.
-      // Recheck before each new side-effect, not only before intake init.
+      // Recheck both the synthetic fixture and F0 grant after each source
+      // read: a long multipart transfer can outlive either authorization.
+      validateF5ExecutionPlan(plan);
+      await requireFreshAuthorization();
       validateF5ExecutionPlan(plan);
       await adapters.putIntakePart({
         tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
@@ -209,6 +220,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       });
     }
     if (uploadHash.digest('hex') !== c.packageSha256) fail('PRIVATE_SOURCE_CHANGED_DURING_UPLOAD');
+    // Completion finalizes an intake even if the grant was revoked after
+    // the last part. Check again before the final side-effect.
+    validateF5ExecutionPlan(plan);
+    await requireFreshAuthorization();
     validateF5ExecutionPlan(plan);
     completionAttempted = true;
     const uploaded = await adapters.completeIntake({
@@ -241,11 +256,21 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     validateF5ExecutionPlan(plan);
     await requirePinnedRuntime();
     validateF5ExecutionPlan(plan);
+    // Intake/readback can be lengthy. A revoked or expired F0 grant must
+    // not authorize a new synthetic binding after those operations.
+    await requireFreshAuthorization();
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
+    validateF5ExecutionPlan(plan);
+    // Binding/readback may also cross the grant expiry or a revocation.
+    // Compensation remains available even when this check fails.
+    await requireFreshAuthorization();
+    // The BEFORE readback can span a staging rollout. Do not start browser QA
+    // against a different Worker/Pages/harness than the authorized release.
+    await requirePinnedRuntime();
     validateF5ExecutionPlan(plan);
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
@@ -253,6 +278,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       enrollmentId: f.enrollmentId,
       cycleId: f.cycleId, runId: f.runId,
     }), plan, candidate);
+    // A rollout during browser execution invalidates attribution of the CMI
+    // and suspend/resume receipts to the pinned release; recover synthetics.
+    validateF5ExecutionPlan(plan);
+    await requirePinnedRuntime();
     const after = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'AFTER',

@@ -200,6 +200,235 @@ test('blocks synthetic binding if Worker or Pages SHA changes after private inta
   }
 });
 
+test('staging runtime drift during BEFORE readback blocks browser QA and recovers synthetic fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with runtime drift during BEFORE readback');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let drifted = false;
+  const originalReadback = adapters.readQaEvidence;
+  adapters.readQaEvidence = async params => {
+    const evidence = await originalReadback(params);
+    if (params.phase === 'BEFORE') drifted = true;
+    return evidence;
+  };
+  const originalRuntime = adapters.readRuntimeProvenance;
+  adapters.readRuntimeProvenance = async () => {
+    const runtime = await originalRuntime();
+    if (drifted) runtime.pagesSha = 'f'.repeat(7);
+    return runtime;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH/,
+  );
+  assert.equal(calls.filter(call => call === 'runtime').length, 3);
+  assert.ok(calls.includes('readback:BEFORE'));
+  assert.ok(!calls.includes('execute'), 'browser must not run on a changed staging release');
+  assert.ok(calls.includes('recover'), 'synthetic fixture must be recovered');
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
+});
+
+test('staging runtime drift during browser QA invalidates evidence and recovers fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with runtime drift during browser QA');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let drifted = false;
+  const originalExecute = adapters.runSyntheticCandidate;
+  adapters.runSyntheticCandidate = async params => {
+    const evidence = await originalExecute(params);
+    drifted = true;
+    return evidence;
+  };
+  const originalRuntime = adapters.readRuntimeProvenance;
+  adapters.readRuntimeProvenance = async () => {
+    const runtime = await originalRuntime();
+    if (drifted) runtime.workerSha = 'f'.repeat(40);
+    return runtime;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH/,
+  );
+  assert.equal(calls.filter(call => call === 'runtime').length, 4);
+  assert.ok(calls.includes('execute'), 'drift occurs during the execution itself');
+  assert.ok(!calls.includes('readback:AFTER'), 'do not accept QA readback from a changed runtime');
+  assert.ok(calls.includes('recover'), 'synthetic fixture must be recovered');
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
+});
+
+test('fixture lease expiring during pre-begin grant verification prevents all Worker writes', async () => {
+  const bytes = Buffer.from('synthetic ZIP with fixture lease expiring during authorization');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let checks = 0;
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    if (++checks === 2) {
+      // Model the wall clock crossing the lease deadline while GitHub responds.
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    }
+    return true;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.equal(checks, 2);
+  assert.ok(!calls.includes('begin'), 'expired fixture must never reach beginIntake');
+  assert.ok(!calls.includes('abort'), 'no intake was started');
+});
+
+test('fixture lease expiring during post-binding grant verification blocks browser QA', async () => {
+  const bytes = Buffer.from('synthetic ZIP with fixture lease expiring before browser QA');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    if (calls.includes('readback:BEFORE')) {
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    }
+    return true;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.ok(calls.includes('readback:BEFORE'));
+  assert.ok(!calls.includes('execute'), 'expired fixture must never run browser QA');
+  assert.ok(calls.includes('recover'), 'synthetic fixture recovery remains mandatory');
+  assert.ok(calls.includes('remove-candidate'), 'only owned inactive candidate may be compensated');
+});
+
+test('revoked F0 grant during private source hashing blocks the first Worker write', async () => {
+  const bytes = Buffer.from('synthetic ZIP with authorization revoked during hashing');
+  const plan = planFor(bytes);
+  const source = sourceFor(bytes);
+  const originalRead = source.read.bind(source);
+  let valid = true;
+  source.read = async (...args) => {
+    const part = await originalRead(...args);
+    valid = false;
+    return part;
+  };
+  const { calls, adapters } = adaptersFor(plan, {
+    async verifyAuthorization() { calls.push('authorize'); return valid; },
+  });
+  await assert.rejects(executeF5InactiveCandidate({ plan, source, adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.equal(calls.filter(x => x === 'authorize').length, 2);
+  assert.ok(!calls.includes('begin'), 'no Worker mutation after grant revocation');
+});
+
+test('revoked F0 grant after intake compensates owned candidate before binding', async () => {
+  const bytes = Buffer.from('synthetic ZIP with F0 grant revoked after intake');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalRead = adapters.readCandidateR2;
+  adapters.readCandidateR2 = async (...args) => {
+    const result = await originalRead(...args);
+    valid = false;
+    return result;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate compensated');
+  assert.ok(!calls.includes('readback:BEFORE'), 'no synthetic binding after grant revocation');
+  assert.ok(!calls.includes('execute'));
+});
+
+test('revoked F0 grant during synthetic binding blocks browser execution and recovers fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with F0 grant revoked during binding');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalRead = adapters.readQaEvidence;
+  adapters.readQaEvidence = async (...args) => {
+    const result = await originalRead(...args);
+    if (args[0].phase === 'BEFORE') valid = false;
+    return result;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('recover'), 'binding requires synthetic fixture recovery');
+  assert.ok(calls.includes('remove-candidate'), 'compensate only after recovery');
+  assert.ok(!calls.includes('execute'), 'browser QA must not run after grant revocation');
+});
+
+
+test('revoked F0 grant during begin aborts intake before the first part', async () => {
+  const bytes = Buffer.from('synthetic ZIP revoked during begin');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalBegin = adapters.beginIntake;
+  adapters.beginIntake = async (...args) => {
+    await originalBegin(...args);
+    valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('begin'));
+  assert.ok(!calls.includes('part:1'), 'no part upload after revocation');
+  assert.ok(!calls.includes('complete'));
+  assert.ok(calls.includes('abort'), 'operation-scoped multipart teardown');
+});
+
+test('revoked F0 grant after first multipart part blocks the second part', async () => {
+  const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalPut = adapters.putIntakePart;
+  adapters.putIntakePart = async params => {
+    await originalPut(params);
+    if (params.partNumber === 1) valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('part:1'));
+  assert.ok(!calls.includes('part:2'), 'no further multipart write after revocation');
+  assert.ok(!calls.includes('complete'));
+  assert.ok(calls.includes('abort'), 'partial intake must be aborted');
+});
+
+test('revoked F0 grant after final multipart part blocks completion', async () => {
+  const bytes = Buffer.from('synthetic ZIP revoked after final part');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalPut = adapters.putIntakePart;
+  adapters.putIntakePart = async params => {
+    await originalPut(params);
+    valid = false;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('part:1'));
+  assert.ok(!calls.includes('complete'), 'no intake finalization after revocation');
+  assert.ok(calls.includes('abort'), 'last part must still be compensated');
+});
+
 test('streams an archive over multiple bounded multipart requests', async () => {
   const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
   const plan = planFor(bytes);
