@@ -278,22 +278,26 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
       .toBeVisible();
   }
 
+  // Capture into memory before the final guards, so no browser await can
+  // create a window between those guards and publishing the evidence.
+  const sanitizedScreenshot = await daySection.screenshot({
+    animations: 'disabled',
+    // Keep the day, count and explicit empty state visible while preventing
+    // published crew names and operational notes from entering the artifact.
+    style: '#evd-escala-dia tbody { visibility: hidden !important; }',
+  });
+
   expect(serverFailures, 'Erros 5xx durante leitura EVD').toEqual([]);
   expect(postLoginMutations, 'Nenhum método mutável pode sair após autenticação e validação do tenant')
     .toEqual([]);
   expect(blockedRequests, 'Nenhuma chamada fora da allowlist deve ocorrer')
     .toEqual([]);
 
-  // Evidence is emitted only after every contract and read-only guard passes.
+  // No browser await occurs after the final guard. A failed assertion leaves
+  // neither screenshot nor PASS summary on disk.
   const outputDirectory = process.env.RUNNER_TEMP || test.info().outputDir;
   fs.mkdirSync(outputDirectory, { recursive: true });
-  await daySection.screenshot({
-    path: path.join(outputDirectory, 'frms-evd-readonly.png'),
-    animations: 'disabled',
-    // Keep the day, count and explicit empty state visible while preventing
-    // published crew names and operational notes from entering the artifact.
-    style: '#evd-escala-dia tbody { visibility: hidden !important; }',
-  });
+  fs.writeFileSync(path.join(outputDirectory, 'frms-evd-readonly.png'), sanitizedScreenshot);
   saveSanitizedEvidence({
     date: selectedDate,
     assignments: assignments.length,
