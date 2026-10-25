@@ -160,8 +160,10 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   if (!adapters || required.some(name => typeof adapters[name] !== 'function')) fail('ADAPTERS_INCOMPLETE');
 
   // Every precondition is proven before the first Worker write.
-  const authorized = await adapters.verifyAuthorization(plan);
-  if (authorized !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+  const requireFreshAuthorization = async () => {
+    if (await adapters.verifyAuthorization(plan) !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+  };
+  await requireFreshAuthorization();
   const requirePinnedRuntime = async () => {
     const runtime = await adapters.readRuntimeProvenance();
     if (runtime?.workerSha !== plan.releaseSha ||
@@ -177,6 +179,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   // A long private ZIP hash may outlive the fixture lease. Recheck immediately
   // before any side-effecting Worker request, not just at initial preflight.
   validateF5ExecutionPlan(plan);
+  // A private ZIP hash can outlive or invalidate the grant. Recheck the
+  // immutable GitHub F0 authorization before the first Worker mutation.
+  await requireFreshAuthorization();
 
   let intakeStarted = false;
   let completionAttempted = false;
@@ -241,12 +246,18 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     validateF5ExecutionPlan(plan);
     await requirePinnedRuntime();
     validateF5ExecutionPlan(plan);
+    // Intake/readback can be lengthy. A revoked or expired F0 grant must
+    // not authorize a new synthetic binding after those operations.
+    await requireFreshAuthorization();
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
     validateF5ExecutionPlan(plan);
+    // Binding/readback may also cross the grant expiry or a revocation.
+    // Compensation remains available even when this check fails.
+    await requireFreshAuthorization();
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       packageSha256: c.packageSha256, scormVersion: candidate.scormVersion,
