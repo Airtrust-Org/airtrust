@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       qa_scope:
-        description: 'Full original QA or strictly inactive SCORM resume preview'
+        description: 'Full QA or focused EXTERNAL resume replacement guard (F5 preview requires grant)'
         required: true
         type: choice
         default: all
@@ -195,7 +195,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Exercise governed SCORM functional blocking, rejection and timeout in staging UI
+      - name: Exercise governed SCORM upload, external replacement guard, rejection and timeout in staging UI
         shell: bash
         env:
           QA_SCOPE: ${{ inputs.qa_scope }}

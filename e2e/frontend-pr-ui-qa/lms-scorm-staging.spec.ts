@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { chromium, expect, test, webkit, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 
@@ -367,108 +367,45 @@ test('LMS SCORM staging: protocol pass stays uncertified, static reject and time
   writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
 
-test('LMS SCORM resume: exact inactive candidate upload and Chromium WebKit preview', async ({ page }) => {
-  test.setTimeout(180_000);
+// The EXTERNAL resume ZIP has no independent F5 admin grant or signed
+// editorial review. The legacy Replace Content path MUST reject it before
+// /scorm-upload. Actual candidate intake and Chromium/WebKit preview are
+// separately governed by staging-scorm-f5-readiness.yml with an exact grant.
+test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before upload', async ({ page }) => {
+  test.setTimeout(90_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
+  const resume = state.courses.resume;
   const mutations: string[] = [];
+  const unexpectedUploads: string[] = [];
   page.on('request', request => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    mutations.push(request.url());
+    const url = request.url();
+    mutations.push(url);
+    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(new URL(url).pathname)) {
+      unexpectedUploads.push(new URL(url).pathname);
+    }
   });
-  // Upload the exact SHA-pinned resume fixture through the REAL staging UI.
-  // Keep the candidate inactive/uncertified. QA preview cannot persist CMI;
-  // authenticated Chromium/WebKit persistence is covered separately by #1730.
-  let resumeUpload: ApiEnvelope | null = null;
-  const resume = state.courses.resume;
-  await page.route(`**/api/lms/cursos/${resume.id}/scorm-upload**`,
-    (route) => delayedRealResponse(route, 600, (json) => { resumeUpload = json; }));
+
   await openCourseEditor(page, resume);
   await submitCourse(page);
-  await expect.poll(() => resumeUpload !== null, {
-    timeout: 45_000,
-    message: 'O upload real da fixture de retomada não retornou da API',
-  }).toBe(true);
-  const resumeData = resumeUpload?.data;
-  expect(resumeUpload?.success).toBe(true);
-  expect(resumeData?.status).toBe('VALIDATED');
-  expect(resumeData?.packageSha256).toBe(
-    'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-  );
-  const resumeCandidate = String(resumeData?.packageId ?? '');
-  expect(resumeCandidate).toMatch(/^[0-9a-f-]{36}$/i);
-
-  const qaOrigin = 'https://' + STAGING_API_HOST;
-  const previews: string[] = [];
-  for (const [label, engine] of [['CHROMIUM', chromium], ['WEBKIT', webkit]] as const) {
-    const browser = await engine.launch({ headless: true });
-    try {
-      const context = await browser.newContext({ serviceWorkers: 'block' });
-      try {
-        const email = process.env.QA_EXAMINER_ADMIN_EMAIL ||
-          'qa-examiner-admin@staging.airtrust.invalid';
-        const password = process.env.QA_EXAMINER_ADMIN_PASSWORD ||
-          process.env.QA_ADMIN_PASSWORD || '';
-        expect(password.length).toBeGreaterThan(0);
-        const logged = await context.request.post(qaOrigin + '/api/auth/login',
-          { data: { email, senha: password } });
-        expect(logged.status()).toBe(200);
-        let token = String((await logged.json())?.data?.accessToken ?? '');
-        expect(token.length).toBeGreaterThan(20);
-        const enterprises = await context.request.get(qaOrigin + '/api/auth/empresas',
-          { headers: { Authorization: 'Bearer ' + token } });
-        expect(enterprises.status()).toBe(200);
-        const list = (await enterprises.json())?.data;
-        const qaTenant = (list?.empresas ?? []).find(
-          (item: { codigo?: string }) => item.codigo === 'qa_examiner_training');
-        expect(Number(qaTenant?.id)).toBeGreaterThan(0);
-        if (Number(list?.empresaAtualId) !== Number(qaTenant.id)) {
-          const switched = await context.request.post(qaOrigin + '/api/auth/select-empresa', {
-            headers: { Authorization: 'Bearer ' + token },
-            data: { empresaId: Number(qaTenant.id) },
-          });
-          expect(switched.status()).toBe(200);
-          token = String((await switched.json())?.data?.accessToken ?? '');
-          expect(token.length).toBeGreaterThan(20);
-        }
-        const session = await context.request.post(qaOrigin + '/api/lms/assets/session', {
-          headers: { Authorization: 'Bearer ' + token },
-          data: { curso_id: resume.id, preview: true,
-            candidate_package_id: resumeCandidate,
-            candidate_package_sha256: resumeData.packageSha256 },
-        });
-        expect(session.status()).toBe(200);
-        const candidatePage = await context.newPage();
-        const preview = await candidatePage.goto(
-          qaOrigin + '/api/lms/scorm/qa-preview/' + resume.id + '/' + resumeCandidate,
-          { waitUntil: 'domcontentloaded' },
-        );
-        expect(preview?.status()).toBe(200);
-        const frame = candidatePage.frameLocator('#scorm-frame');
-        await expect(frame.getByRole('heading', { name: 'QA SCORM — Retomada Sintética' }))
-          .toBeVisible({ timeout: 25_000 });
-        await expect(frame.locator('[data-qa-position]'))
-          .toHaveText('Posição 1 de 2');
-        previews.push(label);
-      } finally {
-        await context.close();
-      }
-    } finally {
-      await browser.close();
-    }
-  }
-  expect(previews).toEqual(['CHROMIUM', 'WEBKIT']);
-  await page.unroute(`**/api/lms/cursos/${resume.id}/scorm-upload**`);
-
-
+  await expect(page.getByText(/A substituição foi bloqueada antes do upload/i))
+    .toBeVisible({ timeout: 25_000 });
+  expect(unexpectedUploads,
+    'Unreviewed EXTERNAL ZIP must not start upload, conformance or activation',
+  ).toEqual([]);
   expect(mutations.every(url => {
-    try { return new URL(url).hostname === STAGING_API_HOST; } catch { return false; }
+    try { return new URL(url).hostname === STAGING_API_HOST; }
+    catch { return false; }
   })).toBe(true);
+
   const summary = {
-    source: 'GOVERNED_STAGING_REAL_WORKER_PAGES_INACTIVE_PREVIEW',
+    source: 'GOVERNED_STAGING_LMS_SCORM_EXTERNAL_REPLACEMENT_GUARD',
     scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
     exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-    uploadStatus: 'VALIDATED',
-    previewRendered: ['CHROMIUM', 'WEBKIT'],
+    rejectedBeforeUpload: true,
+    uploadRequests: unexpectedUploads.length,
+    previewRendered: [],
+    previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
     active: false,
     certified: false,
     committedCmiProven: false,

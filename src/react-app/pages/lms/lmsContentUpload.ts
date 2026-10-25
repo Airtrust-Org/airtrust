@@ -434,6 +434,102 @@ async function uploadScormZipPackage(params: {
   };
 }
 
+/**
+ * F5 operator upload of a single inactive SCORM edition in the staging UI.
+ * Uses the *existing* staging-only R2 multipart protocol. The Worker validates
+ * a fresh, exact runtime/tenant/course/package-SHA/byte grant on init/parts/
+ * completion. This client never calls conformance or activation and never
+ * changes lms_cursos or any learner/certificate state.
+ */
+export async function uploadScormF5InactiveStaging(params: {
+  cursoId: number;
+  file: File;
+  onProgress?: (pct: number) => void;
+  onStatus?: (status: string) => void;
+}): Promise<{ packageId: string; packageSha256: string; status: 'VALIDATED'; zipBytes: number }> {
+  const { cursoId, file, onProgress, onStatus } = params;
+  if (window.location.hostname !== 'staging.airtrust.pages.dev') {
+    throw new Error('Envio de candidato F5 disponível somente no staging.');
+  }
+  if (!Number.isSafeInteger(cursoId) || cursoId < 1 || !file.name.toLowerCase().endsWith('.zip')) {
+    throw new Error('Selecione um curso existente e seu arquivo SCORM .zip.');
+  }
+  onStatus?.('Calculando SHA-256 do ZIP original...');
+  const packageBytes = new Uint8Array(await file.arrayBuffer());
+  if (packageBytes.byteLength < 22 || packageBytes.byteLength > 80 * 1024 * 1024) {
+    throw new Error('O ZIP F5 deve ter entre 22 bytes e 80 MiB.');
+  }
+  const digest = await crypto.subtle.digest('SHA-256', packageBytes);
+  const packageSha256 = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const operationId = crypto.randomUUID();
+  const base = `/api/lms/cursos/${cursoId}/scorm-upload/streamed`;
+  let initialized = false;
+  let completeStarted = false;
+  try {
+    onStatus?.('Validando autorização individual de staging...');
+    const initResponse = await fetchWithAuth(`${base}/init`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation_id: operationId, expected_sha256: packageSha256,
+        zip_bytes: packageBytes.byteLength, arquivo_nome: file.name,
+      }),
+    });
+    const init = await parseApiResponse<{ operationId: string; partBytes: number; partCount: number }>(initResponse);
+    if (init.operationId !== operationId ||
+        !Number.isSafeInteger(init.partBytes) || init.partBytes < 1 ||
+        init.partBytes > 8 * 1024 * 1024 ||
+        init.partCount !== Math.ceil(packageBytes.byteLength / init.partBytes)) {
+      throw new Error('Protocolo de intake F5 retornou tamanho/escopo inesperado.');
+    }
+    initialized = true;
+    for (let part = 1; part <= init.partCount; part += 1) {
+      const start = (part - 1) * init.partBytes;
+      const end = Math.min(start + init.partBytes, packageBytes.byteLength);
+      const chunk = new Blob([new Uint8Array(packageBytes.slice(start, end))], {
+        type: 'application/octet-stream',
+      });
+      onStatus?.(`Enviando parte ${part} de ${init.partCount} (candidato inativo)...`);
+      const response = await fetchWithAuth(`${base}/${operationId}/parts/${part}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: chunk,
+      });
+      const receipt = await parseApiResponse<{ partNumber: number; bytes: number }>(response);
+      if (receipt.partNumber !== part || receipt.bytes !== end - start) {
+        throw new Error('Recibo de parte SCORM F5 não corresponde aos bytes enviados.');
+      }
+      onProgress?.(Math.round(80 * part / init.partCount));
+    }
+    completeStarted = true;
+    onStatus?.('Verificando ZIP e criando somente a versão candidata inativa...');
+    const response = await fetchWithAuth(`${base}/${operationId}/complete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const candidate = await parseApiResponse<{
+      packageId?: string; packageSha256?: string; status?: string; zipBytes?: number;
+    }>(response);
+    if (!candidate.packageId || candidate.packageSha256 !== packageSha256 ||
+        candidate.status !== 'VALIDATED' || candidate.zipBytes !== packageBytes.byteLength) {
+      throw new Error('Candidato F5 sem confirmação íntegra de SHA/bytes/estado pelo Worker.');
+    }
+    onProgress?.(100);
+    onStatus?.('Candidato F5 armazenado INATIVO no staging. Não houve publicação.');
+    return {
+      packageId: candidate.packageId, packageSha256,
+      status: 'VALIDATED', zipBytes: packageBytes.byteLength,
+    };
+  } catch (error) {
+    // Before complete, the granted abort endpoint releases only the isolated
+    // intake. A lost completion response must NOT delete an already-created
+    // candidate; the separate Worker status/readback endpoint resolves it.
+    if (initialized && !completeStarted) {
+      await fetchWithAuth(`${base}/${operationId}/abort`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
 export async function uploadStructuredLmsPackage(params: {
   cursoId: number;
   tipoConteudo: UploadTipoConteudo;
