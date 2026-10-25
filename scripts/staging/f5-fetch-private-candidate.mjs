@@ -15,7 +15,64 @@ const HEX64 = /^[a-f0-9]{64}$/;
 const MAX_BYTES = 80 * 1024 * 1024;
 const fail = code => { throw Error('F5_PRIVATE_FETCH_' + code); };
 
-export async function fetchF5PrivateCandidate(config, { fetchImpl = fetch } = {}) {
+/**
+ * Only a short-lived provider-signed GET URL can cross the protected runner
+ * boundary. A HTTPS hostname alone does not prove that an archive is private.
+ * R2/S3 SigV4 and GCS V4 are supported; any other transport fails closed.
+ * The provider must validate the actual signature and object permissions.
+ * Presigned URLs are time-limited, NOT single-use capabilities.
+ */
+export function verifyF5SignedSourceLease(url, now = Date.now()) {
+  const params = url?.searchParams;
+  if (!params || !Number.isFinite(now)) fail('SOURCE_LEASE_INVALID');
+  const aws = params.has('X-Amz-Algorithm');
+  const google = params.has('X-Goog-Algorithm');
+  if (aws === google) fail('SOURCE_SIGNED_LEASE_REQUIRED');
+  const prefix = aws ? 'X-Amz-' : 'X-Goog-';
+  const exact = name => {
+    const values = params.getAll(prefix + name);
+    if (values.length !== 1 || !values[0]) fail('SOURCE_LEASE_INVALID');
+    return values[0];
+  };
+  const algorithm = exact('Algorithm');
+  if (aws ? algorithm !== 'AWS4-HMAC-SHA256'
+          : !['GOOG4-HMAC-SHA256', 'GOOG4-RSA-SHA256'].includes(algorithm)) {
+    fail('SOURCE_LEASE_INVALID');
+  }
+  const signedDate = exact('Date');
+  if (!/^\d{8}T\d{6}Z$/.test(signedDate)) fail('SOURCE_LEASE_INVALID');
+  const iso = `${signedDate.slice(0, 4)}-${signedDate.slice(4, 6)}-${signedDate.slice(6, 8)}T${signedDate.slice(9, 11)}:${signedDate.slice(11, 13)}:${signedDate.slice(13, 15)}.000Z`;
+  const issued = Date.parse(iso);
+  if (!Number.isFinite(issued) || new Date(issued).toISOString() !== iso) {
+    fail('SOURCE_LEASE_INVALID');
+  }
+  const expiration = exact('Expires');
+  if (!/^[1-9][0-9]{0,2}$/.test(expiration) ||
+      Number(expiration) > 900) fail('SOURCE_LEASE_INVALID');
+  // Preserve time for an 80 MiB transfer. Reject an already expired source or
+  // a lease that will expire during the bounded 120-second fetch.
+  if (issued > now + 60_000 || issued + Number(expiration) * 1000 < now + 120_000) {
+    fail('SOURCE_LEASE_EXPIRED_OR_TOO_SHORT');
+  }
+  const credential = exact('Credential').split('/');
+  if (credential.length !== 5 || credential[1] !== signedDate.slice(0, 8) ||
+      !credential[0] || !/^[a-z0-9-]{1,32}$/.test(credential[2]) ||
+      credential[3] !== (aws ? 's3' : 'storage') ||
+      credential[4] !== (aws ? 'aws4_request' : 'goog4_request')) {
+    fail('SOURCE_LEASE_INVALID');
+  }
+  const headers = exact('SignedHeaders').split(';');
+  if (!headers.includes('host') || new Set(headers).size !== headers.length ||
+      headers.some(h => !/^[a-z0-9-]+$/.test(h))) fail('SOURCE_LEASE_INVALID');
+  const signature = exact('Signature');
+  const sigLength = !aws && algorithm === 'GOOG4-RSA-SHA256' ? 512 : 64;
+  if (!new RegExp(`^[a-fA-F0-9]{${sigLength}}$`).test(signature)) {
+    fail('SOURCE_LEASE_INVALID');
+  }
+  return { expiresAt: new Date(issued + Number(expiration) * 1000).toISOString() };
+}
+
+export async function fetchF5PrivateCandidate(config, { fetchImpl = fetch, now = Date.now() } = {}) {
   if (config?.environment !== 'staging' ||
       config?.ref !== 'refs/heads/main' ||
       config?.confirmation !== 'AIRTRUST_F5_STAGING_CANDIDATE' ||
@@ -42,6 +99,8 @@ export async function fetchF5PrivateCandidate(config, { fetchImpl = fetch } = {}
       !url.pathname || url.pathname === '/') {
     fail('SOURCE_URL_INVALID');
   }
+
+  verifyF5SignedSourceLease(url, now);
 
   let response;
   try {

@@ -176,8 +176,10 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/staging/f5-materialize-private-zip.mjs
-      # Larger R5 ZIPs use an administrator-provisioned, one-use HTTPS source.
-      # The URL is an environment secret, never a dispatch input or artifact.
+      # Larger R5 ZIPs require a short-lived provider-signed HTTPS GET URL.
+      # A signed URL can be reused until expiry; it is not one-use. The provider
+      # must enforce signature and private-object ACL. GitHub never logs its URL.
+      # Both protected environment values must be approved for this exact ZIP.
       - name: Fetch and hash exact private R5 ZIP on ephemeral runner
         if: ${{ inputs.package_sha256 != '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' || inputs.zip_bytes != '40644' }}
         shell: bash

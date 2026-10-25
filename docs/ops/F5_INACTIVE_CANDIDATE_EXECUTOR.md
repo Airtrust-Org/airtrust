@@ -76,7 +76,21 @@ and WebKit** for the same inactive ZIP SHA and synthetic enrollment/cycle;
 only their combined authenticated readback can satisfy the executor and
 its sanitized audit summary. Staging also still requires `SCORM_QA_ACCESS_TOKEN` and
 `SCORM_QA_READBACK_SECRET`, along with the authorized synthetic tenant,
-enrollment/cycle and fresh, immutable single-candidate grant. The original
+enrollment/cycle and fresh, immutable single-candidate grant. Larger R5 ZIPs use the protected environment secret
+`F5_PRIVATE_ZIP_DOWNLOAD_URL` and configured
+`F5_PRIVATE_ZIP_ALLOWED_HOST`. The runner accepts only a short-lived
+AWS SigV4 (S3/Cloudflare R2) or Google Cloud Storage V4 signed GET URL:
+a single signing date/credential, signed host, signature, expiry no longer
+than 15 minutes, and at least 120 seconds remaining at transfer start.
+Malformed, unsigned, expired, overlong or cross-host URLs fail before any
+network request or private file creation. The remote storage provider must
+actually verify the signature, protect the object from anonymous reads and
+enforce revocation/expiry. A presigned URL is **reusable until expiry**, not
+cryptographically single-use; enforce additional access restrictions or revoke
+the object after the approved run. These code checks do not prove the provider
+ACL or that secrets/URL have been provisioned.
+
+The original
 ZIP #15 continues to use the already protected two-secret bridge. Do not
 place secrets or private adapter source in GitHub comments, repository files
 or runner logs. Without all required inputs the workflow exits before

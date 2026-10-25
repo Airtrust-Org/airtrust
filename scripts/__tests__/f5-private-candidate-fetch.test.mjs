@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, lstat, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fetchF5PrivateCandidate } from '../staging/f5-fetch-private-candidate.mjs';
+import { fetchF5PrivateCandidate, verifyF5SignedSourceLease } from '../staging/f5-fetch-private-candidate.mjs';
 
 const sha = data => createHash('sha256').update(data).digest('hex');
 const payload = Buffer.from('Synthetic, unclassified ZIP transport test bytes.');
@@ -12,11 +12,26 @@ const makeResponse = (body = payload, options = {}) => new Response(body, {
   status: options.status ?? 200,
   headers: options.headers ?? { 'content-length': String(body.byteLength) },
 });
+const signedStamp = when => new Date(when).toISOString()
+  .replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+const signedSourceUrl = (when = Date.now(), isGoogle = false) => {
+  const stamp = signedStamp(when);
+  const url = new URL('https://private.example.org/one-use');
+  const prefix = isGoogle ? 'X-Goog-' : 'X-Amz-';
+  const credential = 'fixture/' + stamp.slice(0, 8) +
+    '/auto/' + (isGoogle ? 'storage/goog4_request' : 's3/aws4_request');
+  for (const [name, value] of Object.entries({
+    Algorithm: isGoogle ? 'GOOG4-HMAC-SHA256' : 'AWS4-HMAC-SHA256',
+    Credential: credential, Date: stamp, Expires: '600',
+    SignedHeaders: 'host', Signature: 'a'.repeat(64),
+  })) url.searchParams.set(prefix + name, value);
+  return url.href;
+};
 const base = temp => ({ environment: 'staging', ref: 'refs/heads/main',
   confirmation: 'AIRTRUST_F5_STAGING_CANDIDATE', expectedSha256: sha(payload),
   expectedBytes: payload.byteLength, runnerTemp: temp,
   outputPath: join(temp, 'f5-private-candidate.zip'),
-  sourceUrl: 'https://private.example.org/one-use?signature=not-for-logs',
+  sourceUrl: signedSourceUrl(),
   allowedHost: 'private.example.org' });
 
 async function fixture(fn) {
@@ -95,4 +110,35 @@ test('exclusive create refuses preexisting file and symlink, preserving unrelate
   }), /F5_PRIVATE_FETCH_DESTINATION_UNAVAILABLE/);
   assert.equal(await readFile(other, 'utf8'), 'untouched');
   assert.equal((await lstat(c.outputPath)).isSymbolicLink(), true);
+}));
+
+test('accepts only bounded signed S3/R2 or GCS lease metadata (not a one-use claim)', async () => fixture(async c => {
+  assert.ok(Date.parse(verifyF5SignedSourceLease(new URL(c.sourceUrl)).expiresAt) > Date.now());
+  assert.ok(Date.parse(verifyF5SignedSourceLease(new URL(signedSourceUrl(Date.now(), true))).expiresAt) > Date.now());
+  const rejected = [
+    'https://private.example.org/one-use',
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-Expires', '3600'); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-Signature', 'x'); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-SignedHeaders', 'accept'); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-Date', '20200101T000000Z'); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-Date', signedStamp(Date.now() + 120_000)); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.append('X-Amz-Signature', 'a'.repeat(64)); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Goog-Algorithm', 'GOOG4-HMAC-SHA256'); return u.href; })(),
+    (() => { const u = new URL(c.sourceUrl); u.searchParams.set('X-Amz-Credential', 'other/20200101/auto/s3/aws4_request'); return u.href; })(),
+  ];
+  for (const sourceUrl of rejected) {
+    let networkCalls = 0;
+    await assert.rejects(fetchF5PrivateCandidate({ ...c, sourceUrl }, {
+      fetchImpl: async () => { networkCalls++; return makeResponse(); },
+    }), /F5_PRIVATE_FETCH_SOURCE_(LEASE_INVALID|SIGNED_LEASE_REQUIRED|LEASE_EXPIRED_OR_TOO_SHORT)/);
+    assert.equal(networkCalls, 0, 'No network call permitted with invalid private lease');
+    await assert.rejects(lstat(c.outputPath), { code: 'ENOENT' });
+  }
+  // The signed metadata must still be valid when the download starts.
+  let calls = 0;
+  await assert.rejects(fetchF5PrivateCandidate(c, {
+    now: Date.now() + 700_000,
+    fetchImpl: async () => { calls++; return makeResponse(); },
+  }), /F5_PRIVATE_FETCH_SOURCE_LEASE_EXPIRED_OR_TOO_SHORT/);
+  assert.equal(calls, 0);
 }));
