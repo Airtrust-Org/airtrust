@@ -50,13 +50,17 @@ test('rejects changed SHA/scope, extra grants, and missing confirmation fail-clo
 
 test('requires all official release gates on the exact candidate SHA', () => {
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const runs = names.map(name => ({ name, head_sha: sha, status: 'completed', conclusion: 'success' }));
   assert.doesNotThrow(() => checkReleaseChecks(runs, sha));
   assert.throws(() => checkReleaseChecks(runs.map(x => ({ ...x, head_sha: 'c'.repeat(40) })), sha),
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
   assert.throws(() => checkReleaseChecks(runs.slice(1), sha),
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
+  assert.throws(() => checkReleaseChecks(
+    runs.filter(run => run.name !== 'lms-scorm-browser-e2e'), sha),
+    /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/,
+    'F5 cannot authorize staging without its Chromium/WebKit browser gate');
 });
 
 test('verifies open exact PR, fresh immutable issue grant and both repository admins using GET-only adapter', async () => {
@@ -67,7 +71,7 @@ test('verifies open exact PR, fresh immutable issue grant and both repository ad
     body: grantBody(base), user: { login: 'owner-user' }
   };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const calls = [];
   const get = async path => {
     calls.push(path);
@@ -91,7 +95,7 @@ test('accepts exact merged release SHA using required gates on the associated PR
   const reviewedHeadSha = 'e'.repeat(40);
   const merged = { ...base, sha: mergeSha };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const calls = [];
   const get = async path => {
     calls.push(path);
@@ -122,7 +126,7 @@ test('accepts newer main release only with authenticated ancestry from original 
   const reviewedHeadSha = 'e'.repeat(40);
   const current = { ...base, sha: releaseSha };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const request = `compare/${mergeSha}...${releaseSha}`;
   const get = async (path) => {
     if (path === `pulls/${PR}`) return {
@@ -168,7 +172,7 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
     };
     if (path === `commits/${reviewedHeadSha}/check-runs?per_page=100`) return {
       check_runs: ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'].map(name => ({
+        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'].map(name => ({
         name, head_sha: checkSha, status: 'completed', conclusion: 'success'
       }))
     };
@@ -200,7 +204,7 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
     };
     if (path.startsWith(`commits/${sha}/check-runs`)) return { check_runs: [
       'lint','build-content-gates','worker-typecheck','frontend-coverage',
-      'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'
+      'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'
     ].map(name => ({ name, head_sha: sha, status: 'completed', conclusion: 'success' })) };
     if (path === 'issues/comments/12345') return {
       issue_url: `https://api.github.com/repos/${REPO}/issues/776`,

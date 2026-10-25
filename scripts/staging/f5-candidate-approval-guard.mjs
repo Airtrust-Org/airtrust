@@ -71,7 +71,10 @@ export function checkGrantBody(body, v) {
 export function checkReleaseChecks(runs, sha) {
   const required = new Set([
     'lint', 'build-content-gates', 'worker-typecheck', 'frontend-coverage',
-    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e', '🧪 Check PR'
+    // F5-specific requirement beyond the eight generic release gates:
+    // browser proof must include Chromium and WebKit on the reviewed PR head.
+    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e',
+    'lms-scorm-browser-e2e', '🧪 Check PR'
   ]);
   if (!Array.isArray(runs)) throw Error('F5_RELEASE_GATES_UNAVAILABLE');
   for (const run of runs) {
