@@ -104,6 +104,21 @@ describe('resolveSigvoosOperationalStatus', () => {
     ).toMatchObject({ status: 'failed', usable_for_frms: false });
   });
 
+  it('mantém erro quando a precisão de segundos parece anterior aos milissegundos do sync', () => {
+    expect(
+      resolveSigvoosOperationalStatus(
+        config({ last_sync_at: '2026-09-28T15:30:00.123Z' }),
+        {
+          status: 'ERRO',
+          erro_ultima: 'falha da execução',
+          updated_at: '2026-09-28 15:30:00',
+        },
+        0,
+        NOW,
+      ),
+    ).toMatchObject({ status: 'failed', usable_for_frms: false });
+  });
+
   it('classifica pendências como fonte parcial e não apta para cálculo conclusivo', () => {
     expect(resolveSigvoosOperationalStatus(config(), { status: 'SUCESSO' }, 3, NOW)).toMatchObject({
       status: 'partial',

@@ -42,7 +42,10 @@ export function resolveSigvoosOperationalStatus(
     eventStatus === 'ERRO' &&
     lastSyncMs != null &&
     eventUpdatedMs != null &&
-    eventUpdatedMs < lastSyncMs;
+    // Event timestamps may be stored only to whole seconds while config
+    // timestamps retain milliseconds. Keep an error fail-closed when the
+    // apparent ordering could be explained by that precision difference.
+    eventUpdatedMs + 1_000 <= lastSyncMs;
   const effectiveEventStatus = eventSupersededBySuccessfulSync ? '' : eventStatus;
 
   if (!configured) {
