@@ -234,8 +234,14 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
   const publicationPayload = await publicationResponse.json() as EVDPayload;
   expect(evdPayload.success).toBe(true);
   expect(publicationPayload.success).toBe(true);
-  const assignments = evdPayload.data ?? [];
-  const publications = publicationPayload.data ?? [];
+  if (!Array.isArray(evdPayload.data)) {
+    throw new Error('FRMS_EVD_DATA_ARRAY_MISSING');
+  }
+  if (!Array.isArray(publicationPayload.data)) {
+    throw new Error('FRMS_EVD_PUBLICATIONS_ARRAY_MISSING');
+  }
+  const assignments = evdPayload.data;
+  const publications = publicationPayload.data;
   expect(assignments.every((row) => Number(row.empresa_id) === QA_TENANT_ID)).toBe(true);
   expect(publications.every((row) => Number(row.empresa_id) === QA_TENANT_ID)).toBe(true);
 
