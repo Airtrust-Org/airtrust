@@ -256,6 +256,49 @@ test('staging runtime drift during browser QA invalidates evidence and recovers 
   assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
 });
 
+test('fixture lease expiring during pre-begin grant verification prevents all Worker writes', async () => {
+  const bytes = Buffer.from('synthetic ZIP with fixture lease expiring during authorization');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  let checks = 0;
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    if (++checks === 2) {
+      // Model the wall clock crossing the lease deadline while GitHub responds.
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    }
+    return true;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.equal(checks, 2);
+  assert.ok(!calls.includes('begin'), 'expired fixture must never reach beginIntake');
+  assert.ok(!calls.includes('abort'), 'no intake was started');
+});
+
+test('fixture lease expiring during post-binding grant verification blocks browser QA', async () => {
+  const bytes = Buffer.from('synthetic ZIP with fixture lease expiring before browser QA');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    if (calls.includes('readback:BEFORE')) {
+      plan.syntheticFixture.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    }
+    return true;
+  };
+  await assert.rejects(
+    executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_PLAN_OR_F0_RECEIPT_INVALID/,
+  );
+  assert.ok(calls.includes('readback:BEFORE'));
+  assert.ok(!calls.includes('execute'), 'expired fixture must never run browser QA');
+  assert.ok(calls.includes('recover'), 'synthetic fixture recovery remains mandatory');
+  assert.ok(calls.includes('remove-candidate'), 'only owned inactive candidate may be compensated');
+});
+
 test('revoked F0 grant during private source hashing blocks the first Worker write', async () => {
   const bytes = Buffer.from('synthetic ZIP with authorization revoked during hashing');
   const plan = planFor(bytes);
