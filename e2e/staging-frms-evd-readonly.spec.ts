@@ -24,7 +24,11 @@ type AuthCompaniesPayload = {
 
 type EVDPayload = {
   success?: boolean;
-  data?: Array<Record<string, unknown> & { empresa_id?: number | string }>;
+  data?: Array<Record<string, unknown> & {
+    empresa_id?: number | string;
+    revisao?: number;
+    status?: string;
+  }>;
 };
 
 function apiPath(url: string): string | null {
@@ -248,9 +252,22 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     await expect(daySection.locator('tbody tr')).toHaveCount(assignments.length);
   }
 
+  const publicationHeading = page.getByRole('heading', { name: /^Histórico de publicações/ });
+  await expect(publicationHeading).toBeVisible();
+  const publicationSection = publicationHeading.locator('xpath=../..');
   if (publications.length === 0) {
-    await expect(page.getByText('Nenhuma publicação diária registrada para esta data.', { exact: true }))
+    await expect(publicationSection.getByText('Nenhuma publicação diária registrada para esta data.', { exact: true }))
       .toBeVisible({ timeout: 30_000 });
+  } else {
+    const latestPublication = publications[0];
+    expect(latestPublication.revisao).toEqual(expect.any(Number));
+    expect(typeof latestPublication.status).toBe('string');
+    await expect(publicationSection.getByText(`Última revisão: R${latestPublication.revisao}`, { exact: true }))
+      .toBeVisible({ timeout: 30_000 });
+    await expect(publicationSection.getByText(`R${latestPublication.revisao}`, { exact: true }).first())
+      .toBeVisible();
+    await expect(publicationSection.getByText(latestPublication.status!, { exact: true }).first())
+      .toBeVisible();
   }
 
   const outputDirectory = process.env.RUNNER_TEMP || test.info().outputDir;
