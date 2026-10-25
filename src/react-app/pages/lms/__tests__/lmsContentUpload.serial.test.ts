@@ -211,6 +211,9 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
 
   const blockedR5Cases: Array<[string, Record<string, unknown>]> = [
     ['private R5 release', { release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', reviewed: false }, assessment: { mode: 'NONE' } }],
+    ['private R5 QA upload (actual MGM RC1 contract)', { release: { status: 'PRIVATE_QA_UPLOAD_ONLY', reviewed: false }, assessment: { mode: 'NONE' } }],
+    ['private draft with mixed-case release marker', { release: { status: ' private_review_pending ' }, assessment: { mode: 'NONE' } }],
+    ['explicit non-activation without private prefix', { release: { status: 'CANDIDATE_DO_NOT_ACTIVATE' }, assessment: { mode: 'NONE' } }],
     ['external examination R5', { release: { status: 'REVIEWED' }, assessment: { mode: 'EXTERNAL' } }],
   ];
   it.each(blockedR5Cases)('blocks %s before any network upload or activation', async (_label, contract) => {

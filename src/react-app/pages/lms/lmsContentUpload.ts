@@ -252,7 +252,13 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
     ? contract.release as Record<string, unknown> : null;
   const assessment = contract.assessment && typeof contract.assessment === 'object'
     ? contract.assessment as Record<string, unknown> : null;
-  if (release?.status === 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE' ||
+  const releaseStatus = typeof release?.status === 'string'
+    ? release.status.trim().toUpperCase() : '';
+  // R5 authoring uses more than one immutable private-candidate marker.
+  // The "Substituir conteúdo" button eventually activates a package, so
+  // every private/non-activatable edition must be rejected before network I/O.
+  if (releaseStatus.startsWith('PRIVATE_') ||
+      releaseStatus.includes('DO_NOT_ACTIVATE') ||
       assessment?.mode === 'EXTERNAL') {
     throw new Error(
       'Este SCORM exige aprovação editorial e prova externa independente ou está marcado NÃO ATIVAR. ' +
