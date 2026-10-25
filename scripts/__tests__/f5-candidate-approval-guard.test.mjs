@@ -195,6 +195,38 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
 });
 
+test('rejects F0 grant expiring during remote admin permission verification', async () => {
+  const created = Date.now();
+  let clock = created + 11 * 60 * 60 * 1000;
+  const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
+  const get = async path => {
+    if (path === `pulls/${PR}`) return {
+      state: 'open', draft: false, base: { ref: 'main' },
+      head: { sha, repo: { full_name: REPO, fork: false } }
+    };
+    if (path === `commits/${sha}/check-runs?per_page=100`) return {
+      check_runs: names.map(name => ({
+        name, head_sha: sha, status: 'completed', conclusion: 'success'
+      }))
+    };
+    if (path === 'issues/comments/12345') return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(created).toISOString(),
+      updated_at: new Date(created).toISOString(),
+      body: grantBody(base), user: { login: 'owner-user' }
+    };
+    if (path === 'collaborators/owner-user/permission') {
+      clock = created + 13 * 60 * 60 * 1000;
+      return { permission: 'admin' };
+    }
+    throw Error(`unexpected request ${path}`);
+  };
+  await assert.rejects(verify(base, 'read-token', get, () => clock),
+    /F5_F0_GRANT_EXPIRED/,
+    'authorization must be fresh when all remote reads have completed');
+});
+
 test('rejects edited/wrong issue, stale authorization, draft PR and non-admin actor', async () => {
   const now = Date.now();
   const setup = overrides => async path => {
