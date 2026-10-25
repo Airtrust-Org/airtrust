@@ -52,6 +52,7 @@ function saveSanitizedEvidence(params: {
   publicationStatus: number;
   evdStatus: number;
   mutationRequestsAfterLogin: number;
+  suppressedRequestsAfterLogin: number;
 }) {
   const outputDirectory = process.env.RUNNER_TEMP || test.info().outputDir;
   fs.mkdirSync(outputDirectory, { recursive: true });
@@ -66,6 +67,7 @@ function saveSanitizedEvidence(params: {
       publicationsHttpStatus: params.publicationStatus,
       outcome: 'PASS',
       mutationRequestsAfterLogin: params.mutationRequestsAfterLogin,
+      suppressedRequestsAfterLogin: params.suppressedRequestsAfterLogin,
       evidence: 'read-only authenticated staging view; no D1/R2 writes',
     }, null, 2) + '\n',
   );
@@ -83,6 +85,7 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
   const loginResponses: number[] = [];
   const loginAborted: string[] = [];
   const postLoginMutations: Array<{ method: string; path: string }> = [];
+  const postLoginSuppressedRequests: Array<{ method: string; path: string }> = [];
   const serverFailures: string[] = [];
   let authenticated = false;
 
@@ -109,9 +112,10 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     }
   });
 
-  // A real staging login is permitted before the EVD read phase. As soon as
-  // the authenticated route/profile is ready, every non-safe HTTP method is
-  // recorded and blocked, including auth refresh/logout POSTs.
+  // A real staging login is permitted before the EVD read phase. After the
+  // authenticated route/profile is ready, operational POSTs and other unsafe
+  // methods are recorded and blocked. Shared-policy `suppress` requests are
+  // also aborted locally, but counted separately from operational mutations.
   const blockedRequests: Array<{ method: string; path: string; reason: string }> = [];
   page.route('**/*', async (route) => {
     const request = route.request();
@@ -126,6 +130,15 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     })();
 
     if (authenticated && !SAFE_METHODS.includes(method)) {
+      const decision = classifyRequest({ method, url });
+      if (decision.decision === 'suppress') {
+        // The shared policy aborts the i18n fallback locally because the
+        // staging Worker forwards its text to Google Translate.
+        postLoginSuppressedRequests.push({ method, path: pathName });
+        await route.abort('blockedbyclient');
+        return;
+      }
+
       const entry = { method, path: pathName, reason: 'post-auth-read-only-phase' };
       postLoginMutations.push({ method, path: pathName });
       blockedRequests.push(entry);
@@ -305,6 +318,7 @@ test('EVD staging: authenticated QA reads the selected day without writes', asyn
     evdStatus: evdResponse.status(),
     publicationStatus: publicationResponse.status(),
     mutationRequestsAfterLogin: postLoginMutations.length,
+    suppressedRequestsAfterLogin: postLoginSuppressedRequests.length,
   });
   console.log(
     `FRMS_EVD_READONLY_QA_END; tenant=${QA_TENANT_ID}; date=${selectedDate}; ` +
