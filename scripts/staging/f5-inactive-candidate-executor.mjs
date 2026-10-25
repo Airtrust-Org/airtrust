@@ -162,6 +162,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   // Every precondition is proven before the first Worker write.
   const requireFreshAuthorization = async () => {
     if (await adapters.verifyAuthorization(plan) !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+    // GitHub grant verification is asynchronous: the synthetic lease may
+    // expire while the remote authorization check is still in progress.
+    validateF5ExecutionPlan(plan);
   };
   await requireFreshAuthorization();
   const requirePinnedRuntime = async () => {
