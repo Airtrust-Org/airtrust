@@ -200,6 +200,70 @@ test('blocks synthetic binding if Worker or Pages SHA changes after private inta
   }
 });
 
+test('revoked F0 grant during private source hashing blocks the first Worker write', async () => {
+  const bytes = Buffer.from('synthetic ZIP with authorization revoked during hashing');
+  const plan = planFor(bytes);
+  const source = sourceFor(bytes);
+  const originalRead = source.read.bind(source);
+  let valid = true;
+  source.read = async (...args) => {
+    const part = await originalRead(...args);
+    valid = false;
+    return part;
+  };
+  const { calls, adapters } = adaptersFor(plan, {
+    async verifyAuthorization() { calls.push('authorize'); return valid; },
+  });
+  await assert.rejects(executeF5InactiveCandidate({ plan, source, adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.equal(calls.filter(x => x === 'authorize').length, 2);
+  assert.ok(!calls.includes('begin'), 'no Worker mutation after grant revocation');
+});
+
+test('revoked F0 grant after intake compensates owned candidate before binding', async () => {
+  const bytes = Buffer.from('synthetic ZIP with F0 grant revoked after intake');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalRead = adapters.readCandidateR2;
+  adapters.readCandidateR2 = async (...args) => {
+    const result = await originalRead(...args);
+    valid = false;
+    return result;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate compensated');
+  assert.ok(!calls.includes('readback:BEFORE'), 'no synthetic binding after grant revocation');
+  assert.ok(!calls.includes('execute'));
+});
+
+test('revoked F0 grant during synthetic binding blocks browser execution and recovers fixture', async () => {
+  const bytes = Buffer.from('synthetic ZIP with F0 grant revoked during binding');
+  const plan = planFor(bytes);
+  let valid = true;
+  const { calls, adapters } = adaptersFor(plan);
+  const originalRead = adapters.readQaEvidence;
+  adapters.readQaEvidence = async (...args) => {
+    const result = await originalRead(...args);
+    if (args[0].phase === 'BEFORE') valid = false;
+    return result;
+  };
+  adapters.verifyAuthorization = async () => {
+    calls.push('authorize');
+    return valid;
+  };
+  await assert.rejects(executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+    /F5_EXECUTOR_F0_AUTHORIZATION_NOT_VERIFIED/);
+  assert.ok(calls.includes('recover'), 'binding requires synthetic fixture recovery');
+  assert.ok(calls.includes('remove-candidate'), 'compensate only after recovery');
+  assert.ok(!calls.includes('execute'), 'browser QA must not run after grant revocation');
+});
+
 test('streams an archive over multiple bounded multipart requests', async () => {
   const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
   const plan = planFor(bytes);
