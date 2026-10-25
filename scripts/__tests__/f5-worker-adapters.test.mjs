@@ -220,7 +220,15 @@ test('runs the executor end to end through real Worker adapters against an isola
           committedPackageSha256: qaReads === 1 ? null : packageSha256, synthetic: true,
           completionStatus: 'EM_ANDAMENTO', cmiSha256: qaReads === 1 ? null : '1'.repeat(64),
           suspendSha256: qaReads === 1 ? null : '2'.repeat(64), sessionCount: qaReads === 1 ? 0 : 1,
-          qualificationHistoryCount: 0, certificateDocument: null, scormScoreRaw: null });
+          qualificationHistoryCount: 0, certificateDocument: null, scormScoreRaw: null,
+          assessmentEvidence: {
+            source: 'WORKER_D1_F0_ASSESSMENT_READBACK_V1',
+            tenantId: 9201, courseId: 7301, enrollmentId: 8101, cycleId: 8201,
+            runId: '123e4567-e89b-12d3-a456-426614174001',
+            observedAt: new Date().toISOString(),
+            assessmentAttemptCount: 0, assessmentApprovedCount: 0,
+            externalAssessmentApprovedCount: 0, certificateIssuedCount: 0,
+          } });
       } else { res.writeHead(404); res.end(); }
     });
   }, async origin => {
@@ -246,9 +254,7 @@ test('runs the executor end to end through real Worker adapters against an isola
         completionStatus: 'EM_ANDAMENTO', qualificationHistoryCount: 0, certificateDocument: null,
         runtimeVersion: '1.2', locationPersisted: true,
         suspendDataPersisted: true, resumeVerified: true,
-        browserEngines: ['chromium', 'webkit'],
-        assessmentAttempted: false, assessmentApproved: false, externalAssessmentApproved: false,
-        certificateIssued: false }),
+        browserEngines: ['chromium', 'webkit'] }),
       cleanupSyntheticCandidate: async () => ({ verified: true, syntheticFixtureCleaned: true,
         candidatePreservedInactive: true, receiptSha256: '9'.repeat(64) }),
     };
