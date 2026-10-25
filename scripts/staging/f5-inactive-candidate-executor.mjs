@@ -290,6 +290,14 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
+    // A fresh F0 synthetic enrollment must have no pre-existing SCORM state.
+    // Zero assessment counts alone cannot prove this run owns its CMI/launch.
+    if (before.sessionCount !== 0 || before.cmiSha256 !== null ||
+        before.suspendSha256 !== null || before.servedPackageSha256 !== null ||
+        before.committedPackageSha256 !== null ||
+        before.completionStatus !== 'NAO_INICIADO') {
+      fail('BEFORE_SYNTHETIC_FIXTURE_NOT_PRISTINE');
+    }
     validateF5ExecutionPlan(plan);
     // Binding/readback may also cross the grant expiry or a revocation.
     // Compensation remains available even when this check fails.
