@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { uploadScormF5InactiveStaging, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -680,6 +680,7 @@ function CourseDrawer({
   onClose,
   onPreview,
   onSave,
+  onQaCandidateUpload,
   isSaving,
   uploadProgress,
   uploadStatus,
@@ -692,6 +693,9 @@ function CourseDrawer({
     form: CreateCursoDTO,
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
+  onQaCandidateUpload: (cursoId: number, file: File) => Promise<{
+    packageId: string; packageSha256: string; status: 'VALIDATED'; zipBytes: number;
+  }>;
   isSaving: boolean;
   uploadProgress: number;
   uploadStatus: string;
@@ -703,12 +707,17 @@ function CourseDrawer({
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
   const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
   const [contentFile, setContentFile] = useState<File | null>(null);
+  const [qaCandidateReceipt, setQaCandidateReceipt] = useState<{
+    packageId: string; packageSha256: string; status: 'VALIDATED';
+  } | null>(null);
   const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [thumbPreview, setThumbPreview] = useState<string | null>(storedThumbPreview);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isRefreshingTemplate, setIsRefreshingTemplate] = useState(false);
   const isEditing = Boolean(initial?.id);
+  const canUploadStagingQa = isEditing && form.tipo_conteudo === 'scorm' &&
+    window.location.hostname === 'staging.airtrust.pages.dev';
   const hasContent = form.tipo_conteudo !== 'video';
   const eadTipos = useMemo(() => qualTipos.filter(isEadTipo), [qualTipos]);
   const curTipo = useMemo(
@@ -1146,7 +1155,10 @@ function CourseDrawer({
                     >
                       <ContentDropzone
                         file={contentFile}
-                        onFileChange={setContentFile}
+                        onFileChange={(file) => {
+                          setContentFile(file);
+                          setQaCandidateReceipt(null);
+                        }}
                         accept={
                           form.tipo_conteudo === 'h5p'
                             ? '.h5p'
@@ -1167,6 +1179,32 @@ function CourseDrawer({
                         }
                         disabled={isSaving}
                       />
+                      {canUploadStagingQa ? (
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                          <p className="font-semibold">QA de staging — candidato SCORM inativo</p>
+                          <p className="mt-1">Este envio usa o grant F5 exato da edição e não altera o conteúdo publicado,
+                            matrículas, notas ou certificados. Não executa ativação nem certificação.</p>
+                          <Button type="button" variant="secondary" disabled={!contentFile || isSaving}
+                            onClick={() => {
+                              if (!contentFile || !initial?.id) return;
+                              void onQaCandidateUpload(initial.id, contentFile).then((receipt) => {
+                                setQaCandidateReceipt(receipt);
+                                toast.success('SCORM recebido pelo Worker como candidato inativo.');
+                              }).catch((error: unknown) => {
+                                toast.error(error instanceof Error ? error.message : 'Falha ao enviar candidato de QA');
+                              });
+                            }}>
+                            Carregar somente candidato inativo (QA)
+                          </Button>
+                          {qaCandidateReceipt ? (
+                            <div role="status" className="mt-3 break-all text-xs">
+                              Candidato VALIDATED, INATIVO. ID: {qaCandidateReceipt.packageId}.
+                              SHA-256: {qaCandidateReceipt.packageSha256}.
+                              Prévia autenticada depende do grant QA; nenhuma versão foi ativada.
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {isReplacingExistingContent ? (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                           <p className="font-semibold">Substituindo conteúdo atual</p>
@@ -1914,6 +1952,19 @@ export default function LmsCatalogo() {
     }
   }
 
+  async function handleQaCandidateUpload(cursoId: number, file: File) {
+    setIsSavingCourse(true);
+    setUploadProgress(0);
+    setUploadStatus('Iniciando envio governado F5...');
+    try {
+      return await uploadScormF5InactiveStaging({
+        cursoId, file, onProgress: setUploadProgress, onStatus: setUploadStatus,
+      });
+    } finally {
+      setIsSavingCourse(false);
+    }
+  }
+
   async function handleSave(
     form: CreateCursoDTO,
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
@@ -2320,6 +2371,7 @@ export default function LmsCatalogo() {
               : undefined
           }
           onSave={handleSave}
+          onQaCandidateUpload={handleQaCandidateUpload}
           isSaving={
             isSavingCourse ||
             createCurso.isPending ||
