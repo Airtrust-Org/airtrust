@@ -171,6 +171,7 @@ jobs:
             `- daily publications: ${summary.publications}`,
             `- EVD HTTP: ${summary.evdHttpStatus}; publications HTTP: ${summary.publicationsHttpStatus}`,
             `- mutation requests after login: ${summary.mutationRequestsAfterLogin}`,
+            `- locally suppressed non-persisting requests after login: ${summary.suppressedRequestsAfterLogin}`,
             `- ${summary.evidence}`,
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,lines.join('\n')+'\n');
