@@ -265,12 +265,20 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     // Binding/readback may also cross the grant expiry or a revocation.
     // Compensation remains available even when this check fails.
     await requireFreshAuthorization();
+    // The BEFORE readback can span a staging rollout. Do not start browser QA
+    // against a different Worker/Pages/harness than the authorized release.
+    await requirePinnedRuntime();
+    validateF5ExecutionPlan(plan);
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       packageSha256: c.packageSha256, scormVersion: candidate.scormVersion,
       enrollmentId: f.enrollmentId,
       cycleId: f.cycleId, runId: f.runId,
     }), plan, candidate);
+    // A rollout during browser execution invalidates attribution of the CMI
+    // and suspend/resume receipts to the pinned release; recover synthetics.
+    validateF5ExecutionPlan(plan);
+    await requirePinnedRuntime();
     const after = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'AFTER',
