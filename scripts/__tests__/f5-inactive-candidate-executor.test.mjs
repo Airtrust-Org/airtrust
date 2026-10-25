@@ -173,6 +173,33 @@ test('completes one isolated candidate intake, R2/D1 readbacks, synthetic execut
   assert.ok(source.lengths.every(length => length <= F5_EXECUTOR_LIMITS.partBytes));
 });
 
+test('blocks synthetic binding if Worker or Pages SHA changes after private intake', async () => {
+  const bytes = Buffer.from('synthetic ZIP bytes for runtime drift probe');
+  const plan = planFor(bytes);
+  for (const changed of ['worker', 'pages']) {
+    const { calls, adapters } = adaptersFor(plan);
+    const original = adapters.readRuntimeProvenance;
+    let checks = 0;
+    adapters.readRuntimeProvenance = async () => {
+      const provenance = await original();
+      if (++checks === 2) {
+        if (changed === 'worker') provenance.workerSha = 'f'.repeat(40);
+        else provenance.pagesSha = 'f'.repeat(7);
+      }
+      return provenance;
+    };
+    await assert.rejects(
+      executeF5InactiveCandidate({ plan, source: sourceFor(bytes), adapters }),
+      /F5_EXECUTOR_STAGING_RUNTIME_SHA_MISMATCH/,
+    );
+    assert.equal(checks, 2, 'must recheck live runtime after private intake');
+    assert.ok(calls.includes('r2-candidate'));
+    assert.ok(!calls.includes('readback:BEFORE'), 'no synthetic fixture binding after drift');
+    assert.ok(!calls.includes('execute'), 'no browser QA after drift');
+    assert.ok(calls.includes('remove-candidate'), 'owned inactive candidate must be compensated');
+  }
+});
+
 test('streams an archive over multiple bounded multipart requests', async () => {
   const bytes = Buffer.alloc(F5_EXECUTOR_LIMITS.partBytes + 17, 7);
   const plan = planFor(bytes);
