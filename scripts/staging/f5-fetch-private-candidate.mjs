@@ -66,22 +66,7 @@ export function verifyF5SignedSourceLease(url, now = Date.now()) {
       headers.some(h => !/^[a-z0-9-]+$/.test(h))) fail('SOURCE_LEASE_INVALID');
   const signature = exact('Signature');
   const sigLength = !aws && algorithm === 'GOOG4-RSA-SHA256' ? 512 : 64;
-  if (!new RegExp(`^[a-fA-F0-9]{${sigLength}}#!/usr/bin/env node
-/**
- * Transfer exactly one approved private F5 ZIP to the ephemeral staging runner.
- * The URL is a protected environment secret, never a workflow input or log.
- * This is a read-only source transfer; the separate F0 grant, plan and SHA
- * checks remain mandatory before any staging mutation.
- */
-import { createHash } from 'node:crypto';
-import { open, unlink } from 'node:fs/promises';
-import { isIP } from 'node:net';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const HEX64 = /^[a-f0-9]{64}$/;
-const MAX_BYTES = 80 * 1024 * 1024;
-).test(signature)) {
+  if (!new RegExp(`^[a-fA-F0-9]{${sigLength}}$`).test(signature)) {
     fail('SOURCE_LEASE_INVALID');
   }
   return { expiresAt: new Date(issued + Number(expiration) * 1000).toISOString() };
