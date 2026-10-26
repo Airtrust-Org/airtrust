@@ -112,19 +112,24 @@ describe('prontidão de fechamento — o defeito do 99%/409', () => {
   });
 });
 
-describe('pacote sem prova (assessment.mode NONE/EXTERNAL): o curso é para concluir', () => {
+describe('política de avaliação do servidor: NONE não equivale a EXTERNAL', () => {
   const full = ledger([1, 2, 3, 4]);
-  it('estudo comprovado + confirmação do aluno conclui — não há nada mais a esperar', () => {
-    for (const mode of ['NONE', 'EXTERNAL'] as const) {
-      const r = readiness(evidenceFor(manifest({ assessmentMode: mode }), full), full);
-      expect(r).toMatchObject({ eligible_for_server_verification: true,
-        code: 'SCORM_READY_FOR_SERVER_VERIFICATION', missing: [] });
-    }
+  it('curso FORMATIVE com pacote NONE, estado terminal e confirmação conclui sem prova', () => {
+    const r = readiness(evidenceFor(manifest({ assessmentMode: 'NONE' }), full), full);
+    expect(r).toMatchObject({ eligible_for_server_verification: true,
+      code: 'SCORM_READY_FOR_SERVER_VERIFICATION', missing: [] });
   });
-  it('não depende de status terminal nem de nota do pacote', () => {
+  it('EXTERNAL não é interpretado como NONE sem comprovação independente', () => {
+    const r = readiness(evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full), full);
+    expect(r).toMatchObject({ eligible_for_server_verification: false,
+      code: 'EXTERNAL_ASSESSMENT_PENDING' });
+    expect(r.missing).toContain('verified_external_assessment');
+  });
+  it('NONE sem status terminal não concede conclusão automaticamente', () => {
     const r = readiness(evidenceFor(manifest({ assessmentMode: 'NONE' }), full), full,
       { commit_event: 'SCORM_USER_FINALIZE' });
-    expect(r.eligible_for_server_verification).toBe(true);
+    expect(r.eligible_for_server_verification).toBe(false);
+    expect(r.missing).toContain('terminal_scorm_status');
   });
   it('continua exigindo cobertura de todas as telas do manifest', () => {
     const partial = ledger([1, 2]);
