@@ -775,15 +775,15 @@ function CourseDrawer({
       toast.error('Não altere um curso existente de outro formato para SCORM neste formulário. Crie um curso SCORM e envie o ZIP inativo para homologação.');
       return;
     }
+    if (candidateFirstScorm && contentFile) {
+      toast.error('Para enviar o ZIP, use “Enviar ZIP para homologação”. Para salvar dados do curso, remova primeiro o ZIP selecionado.');
+      return;
+    }
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    // A selected SCORM is submitted only through the explicit inactive intake
-    // action, never through the course-metadata save/publication path.
-    await onSave(form, {
-      contentFile: candidateFirstScorm ? null : contentFile,
-      thumbnailFile: thumbFile, skipPurge,
-    });
+    // A candidate ZIP and course metadata are deliberately separate operations.
+    await onSave(form, { contentFile, thumbnailFile: thumbFile, skipPurge });
   }
 
   useEffect(() => {
@@ -1261,7 +1261,7 @@ function CourseDrawer({
                           </p>
                           <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
-                            <p className="mt-2 font-medium">Use o botão “Enviar ZIP para homologação” acima. “Salvar dados” não envia nem ativa o ZIP selecionado.</p>
+                            <p className="mt-2 font-medium">Use o botão “Enviar ZIP para homologação” acima. Para editar os dados do curso, primeiro remova o ZIP selecionado. Nenhum envio ativa o curso automaticamente.</p>
                           ) : null}
                           {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
@@ -1457,10 +1457,10 @@ function CourseDrawer({
                 <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving}>
                   Cancelar
                 </Button>
-                <Button variant="primary" type="submit" loading={isSaving}>
+                <Button variant="primary" type="submit" loading={isSaving} disabled={candidateFirstScorm && Boolean(contentFile)}>
                   {isEditing
                     ? candidateFirstScorm && contentFile
-                      ? 'Salvar dados do curso (sem enviar ZIP)'
+                      ? 'Salvar dados (remova o ZIP)'
                       : isReplacingExistingContent
                         ? 'Substituir conteúdo'
                         : 'Salvar alterações'
