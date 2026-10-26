@@ -1,27 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { shouldSaveScormMetadataWithoutZip } from '../lmsScormCandidateIntent';
+import {
+  blocksUnsafeScormTypeConversion,
+  shouldSaveScormMetadataWithoutZip,
+} from '../lmsScormCandidateIntent';
 
-describe('existing-course SCORM upload intent', () => {
+describe('SCORM upload intent for existing courses', () => {
   it.each(['airtrust.online', 'staging.airtrust.pages.dev'])(
-    'keeps SCORM ZIP out of the metadata submit on %s',
+    'edits existing SCORM without automatically uploading or activating on %s',
     (hostname) => {
-      expect(shouldSaveScormMetadataWithoutZip({
-        isEditing: true, tipoConteudo: 'scorm', hostname,
-      })).toBe(true);
+      const input = {
+        isEditing: true, storedTipoConteudo: 'scorm',
+        tipoConteudo: 'scorm', hostname,
+      };
+      expect(shouldSaveScormMetadataWithoutZip(input)).toBe(true);
+      expect(blocksUnsafeScormTypeConversion(input)).toBe(false);
     },
   );
 
-  it('does not change new-course uploads, H5P, PDFs or unrelated hosts', () => {
-    for (const [isEditing, tipoConteudo, hostname] of [
-      [false, 'scorm', 'airtrust.online'],
-      [true, 'h5p', 'airtrust.online'],
-      [true, 'pdf', 'staging.airtrust.pages.dev'],
-      [true, 'scorm', 'localhost'],
-      [true, 'scorm', 'qa.example.test'],
+  it.each(['pdf', 'h5p', 'video', 'pptx'])(
+    'refuses conversion from existing %s to SCORM without an active package',
+    (storedTipoConteudo) => {
+      const input = {
+        isEditing: true, storedTipoConteudo,
+        tipoConteudo: 'scorm', hostname: 'airtrust.online',
+      };
+      expect(blocksUnsafeScormTypeConversion(input)).toBe(true);
+      expect(shouldSaveScormMetadataWithoutZip(input)).toBe(false);
+    },
+  );
+
+  it('preserves new-course creation, non-SCORM uploads and local preview', () => {
+    for (const [isEditing, storedTipoConteudo, tipoConteudo, hostname] of [
+      [false, undefined, 'scorm', 'airtrust.online'],
+      [true, 'h5p', 'h5p', 'airtrust.online'],
+      [true, 'pdf', 'pdf', 'staging.airtrust.pages.dev'],
+      [true, 'scorm', 'scorm', 'localhost'],
+      [true, 'pdf', 'scorm', 'localhost'],
     ] as const) {
-      expect(shouldSaveScormMetadataWithoutZip({
-        isEditing, tipoConteudo, hostname,
-      })).toBe(false);
+      const input = { isEditing, storedTipoConteudo, tipoConteudo, hostname };
+      expect(shouldSaveScormMetadataWithoutZip(input)).toBe(false);
+      expect(blocksUnsafeScormTypeConversion(input)).toBe(false);
     }
   });
 });
