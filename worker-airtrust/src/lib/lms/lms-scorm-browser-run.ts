@@ -163,8 +163,8 @@ export async function runScormBrowserConformance(params: {
     await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS });
     failureStage = 'VERIFY_SCORM_INITIALIZATION';
     await page.waitForFunction(
-      () => typeof (window as unknown as { __AIRTRUST_SCORM_TRACE?: () => { initialized: boolean } }).__AIRTRUST_SCORM_TRACE === 'function' &&
-        (window as unknown as { __AIRTRUST_SCORM_TRACE: () => { initialized: boolean } }).__AIRTRUST_SCORM_TRACE().initialized === true,
+      () => typeof (globalThis as unknown as { __AIRTRUST_SCORM_TRACE?: () => { initialized: boolean } }).__AIRTRUST_SCORM_TRACE === 'function' &&
+        (globalThis as unknown as { __AIRTRUST_SCORM_TRACE: () => { initialized: boolean } }).__AIRTRUST_SCORM_TRACE().initialized === true,
       { timeout: TIMEOUT_MS },
     );
     // Drive authored M8 interactions by actually clicking course controls,
