@@ -12,7 +12,7 @@ import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntim
 import { evaluateScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
-import { isEligibleForHistoricEditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
+import { isEligibleForHistoricEditionCredit, isAuthorizedAdmin99EditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -623,6 +623,7 @@ async function guardAdministrativeStatus(
   }
   if (requestedStatus !== 'CONCLUIDO') return null;
   let historicEditionCredit = false;
+  let authorizedAdmin99EditionCredit = false;
   if (String(row.status).toUpperCase() !== 'CONCLUIDO') {
     const edition = await detectLmsEditionMismatch({
       bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
@@ -636,7 +637,7 @@ async function guardAdministrativeStatus(
       // admin RBAC, saved evidence, no previous qualification or explicit fail.
       // The canonical PATCH route remains responsible for atomic qualification
       // creation and recording its administrative override audit event.
-      const historicCredit = isEligibleForHistoricEditionCredit({
+      const historicCheck = {
         empresaId, matriculaId, cursoId: row.curso_id, isAdmin: hasRole(c, 'admin'),
         reason: incoming.observacoes, status: row.status, progressoPct: row.progresso_pct,
         qualificationId: row.qualificacao_historico_id,
@@ -644,16 +645,17 @@ async function guardAdministrativeStatus(
         currentCourseActive: row.ativo === 1 && row.publicado === 1,
         hasScormEvidence: hasStoredRuntimeEvidence(row),
         lessonStatus: row.lesson_status, successStatus: row.success_status,
-      });
+      };
+      const historicCredit = isEligibleForHistoricEditionCredit(historicCheck);
       if (!historicCredit) {
         return errorResponse(c, 409, 'LMS_NEW_EDITION_REQUIRED',
           'A conclusão administrativa não pode usar evidências de outra edição.',
           { matricula_id: matriculaId, edition_mismatch: edition });
       }
       historicEditionCredit = true;
-      // Edition mismatch is the only waived condition. Continue through the
-      // canonical administrative decision below: score/mastery, failure
-      // precedence, authorization and content evidence MUST still pass.
+      authorizedAdmin99EditionCredit = isAuthorizedAdmin99EditionCredit(historicCheck);
+      // Continue through the canonical decision; the separately authorized
+      // 99% cohort may also waive score, while failure precedence remains.
     }
   }
 
@@ -662,7 +664,7 @@ async function guardAdministrativeStatus(
   // An administrator may attest completion despite a score that the SCORM
   // package failed to report correctly. The route still requires and audits
   // the reason, and all other enrollment and evidence checks remain in force.
-  const administrativeScoreOverride = !historicEditionCredit && hasRole(c, 'admin') &&
+  const administrativeScoreOverride = (!historicEditionCredit || authorizedAdmin99EditionCredit) && hasRole(c, 'admin') &&
     typeof incoming.observacoes === 'string' && incoming.observacoes.trim().length >= 10;
   const decision = buildDecision(row, 'administrative', {}, true, {
     explicitCompletion: true,
