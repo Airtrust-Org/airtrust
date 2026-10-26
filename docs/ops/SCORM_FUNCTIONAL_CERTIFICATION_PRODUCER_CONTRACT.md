@@ -236,13 +236,13 @@ em vez de transcrever manualmente as 101 telas ou itens de uma prova inexistente
 Preservam-se dois navegadores reais, matrícula/ciclo em staging, isolamento
 de tenant, readback Worker/D1, revisão pedagógica humana e assinatura governada.
 
-Comando para preparar a revisão, sem fabricar aprovação:
+Definir `COURSE_ID` a partir do ID de curso autenticado no LMS (não inferir do ZIP).\nComando para preparar a revisão, sem fabricar aprovação:
 
 ```bash
 python3 scripts/qa/scorm_formative_review_kit.py \
   --zip /private/MGM_F5_RC3_SCORM12.zip \
   --package-sha 173db1a620afcca64e2019a869097b7e49622e6bb197aad81ef95788690fe03b \
-  --course-id <ID_NUMERICO_AUTENTICADO> \
+  --course-id "$COURSE_ID" \
   --output /private/mgm-independent-review-pending.csv
 ```
 
@@ -259,11 +259,11 @@ Após a aprovação autêntica, converter o CSV verificado em JSON:
 python3 scripts/qa/scorm-pedagogical-review-from-csv.py \
   --csv /private/mgm-independent-review-approved.csv \
   --zip /private/MGM_F5_RC3_SCORM12.zip \
-  --course-id <ID_NUMERICO_AUTENTICADO> \
+  --course-id "$COURSE_ID" \
   --package-sha 173db1a620afcca64e2019a869097b7e49622e6bb197aad81ef95788690fe03b \
-  --reviewer-reference <REVISOR_AUTORIZADO> \
-  --approval-reference <ID_DA_APROVACAO_REAL> \
-  --approved-at <ISO_UTC_DA_APROVACAO> \
+  --reviewer-reference "$REVIEWER_REFERENCE" \
+  --approval-reference "$APPROVAL_REFERENCE" \
+  --approved-at "$APPROVED_AT" \
   --output /private/mgm-independent-approved.json
 ```
 
