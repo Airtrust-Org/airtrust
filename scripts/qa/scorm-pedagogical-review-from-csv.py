@@ -9,6 +9,8 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from zipfile import ZipFile
+from scorm_formative_review_kit import inventory
 
 COUNTS = {
     "cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2": (15, 80),
@@ -17,10 +19,18 @@ COUNTS = {
 
 
 def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
-            approval_ref: str, approved_at: str) -> dict:
-    if package_sha not in COUNTS:
-        raise ValueError("UNRECOGNIZED_EXACT_ZIP_SHA")
-    course, expected = COUNTS[package_sha]
+            approval_ref: str, approved_at: str, *,
+            zip_path: Path | None = None, course_id: int | None = None) -> dict:
+    formative = None
+    if zip_path is not None:
+        if not isinstance(course_id, int) or course_id <= 0:
+            raise ValueError("FORMATIVE_COURSE_ID_REQUIRED")
+        formative = inventory(zip_path, package_sha, course_id)
+        course, expected = course_id, len(formative)
+    else:
+        if package_sha not in COUNTS:
+            raise ValueError("UNRECOGNIZED_EXACT_ZIP_SHA")
+        course, expected = COUNTS[package_sha]
     if not (6 <= len(reviewer_ref) <= 128 and
             all(c.isalnum() or c in "._:-" for c in reviewer_ref)):
         raise ValueError("REVIEWER_REFERENCE_REQUIRED")
@@ -43,6 +53,15 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
         rows = [r for r in reader if r["package_sha256"] == package_sha]
     if len(rows) != expected:
         raise ValueError(f"INCOMPLETE_INDEPENDENT_REVIEW:{len(rows)}/{expected}")
+    if formative is not None:
+        by_identity = {
+            (item["slide_index"], item["item_type"], item["item_number"]): item
+            for item in formative
+        }
+        with ZipFile(zip_path) as package:
+            model_js = package.read("content.js").decode("utf-8")
+        source = json.loads(model_js.split(" = ", 1)[1].strip().removesuffix(";"))
+        slides = source["slides"]
     names, seen, items = set(), set(), []
     for row in rows:
         if int(row["course_id"]) != course:
@@ -58,12 +77,27 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
         choices = json.loads(row["options_json"])
         if not isinstance(choices, list) or not choices:
             raise ValueError("REVIEW_CHOICES_MISSING")
+        if formative is not None:
+            key = (row["slide_index"].strip(), row["item_type"].strip(),
+                   row["item_number"].strip())
+            expected_row = by_identity.get(key)
+            audited_fields = ("slide_id", "module", "title",
+                              "scenario_context", "question")
+            if expected_row is None or choices != json.loads(expected_row["options_json"]) or any(
+                field not in row or row[field] != expected_row[field]
+                for field in audited_fields
+            ):
+                raise ValueError("FORMATIVE_REVIEW_ZIP_CONTENT_DRIFT")
         try:
             idx = int(row["reviewer_selected_index"])
         except (ValueError, TypeError) as exc:
             raise ValueError("REVIEWER_SELECTION_MISSING") from exc
         if idx < 0 or idx >= len(choices):
             raise ValueError("REVIEWER_SELECTION_OUT_OF_RANGE")
+        if formative is not None:
+            authored = slides[int(row["slide_index"]) - 1]["options"]
+            if not authored[idx]["correct"]:
+                raise ValueError("REVIEWER_SELECTION_DISAGREES_WITH_PACKAGE_KEY")
         item_id = "/".join((str(course), row["slide_index"].strip(),
                             row["item_type"].strip(), row["item_number"].strip()))
         if item_id in seen:
@@ -73,6 +107,11 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
                       "selectedIndex": idx,
                       "rationale": row["reviewer_evidence"].strip(),
                       "reviewerReference": reviewer_ref})
+    if formative is not None and seen != {
+        "/".join((str(course), item["slide_index"], item["item_type"],
+                  item["item_number"])) for item in formative
+    }:
+        raise ValueError("FORMATIVE_REVIEW_INVENTORY_MISMATCH")
     if len(names) != 1:
         raise ValueError("REVIEWER_IDENTITY_INCONSISTENT")
     return {"kind": "AIRTRUST_SCORM_INDEPENDENT_PEDAGOGICAL_REVIEW_V1",
@@ -85,6 +124,8 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--csv", type=Path, required=True)
+    p.add_argument("--zip", type=Path, help="Exact immutable formative ZIP; otherwise legacy reviewed portfolio")
+    p.add_argument("--course-id", type=int, help="Tenant-scoped numeric course ID for this exact ZIP")
     p.add_argument("--package-sha", required=True)
     p.add_argument("--reviewer-reference", required=True)
     p.add_argument("--approval-reference", required=True)
@@ -92,7 +133,8 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
     data = convert(args.csv, args.package_sha, args.reviewer_reference,
-                   args.approval_reference, args.approved_at)
+                   args.approval_reference, args.approved_at,
+                   zip_path=args.zip, course_id=args.course_id)
     if args.output.exists():
         raise ValueError("REFUSE_OVERWRITE_PEDAGOGICAL_APPROVAL")
     args.output.parent.mkdir(parents=True, exist_ok=True)
