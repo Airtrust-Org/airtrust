@@ -681,6 +681,7 @@ function CourseDrawer({
   onPreview,
   onSave,
   onQaCandidateUpload,
+  onProductionCandidateUpload,
   isSaving,
   uploadProgress,
   uploadStatus,
