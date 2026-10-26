@@ -131,6 +131,7 @@ function editionRejection(
 
 function closureRejectionCode(code: ScormClosureReadiness['code']): LmsCompletionDecision['code'] {
   if (code === 'SCORM_ASSESSMENT_POLICY_INVALID') return 'MASTERY_SCORE_MISSING';
+  if (code === 'EXTERNAL_ASSESSMENT_PENDING') return 'COMPLETION_EVIDENCE_INSUFFICIENT';
   if (code === 'SCORM_USER_CONFIRMATION_REQUIRED' || code === 'SCORM_ALREADY_COMPLETED' ||
       code === 'SCORM_READY_FOR_SERVER_VERIFICATION') return 'COMPLETION_EVIDENCE_INSUFFICIENT';
   return code;
