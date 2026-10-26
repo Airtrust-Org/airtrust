@@ -299,7 +299,7 @@ function collectGateErrors(quality: ScormQualityShape): string[] {
   if (quality.runtime?.errors?.includes('SCORM_BROWSER_INFRASTRUCTURE_ERROR')) {
     const allowed = [
       new Set(['BINDING_MISSING', 'BROWSER_LAUNCH', 'CREATE_PAGE',
-        'SET_REQUEST_INTERCEPTION', 'LOAD_SCO_ASSETS', 'DRIVE_SCO_INTERACTIONS',
+        'SET_REQUEST_INTERCEPTION', 'LOAD_SCO_ASSETS', 'VERIFY_SCORM_INITIALIZATION', 'DRIVE_SCO_INTERACTIONS',
         'CLOSE_SCO_SESSION', 'READ_SCORM_TRACE']),
       new Set(['BROWSER_QUOTA', 'BROWSER_ACCESS', 'BROWSER_SERVICE',
         'BROWSER_TIMEOUT', 'BROWSER_CONNECTION', 'BROWSER_OTHER']),
@@ -402,9 +402,14 @@ async function uploadScormZipPackage(params: {
     // active ZIP until independent Chromium/WebKit and backend proof exists.
     const technicalPass = conformance.conformance?.status === 'PASS';
     const functionalPending = conformance.functionalCertification?.status !== 'CERTIFIED';
-    const prefix = technicalPass && functionalPending
-      ? 'O pacote passou na conformidade técnica, mas aguarda certificação funcional completa. O conteúdo ativo foi preservado'
-      : 'O pacote não passou na validação de conformidade do player';
+    const infrastructureFailure = conformance.runtime?.errors?.includes('SCORM_BROWSER_INFRASTRUCTURE_ERROR') === true;
+    // An infrastructure timeout is inconclusive: it is not a bad ZIP and
+    // must never trigger automatic retries, approval or an active switch.
+    const prefix = infrastructureFailure
+      ? 'O ZIP foi recebido como candidato inativo, mas a infraestrutura de navegação do Quality Gate falhou. A certificação não foi executada e o conteúdo atual foi preservado'
+      : technicalPass && functionalPending
+        ? 'O pacote passou na conformidade técnica, mas aguarda certificação funcional independente em staging. O conteúdo ativo foi preservado'
+        : 'O pacote não passou na validação de conformidade do player; o conteúdo ativo foi preservado';
     throw scormGateError(prefix, conformance);
   }
 
