@@ -85,15 +85,10 @@ const CANDIDATE_VALIDATED = {
 
 
 describe('production SCORM inactive candidate upload: never activates', () => {
-  const originalWindow = window;
   beforeEach(() => {
     fetchWithAuthMock.mockReset();
     extractBrowserLmsPackageMock.mockReset();
-    const fakeWindow = Object.create(originalWindow) as Window;
-    Object.defineProperty(fakeWindow, 'location', {
-      value: { hostname: 'airtrust.online' }, configurable: true,
-    });
-    vi.stubGlobal('window', fakeWindow);
+    vi.stubGlobal('window', { location: { hostname: 'airtrust.online' } });
   });
   afterEach(() => {
     vi.unstubAllGlobals();
