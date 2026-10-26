@@ -149,7 +149,8 @@ function isScormCompletion(body: JsonRecord): boolean {
     ['passed', 'completed', 'complete'].includes(lesson) ||
     ['completed', 'complete'].includes(completion) ||
     success === 'passed' ||
-    body.completion_candidate === true
+    body.completion_candidate === true ||
+    normalizeStatus(body.commit_event).toUpperCase() === 'SCORM_USER_FINALIZE'
   );
 }
 

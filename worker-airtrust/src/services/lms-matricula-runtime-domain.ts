@@ -1,7 +1,6 @@
 import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from './lms-progress-guardrails';
 import { resolveLmsCompletionScorePct } from './lms-completion-evidence';
 import type { ScormManifestClosureEvidence } from './lms-scorm-completion-context';
-import { isStudyOnlyAssessmentMode } from './lms-completion-manifest-evidence';
 
 export type ScormCommitLike = {
   lesson_status?: string | null;
@@ -167,6 +166,7 @@ export type ScormClosureCode =
   | 'MASTERY_SCORE_MISSING'
   | 'SCORE_MISSING'
   | 'SCORE_BELOW_MASTERY'
+  | 'EXTERNAL_ASSESSMENT_PENDING'
   | 'SCORM_ASSESSMENT_POLICY_INVALID'
   | 'SCORM_READY_FOR_SERVER_VERIFICATION';
 
@@ -257,32 +257,6 @@ export function evaluateScormClosureReadiness(params: {
     package_version: manifest.coverage.package_version,
   } : null;
 
-  if (manifest && isStudyOnlyAssessmentMode(manifest.coverage.assessment_mode)) {
-    // Study-only package (assessment.mode NONE/EXTERNAL): no score or pass bit
-    // exists to wait for. Verified coverage of the manifest-declared units plus
-    // the learner's explicit confirmation concludes the enrollment.
-    const missing = [
-      ...(!userConfirmed ? ['user_confirmation'] : []),
-      ...(!manifestCoverage ? ['manifest_required_units'] : []),
-    ];
-    let code: ScormClosureCode = 'SCORM_READY_FOR_SERVER_VERIFICATION';
-    if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
-    else if (failed) code = 'EXPLICIT_FAILURE';
-    else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
-    else if (!manifestCoverage) code = 'PROGRESS_EVIDENCE_MISSING';
-    return {
-      contract_version: 1,
-      eligible_for_server_verification: code === 'SCORM_READY_FOR_SERVER_VERIFICATION',
-      code,
-      missing,
-      last_step_reached: lastStep,
-      every_slide_verified: everySlide,
-      terminal_status_verified: false,
-      assessment_verified: true,
-      slide_coverage: describeScormSlideCoverage(cmiJson, location),
-      study_coverage: studyCoverage,
-    };
-  }
 
   const scoreRequired = policy === 'SCORED';
   const validMastery = masteryScore != null && Number.isFinite(masteryScore) &&
@@ -305,6 +279,7 @@ export function evaluateScormClosureReadiness(params: {
     ...(policy === 'FORMATIVE' && !everySlide
       ? [manifest ? 'manifest_required_units' : 'distinct_slide_coverage'] : []),
     ...(!terminal ? ['terminal_scorm_status'] : []),
+    ...(manifest?.coverage.assessment_mode === 'EXTERNAL' ? ['verified_external_assessment'] : []),
     ...(scoreRequired && !validMastery ? ['course_mastery_policy'] : []),
     ...(scoreRequired && !validScore ? ['assessment_score'] : []),
     ...(scoreRequired && validMastery && validScore && !scorePassed ? ['assessment_pass'] : []),
@@ -314,6 +289,7 @@ export function evaluateScormClosureReadiness(params: {
   if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
   else if (failed) code = 'EXPLICIT_FAILURE';
   else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
+  else if (manifest?.coverage.assessment_mode === 'EXTERNAL') code = 'EXTERNAL_ASSESSMENT_PENDING';
   else if (policy === 'FORMATIVE' && (!everySlide || !lastStep)) code = 'PROGRESS_EVIDENCE_MISSING';
   else if (policy !== 'SCORED' && policy !== 'FORMATIVE') code = 'SCORM_ASSESSMENT_POLICY_INVALID';
   else if (scoreRequired && !validMastery) code = 'MASTERY_SCORE_MISSING';

@@ -57,7 +57,7 @@ const userFinalize = (viewed: number[], extra: Record<string, unknown> = {}) => 
   lesson_status: 'completed', cmi_json: ledger(viewed), ...extra,
 });
 
-describe('pacote sem prova: o curso é para concluir', () => {
+describe('pacote sem prova: somente a política persistida no servidor pode dispensar nota', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     detectEdition.mockResolvedValue(null);
@@ -65,10 +65,33 @@ describe('pacote sem prova: o curso é para concluir', () => {
     matchSession.mockReturnValue(true);
   });
 
-  it.each(['NONE', 'EXTERNAL'])('conclui com estudo comprovado mesmo com curso SCORED/nota mínima herdados (%s)', async (mode) => {
-    const { response, saved } = await finalize(course(), bucketWith(noExam(mode)), userFinalize([1, 2, 3]));
+  const formative = { scorm_assessment_policy: 'FORMATIVE', scorm_mastery_score: null };
+
+  it('curso FORMATIVE com pacote NONE e terminal explícito conclui o estudo sem nota', async () => {
+    const { response, saved } = await finalize(course(formative), bucketWith(noExam('NONE')), userFinalize([1, 2, 3]));
     expect(response.status).toBe(200);
     expect(saved).toBe(true);
+  });
+
+  it.each(['NONE', 'EXTERNAL'])('pacote %s não dispensa exigência SCORED do servidor', async (mode) => {
+    const { response, saved } = await finalize(course(), bucketWith(noExam(mode)), userFinalize([1, 2, 3]));
+    expect(response.status).toBe(409);
+    expect(saved).toBe(false);
+  });
+
+  it('pacote EXTERNAL continua exigindo aprovação externa independente, mesmo num curso FORMATIVE', async () => {
+    const { response, saved } = await finalize(course(formative), bucketWith(noExam('EXTERNAL')), userFinalize([1, 2, 3]));
+    expect(response.status).toBe(409);
+    expect(saved).toBe(false);
+  });
+
+  it('FINALIZE sem status terminal ou completion_candidate não pode escapar da guarda de sessão', async () => {
+    readSession.mockResolvedValueOnce(null);
+    matchSession.mockReturnValueOnce(false);
+    const { response, saved } = await finalize(course(formative), bucketWith(noExam('NONE')),
+      userFinalize([1, 2, 3], { lesson_status: 'incomplete', completion_candidate: false }));
+    expect(response.status).not.toBe(200);
+    expect(saved).toBe(false);
   });
 
   it('sem comprovar todas as telas do manifest não conclui', async () => {

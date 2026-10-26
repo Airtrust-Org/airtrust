@@ -170,7 +170,8 @@ async function guardScormCommit(
     ['passed', 'completed', 'complete'].includes(lesson) ||
     ['completed', 'complete'].includes(completion) ||
     success === 'passed' ||
-    incoming.completion_candidate === true;
+    incoming.completion_candidate === true ||
+    String(incoming.commit_event || '').toUpperCase() === 'SCORM_USER_FINALIZE';
   const failureSignal = lesson === 'failed' || success === 'failed';
   if (!completionSignal) return null; // pure failure/progress still reaches the canonical route
 
