@@ -76,7 +76,7 @@ const F5StreamedInitSchema = z.object({
 
 function validCourseId(c: Context<{ Bindings: Env }>) {
   const id = Number(c.req.param('id'));
-  if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError('Curso inválido', 400);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
   return id;
 }
 
@@ -148,10 +148,10 @@ function validateExtension(file: UploadedFile, tipoConteudo: LmsStructuredConten
   const name = file.name.trim().toLowerCase();
   if (!name) return;
   if (tipoConteudo === 'scorm' && !name.endsWith('.zip')) {
-    throw new ApiError('Envie um arquivo .zip válido para o conteúdo SCORM', 400);
+    throw new ApiError('Envie um arquivo .zip válido para o conteúdo SCORM', 400, 'UPLOAD_ZIP_EXTENSION_INVALID');
   }
   if (tipoConteudo === 'h5p' && !name.endsWith('.h5p') && !name.endsWith('.zip')) {
-    throw new ApiError('Envie um arquivo .h5p ou .zip válido para o conteúdo H5P', 400);
+    throw new ApiError('Envie um arquivo .h5p ou .zip válido para o conteúdo H5P', 400, 'UPLOAD_H5P_EXTENSION_INVALID');
   }
 }
 
@@ -189,10 +189,10 @@ async function readPackageRequest(
         break;
       }
     }
-    if (!file) throw new ApiError('Campo de arquivo não encontrado', 400);
+    if (!file) throw new ApiError('Campo de arquivo não encontrado', 400, 'UPLOAD_FILE_FIELD_MISSING');
     validateExtension(file, tipoConteudo);
     if (file.size > LMS_PACKAGE_LIMITS.maxCompressedBytes) {
-      throw new ApiError('Pacote excede o limite comprimido de 32 MB', 413);
+      throw new ApiError('Pacote excede o limite comprimido de 32 MB', 413, 'UPLOAD_ZIP_TOO_LARGE');
     }
     bytes = new Uint8Array(await file.arrayBuffer());
   } else {
@@ -206,11 +206,11 @@ async function handleDirectPackageUpload(
   c: Context<{ Bindings: Env }>,
   tipoConteudo: LmsStructuredContentType,
 ) {
-  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+  if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
   const empresaId = getEmpresaIdSafe(c);
   const cursoId = Number(c.req.param('id'));
   if (!Number.isInteger(cursoId) || cursoId <= 0) {
-    throw new ApiError('Curso inválido', 400);
+    throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
   }
 
   const { bytes, arquivoNome } = await readPackageRequest(c, tipoConteudo);
@@ -248,6 +248,7 @@ app.post('/', async (c, next) => {
     throw new ApiError(
       'Crie o curso sem arquivo e envie SCORM/H5P pelo fluxo de upload versionado',
       409,
+      'UPLOAD_INLINE_PACKAGE_DISABLED',
     );
   }
   return next();
@@ -258,7 +259,7 @@ app.post(
   requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const parsed = InitSchema.safeParse(await c.req.json<unknown>().catch(() => null));
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
@@ -270,6 +271,7 @@ app.post(
       throw new ApiError(
         'Upload SCORM estruturado foi desativado: envie o ZIP para o Quality Gate',
         409,
+        'UPLOAD_STRUCTURED_SCORM_DISABLED',
       );
     }
 
@@ -303,7 +305,7 @@ app.post(
 
 app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
-  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
   return c.json({ success: true, data: await listScormPackageVersions(c.env.DB, getEmpresaIdSafe(c), cursoId) });
 });
 
@@ -312,7 +314,7 @@ app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin
 // can enter the existing SCORM Quality Gate as an inactive version candidate.
 app.post('/:id/scorm-upload/streamed/init',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     assertContentLengthWithinLimit(c.req.raw, 4096, 'Solicitação de intake');
     const parsed = F5StreamedInitSchema.safeParse(await c.req.json<unknown>().catch(() => null));
     if (!parsed.success) throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
@@ -334,12 +336,12 @@ app.post('/:id/scorm-upload/streamed/init',
 
 app.put('/:id/scorm-upload/streamed/:operationId/parts/:partNumber',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
     await authorizeF5Operation(c, empresaId, cursoId);
     const partNumber = Number(c.req.param('partNumber'));
     const contentLength = contentLengthWithinLimit(c.req.raw, F5_STREAMED_ZIP_LIMITS.partBytes, 'Parte SCORM');
-    if (!c.req.raw.body) throw new ApiError('Corpo da parte SCORM ausente', 400);
+    if (!c.req.raw.body) throw new ApiError('Corpo da parte SCORM ausente', 400, 'UPLOAD_PART_BODY_MISSING');
     const data = await putF5StreamedIntakePart({
       bucket: c.env.BUCKET, tenantId: empresaId, courseId: cursoId,
       operationId: c.req.param('operationId'), partNumber, contentLength, body: c.req.raw.body,
@@ -349,7 +351,7 @@ app.put('/:id/scorm-upload/streamed/:operationId/parts/:partNumber',
 
 app.post('/:id/scorm-upload/streamed/:operationId/complete',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
     const marker = await authorizeF5Operation(c, empresaId, cursoId);
     try {
@@ -371,7 +373,7 @@ app.post('/:id/scorm-upload/streamed/:operationId/complete',
 
 app.post('/:id/scorm-upload/streamed/:operationId/abort',
   requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
     try {
       await authorizeF5Operation(c, empresaId, cursoId, true);
@@ -395,8 +397,8 @@ app.get('/:id/scorm-upload/streamed/:operationId/status',
     const empresaId = getEmpresaIdSafe(c), cursoId = validCourseId(c);
     const operationId = c.req.param('operationId');
     const expectedSha = c.req.query('sha256') ?? '';
-    if (!/^[a-f0-9-]{36}$/i.test(operationId)) throw new ApiError('Operação F5 inválida', 400);
-    if (!/^[a-f0-9]{64}$/.test(expectedSha)) throw new ApiError('SHA F5 inválido', 400);
+    if (!/^[a-f0-9-]{36}$/i.test(operationId)) throw new ApiError('Operação F5 inválida', 400, 'UPLOAD_OPERATION_INVALID');
+    if (!/^[a-f0-9]{64}$/.test(expectedSha)) throw new ApiError('SHA F5 inválido', 400, 'UPLOAD_SHA_INVALID');
     const versions = await listScormPackageVersions(c.env.DB, empresaId, cursoId);
     const expectedName = `f5-${expectedSha}-${operationId}.zip`;
     const candidate = versions.find(item => item.arquivoNome === expectedName &&
@@ -417,7 +419,7 @@ app.get('/:id/scorm-upload/streamed/:operationId/status',
     }
     try {
       const marker = await authorizeF5Operation(c, empresaId, cursoId, true);
-      if (marker.packageSha256 !== expectedSha) throw new ApiError('SHA da operação F5 divergente', 409);
+      if (marker.packageSha256 !== expectedSha) throw new ApiError('SHA da operação F5 divergente', 409, 'UPLOAD_SHA_MISMATCH');
       return c.json({ success: true, data: { source: 'WORKER_F5_INTAKE_STATUS',
         state: 'INTAKE_PRESENT', operationId, packageSha256: marker.packageSha256 } });
     } catch (error) {
@@ -582,7 +584,7 @@ app.get('/:id/scorm-package-versions/:packageId/qa-evidence/:enrollmentId',
 
 app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
-  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
   const data = await activateScormPackageVersion({
     db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
     attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET,
@@ -598,7 +600,7 @@ app.post('/:id/scorm-package-versions/:packageId/functional-attestation',
   requireOperacoesCurso('update'),
   async (c) => {
     const cursoId = Number(c.req.param('id'));
-    if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+    if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
     assertContentLengthWithinLimit(c.req.raw, 24_576, 'Atestação SCORM');
     const raw = await c.req.text();
     if (raw.length > 24_576) throw new ApiError('Atestação muito extensa', 413);
@@ -618,7 +620,7 @@ app.post('/:id/scorm-package-versions/:packageId/functional-attestation',
 
 app.post('/:id/scorm-package-versions/:packageId/conformance', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
-  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400);
+  if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
   const data = await runScormPackageConformance({
     db: c.env.DB, bucket: c.env.BUCKET, browserBinding: c.env.SCORM_BROWSER, empresaId: getEmpresaIdSafe(c), cursoId,
     packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
@@ -631,7 +633,7 @@ app.post(
   requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const tipoConteudo = c.req.query('tipo_conteudo');
     if (tipoConteudo !== 'scorm' && tipoConteudo !== 'h5p') {
       throw new ApiError('Tipo de conteúdo inválido', 400);
@@ -670,11 +672,11 @@ app.post(
     const storedKey = `lms/${tipoConteudo}/${empresaId}/${cursoId}/_versions/${uploadId}/${normalizedPath}`;
     const stored = await c.env.BUCKET.head(storedKey);
     if (!stored) {
-      throw new ApiError('Arquivo não confirmado no storage', 500);
+      throw new ApiError('Arquivo não confirmado no storage', 500, 'UPLOAD_STORAGE_READBACK_FAILED');
     }
     if (stored.size > LMS_PACKAGE_LIMITS.maxFileBytes) {
       await c.env.BUCKET.delete(storedKey);
-      throw new ApiError('Arquivo individual excede o limite de 32 MB', 413);
+      throw new ApiError('Arquivo individual excede o limite de 32 MB', 413, 'UPLOAD_FILE_TOO_LARGE');
     }
 
     return c.json({ success: true, data: { ...data, bytes: stored.size } });
@@ -686,7 +688,7 @@ app.post(
   requirePermission('lms', 'editar', 'admin', 'manager'),
   requireOperacoesCurso('update'),
   async (c) => {
-    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500);
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const parsed = CompleteSchema.safeParse(await c.req.json<unknown>().catch(() => null));
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
