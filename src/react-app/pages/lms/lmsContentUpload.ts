@@ -275,6 +275,7 @@ function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: stri
 type ScormGateSection = { status?: string; errors?: string[] };
 type ScormQualityShape = {
   packageId?: string;
+  packageSha256?: string;
   status?: string;
   publishable?: boolean;
   structural?: ScormGateSection;
