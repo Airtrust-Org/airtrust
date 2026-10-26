@@ -29,7 +29,7 @@ export type ScormQualityGateResult = {
   /** Independent browser E2E attestation, not SCORM protocol conformance. */
   functionalCertification: ScormFunctionalCertification;
   /** Untrusted author-declared review: informational ONLY, never an SME release approval. */
-  authoringReview?: { externalExam: boolean; reviewed: boolean };
+  authoringReview?: { externalExam: boolean; reviewed: boolean; formativeNoExam: boolean };
   publishable: boolean;
 };
 
@@ -385,6 +385,20 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const manifest = parseJsonEntry(pkg, 'airtrust-completion-manifest.json');
   const externalExam = asRecord(manifest?.assessment)?.mode === 'EXTERNAL';
   const declaredReviewed = asRecord(manifest?.release)?.reviewed === true;
+  const assessment = asRecord(manifest?.assessment);
+  const closure = asRecord(manifest?.completion);
+  const release = asRecord(manifest?.release);
+  const releaseStatus = String(release?.status ?? '');
+  // A narrow, explicit formative profile. A scored/external course cannot
+  // opt into this path merely because it omitted its assessment metadata.
+  const formativeNoExam = assessment?.mode === 'NONE' &&
+    Array.isArray(assessment.requiredInteractions) &&
+    assessment.requiredInteractions.length === 0 &&
+    assessment.scoringBySCORM === false &&
+    assessment.successStatus === 'completed' &&
+    closure?.workerApprovalRequired === true &&
+    closure.passStatusFromSCORM === false &&
+    !releaseStatus.startsWith('PRIVATE_') && !releaseStatus.includes('DO_NOT_ACTIVATE');
   return {
     validatorVersion: SCORM_QUALITY_GATE_VERSION,
     structural,
@@ -392,9 +406,60 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
     diagnostics: diagnostic,
     conformance,
     functionalCertification: evaluateScormFunctionalCertification('', []),
-    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed },
+    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed, formativeNoExam },
     publishable: false,
   };
+}
+
+/**
+ * Operator-selected FORMATIVE/NO-EXAM replacement: one real Worker-owned
+ * Browser Rendering execution is sufficient. No twin-browser staging
+ * certification is requested for this narrow profile.
+ *
+ * This proof is not a CERTIFIED attestation. It must still demonstrate the
+ * actual authored UI journey, SCORM terminal state and protocol lifetime.
+ * Only backend-generated runtime data is eligible; ZIP authoring claims alone
+ * never authorize activation.
+ */
+export function canActivateRuntimeValidatedFormativeScormPackage(
+  quality: ScormQualityGateResult | null | undefined, expectedSha256: string,
+): boolean {
+  if (!quality || !/^[a-f0-9]{64}$/.test(expectedSha256) ||
+      quality.authoringReview?.externalExam !== false ||
+      quality.authoringReview?.formativeNoExam !== true ||
+      quality.structural?.status !== 'PASS' ||
+      quality.completionManifest?.status !== 'PASS' ||
+      quality.diagnostics?.status !== 'PASS' ||
+      quality.conformance?.status !== 'PASS') return false;
+  const runtime = (quality as ScormQualityGateResult & {
+    runtime?: ScormRuntimeConformance
+  }).runtime;
+  if (!runtime || runtime.status !== 'PASS' ||
+      runtime.candidateSha256 !== expectedSha256 ||
+      runtime.runnerVersion !== 'AIRTRUST_SCORM_BROWSER_RUN_V1' ||
+      runtime.initializeObserved !== true ||
+      runtime.commitObserved !== true || runtime.finishObserved !== true ||
+      runtime.completionReached !== true ||
+      runtime.functionalCompletionVerified !== true ||
+      runtime.lessonStatus !== 'completed' ||
+      runtime.expectedSuccessStatus !== 'completed' ||
+      runtime.requiresAssessmentEvidence !== false ||
+      runtime.scoreRaw !== null || runtime.masteryScore !== null ||
+      !/^\\d+\/\\d+$/.test(runtime.lessonLocation ?? '') ||
+      !Array.isArray(runtime.errors) || runtime.errors.length !== 0 ||
+      !Array.isArray(runtime.trace)) return false;
+  const count = (method: string, key?: string) => runtime.trace.filter(
+    item => item.method === method && (key === undefined || item.key === key),
+  ).length;
+  if (!count('LMSInitialize') || !count('LMSCommit') ||
+      !count('LMSFinish') || !count('LMSSetValue', 'cmi.core.lesson_status')) {
+    return false;
+  }
+  const last = (method: string) => runtime.trace.findLastIndex(item => item.method === method);
+  return last('LMSInitialize') < last('LMSCommit') &&
+    last('LMSCommit') < last('LMSFinish') &&
+    last('LMSSetValue') < last('LMSFinish') &&
+    runtime.functionalCompletionReason == null;
 }
 
 export function applyRuntimeConformance(
@@ -452,7 +517,10 @@ export function applyRuntimeConformance(
     ...staticResult,
     conformance,
     functionalCertification,
-    publishable: functionalCertification.status === 'CERTIFIED' &&
+    publishable: (functionalCertification.status === 'CERTIFIED' ||
+      canActivateRuntimeValidatedFormativeScormPackage({
+        ...staticResult, conformance, functionalCertification, runtime,
+      } as ScormQualityGateResult, expectedSha256)) &&
       // Historical validation blobs may predate the release-review marker.
       // They cannot prove the ZIP is not an EXTERNAL self-approved package.
       // Require fresh server-side validation before accepting certification.
