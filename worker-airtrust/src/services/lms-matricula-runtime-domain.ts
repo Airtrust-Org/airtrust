@@ -1,5 +1,7 @@
 import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from './lms-progress-guardrails';
 import { resolveLmsCompletionScorePct } from './lms-completion-evidence';
+import type { ScormManifestClosureEvidence } from './lms-scorm-completion-context';
+import { isStudyOnlyAssessmentMode } from './lms-completion-manifest-evidence';
 
 export type ScormCommitLike = {
   lesson_status?: string | null;
@@ -180,6 +182,17 @@ export interface ScormClosureReadiness {
   assessment_verified: boolean;
   /** Server-observed page visits; informational, never completion proof. */
   slide_coverage: { total: number; recorded: number; missing_numbers: number[] } | null;
+  /**
+   * Coverage proven against the ACTIVE package's completion manifest (either
+   * the wrapper ledger or the package's own declared state). Null = no manifest.
+   */
+  study_coverage?: {
+    source: 'WRAPPER_LEDGER' | 'PACKAGE_STATE' | null;
+    verified: boolean;
+    required_total: number;
+    recorded: number;
+    package_version: string | null;
+  } | null;
 }
 
 /** Never infer coverage from the highest slide position. Malformed maps stay unverified. */
@@ -215,18 +228,62 @@ export function evaluateScormClosureReadiness(params: {
   policy: 'SCORED' | 'FORMATIVE' | null | undefined;
   masteryScore: number | null;
   scorePct: number | null;
+  /** Active-package manifest evidence; absent = legacy behaviour (fail-closed). */
+  manifest?: ScormManifestClosureEvidence | null;
 }): ScormClosureReadiness {
   const { commit, wasCompleted, cmiJson, location, masteryScore, scorePct } = params;
+  const manifest = params.manifest ?? null;
+  const manifestCoverage = manifest?.coverage.verified === true;
   // Legacy rows without an explicit policy remain SCORED, never FORMATIVE.
   // This is the same fail-closed default as evaluateLmsCompletionEvidence.
   const policy = params.policy ?? 'SCORED';
-  const lastStep = Boolean(location?.total && location.current >= location.total);
+  // Full coverage of the manifest-declared units implies the final unit was seen.
+  const lastStep = Boolean(location?.total && location.current >= location.total) || manifestCoverage;
   // A scored package provides learning evidence through its terminal SCORM
   // success AND a valid passing assessment. Requiring a separate AirTrust-only
   // page-visit ledger as well rejects valid SCORM packages and older sessions.
-  // Formative content has no exam and must still prove actual page coverage.
-  const everySlide = hasCompleteScormSlideCoverage(cmiJson);
+  // Formative content has no exam and must still prove actual page coverage —
+  // When the active package has a completion manifest, coverage is measured
+  // against ITS declared units (wrapper ledger or package-declared state);
+  // otherwise the wrapper ledger is the only server-observed evidence.
+  const everySlide = manifest ? manifestCoverage : hasCompleteScormSlideCoverage(cmiJson);
   const failed = isScormFailed(commit);
+  const userConfirmed = params.mode !== 'commit' || commit.commit_event === 'SCORM_USER_FINALIZE';
+  const studyCoverage = manifest ? {
+    source: manifest.coverage.source,
+    verified: manifest.coverage.verified,
+    required_total: manifest.coverage.required_total,
+    recorded: manifest.coverage.recorded,
+    package_version: manifest.coverage.package_version,
+  } : null;
+
+  if (manifest && isStudyOnlyAssessmentMode(manifest.coverage.assessment_mode)) {
+    // Study-only package (assessment.mode NONE/EXTERNAL): no score or pass bit
+    // exists to wait for. Verified coverage of the manifest-declared units plus
+    // the learner's explicit confirmation concludes the enrollment.
+    const missing = [
+      ...(!userConfirmed ? ['user_confirmation'] : []),
+      ...(!manifestCoverage ? ['manifest_required_units'] : []),
+    ];
+    let code: ScormClosureCode = 'SCORM_READY_FOR_SERVER_VERIFICATION';
+    if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
+    else if (failed) code = 'EXPLICIT_FAILURE';
+    else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
+    else if (!manifestCoverage) code = 'PROGRESS_EVIDENCE_MISSING';
+    return {
+      contract_version: 1,
+      eligible_for_server_verification: code === 'SCORM_READY_FOR_SERVER_VERIFICATION',
+      code,
+      missing,
+      last_step_reached: lastStep,
+      every_slide_verified: everySlide,
+      terminal_status_verified: false,
+      assessment_verified: true,
+      slide_coverage: describeScormSlideCoverage(cmiJson, location),
+      study_coverage: studyCoverage,
+    };
+  }
+
   const scoreRequired = policy === 'SCORED';
   const validMastery = masteryScore != null && Number.isFinite(masteryScore) &&
     masteryScore > 0 && masteryScore <= 100;
@@ -239,14 +296,14 @@ export function evaluateScormClosureReadiness(params: {
     masteryScore: scoreRequired ? masteryScore : null,
     effectiveScorePct: scorePct,
   });
-  const userConfirmed = params.mode !== 'commit' || commit.commit_event === 'SCORM_USER_FINALIZE';
 
   const missing = [
     ...(!userConfirmed ? ['user_confirmation'] : []),
     // Navigation requirements belong only to non-scored content. For SCORED,
     // terminal success plus the verified course mastery result are sufficient.
     ...(policy === 'FORMATIVE' && !lastStep ? ['terminal_location'] : []),
-    ...(policy === 'FORMATIVE' && !everySlide ? ['distinct_slide_coverage'] : []),
+    ...(policy === 'FORMATIVE' && !everySlide
+      ? [manifest ? 'manifest_required_units' : 'distinct_slide_coverage'] : []),
     ...(!terminal ? ['terminal_scorm_status'] : []),
     ...(scoreRequired && !validMastery ? ['course_mastery_policy'] : []),
     ...(scoreRequired && !validScore ? ['assessment_score'] : []),
@@ -274,6 +331,7 @@ export function evaluateScormClosureReadiness(params: {
     terminal_status_verified: terminal,
     assessment_verified: scorePassed,
     slide_coverage: describeScormSlideCoverage(cmiJson, location),
+    study_coverage: studyCoverage,
   };
 }
 
@@ -283,6 +341,7 @@ export function evaluateScormClosureReadiness(params: {
 export function buildPersistedScormClosureReadiness(
   matricula: Record<string, unknown>,
   scorm: Record<string, unknown> | null,
+  manifest?: ScormManifestClosureEvidence | null,
 ): ScormClosureReadiness {
   const cmiJson = typeof scorm?.cmi_json === 'string' ? scorm.cmi_json : null;
   return evaluateScormClosureReadiness({
@@ -303,6 +362,7 @@ export function buildPersistedScormClosureReadiness(
       scoreMax: scorm?.score_max ?? null,
       scoreScaled: scorm?.score_scaled ?? null,
     }),
+    manifest: manifest ?? null,
   });
 }
 
@@ -315,6 +375,7 @@ export function canFinalizeScormEnrollment(params: {
   policy: 'SCORED' | 'FORMATIVE' | null | undefined;
   masteryScore: number | null;
   scorePct: number | null;
+  manifest?: ScormManifestClosureEvidence | null;
 }): boolean {
   return evaluateScormClosureReadiness({ ...params, mode: 'commit' })
     .eligible_for_server_verification;

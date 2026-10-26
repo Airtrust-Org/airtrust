@@ -78,7 +78,7 @@ import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '.
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
-import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
+import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
@@ -636,7 +636,7 @@ app.get('/:id', async (c) => {
         })
       : null;
   const scormClosureReadiness = tipoConteudo === 'scorm'
-    ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null))
     : null;
   const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
     handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
@@ -1290,7 +1290,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.tipo_conteudo, c.scorm_package_r2_prefix,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1310,7 +1310,7 @@ app.post('/scorm/commit', async (c) => {
       progresso_pct: number;
       tentativas: number;
       qualificacao_historico_id: number | null;
-      curso_id: number;
+      curso_id: number; tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -1416,7 +1416,7 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  const sucesso = canFinalizeScormEnrollment({
+  const sucesso = canFinalizeScormEnrollment({ manifest: await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, mergedCmiJson, d.suspend_data),
     commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
     masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
@@ -1832,7 +1832,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
+              c.id AS curso_id, c.scorm_package_r2_prefix, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1851,7 +1851,7 @@ app.post('/:id/finalizar', async (c) => {
       progresso_pct: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
-      tipo_conteudo: string | null;
+      tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       scorm_mastery_score: number | null;
@@ -1923,7 +1923,7 @@ app.post('/:id/finalizar', async (c) => {
       status: matricula.status,
       scorm_assessment_policy: matricula.scorm_assessment_policy,
       scorm_mastery_score: matricula.scorm_mastery_score,
-    }, scormAtual)
+    }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data))
     : null;
   if (scormClosure && !scormClosure.eligible_for_server_verification) {
     await logLmsMatriculaAudit(db, c, {
@@ -2118,7 +2118,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     .prepare(
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
-              c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+              c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -2137,7 +2137,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       curso_id: number;
       curso_titulo: string;
       qualificacao_tipo_id: number | null;
-      tipo_conteudo: string | null;
+      tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -2208,7 +2208,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         status: existing.status,
         scorm_assessment_policy: existing.scorm_assessment_policy,
         scorm_mastery_score: existing.scorm_mastery_score,
-      }, scormAtual);
+      }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, existing, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data));
       // The only exception is a separately governed administrative override:
       // real SCORM completion still uses the exact same closure verdict as
       // commit and learner finalization. Overrides are never SCORM PASS.

@@ -14,6 +14,10 @@ const integrityMiddleware = readFileSync(
   join(workerRoot, 'src/middleware/lms-completion-integrity.ts'),
   'utf8',
 );
+const completionDecisionService = readFileSync(
+  join(workerRoot, 'src/services/lms-enrollment-completion-decision.ts'),
+  'utf8',
+);
 const lmsAssetSession = readFileSync(
   join(workerRoot, 'src/lib/lms/lms-asset-session.ts'),
   'utf8',
@@ -92,7 +96,11 @@ describe('guard:lms-completion-single-entry-point', () => {
     expect(integrityMiddleware).toContain("path === '/api/lms/xapi/statements'");
     expect(integrityMiddleware).toContain('/finalizar');
     expect(integrityMiddleware).toContain('/status');
-    expect(integrityMiddleware).toContain('evaluateLmsCompletionEvidence');
+    // The middleware reaches the single evidence engine only through the shared
+    // enrollment decision service, which is the sole caller of the engine.
+    expect(integrityMiddleware).toContain('buildEnrollmentCompletionDecision');
+    expect(integrityMiddleware).not.toContain('evaluateLmsCompletionEvidence(');
+    expect(completionDecisionService).toContain('evaluateLmsCompletionEvidence({');
   });
 
   it('uses canonical usuario-to-funcionario linkage for own progress', () => {
