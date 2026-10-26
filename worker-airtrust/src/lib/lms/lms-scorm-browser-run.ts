@@ -156,7 +156,19 @@ export async function runScormBrowserConformance(params: {
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
     failureStage = 'LOAD_SCO_ASSETS';
-    await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
+    // networkidle0 waits for all incidental resources, not for SCO readiness.
+    // It can timeout on an otherwise healthy course (fonts/images/telemetry).
+    // DOMContentLoaded awaits parser-blocking course scripts; the next bounded
+    // check independently proves that the SCORM adapter initialized.
+    await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS });
+    failureStage = 'VERIFY_SCORM_INITIALIZATION';
+    await page.waitForFunction(() => {
+      const probe: unknown = Reflect.get(globalThis, '__AIRTRUST_SCORM_TRACE');
+      if (typeof probe !== 'function') return false;
+      const state: unknown = probe();
+      return typeof state === 'object' && state !== null &&
+        'initialized' in state && state.initialized === true;
+    }, { timeout: TIMEOUT_MS });
     // Drive authored M8 interactions by actually clicking course controls,
     // never by calling SCORMSetValue or forcing internal course state.
     failureStage = 'DRIVE_SCO_INTERACTIONS';

@@ -250,6 +250,25 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some(call => call.includes('/activate'))).toBe(false);
   });
 
+  it('keeps an infrastructure timeout distinct from an invalid ZIP and never activates it', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'TIMEOUT', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'VERIFY_SCORM_INITIALIZATION',
+        failureCategory: 'BROWSER_TIMEOUT', failureCode: 'TIMEOUT_ERROR',
+      },
+    } });
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+    })).rejects.toThrow(/recebido como candidato inativo.*infraestrutura.*VERIFY_SCORM_INITIALIZATION.*BROWSER_TIMEOUT/s);
+    expect(calls.filter(call => call.includes('/scorm-upload'))).toHaveLength(1);
+    expect(calls.filter(call => call.includes('/conformance'))).toHaveLength(1);
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
+  });
+
   it('does not reflect unrecognized diagnostic strings or browser exception details', async () => {
     const fixture = scormZip();
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
