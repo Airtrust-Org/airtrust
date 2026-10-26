@@ -228,6 +228,50 @@ Worker valida a assinatura HMAC do resumo, os digests por navegador,
 os documentos e a revisão pedagógica. Nenhum booleano de `verifiedCycle`
 sozinho substitui os campos concretos.
 
+### Revisão formativa simplificada (MGM F5 sem prova)
+
+A simplificação é operacional: **uma única checklist dos 14 cenários formativos**,
+gerada do ZIP imutável pelo novo `scripts/qa/scorm_formative_review_kit.py`,
+em vez de transcrever manualmente as 101 telas ou itens de uma prova inexistente.
+Preservam-se dois navegadores reais, matrícula/ciclo em staging, isolamento
+de tenant, readback Worker/D1, revisão pedagógica humana e assinatura governada.
+
+Comando para preparar a revisão, sem fabricar aprovação:
+
+```bash
+python3 scripts/qa/scorm_formative_review_kit.py \
+  --zip /private/MGM_F5_RC3_SCORM12.zip \
+  --package-sha 173db1a620afcca64e2019a869097b7e49622e6bb197aad81ef95788690fe03b \
+  --course-id <ID_NUMERICO_AUTENTICADO> \
+  --output /private/mgm-independent-review-pending.csv
+```
+
+O programa não copia a resposta marcada `correct`; toda linha fica PENDING
+e os campos do reviewer permanecem vazios. O revisor humano independente
+confere as alternativas com o Manual, seleciona a correta, escreve sua
+justificativa e assina a aprovação pelo fluxo existente. Divergência entre
+escolha independente e chave autoral bloqueia a aprovação, demandando revisão
+e nova edição exata do ZIP.
+
+Após a aprovação autêntica, converter o CSV verificado em JSON:
+
+```bash
+python3 scripts/qa/scorm-pedagogical-review-from-csv.py \
+  --csv /private/mgm-independent-review-approved.csv \
+  --zip /private/MGM_F5_RC3_SCORM12.zip \
+  --course-id <ID_NUMERICO_AUTENTICADO> \
+  --package-sha 173db1a620afcca64e2019a869097b7e49622e6bb197aad81ef95788690fe03b \
+  --reviewer-reference <REVISOR_AUTORIZADO> \
+  --approval-reference <ID_DA_APROVACAO_REAL> \
+  --approved-at <ISO_UTC_DA_APROVACAO> \
+  --output /private/mgm-independent-approved.json
+```
+
+O conversor confere SHA real, quantidade e IDs, texto das alternativas,
+status humano, reviewer, data, justificativa e concordância com a resposta
+autoral. JSON não representa certificação; signer Ed25519, QA com
+Chromium/WebKit e evidências físicas de Worker/D1 continuam obrigatórios.
+O ZIP e o frontend não podem emitir autoatestação nem ativar o curso.
 ### Preflight e bloqueios operacionais de staging
 
 O workflow atual `.github/workflows/staging-lms-scorm-qa.yml` executa QA
