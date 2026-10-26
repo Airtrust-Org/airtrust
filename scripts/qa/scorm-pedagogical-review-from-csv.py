@@ -81,8 +81,11 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
             key = (row["slide_index"].strip(), row["item_type"].strip(),
                    row["item_number"].strip())
             expected_row = by_identity.get(key)
-            if expected_row is None or choices != json.loads(expected_row["options_json"]) or (
-                "slide_id" in row and row["slide_id"] != expected_row["slide_id"]
+            audited_fields = ("slide_id", "module", "title",
+                              "scenario_context", "question")
+            if expected_row is None or choices != json.loads(expected_row["options_json"]) or any(
+                field not in row or row[field] != expected_row[field]
+                for field in audited_fields
             ):
                 raise ValueError("FORMATIVE_REVIEW_ZIP_CONTENT_DRIFT")
         try:
