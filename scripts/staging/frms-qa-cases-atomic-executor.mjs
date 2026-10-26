@@ -10,6 +10,7 @@ const HEX_64=/^[a-f0-9]{64}$/;
 const DENY="json_extract('FRMS_QA_CAS_ABORT_BAD_JSON','$')";
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const die=x=>{throw new Error(x);};
+const isSnapshotScalar=value=>value===null || ['string','number'].includes(typeof value);
 
 export function validateQaPreimage(plan, rows){
   assertReviewPlan(plan);
@@ -115,10 +116,30 @@ export function assertQaCompensationImages({plan,preimage,postimage}){
   validateQaPreimage(plan,preimage);
   validateQaPreimage(plan,postimage);
   const required={
-    frms_jornada:['id','empresa_id','tripulante_id','data','registrado_por',
-      'origem','observacao','duracao_jornada_minutos','deleted_at','updated_at'],
+    // All columns from the reviewed FRMS schema (journey 0351, alert 0212+0215).
+    // Reject an image that omits an untouched column: otherwise full-row CAS
+    // silently degrades into partial-row CAS even when before/after hashes match.
+    frms_jornada:['id','empresa_id','tripulante_id','data','status',
+      'hora_apresentacao','hora_termino','duracao_jornada_minutos',
+      'horas_voo_minutos','hora_primeiro_acionamento','hora_primeira_decolagem',
+      'hora_ultimo_pouso','hora_corte_motor','repouso_plataforma_inicio',
+      'repouso_plataforma_fim','repouso_plataforma_valido',
+      'observacao','registrado_por','origem','created_at','updated_at',
+      'deleted_at','tipo_base','tripulacao_aumentada','classe_cabine',
+      'aclimatado','local_base',
+      // Post-0351 migrations 0352–0354. Keep the reviewed SELECT * shape
+      // exactly aligned or deny inverse CAS until recovery is re-reviewed.
+      'matricula_aeronave','tempo_noturno_str','tempo_ifr_str',
+      'fonte_resolucao_sigvoos','hora_dormiu','hora_acordou',
+      'sono_efetivo_min','fonte_sono','acordou_na_wocl',
+      'repouso_regulatorio_min','fator_basica_pct','fator_apresentacao_pct',
+      'fator_repouso_pct','horas_voo_noturno_min','horas_voo_ifr_min',
+      'fonte_resolucao'],
     frms_alerta:['id','tripulante_id','jornada_id','tipo_limite','nivel',
-      'created_at','resolvido','visualizado','valor_atual_min','deleted_at','updated_at'],
+      'percentual_atingido','valor_atual_min','valor_limite_min','mensagem',
+      'visualizado','visualizado_em','visualizado_por',
+      'resolvido','resolvido_em','resolvido_por','created_at','updated_at',
+      'deleted_at','notas_resolucao'],
   };
   const mutable={
     frms_jornada:new Set(['origem','observacao','updated_at']),
@@ -131,11 +152,16 @@ export function assertQaCompensationImages({plan,preimage,postimage}){
       die('QA_COMPENSATION_IMAGE_SCOPE_MISMATCH');
     const was=before.original, now=after.original;
     const oldKeys=Object.keys(was).sort(),newKeys=Object.keys(now).sort();
-    if(oldKeys.length!==newKeys.length ||
+    // The entire reviewed table shape is an invariant, not a minimum-field
+    // list. A schema addition or omitted SELECT * column must fail closed
+    // until the affected migrations and CAS recovery are re-reviewed.
+    const schemaKeys=required[op.table]?.slice().sort();
+    if(!schemaKeys || oldKeys.length!==schemaKeys.length ||
+       oldKeys.some((k,j)=>k!==schemaKeys[j]) ||
+       oldKeys.length!==newKeys.length ||
        oldKeys.some((k,j)=>k!==newKeys[j] || !/^[a-z][a-z0-9_]*$/.test(k)) ||
-       required[op.table]?.some(k=>!Object.hasOwn(was,k))!==false ||
-       oldKeys.some(k=>![null,'string','number'].includes(typeof was[k]) ||
-          ![null,'string','number'].includes(typeof now[k]) ||
+       oldKeys.some(k=>!isSnapshotScalar(was[k]) ||
+          !isSnapshotScalar(now[k]) ||
           (typeof was[k]==='number'&&!Number.isFinite(was[k])) ||
           (typeof now[k]==='number'&&!Number.isFinite(now[k]))))
       die('QA_COMPENSATION_FULL_ROWS_REQUIRED');
