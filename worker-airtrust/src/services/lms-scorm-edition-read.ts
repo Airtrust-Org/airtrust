@@ -27,6 +27,7 @@ export async function readLmsScormEditionState(params:{
         matriculaId:params.matriculaId,cycleId,activePrefix,
         cycleStartedAt:typeof m.active_lms_cycle_started_at==='string'
           ? m.active_lms_cycle_started_at:null,cmiJson,
+        suspendData:typeof p?.suspend_data==='string'?p.suspend_data:null,
         handoffHistoryEnabled:params.handoffEnabled,
       })
     : null;

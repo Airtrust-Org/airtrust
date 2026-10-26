@@ -474,3 +474,57 @@ export function buildScormQueuedCommitScript(): string {
     );
   }`;
 }
+
+/**
+ * #1311 terminal lock (same IIFE scope: `cmi`, `IS_2004`, `emitTelemetry`,
+ * `sanitizeTelemetryValue`). Once this cycle holds a terminal status (served
+ * from persisted evidence or reported in this session), a reopened package
+ * cannot downgrade it nor lower the best score in the CMI used for commits
+ * (including LMSFinish/unload beacons). The attempted value goes to a
+ * non-terminal audit field; GetValue keeps answering the protected value.
+ */
+export function buildScormTerminalLockScript(): string {
+  return `
+  var TERMINAL_STATUS_RANKS = {
+    'cmi.core.lesson_status': { passed: 2, completed: 1 },
+    'cmi.completion_status': { completed: 1 },
+    'cmi.success_status': { passed: 1 }
+  };
+  var BEST_SCORE_FIELDS = ['cmi.core.score.raw', 'cmi.score.raw', 'cmi.score.scaled'];
+  function terminalStatusRank(field, value) {
+    var ranks = TERMINAL_STATUS_RANKS[field];
+    var key = String(value == null ? '' : value).trim().toLowerCase();
+    return ranks && ranks[key] ? ranks[key] : 0;
+  }
+  function holdsTerminalStatus() {
+    return IS_2004
+      ? terminalStatusRank('cmi.completion_status', cmi['cmi.completion_status']) > 0 ||
+        terminalStatusRank('cmi.success_status', cmi['cmi.success_status']) > 0
+      : terminalStatusRank('cmi.core.lesson_status', cmi['cmi.core.lesson_status']) > 0;
+  }
+  function protectTerminalValue(field, value) {
+    var current = cmi[field];
+    var reason = null;
+    if (TERMINAL_STATUS_RANKS[field]) {
+      if (terminalStatusRank(field, current) > terminalStatusRank(field, value)) reason = 'terminal-status-regression';
+    } else if (BEST_SCORE_FIELDS.indexOf(field) !== -1 && holdsTerminalStatus()) {
+      var best = finiteNumberOrNull(current);
+      var next = finiteNumberOrNull(value);
+      if (best !== null && (next === null || next < best)) reason = 'best-score-regression';
+    }
+    if (!reason) return false;
+    var audit = cmi['airtrust.runtime_regression'];
+    if (!audit || typeof audit !== 'object' || Array.isArray(audit)) audit = {};
+    audit[field] = value == null ? null : String(value);
+    cmi['airtrust.runtime_regression'] = audit;
+    emitTelemetry('SCORM_REGRESSION_BLOCKED', {
+      field: field,
+      previous_value: sanitizeTelemetryValue(field, current),
+      next_value: sanitizeTelemetryValue(field, value),
+      decision: 'blocked',
+      reason: reason,
+    });
+    return true;
+  }
+`;
+}

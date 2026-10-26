@@ -22,6 +22,7 @@ import {
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
   buildScormQueuedCommitScript,
+  buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
@@ -29,7 +30,7 @@ import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
-import { buildScormLaunchState, readScormNavigationBookmark } from '../services/lms-scorm-launch-state';
+import { buildScormLaunchState, readScormNavigationBookmark, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1084,13 +1085,14 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const isScorm2004 = matricula.scorm_versao === '2004';
   const progressoScorm = await db
     .prepare(
-      `SELECT suspend_data, cmi_json
+      `SELECT suspend_data, cmi_json, lesson_status, completion_status, success_status,
+              score_raw, score_max, score_min, score_scaled
          FROM lms_progresso_scorm
         WHERE matricula_id = ?
           AND empresa_id = ?`,
     )
     .bind(matricula.id, empresaId)
-    .first<{ suspend_data: string | null; cmi_json: string | null }>();
+    .first<{ suspend_data: string | null; cmi_json: string | null } & PersistedScormEvidence>();
 
   const ciclo = await db
     .prepare(
@@ -1124,21 +1126,21 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
   }
 
-  if (matricula.status !== 'CONCLUIDO') {
-    const mismatch = await detectLmsEditionMismatch({
-      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
-      empresaId, cursoId: matricula.curso_id,
-      cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
-      enrollmentStartedAt: matricula.data_inicio,
-    });
-    if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
-  }
+  // Completed review also checks the edition: an old cursor is never replayed into another one.
+  const mismatch = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
+    empresaId, cursoId: matricula.curso_id,
+    cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
+    enrollmentStartedAt: matricula.data_inicio,
+  });
+  if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
     matricula.status === 'CONCLUIDO',
     navigationBookmark,
+    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch) },
   );
 
   const html = buildLaunchPage({
@@ -1660,6 +1662,7 @@ ${buildScormPayloadFingerprintScript()}
   }
 
 ${buildScormVisitTrackingScript()}
+${buildScormTerminalLockScript()}
 
   function emitProgress(payload) {
     if (MATRICULA_ID == null) return;
@@ -2388,6 +2391,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     LMSSetValue: function(element, value) {
+      if (protectTerminalValue(element, value)) return 'true';
       var previousValue = cmi[element];
       var nextValue = value;
       var decision = 'accepted';
@@ -2468,6 +2472,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     SetValue: function(element, value) {
+      if (protectTerminalValue(element, value)) return 'true';
       var previousValue = cmi[element];
       var nextValue = value;
       var decision = 'accepted';
