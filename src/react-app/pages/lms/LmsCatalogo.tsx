@@ -61,7 +61,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
-import { shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
+import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -721,12 +721,13 @@ function CourseDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isRefreshingTemplate, setIsRefreshingTemplate] = useState(false);
   const isEditing = Boolean(initial?.id);
-  const canUploadStagingQa = isEditing && form.tipo_conteudo === 'scorm' &&
+  const canUploadStagingQa = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'staging.airtrust.pages.dev';
-  const canUploadInactiveProduction = isEditing && form.tipo_conteudo === 'scorm' &&
+  const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
   const candidateFirstScorm = shouldSaveScormMetadataWithoutZip({
-    isEditing, tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
+    isEditing, storedTipoConteudo: initial?.tipo_conteudo,
+    tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
   });
   const hasContent = form.tipo_conteudo !== 'video';
   const eadTipos = useMemo(() => qualTipos.filter(isEadTipo), [qualTipos]);
@@ -767,6 +768,13 @@ function CourseDrawer({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (blocksUnsafeScormTypeConversion({
+      isEditing, storedTipoConteudo: initial?.tipo_conteudo,
+      tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
+    })) {
+      toast.error('Não altere um curso existente de outro formato para SCORM neste formulário. Crie um curso SCORM e envie o ZIP inativo para homologação.');
+      return;
+    }
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
