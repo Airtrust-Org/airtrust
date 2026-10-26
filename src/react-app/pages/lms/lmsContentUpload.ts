@@ -440,6 +440,59 @@ async function uploadScormZipPackage(params: {
 }
 
 /**
+ * Explicit operator upload of an inactive candidate on production.
+ * This NEVER invokes browser conformance, functional attestation or activation.
+ * Course, enrollments and published pointer remain unchanged. Only the existing
+ * tenant-scoped versioned ZIP intake API is used; backend remains authoritative.
+ */
+export async function uploadScormInactiveProductionCandidate(params: {
+  cursoId: number;
+  file: File;
+  onProgress?: (pct: number) => void;
+  onStatus?: (status: string) => void;
+}): Promise<{ packageId: string; packageSha256: string; status: 'VALIDATED' }> {
+  if (window.location.hostname !== 'airtrust.online') {
+    throw new Error('Envio de candidato inativo de produção disponível apenas em airtrust.online.');
+  }
+  const { cursoId, file, onProgress, onStatus } = params;
+  if (!Number.isSafeInteger(cursoId) || cursoId <= 0) {
+    throw new Error('Curso inválido para candidato SCORM.');
+  }
+  onStatus?.('Validando estrutura do ZIP SCORM...');
+  onProgress?.(10);
+  const prepared = await preparePackageUpload(file, 'scorm');
+  onStatus?.('Enviando versão candidata INATIVA, sem substituir conteúdo...');
+  onProgress?.(25);
+  const formData = new FormData();
+  formData.append('arquivo', new Blob([prepared.packageBytes], { type: 'application/zip' }),
+    file.name?.trim() || 'scorm-candidate.zip');
+  const response = await fetchWithAuth(`/api/lms/cursos/${cursoId}/scorm-upload`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': buildIdempotencyKey('scorm', prepared.packageHash) },
+    body: formData,
+  });
+  const candidate = await parseApiResponse<ScormQualityShape>(response);
+  if (candidate.status === 'REJECTED') {
+    throw scormGateError('Pacote candidato recusado pelo Quality Gate estático; versão ativa preservada', candidate);
+  }
+  if (candidate.status === 'ACTIVE') {
+    throw new Error('Este ZIP já corresponde ao conteúdo ATIVO; nenhum candidato novo foi criado.');
+  }
+  if (candidate.status !== 'VALIDATED' ||
+      typeof candidate.packageId !== 'string' || !candidate.packageId ||
+      typeof candidate.packageSha256 !== 'string' ||
+      candidate.packageSha256 !== prepared.packageHash ||
+      candidate.structural?.status !== 'PASS' ||
+      candidate.completionManifest?.status !== 'PASS' ||
+      candidate.diagnostics?.status !== 'PASS') {
+    throw new Error('Recebimento do candidato não confirmado integralmente: estado, SHA ou gates inválidos. Não houve ativação.');
+  }
+  onProgress?.(100);
+  onStatus?.('Candidato SCORM INATIVO recebido. Versão publicada permanece inalterada; homologação pendente.');
+  return { packageId: candidate.packageId, packageSha256: candidate.packageSha256, status: 'VALIDATED' };
+}
+
+/**
  * F5 operator upload of a single inactive SCORM edition in the staging UI.
  * Uses the *existing* staging-only R2 multipart protocol. The Worker validates
  * a fresh, exact runtime/tenant/course/package-SHA/byte grant on init/parts/
