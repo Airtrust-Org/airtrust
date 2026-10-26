@@ -161,6 +161,28 @@ describe('#1311 reopen of a terminal SCORM 1.2 enrollment (Doutrinamento #15 eng
     expect(finish).toMatchObject({ lesson_status: 'passed', score_raw: 100 });
   });
 
+  it('terminal snapshot retains suspend_data against equal-length/longer reset after reopening', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const api = launch({ cmi: PERSISTED_15 });
+    api.LMSInitialize('');
+    const original = String(PERSISTED_15['cmi.suspend_data']);
+    const equalLengthReset = original.replace('"s":52', '"s":01');
+    expect(equalLengthReset.length).toBe(original.length);
+    api.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+    api.LMSSetValue('cmi.suspend_data', equalLengthReset);
+    api.LMSSetValue('cmi.suspend_data', equalLengthReset + 'more-data');
+    expect(api.LMSGetValue('cmi.suspend_data')).toBe(original);
+    api.LMSCommit('');
+    await vi.waitFor(() => expect(bodies(fetchMock).length).toBeGreaterThan(0));
+    for (const body of bodies(fetchMock)) {
+      expect(body.suspend_data).toBe(original);
+      const committed = JSON.parse(body.cmi_json);
+      expect(committed['cmi.suspend_data']).toBe(original);
+      expect(committed['airtrust.runtime_regression']['cmi.suspend_data']).toBe('[blocked]');
+    }
+  });
+
   it('non-terminal sessions keep ordinary incomplete/score updates (no lock without terminal)', () => {
     vi.stubGlobal('fetch', mockOkFetch());
     const api = launch({ cmi: { 'cmi.core.lesson_status': 'incomplete', 'cmi.core.score.raw': '60' } });

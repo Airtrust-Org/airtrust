@@ -507,6 +507,12 @@ export function buildScormTerminalLockScript(): string {
     var reason = null;
     if (TERMINAL_STATUS_RANKS[field]) {
       if (terminalStatusRank(field, current) > terminalStatusRank(field, value)) reason = 'terminal-status-regression';
+    } else if (field === 'cmi.suspend_data' && holdsTerminalStatus()) {
+      // A terminal snapshot is immutable even when a reopened SCO sends an
+      // equal-length or longer reset. Never log suspend_data (may contain PII).
+      if (typeof current === 'string' && current.length > 0 && String(value == null ? '' : value) !== current) {
+        reason = 'terminal-suspend-snapshot-regression';
+      }
     } else if (BEST_SCORE_FIELDS.indexOf(field) !== -1 && holdsTerminalStatus()) {
       var best = finiteNumberOrNull(current);
       var next = finiteNumberOrNull(value);
@@ -515,7 +521,7 @@ export function buildScormTerminalLockScript(): string {
     if (!reason) return false;
     var audit = cmi['airtrust.runtime_regression'];
     if (!audit || typeof audit !== 'object' || Array.isArray(audit)) audit = {};
-    audit[field] = value == null ? null : String(value);
+    audit[field] = field === 'cmi.suspend_data' ? '[blocked]' : (value == null ? null : String(value));
     cmi['airtrust.runtime_regression'] = audit;
     emitTelemetry('SCORM_REGRESSION_BLOCKED', {
       field: field,
