@@ -1,16 +1,25 @@
 /**
- * Editing course metadata and staging a SCORM ZIP are separate operations.
- * The existing-course production/staging screen has an explicit inactive intake
- * action; form submission must never implicitly activate the selected ZIP.
- * Backend certification, authorization and activation remain unchanged.
+ * Editing existing course metadata and staging a SCORM ZIP are separate.
+ * A course of a different active content type cannot be converted to SCORM
+ * by an inactive intake: doing so would leave the course without a launch.
  */
-export function shouldSaveScormMetadataWithoutZip(input: {
+type ScormSaveInput = {
   isEditing: boolean;
+  storedTipoConteudo: string | null | undefined;
   tipoConteudo: string | null | undefined;
   hostname: string;
-}): boolean {
-  return input.isEditing &&
-    input.tipoConteudo === 'scorm' &&
-    (input.hostname === 'airtrust.online' ||
-      input.hostname === 'staging.airtrust.pages.dev');
+};
+
+function isGovernedHost(hostname: string) {
+  return hostname === 'airtrust.online' || hostname === 'staging.airtrust.pages.dev';
+}
+
+export function blocksUnsafeScormTypeConversion(input: ScormSaveInput): boolean {
+  return input.isEditing && isGovernedHost(input.hostname) &&
+    input.tipoConteudo === 'scorm' && input.storedTipoConteudo !== 'scorm';
+}
+
+export function shouldSaveScormMetadataWithoutZip(input: ScormSaveInput): boolean {
+  return input.isEditing && isGovernedHost(input.hostname) &&
+    input.tipoConteudo === 'scorm' && input.storedTipoConteudo === 'scorm';
 }
