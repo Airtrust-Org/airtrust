@@ -12,6 +12,7 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     delete global.window.AIRTRUST_COURSE_MODEL;
     delete global.window.AIRTRUST_CONTENT;
     delete global.window.AirTrustSCORM;
+    delete global.window.API;
     delete global.window.__AIRTRUST_PLAYER_TEST__;
     for (const key of [
       'SLIDES', 'current', 'completed', 'scenarioDone', 'interactions', 'moduleQuiz',
