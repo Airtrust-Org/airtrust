@@ -92,6 +92,20 @@ class FormativeReviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ZIP_CONTENT_DRIFT"):
             self.convert()
 
+    def test_reject_edited_question_or_context(self):
+        for column, replacement in (
+            ("question", "A reversed operational condition requiring another answer"),
+            ("scenario_context", "The manual is current, contrary to the original scenario"),
+            ("title", "Different training topic"),
+            ("module", "Different module"),
+            ("slide_id", "other-scenario"),
+        ):
+            self.csv.unlink(missing_ok=True)
+            self.write_review(lambda row, column=column, replacement=replacement:
+                              row.update({column: replacement}))
+            with self.assertRaisesRegex(ValueError, "ZIP_CONTENT_DRIFT"):
+                self.convert()
+
     def test_reject_duplicate_scenario_and_missing_activity(self):
         self.manifest["formative"]["requiredActivities"] = ["wrong_id"]
         with ZipFile(self.zip, "w") as z:
