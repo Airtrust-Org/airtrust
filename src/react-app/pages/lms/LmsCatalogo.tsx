@@ -61,6 +61,7 @@ import {
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
 import { uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -720,10 +721,14 @@ function CourseDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isRefreshingTemplate, setIsRefreshingTemplate] = useState(false);
   const isEditing = Boolean(initial?.id);
-  const canUploadStagingQa = isEditing && form.tipo_conteudo === 'scorm' &&
+  const canUploadStagingQa = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'staging.airtrust.pages.dev';
-  const canUploadInactiveProduction = isEditing && form.tipo_conteudo === 'scorm' &&
+  const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
+  const candidateFirstScorm = shouldSaveScormMetadataWithoutZip({
+    isEditing, storedTipoConteudo: initial?.tipo_conteudo,
+    tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
+  });
   const hasContent = form.tipo_conteudo !== 'video';
   const eadTipos = useMemo(() => qualTipos.filter(isEadTipo), [qualTipos]);
   const curTipo = useMemo(
@@ -763,9 +768,21 @@ function CourseDrawer({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (blocksUnsafeScormTypeConversion({
+      isEditing, storedTipoConteudo: initial?.tipo_conteudo,
+      tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
+    })) {
+      toast.error('Não altere um curso existente de outro formato para SCORM neste formulário. Crie um curso SCORM e envie o ZIP inativo para homologação.');
+      return;
+    }
+    if (candidateFirstScorm && contentFile) {
+      toast.error('Para enviar o ZIP, use “Enviar ZIP para homologação”. Para salvar dados do curso, remova primeiro o ZIP selecionado.');
+      return;
+    }
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
+    // A candidate ZIP and course metadata are deliberately separate operations.
     await onSave(form, { contentFile, thumbnailFile: thumbFile, skipPurge });
   }
 
@@ -1187,9 +1204,9 @@ function CourseDrawer({
                       />
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                          <p className="font-semibold">Enviar candidato SCORM inativo — produção</p>
+                          <p className="font-semibold">1. Enviar ZIP para homologação (sem publicar)</p>
                           <p className="mt-1">Somente armazena e valida o ZIP, sem substituir o curso publicado, alterar matrículas, concluir treinamentos ou emitir certificados. A ativação exige homologação independente.</p>
-                          <Button type="button" variant="secondary" disabled={!contentFile || isSaving}
+                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
                             onClick={() => {
                               if (!contentFile || !initial?.id) return;
                               void onProductionCandidateUpload(initial.id, contentFile).then((receipt) => {
@@ -1212,10 +1229,10 @@ function CourseDrawer({
                       ) : null}
                       {canUploadStagingQa ? (
                         <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
-                          <p className="font-semibold">QA de staging — candidato SCORM inativo</p>
+                          <p className="font-semibold">1. Enviar ZIP para homologação em staging (sem publicar)</p>
                           <p className="mt-1">Este envio usa o grant F5 exato da edição e não altera o conteúdo publicado,
                             matrículas, notas ou certificados. Não executa ativação nem certificação.</p>
-                          <Button type="button" variant="secondary" disabled={!contentFile || isSaving}
+                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
                             onClick={() => {
                               if (!contentFile || !initial?.id) return;
                               void onQaCandidateUpload(initial.id, contentFile).then((receipt) => {
@@ -1238,12 +1255,15 @@ function CourseDrawer({
                       ) : null}
                       {isReplacingExistingContent ? (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                          <p className="font-semibold">Substituindo conteúdo atual</p>
+                          <p className="font-semibold">{candidateFirstScorm ? 'Versão atual preservada durante a homologação' : 'Substituindo conteúdo atual'}</p>
                           <p className="mt-1 text-amber-800">
                             Atual: {storedContentLabel ?? 'conteúdo já publicado'}
                           </p>
-                          <p className="mt-1 text-amber-800">Novo envio: {contentFile?.name}</p>
-                          {form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p' ? (
+                          <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
+                          {candidateFirstScorm ? (
+                            <p className="mt-2 font-medium">Use o botão “Enviar ZIP para homologação” acima. Para editar os dados do curso, primeiro remova o ZIP selecionado. Nenhum envio ativa o curso automaticamente.</p>
+                          ) : null}
+                          {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
                               <input
                                 type="checkbox"
@@ -1437,11 +1457,13 @@ function CourseDrawer({
                 <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving}>
                   Cancelar
                 </Button>
-                <Button variant="primary" type="submit" loading={isSaving}>
+                <Button variant="primary" type="submit" loading={isSaving} disabled={candidateFirstScorm && Boolean(contentFile)}>
                   {isEditing
-                    ? isReplacingExistingContent
-                      ? 'Substituir conteúdo'
-                      : 'Salvar alterações'
+                    ? candidateFirstScorm && contentFile
+                      ? 'Salvar dados (remova o ZIP)'
+                      : isReplacingExistingContent
+                        ? 'Substituir conteúdo'
+                        : 'Salvar alterações'
                     : 'Criar curso'}
                 </Button>
               </div>
