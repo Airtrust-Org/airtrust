@@ -451,7 +451,7 @@ export async function uploadScormInactiveProductionCandidate(params: {
   onProgress?: (pct: number) => void;
   onStatus?: (status: string) => void;
 }): Promise<{ packageId: string; packageSha256: string; status: 'VALIDATED' }> {
-  if (window.location.hostname !== 'airtrust.online') {
+  if (typeof window === 'undefined' || window.location.hostname !== 'airtrust.online') {
     throw new Error('Envio de candidato inativo de produção disponível apenas em airtrust.online.');
   }
   const { cursoId, file, onProgress, onStatus } = params;
