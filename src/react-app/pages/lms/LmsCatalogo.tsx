@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { uploadScormF5InactiveStaging, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -681,6 +681,7 @@ function CourseDrawer({
   onPreview,
   onSave,
   onQaCandidateUpload,
+  onProductionCandidateUpload,
   isSaving,
   uploadProgress,
   uploadStatus,
@@ -693,6 +694,9 @@ function CourseDrawer({
     form: CreateCursoDTO,
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
+  onProductionCandidateUpload: (cursoId: number, file: File) => Promise<{
+    packageId: string; packageSha256: string; status: 'VALIDATED';
+  }>;
   onQaCandidateUpload: (cursoId: number, file: File) => Promise<{
     packageId: string; packageSha256: string; status: 'VALIDATED'; zipBytes: number;
   }>;
@@ -718,6 +722,8 @@ function CourseDrawer({
   const isEditing = Boolean(initial?.id);
   const canUploadStagingQa = isEditing && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'staging.airtrust.pages.dev';
+  const canUploadInactiveProduction = isEditing && form.tipo_conteudo === 'scorm' &&
+    window.location.hostname === 'airtrust.online';
   const hasContent = form.tipo_conteudo !== 'video';
   const eadTipos = useMemo(() => qualTipos.filter(isEadTipo), [qualTipos]);
   const curTipo = useMemo(
@@ -1179,6 +1185,31 @@ function CourseDrawer({
                         }
                         disabled={isSaving}
                       />
+                      {canUploadInactiveProduction ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                          <p className="font-semibold">Enviar candidato SCORM inativo — produção</p>
+                          <p className="mt-1">Somente armazena e valida o ZIP, sem substituir o curso publicado, alterar matrículas, concluir treinamentos ou emitir certificados. A ativação exige homologação independente.</p>
+                          <Button type="button" variant="secondary" disabled={!contentFile || isSaving}
+                            onClick={() => {
+                              if (!contentFile || !initial?.id) return;
+                              void onProductionCandidateUpload(initial.id, contentFile).then((receipt) => {
+                                setQaCandidateReceipt(receipt);
+                                toast.success('SCORM armazenado como candidato INATIVO. Conteúdo publicado preservado.');
+                              }).catch((error: unknown) => {
+                                toast.error(error instanceof Error ? error.message : 'Falha no recebimento do candidato inativo');
+                              });
+                            }}>
+                            Enviar ZIP como candidato INATIVO (sem publicar)
+                          </Button>
+                          {qaCandidateReceipt ? (
+                            <div role="status" className="mt-3 break-all text-xs">
+                              Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
+                              SHA-256: {qaCandidateReceipt.packageSha256}.
+                              A versão usada pelos alunos NÃO foi alterada; certificação funcional pendente.
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {canUploadStagingQa ? (
                         <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
                           <p className="font-semibold">QA de staging — candidato SCORM inativo</p>
@@ -1952,6 +1983,19 @@ export default function LmsCatalogo() {
     }
   }
 
+  async function handleProductionCandidateUpload(cursoId: number, file: File) {
+    setIsSavingCourse(true);
+    setUploadProgress(0);
+    setUploadStatus('Iniciando recebimento inativo em produção...');
+    try {
+      return await uploadScormInactiveProductionCandidate({
+        cursoId, file, onProgress: setUploadProgress, onStatus: setUploadStatus,
+      });
+    } finally {
+      setIsSavingCourse(false);
+    }
+  }
+
   async function handleQaCandidateUpload(cursoId: number, file: File) {
     setIsSavingCourse(true);
     setUploadProgress(0);
@@ -2372,6 +2416,7 @@ export default function LmsCatalogo() {
           }
           onSave={handleSave}
           onQaCandidateUpload={handleQaCandidateUpload}
+            onProductionCandidateUpload={handleProductionCandidateUpload}
           isSaving={
             isSavingCourse ||
             createCurso.isPending ||

@@ -1,8 +1,8 @@
 import { strToU8, zipSync } from 'fflate';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithAuth } from '@/react-app/config/api';
-import { uploadStructuredLmsPackage } from '../lmsContentUpload';
+import { uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
 
 const { extractBrowserLmsPackageMock } = vi.hoisted(() => ({
   extractBrowserLmsPackageMock: vi.fn(),
@@ -82,6 +82,78 @@ const CANDIDATE_VALIDATED = {
   completionManifest: { status: 'PASS', errors: [] },
   diagnostics: { status: 'PASS', errors: [] },
 };
+
+
+describe('production SCORM inactive candidate upload: never activates', () => {
+  beforeEach(() => {
+    fetchWithAuthMock.mockReset();
+    extractBrowserLmsPackageMock.mockReset();
+    vi.stubGlobal('window', { location: { hostname: 'airtrust.online' } });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('stores exact-ZIP SHA only as VALIDATED without conformance or activation', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const statuses: string[] = [];
+    const expectedDigest = await crypto.subtle.digest('SHA-256', new Uint8Array(fixture.zip));
+    const expectedSha = [...new Uint8Array(expectedDigest)]
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, packageSha256: expectedSha,
+    }, 202));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+      onStatus: status => statuses.push(status),
+    });
+    expect(receipt).toEqual({
+      packageId: 'pkg-1', packageSha256: expectedSha, status: 'VALIDATED',
+    });
+    expect(statuses.at(-1)).toMatch(/INATIVO.*inalterada/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/44/scorm-upload');
+    const request = fetchWithAuthMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe('POST');
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'scorm:' + expectedSha });
+    expect((request.body as FormData).has('arquivo')).toBe(true);
+    expect(fetchWithAuthMock.mock.calls.some(call => /conformance|activate|content-upload/.test(String(call[0])))).toBe(false);
+  });
+
+  it('rejects server-side failed static gate without calling activation', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, status: 'REJECTED',
+      structural: { status: 'FAIL', errors: ['estrutura incorreta'] },
+    }, 202));
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+    })).rejects.toThrow(/Quality Gate estático.*estrutura incorreta/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unverifiable candidate SHA response; never marks receipt successful', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, packageSha256: '0'.repeat(64),
+    }, 202));
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+    })).rejects.toThrow(/estado, SHA ou gates inválidos/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('is host-restricted and never sends a request from staging or preview', async () => {
+    vi.unstubAllGlobals();
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(scormZip().zip),
+    })).rejects.toThrow(/disponível apenas em airtrust.online/);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('uploadStructuredLmsPackage — SCORM governed package-version flow', () => {
   beforeEach(() => {
