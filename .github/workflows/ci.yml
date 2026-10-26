@@ -73,6 +73,8 @@ jobs:
         run: |
           node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
           node --test scripts/__tests__/scorm-duplicate-reference-inventory.test.mjs
+      - name: validate exact-ZIP formative review kit and human approval boundaries
+        run: python3 -m unittest discover -s scripts/qa -p 'test_scorm_formative_review_kit.py' -v
       - name: validate legacy qualification comparison CLI compatibility
         run: node --test scripts/__tests__/legacy-qualification-comparison-entrypoint.test.mjs
       - name: tenant mutations guard
