@@ -10,12 +10,106 @@ describe('SCORM functional browser driver (no synthetic SCORM statuses)', () => 
     global.document.body.innerHTML = '';
     delete global.window.COURSE_DATA;
     delete global.window.AIRTRUST_COURSE_MODEL;
+    delete global.window.AIRTRUST_CONTENT;
     delete global.window.AirTrustSCORM;
     delete global.window.__AIRTRUST_PLAYER_TEST__;
     for (const key of [
       'SLIDES', 'current', 'completed', 'scenarioDone', 'interactions', 'moduleQuiz',
       'MODULE_QUIZZES', 'completionReady', 'Scorm',
     ]) delete global[key];
+  });
+
+
+  it('drives F5/R22 formative SCORM through learner controls and verifies persisted complete coverage', async () => {
+    const slides = [
+      { id: 'objectives', layout: 'objectives', required: true },
+      { id: 'scenario', layout: 'scenario' },
+      { id: 'end', layout: 'end', isEnd: true },
+    ];
+    global.window.AIRTRUST_CONTENT = { edition: 'AIRTRUST-F5-SYNTHETIC', slides };
+    global.window.COURSE_DATA = { slides, packageVersion: 'AIRTRUST-F5-SYNTHETIC' };
+    const values: Record<string, string> = {};
+    const covered: number[] = [];
+    const resolved: number[] = [];
+    let current = 0;
+    const counter = global.document.createElement('span');
+    counter.id = 'counter';
+    const stage = global.document.createElement('section');
+    stage.id = 'stage';
+    const next = global.document.createElement('button');
+    next.id = 'next';
+    const render = () => {
+      counter.textContent = String(current + 1) + ' / 3';
+      stage.innerHTML = '';
+      if (current === 0) {
+        next.disabled = true;
+        const details = global.document.createElement('details');
+        details.dataset.required = '0';
+        const summary = global.document.createElement('summary');
+        summary.textContent = 'Objetivo';
+        summary.addEventListener('click', () => {
+          resolved.push(0);
+          next.disabled = false;
+        });
+        details.append(summary);
+        stage.append(details);
+      } else if (current === 1) {
+        next.disabled = true;
+        const answer = global.document.createElement('textarea');
+        answer.id = 'reflectionAnswer';
+        const reveal = global.document.createElement('button');
+        reveal.id = 'reflectionReveal';
+        reveal.addEventListener('click', () => {
+          if (answer.value.length < 20) return;
+          for (const [idx, correct] of [false, true].entries()) {
+            const choice = global.document.createElement('button');
+            choice.dataset.answer = String(idx);
+            choice.addEventListener('click', () => {
+              if (correct) { resolved.push(1); next.disabled = false; }
+            });
+            stage.append(choice);
+          }
+        });
+        stage.append(answer, reveal);
+      } else {
+        next.disabled = true;
+        const close = global.document.createElement('button');
+        close.id = 'completeStudy';
+        close.addEventListener('click', () => {
+          covered.push(2);
+          values['cmi.suspend_data'] = JSON.stringify({
+            p: 'AIRTRUST-F5-SYNTHETIC', d: covered, f: resolved,
+          });
+          values['cmi.core.lesson_status'] = 'completed';
+        });
+        stage.append(close);
+      }
+    };
+    next.addEventListener('click', () => {
+      if (next.disabled || current >= 2) return;
+      covered.push(current);
+      current += 1;
+      render();
+    });
+    global.document.body.append(counter, stage, next);
+    global.window.API = { LMSGetValue: (key: string) => values[key] ?? '' };
+    render();
+    const result = await new Function('return ' + buildScormFunctionalDriverScript())();
+    expect(result).toEqual({ supported: true, completed: true, steps: 3, reason: null });
+    expect(covered).toEqual([0, 1, 2]);
+    expect(resolved).toEqual([0, 1]);
+    expect(values['cmi.core.lesson_status']).toBe('completed');
+    // If the package silently loses one required unit, reject even when
+    // its own lesson_status falsely claims completed.
+    values['cmi.core.lesson_status'] = '';
+    current = 0;
+    covered.length = 0;
+    resolved.length = 0;
+    render();
+    const finish = stage.querySelector('#completeStudy');
+    expect(finish).toBeNull();
+    // The independent certification path must never set LMSSetValue.
+    expect(global.window.API.LMSSetValue).toBeUndefined();
   });
 
   it('executes bundled inner function annotations without leaking bundler globals', () => {
