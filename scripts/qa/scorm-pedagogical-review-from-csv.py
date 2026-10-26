@@ -58,8 +58,9 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
             (item["slide_index"], item["item_type"], item["item_number"]): item
             for item in formative
         }
-        source = json.loads(ZipFile(zip_path).read("content.js").decode("utf-8")
-                            .split(" = ", 1)[1].rstrip(";\\r\\n "))
+        with ZipFile(zip_path) as package:
+            model_js = package.read("content.js").decode("utf-8")
+        source = json.loads(model_js.split(" = ", 1)[1].strip().removesuffix(";"))
         slides = source["slides"]
     names, seen, items = set(), set(), []
     for row in rows:
