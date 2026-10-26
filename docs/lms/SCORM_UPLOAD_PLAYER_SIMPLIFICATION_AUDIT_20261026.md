@@ -26,7 +26,7 @@ Referências ativas: issue #1325, PR #1813 (revisão formativa MGM, sem conflito
 ## Simplificação nesta PR
 
 - Para **curso SCORM existente em produção ou staging**, selecionar ZIP **não** faz o botão `Salvar dados` enviar/ativar pacote. O único envio direto exposto é `Enviar ZIP para homologação`, de forma inativa e com recibo SHA.
-- O submit de metadados mantém seu significado: salva dados/capa, sem tentar substituir o ZIP escolhido. H5P, PDF, PPTX, novo curso e desenvolvimento local mantêm fluxos anteriores.
+- O envio de um ZIP candidato e a edição de metadados são operações exclusivas: com ZIP selecionado, o botão de salvar dados fica desabilitado e não persiste alterações parciais. Remover o ZIP permite salvar dados/capa normalmente. Conversões de cursos PDF/H5P/vídeo existentes para SCORM no formulário de produção/staging são bloqueadas, porque o intake inativo não cria launch ativo. H5P, PDF, PPTX, novos cursos e desenvolvimento local mantêm seus fluxos anteriores.
 - UI diferencia visualmente a ação de intake da gravação de metadados e remove o `skipPurge` irrelevante à versão SCORM inativa.
 - Nenhuma mudança em Worker/Player, política de notas, verificador, banco, grants ou publicação.
 
