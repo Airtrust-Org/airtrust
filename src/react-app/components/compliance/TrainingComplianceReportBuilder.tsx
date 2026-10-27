@@ -506,6 +506,75 @@ export function TrainingComplianceReportBuilder({
         </div>
       </div>
 
+      {selectedTrainingType && (
+        <section aria-label="Histórico de qualificações cadastradas" className="mt-5 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+          <h3 className="text-base font-semibold text-slate-900">
+            Histórico cadastrado — {selectedTrainingType.codigo || selectedTrainingType.nome}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Certificados registrados em Qualificações, inclusive renovados. Não representa a matriz de requisitos obrigatórios.
+          </p>
+          {qualificationHistory.isPending ? (
+            <p className="mt-3 text-sm text-slate-700">Consultando histórico de qualificações...</p>
+          ) : qualificationHistory.isError ? (
+            <div className="mt-3 text-sm text-red-700" role="alert">
+              Não foi possível carregar o histórico: {qualificationHistory.error instanceof Error
+                ? qualificationHistory.error.message : 'erro de consulta'}.
+              <button type="button" className="ml-2 underline" onClick={() => void qualificationHistory.refetch()}>
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <Metric label="Registros no histórico" value={historySummary.total} />
+                <Metric label="Funcionários" value={historySummary.funcionarios} />
+                <Metric label="Renovados" value={historySummary.renovados} />
+                <Metric label="Vigentes" value={historySummary.vigentes} />
+                <Metric label="Vencendo" value={historySummary.vencendo} />
+                <Metric label="Vencidos" value={historySummary.vencidos} />
+              </div>
+              {historyRows.length > 0 ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-sky-200 text-slate-600">
+                        <th className="p-2">Funcionário</th>
+                        <th className="p-2">Situação</th>
+                        <th className="p-2">Conclusão</th>
+                        <th className="p-2">Vencimento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.slice(0, 20).map((item) => (
+                        <tr key={item.id} className="border-b border-sky-100">
+                          <td className="p-2">{item.funcionario}</td>
+                          <td className="p-2">{item.statusLabel}</td>
+                          <td className="p-2">{item.dataConclusao}</td>
+                          <td className="p-2">{item.dataVencimento}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {historyRows.length > 20 && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Exibindo 20 de {historyRows.length} registros. O PDF inclui todos os registros recuperados.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-700">
+                  Nenhum registro encontrado para esta qualificação e os filtros de setor, função e funcionário.
+                </p>
+              )}
+              <p className="mt-3 text-xs text-slate-600">
+                As situações e o prazo do painel de Compliance aplicam-se aos requisitos obrigatórios abaixo, não ao histórico.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+      <h3 className="mt-5 text-sm font-semibold text-slate-900">Requisitos obrigatórios (matriz de Compliance)</h3>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Pessoas no recorte" value={summary.pessoas} />
         <Metric label="Requisitos" value={summary.requisitos_obrigatorios} />
