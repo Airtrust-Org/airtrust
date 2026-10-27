@@ -247,8 +247,6 @@ export function buildEnrollmentCompletionDecision(
     explicitFailure?: boolean;
     administrativeAuthorized?: boolean;
     administrativeReason?: unknown;
-    /** Active package is study-only (manifest assessment NONE/EXTERNAL): no score applies. */
-    studyOnly?: boolean;
     administrativeScoreOverride?: boolean;
   } = {},
 ): LmsCompletionDecision {
@@ -262,8 +260,7 @@ export function buildEnrollmentCompletionDecision(
   // An explicit, server-owned course policy distinguishes formative participation
   // from graded assessment. Only FORMATIVE can omit a score; missing/unknown
   // policy stays SCORED (fail-closed, including legacy rows and test fixtures).
-  const isFormative = (row.scorm_assessment_policy === 'FORMATIVE' || options.studyOnly === true) &&
-    row.tipo_conteudo === 'scorm';
+  const isFormative = row.scorm_assessment_policy === 'FORMATIVE' && row.tipo_conteudo === 'scorm';
   const requiresAssessment = interactive && !isFormative &&
     (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
   const statuses = source === 'scorm' || source === 'administrative' || source === 'manual'

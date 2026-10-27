@@ -15,7 +15,6 @@ import {
   type EnrollmentEvidenceRow,
 } from '../services/lms-enrollment-completion-decision';
 import { loadScormManifestClosureEvidence } from '../services/lms-scorm-completion-context';
-import { isStudyOnlyAssessmentMode } from '../services/lms-completion-manifest-evidence';
 import { describeLmsCompletionBlocker } from '../services/lms-completion-blockers';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
@@ -273,7 +272,6 @@ async function guardScormCommit(
     }, closure);
   }
   const decision = buildDecision(row, 'scorm', incoming, assetSessionValid, {
-    studyOnly: isStudyOnlyAssessmentMode(manifest?.coverage.assessment_mode),
     explicitCompletion:
       ['completed', 'complete'].includes(completion) || incoming.completion_candidate === true,
     explicitFailure: failureSignal,
@@ -385,7 +383,6 @@ async function guardManualFinalize(
   // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
   // Other manual finalizations remain in the non-SCORM, fail-closed policy.
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
-    studyOnly: isStudyOnlyAssessmentMode(manifest?.coverage.assessment_mode),
     explicitCompletion: isScorm ? true : storedCompletion,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
