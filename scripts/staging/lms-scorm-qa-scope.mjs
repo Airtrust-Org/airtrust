@@ -93,6 +93,20 @@ export function assertDisposableQaCourseReadback(course, expected) {
  * Only mutating Playwright requests belong in this trace. No network I/O,
  * grant, conformance, activation or certification is performed here.
  */
+/** The Worker returns a normalized ZIP member path, never an external URL. */
+function isCanonicalQaLaunchPath(value) {
+  if (typeof value !== 'string' || !value || value.length > 350 ||
+      value !== value.normalize('NFC') || value.startsWith('/') ||
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value) ||
+      /[\\?#\u0000-\u001f\u007f]/.test(value)) return false;
+  // Escaped dot segments and separators must not pass as an apparently safe
+  // readback path. The Worker normalizes ZIP paths before returning them.
+  try { if (decodeURIComponent(value) !== value) return false; }
+  catch { return false; }
+  return value.split('/').every(segment => segment !== '' &&
+    segment !== '.' && segment !== '..');
+}
+
 export function assertInactiveF5CandidateTrace({
   requests, tenantId, courseId, operationId, partCount, packageSha256, zipBytes, receipt,
 }) {
@@ -108,8 +122,7 @@ export function assertInactiveF5CandidateTrace({
       !receipt || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.packageId ?? '') ||
       receipt.packageId === operationId ||
       receipt.r2Prefix !== `lms/scorm/${tenantId}/${courseId}/_candidates/${receipt.packageId}/` ||
-      typeof receipt.launchFile !== 'string' || !receipt.launchFile ||
-      receipt.launchFile.startsWith('/') || receipt.launchFile.includes('..') ||
+      !isCanonicalQaLaunchPath(receipt.launchFile) ||
       receipt.packageSha256 !== packageSha256 ||
       receipt.zipBytes !== zipBytes || receipt.status !== 'VALIDATED' ||
       receipt.scormVersion !== '1.2' ||

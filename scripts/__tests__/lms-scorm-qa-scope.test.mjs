@@ -187,7 +187,26 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
     activationRequestObserved: false, independentReadbackVerified: false,
     functionalCertificationVerified: false, uploadParts: 2,
   });
+  // A canonical nested ZIP member remains valid; unsafe launch URLs do not.
+  assert.equal(assertInactiveF5CandidateTrace({
+    ...valid, receipt: { ...valid.receipt, launchFile: 'lessons/intro.html' },
+  }).candidate, 'VALIDATED');
   const bad = [
+    { receipt: { ...valid.receipt, launchFile: "https://evil.example/steal" } },
+    { receipt: { ...valid.receipt, launchFile: "C:/index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "/index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "%2e%2e/index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "folder/%2Findex.html" } },
+    { receipt: { ...valid.receipt, launchFile: "folder/../index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "folder/./index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "folder//index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "folder\\index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "index.html?token=1" } },
+    { receipt: { ...valid.receipt, launchFile: "index.html#frag" } },
+    { receipt: { ...valid.receipt, launchFile: "index.html\n" } },
+    { receipt: { ...valid.receipt, launchFile: "ftp:payload" } },
+    { receipt: { ...valid.receipt, launchFile: "café/index.html" } },
+    { receipt: { ...valid.receipt, launchFile: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
     { requests: [...valid.requests, req('POST', '/activate')] },
     { requests: [valid.requests[0], valid.requests[2], valid.requests[1], valid.requests[3]] },
     { requests: [valid.requests[0], valid.requests[0], valid.requests[2], valid.requests[3]] },
