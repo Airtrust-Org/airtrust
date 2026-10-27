@@ -201,9 +201,10 @@ function summarize(rows: QualificationHistoryReportRow[]) {
       if (row.status === 'VENCIDA') acc.vencidas += 1;
       if (row.status === 'VENCENDO_30') acc.vencendo += 1;
       if (row.status === 'VALIDA') acc.vigentes += 1;
+      if (row.status === 'RENOVADA') acc.renovadas += 1;
       return acc;
     },
-    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0 },
+    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0, renovadas: 0 },
   );
 }
 
@@ -251,6 +252,7 @@ export async function exportQualificationHistoryExcel(
     ['Vencidas', stats.vencidas],
     ['Em vencimento', stats.vencendo],
     ['Vigentes', stats.vigentes],
+    ['Renovadas', stats.renovadas],
     ['Filtros', (context.filterLabels || []).join(' | ') || 'Sem filtros adicionais'],
   ]);
   summary.getRow(1).font = { bold: true, size: 14 };
@@ -332,7 +334,7 @@ export async function exportQualificationHistoryPdf(
     doc.text(`Emitido por: ${context.usuarioNome || 'Usuário autenticado'}`, margin, 24);
     doc.text(`Emissão: ${generatedAt.toLocaleString('pt-BR')}`, margin, 29);
     doc.text(
-      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}`,
+      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}  |  Renovadas: ${stats.renovadas}`,
       margin,
       34,
     );
