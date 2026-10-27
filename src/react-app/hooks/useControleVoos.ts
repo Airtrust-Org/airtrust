@@ -239,6 +239,13 @@ export type FrmsDispatchGateReasonCode =
   | 'FADIGA_ACUMULADA_ATENCAO'
   | 'DADO_ESTIMADO';
 
+export type CvFrmsDailyAssessmentReason =
+  | 'CHECKIN_NAO_CONFIRMADO'
+  | 'CHECKIN_OU_DADOS_INCONSISTENTES'
+  | 'EVIDENCIA_REGULATORIA_INSUFICIENTE'
+  | 'EVIDENCIA_OPERACIONAL_INSUFICIENTE'
+  | null;
+
 export interface CvFrmsCrewDispatchAssessment {
   funcionario_id: number;
   nome: string | null;
@@ -246,6 +253,7 @@ export interface CvFrmsCrewDispatchAssessment {
   frms_status: FrmsDispatchReadinessStatus;
   checkin_status: FrmsDispatchCheckinStatus;
   fadiga_diaria: FrmsDispatchFadigaNivel;
+  daily_assessment_reason: CvFrmsDailyAssessmentReason;
   fadiga_acumulada: FrmsDispatchFadigaNivel;
   reasons: FrmsDispatchGateReasonCode[];
   primary_reason: FrmsDispatchGateReasonCode | null;
@@ -784,7 +792,13 @@ export function useFrmsOperacionalPainel(data: string) {
       return extractPayload<CvFrmsOperacionalPainel>(response, EMPTY_FRMS_OPERACIONAL_PAINEL);
     },
     enabled: Boolean(data),
-    staleTime: 15_000,
+    // Outra sessão pode registrar o check-in com a fila já aberta.
+    // Revalidar no foco/reconexão e periodicamente, sem refetch oculto em background.
+    staleTime: 0,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
     retry: 1,
   });
 }
