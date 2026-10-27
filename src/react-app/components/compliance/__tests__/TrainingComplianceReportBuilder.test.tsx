@@ -226,12 +226,12 @@ describe('TrainingComplianceReportBuilder', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Somente renovadas' }));
     expect(screen.getByRole('checkbox', { name: 'Renovadas' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Realizados' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Vencidos' })).not.toBeChecked();
+    expect(screen.getAllByRole('checkbox', { name: 'Realizados' })[0]).not.toBeChecked();
+    expect(screen.getAllByRole('checkbox', { name: 'Vencidos' })[0]).not.toBeChecked();
     expect(screen.getByText('Piloto Renovado')).toBeInTheDocument();
     expect(screen.queryByText('Piloto Vigente')).not.toBeInTheDocument();
     expect(screen.queryByText('Piloto Vencido')).not.toBeInTheDocument();
-    const onlyRenewed = screen.getByRole('button', { name: 'Gerar PDF do histórico (1 registros)' });
+    const onlyRenewed = screen.getByRole('button', { name: 'Gerar PDF do histórico (1 registro)' });
     fireEvent.click(onlyRenewed);
     await waitFor(() => expect(exportHistoryPdfMock).toHaveBeenLastCalledWith(
       [historical[0]],
