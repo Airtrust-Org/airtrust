@@ -310,6 +310,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node --test scripts/__tests__/f5-factory-v3-visual-witness.test.mjs
           node scripts/__tests__/factory-v3-browser.cjs
       - name: Bootstrap only the local synthetic LMS database and real bcrypt login
         shell: bash
