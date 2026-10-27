@@ -98,6 +98,54 @@ function snapshotItem(
 }
 
 describe('deriveCrewDispatchAssessment', () => {
+  it('exibe sinal do check-in íntegro mesmo quando compliance está inconclusivo, mantendo bloqueio', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      checkin_status: 'RECEBIDO',
+      estado_operacional: 'NAO_AVALIADO',
+      compliance_status: 'UNKNOWN',
+      snapshot_status: 'OK',
+      nivel_fadiga_calculado: 'BAIXO',
+    }));
+    expect(result.sinal_fadiga_checkin).toBe('NORMAL');
+    expect(result.fadiga_diaria).toBe('INDISPONIVEL');
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+    expect(result.daily_assessment_reason).toBe('EVIDENCIA_REGULATORIA_INSUFICIENTE');
+  });
+
+  it('check-in crítico prevalece sobre o rótulo calculado normal', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      nivel_fadiga_calculado: 'VERDE',
+      alertas: ['CHECKIN_CRITICO'],
+      estado_operacional: 'MITIGACAO_NECESSARIA',
+    }));
+    expect(result.sinal_fadiga_checkin).toBe('CRITICO');
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+  });
+
+  it('dado inconsistente, sem check-in ou nível desconhecido não inventa sinal normal', () => {
+    for (const overrides of [
+      { checkin_status: 'PENDENTE' as const },
+      { snapshot_status: 'INCOMPLETO' as const },
+      { sleep_data_source: 'AUSENTE' as const },
+      { nivel_fadiga_calculado: null },
+      { nivel_fadiga_calculado: 'FUTURO_DESCONHECIDO' },
+    ]) {
+      expect(deriveCrewDispatchAssessment(crewMember(), snapshotItem(overrides)).sinal_fadiga_checkin)
+        .toBe('INDISPONIVEL');
+    }
+  });
+
+  it('faixas canônicas de sinal de fadiga preservam cor sem recalcular limites', () => {
+    for (const [nivel, esperado] of [
+      ['VERDE', 'NORMAL'], ['BAIXO', 'NORMAL'], ['ALTA', 'NORMAL'],
+      ['AMARELO', 'ATENCAO'], ['ATENÇÃO', 'ATENCAO'], ['DEGRADADA', 'ATENCAO'],
+      ['VERMELHO', 'CRITICO'], ['BAIXA', 'CRITICO'],
+    ] as const) {
+      expect(deriveCrewDispatchAssessment(crewMember(), snapshotItem({ nivel_fadiga_calculado: nivel }))
+        .sinal_fadiga_checkin).toBe(esperado);
+    }
+  });
+
   it('mantém decisão não avaliada separada de check-in recebido com evidência regulatória desconhecida', () => {
     const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
       checkin_status: 'RECEBIDO', estado_operacional: 'NAO_AVALIADO',
@@ -295,6 +343,7 @@ describe('aggregateFlightDispatchAssessment', () => {
       frms_status: 'LIBERAVEL',
       checkin_status: 'RECEBIDO',
       fadiga_diaria: 'NORMAL',
+      sinal_fadiga_checkin: 'NORMAL',
       daily_assessment_reason: null,
       fadiga_acumulada: 'NORMAL',
       reasons: [],
