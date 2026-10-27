@@ -425,15 +425,13 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   test.setTimeout(90_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const course = state.courses.resume;
-  const forbidden: string[] = [];
+  const writes: Array<{ method: string; origin: string; pathname: string }> = [];
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
   page.on('request', request => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    const pathname = new URL(request.url()).pathname;
-    if (/\/scorm-package-versions\/|\/activate(?:\/|$)|\/scorm-upload\/streamed\/[^/]+\/(?:parts|complete)/.test(pathname)) {
-      forbidden.push(pathname);
-    }
+    const url = new URL(request.url());
+    writes.push({ method: request.method(), origin: url.origin, pathname: url.pathname });
   });
 
   await openCourseEditor(page, course);
@@ -454,8 +452,22 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   }, { timeout: 20_000 });
   await inactiveButton.click();
   const initResponse = await rejectedInit;
-  expect([401, 403], 'Disposable course must not have F5 candidate grant')
-    .toContain(initResponse.status());
-  expect(forbidden, 'Rejected intake must not reach R2 parts, conformance or activation')
-    .toEqual([]);
+  // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
+  expect(initResponse.status(), 'F5 grant denial must be HTTP 403').toBe(403);
+  const denial = await initResponse.json().catch(() => null) as {
+    success?: boolean; error?: unknown;
+  } | null;
+  expect(denial?.success).toBe(false);
+  expect(typeof denial?.error).toBe('string');
+  expect(/grant(?: SCORM)? F5|grant de staging/i.test(String(denial?.error)),
+    'Expected explicit F5 grant rejection, not an unrelated RBAC denial',
+  ).toBe(true);
+  // An exact allowlist also detects unexpected course writes or off-origin
+  // requests, beyond just upload parts, conformance and activation.
+  expect(writes, 'Denied intake must only POST init to the trusted staging Worker')
+    .toEqual([{
+      method: 'POST',
+      origin: 'https://' + STAGING_API_HOST,
+      pathname: initPath,
+    }]);
 });
