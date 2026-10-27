@@ -48,3 +48,18 @@ export function assertDisposableQaCleanupState(state, scope, runMarker) {
     return { id: item.id, kind, title };
   });
 }
+
+/** Verify actual Worker course identity before any QA cleanup or rollback. */
+export function assertDisposableQaCourseReadback(course, expected) {
+  if (!expected || !Number.isSafeInteger(expected.id) || expected.id <= 0 ||
+      typeof expected.title !== 'string' ||
+      !/^QA SCORM (Success|Reject|Timeout|Resume) [0-9]+-[0-9]+$/.test(expected.title) ||
+      !course || Number(course.id) !== expected.id ||
+      course.titulo !== expected.title ||
+      course.categoria !== 'QA Synthetic' ||
+      course.tipo_conteudo !== 'scorm' ||
+      (course.publicado !== 0 && course.publicado !== false)) {
+    throw new Error('QA_SCORM_CLEANUP_TARGET_IDENTITY_MISMATCH');
+  }
+  return true;
+}
