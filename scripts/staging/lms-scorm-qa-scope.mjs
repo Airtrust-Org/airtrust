@@ -136,6 +136,26 @@ export function assertInactiveF5CandidateTrace({
     })),
     { method: 'POST', pathname: `${base}/${operationId}/complete` },
   ];
+  // Bind the offline positive trace to the Worker protocol, not just URLs.
+  // Captured statuses and body sizes are assertions, NOT independent readbacks.
+  const init = requests[0], body = init?.body;
+  if (init?.responseStatus !== 201 || init.contentType !== 'application/json' ||
+      !body || typeof body !== 'object' || Array.isArray(body) ||
+      Object.keys(body).sort().join(',') !==
+        'arquivo_nome,expected_sha256,operation_id,zip_bytes' ||
+      body.operation_id !== operationId ||
+      body.expected_sha256 !== packageSha256 || body.zip_bytes !== zipBytes ||
+      body.arquivo_nome !== `f5-${packageSha256}-${operationId}.zip`) fail();
+  for (let part = 1; part <= partCount; part += 1) {
+    const item = requests[part];
+    const bytes = Math.min(8 * 1024 * 1024, zipBytes - (part - 1) * 8 * 1024 * 1024);
+    if (item?.responseStatus !== 200 ||
+        item.contentType !== 'application/octet-stream' ||
+        item.contentLength !== bytes || item.byteLength !== bytes) fail();
+  }
+  const complete = requests[partCount + 1];
+  if (complete?.responseStatus !== 202 || complete.byteLength !== 0) fail();
+
   for (let index = 0; index < expected.length; index += 1) {
     const observed = requests[index];
     if (!observed || observed.method !== expected[index].method ||

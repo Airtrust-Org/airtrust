@@ -150,7 +150,7 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
   const operationId = '123e4567-e89b-42d3-a456-426614174000';
   const packageSha256 = 'a'.repeat(64);
   const base = 'https://airtrust-api-staging.airtrust.workers.dev/api/lms/cursos/101/scorm-upload/streamed';
-  const req = (method, suffix) => ({ method, url: base + suffix });
+  const req = (method, suffix, details = {}) => ({ method, url: base + suffix, ...details });
   const valid = {
     tenantId: 9201, courseId: 101, operationId, partCount: 2, packageSha256,
     zipBytes: 8 * 1024 * 1024 + 1,
@@ -169,8 +169,18 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
         launchAssetSha256: 'c'.repeat(64), etagStable: true,
         memberIntegrityVerified: true, rangeRequests: 2 },
     },
-    requests: [req('POST', '/init'), req('PUT', `/${operationId}/parts/1`),
-      req('PUT', `/${operationId}/parts/2`), req('POST', `/${operationId}/complete`)],
+    requests: [
+      req('POST', '/init', { responseStatus: 201, contentType: 'application/json',
+        body: { operation_id: operationId, expected_sha256: packageSha256,
+          zip_bytes: 8 * 1024 * 1024 + 1,
+          arquivo_nome: `f5-${packageSha256}-${operationId}.zip` } }),
+      req('PUT', `/${operationId}/parts/1`, { responseStatus: 200,
+        contentType: 'application/octet-stream',
+        contentLength: 8 * 1024 * 1024, byteLength: 8 * 1024 * 1024 }),
+      req('PUT', `/${operationId}/parts/2`, { responseStatus: 200,
+        contentType: 'application/octet-stream', contentLength: 1, byteLength: 1 }),
+      req('POST', `/${operationId}/complete`, { responseStatus: 202, byteLength: 0 }),
+    ],
   };
   assert.deepEqual(assertInactiveF5CandidateTrace(valid), {
     candidate: 'VALIDATED', workerReceiptInactive: true,
@@ -187,6 +197,22 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
     { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url + '?bypass=1' } : x) },
     { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('/cursos/101/', '/cursos/102/') } : x) },
     { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('/parts/2', '/activate') } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, responseStatus: 403 } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, contentType: 'text/plain' } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: undefined } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: { ...x.body, operation_id: 'other' } } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: { ...x.body, expected_sha256: 'b'.repeat(64) } } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: { ...x.body, zip_bytes: 22 } } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: { ...x.body, arquivo_nome: 'unrelated.zip' } } : x) },
+    { requests: valid.requests.map((x, i) => i === 0 ? { ...x, body: { ...x.body, grant_override: true } } : x) },
+    { requests: valid.requests.map((x, i) => i === 1 ? { ...x, responseStatus: 403 } : x) },
+    { requests: valid.requests.map((x, i) => i === 1 ? { ...x, contentType: 'application/json' } : x) },
+    { requests: valid.requests.map((x, i) => i === 1 ? { ...x, contentLength: 1 } : x) },
+    { requests: valid.requests.map((x, i) => i === 1 ? { ...x, byteLength: 1 } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, contentLength: 0 } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, byteLength: 0 } : x) },
+    { requests: valid.requests.map((x, i) => i === 3 ? { ...x, responseStatus: 200 } : x) },
+    { requests: valid.requests.map((x, i) => i === 3 ? { ...x, byteLength: 1 } : x) },
     { receipt: { ...valid.receipt, status: 'ACTIVE' } },
     { receipt: { ...valid.receipt, packageSha256: 'b'.repeat(64) } },
     { receipt: { ...valid.receipt, zipBytes: valid.zipBytes - 1 } },
