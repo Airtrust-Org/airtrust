@@ -137,8 +137,9 @@ describe('deriveCrewDispatchAssessment', () => {
 
   it('faixas canônicas de sinal de fadiga preservam cor sem recalcular limites', () => {
     for (const [nivel, esperado] of [
-      ['VERDE', 'NORMAL'], ['BAIXO', 'NORMAL'], ['AMARELO', 'ATENCAO'],
-      ['MÉDIO', 'ATENCAO'], ['VERMELHO', 'CRITICO'],
+      ['VERDE', 'NORMAL'], ['BAIXO', 'NORMAL'], ['ALTA', 'NORMAL'],
+      ['AMARELO', 'ATENCAO'], ['ATENÇÃO', 'ATENCAO'], ['DEGRADADA', 'ATENCAO'],
+      ['VERMELHO', 'CRITICO'], ['BAIXA', 'CRITICO'],
     ] as const) {
       expect(deriveCrewDispatchAssessment(crewMember(), snapshotItem({ nivel_fadiga_calculado: nivel }))
         .sinal_fadiga_checkin).toBe(esperado);
