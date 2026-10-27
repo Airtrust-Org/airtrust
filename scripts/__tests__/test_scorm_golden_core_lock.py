@@ -1,5 +1,6 @@
 import importlib.util
 import hashlib
+import json
 import io
 import tempfile
 import unittest
@@ -52,6 +53,45 @@ class FactoryCoreLockTests(unittest.TestCase):
         result = module.verify_golden_core(self._write_zip(self.entries + [("app.js", b"drift")]), self.hashes)
         self.assertFalse(result["core_lock_pass"])
         self.assertIn("app.js:expected_exactly_one_found_2", result["errors"])
+
+    def test_registered_v3_hash_is_distinct_and_v2_is_unchanged(self):
+        self.assertEqual(
+            module.REGISTERED_VERSIONS[module.GOLDEN_MASTER_VERSION],
+            module.PINNED_CORE,
+        )
+        self.assertEqual(
+            module.REGISTERED_VERSIONS[module.FORMATIVE_V3_VERSION]["app.js"],
+            "95fda7d6d9013260bf4e7e8dadc4b25baea1bebf88c23126d945ed2dfa6a34ef",
+        )
+        for name in ("styles.css", "scorm_api.js"):
+            self.assertEqual(
+                module.REGISTERED_VERSIONS[module.FORMATIVE_V3_VERSION][name],
+                module.PINNED_CORE[name],
+            )
+
+    def test_unregistered_package_core_never_passes(self):
+        m = json.dumps({"factoryCoreVersion": "UNREVIEWED_CUSTOM_ENGINE"}).encode()
+        entries = [(n, m if n == "airtrust-completion-manifest.json" else v)
+                   for n, v in self.entries]
+        result = module.verify_golden_core(self._write_zip(entries))
+        self.assertFalse(result["core_lock_pass"])
+        self.assertIn("factoryCoreVersion:UNREGISTERED", result["errors"])
+
+    def test_v2_bytes_cannot_impersonate_v3_by_declaring_version(self):
+        m = json.dumps({"factoryCoreVersion": module.FORMATIVE_V3_VERSION}).encode()
+        entries = [(n, m if n == "airtrust-completion-manifest.json" else v)
+                   for n, v in self.entries]
+        result = module.verify_golden_core(self._write_zip(entries))
+        self.assertFalse(result["core_lock_pass"])
+        self.assertEqual(result["golden_master_version"], module.FORMATIVE_V3_VERSION)
+        self.assertIn("app.js:CORE_DRIFT", result["errors"])
+
+    def test_malformed_manifest_fails_closed(self):
+        entries = [(n, b"not-json" if n == "airtrust-completion-manifest.json" else v)
+                   for n, v in self.entries]
+        result = module.verify_golden_core(self._write_zip(entries))
+        self.assertFalse(result["core_lock_pass"])
+        self.assertIn("airtrust-completion-manifest.json:INVALID_JSON", result["errors"])
 
     def test_nested_core_does_not_silently_pass(self):
         entries = [(f"course/{n}", v) for n, v in self.entries]
