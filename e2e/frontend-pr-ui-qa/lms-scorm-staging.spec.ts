@@ -426,10 +426,12 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const course = state.courses.resume;
   const writes: Array<{ method: string; origin: string; pathname: string }> = [];
+  let captureCandidateWrites = false;
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
   page.on('request', request => {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
+    // Editor initialization/auth refresh is not part of the candidate action.
+    if (!captureCandidateWrites || ['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
     const url = new URL(request.url());
     writes.push({ method: request.method(), origin: url.origin, pathname: url.pathname });
   });
@@ -450,6 +452,7 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
       u.pathname === initPath &&
       response.request().method() === 'POST';
   }, { timeout: 20_000 });
+  captureCandidateWrites = true;
   await inactiveButton.click();
   const initResponse = await rejectedInit;
   // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
