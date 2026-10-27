@@ -77,6 +77,31 @@ function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperaci
 }
 
 describe('ControleOperacionalFrmsPanel', () => {
+  it('distingue sinal de check-in recebido da decisão regulatória ainda não avaliada', async () => {
+    const response = painel();
+    response.voos[0].tripulacao[0] = {
+      ...response.voos[0].tripulacao[0],
+      checkin_status: 'RECEBIDO',
+      fadiga_diaria: 'INDISPONIVEL',
+      sinal_fadiga_checkin: 'NORMAL',
+      daily_assessment_reason: 'EVIDENCIA_REGULATORIA_INSUFICIENTE',
+      frms_status: 'NAO_LIBERADO',
+      reasons: ['DECISAO_FRMS_NAO_AVALIADO'],
+      primary_reason: 'DECISAO_FRMS_NAO_AVALIADO',
+    };
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/operacional')) return apiOk(response);
+      throw new Error('unexpected');
+    });
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    await waitFor(() => expect(screen.getByText(/Sinal do check-in: Normal/)).toBeInTheDocument());
+    expect(screen.getByText(/não indica liberação operacional/)).toBeInTheDocument();
+    expect(screen.getByText('ALERTA FRMS')).toBeInTheDocument();
+    expect(screen.getByText(/avaliação regulatória ainda não tem evidência suficiente/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/kss_score|horas_sono|wake_time|meds_ult_12h/i);
+  });
+
+
   it('mostra alerta consultivo quando ha check-in pendente', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(painel());
