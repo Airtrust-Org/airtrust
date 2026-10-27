@@ -1,0 +1,90 @@
+name: FRMS CV 2026-10-27 Production Readonly Check-in Reconciliation
+
+# Fixed operational incident. Never sends identifiers or clinical answers to logs.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Exact reviewed current main SHA (40 hex chars)'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type AIRTRUST_FRMS_CV_READONLY_20261027'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frms-cv-20261027-production-readonly
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: FRMS CV Fixed Scope / SHA Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert reviewed main, SHA and explicit fixed-day confirmation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_ONLY; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo SHA_INVALID; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo SHA_MISMATCH; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_FRMS_CV_READONLY_20261027' ]] || { echo CONFIRMATION_REQUIRED; exit 1; }
+          echo FRMS_CV_OCT27_GUARD_PASS
+
+  audit:
+    name: FRMS CV 27 Oct D1 SELECT Only
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test privacy, fixed target and read-only SQL contract
+        run: node --test scripts/__tests__/frms-cv-20261027-readonly-checkin.test.mjs
+      - name: Query fixed company, aircraft and date with SELECT only
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          PRODUCTION_D1_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
+          CONFIRM_READONLY: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          AUDIT_REPORT_PATH: ${{ runner.temp }}/frms-cv-oct27-readonly-sanitized.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/frms-cv-20261027-readonly-checkin.mjs
+          node --input-type=module <<'NODE'
+          import {readFileSync, appendFileSync} from 'node:fs';
+          const r = JSON.parse(readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8'));
+          if (r.date !== '2026-10-27' || r.readOnly !== true || r.writes !== 0 ||
+              !r.roles || typeof r.currentDate?.pending !== 'number') throw new Error('READ_ONLY_REPORT_INVALID');
+          const summary = {
+            date:r.date, sourceSha:r.sourceSha, matchedFlights:r.matchedFlights,
+            uniqueAssigned:r.uniqueAssigned, currentDate:r.currentDate,
+            roles:r.roles, softDeleted:r.assignedWithOnlySoftDeletedToday,
+            previousDay:r.assignedWithPreviousDayCheckinButMissingToday,
+            nextDay:r.assignedWithNextDayCheckinButMissingToday,
+            invalidEmployeeLinks:r.crewWithoutActiveEmployeeLink, duplicateCheckins:r.sameDayDuplicateCheckinEmployees,
+            writes:0,
+          };
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## FRMS/CV 27 Oct production SELECT-only\n\n' + JSON.stringify(summary,null,2) + '\n');
+          NODE
+      - name: Save sanitized aggregate evidence only
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frms-cv-oct27-readonly-aggregate
+          path: ${{ runner.temp }}/frms-cv-oct27-readonly-sanitized.json
+          if-no-files-found: ignore
+          retention-days: 14
