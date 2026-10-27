@@ -81,18 +81,47 @@ async function exercise(name,browserType,enrollment){
     }
     const next=sco.locator('#next');
     if(await next.isDisabled())throw Error('ADVANCE_DISABLED_'+counter+'_KIND_'+meta.kind);
+    // The wrapper commits asynchronously. Await the actual terminal
+    // SCORM_FINISH response before reading the passive backend state.
+    const passiveResponse=counter===100?page.waitForResponse(response=>{
+      if(!response.url().endsWith('/lms/matriculas/scorm/commit'))return false;
+      try{return response.request().postDataJSON()?.commit_event==='SCORM_FINISH'}catch{return false}
+    },{timeout:25000}):null;
     await next.click();
+    if(passiveResponse){
+      const response=await passiveResponse;
+      await response.finished();
+      if(!response.ok())throw Error('PASSIVE_FINISH_HTTP_'+response.status());
+      result.passiveFinishHttp=response.status();
+    }
     result.steps++;
   }
   result.afterFinish=read(enrollment);
+  const passiveCmi=JSON.parse(result.afterFinish.scorm?.suspend_data||'{}');
+  if(result.afterFinish.enrollment?.status==='CONCLUIDO'||
+     result.afterFinish.scorm?.lesson_status!=='completed'||
+     passiveCmi.a!==100||!Array.isArray(passiveCmi.d)||passiveCmi.d.length!==101||
+     passiveCmi.c!==true)
+    throw Error('PASSIVE_FINISH_READBACK_INCORRECT');
   // The SCO's final action is explicit, but the React player has a separate
   // "Confirm course completion" message. Test that separately; do NOT
   // classify this synthetic UI request as trusted certification.
+  const explicitResponse=page.waitForResponse(response=>{
+    if(!response.url().endsWith('/lms/matriculas/scorm/commit'))return false;
+    try{return response.request().postDataJSON()?.commit_event==='SCORM_USER_FINALIZE'}catch{return false}
+  },{timeout:25000});
   await page.evaluate(id=>{
     const outer=document.getElementById('outer');
     outer.contentWindow.postMessage({type:'lms:request-completion',matriculaId:id},location.origin);
   },enrollment);
-  await page.waitForTimeout(2500);
+  const confirmation=await explicitResponse;
+  await confirmation.finished();
+  if(!confirmation.ok())throw Error('EXPLICIT_FINALIZE_HTTP_'+confirmation.status());
+  result.explicitFinalizeHttp=confirmation.status();
+  for(let t=0;t<40;t++){
+    if(read(enrollment).enrollment?.status==='CONCLUIDO')break;
+    await page.waitForTimeout(250);
+  }
   result.afterExplicitRequest=read(enrollment);
   result.outcome=(
     result.afterFinish.enrollment?.status!=='CONCLUIDO'&&
