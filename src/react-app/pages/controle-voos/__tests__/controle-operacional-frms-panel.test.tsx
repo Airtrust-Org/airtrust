@@ -94,7 +94,7 @@ describe('ControleOperacionalFrmsPanel', () => {
       throw new Error('unexpected');
     });
     renderWithClient(<ControleOperacionalFrmsPanel />);
-    await waitFor(() => expect(screen.getByText(/Sinal do check-in: Normal/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Indicador diário de fadiga: Normal/)).toBeInTheDocument());
     expect(screen.getByText(/não indica liberação operacional/)).toBeInTheDocument();
     expect(screen.getByText('ALERTA FRMS')).toBeInTheDocument();
     expect(screen.getByText(/avaliação regulatória ainda não tem evidência suficiente/)).toBeInTheDocument();
