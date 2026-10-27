@@ -367,43 +367,48 @@ test('LMS SCORM staging: protocol pass stays uncertified, static reject and time
   writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
 
-// The EXTERNAL resume ZIP has no independent F5 admin grant or signed
-// editorial review. The legacy Replace Content path MUST reject it before
-// /scorm-upload. Actual candidate intake and Chromium/WebKit preview are
-// separately governed by staging-scorm-f5-readiness.yml with an exact grant.
-test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before upload', async ({ page }) => {
+// A selected EXTERNAL ZIP cannot use the legacy save/replace action. The
+// candidate-first editor disables that action instead of surfacing the old
+// synchronous replacement error. This is a UI guard only: it does not prove
+// Worker-side EXTERNAL rejection or any granted candidate conformance.
+test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP', async ({ page }) => {
   test.setTimeout(90_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const resume = state.courses.resume;
-  const mutations: string[] = [];
-  const unexpectedUploads: string[] = [];
-  page.on('request', request => {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    const url = request.url();
-    mutations.push(url);
-    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(new URL(url).pathname)) {
-      unexpectedUploads.push(new URL(url).pathname);
-    }
-  });
+  const attemptedWrites: Array<{ method: string; pathname: string }> = [];
 
   await openCourseEditor(page, resume);
-  await submitCourse(page);
-  await expect(page.getByText(/A substituição foi bloqueada antes do upload/i))
-    .toBeVisible({ timeout: 25_000 });
-  expect(unexpectedUploads,
-    'Unreviewed EXTERNAL ZIP must not start upload, conformance or activation',
-  ).toEqual([]);
-  expect(mutations.every(url => {
-    try { return new URL(url).hostname === STAGING_API_HOST; }
-    catch { return false; }
-  })).toBe(true);
+  // Fail closed even if a future UI regression tries an unsolicited mutation.
+  // Service Workers are blocked for this audit profile in Playwright config.
+  await page.route('**/*', async route => {
+    const method = route.request().method().toUpperCase();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      await route.continue();
+      return;
+    }
+    const pathname = new URL(route.request().url()).pathname;
+    attemptedWrites.push({ method, pathname });
+    await route.abort('blockedbyclient');
+  });
+
+  await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
+    .toBeDisabled();
+  await expect(page.getByRole('button', {
+    name: 'Carregar somente candidato inativo (QA)',
+  })).toBeVisible();
+  // Do not click the candidate button: a real init POST is separately governed
+  // and must not be mistaken for this no-write UI guard.
+  await page.waitForTimeout(500);
+  expect(attemptedWrites, 'Legacy replacement must not attempt a mutation')
+    .toEqual([]);
 
   const summary = {
-    source: 'GOVERNED_STAGING_LMS_SCORM_EXTERNAL_REPLACEMENT_GUARD',
+    source: 'GOVERNED_STAGING_LMS_SCORM_LEGACY_REPLACEMENT_UI_GUARD',
     scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
     exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
     rejectedBeforeUpload: true,
-    uploadRequests: unexpectedUploads.length,
+    rejectionMechanism: 'DISABLED_LEGACY_SUBMIT',
+    uploadRequests: 0,
     previewRendered: [],
     previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
     active: false,
