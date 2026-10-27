@@ -143,3 +143,40 @@ test('workflow and prepare runner enforce positive-scope block before staging op
   assert.ok(guardStep > 0 && guardStep < liveStep);
   assert.match(workflow, /assertQaScopeReadyForStaging\(process\.env\.QA_SCOPE\)/);
 });
+
+import { assertInactiveF5CandidateTrace } from '../staging/lms-scorm-qa-scope.mjs';
+
+test('future positive F5 candidate QA accepts only ordered inactive multipart intake', () => {
+  const operationId = '123e4567-e89b-42d3-a456-426614174000';
+  const packageSha256 = 'a'.repeat(64);
+  const base = 'https://airtrust-api-staging.airtrust.workers.dev/api/lms/cursos/101/scorm-upload/streamed';
+  const req = (method, suffix) => ({ method, url: base + suffix });
+  const valid = {
+    courseId: 101, operationId, partCount: 2, packageSha256, zipBytes: 1234,
+    receipt: { packageId: 'candidate-1', packageSha256, zipBytes: 1234, status: 'VALIDATED' },
+    requests: [req('POST', '/init'), req('PUT', `/${operationId}/parts/1`),
+      req('PUT', `/${operationId}/parts/2`), req('POST', `/${operationId}/complete`)],
+  };
+  assert.deepEqual(assertInactiveF5CandidateTrace(valid), {
+    candidate: 'VALIDATED', active: false, certified: false, uploadParts: 2,
+  });
+  const bad = [
+    { requests: [...valid.requests, req('POST', '/activate')] },
+    { requests: [valid.requests[0], valid.requests[2], valid.requests[1], valid.requests[3]] },
+    { requests: [valid.requests[0], valid.requests[0], valid.requests[2], valid.requests[3]] },
+    { requests: valid.requests.map((x, i) => i === 1 ? { ...x, method: 'POST' } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('https:', 'http:') } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('airtrust-api-staging', 'other') } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url + '?bypass=1' } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('/cursos/101/', '/cursos/102/') } : x) },
+    { requests: valid.requests.map((x, i) => i === 2 ? { ...x, url: x.url.replace('/parts/2', '/activate') } : x) },
+    { receipt: { ...valid.receipt, status: 'ACTIVE' } },
+    { receipt: { ...valid.receipt, packageSha256: 'b'.repeat(64) } },
+    { receipt: { ...valid.receipt, zipBytes: 1235 } },
+    { partCount: 1 }, { courseId: 0 }, { operationId: 'not-a-uuid' },
+  ];
+  for (const override of bad) {
+    assert.throws(() => assertInactiveF5CandidateTrace({ ...valid, ...override }),
+      { message: 'QA_SCORM_F5_POSITIVE_TRACE_INVALID' });
+  }
+});
