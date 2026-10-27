@@ -98,6 +98,43 @@ function snapshotItem(
 }
 
 describe('deriveCrewDispatchAssessment', () => {
+  it('mantém decisão não avaliada separada de check-in recebido com evidência regulatória desconhecida', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      checkin_status: 'RECEBIDO', estado_operacional: 'NAO_AVALIADO',
+      compliance_status: 'UNKNOWN', snapshot_status: 'OK',
+    }));
+    expect(result.checkin_status).toBe('RECEBIDO');
+    expect(result.fadiga_diaria).toBe('INDISPONIVEL');
+    expect(result.daily_assessment_reason).toBe('EVIDENCIA_REGULATORIA_INSUFICIENTE');
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+    expect(JSON.stringify(result)).not.toMatch(/horas_sono|kss_score|wake_time/);
+  });
+
+  it('check-in recebido mas incompleto não vira avaliação normal', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      checkin_status: 'RECEBIDO', estado_operacional: 'NAO_AVALIADO',
+      snapshot_status: 'INCOMPLETO', sleep_data_source: 'AUSENTE',
+    }));
+    expect(result.daily_assessment_reason).toBe('CHECKIN_OU_DADOS_INCONSISTENTES');
+    expect(result.fadiga_diaria).toBe('INDISPONIVEL');
+  });
+
+  it('check-in pendente continua não confirmado, sem falsa conclusão', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      checkin_status: 'PENDENTE', estado_operacional: 'NAO_AVALIADO',
+    }));
+    expect(result.daily_assessment_reason).toBe('CHECKIN_NAO_CONFIRMADO');
+    expect(result.frms_status).toBe('NAO_LIBERADO');
+  });
+
+  it('decisão concluída mantém valor canônico mesmo se fonte parcial exige atenção', () => {
+    const result = deriveCrewDispatchAssessment(crewMember(), snapshotItem({
+      checkin_status: 'RECEBIDO', estado_operacional: 'ATENCAO',
+    }));
+    expect(result.daily_assessment_reason).toBeNull();
+    expect(result.fadiga_diaria).toBe('ATENCAO');
+  });
+
   it('1) tripulante escalado hoje + check-in ausente => NAO_LIBERADO', () => {
     const result = deriveCrewDispatchAssessment(
       crewMember(),
@@ -258,6 +295,7 @@ describe('aggregateFlightDispatchAssessment', () => {
       frms_status: 'LIBERAVEL',
       checkin_status: 'RECEBIDO',
       fadiga_diaria: 'NORMAL',
+      daily_assessment_reason: null,
       fadiga_acumulada: 'NORMAL',
       reasons: [],
       primary_reason: null,
