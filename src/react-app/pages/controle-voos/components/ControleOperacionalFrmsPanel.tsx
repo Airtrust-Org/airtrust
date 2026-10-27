@@ -141,7 +141,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
           <span className="block">{FADIGA_LABELS[membro.fadiga_diaria] ?? membro.fadiga_diaria}</span>
           {membro.sinal_fadiga_checkin && membro.sinal_fadiga_checkin !== 'INDISPONIVEL' && (
             <span className={cn('mt-1 block max-w-xs text-xs font-normal', fadigaClass(membro.sinal_fadiga_checkin))}>
-              Sinal do check-in: {FADIGA_LABELS[membro.sinal_fadiga_checkin]} (não indica liberação operacional)
+              Indicador diário de fadiga: {FADIGA_LABELS[membro.sinal_fadiga_checkin]} (pode incluir efetividade projetada; não indica liberação operacional)
             </span>
           )}
           {membro.fadiga_diaria === 'INDISPONIVEL' && membro.daily_assessment_reason && (
