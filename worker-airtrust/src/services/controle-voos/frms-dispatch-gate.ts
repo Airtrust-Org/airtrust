@@ -26,6 +26,14 @@ export type DispatchFadigaNivel = 'NORMAL' | 'ATENCAO' | 'CRITICO' | 'INDISPONIV
 
 export type DispatchCheckinStatus = 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL' | 'INDISPONIVEL';
 
+/** Motivo sanitizado: check-in não é sinônimo de decisão regulatória completa. */
+export type DispatchDailyAssessmentReason =
+  | 'CHECKIN_NAO_CONFIRMADO'
+  | 'CHECKIN_OU_DADOS_INCONSISTENTES'
+  | 'EVIDENCIA_REGULATORIA_INSUFICIENTE'
+  | 'EVIDENCIA_OPERACIONAL_INSUFICIENTE'
+  | null;
+
 export type DispatchGateReasonCode =
   | 'TRIPULACAO_AUSENTE'
   | 'CHECKIN_DIARIO_PENDENTE'
@@ -103,6 +111,8 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   frms_status: DispatchReadinessStatus;
   checkin_status: DispatchCheckinStatus;
   fadiga_diaria: DispatchFadigaNivel;
+  /** Explica por que a avaliação diária permanece inconclusiva, sem dados sensíveis. */
+  daily_assessment_reason: DispatchDailyAssessmentReason;
   fadiga_acumulada: DispatchFadigaNivel;
   reasons: DispatchGateReasonCode[];
   primary_reason: DispatchGateReasonCode | null;
@@ -137,6 +147,22 @@ function mapEstadoToFadigaNivel(
     default:
       return 'INDISPONIVEL';
   }
+}
+
+/** Só a decisão canônica conclui a avaliação; check-in recebido sozinho não libera. */
+function resolveDailyAssessmentReason(
+  item: FrmsOperationalSnapshotItem | undefined,
+): DispatchDailyAssessmentReason {
+  if (!item || item.checkin_status !== 'RECEBIDO') return 'CHECKIN_NAO_CONFIRMADO';
+  if (item.estado_operacional !== 'NAO_AVALIADO') return null;
+  if (
+    item.snapshot_status === 'INCOMPLETO' ||
+    item.alertas.includes('DADO_INCONSISTENTE') ||
+    item.sleep_data_source === 'AUSENTE' ||
+    item.wake_data_source === 'AUSENTE'
+  ) return 'CHECKIN_OU_DADOS_INCONSISTENTES';
+  if (item.compliance_status === 'UNKNOWN') return 'EVIDENCIA_REGULATORIA_INSUFICIENTE';
+  return 'EVIDENCIA_OPERACIONAL_INSUFICIENTE';
 }
 
 function mapQuinzenaToFadigaNivel(status: FrmsFortnightStatus | undefined): DispatchFadigaNivel {
@@ -219,6 +245,7 @@ export function deriveCrewDispatchAssessment(
     frms_status,
     checkin_status: item?.checkin_status ?? 'INDISPONIVEL',
     fadiga_diaria: mapEstadoToFadigaNivel(item?.estado_operacional),
+    daily_assessment_reason: resolveDailyAssessmentReason(item),
     fadiga_acumulada: mapQuinzenaToFadigaNivel(item?.fortnight_indicator?.status_quinzena),
     reasons: reasonList,
     primary_reason: pickPrimaryReason(reasonList),
