@@ -29,3 +29,48 @@ test('caller cannot mutate the canonical scope fixture list', () => {
   selected.push('success');
   assert.deepEqual(fixtureKindsForQaScope('candidate-first-no-grant'), ['resume']);
 });
+
+import { assertDisposableQaCleanupState } from '../staging/lms-scorm-qa-scope.mjs';
+
+const marker = '40471008003-1';
+const makeState = (scope = 'candidate-first-no-grant') => ({
+  schema_version: 1,
+  run_marker: marker,
+  courses: Object.fromEntries(fixtureKindsForQaScope(scope).map((kind, index) => {
+    const label = { success: 'Success', reject: 'Reject', timeout: 'Timeout', resume: 'Resume' }[kind];
+    return [kind, {
+      id: index + 101,
+      kind,
+      title: 'QA SCORM ' + label + ' ' + marker,
+      zip_name: 'qa-scorm-' + kind + '-' + marker + '.zip',
+    }];
+  })),
+});
+
+test('cleanup only accepts the exact run-scoped synthetic fixtures', () => {
+  assert.deepEqual(assertDisposableQaCleanupState(makeState(), 'candidate-first-no-grant', marker),
+    [{ id: 101, kind: 'resume', title: 'QA SCORM Resume ' + marker }]);
+  assert.equal(assertDisposableQaCleanupState(makeState('all'), 'all', marker).length, 4);
+});
+
+test('cleanup fails closed for stale run, extra course and wrong identity', () => {
+  const cases = [
+    { state: { ...makeState(), run_marker: 'older-1' }, scope: 'candidate-first-no-grant' },
+    { state: { ...makeState(), courses: { ...makeState().courses, other: { id: 9 } } }, scope: 'candidate-first-no-grant' },
+    { state: { ...makeState(), courses: { resume: { ...makeState().courses.resume, id: 0 } } }, scope: 'candidate-first-no-grant' },
+    { state: { ...makeState(), courses: { resume: { ...makeState().courses.resume, title: 'Real course' } } }, scope: 'candidate-first-no-grant' },
+    { state: { ...makeState(), courses: { resume: { ...makeState().courses.resume, zip_name: 'other.zip' } } }, scope: 'candidate-first-no-grant' },
+    { state: makeState('all'), scope: 'candidate-first-no-grant' },
+  ];
+  for (const { state, scope } of cases) {
+    assert.throws(() => assertDisposableQaCleanupState(state, scope, marker),
+      /QA_SCORM_CLEANUP_(STATE|FIXTURE_IDENTITY)_MISMATCH/);
+  }
+});
+
+test('cleanup rejects duplicate IDs before any deletion', () => {
+  const state = makeState('all');
+  state.courses.reject.id = state.courses.success.id;
+  assert.throws(() => assertDisposableQaCleanupState(state, 'all', marker),
+    /QA_SCORM_CLEANUP_FIXTURE_IDENTITY_MISMATCH/);
+});

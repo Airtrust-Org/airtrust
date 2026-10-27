@@ -17,3 +17,34 @@ export function fixtureKindsForQaScope(scope = 'all') {
   }
   return [...FIXTURES_BY_SCOPE[scope]];
 }
+
+/**
+ * Cleanup is a destructive staging operation. A state file alone must never
+ * authorize deleting an arbitrary course ID (even inside the QA tenant).
+ * Validate the exact run, fixture count, names, kinds and unique IDs first.
+ */
+export function assertDisposableQaCleanupState(state, scope, runMarker) {
+  const kinds = fixtureKindsForQaScope(scope);
+  if (!/^\d+-\d+$/.test(String(runMarker)) ||
+      !state || state.schema_version !== 1 ||
+      state.run_marker !== runMarker ||
+      !state.courses || typeof state.courses !== 'object' ||
+      Array.isArray(state.courses) ||
+      Object.keys(state.courses).length !== kinds.length) {
+    throw new Error('QA_SCORM_CLEANUP_STATE_MISMATCH');
+  }
+  const labels = { success: 'Success', reject: 'Reject', timeout: 'Timeout', resume: 'Resume' };
+  const seen = new Set();
+  return kinds.map((kind) => {
+    const item = state.courses[kind];
+    const title = 'QA SCORM ' + labels[kind] + ' ' + runMarker;
+    const zipName = 'qa-scorm-' + kind + '-' + runMarker + '.zip';
+    if (!item || item.kind !== kind || item.title !== title ||
+        item.zip_name !== zipName ||
+        !Number.isSafeInteger(item.id) || item.id <= 0 || seen.has(item.id)) {
+      throw new Error('QA_SCORM_CLEANUP_FIXTURE_IDENTITY_MISMATCH');
+    }
+    seen.add(item.id);
+    return { id: item.id, kind, title };
+  });
+}

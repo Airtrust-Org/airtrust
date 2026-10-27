@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
-import { fixtureKindsForQaScope } from './lms-scorm-qa-scope.mjs';
+import { assertDisposableQaCleanupState, fixtureKindsForQaScope } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -315,12 +315,30 @@ async function cleanup() {
   assert(fs.existsSync(STATE_PATH), 'state QA SCORM ausente para cleanup');
   await assertPinnedStagingRelease();
   const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+  // Fail closed before authentication or any destructive request. Never trust
+  // course IDs from a state file without matching the exact run and scope.
+  const items = assertDisposableQaCleanupState(state, process.env.QA_SCOPE || 'all', RUN_MARKER);
   const token = await qaToken();
   const results = [];
 
-  for (const item of Object.values(state.courses || {})) {
-    const id = Number(item?.id);
-    if (!Number.isInteger(id) || id <= 0) continue;
+  for (const item of items) {
+    const id = item.id;
+    // Read back the current tenant-scoped course before deletion. A valid
+    // synthetic-looking state file must not be enough to delete a real course.
+    const existing = await authJson(token, `/api/lms/cursos/${id}`);
+    if (existing.status === 404) {
+      results.push({ kind: item.kind, removed: true });
+      continue;
+    }
+    assert(existing.status === 200 && existing.json?.success === true,
+      'QA_SCORM_CLEANUP_READBACK_FAILED');
+    const course = existing.json?.data;
+    assert(Number(course?.id) === id &&
+      course?.titulo === item.title &&
+      course?.categoria === 'QA Synthetic' &&
+      course?.tipo_conteudo === 'scorm' &&
+      (course?.publicado === 0 || course?.publicado === false),
+      'QA_SCORM_CLEANUP_TARGET_IDENTITY_MISMATCH');
     const removed = await authJson(token, `/api/lms/cursos/${id}`, { method: 'DELETE' });
     assert(
       removed.status === 200 || removed.status === 404,
