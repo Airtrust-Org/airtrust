@@ -8,7 +8,7 @@ import { installReadOnlyGuard } from './lib/read-only-network-guard.mjs';
  */
 const BASE = 'https://staging.airtrust.pages.dev';
 const DAY = '2026-10-27';
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: { cookies: [], origins: [] }, trace: 'off', screenshot: 'off', video: 'off' });
 
 async function loginViaRealStagingUi(page: Page) {
   const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim();
@@ -105,14 +105,49 @@ test('Coordenação FRMS: real auth, persisted GET and independently rendered de
   if (expectedSignals.length === 0) throw new Error('CV_FRMS_CLASSIFIED_DAILY_INDICATOR_FIXTURE_MISSING');
   const signalLabels = page.getByText(/Indicador diário de fadiga:/);
   await expect(signalLabels).toHaveCount(expectedSignals.length);
+
+  const fatigueLabel: Record<string, string> = {
+    NORMAL: 'Normal', ATENCAO: 'Atenção', CRITICO: 'Crítico', INDISPONIVEL: 'Sem conclusão',
+  };
+  const checkinLabel: Record<string, string> = {
+    RECEBIDO: 'Recebido', PENDENTE: 'Pendente', AUSENTE: 'Ausente',
+    NAO_APLICAVEL: 'Não confirmado', INDISPONIVEL: 'Indisponível',
+  };
+  const readinessLabel: Record<string, string> = {
+    LIBERAVEL: 'SEM ALERTAS', ATENCAO_COORDENACAO: 'ATENÇÃO FRMS', NAO_LIBERADO: 'ALERTA FRMS',
+  };
+  const reasonLabel: Record<string, string> = {
+    CHECKIN_NAO_CONFIRMADO: 'Não há check-in confirmado para esta data e vínculo.',
+    CHECKIN_OU_DADOS_INCONSISTENTES: 'Check-in recebido, mas faltam dados obrigatórios ou há inconsistência.',
+    EVIDENCIA_REGULATORIA_INSUFICIENTE: 'Check-in recebido; a avaliação regulatória ainda não tem evidência suficiente.',
+    EVIDENCIA_OPERACIONAL_INSUFICIENTE: 'Check-in recebido; faltam evidências para concluir a decisão operacional.',
+  };
+  if (crew.length > 100) throw new Error('CV_FRMS_UNEXPECTED_CREW_COUNT');
   for (const [i, c] of crew.entries()) {
+    const row = rows.nth(i);
+    const cells = row.locator('td');
+    await expect(cells.nth(3).locator('span')).toHaveText(checkinLabel[c.checkin_status || ''] || c.checkin_status || '');
+    await expect(cells.nth(4).locator('span').first())
+      .toHaveText(fatigueLabel[c.fadiga_diaria || ''] || c.fadiga_diaria || '');
+    await expect(cells.nth(6).locator('span'))
+      .toHaveText(readinessLabel[c.frms_status || ''] || c.frms_status || '');
+    if (c.sinal_fadiga_checkin && c.sinal_fadiga_checkin !== 'INDISPONIVEL') {
+      await expect(cells.nth(4)).toContainText(
+        'Indicador diário de fadiga: ' + (fatigueLabel[c.sinal_fadiga_checkin] || c.sinal_fadiga_checkin),
+      );
+      await expect(cells.nth(4)).toContainText('não indica liberação operacional');
+    } else {
+      await expect(cells.nth(4)).not.toContainText('Indicador diário de fadiga:');
+    }
+    if (c.fadiga_diaria === 'INDISPONIVEL' && c.daily_assessment_reason) {
+      await expect(cells.nth(4)).toContainText(reasonLabel[c.daily_assessment_reason]);
+    }
     if (c.frms_status === 'NAO_LIBERADO' && c.fadiga_diaria === 'INDISPONIVEL') {
       expect(c.daily_assessment_reason, 'Fail-closed regulatory decision needs reason').toBeTruthy();
     }
     if (c.sinal_fadiga_checkin === 'NORMAL' && c.fadiga_diaria === 'INDISPONIVEL') {
       expect(c.frms_status).not.toBe('LIBERAVEL');
     }
-    if (i > 100) throw new Error('CV_FRMS_UNEXPECTED_CREW_COUNT');
   }
   const payloadText = JSON.stringify(json.data);
   expect(payloadText).not.toMatch(/"(?:kss_score|horas_sono|wake_time|meds_ult_12h)"\s*:/i);
