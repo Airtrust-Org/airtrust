@@ -272,14 +272,32 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require governed LMS SCORM QA
+      - name: Require governed LMS SCORM QA with exact scope
         shell: bash
         env:
           GUARD: ${{ needs.guard.result }}
           QA: ${{ needs.qa.result }}
+          QA_SCOPE: ${{ inputs.qa_scope }}
         run: |
           set -euo pipefail
           echo "guard=$GUARD qa=$QA"
           [[ "$GUARD" == 'success' ]]
           [[ "$QA" == 'success' ]]
-          echo 'STAGING_LMS_SCORM_QA_PASS'
+          case "$QA_SCOPE" in
+            all)
+              echo 'STAGING_LMS_SCORM_QA_PASS'
+              echo 'Full staging LMS SCORM QA scope completed.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            resume-inactive-preview)
+              echo 'STAGING_LMS_SCORM_RESUME_NEGATIVE_GUARD_PASS_ONLY'
+              echo 'Only the EXTERNAL replacement negative guard was checked; no full QA, upload acceptance, or functional certification.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            candidate-first-no-grant)
+              echo 'STAGING_LMS_SCORM_CANDIDATE_NO_GRANT_NEGATIVE_PASS_ONLY'
+              echo 'Only the candidate-first no-grant negative guard was checked; no positive upload, conformance, activation, or functional certification.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo 'QA_SCOPE_NOT_RECOGNIZED' >&2
+              exit 1
+              ;;
+          esac
