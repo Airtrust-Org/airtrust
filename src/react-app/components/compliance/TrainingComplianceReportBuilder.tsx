@@ -453,7 +453,7 @@ export function TrainingComplianceReportBuilder({
             {historyExporting
               ? 'Gerando PDF...'
               : selectedTrainingType
-                ? `Gerar PDF do histórico (${historyRows.length} registros)`
+                ? `Gerar PDF do histórico (${historyRows.length} ${historyRows.length === 1 ? 'registro' : 'registros'})`
                 : 'Gerar PDF de requisitos'}
           </button>
           {selectedTrainingType && rows.length > 0 && (
