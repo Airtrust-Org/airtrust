@@ -295,6 +295,7 @@ describe('aggregateFlightDispatchAssessment', () => {
       frms_status: 'LIBERAVEL',
       checkin_status: 'RECEBIDO',
       fadiga_diaria: 'NORMAL',
+      daily_assessment_reason: null,
       fadiga_acumulada: 'NORMAL',
       reasons: [],
       primary_reason: null,
