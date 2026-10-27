@@ -103,9 +103,24 @@ export function assertInactiveF5CandidateTrace({
       !/^[0-9a-f]{64}$/.test(packageSha256 ?? '') ||
       !Number.isSafeInteger(zipBytes) || zipBytes < 22 || zipBytes > 80 * 1024 * 1024 ||
       !Array.isArray(requests) || requests.length !== partCount + 2 ||
-      !receipt || typeof receipt.packageId !== 'string' || !receipt.packageId ||
+      !receipt || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.packageId ?? '') ||
+      receipt.packageId === operationId ||
       receipt.packageSha256 !== packageSha256 ||
-      receipt.zipBytes !== zipBytes || receipt.status !== 'VALIDATED') fail();
+      receipt.zipBytes !== zipBytes || receipt.status !== 'VALIDATED' ||
+      receipt.scormVersion !== '1.2' ||
+      receipt.createdByOperation !== true || receipt.alreadyExisted !== false ||
+      receipt.active !== false || receipt.completionWritten !== false ||
+      receipt.certificateIssued !== false ||
+      receipt.structural?.status !== 'PASS' ||
+      receipt.completionManifest?.status !== 'PASS' ||
+      receipt.diagnostics?.status !== 'PASS' ||
+      receipt.r2Readback?.source !== 'WORKER_R2_STREAMED_ZIP_READBACK' ||
+      receipt.r2Readback?.zipSha256 !== packageSha256 ||
+      receipt.r2Readback?.zipBytes !== zipBytes ||
+      receipt.r2Readback?.etagStable !== true ||
+      receipt.r2Readback?.memberIntegrityVerified !== true ||
+      !Number.isSafeInteger(receipt.r2Readback?.rangeRequests) ||
+      receipt.r2Readback.rangeRequests < 1) fail();
 
   const base = `/api/lms/cursos/${courseId}/scorm-upload/streamed`;
   const expected = [
@@ -126,8 +141,12 @@ export function assertInactiveF5CandidateTrace({
         url.port || url.username || url.password || url.search || url.hash ||
         url.pathname !== expected[index].pathname) fail();
   }
+  // This is a Worker-reported receipt plus an HTTP request trace, NOT an
+  // independent D1/R2 readback or functional certification. The caller must
+  // separately prove persisted inactive state and previous active-version pin.
   return Object.freeze({
-    candidate: 'VALIDATED', active: false, certified: false,
-    uploadParts: partCount,
+    candidate: 'VALIDATED', workerReceiptInactive: true,
+    activationRequestObserved: false, independentReadbackVerified: false,
+    functionalCertificationVerified: false, uploadParts: partCount,
   });
 }
