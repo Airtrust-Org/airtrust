@@ -87,3 +87,47 @@ export function assertDisposableQaCourseReadback(course, expected) {
   }
   return true;
 }
+
+/**
+ * Offline contract for a future grant-authorized POSITIVE candidate QA.
+ * Only mutating Playwright requests belong in this trace. No network I/O,
+ * grant, conformance, activation or certification is performed here.
+ */
+export function assertInactiveF5CandidateTrace({
+  requests, courseId, operationId, partCount, packageSha256, zipBytes, receipt,
+}) {
+  const fail = () => { throw new Error('QA_SCORM_F5_POSITIVE_TRACE_INVALID'); };
+  if (!Number.isSafeInteger(courseId) || courseId < 1 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId ?? '') ||
+      !Number.isSafeInteger(partCount) || partCount < 1 || partCount > 1024 ||
+      !/^[0-9a-f]{64}$/.test(packageSha256 ?? '') ||
+      !Number.isSafeInteger(zipBytes) || zipBytes < 22 || zipBytes > 80 * 1024 * 1024 ||
+      !Array.isArray(requests) || requests.length !== partCount + 2 ||
+      !receipt || typeof receipt.packageId !== 'string' || !receipt.packageId ||
+      receipt.packageSha256 !== packageSha256 ||
+      receipt.zipBytes !== zipBytes || receipt.status !== 'VALIDATED') fail();
+
+  const base = `/api/lms/cursos/${courseId}/scorm-upload/streamed`;
+  const expected = [
+    { method: 'POST', pathname: `${base}/init` },
+    ...Array.from({ length: partCount }, (_, index) => ({
+      method: 'PUT', pathname: `${base}/${operationId}/parts/${index + 1}`,
+    })),
+    { method: 'POST', pathname: `${base}/${operationId}/complete` },
+  ];
+  for (let index = 0; index < expected.length; index += 1) {
+    const observed = requests[index];
+    if (!observed || observed.method !== expected[index].method ||
+        typeof observed.url !== 'string') fail();
+    let url;
+    try { url = new URL(observed.url); } catch { fail(); }
+    if (url.protocol !== 'https:' ||
+        url.hostname !== 'airtrust-api-staging.airtrust.workers.dev' ||
+        url.port || url.username || url.password || url.search || url.hash ||
+        url.pathname !== expected[index].pathname) fail();
+  }
+  return Object.freeze({
+    candidate: 'VALIDATED', active: false, certified: false,
+    uploadParts: partCount,
+  });
+}
