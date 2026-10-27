@@ -14,18 +14,14 @@
 export type ManifestAssessmentMode = 'NONE' | 'EXTERNAL' | 'SCORM';
 
 /**
- * Packages declaring NONE/EXTERNAL carry no assessment of their own: they are
- * study-only content. Completing the study (verified coverage + explicit learner
- * confirmation) is what concludes the enrollment — there is no score to wait for.
+ * The manifest only describes package content. NONE does not waive a scored
+ * assessment: the Worker must require server-owned FORMATIVE policy. EXTERNAL
+ * always requires independent proof and is never an alias for NONE.
  */
-export function isStudyOnlyAssessmentMode(mode: ManifestAssessmentMode | null | undefined): boolean {
-  return mode === 'NONE' || mode === 'EXTERNAL';
-}
-
 export interface ActiveCompletionManifest {
   packageVersion: string | null;
   requiredSlideIds: string[];
-  /** NONE/EXTERNAL = the package has no assessment of its own (study-only content). */
+  /** Package declaration only; never grants completion or certificate privileges. */
   assessmentMode: ManifestAssessmentMode;
   workerApprovalRequired: boolean;
 }
