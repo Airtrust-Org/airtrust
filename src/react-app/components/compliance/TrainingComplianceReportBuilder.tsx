@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Mail, Settings2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
+import {
+  exportQualificationHistoryPdf,
+  fetchQualificationHistoryReport,
+} from '@/react-app/pages/relatorios/qualificationHistoryReport';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import {
@@ -107,6 +111,7 @@ export function TrainingComplianceReportBuilder({
   const [statuses, setStatuses] = useState<ReportStatus[]>(PENDING_STATUSES);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [windowDays, setWindowDays] = useState('');
+  const [historyExporting, setHistoryExporting] = useState(false);
   const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [managerSectorIds, setManagerSectorIds] = useState<Set<number>>(new Set());
   const [automationDraft, setAutomationDraft] = useState<AutomationPolicy | null>(null);
@@ -206,8 +211,55 @@ export function TrainingComplianceReportBuilder({
   };
 
   const exportPdf = async () => {
+    if (reportRows.isError || !reportRows.data) {
+      toast.error('Não foi possível carregar os requisitos obrigatórios para exportação.');
+      return;
+    }
+    if (rows.length === 0) {
+      toast.warning('Não há requisitos obrigatórios nesse recorte. Para consultar certificados já cadastrados, use Exportar histórico (PDF).');
+      return;
+    }
     const report = await generateTrainingCompliancePdf(rows, summary, reportContext);
     downloadTrainingCompliancePdf(report.blob, report.filename);
+  };
+
+  const exportHistoryPdf = async () => {
+    const qualificationId = numericOrNull(trainingTypeId);
+    if (!qualificationId) {
+      toast.warning('Selecione uma qualificação para exportar seu histórico.');
+      return;
+    }
+
+    setHistoryExporting(true);
+    try {
+      const history = await fetchQualificationHistoryReport({
+        statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+        setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
+        funcionarioId: numericOrNull(employeeId) || undefined,
+        tipoId: qualificationId,
+        funcao: funcaoNome || undefined,
+      });
+      if (history.length === 0) {
+        toast.warning('Nenhum registro cadastrado foi encontrado para a qualificação e o setor selecionados.');
+        return;
+      }
+      await exportQualificationHistoryPdf(history, {
+        empresaNome,
+        usuarioNome: user?.nome || user?.email || 'Usuário autenticado',
+        filterLabels: [
+          setorNome ? `Setor: ${setorNome}` : 'Todos os setores autorizados',
+          treinamentoNome ? `Qualificação: ${treinamentoNome}` : '',
+          funcaoNome ? `Função: ${funcaoNome}` : '',
+          funcionarioNome ? `Funcionário: ${funcionarioNome}` : '',
+          'Histórico: vigentes, em vencimento, vencidas e renovadas',
+        ].filter(Boolean),
+      });
+      toast.success(`PDF de histórico gerado com ${history.length} registro(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao gerar o histórico.');
+    } finally {
+      setHistoryExporting(false);
+    }
   };
 
   const sendManagers = useMutation({
@@ -297,11 +349,21 @@ export function TrainingComplianceReportBuilder({
             recorte selecionado.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void exportHistoryPdf()}
+            disabled={historyExporting || !trainingTypeId}
+            title="Usa o histórico cadastrado de Qualificações, incluindo registros renovados. Selecione a qualificação antes de exportar."
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            {historyExporting ? 'Gerando histórico...' : 'Exportar histórico (PDF)'}
+          </button>
           <button
             type="button"
             onClick={() => void exportPdf()}
-            disabled={reportRows.isLoading}
+            disabled={reportRows.isLoading || reportRows.isError}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
           >
             <Download className="h-4 w-4" /> Exportar PDF
