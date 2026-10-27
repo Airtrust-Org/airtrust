@@ -1,0 +1,91 @@
+name: Staging CV FRMS Coordination Read-Only Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AIRTRUST_CV_FRMS_STAGING_READONLY'
+        required: true
+        type: string
+      expected_deployed_sha:
+        description: 'Exact previously gated Worker + Pages staging release SHA'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Check exact release and staging provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate main ancestry, release gates and Worker/Pages SHA
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.expected_deployed_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo MAIN_ONLY; exit 1; }
+          [[ "$CONFIRMATION" == "AIRTRUST_CV_FRMS_STAGING_READONLY" ]] || { echo CONFIRMATION_INVALID; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo SHA_INVALID; exit 1; }
+          git merge-base --is-ancestor "$RELEASE_SHA" "$GITHUB_SHA" || { echo DEPLOYED_SHA_NOT_ANCESTOR; exit 1; }
+          node scripts/ci/verify-release-gates.mjs
+          node --input-type=module <<'NODE'
+          const sha=process.env.RELEASE_SHA;
+          const worker=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version',{headers:{'Cache-Control':'no-store'}});
+          if(!worker.ok) throw new Error('STAGING_WORKER_UNREACHABLE');
+          const version=await worker.json();
+          if(version?.data?.sourceSha!==sha||version?.data?.environment!=='staging') throw new Error('STAGING_WORKER_SHA_MISMATCH');
+          const pages=await fetch('https://staging.airtrust.pages.dev/',{headers:{'Cache-Control':'no-store'}});
+          if(!pages.ok||!(await pages.text()).includes(sha.slice(0,7))) throw new Error('STAGING_PAGES_SHA_MISMATCH');
+          console.log('CV_FRMS_STAGING_MATCHED_SHA');
+          NODE
+  browser:
+    name: Authenticated Coordenação CV/FRMS (strictly read-only)
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    env:
+      BASE_URL: https://staging.airtrust.pages.dev
+      STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require canonical staging credential pair
+        run: |
+          test "$STAGING_SMOKE_EMAIL" = "qa-agent@staging.airtrust.invalid"
+          test -n "$STAGING_SMOKE_PASSWORD"
+      - run: npm ci
+      - name: Validate QA test compile
+        run: >-
+          npx --no-install tsc --noEmit --skipLibCheck
+          --target es2022 --module nodenext --moduleResolution nodenext
+          --esModuleInterop --types node
+          e2e/staging-cv-frms-coordination-readonly.spec.ts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Visit real Coordination with session and read-only network guard
+        # --reporter=list disables HTML/JSON/JUnit files that might retain login responses.
+        # No screenshot, trace, video or browser artifact is uploaded.
+        run: npx playwright test e2e/staging-cv-frms-coordination-readonly.spec.ts --project=chromium --no-deps --retries=0 --reporter=list
