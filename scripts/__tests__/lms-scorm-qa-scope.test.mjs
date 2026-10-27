@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { fixtureKindsForQaScope } from '../staging/lms-scorm-qa-scope.mjs';
@@ -91,4 +93,14 @@ test('cleanup and failed-prepare rollback reject non-synthetic Worker readbacks'
   assert.throws(() => assertDisposableQaCourseReadback(valid,
     { ...expected, title: 'QA SCORM Resume stale-run' }),
     /QA_SCORM_CLEANUP_TARGET_IDENTITY_MISMATCH/);
+});
+
+// Catch accidental duplicate/partial cleanup blocks at PR-test time, before
+// the staging workflow receives credentials or reaches a disposable course.
+test('SCORM QA entrypoint parses before any staging request', () => {
+  const entrypoint = fileURLToPath(new URL('../staging/lms-scorm-staging-qa.mjs', import.meta.url));
+  assert.doesNotThrow(() => execFileSync(process.execPath, ['--check', entrypoint], {
+    timeout: 10_000,
+    stdio: 'pipe',
+  }), 'SCORM QA prepare/cleanup entrypoint must pass node --check');
 });
