@@ -61,6 +61,8 @@ export async function readScormQaBackendEvidence(params: {
     launched_package_sha256:string|null;
     last_committed_package_sha256:string|null;
     matricula_status:string; numero_ciclo:number;
+    enrollment_score_final:number|null;
+    enrollment_qualification_history_id:number|null;
   } | null;
   try {
     bind = await db.prepare(
@@ -68,6 +70,8 @@ export async function readScormQaBackendEvidence(params: {
             b.run_id, b.expires_at, b.launched_package_sha256,
             b.last_committed_package_sha256,
             m.status AS matricula_status,
+            m.score_final AS enrollment_score_final,
+            m.qualificacao_historico_id AS enrollment_qualification_history_id,
             cy.numero_ciclo
        FROM lms_scorm_qa_evidence_bindings b
        JOIN lms_matriculas m
@@ -90,6 +94,8 @@ export async function readScormQaBackendEvidence(params: {
       launched_package_sha256:string|null;
       last_committed_package_sha256:string|null;
       matricula_status:string; numero_ciclo:number;
+      enrollment_score_final:number|null;
+      enrollment_qualification_history_id:number|null;
     }>();
   } catch {
     // Missing QA schema, incompatible Schema V2 layout or D1 outage:
@@ -102,13 +108,15 @@ export async function readScormQaBackendEvidence(params: {
   });
   const state = await db.prepare(
     `SELECT cmi_json, suspend_data, lesson_status, completion_status,
-            success_status, score_raw, session_count, last_commit_at
+            success_status, score_raw, score_max, score_min, score_scaled,
+            session_count, last_commit_at
        FROM lms_progresso_scorm
       WHERE empresa_id = ? AND matricula_id = ?`,
   ).bind(empresaId, matriculaId).first<{
     cmi_json:string|null; suspend_data:string|null;
     lesson_status:string|null; completion_status:string|null;
     success_status:string|null; score_raw:number|null;
+    score_max:number|null; score_min:number|null; score_scaled:number|null;
     session_count:number|null; last_commit_at:string|null;
   }>();
   // F0's QA runtime, not a plan supplied by the test driver, must record
@@ -122,6 +130,15 @@ export async function readScormQaBackendEvidence(params: {
   } else if (bind.launched_package_sha256 !== null &&
              bind.launched_package_sha256 !== candidate.package_sha256) {
     throw new ApiError('SCORM_QA_LAUNCH_EDITION_DRIFT', 409);
+  }
+  // F0 is a suspend/resume-only synthetic exercise. Score columns other than
+  // score_raw and the enrollment's qualification pointer are independent D1
+  // evidence; neither may be silently treated as absent. This does NOT prove
+  // the absence of assessment attempts or external approvals.
+  if ([bind.enrollment_score_final, bind.enrollment_qualification_history_id,
+       state?.score_raw, state?.score_max, state?.score_min, state?.score_scaled]
+      .some(value => value !== null && value !== undefined)) {
+    throw new ApiError('SCORM_QA_GRADED_STATE_PRESENT', 409);
   }
   const histories = await db.prepare(
     `SELECT id, certificado_arquivo_id
