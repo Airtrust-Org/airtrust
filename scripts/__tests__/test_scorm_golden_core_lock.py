@@ -54,6 +54,16 @@ class FactoryCoreLockTests(unittest.TestCase):
         self.assertFalse(result["core_lock_pass"])
         self.assertIn("app.js:expected_exactly_one_found_2", result["errors"])
 
+    def test_checked_in_v3_engine_matches_registered_sha256(self):
+        source = SRC.parent / "cores" / "AIRTRUST_FORMATIVE_V3_CORE.app.js.txt"
+        self.assertTrue(source.is_file())
+        data = source.read_bytes()
+        self.assertGreater(len(data), 20000)
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            module.PINNED_FORMATIVE_V3["app.js"],
+        )
+
     def test_registered_v3_hash_is_distinct_and_v2_is_unchanged(self):
         self.assertEqual(
             module.REGISTERED_VERSIONS[module.GOLDEN_MASTER_VERSION],
