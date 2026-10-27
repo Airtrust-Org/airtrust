@@ -83,29 +83,38 @@ async function readMatriculaSnapshot(
     .first<MatriculaSnapshot>();
 }
 
-async function readCurrentMatriculaCycleId(db: D1Database, matriculaId: number) {
+// Tenant scoping (#1541): every cycle lookup is bound to empresa_id as well as
+// matricula_id. Callers that still lack a tenant keep the legacy behaviour only
+// because their matrícula id was already resolved under the tenant.
+async function readCurrentMatriculaCycleId(
+  db: D1Database,
+  matriculaId: number,
+  empresaId?: number | null,
+) {
   return db
     .prepare(
       `SELECT id
          FROM lms_matricula_ciclos
         WHERE matricula_id = ?
+          AND (? IS NULL OR empresa_id = ?)
           AND ciclo_atual = 1
           AND deleted_at IS NULL
         ORDER BY id DESC
         LIMIT 1`,
     )
-    .bind(matriculaId)
+    .bind(matriculaId, empresaId ?? null, empresaId ?? null)
     .first<{ id: number }>();
 }
 
-async function resolveNextCycleNumber(db: D1Database, matriculaId: number) {
+async function resolveNextCycleNumber(db: D1Database, matriculaId: number, empresaId: number) {
   const row = await db
     .prepare(
       `SELECT COALESCE(MAX(numero_ciclo), 0) AS max_numero
          FROM lms_matricula_ciclos
-        WHERE matricula_id = ?`,
+        WHERE matricula_id = ?
+          AND empresa_id = ?`,
     )
-    .bind(matriculaId)
+    .bind(matriculaId, empresaId)
     .first<{ max_numero: number | null }>();
 
   return Number(row?.max_numero ?? 0) + 1;
@@ -116,7 +125,7 @@ async function upsertCurrentMatriculaCycle(
   snapshot: MatriculaSnapshot,
   origin: string = DEFAULT_CYCLE_ORIGIN,
 ) {
-  const current = await readCurrentMatriculaCycleId(db, snapshot.id);
+  const current = await readCurrentMatriculaCycleId(db, snapshot.id, snapshot.empresa_id);
 
   if (current?.id) {
     await db
@@ -137,7 +146,9 @@ async function upsertCurrentMatriculaCycle(
                 tentativas = COALESCE(?, 0),
                 qualificacao_historico_id = ?,
                 updated_at = datetime('now')
-          WHERE id = ?`,
+          WHERE id = ?
+            AND empresa_id = ?
+            AND matricula_id = ?`,
       )
       .bind(
         snapshot.empresa_id,
@@ -155,13 +166,15 @@ async function upsertCurrentMatriculaCycle(
         snapshot.tentativas,
         snapshot.qualificacao_historico_id,
         current.id,
+        snapshot.empresa_id,
+        snapshot.id,
       )
       .run();
 
     return current.id;
   }
 
-  const numeroCiclo = await resolveNextCycleNumber(db, snapshot.id);
+  const numeroCiclo = await resolveNextCycleNumber(db, snapshot.id, snapshot.empresa_id);
   const insert = await db
     .prepare(
       `INSERT INTO lms_matricula_ciclos (
@@ -222,7 +235,7 @@ export async function ensureMatriculaCycle(
 
 export async function syncMatriculaCycleFromMatricula(
   db: D1Database,
-  params: { matriculaId: number; origin?: string },
+  params: { matriculaId: number; origin?: string; empresaId?: number },
 ) {
   return ensureMatriculaCycle(db, params);
 }
@@ -237,10 +250,11 @@ export async function syncMatriculaCycleHistoricoLink(
           SET qualificacao_historico_id = ?,
               updated_at = datetime('now')
         WHERE matricula_id = ?
+          AND empresa_id = ?
           AND ciclo_atual = 1
           AND deleted_at IS NULL`,
     )
-    .bind(params.historicoId, params.matriculaId)
+    .bind(params.historicoId, params.matriculaId, params.empresaId)
     .run();
 
   await db
@@ -250,6 +264,7 @@ export async function syncMatriculaCycleHistoricoLink(
                 SELECT id
                   FROM lms_matricula_ciclos
                  WHERE matricula_id = ?
+                   AND empresa_id = ?
                    AND ciclo_atual = 1
                    AND deleted_at IS NULL
                  ORDER BY id DESC
@@ -260,7 +275,7 @@ export async function syncMatriculaCycleHistoricoLink(
           AND empresa_id = ?
           AND deleted_at IS NULL`,
     )
-    .bind(params.matriculaId, params.historicoId, params.empresaId)
+    .bind(params.matriculaId, params.empresaId, params.historicoId, params.empresaId)
     .run();
 }
 
@@ -480,7 +495,7 @@ export async function resetMatriculaForNewCycle(
     if (typeof resumed !== 'object') {
       throw new Error('LMS_CANCELLED_PROGRESS_PRESERVATION_REQUIRED');
     }
-    const current = await readCurrentMatriculaCycleId(db, params.matriculaId);
+    const current = await readCurrentMatriculaCycleId(db, params.matriculaId, params.empresaId);
     return current?.id ?? null;
   }
 
@@ -556,11 +571,49 @@ export async function resetMatriculaForNewCycle(
          AND ${markerExists}`)
       .bind(current.id,params.empresaId,params.matriculaId,...guarded),
 
+    // Close the previous cycle and freeze its terminal summary from the
+    // enrollment row (still untouched at this point of the transaction). The
+    // validated qualification stays attached to the cycle that earned it;
+    // existing cycle values win, so nothing already recorded is rewritten.
     db.prepare(`UPDATE lms_matricula_ciclos
-       SET ciclo_atual=0,updated_at=datetime('now')
+       SET ciclo_atual=0,
+           status=(SELECT m.status FROM lms_matriculas m
+             WHERE m.id=lms_matricula_ciclos.matricula_id
+               AND m.empresa_id=lms_matricula_ciclos.empresa_id),
+           progresso_pct=COALESCE((SELECT m.progresso_pct FROM lms_matriculas m
+             WHERE m.id=lms_matricula_ciclos.matricula_id
+               AND m.empresa_id=lms_matricula_ciclos.empresa_id),progresso_pct),
+           score_final=COALESCE(score_final,(SELECT m.score_final FROM lms_matriculas m
+             WHERE m.id=lms_matricula_ciclos.matricula_id
+               AND m.empresa_id=lms_matricula_ciclos.empresa_id)),
+           data_inicio=COALESCE(data_inicio,(SELECT m.data_inicio FROM lms_matriculas m
+             WHERE m.id=lms_matricula_ciclos.matricula_id
+               AND m.empresa_id=lms_matricula_ciclos.empresa_id)),
+           data_conclusao=COALESCE(data_conclusao,(SELECT m.data_conclusao FROM lms_matriculas m
+             WHERE m.id=lms_matricula_ciclos.matricula_id
+               AND m.empresa_id=lms_matricula_ciclos.empresa_id)),
+           qualificacao_historico_id=COALESCE(qualificacao_historico_id,
+             (SELECT m.qualificacao_historico_id FROM lms_matriculas m
+               WHERE m.id=lms_matricula_ciclos.matricula_id
+                 AND m.empresa_id=lms_matricula_ciclos.empresa_id)),
+           updated_at=datetime('now')
        WHERE id=? AND empresa_id=? AND matricula_id=? AND ciclo_atual=1
          AND deleted_at IS NULL AND ${markerExists}`)
       .bind(current.id,params.empresaId,params.matriculaId,...guarded),
+
+    // Attribute an unlinked qualification to the cycle that validated it.
+    // Never re-point a qualification already linked to another cycle and
+    // never create/duplicate a qualification or certificate here.
+    db.prepare(`UPDATE qualificacoes_historico
+       SET lms_matricula_ciclo_id=?,updated_at=datetime('now')
+       WHERE empresa_id=? AND lms_matricula_ciclo_id IS NULL AND deleted_at IS NULL
+         AND id=(SELECT m.qualificacao_historico_id FROM lms_matriculas m
+           WHERE m.id=? AND m.empresa_id=?)
+         AND funcionario_id=(SELECT m.funcionario_id FROM lms_matriculas m
+           WHERE m.id=? AND m.empresa_id=?)
+         AND ${markerExists}`)
+      .bind(current.id,params.empresaId,params.matriculaId,params.empresaId,
+        params.matriculaId,params.empresaId,...guarded),
 
     db.prepare(`UPDATE lms_progresso_scorm
        SET lesson_status=NULL,completion_status=NULL,
@@ -622,7 +675,7 @@ export async function resetMatriculaForNewCycle(
       AND instr(COALESCE(new_values,''),?)>0 LIMIT 1`)
     .bind(params.empresaId,params.matriculaId,operationId).first<{ok:number}>();
   if (receipt?.ok !== 1) throw new Error('LMS_CYCLE_CONCURRENT_CHANGE');
-  const newCycle = await readCurrentMatriculaCycleId(db,params.matriculaId);
+  const newCycle = await readCurrentMatriculaCycleId(db,params.matriculaId,params.empresaId);
   if (!newCycle?.id || newCycle.id===current.id) {
     throw new Error('LMS_CYCLE_POSTCHECK_REQUIRED');
   }

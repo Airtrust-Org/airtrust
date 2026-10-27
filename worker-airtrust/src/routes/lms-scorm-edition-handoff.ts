@@ -25,7 +25,7 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
       SELECT m.id,m.curso_id,m.status,m.data_inicio,m.qualificacao_historico_id,
         cy.id AS ciclo_id,cy.data_inicio AS cycle_started_at,
         c.tipo_conteudo,c.scorm_package_r2_prefix,p.package_sha256,
-        ps.cmi_json
+        ps.cmi_json,ps.suspend_data
       FROM lms_matriculas m
       JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
         AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
@@ -43,19 +43,19 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
       .first<{id:number;curso_id:number;status:string;data_inicio:string|null;
         qualificacao_historico_id:number|null;ciclo_id:number;cycle_started_at:string|null;
         tipo_conteudo:string;scorm_package_r2_prefix:string;package_sha256:string;
-        cmi_json:string|null}>();
+        cmi_json:string|null;suspend_data:string|null}>();
     if (!row) throw new ApiError('Matrícula, ciclo ou pacote ativo não elegível', 409);
     const mismatch = await detectLmsEditionMismatch({
       bucket:c.env.BUCKET,contentType:row.tipo_conteudo,
       activePrefix:row.scorm_package_r2_prefix,empresaId,cursoId:Number(row.curso_id),
-      cmiJson:row.cmi_json,db,enrollmentStartedAt:row.data_inicio,
+      cmiJson:row.cmi_json,suspendData:row.suspend_data,db,enrollmentStartedAt:row.data_inicio,
     });
     if (!mismatch) throw new ApiError('A matrícula não exige reconciliação de edição', 409);
     const proposal = await readScormActiveResumeProposal({
       db,bucket:c.env.BUCKET,empresaId,cursoId:Number(row.curso_id),
       matriculaId:Number(row.id),cycleId:Number(row.ciclo_id),
       activePrefix:row.scorm_package_r2_prefix,
-      cycleStartedAt:row.cycle_started_at,cmiJson:row.cmi_json,
+      cycleStartedAt:row.cycle_started_at,cmiJson:row.cmi_json,suspendData:row.suspend_data,
       handoffHistoryEnabled:true,
     });
     const validResumeStatuses = ['MATCHED_ANCHOR','SUGGESTED_ANCHOR','START_ACTIVE'];

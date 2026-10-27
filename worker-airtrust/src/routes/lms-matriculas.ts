@@ -78,7 +78,7 @@ import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '.
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
-import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
+import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
@@ -1247,7 +1247,7 @@ app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), asyn
     )
     .bind(matriculaId, empresaId)
     .run();
-  await syncMatriculaCycleFromMatricula(db, { matriculaId });
+  await syncMatriculaCycleFromMatricula(db, { matriculaId, empresaId });
 
   await createLmsInAppNotification(db, {
     funcionarioId: existing.funcionario_id,
@@ -1497,8 +1497,8 @@ app.post('/scorm/commit', async (c) => {
       cmi_json: mergedCmiJson,
     },
   });
-  // Upsert progresso SCORM
-  await db
+  // Upsert progresso SCORM só enquanto o ciclo informado é o atual (#1541: guarda no próprio write).
+  assertCycleWrite((await db
     .prepare(
       `
       INSERT INTO lms_progresso_scorm
@@ -1506,7 +1506,7 @@ app.post('/scorm/commit', async (c) => {
          score_raw, score_max, score_min, score_scaled,
          session_time, total_time, suspend_data, launch_data, cmi_json,
          session_count, last_commit_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now') WHERE ${CYCLE_WRITE_GUARD}
       ON CONFLICT(matricula_id) DO UPDATE SET
         lesson_status = excluded.lesson_status,
         completion_status = excluded.completion_status,
@@ -1563,9 +1563,9 @@ app.post('/scorm/commit', async (c) => {
         d.launch_data ?? null,
         preferIncomingScormState,
       ),
-      mergedCmiJson,
+      mergedCmiJson, ...cycleGuardBinds(Number(d.ciclo_id), d.matricula_id, empresaId),
     )
-    .run();
+    .run()).meta?.changes);
 
   emitScormCommitTelemetry(c, {
     matriculaId: d.matricula_id,
@@ -1700,7 +1700,7 @@ app.post('/scorm/commit', async (c) => {
         empresaId,
       )
       .run();
-    await syncMatriculaCycleFromMatricula(db, { matriculaId: d.matricula_id });
+    await syncMatriculaCycleFromMatricula(db, { matriculaId: d.matricula_id, empresaId });
   }
 
   novoStatus = statusFinal;
@@ -2364,7 +2364,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       )
       .bind(status, observacoes ?? null, dataConclusao, matriculaId, empresaId)
       .run();
-    await syncMatriculaCycleFromMatricula(db, { matriculaId });
+    await syncMatriculaCycleFromMatricula(db, { matriculaId, empresaId });
   }
 
   const updated = await db

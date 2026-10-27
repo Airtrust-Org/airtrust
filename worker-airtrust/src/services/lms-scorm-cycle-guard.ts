@@ -38,3 +38,35 @@ export async function assertScormCommitCycle(
     );
   }
 }
+
+/**
+ * Write-time half of the cycle guard (#1541/#1422). `assertScormCommitCycle`
+ * runs before the SCORM merge; a governed renewal may commit between that read
+ * and the CMI upsert. The upsert therefore carries this predicate in its own
+ * statement, so a commit from an archived cycle writes nothing even under that
+ * race. Bind order: ciclo_id, matricula_id, empresa_id.
+ */
+export const SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL = `EXISTS (
+  SELECT 1 FROM lms_matricula_ciclos guard_cy
+   WHERE guard_cy.id = ? AND guard_cy.matricula_id = ? AND guard_cy.empresa_id = ?
+     AND guard_cy.ciclo_atual = 1 AND guard_cy.deleted_at IS NULL)`;
+
+export function scormActiveCycleWriteGuardBinds(
+  cicloId: number,
+  matriculaId: number,
+  empresaId: number,
+): [number, number, number] {
+  return [cicloId, matriculaId, empresaId];
+}
+
+/** Zero rows written by the guarded upsert means the claimed cycle was archived. */
+export function assertScormCycleWriteApplied(changes: unknown): void {
+  const n = Number(changes);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new ApiError(
+      'A sessão pertence a outro ciclo. Reabra o treinamento para continuar.',
+      409,
+      'LMS_SCORM_CYCLE_MISMATCH',
+    );
+  }
+}
