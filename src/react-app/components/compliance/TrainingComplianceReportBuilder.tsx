@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
 import {
   exportQualificationHistoryPdf,
-  fetchQualificationHistoryReport,
+  fetchQualificationHistoryForType,
+  buildQualificationHistoryReportRows,
 } from '@/react-app/pages/relatorios/qualificationHistoryReport';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -179,8 +180,43 @@ export function TrainingComplianceReportBuilder({
   const funcaoNome = catalogs?.funcoes.find((item) => item.id === Number(functionId))?.nome || null;
   const funcionarioNome =
     (catalogs?.funcionarios || []).find((item) => item.id === Number(employeeId))?.nome || null;
-  const treinamentoNome =
-    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId))?.nome || null;
+  const selectedTrainingType =
+    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId)) || null;
+  const treinamentoNome = selectedTrainingType?.nome || null;
+  const qualificationHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history', empresaAtualId,
+      sectorId, functionId, employeeId, trainingTypeId,
+      selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(selectedTrainingType && numericOrNull(trainingTypeId)),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
+  const historyRows = useMemo(
+    () => buildQualificationHistoryReportRows(qualificationHistory.data || []),
+    [qualificationHistory.data],
+  );
+  const historySummary = useMemo(() => ({
+    total: historyRows.length,
+    funcionarios: new Set((qualificationHistory.data || []).map((item) => item.funcionario_id)).size,
+    renovados: historyRows.filter((item) => item.status === 'RENOVADA').length,
+    vigentes: historyRows.filter((item) => item.status === 'VALIDA').length,
+    vencendo: historyRows.filter((item) => item.status === 'VENCENDO_30').length,
+    vencidos: historyRows.filter((item) => item.status === 'VENCIDA').length,
+  }), [historyRows, qualificationHistory.data]);
   const allStatusesSelected = sameStatuses(statuses, ALL_STATUSES);
   const summary = useMemo<TrainingComplianceReportSummary>(() => {
     const compliant = rows.filter(
@@ -232,13 +268,7 @@ export function TrainingComplianceReportBuilder({
 
     setHistoryExporting(true);
     try {
-      const history = await fetchQualificationHistoryReport({
-        statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
-        setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
-        funcionarioId: numericOrNull(employeeId) || undefined,
-        tipoId: qualificationId,
-        funcao: funcaoNome || undefined,
-      });
+      const history = qualificationHistory.data || (await qualificationHistory.refetch()).data || [];
       if (history.length === 0) {
         toast.warning('Nenhum registro cadastrado foi encontrado para a qualificação e o setor selecionados.');
         return;
@@ -353,7 +383,7 @@ export function TrainingComplianceReportBuilder({
           <button
             type="button"
             onClick={() => void exportHistoryPdf()}
-            disabled={historyExporting || !trainingTypeId}
+            disabled={historyExporting || qualificationHistory.isFetching || !selectedTrainingType}
             title="Usa o histórico cadastrado de Qualificações, incluindo registros renovados. Selecione a qualificação antes de exportar."
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
           >
