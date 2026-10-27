@@ -9,10 +9,15 @@ const access=()=>({
 });
 const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
 function dbMock({binding=true,history=[],candidate=true,table=true,
-  launchedSha=qsha,committedSha=qsha}:{
+  launchedSha=qsha,committedSha=qsha,
+  enrollmentScoreFinal=null,enrollmentQualificationHistoryId=null,
+  scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
   launchedSha?:string|null;committedSha?:string|null;
+  enrollmentScoreFinal?:number|null;enrollmentQualificationHistoryId?:number|null;
+  scormScoreRaw?:number|null;scormScoreMax?:number|null;
+  scormScoreMin?:number|null;scormScoreScaled?:number|null;
 }={}){
   const statements:{sql:string;args:unknown[]}[]=[];
   const fake={
@@ -32,11 +37,14 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
               expires_at:'2999-01-01',
               launched_package_sha256:launchedSha,
               last_committed_package_sha256:committedSha,
-              matricula_status:'EM_ANDAMENTO',numero_ciclo:1}:null;
+              matricula_status:'EM_ANDAMENTO',numero_ciclo:1,
+              enrollment_score_final:enrollmentScoreFinal,
+              enrollment_qualification_history_id:enrollmentQualificationHistoryId}:null;
           }
           if(sql.includes('FROM lms_progresso_scorm'))
             return {cmi_json:'{"cmi":"real"}',suspend_data:'resume-01',lesson_status:'incomplete',
-              completion_status:null,success_status:null,score_raw:null,
+              completion_status:null,success_status:null,score_raw:scormScoreRaw,
+              score_max:scormScoreMax,score_min:scormScoreMin,score_scaled:scormScoreScaled,
               session_count:2,last_commit_at:'2026-10-19T12:00:00Z'};
           return null;
         },
@@ -88,6 +96,21 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
       .toEqual([997,88,555]);
     expect(statements.some(s=>/\b(?:INSERT|UPDATE|DELETE)\b/i.test(s.sql))).toBe(false);
     expect(statements.some(s=>s.sql.includes('sqlite_master'))).toBe(false);
+  });
+  it('rejects every independently stored grade and enrollment qualification link',async()=>{
+    for (const contaminated of [
+      {enrollmentScoreFinal:0},
+      {enrollmentQualificationHistoryId:901},
+      {scormScoreRaw:0},
+      {scormScoreMax:100},
+      {scormScoreMin:0},
+      {scormScoreScaled:0.9},
+    ]) {
+      const {db}=dbMock(contaminated);
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_GRADED_STATE_PRESENT/);
+    }
   });
   it('rejects duplicate qualification instead of passing synthetic replay',async()=>{
     const {db}=dbMock({history:[{id:700,certificado_arquivo_id:900},
