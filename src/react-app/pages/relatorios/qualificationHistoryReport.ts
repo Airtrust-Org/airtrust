@@ -5,6 +5,7 @@ export const QUALIFICATION_REPORT_STATUS_OPTIONS = [
   { value: 'VENCIDA', label: 'Vencidas' },
   { value: 'VENCENDO_30', label: 'Em vencimento' },
   { value: 'VALIDA', label: 'Vigentes' },
+  { value: 'RENOVADA', label: 'Renovadas' },
 ] as const;
 
 export type QualificationReportStatus =
@@ -161,7 +162,8 @@ export async function fetchQualificationHistoryReport(
     );
     if (Array.isArray(envelope.data)) allRows.push(...envelope.data);
     const meta = envelope.meta as HistoricoMeta | undefined;
-    totalPages = Math.max(1, Number(meta?.total_pages || 1));
+    const pagination = envelope.pagination as { pages?: number } | undefined;
+    totalPages = Math.max(1, Number(pagination?.pages || meta?.total_pages || 1));
     page += 1;
   } while (page <= totalPages);
 
