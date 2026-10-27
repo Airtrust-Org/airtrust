@@ -7,6 +7,7 @@ const fs=require('fs');
 const {DatabaseSync}=require('node:sqlite');
 const {createHash}=require('node:crypto');
 const {chromium,webkit}=require('@playwright/test');
+const {observeScormCommit}=require('./scorm-formative-commit-witness.cjs');
 const root=require('node:path').resolve('worker-airtrust/.wrangler/scorm-browser-qa');
 const fixture=JSON.parse(fs.readFileSync(root+'/fixture.json'));
 const auth=JSON.parse(fs.readFileSync(root+'/local-auth.json'));
@@ -81,19 +82,12 @@ async function exercise(name,browserType,enrollment){
     }
     const next=sco.locator('#next');
     if(await next.isDisabled())throw Error('ADVANCE_DISABLED_'+counter+'_KIND_'+meta.kind);
-    // The wrapper commits asynchronously. Await the actual terminal
-    // SCORM_FINISH response before reading the passive backend state.
-    const passiveResponse=counter===100?page.waitForResponse(response=>{
-      if(!response.url().endsWith('/lms/matriculas/scorm/commit'))return false;
-      try{return response.request().postDataJSON()?.commit_event==='SCORM_FINISH'}catch{return false}
-    },{timeout:25000}):null;
-    await next.click();
-    if(passiveResponse){
-      const response=await passiveResponse;
-      await response.finished();
-      if(!response.ok())throw Error('PASSIVE_FINISH_HTTP_'+response.status());
-      result.passiveFinishHttp=response.status();
-    }
+    // A passive finish is proven only by the matching completed Worker HTTP
+    // response. Earlier in-flight commits or a queued request are insufficient.
+    if(counter===100){
+      result.passiveFinishHttp=await observeScormCommit(
+        page,'SCORM_FINISH',()=>next.click());
+    }else await next.click();
     result.steps++;
   }
   result.afterFinish=read(enrollment);
@@ -106,18 +100,13 @@ async function exercise(name,browserType,enrollment){
   // The SCO's final action is explicit, but the React player has a separate
   // "Confirm course completion" message. Test that separately; do NOT
   // classify this synthetic UI request as trusted certification.
-  const explicitResponse=page.waitForResponse(response=>{
-    if(!response.url().endsWith('/lms/matriculas/scorm/commit'))return false;
-    try{return response.request().postDataJSON()?.commit_event==='SCORM_USER_FINALIZE'}catch{return false}
-  },{timeout:25000});
-  await page.evaluate(id=>{
-    const outer=document.getElementById('outer');
-    outer.contentWindow.postMessage({type:'lms:request-completion',matriculaId:id},location.origin);
-  },enrollment);
-  const confirmation=await explicitResponse;
-  await confirmation.finished();
-  if(!confirmation.ok())throw Error('EXPLICIT_FINALIZE_HTTP_'+confirmation.status());
-  result.explicitFinalizeHttp=confirmation.status();
+  result.explicitFinalizeHttp=await observeScormCommit(
+    page,'SCORM_USER_FINALIZE',()=>page.evaluate(id=>{
+      const outer=document.getElementById('outer');
+      outer.contentWindow.postMessage({
+        type:'lms:request-completion',matriculaId:id,
+      },location.origin);
+    },enrollment));
   for(let t=0;t<40;t++){
     if(read(enrollment).enrollment?.status==='CONCLUIDO')break;
     await page.waitForTimeout(250);
