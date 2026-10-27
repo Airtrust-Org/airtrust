@@ -11,6 +11,7 @@ import FrmsCheckinFadiga, {
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
 import {
   buildFadigaPainelRequestPath,
+  buildCheckinHojePath,
   normalizeFadigaPainelDate,
   normalizeFadigaPainelPayload,
   type FadigaPainelEquipeItem,
@@ -206,6 +207,11 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(optionalBinaryResponseToPayload(null)).toBeNull();
     expect(optionalBinaryResponseToPayload(true)).toBe(true);
     expect(optionalBinaryResponseToPayload(false)).toBe(false);
+  });
+
+  it('a consulta de check-in usa a data explícita e não o relógio UTC do Worker', () => {
+    expect(buildCheckinHojePath('2026-10-27')).toBe('/frms/fadiga-checkin/me?date=2026-10-27');
+    expect(() => buildCheckinHojePath('27/10/2026')).toThrow(/FRMS_INVALID_OPERATIONAL_DATE/);
   });
 
   it('mapeia KSS para escala subjetiva legado-compativel', () => {
@@ -439,6 +445,37 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
   }
+
+  it('submete check-in para o dia operacional de Brasília mesmo quando UTC já virou', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-28T01:30:00Z')); // 27/10 22:30 Brasília
+      render(<FrmsCheckinFadiga />);
+      expect(screen.getByText(/Data operacional do check-in: 27\\/10\\/2026/)).toBeInTheDocument();
+      preencherFormularioValido();
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+        reference_date: '2026-10-27',
+        data_checkin: '2026-10-27',
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('impede que um formulário aberto antes da meia-noite envie silenciosamente no dia anterior', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-28T02:59:00Z')); // 27/10 23:59 Brasília
+      render(<FrmsCheckinFadiga />);
+      preencherFormularioValido();
+      vi.setSystemTime(new Date('2026-10-28T03:01:00Z')); // 28/10 00:01 Brasília
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      expect(mutateAsyncMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('renderiza KSS com titulo claro e descritores', () => {
     render(<FrmsCheckinFadiga />);
