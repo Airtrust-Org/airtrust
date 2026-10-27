@@ -297,7 +297,14 @@ export function TrainingComplianceReportBuilder({
             recorte selecionado.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/relatorios"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+            title="Abre o relatório de histórico de qualificações, incluindo certificados CMA cadastrados mesmo sem regra de obrigatoriedade na matriz de Compliance"
+          >
+            <Download className="h-4 w-4" /> Histórico de qualificações (PDF)
+          </a>
           <button
             type="button"
             onClick={() => void exportPdf()}
