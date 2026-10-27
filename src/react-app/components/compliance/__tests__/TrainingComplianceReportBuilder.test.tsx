@@ -173,11 +173,11 @@ describe('TrainingComplianceReportBuilder', () => {
     renderBuilder();
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
-    await screen.findByText(/em todos os setores autorizados, mas nenhum pertence ao setor/);
+    await screen.findByRole('button', { name: 'Ver em todos os setores' });
     expect(screen.queryByText('Carlos Piloto')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Ver em todos os setores' }));
     await screen.findByText('Carlos Piloto');
-    expect(screen.getByText('Operações')).toBeInTheDocument();
+    expect(within(screen.getByRole('table')).getByText('Operações')).toBeInTheDocument();
   });
 
   it('não produz PDF de Compliance vazio quando não existem requisitos obrigatórios', async () => {
