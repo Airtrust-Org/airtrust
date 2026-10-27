@@ -27,12 +27,12 @@ test('scope fixed to one tenant/date/aircraft and four SELECT-only SQL statement
   assert.equal(AIRCRAFT_PREFIX, 'PS-CDV');
   assert.deepEqual(Object.keys(QUERIES), ['tenant', 'flights', 'crew', 'checkins']);
   for (const sql of Object.values(QUERIES)) {
-    assert.match(sql, /^SELECT\\s/);
-    assert.doesNotMatch(sql, /\\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|MERGE|TRUNCATE|PRAGMA)\\b|;/i);
+    assert.match(sql, /^SELECT\s/);
+    assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|MERGE|TRUNCATE|PRAGMA)\b|;/i);
   }
-  assert.match(QUERIES.checkins, /ch\\.empresa_id = \\?/);
-  assert.match(QUERIES.crew, /t\\.empresa_id = \\?/);
-  assert.match(QUERIES.flights, /prefixo = \\?/);
+  assert.match(QUERIES.checkins, /ch\.empresa_id = \?/);
+  assert.match(QUERIES.crew, /t\.empresa_id = \?/);
+  assert.match(QUERIES.flights, /prefixo = \?/);
 });
 
 test('one person assigned to two flights counts once and missing check-in remains pending', () => {
@@ -47,7 +47,7 @@ test('one person assigned to two flights counts once and missing check-in remain
   assert.deepEqual(r.roles.SIC, {assigned: 1, received: 0, pending: 1});
 });
 
-test('a check-in from yesterday or a soft-deleted one cannot mark today's check-in received', () => {
+test("a check-in from yesterday or a soft-deleted one cannot mark today's check-in received", () => {
   const f = fixture();
   f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-26', active: 1});
   f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-27', active: 0});
@@ -70,11 +70,11 @@ test('workflow requires explicit SHA, production environment and readonly confir
   const workflow = readFileSync(new URL('../../.github/workflows/frms-cv-20261027-readonly-checkin.yml', import.meta.url), 'utf8');
   const script = readFileSync(new URL('../production/frms-cv-20261027-readonly-checkin.mjs', import.meta.url), 'utf8');
   assert.match(workflow, /environment: production/);
-  assert.match(workflow, /permissions:\\s*\\n\\s*contents: read/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.match(workflow, /AIRTRUST_FRMS_CV_READONLY_20261027/);
   assert.match(workflow, /EXPECTED_SHA.*GITHUB_SHA/);
   assert.doesNotMatch(workflow, /wrangler d1 execute|deploy-airtrust|--apply|migrations apply/);
   assert.match(script, /PRODUCTION_TARGET_PIN_FAILED/);
   assert.match(script, /MUTATING_OR_MULTISTATEMENT_SQL_BLOCKED/);
-  assert.match(script, /writeFile\\(out/);
+  assert.match(script, /writeFile\(out/);
 });
