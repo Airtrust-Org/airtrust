@@ -94,17 +94,22 @@ export function assertDisposableQaCourseReadback(course, expected) {
  * grant, conformance, activation or certification is performed here.
  */
 export function assertInactiveF5CandidateTrace({
-  requests, courseId, operationId, partCount, packageSha256, zipBytes, receipt,
+  requests, tenantId, courseId, operationId, partCount, packageSha256, zipBytes, receipt,
 }) {
   const fail = () => { throw new Error('QA_SCORM_F5_POSITIVE_TRACE_INVALID'); };
-  if (!Number.isSafeInteger(courseId) || courseId < 1 ||
+  if (!Number.isSafeInteger(tenantId) || tenantId < 1 ||
+      !Number.isSafeInteger(courseId) || courseId < 1 ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId ?? '') ||
-      !Number.isSafeInteger(partCount) || partCount < 1 || partCount > 1024 ||
+      !Number.isSafeInteger(partCount) || partCount < 1 || partCount > 10 ||
       !/^[0-9a-f]{64}$/.test(packageSha256 ?? '') ||
       !Number.isSafeInteger(zipBytes) || zipBytes < 22 || zipBytes > 80 * 1024 * 1024 ||
+      partCount !== Math.ceil(zipBytes / (8 * 1024 * 1024)) ||
       !Array.isArray(requests) || requests.length !== partCount + 2 ||
       !receipt || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.packageId ?? '') ||
       receipt.packageId === operationId ||
+      receipt.r2Prefix !== `lms/scorm/${tenantId}/${courseId}/_candidates/${receipt.packageId}/` ||
+      typeof receipt.launchFile !== 'string' || !receipt.launchFile ||
+      receipt.launchFile.startsWith('/') || receipt.launchFile.includes('..') ||
       receipt.packageSha256 !== packageSha256 ||
       receipt.zipBytes !== zipBytes || receipt.status !== 'VALIDATED' ||
       receipt.scormVersion !== '1.2' ||
@@ -119,8 +124,9 @@ export function assertInactiveF5CandidateTrace({
       receipt.r2Readback?.zipBytes !== zipBytes ||
       receipt.r2Readback?.etagStable !== true ||
       receipt.r2Readback?.memberIntegrityVerified !== true ||
+      !/^[0-9a-f]{64}$/.test(receipt.r2Readback?.launchAssetSha256 ?? '') ||
       !Number.isSafeInteger(receipt.r2Readback?.rangeRequests) ||
-      receipt.r2Readback.rangeRequests < 1) fail();
+      receipt.r2Readback.rangeRequests < 1 || receipt.r2Readback.rangeRequests > 6) fail();
 
   const base = `/api/lms/cursos/${courseId}/scorm-upload/streamed`;
   const expected = [
