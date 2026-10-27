@@ -170,6 +170,62 @@ export async function fetchQualificationHistoryReport(
   return applyQualificationHistoryReportClientFilters(allRows, filters);
 }
 
+export interface QualificationHistoryTypeIdentity {
+  id: number;
+  nome: string;
+  codigo?: string | null;
+}
+
+function normalizeQualificationIdentity(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\\s+/g, ' ')
+    .toLocaleUpperCase('pt-BR');
+}
+
+/**
+ * Reconcile the canonical tipo ID with legacy history identified by code/name.
+ * The search endpoint enforces the same tenant, employee, sector and operational
+ * read scopes as the ID endpoint. Exact client-side identity checking prevents
+ * fuzzy search matches (e.g. CMA-2 or a matching employee name) leaking into the
+ * report. This is read-only and never creates requirements or qualifications.
+ */
+export async function fetchQualificationHistoryForType(
+  filters: QualificationHistoryReportFilters,
+  type: QualificationHistoryTypeIdentity,
+): Promise<HistoricoQualificacao[]> {
+  const directRows = await fetchQualificationHistoryReport({ ...filters, tipoId: type.id });
+  const searchTerm = String(type.codigo || type.nome || '').trim();
+  if (!searchTerm) return directRows;
+
+  const matchedRows = await fetchQualificationHistoryReport({
+    ...filters,
+    tipoId: undefined,
+    search: searchTerm,
+  });
+  const canonicalCode = normalizeQualificationIdentity(type.codigo);
+  const canonicalName = normalizeQualificationIdentity(type.nome);
+  const indexed = new Map<number, HistoricoQualificacao>(
+    directRows.map((row) => [row.id, row]),
+  );
+
+  for (const row of matchedRows) {
+    const rowCode = normalizeQualificationIdentity(row.qualificacao_codigo || row.codigo);
+    const rowName = normalizeQualificationIdentity(
+      row.qualificacao_nome || row.qualificacao_desc || row.tipo,
+    );
+    if ((canonicalCode && rowCode === canonicalCode) ||
+        (canonicalName && rowName === canonicalName) ||
+        Number(row.qualificacao_id) === type.id) {
+      indexed.set(row.id, row);
+    }
+  }
+
+  return Array.from(indexed.values());
+}
+
 export function buildQualificationHistoryReportRows(
   source: HistoricoQualificacao[],
 ): QualificationHistoryReportRow[] {
@@ -188,7 +244,7 @@ export function buildQualificationHistoryReportRows(
       categoria: row.qualificacao_categoria || row.categoria || '-',
       status,
       statusLabel: qualificationStatusLabel(status),
-      dataConclusao: formatDateBr(row.data_conclusao),
+      dataConclusao: formatDateBr(row.data_conclusao || row.data_realizacao),
       dataVencimento: formatDateBr(row.data_vencimento),
     };
   });
