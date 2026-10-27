@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
 import {
   exportQualificationHistoryPdf,
-  fetchQualificationHistoryReport,
+  fetchQualificationHistoryForType,
+  buildQualificationHistoryReportRows,
 } from '@/react-app/pages/relatorios/qualificationHistoryReport';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
@@ -179,8 +180,66 @@ export function TrainingComplianceReportBuilder({
   const funcaoNome = catalogs?.funcoes.find((item) => item.id === Number(functionId))?.nome || null;
   const funcionarioNome =
     (catalogs?.funcionarios || []).find((item) => item.id === Number(employeeId))?.nome || null;
-  const treinamentoNome =
-    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId))?.nome || null;
+  const selectedTrainingType =
+    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId)) || null;
+  const treinamentoNome = selectedTrainingType?.nome || null;
+  const qualificationHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history', empresaAtualId,
+      sectorId, functionId, employeeId, trainingTypeId,
+      selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(selectedTrainingType && numericOrNull(trainingTypeId)),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
+  const unfilteredSectorHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history-other-sectors', empresaAtualId,
+      functionId, employeeId, trainingTypeId, selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(
+      selectedTrainingType && sectorId &&
+      qualificationHistory.isSuccess && (qualificationHistory.data?.length || 0) === 0,
+    ),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
+  const historyRows = useMemo(
+    () => buildQualificationHistoryReportRows(qualificationHistory.data || []),
+    [qualificationHistory.data],
+  );
+  const historySummary = useMemo(() => ({
+    total: historyRows.length,
+    funcionarios: new Set((qualificationHistory.data || []).map((item) => item.funcionario_id)).size,
+    renovados: historyRows.filter((item) => item.status === 'RENOVADA').length,
+    vigentes: historyRows.filter((item) => item.status === 'VALIDA').length,
+    vencendo: historyRows.filter((item) => item.status === 'VENCENDO_30').length,
+    vencidos: historyRows.filter((item) => item.status === 'VENCIDA').length,
+  }), [historyRows, qualificationHistory.data]);
   const allStatusesSelected = sameStatuses(statuses, ALL_STATUSES);
   const summary = useMemo<TrainingComplianceReportSummary>(() => {
     const compliant = rows.filter(
@@ -232,13 +291,13 @@ export function TrainingComplianceReportBuilder({
 
     setHistoryExporting(true);
     try {
-      const history = await fetchQualificationHistoryReport({
-        statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
-        setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
-        funcionarioId: numericOrNull(employeeId) || undefined,
-        tipoId: qualificationId,
-        funcao: funcaoNome || undefined,
-      });
+      const retry = qualificationHistory.data ? null : await qualificationHistory.refetch();
+      if (retry?.isError) {
+        throw retry.error instanceof Error
+          ? retry.error
+          : new Error('Falha ao consultar o histórico de qualificações.');
+      }
+      const history = qualificationHistory.data || retry?.data || [];
       if (history.length === 0) {
         toast.warning('Nenhum registro cadastrado foi encontrado para a qualificação e o setor selecionados.');
         return;
@@ -353,7 +412,7 @@ export function TrainingComplianceReportBuilder({
           <button
             type="button"
             onClick={() => void exportHistoryPdf()}
-            disabled={historyExporting || !trainingTypeId}
+            disabled={historyExporting || qualificationHistory.isFetching || !selectedTrainingType}
             title="Usa o histórico cadastrado de Qualificações, incluindo registros renovados. Selecione a qualificação antes de exportar."
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
           >
@@ -476,6 +535,94 @@ export function TrainingComplianceReportBuilder({
         </div>
       </div>
 
+      {selectedTrainingType && (
+        <section aria-label="Histórico de qualificações cadastradas" className="mt-5 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+          <h3 className="text-base font-semibold text-slate-900">
+            Histórico cadastrado — {selectedTrainingType.codigo || selectedTrainingType.nome}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Certificados registrados em Qualificações, inclusive renovados. Não representa a matriz de requisitos obrigatórios.
+          </p>
+          {qualificationHistory.isPending ? (
+            <p className="mt-3 text-sm text-slate-700">Consultando histórico de qualificações...</p>
+          ) : qualificationHistory.isError ? (
+            <div className="mt-3 text-sm text-red-700" role="alert">
+              Não foi possível carregar o histórico: {qualificationHistory.error instanceof Error
+                ? qualificationHistory.error.message : 'erro de consulta'}.
+              <button type="button" className="ml-2 underline" onClick={() => void qualificationHistory.refetch()}>
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <Metric label="Registros no histórico" value={historySummary.total} />
+                <Metric label="Funcionários" value={historySummary.funcionarios} />
+                <Metric label="Renovados" value={historySummary.renovados} />
+                <Metric label="Vigentes" value={historySummary.vigentes} />
+                <Metric label="Vencendo" value={historySummary.vencendo} />
+                <Metric label="Vencidos" value={historySummary.vencidos} />
+              </div>
+              {historyRows.length > 0 ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-sky-200 text-slate-600">
+                        <th className="p-2">Funcionário</th>
+                        <th className="p-2">Setor</th>
+                        <th className="p-2">Situação</th>
+                        <th className="p-2">Conclusão</th>
+                        <th className="p-2">Vencimento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.slice(0, 20).map((item) => (
+                        <tr key={item.id} className="border-b border-sky-100">
+                          <td className="p-2">{item.funcionario}</td>
+                          <td className="p-2">{item.setor}</td>
+                          <td className="p-2">{item.statusLabel}</td>
+                          <td className="p-2">{item.dataConclusao}</td>
+                          <td className="p-2">{item.dataVencimento}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {historyRows.length > 20 && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Exibindo 20 de {historyRows.length} registros. O PDF inclui todos os registros recuperados.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-slate-700">
+                  <p>Nenhum registro encontrado para esta qualificação e os filtros de setor, função e funcionário.</p>
+                  {sectorId && unfilteredSectorHistory.isFetching && (
+                    <p className="mt-1">Conferindo registros disponíveis nos demais setores autorizados...</p>
+                  )}
+                  {sectorId && unfilteredSectorHistory.isSuccess &&
+                    (unfilteredSectorHistory.data?.length || 0) > 0 && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p>
+                          Existem {unfilteredSectorHistory.data!.length} registros desta qualificação
+                          em todos os setores autorizados, mas nenhum pertence ao setor
+                          selecionado no cadastro atual.
+                        </p>
+                        <button type="button" className="mt-2 font-semibold underline"
+                          onClick={() => setSectorId('')}>
+                          Ver em todos os setores
+                        </button>
+                      </div>
+                    )}
+                </div>
+              )}
+              <p className="mt-3 text-xs text-slate-600">
+                As situações e o prazo do painel de Compliance aplicam-se aos requisitos obrigatórios abaixo, não ao histórico.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+      <h3 className="mt-5 text-sm font-semibold text-slate-900">Requisitos obrigatórios (matriz de Compliance)</h3>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Pessoas no recorte" value={summary.pessoas} />
         <Metric label="Requisitos" value={summary.requisitos_obrigatorios} />
