@@ -181,7 +181,7 @@ function normalizeQualificationIdentity(value: unknown): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .toLocaleUpperCase('pt-BR');
 }
 
