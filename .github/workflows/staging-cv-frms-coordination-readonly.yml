@@ -86,14 +86,6 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Visit real Coordination with session and read-only network guard
-        run: npx playwright test e2e/staging-cv-frms-coordination-readonly.spec.ts --project=chromium --no-deps --retries=0
-      - name: Preserve sanitized browser QA status
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: cv-frms-coordination-readonly-${{ github.run_id }}
-          path: |
-            test-results
-            playwright-report
-          if-no-files-found: ignore
-          retention-days: 7
+        # --reporter=list disables HTML/JSON/JUnit files that might retain login responses.
+        # No screenshot, trace, video or browser artifact is uploaded.
+        run: npx playwright test e2e/staging-cv-frms-coordination-readonly.spec.ts --project=chromium --no-deps --retries=0 --reporter=list
