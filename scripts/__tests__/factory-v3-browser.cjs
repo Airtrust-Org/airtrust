@@ -22,7 +22,7 @@ const mock=[
   "get:k=>state[k]||'',",
   "set:(k,v)=>{window.__writes++;state[k]=String(v);sessionStorage.setItem('scorm',JSON.stringify(state));return true;},",
   'commit:()=>true,',
-  "finish:()=>{const n=Number(sessionStorage.getItem('finishTries')||0)+1;sessionStorage.setItem('finishTries',String(n));return n>1;}",
+  "finish:()=>{if(state['cmi.core.lesson_status']!=='completed')return true;const n=Number(sessionStorage.getItem('finishTries')||0)+1;sessionStorage.setItem('finishTries',String(n));return n>1;}",
   '};'
 ].join('\n');
 fs.copyFileSync(core,path.join(dir,'engine.js'));
