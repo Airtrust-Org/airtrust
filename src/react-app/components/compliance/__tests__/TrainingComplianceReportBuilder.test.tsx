@@ -156,6 +156,30 @@ describe('TrainingComplianceReportBuilder', () => {
     expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('2 registro'));
   });
 
+  it('explica quando a qualificação existe mas o cadastro não está no setor filtrado', async () => {
+    fetchHistoryMock.mockImplementation(async (filters: { setorIds?: number[] }) => (
+      filters.setorIds?.length ? [] : [
+        {
+          id: 901,
+          funcionario_id: 45,
+          funcionario_nome: 'Carlos Piloto',
+          funcionario_setor: 'Operações',
+          status: 'RENOVADA',
+          qualificacao_id: 300,
+          data_conclusao: '2025-02-01',
+        },
+      ]
+    ));
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await screen.findByText(/em todos os setores autorizados, mas nenhum pertence ao setor/);
+    expect(screen.queryByText('Carlos Piloto')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver em todos os setores' }));
+    await screen.findByText('Carlos Piloto');
+    expect(screen.getByText('Operações')).toBeInTheDocument();
+  });
+
   it('não produz PDF de Compliance vazio quando não existem requisitos obrigatórios', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/relatorios/automacao')) return ok(automation);
