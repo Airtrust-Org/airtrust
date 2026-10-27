@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { fixtureKindsForQaScope } from '../staging/lms-scorm-qa-scope.mjs';
+import { fixtureKindsForQaScope, resolveQaScope } from '../staging/lms-scorm-qa-scope.mjs';
 
 test('full SCORM staging QA retains all four synthetic scenarios', () => {
   assert.deepEqual(fixtureKindsForQaScope('all'),
@@ -21,6 +21,18 @@ test('negative-only SCORM QA creates only its resume fixture', () => {
 test('unknown and prototype-key scopes fail closed before staging writes', () => {
   for (const scope of ['unknown', '', '__proto__', 'constructor', null, 1]) {
     assert.throws(() => fixtureKindsForQaScope(scope), {
+      message: 'QA_SCORM_SCOPE_NOT_SUPPORTED',
+    });
+  }
+});
+
+test('QA_SCOPE only defaults when absent, never when explicitly empty', () => {
+  assert.equal(resolveQaScope(undefined), 'all');
+  for (const scope of ['all', 'resume-inactive-preview', 'candidate-first-no-grant']) {
+    assert.equal(resolveQaScope(scope), scope);
+  }
+  for (const invalid of ['', ' ', 'ALL', 'unknown', '__proto__', null, 0]) {
+    assert.throws(() => resolveQaScope(invalid), {
       message: 'QA_SCORM_SCOPE_NOT_SUPPORTED',
     });
   }
