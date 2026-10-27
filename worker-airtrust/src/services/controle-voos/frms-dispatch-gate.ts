@@ -111,7 +111,7 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   frms_status: DispatchReadinessStatus;
   checkin_status: DispatchCheckinStatus;
   fadiga_diaria: DispatchFadigaNivel;
-  /** Sinal subjetivo/projetado do check-in, separado da decisão regulatória. Não libera o voo. */
+  /** Indicador biológico diário do snapshot (inclui efetividade projetada), distinto da decisão regulatória. */
   sinal_fadiga_checkin: DispatchFadigaNivel;
   /** Explica por que a decisão operacional permanece inconclusiva, sem dados sensíveis. */
   daily_assessment_reason: DispatchDailyAssessmentReason;
