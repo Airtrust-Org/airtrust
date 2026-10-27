@@ -93,8 +93,6 @@ test('Coordenação FRMS: real auth, persisted GET and independently rendered de
   expect(json.data?.data).toBe(DAY);
   expect(Array.isArray(json.data?.voos)).toBe(true);
   await expect(page.getByText(/Consulta atualizada às/)).toBeVisible();
-  await expect(page.getByText('Avaliação FRMS diária', {exact: true})).toBeVisible();
-
   const crew = (json.data?.voos || []).flatMap(v => v.tripulacao || []);
   const expectedSignals = crew.filter(c =>
     c.sinal_fadiga_checkin && c.sinal_fadiga_checkin !== 'INDISPONIVEL');
@@ -102,7 +100,9 @@ test('Coordenação FRMS: real auth, persisted GET and independently rendered de
   if (crew.length === 0) {
     throw new Error('CV_FRMS_STAGING_CREW_FIXTURE_MISSING: real 27 Oct operational crew needed for row acceptance');
   }
+  await expect(page.getByText('Avaliação FRMS diária', {exact: true})).toBeVisible();
   await expect(rows).toHaveCount(crew.length);
+  if (expectedSignals.length === 0) throw new Error('CV_FRMS_CLASSIFIED_DAILY_INDICATOR_FIXTURE_MISSING');
   const signalLabels = page.getByText(/Indicador diário de fadiga:/);
   await expect(signalLabels).toHaveCount(expectedSignals.length);
   for (const [i, c] of crew.entries()) {
@@ -115,7 +115,7 @@ test('Coordenação FRMS: real auth, persisted GET and independently rendered de
     if (i > 100) throw new Error('CV_FRMS_UNEXPECTED_CREW_COUNT');
   }
   const payloadText = JSON.stringify(json.data);
-  expect(payloadText).not.toMatch(/"(?:kss_score|horas_sono|wake_time|meds_ult_12h)"\\s*:/i);
+  expect(payloadText).not.toMatch(/"(?:kss_score|horas_sono|wake_time|meds_ult_12h)"\s*:/i);
   guard.assertClean();
   expect(api5xx).toEqual([]);
   console.log('CV_FRMS_STAGING_READONLY_VERIFIED; date=2026-10-27; operational_rows_present=true; writes=0; production=not_contacted');
