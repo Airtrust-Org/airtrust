@@ -350,25 +350,6 @@ async function cleanup() {
     // Normal cleanup and failed-prepare rollback share the same readback gate.
     await removeVerifiedSyntheticCourse(token, item);
     results.push({ kind: item.kind, removed: true });
-      continue;
-    }
-    assert(existing.status === 200 && existing.json?.success === true,
-      'QA_SCORM_CLEANUP_READBACK_FAILED');
-    const course = existing.json?.data;
-    assert(Number(course?.id) === id &&
-      course?.titulo === item.title &&
-      course?.categoria === 'QA Synthetic' &&
-      course?.tipo_conteudo === 'scorm' &&
-      (course?.publicado === 0 || course?.publicado === false),
-      'QA_SCORM_CLEANUP_TARGET_IDENTITY_MISMATCH');
-    const removed = await authJson(token, `/api/lms/cursos/${id}`, { method: 'DELETE' });
-    assert(
-      removed.status === 200 || removed.status === 404,
-      `cleanup curso ${id} retornou ${removed.status}`,
-    );
-    const verify = await authJson(token, `/api/lms/cursos/${id}`);
-    assert(verify.status === 404, `curso sintético ${id} ainda visível após cleanup`);
-    results.push({ kind: item.kind, removed: true });
   }
 
   const summary = {
