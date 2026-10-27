@@ -382,18 +382,18 @@ test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP'
 
   // Fail closed from the moment the ZIP is selected, not only after selection.
   await openCourseEditor(page, resume, async () => {
-  // Fail closed even if a future UI regression tries an unsolicited mutation.
-  // Service Workers are blocked for this audit profile in Playwright config.
-  await page.route('**/*', async route => {
-    const method = route.request().method().toUpperCase();
-    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-      await route.continue();
-      return;
-    }
-    const pathname = new URL(route.request().url()).pathname;
-    attemptedWrites.push({ method, pathname });
-    await route.abort('blockedbyclient');
-  });
+    // Fail closed even if a future UI regression tries an unsolicited mutation.
+    // Service Workers are blocked for this audit profile in Playwright config.
+    await page.route('**/*', async route => {
+      const method = route.request().method().toUpperCase();
+      if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        await route.continue();
+        return;
+      }
+      const pathname = new URL(route.request().url()).pathname;
+      attemptedWrites.push({ method, pathname });
+      await route.abort('blockedbyclient');
+    });
   });
 
   await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
@@ -437,32 +437,35 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   const course = state.courses.resume;
   const writes: Array<{ method: string; origin: string; pathname: string }> = [];
   const blockedWrites: typeof writes = [];
+  // Explicit user action is the only allowed window for an init POST.
+  // ZIP selection must never be allowed to initialize an upload automatically.
+  let allowExplicitInit = false;
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
   // Install after opening the editor but BEFORE selecting the ZIP. Otherwise
   // an automatic upload on file selection could escape the negative QA firewall.
   await openCourseEditor(page, course, async () => {
-  await page.route('**/*', async route => {
-    const request = route.request();
-    const method = request.method().toUpperCase();
-    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    await page.route('**/*', async route => {
+      const request = route.request();
+      const method = request.method().toUpperCase();
+      if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        await route.continue();
+        return;
+      }
+      const url = new URL(request.url());
+      const observed = { method, origin: url.origin, pathname: url.pathname };
+      writes.push(observed);
+      const allowedInit = allowExplicitInit && method === 'POST' &&
+        url.protocol === 'https:' &&
+        url.hostname === STAGING_API_HOST &&
+        url.pathname === initPath;
+      if (!allowedInit) {
+        blockedWrites.push(observed);
+        await route.abort('blockedbyclient');
+        return;
+      }
       await route.continue();
-      return;
-    }
-    const url = new URL(request.url());
-    const observed = { method, origin: url.origin, pathname: url.pathname };
-    writes.push(observed);
-    const allowedInit = method === 'POST' &&
-      url.protocol === 'https:' &&
-      url.hostname === STAGING_API_HOST &&
-      url.pathname === initPath;
-    if (!allowedInit) {
-      blockedWrites.push(observed);
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
+    });
   });
   await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
     .toBeDisabled();
@@ -481,8 +484,10 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
       u.pathname === initPath &&
       response.request().method() === 'POST';
   }, { timeout: 20_000 });
+  allowExplicitInit = true;
   await inactiveButton.click();
   const initResponse = await rejectedInit;
+  allowExplicitInit = false;
   // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
   expect(initResponse.status(), 'F5 grant denial must be HTTP 403').toBe(403);
   const denial = await initResponse.json().catch(() => null) as {
