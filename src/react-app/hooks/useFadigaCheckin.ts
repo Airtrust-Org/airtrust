@@ -258,10 +258,16 @@ async function fetchTeamPanelJson<T>(path: string): Promise<T> {
   }
 }
 
-export function useCheckinHoje() {
+/** Read the exact operational date; /hoje uses the Worker's UTC clock. */
+export function buildCheckinHojePath(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('FRMS_INVALID_OPERATIONAL_DATE');
+  return `/frms/fadiga-checkin/me?date=${encodeURIComponent(date)}`;
+}
+
+export function useCheckinHoje(date: string) {
   return useQuery({
-    queryKey: ['fadiga-checkin-hoje'],
-    queryFn: () => fetchJson<FadigaCheckinItem | null>('/frms/fadiga-checkin/hoje'),
+    queryKey: ['fadiga-checkin-hoje', date],
+    queryFn: () => fetchJson<FadigaCheckinItem | null>(buildCheckinHojePath(date)),
     staleTime: 2 * 60 * 1000,
   });
 }
