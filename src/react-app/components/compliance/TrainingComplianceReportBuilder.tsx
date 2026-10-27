@@ -291,7 +291,13 @@ export function TrainingComplianceReportBuilder({
 
     setHistoryExporting(true);
     try {
-      const history = qualificationHistory.data || (await qualificationHistory.refetch()).data || [];
+      const retry = qualificationHistory.data ? null : await qualificationHistory.refetch();
+      if (retry?.isError) {
+        throw retry.error instanceof Error
+          ? retry.error
+          : new Error('Falha ao consultar o histórico de qualificações.');
+      }
+      const history = qualificationHistory.data || retry?.data || [];
       if (history.length === 0) {
         toast.warning('Nenhum registro cadastrado foi encontrado para a qualificação e o setor selecionados.');
         return;
