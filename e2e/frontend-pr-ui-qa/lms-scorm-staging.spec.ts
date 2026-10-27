@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
+import { isExactQaStagingInitRequest } from '../../scripts/staging/lms-scorm-qa-scope.mjs';
 
 type QaCourse = {
   id: number;
@@ -461,11 +462,8 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
       const url = new URL(request.url());
       const observed = { method, origin: url.origin, pathname: url.pathname };
       writes.push(observed);
-      const allowedInit = allowExplicitInit && method === 'POST' &&
-        url.protocol === 'https:' &&
-        url.hostname === STAGING_API_HOST &&
-        url.pathname === initPath &&
-        forwardedInitCount === 0;
+      const allowedInit = allowExplicitInit && forwardedInitCount === 0 &&
+        isExactQaStagingInitRequest({ method, url: request.url(), courseId: course.id });
       if (!allowedInit) {
         blockedWrites.push(observed);
         await route.abort('blockedbyclient');
@@ -487,16 +485,20 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   expect(writes, 'ZIP selection must not initiate a staging mutation').toEqual([]);
   // This request must be rejected by the real Worker F5 grant guard before
   // upload parts or candidate creation. Never mock an authorization grant.
-  const rejectedInit = page.waitForResponse(response => {
-    const u = new URL(response.url());
-    return u.hostname === STAGING_API_HOST &&
-      u.pathname === initPath &&
-      response.request().method() === 'POST';
-  }, { timeout: 20_000 });
-  allowExplicitInit = true;
-  await inactiveButton.click();
-  const initResponse = await rejectedInit;
-  allowExplicitInit = false;
+  const rejectedInit = page.waitForResponse(response =>
+    isExactQaStagingInitRequest({
+      method: response.request().method(), url: response.url(), courseId: course.id,
+    }), { timeout: 20_000 });
+  const initResponse = await (async () => {
+    allowExplicitInit = true;
+    try {
+      await inactiveButton.click();
+      return await rejectedInit;
+    } finally {
+      // A click/response timeout must not leave the network gate open.
+      allowExplicitInit = false;
+    }
+  })();
   expect(forwardedInitCount, 'Exactly one init POST may reach the Worker').toBe(1);
   // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
   expect(initResponse.status(), 'F5 grant denial must be HTTP 403').toBe(403);

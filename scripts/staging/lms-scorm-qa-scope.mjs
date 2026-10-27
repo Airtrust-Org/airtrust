@@ -42,6 +42,15 @@ export function assertQaScopeReadyForStaging(scope) {
   return selected;
 }
 
+/** Exact single-use F5 init allowlist for the negative staging QA firewall.
+ * Compare the raw browser URL, not just hostname/pathname: reject credentials,
+ * nonstandard ports, query strings, fragments and alternate encodings.
+ */
+export function isExactQaStagingInitRequest({ method, url, courseId } = {}) {
+  return Number.isSafeInteger(courseId) && courseId > 0 && method === 'POST' &&
+    url === `https://airtrust-api-staging.airtrust.workers.dev/api/lms/cursos/${courseId}/scorm-upload/streamed/init`;
+}
+
 /**
  * Cleanup is a destructive staging operation. A state file alone must never
  * authorize deleting an arbitrary course ID (even inside the QA tenant).

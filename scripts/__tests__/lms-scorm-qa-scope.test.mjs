@@ -144,6 +144,28 @@ test('workflow and prepare runner enforce positive-scope block before staging op
   assert.match(workflow, /assertQaScopeReadyForStaging\(process\.env\.QA_SCOPE\)/);
 });
 
+import { isExactQaStagingInitRequest } from '../staging/lms-scorm-qa-scope.mjs';
+
+test('negative candidate QA forwards only the exact canonical F5 init URL', () => {
+  const url = 'https://airtrust-api-staging.airtrust.workers.dev/api/lms/cursos/101/scorm-upload/streamed/init';
+  const valid = { method: 'POST', url, courseId: 101 };
+  assert.equal(isExactQaStagingInitRequest(valid), true);
+  for (const invalid of [
+    { method: 'GET' }, { method: 'PUT' }, { courseId: 102 },
+    { courseId: 0 }, { courseId: '101' }, { courseId: 1.5 },
+    { url: url + '?grant=override' }, { url: url + '#fragment' },
+    { url: url.replace('.workers.dev/', '.workers.dev:8443/') },
+    { url: url.replace('https://', 'http://') },
+    { url: url.replace('https://', 'https://qa-user:secret@') },
+    { url: url.replace('airtrust-api-staging', 'airtrust-api-production') },
+    { url: url.replace('/cursos/101/', '/cursos/%31%30%31/') },
+    { url: url + '/' }, { url: undefined },
+  ]) {
+    assert.equal(isExactQaStagingInitRequest({ ...valid, ...invalid }), false,
+      JSON.stringify(invalid));
+  }
+});
+
 import { assertInactiveF5CandidateTrace } from '../staging/lms-scorm-qa-scope.mjs';
 
 test('future positive F5 candidate QA accepts only ordered inactive multipart intake', () => {
