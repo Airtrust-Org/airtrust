@@ -156,7 +156,24 @@ jobs:
       AUDIT_PROFILE: lms-scorm
       CI: 'true'
     steps:
+      # The guard checks the exact deployed Worker+Pages SHA. The QA harness
+      # must run from that same commit, not from a newer moving main HEAD.
+      # Otherwise a successful run could be misattributed to older staging.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify exact QA harness provenance before using staging credentials
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]] || {
+            echo 'QA_HARNESS_RELEASE_SHA_MISMATCH' >&2
+            exit 1
+          }
 
       - uses: actions/setup-node@v7
         with:
