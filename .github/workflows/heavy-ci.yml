@@ -306,6 +306,11 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3
           npm ci
           npm --prefix worker-airtrust ci
+      - name: Regression test immutable Factory V3 core in Chromium and WebKit (synthetic only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/__tests__/factory-v3-browser.cjs
       - name: Bootstrap only the local synthetic LMS database and real bcrypt login
         shell: bash
         run: |
