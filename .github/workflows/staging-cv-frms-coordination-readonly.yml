@@ -86,7 +86,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Visit real Coordination with session and read-only network guard
-        run: npx playwright test e2e/staging-cv-frms-coordination-readonly.spec.ts --project=chromium --no-deps
+        run: npx playwright test e2e/staging-cv-frms-coordination-readonly.spec.ts --project=chromium --no-deps --retries=0
       - name: Preserve sanitized browser QA status
         if: always()
         uses: actions/upload-artifact@v7
