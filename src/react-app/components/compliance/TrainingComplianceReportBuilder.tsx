@@ -404,29 +404,40 @@ export function TrainingComplianceReportBuilder({
         <div>
           <h2 className="font-semibold text-slate-900">Gerador de relatórios</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Combine setor, função, funcionário, treinamento e situação. O PDF reflete exatamente o
-            recorte selecionado.
+            Ao selecionar uma qualificação, o botão principal gera o PDF do histórico cadastrado,
+            inclusive renovações. Os requisitos obrigatórios são um relatório separado.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void exportHistoryPdf()}
-            disabled={historyExporting || qualificationHistory.isFetching || !selectedTrainingType}
-            title="Usa o histórico cadastrado de Qualificações, incluindo registros renovados. Selecione a qualificação antes de exportar."
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            onClick={() => void (selectedTrainingType ? exportHistoryPdf() : exportPdf())}
+            disabled={selectedTrainingType
+              ? historyExporting || qualificationHistory.isFetching || qualificationHistory.isError || historyRows.length === 0
+              : reportRows.isLoading || reportRows.isError || rows.length === 0}
+            title={selectedTrainingType
+              ? 'Gera o PDF com todos os certificados exibidos no Histórico cadastrado, inclusive renovados.'
+              : 'Gera o PDF de requisitos obrigatórios da matriz de Compliance.'}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
-            {historyExporting ? 'Gerando histórico...' : 'Exportar histórico (PDF)'}
+            {historyExporting
+              ? 'Gerando PDF...'
+              : selectedTrainingType
+                ? `Gerar PDF do histórico (${historyRows.length} registros)`
+                : 'Gerar PDF de requisitos'}
           </button>
-          <button
-            type="button"
-            onClick={() => void exportPdf()}
-            disabled={reportRows.isLoading || reportRows.isError}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-          >
-            <Download className="h-4 w-4" /> Exportar PDF
-          </button>
+          {selectedTrainingType && rows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void exportPdf()}
+              disabled={reportRows.isLoading || reportRows.isError}
+              title="Relatório separado de requisitos obrigatórios, diferente do histórico de certificados."
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" /> PDF de requisitos obrigatórios
+            </button>
+          )}
           <button
             type="button"
             onClick={openManagerModal}
