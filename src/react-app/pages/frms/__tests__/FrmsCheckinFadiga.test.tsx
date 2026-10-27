@@ -451,7 +451,7 @@ describe('FrmsCheckinFadiga UI', () => {
     try {
       vi.setSystemTime(new Date('2026-10-28T01:30:00Z')); // 27/10 22:30 Brasília
       render(<FrmsCheckinFadiga />);
-      expect(screen.getByText(/Data operacional do check-in: 27\\/10\\/2026/)).toBeInTheDocument();
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
       preencherFormularioValido();
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
       expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
