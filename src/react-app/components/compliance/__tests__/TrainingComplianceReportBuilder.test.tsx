@@ -13,8 +13,9 @@ const { fetchWithAuthMock, fetchHistoryMock, exportHistoryPdfMock, toastMock } =
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
 }));
-vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', () => ({
-  fetchQualificationHistoryReport: (...args: unknown[]) => fetchHistoryMock(...args),
+vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/react-app/pages/relatorios/qualificationHistoryReport')>()),
+  fetchQualificationHistoryForType: (...args: unknown[]) => fetchHistoryMock(...args),
   exportQualificationHistoryPdf: (...args: unknown[]) => exportHistoryPdfMock(...args),
 }));
 vi.mock('@/react-app/hooks/useAuth', () => ({
@@ -138,17 +139,59 @@ describe('TrainingComplianceReportBuilder', () => {
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await waitFor(() => expect(screen.getByText('Histórico cadastrado — CRM')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Registros no histórico')).toBeInTheDocument());
+    expect(screen.getByText('Renovados')).toBeInTheDocument();
+    expect(screen.getByText('2', { selector: '.text-2xl' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
 
     await waitFor(() => expect(fetchHistoryMock).toHaveBeenCalledWith(expect.objectContaining({
-      tipoId: 300,
       setorIds: [1],
       statuses: expect.arrayContaining(['RENOVADA', 'VALIDA', 'VENCIDA']),
-    })));
+    }), expect.objectContaining({ id: 300, codigo: 'CRM' })));
     expect(exportHistoryPdfMock).toHaveBeenCalledWith(historical, expect.objectContaining({
       filterLabels: expect.arrayContaining(['Qualificação: CRM']),
     }));
     expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('2 registro'));
+  });
+
+  it('explica quando a qualificação existe mas o cadastro não está no setor filtrado', async () => {
+    fetchHistoryMock.mockImplementation(async (filters: { setorIds?: number[] }) => (
+      filters.setorIds?.length ? [] : [
+        {
+          id: 901,
+          funcionario_id: 45,
+          funcionario_nome: 'Carlos Piloto',
+          funcionario_setor: 'Operações',
+          status: 'RENOVADA',
+          qualificacao_id: 300,
+          data_conclusao: '2025-02-01',
+        },
+      ]
+    ));
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await screen.findByRole('button', { name: 'Ver em todos os setores' });
+    expect(screen.queryByText('Carlos Piloto')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver em todos os setores' }));
+    await screen.findByText('Carlos Piloto');
+    expect(within(screen.getByRole('table')).getByText('Operações')).toBeInTheDocument();
+  });
+
+  it('não apresenta erro de leitura do histórico como ausência de certificados na exportação', async () => {
+    fetchHistoryMock.mockRejectedValue(new Error('HISTORICO_SEM_PERMISSAO'));
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await screen.findByRole('alert');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('HISTORICO_SEM_PERMISSAO'));
+    expect(toastMock.warning).not.toHaveBeenCalledWith(
+      expect.stringContaining('Nenhum registro cadastrado'),
+    );
+    expect(exportHistoryPdfMock).not.toHaveBeenCalled();
   });
 
   it('não produz PDF de Compliance vazio quando não existem requisitos obrigatórios', async () => {

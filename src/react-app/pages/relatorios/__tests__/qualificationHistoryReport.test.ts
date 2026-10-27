@@ -5,6 +5,7 @@ import {
   QUALIFICATION_REPORT_STATUS_OPTIONS,
   applyQualificationHistoryReportClientFilters,
   fetchQualificationHistoryReport,
+  fetchQualificationHistoryForType,
   buildQualificationHistoryReportQuery,
   buildQualificationHistoryReportRows,
   qualificationStatusLabel,
@@ -87,6 +88,44 @@ describe('qualificationHistoryReport', () => {
     expect(results.map((result) => result.id)).toEqual([1, 2]);
     expect(api).toHaveBeenCalledTimes(2);
     expect(new URL(String(api.mock.calls[1][0]), 'https://airtrust.local').searchParams.get('page')).toBe('2');
+  });
+
+  it('une por ID os CMAs canônicos e os históricos legados encontrados por código exato', async () => {
+    const api = vi.mocked(apiEnvelope);
+    api.mockReset();
+    api.mockResolvedValueOnce({
+      success: true,
+      data: [historyRow({ id: 1, qualificacao_id: 31, status: 'VALIDA', qualificacao_codigo: 'CMA' })],
+      pagination: { pages: 1 },
+    });
+    api.mockResolvedValueOnce({
+      success: true,
+      data: [
+        historyRow({ id: 1, qualificacao_id: 31, status: 'VALIDA', qualificacao_codigo: 'CMA' }),
+        historyRow({ id: 2, qualificacao_id: 0, status: 'RENOVADA', qualificacao_codigo: 'CMA' }),
+        historyRow({ id: 3, qualificacao_id: 0, status: 'VALIDA', qualificacao_codigo: 'CMA2' }),
+      ],
+      pagination: { pages: 1 },
+    });
+    const rows = await fetchQualificationHistoryForType(
+      { statuses: ['VALIDA', 'RENOVADA'], setorIds: [4] },
+      { id: 31, nome: 'Certificado Médico Aeronáutico', codigo: 'CMA' },
+    );
+    expect(rows.map((row) => row.id)).toEqual([1, 2]);
+    expect(api).toHaveBeenCalledTimes(2);
+    const direct = new URL(String(api.mock.calls[0][0]), 'https://airtrust.local');
+    const legacy = new URL(String(api.mock.calls[1][0]), 'https://airtrust.local');
+    expect(direct.searchParams.get('tipo_id')).toBe('31');
+    expect(legacy.searchParams.get('tipo_id')).toBeNull();
+    expect(legacy.searchParams.get('search')).toBe('CMA');
+    expect(legacy.searchParams.get('setor_ids')).toBe('4');
+  });
+
+  it('usa data_realizacao devolvida pelo histórico sem perder a data de conclusão no PDF', () => {
+    const rows = buildQualificationHistoryReportRows([
+      historyRow({ data_conclusao: undefined, data_realizacao: '2026-03-19' }),
+    ]);
+    expect(rows[0].dataConclusao).toBe('19/03/2026');
   });
 
   it('preserva VENCENDO_30 como a regra canônica de em vencimento', () => {
