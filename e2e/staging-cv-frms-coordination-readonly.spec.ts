@@ -51,9 +51,9 @@ test('Coordenação FRMS: real auth, persisted GET and independently rendered de
   await loginViaRealStagingUi(page);
   await page.goto(BASE + '/controle-voos/coordenacao/fila', {waitUntil: 'domcontentloaded'});
   const header = page.getByRole('heading', {name: 'Fila da Coordenação'});
-  if (!await header.isVisible({timeout: 35_000}).catch(() => false)) {
-    throw new Error('CV_FRMS_QA_COORDINATION_CAPABILITY_NOT_GRANTED');
-  }
+  await expect(header).toBeVisible({ timeout: 35_000 }).catch(() => {
+    throw new Error('CV_FRMS_QA_COORDINATION_CAPABILITY_NOT_GRANTED_OR_ROUTE_UNAVAILABLE');
+  });
   await expect(page.getByRole('heading', {name: /Controle operacional — alertas consultivos de fadiga/})).toBeVisible();
 
   const date = page.getByTestId('frms-gate-date-input');
