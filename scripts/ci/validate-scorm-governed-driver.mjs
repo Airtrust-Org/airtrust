@@ -5,6 +5,7 @@
  */
 import {unzipSync} from 'fflate';
 import {validateScormLearnerCompletionPlan} from '../qa/scorm-real-learner-completion.mjs';
+import {scormGovernedDriverLimits} from '../qa/scorm-governed-driver-limits.mjs';
 
 const bad=code=>{throw Error('SCORM_GOVERNED_DRIVER_'+code);};
 const validPath=name=>typeof name==='string'&&name.length>0&&name.length<350&&
@@ -44,8 +45,9 @@ export function validateGovernedScormZipDriver(zipBytes,driver,candidate){
       Buffer.from(manifest).toString('utf8')))bad('SCORM_MANIFEST_MISSING');
   if(!validPath(driver.launchFile)||!files[driver.launchFile]||
     !/\.(?:html|htm)$/i.test(driver.launchFile))bad('LAUNCH_FILE_NOT_IN_ZIP');
+  const limits=scormGovernedDriverLimits(files);
   if(!Array.isArray(driver.requiredContent)||driver.requiredContent.length===0||
-    driver.requiredContent.length>120||
+    driver.requiredContent.length>limits.maxContent||
     driver.requiredContent.some(x=>!x||!validSelector(x.selector)))
     bad('REQUIRED_CONTENT_PLAN_MISSING');
   if(!driver.resume||!driver.resume.assertion||
@@ -70,7 +72,7 @@ export function validateGovernedScormZipDriver(zipBytes,driver,candidate){
         bad('UNSAFE_LEARNER_ACTION');
     }
   }
-  if(countActions>120)bad('DRIVER_TOO_LARGE');
+  if(countActions>limits.maxActions)bad('DRIVER_TOO_LARGE');
   if(candidate.requiresAssessment&&
     (!Number.isFinite(driver.masteryScore)||driver.masteryScore<0||
       driver.masteryScore>100))bad('ASSESSMENT_THRESHOLD_MISSING');
