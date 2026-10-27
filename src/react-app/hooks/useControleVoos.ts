@@ -253,6 +253,8 @@ export interface CvFrmsCrewDispatchAssessment {
   frms_status: FrmsDispatchReadinessStatus;
   checkin_status: FrmsDispatchCheckinStatus;
   fadiga_diaria: FrmsDispatchFadigaNivel;
+  /** Diagnóstico de fadiga derivado do check-in, sem declarar aptidão operacional. */
+  sinal_fadiga_checkin?: FrmsDispatchFadigaNivel;
   daily_assessment_reason: CvFrmsDailyAssessmentReason;
   fadiga_acumulada: FrmsDispatchFadigaNivel;
   reasons: FrmsDispatchGateReasonCode[];

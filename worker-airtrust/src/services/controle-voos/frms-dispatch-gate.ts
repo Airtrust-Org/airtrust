@@ -111,7 +111,9 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   frms_status: DispatchReadinessStatus;
   checkin_status: DispatchCheckinStatus;
   fadiga_diaria: DispatchFadigaNivel;
-  /** Explica por que a avaliação diária permanece inconclusiva, sem dados sensíveis. */
+  /** Indicador biológico diário do snapshot (inclui efetividade projetada), distinto da decisão regulatória. */
+  sinal_fadiga_checkin: DispatchFadigaNivel;
+  /** Explica por que a decisão operacional permanece inconclusiva, sem dados sensíveis. */
   daily_assessment_reason: DispatchDailyAssessmentReason;
   fadiga_acumulada: DispatchFadigaNivel;
   reasons: DispatchGateReasonCode[];
@@ -147,6 +149,32 @@ function mapEstadoToFadigaNivel(
     default:
       return 'INDISPONIVEL';
   }
+}
+
+/**
+ * Sinal diário de fadiga, estritamente derivado de dados já classificados
+ * pelo snapshot canônico. Nunca substitui a decisão operacional consolidada.
+ * Sem check-in completo/íntegro: indisponível, não presume normalidade.
+ */
+function mapDailyCheckinSignal(item: FrmsOperationalSnapshotItem | undefined): DispatchFadigaNivel {
+  if (!item || item.checkin_status !== 'RECEBIDO' ||
+      item.snapshot_status === 'INCOMPLETO' ||
+      item.alertas.includes('DADO_INCONSISTENTE') ||
+      item.sleep_data_source !== 'REAL' || item.wake_data_source !== 'REAL') {
+    return 'INDISPONIVEL';
+  }
+  if (item.alertas.includes('CHECKIN_CRITICO') || item.alertas.includes('EFETIVIDADE_BAIXA')) {
+    return 'CRITICO';
+  }
+  const nivel = String(item.nivel_fadiga_calculado ?? '')
+    .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  // Faixas reconhecidas pelo adaptador operacional já existente
+  // (frmsOperationalSignals.ts); desconhecidas permanecem indisponíveis.
+  if (['VERMELHO', 'CRITICO', 'BAIXA'].includes(nivel)) return 'CRITICO';
+  if (item.alertas.includes('KSS_ALTO') || item.alertas.includes('SONO_INSUFICIENTE')) return 'ATENCAO';
+  if (['AMARELO', 'ATENCAO', 'TRANSICAO', 'DEGRADADA'].includes(nivel)) return 'ATENCAO';
+  if (['VERDE', 'NORMAL', 'ALTA', 'BAIXO'].includes(nivel)) return 'NORMAL';
+  return 'INDISPONIVEL';
 }
 
 /** Só a decisão canônica conclui a avaliação; check-in recebido sozinho não libera. */
@@ -245,6 +273,7 @@ export function deriveCrewDispatchAssessment(
     frms_status,
     checkin_status: item?.checkin_status ?? 'INDISPONIVEL',
     fadiga_diaria: mapEstadoToFadigaNivel(item?.estado_operacional),
+    sinal_fadiga_checkin: mapDailyCheckinSignal(item),
     daily_assessment_reason: resolveDailyAssessmentReason(item),
     fadiga_acumulada: mapQuinzenaToFadigaNivel(item?.fortnight_indicator?.status_quinzena),
     reasons: reasonList,
