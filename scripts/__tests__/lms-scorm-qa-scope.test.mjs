@@ -287,6 +287,24 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
     { partCount: 1 }, { partCount: 11 }, { zipBytes: 1234 },
     { courseId: 0 }, { operationId: 'not-a-uuid' },
   ];
+  // A URL parser normalizes some aliases into the trusted endpoint. The
+  // offline trace must reject the original non-canonical request strings
+  // at init, multipart PUT and complete, not only malformed hostnames.
+  for (const index of [0, 1, valid.requests.length - 1]) {
+    const canonical = valid.requests[index].url;
+    for (const url of [
+      canonical + '?',
+      canonical + '#',
+      canonical.replace('.workers.dev/', '.workers.dev:443/'),
+      canonical.replace('/api/lms/', '/api/lms/./'),
+      canonical.replace('/api/lms/', '/api/%6cms/'),
+      canonical.replace('airtrust-api-staging', 'AIRTRUST-API-STAGING'),
+    ]) {
+      assert.notEqual(url, canonical);
+      bad.push({ requests: valid.requests.map((request, i) =>
+        i === index ? { ...request, url } : request) });
+    }
+  }
   for (const override of bad) {
     assert.throws(() => assertInactiveF5CandidateTrace({ ...valid, ...override }),
       { message: 'QA_SCORM_F5_POSITIVE_TRACE_INVALID' });

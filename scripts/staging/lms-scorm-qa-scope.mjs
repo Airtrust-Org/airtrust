@@ -180,14 +180,12 @@ export function assertInactiveF5CandidateTrace({
 
   for (let index = 0; index < expected.length; index += 1) {
     const observed = requests[index];
+    // URL parsing normalizes default ports, dot segments and empty query/hash
+    // delimiters. An offline witness must match the exact canonical request
+    // target rather than accepting a normalized alias as the F5 endpoint.
     if (!observed || observed.method !== expected[index].method ||
-        typeof observed.url !== 'string') fail();
-    let url;
-    try { url = new URL(observed.url); } catch { fail(); }
-    if (url.protocol !== 'https:' ||
-        url.hostname !== 'airtrust-api-staging.airtrust.workers.dev' ||
-        url.port || url.username || url.password || url.search || url.hash ||
-        url.pathname !== expected[index].pathname) fail();
+        observed.url !==
+          `https://airtrust-api-staging.airtrust.workers.dev${expected[index].pathname}`) fail();
   }
   // This is a Worker-reported receipt plus an HTTP request trace, NOT an
   // independent D1/R2 readback or functional certification. The caller must
