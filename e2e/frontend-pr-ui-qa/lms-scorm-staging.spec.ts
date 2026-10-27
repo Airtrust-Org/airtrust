@@ -411,9 +411,12 @@ test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP'
     source: 'GOVERNED_STAGING_LMS_SCORM_LEGACY_REPLACEMENT_UI_GUARD',
     scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
     exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-    rejectedBeforeUpload: true,
+    // No Worker rejection was exercised: the disabled UI prevented a submit.
+    rejectedBeforeUpload: false,
     rejectionMechanism: 'DISABLED_LEGACY_SUBMIT',
-    uploadRequests: 0,
+    legacySubmitDisabled: true,
+    workerRejectionVerified: false,
+    uploadRequests: attemptedWrites.length,
     previewRendered: [],
     previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
     active: false,
@@ -440,6 +443,9 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   // Explicit user action is the only allowed window for an init POST.
   // ZIP selection must never be allowed to initialize an upload automatically.
   let allowExplicitInit = false;
+  // At most one init POST may reach the real Worker even if the UI regresses.
+  // The later request-count assertion alone would detect a duplicate too late.
+  let forwardedInitCount = 0;
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
   // Install after opening the editor but BEFORE selecting the ZIP. Otherwise
@@ -458,12 +464,15 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
       const allowedInit = allowExplicitInit && method === 'POST' &&
         url.protocol === 'https:' &&
         url.hostname === STAGING_API_HOST &&
-        url.pathname === initPath;
+        url.pathname === initPath &&
+        forwardedInitCount === 0;
       if (!allowedInit) {
         blockedWrites.push(observed);
         await route.abort('blockedbyclient');
         return;
       }
+      // Reserve the single allowed attempt before asynchronous forwarding.
+      forwardedInitCount += 1;
       await route.continue();
     });
   });
@@ -488,6 +497,7 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   await inactiveButton.click();
   const initResponse = await rejectedInit;
   allowExplicitInit = false;
+  expect(forwardedInitCount, 'Exactly one init POST may reach the Worker').toBe(1);
   // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
   expect(initResponse.status(), 'F5 grant denial must be HTTP 403').toBe(403);
   const denial = await initResponse.json().catch(() => null) as {
