@@ -34,15 +34,29 @@ async function run(engine,label){
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const get=()=>page.evaluate(()=>window.__AIRTRUST_PLAYER_TEST__.getState());
+  const {captureFactoryV3VisualState,requireFactoryV3VisualState,
+    requireFactoryV3ResumeMatch} = await import('../staging/f5-factory-v3-visual-witness.mjs');
+  const witness=async()=>{
+    const screen=await page.evaluate(captureFactoryV3VisualState);
+    const cmi=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('scorm')));
+    return requireFactoryV3VisualState(screen,
+      cmi['cmi.core.lesson_location'],cmi['cmi.suspend_data'],{
+        expectedPackageVersion:course.packageVersion,
+      });
+  };
   try {
     await page.goto(url);await page.waitForFunction(()=>!!window.__AIRTRUST_PLAYER_TEST__);
     let s=await get();assert.equal(s.active,0);assert.equal(s.courseCompleted,false);
     await page.locator('#next').click();
     s=await get();assert.equal(s.active,1);
+    const scenarioWitness=await witness();
+    assert.equal(scenarioWitness.unitId,'question');
     assert.equal(await page.locator('#next').isDisabled(),true);
     await page.locator('[data-opt="1"]').click();
     await page.locator('#next').click();
     s=await get();assert.equal(s.active,2);assert.equal(s.courseCompleted,false);
+    const hotspotWitness=await witness();
+    assert.equal(hotspotWitness.unitId,'hotspot');
     assert.equal(await page.locator('#next').isDisabled(),true);
     await page.locator('[data-gate="2"]').first().click();
     assert.match(await page.locator('.hotspot-detail').textContent(),/THIRD_EXPLANATION/);
@@ -54,8 +68,12 @@ async function run(engine,label){
     assert.equal(await page.locator('#next').isDisabled(),false);
     await page.locator('#next').click();
     s=await get();assert.equal(s.active,3);assert.equal(s.courseCompleted,false);
+    const finalBeforeResume=await witness();
+    assert.equal(finalBeforeResume.unitId,'end');
     await page.reload();await page.waitForFunction(()=>!!window.__AIRTRUST_PLAYER_TEST__);
     s=await get();assert.equal(s.active,3);assert.equal(s.courseCompleted,false);
+    const finalAfterResume=await witness();
+    assert.equal(requireFactoryV3ResumeMatch(finalBeforeResume,finalAfterResume),true);
     await page.locator('#next').click();
     s=await get();assert.equal(s.courseCompleted,false);
     assert.equal(await page.locator('#next').isDisabled(),false);
