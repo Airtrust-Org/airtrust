@@ -143,8 +143,8 @@ describe('TrainingComplianceReportBuilder', () => {
     await waitFor(() => expect(screen.getByText('Registros no histórico')).toBeInTheDocument());
     expect(screen.getByText('Renovados')).toBeInTheDocument();
     expect(screen.getByText('2', { selector: '.text-2xl' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gerar PDF do histórico (2 registros)' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar PDF do histórico (2 registros)' }));
 
     await waitFor(() => expect(fetchHistoryMock).toHaveBeenCalledWith(expect.objectContaining({
       setorIds: [1],
@@ -154,6 +154,43 @@ describe('TrainingComplianceReportBuilder', () => {
       filterLabels: expect.arrayContaining(['Qualificação: CRM']),
     }));
     expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('2 registro'));
+  });
+
+  it('gera o PDF completo dos 44 CMAs mesmo quando não existem requisitos obrigatórios', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/relatorios/automacao')) return ok(automation);
+      if (url.includes('/pendencias')) return ok([]);
+      throw new Error(`unexpected ${url}`);
+    });
+    const history = Array.from({ length: 44 }, (_, index) => ({
+      id: index + 1,
+      funcionario_id: index % 23 + 1,
+      funcionario_nome: `Tripulante ${index % 23 + 1}`,
+      funcionario_setor: 'Operações',
+      qualificacao_id: 300,
+      qualificacao_codigo: 'CRM',
+      status: index < 21 ? 'RENOVADA' : index < 43 ? 'VALIDA' : 'VENCIDA',
+      data_conclusao: '2025-03-01',
+      data_vencimento: '2026-03-01',
+    }));
+    fetchHistoryMock.mockResolvedValue(history);
+    exportHistoryPdfMock.mockResolvedValue(undefined);
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    const pdf = await screen.findByRole('button', { name: 'Gerar PDF do histórico (44 registros)' });
+    await waitFor(() => expect(pdf).toBeEnabled());
+    expect(screen.getByText('Registros no histórico')).toBeInTheDocument();
+    expect(screen.getByText('Renovados')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'PDF de requisitos obrigatórios' })).not.toBeInTheDocument();
+
+    fireEvent.click(pdf);
+    await waitFor(() => expect(exportHistoryPdfMock).toHaveBeenCalledWith(
+      history,
+      expect.objectContaining({ filterLabels: expect.arrayContaining(['Qualificação: CRM']) }),
+    ));
+    expect(toastMock.success).toHaveBeenCalledWith('PDF de histórico gerado com 44 registro(s).');
+    expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
   it('explica quando a qualificação existe mas o cadastro não está no setor filtrado', async () => {
@@ -185,9 +222,8 @@ describe('TrainingComplianceReportBuilder', () => {
     renderBuilder();
     fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
     await screen.findByRole('alert');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('HISTORICO_SEM_PERMISSAO'));
+    expect(screen.getByRole('button', { name: 'Gerar PDF do histórico (0 registros)' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('HISTORICO_SEM_PERMISSAO');
     expect(toastMock.warning).not.toHaveBeenCalledWith(
       expect.stringContaining('Nenhum registro cadastrado'),
     );
@@ -204,11 +240,9 @@ describe('TrainingComplianceReportBuilder', () => {
     await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
       expect.stringContaining('/pendencias'),
     ));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar PDF' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
-    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledWith(
-      expect.stringContaining('Não há requisitos obrigatórios'),
-    ));
+    expect(screen.getByRole('button', { name: 'Gerar PDF de requisitos' })).toBeDisabled();
+    expect(exportHistoryPdfMock).not.toHaveBeenCalled();
+    expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
   it('combina filtros, envia setores selecionados e permite ativar a programação', async () => {
