@@ -167,7 +167,7 @@ function mapDailyCheckinSignal(item: FrmsOperationalSnapshotItem | undefined): D
     return 'CRITICO';
   }
   const nivel = String(item.nivel_fadiga_calculado ?? '')
-    .trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+    .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   // Faixas reconhecidas pelo adaptador operacional já existente
   // (frmsOperationalSignals.ts); desconhecidas permanecem indisponíveis.
   if (['VERMELHO', 'CRITICO', 'BAIXA'].includes(nivel)) return 'CRITICO';
