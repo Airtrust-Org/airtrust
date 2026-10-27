@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       qa_scope:
-        description: 'Full QA or focused EXTERNAL resume replacement guard (F5 preview requires grant)'
+        description: 'Full QA or focused negative candidate/EXTERNAL guards (positive F5 requires exact grant)'
         required: true
         type: choice
         default: all
@@ -147,6 +147,7 @@ jobs:
     timeout-minutes: 15
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_SCOPE: ${{ inputs.qa_scope }}
       QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
       QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
       QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
@@ -192,6 +193,7 @@ jobs:
       - name: Check SCORM QA harness and upload contract
         run: |
           node --check scripts/staging/lms-scorm-staging-qa.mjs
+          node --test scripts/__tests__/lms-scorm-qa-scope.test.mjs
           AUDIT_PROFILE=lms-scorm npx playwright test \
             --config=e2e/frontend-pr-ui-qa.config.ts \
             --project=chromium \
@@ -207,7 +209,7 @@ jobs:
           test "$(sha256sum qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip | cut -d' ' -f1)" = \
             'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f'
 
-      - name: Prepare disposable SCORM courses and ZIP fixtures
+      - name: Prepare only QA-scope-required disposable SCORM courses and ZIP fixtures
         run: node scripts/staging/lms-scorm-staging-qa.mjs
 
       - name: Install Chromium
