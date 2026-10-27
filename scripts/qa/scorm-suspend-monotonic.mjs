@@ -23,6 +23,50 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
       return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
     return {ok:true,reason:beforeRaw===afterRaw?'BYTE_IDENTICAL':'MONOTONIC_CHECKPOINT'};
   }
+  // Factory V3 MGM writes suspend schema v4. Its numeric resume cursor is
+  // "a"; "s" is a keyed scenario-answer map, and "c" is a boolean completion
+  // flag. Interpreting "s" as the numeric cursor falsely rejects actual D1
+  // readback even when the learner resumes on exactly the persisted slide.
+  // The strict schema below is diagnostic only, never a certification grant.
+  if (before.v===4 || after.v===4) {
+    const record = value => value!==null&&typeof value==='object'&&!Array.isArray(value);
+    const keys=['a','c','d','g','h','p','q','s','v','vs'].join(',');
+    const valid = value => record(value)&&
+      Object.keys(value).sort().join(',')===keys &&
+      value.v===4&&typeof value.p==='string'&&value.p.length>0&&
+      Number.isSafeInteger(value.a)&&value.a>=0 &&
+      Array.isArray(value.d)&&value.d.every(n=>Number.isSafeInteger(n)&&n>=0)&&
+      Array.isArray(value.g)&&value.g.every(x=>typeof x==='string'&&x.length>0)&&
+      record(value.s)&&record(value.h)&&record(value.vs)&&record(value.q)&&
+      typeof value.c==='boolean';
+    if (!valid(before)||!valid(after))
+      return {ok:false,reason:'V4_SUSPEND_SCHEMA_INVALID'};
+    if (before.p!==after.p)
+      return {ok:false,reason:'PACKAGE_VERSION_DRIFT_P'};
+    if (before.a!==after.a)
+      return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
+    for (const key of ['d','g']) {
+      if(before[key].some(x=>!after[key].some(y=>JSON.stringify(x)===JSON.stringify(y))))
+        return {ok:false,reason:'COMPLETION_LOST_'+key.toUpperCase()};
+    }
+    // A resumed lesson can add evidence, but must never discard answers,
+    // hotspot selection, media checkpoints, or any answered assessment item.
+    const preserved=(previous,current)=>{
+      if(previous===null)return current!==undefined;
+      if(Array.isArray(previous))return Array.isArray(current)&&
+        previous.every((value,i)=>preserved(value,current[i]));
+      if(record(previous))return record(current)&&
+        Object.entries(previous).every(([k,value])=>Object.hasOwn(current,k)&&
+          preserved(value,current[k]));
+      return Object.is(previous,current);
+    };
+    for(const key of ['s','h','vs','q']){
+      if(!preserved(before[key],after[key]))
+        return {ok:false,reason:'STATE_LOST_'+key.toUpperCase()};
+    }
+    if(before.c&&!after.c)return {ok:false,reason:'COMPLETION_FLAG_DOWNGRADE'};
+    return {ok:true,reason:beforeRaw===afterRaw?'BYTE_IDENTICAL':'MONOTONIC_CHECKPOINT'};
+  }
   // Two real on-wire schemas are supported. Newer certification fixtures use
   // `s` as cursor while F5 Unified packages persist the 0-based cursor in
   // numeric `c`. In CFIT, `c` is instead a boolean completion flag, so
