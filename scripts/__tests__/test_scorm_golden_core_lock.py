@@ -71,7 +71,7 @@ class FactoryCoreLockTests(unittest.TestCase):
         )
         self.assertEqual(
             module.REGISTERED_VERSIONS[module.FORMATIVE_V3_VERSION]["app.js"],
-            "c4f11b8db76ed96bf3f3df91efcd861cc15ea319b8ea25e461c9187a1a78cc3d",
+            "66e46d3ec3baf3c331a92d48037148a429fec7ca5eb137c0ff93a2344ce69a98",
         )
         for name in ("styles.css", "scorm_api.js"):
             self.assertEqual(

@@ -9,6 +9,7 @@ const slide=(id,kind,extra={})=>({id,kind,title:id,module:'Synthetic',eyebrow:'T
 const course={courseId:'synthetic-only',title:'Synthetic only',packageVersion:'SYNTHETIC-V3-1',assessmentMode:'NONE',slides:[
   slide('intro','lesson',{body:['Test screen']}),
   slide('question','scenario',{question:'Choose the second option',options:[['Wrong',false,'Retry'],['Right',true,'Accepted']]}),
+  slide('hotspot','lesson',{family:'hotspot',gateItems:[['First','FIRST_EXPLANATION'],['Second','SECOND_EXPLANATION'],['Third','THIRD_EXPLANATION']]}),
   slide('end','study_end',{body:['Explicit terminal action']})
 ]};
 const ids=['viewport','next','prev','menuBtn','drawerClose','backdrop','drawer','drawerList','drawerProgress','refBtn','modalClose','modalBg','refList','topProgressText','topProgressFill','count','gateStatus','qPrev','qNext'];
@@ -42,8 +43,19 @@ async function run(engine,label){
     await page.locator('[data-opt="1"]').click();
     await page.locator('#next').click();
     s=await get();assert.equal(s.active,2);assert.equal(s.courseCompleted,false);
+    assert.equal(await page.locator('#next').isDisabled(),true);
+    await page.locator('[data-gate="2"]').first().click();
+    assert.match(await page.locator('.hotspot-detail').textContent(),/THIRD_EXPLANATION/);
+    await page.locator('[data-gate="0"]').first().click();
+    assert.match(await page.locator('.hotspot-detail').textContent(),/FIRST_EXPLANATION/);
+    assert.equal(await page.locator('#next').isDisabled(),true);
+    await page.locator('[data-gate="1"]').first().click();
+    assert.match(await page.locator('.hotspot-detail').textContent(),/SECOND_EXPLANATION/);
+    assert.equal(await page.locator('#next').isDisabled(),false);
+    await page.locator('#next').click();
+    s=await get();assert.equal(s.active,3);assert.equal(s.courseCompleted,false);
     await page.reload();await page.waitForFunction(()=>!!window.__AIRTRUST_PLAYER_TEST__);
-    s=await get();assert.equal(s.active,2);assert.equal(s.courseCompleted,false);
+    s=await get();assert.equal(s.active,3);assert.equal(s.courseCompleted,false);
     await page.locator('#next').click();
     s=await get();assert.equal(s.courseCompleted,false);
     assert.equal(await page.locator('#next').isDisabled(),false);
