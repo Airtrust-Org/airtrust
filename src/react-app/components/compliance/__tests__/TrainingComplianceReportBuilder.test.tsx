@@ -161,6 +161,7 @@ describe('TrainingComplianceReportBuilder', () => {
     await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
       expect.stringContaining('/pendencias'),
     ));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar PDF' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledWith(
       expect.stringContaining('Não há requisitos obrigatórios'),
