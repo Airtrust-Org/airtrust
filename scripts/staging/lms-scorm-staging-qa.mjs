@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
+import { fixtureKindsForQaScope } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -276,12 +277,15 @@ async function prepare() {
   const token = await qaToken();
   const setorId = await qaSyntheticSectorId(token);
   const created = [];
+  // Validate the scope before any course creation. Negative-only QA needs
+  // exactly one disposable course, not the four full-upload scenarios.
+  const kinds = fixtureKindsForQaScope(process.env.QA_SCOPE || 'all');
+  const labels = { success: 'Success', reject: 'Reject', timeout: 'Timeout', resume: 'Resume' };
 
   try {
-    created.push(await createCourse(token, 'success', 'Success', setorId));
-    created.push(await createCourse(token, 'reject', 'Reject', setorId));
-    created.push(await createCourse(token, 'timeout', 'Timeout', setorId));
-    created.push(await createCourse(token, 'resume', 'Resume', setorId));
+    for (const kind of kinds) {
+      created.push(await createCourse(token, kind, labels[kind], setorId));
+    }
 
     const state = {
       schema_version: 1,
@@ -294,6 +298,7 @@ async function prepare() {
         ok: true,
         prepared: true,
         course_count: created.length,
+        qa_scope: process.env.QA_SCOPE || 'all',
         state_path: STATE_PATH,
         production_target_used: false,
       }),
