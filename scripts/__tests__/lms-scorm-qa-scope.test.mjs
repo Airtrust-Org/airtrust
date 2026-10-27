@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { fixtureKindsForQaScope, resolveQaScope } from '../staging/lms-scorm-qa-scope.mjs';
+import { fixtureKindsForQaScope, resolveQaScope, assertQaScopeReadyForStaging } from '../staging/lms-scorm-qa-scope.mjs';
 
 test('full SCORM staging QA retains all four synthetic scenarios', () => {
   assert.deepEqual(fixtureKindsForQaScope('all'),
@@ -115,4 +116,30 @@ test('SCORM QA entrypoint parses before any staging request', () => {
     timeout: 10_000,
     stdio: 'pipe',
   }), 'SCORM QA prepare/cleanup entrypoint must pass node --check');
+});
+
+
+test('legacy full positive QA is blocked before any staging write, while focused negatives remain available', () => {
+  assert.throws(() => assertQaScopeReadyForStaging('all'), {
+    message: 'QA_SCORM_POSITIVE_SCOPE_BLOCKED_PENDING_EXACT_F5_GRANT_AND_CANDIDATE_FIRST',
+  });
+  assert.throws(() => assertQaScopeReadyForStaging(undefined), {
+    message: 'QA_SCORM_POSITIVE_SCOPE_BLOCKED_PENDING_EXACT_F5_GRANT_AND_CANDIDATE_FIRST',
+  });
+  for (const scope of ['candidate-first-no-grant', 'resume-inactive-preview']) {
+    assert.equal(assertQaScopeReadyForStaging(scope), scope);
+  }
+  assert.throws(() => assertQaScopeReadyForStaging(''), /QA_SCORM_SCOPE_NOT_SUPPORTED/);
+});
+
+test('workflow and prepare runner enforce positive-scope block before staging operations', () => {
+  const runner = readFileSync(fileURLToPath(new URL('../staging/lms-scorm-staging-qa.mjs', import.meta.url)), 'utf8');
+  const workflow = readFileSync(fileURLToPath(new URL('../../.github/workflows/staging-lms-scorm-qa.yml', import.meta.url)), 'utf8');
+  assert.match(runner, /const qaScope = assertQaScopeReadyForStaging\(process\.env\.QA_SCOPE\);/);
+  assert.ok(runner.indexOf('assertQaScopeReadyForStaging(process.env.QA_SCOPE)') <
+    runner.indexOf('await assertPinnedStagingRelease();'));
+  const guardStep = workflow.indexOf('Block ungranted legacy positive QA before staging access');
+  const liveStep = workflow.indexOf('Require live Worker and frontend provenance');
+  assert.ok(guardStep > 0 && guardStep < liveStep);
+  assert.match(workflow, /assertQaScopeReadyForStaging\(process\.env\.QA_SCOPE\)/);
 });

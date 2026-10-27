@@ -27,6 +27,22 @@ export function resolveQaScope(scope) {
 }
 
 /**
+ * Full positive staging QA still uses the disabled legacy SCORM replacement
+ * action. No grant exists for its four disposable courses, and one exact F5
+ * grant cannot authorize four independent uploads. Block it before any
+ * network or fixture mutation; cleanup of historic "all" runs stays allowed.
+ * Remove this guard only with a reviewed candidate-first positive journey
+ * and per-candidate grant verification (not an environment-variable bypass).
+ */
+export function assertQaScopeReadyForStaging(scope) {
+  const selected = resolveQaScope(scope);
+  if (selected === 'all') {
+    throw new Error('QA_SCORM_POSITIVE_SCOPE_BLOCKED_PENDING_EXACT_F5_GRANT_AND_CANDIDATE_FIRST');
+  }
+  return selected;
+}
+
+/**
  * Cleanup is a destructive staging operation. A state file alone must never
  * authorize deleting an arbitrary course ID (even inside the QA tenant).
  * Validate the exact run, fixture count, names, kinds and unique IDs first.

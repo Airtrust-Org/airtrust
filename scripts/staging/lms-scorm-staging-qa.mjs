@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
-import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope } from './lms-scorm-qa-scope.mjs';
+import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope, assertQaScopeReadyForStaging } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -288,7 +288,7 @@ async function removeVerifiedSyntheticCourse(token, item) {
 
 async function prepare() {
   // Reject invalid/empty scopes before any staging network request or tenant switch.
-  const qaScope = resolveQaScope(process.env.QA_SCOPE);
+  const qaScope = assertQaScopeReadyForStaging(process.env.QA_SCOPE);
   fs.mkdirSync(ROOT, { recursive: true });
   await assertPinnedStagingRelease();
   const token = await qaToken();

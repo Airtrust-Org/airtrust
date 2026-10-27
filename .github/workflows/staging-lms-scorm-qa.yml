@@ -67,6 +67,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Block ungranted legacy positive QA before staging access
+        shell: bash
+        env:
+          QA_SCOPE: ${{ inputs.qa_scope }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { assertQaScopeReadyForStaging } from './scripts/staging/lms-scorm-qa-scope.mjs';
+          assertQaScopeReadyForStaging(process.env.QA_SCOPE);
+          NODE
+
       - name: Require trusted main ancestry or exact open reviewed release PR
         shell: bash
         env:
