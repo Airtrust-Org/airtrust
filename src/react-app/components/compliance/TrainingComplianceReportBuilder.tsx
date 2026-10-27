@@ -205,6 +205,29 @@ export function TrainingComplianceReportBuilder({
         },
       ),
   });
+  const unfilteredSectorHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history-other-sectors', empresaAtualId,
+      functionId, employeeId, trainingTypeId, selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(
+      selectedTrainingType && sectorId &&
+      qualificationHistory.isSuccess && (qualificationHistory.data?.length || 0) === 0,
+    ),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
   const historyRows = useMemo(
     () => buildQualificationHistoryReportRows(qualificationHistory.data || []),
     [qualificationHistory.data],
@@ -540,6 +563,7 @@ export function TrainingComplianceReportBuilder({
                     <thead>
                       <tr className="border-b border-sky-200 text-slate-600">
                         <th className="p-2">Funcionário</th>
+                        <th className="p-2">Setor</th>
                         <th className="p-2">Situação</th>
                         <th className="p-2">Conclusão</th>
                         <th className="p-2">Vencimento</th>
@@ -549,6 +573,7 @@ export function TrainingComplianceReportBuilder({
                       {historyRows.slice(0, 20).map((item) => (
                         <tr key={item.id} className="border-b border-sky-100">
                           <td className="p-2">{item.funcionario}</td>
+                          <td className="p-2">{item.setor}</td>
                           <td className="p-2">{item.statusLabel}</td>
                           <td className="p-2">{item.dataConclusao}</td>
                           <td className="p-2">{item.dataVencimento}</td>
@@ -563,9 +588,26 @@ export function TrainingComplianceReportBuilder({
                   )}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-700">
-                  Nenhum registro encontrado para esta qualificação e os filtros de setor, função e funcionário.
-                </p>
+                <div className="mt-3 text-sm text-slate-700">
+                  <p>Nenhum registro encontrado para esta qualificação e os filtros de setor, função e funcionário.</p>
+                  {sectorId && unfilteredSectorHistory.isFetching && (
+                    <p className="mt-1">Conferindo registros disponíveis nos demais setores autorizados...</p>
+                  )}
+                  {sectorId && unfilteredSectorHistory.isSuccess &&
+                    (unfilteredSectorHistory.data?.length || 0) > 0 && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p>
+                          Existem {unfilteredSectorHistory.data!.length} registros desta qualificação
+                          em todos os setores autorizados, mas nenhum pertence ao setor
+                          selecionado no cadastro atual.
+                        </p>
+                        <button type="button" className="mt-2 font-semibold underline"
+                          onClick={() => setSectorId('')}>
+                          Ver em todos os setores
+                        </button>
+                      </div>
+                    )}
+                </div>
               )}
               <p className="mt-3 text-xs text-slate-600">
                 As situações e o prazo do painel de Compliance aplicam-se aos requisitos obrigatórios abaixo, não ao histórico.
