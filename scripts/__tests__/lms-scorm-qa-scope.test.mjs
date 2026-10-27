@@ -153,12 +153,24 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
   const req = (method, suffix) => ({ method, url: base + suffix });
   const valid = {
     courseId: 101, operationId, partCount: 2, packageSha256, zipBytes: 1234,
-    receipt: { packageId: 'candidate-1', packageSha256, zipBytes: 1234, status: 'VALIDATED' },
+    receipt: {
+      packageId: '223e4567-e89b-42d3-a456-426614174000',
+      packageSha256, zipBytes: 1234, status: 'VALIDATED', scormVersion: '1.2',
+      createdByOperation: true, alreadyExisted: false, active: false,
+      completionWritten: false, certificateIssued: false,
+      structural: { status: 'PASS' }, completionManifest: { status: 'PASS' },
+      diagnostics: { status: 'PASS' },
+      r2Readback: { source: 'WORKER_R2_STREAMED_ZIP_READBACK',
+        zipSha256: packageSha256, zipBytes: 1234, etagStable: true,
+        memberIntegrityVerified: true, rangeRequests: 2 },
+    },
     requests: [req('POST', '/init'), req('PUT', `/${operationId}/parts/1`),
       req('PUT', `/${operationId}/parts/2`), req('POST', `/${operationId}/complete`)],
   };
   assert.deepEqual(assertInactiveF5CandidateTrace(valid), {
-    candidate: 'VALIDATED', active: false, certified: false, uploadParts: 2,
+    candidate: 'VALIDATED', workerReceiptInactive: true,
+    activationRequestObserved: false, independentReadbackVerified: false,
+    functionalCertificationVerified: false, uploadParts: 2,
   });
   const bad = [
     { requests: [...valid.requests, req('POST', '/activate')] },
@@ -173,6 +185,24 @@ test('future positive F5 candidate QA accepts only ordered inactive multipart in
     { receipt: { ...valid.receipt, status: 'ACTIVE' } },
     { receipt: { ...valid.receipt, packageSha256: 'b'.repeat(64) } },
     { receipt: { ...valid.receipt, zipBytes: 1235 } },
+    { receipt: { ...valid.receipt, packageId: operationId } },
+    { receipt: { ...valid.receipt, packageId: 'not-a-uuid' } },
+    { receipt: { ...valid.receipt, active: true } },
+    { receipt: { ...valid.receipt, active: undefined } },
+    { receipt: { ...valid.receipt, createdByOperation: false } },
+    { receipt: { ...valid.receipt, alreadyExisted: true } },
+    { receipt: { ...valid.receipt, completionWritten: true } },
+    { receipt: { ...valid.receipt, certificateIssued: true } },
+    { receipt: { ...valid.receipt, scormVersion: '2004' } },
+    { receipt: { ...valid.receipt, structural: { status: 'FAIL' } } },
+    { receipt: { ...valid.receipt, completionManifest: undefined } },
+    { receipt: { ...valid.receipt, diagnostics: { status: 'FAIL' } } },
+    { receipt: { ...valid.receipt, r2Readback: undefined } },
+    { receipt: { ...valid.receipt, r2Readback: { ...valid.receipt.r2Readback, zipSha256: 'b'.repeat(64) } } },
+    { receipt: { ...valid.receipt, r2Readback: { ...valid.receipt.r2Readback, zipBytes: 1235 } } },
+    { receipt: { ...valid.receipt, r2Readback: { ...valid.receipt.r2Readback, etagStable: false } } },
+    { receipt: { ...valid.receipt, r2Readback: { ...valid.receipt.r2Readback, memberIntegrityVerified: false } } },
+    { receipt: { ...valid.receipt, r2Readback: { ...valid.receipt.r2Readback, rangeRequests: 0 } } },
     { partCount: 1 }, { courseId: 0 }, { operationId: 'not-a-uuid' },
   ];
   for (const override of bad) {
