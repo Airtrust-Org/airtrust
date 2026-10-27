@@ -414,3 +414,48 @@ test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before uplo
   writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
     JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
+
+/**
+ * Current governed editor deliberately prevents legacy "Substituir conteúdo"
+ * from combining a metadata save and an unreviewed SCORM activation.
+ * This negative-path QA is distinct from functional certification or a granted
+ * candidate-upload test: no staging grant is issued for disposable QA courses.
+ */
+test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake is rejected', async ({ page }) => {
+  test.setTimeout(90_000);
+  const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
+  const course = state.courses.resume;
+  const forbidden: string[] = [];
+  const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
+
+  page.on('request', request => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
+    const pathname = new URL(request.url()).pathname;
+    if (/\/scorm-package-versions\/|\/activate(?:\/|$)|\/scorm-upload\/streamed\/[^/]+\/(?:parts|complete)/.test(pathname)) {
+      forbidden.push(pathname);
+    }
+  });
+
+  await openCourseEditor(page, course);
+  await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
+    .toBeDisabled();
+  const inactiveButton = page.getByRole('button', {
+    name: 'Carregar somente candidato inativo (QA)',
+  });
+  await expect(inactiveButton).toBeVisible();
+  await expect(inactiveButton).toBeEnabled();
+  // This request must be rejected by the real Worker F5 grant guard before
+  // upload parts or candidate creation. Never mock an authorization grant.
+  const rejectedInit = page.waitForResponse(response => {
+    const u = new URL(response.url());
+    return u.hostname === STAGING_API_HOST &&
+      u.pathname === initPath &&
+      response.request().method() === 'POST';
+  }, { timeout: 20_000 });
+  await inactiveButton.click();
+  const initResponse = await rejectedInit;
+  expect([401, 403], 'Disposable course must not have F5 candidate grant')
+    .toContain(initResponse.status());
+  expect(forbidden, 'Rejected intake must not reach R2 parts, conformance or activation')
+    .toEqual([]);
+});
