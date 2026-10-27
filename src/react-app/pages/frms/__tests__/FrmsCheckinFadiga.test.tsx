@@ -89,7 +89,7 @@ vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
 });
 
 vi.mock('../OperationalVigilanceTest', () => ({
-  default: ({ onComplete }: { onComplete: (result: unknown) => void }) => {
+  default: function MockOperationalVigilanceTest({ onComplete }: { onComplete: (result: unknown) => void }) {
     const completedRef = useRef(false);
     useEffect(() => {
       if (completedRef.current) return;
