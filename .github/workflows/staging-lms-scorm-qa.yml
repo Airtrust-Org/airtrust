@@ -19,6 +19,7 @@ on:
         options:
           - all
           - resume-inactive-preview
+          - candidate-first-no-grant
       pr_number:
         description: 'Open reviewed same-repository release PR (required only when SHA is not yet in main)'
         required: false
@@ -204,6 +205,10 @@ jobs:
           if [[ "$QA_SCOPE" == 'resume-inactive-preview' ]]; then
             npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium \
               --grep 'LMS SCORM resume:'
+          elif [[ "$QA_SCOPE" == 'candidate-first-no-grant' ]]; then
+            # Negative scope ONLY. Do not claim real ZIP conformance, PDF or certification.
+            npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium \
+              --grep 'LMS SCORM candidate-first:'
           else
             npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
           fi
