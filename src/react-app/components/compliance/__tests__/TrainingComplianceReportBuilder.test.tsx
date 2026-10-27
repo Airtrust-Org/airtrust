@@ -3,13 +3,19 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrainingComplianceReportBuilder } from '../TrainingComplianceReportBuilder';
 
-const { fetchWithAuthMock, toastMock } = vi.hoisted(() => ({
+const { fetchWithAuthMock, fetchHistoryMock, exportHistoryPdfMock, toastMock } = vi.hoisted(() => ({
   fetchWithAuthMock: vi.fn(),
-  toastMock: { success: vi.fn(), error: vi.fn() },
+  fetchHistoryMock: vi.fn(),
+  exportHistoryPdfMock: vi.fn(),
+  toastMock: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
+}));
+vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', () => ({
+  fetchQualificationHistoryReport: (...args: unknown[]) => fetchHistoryMock(...args),
+  exportQualificationHistoryPdf: (...args: unknown[]) => exportHistoryPdfMock(...args),
 }));
 vi.mock('@/react-app/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -119,6 +125,46 @@ describe('TrainingComplianceReportBuilder', () => {
       if (url.includes('/pendencias')) return ok([row]);
       throw new Error(`unexpected ${url}`);
     });
+  });
+
+  it('exporta histórico de qualificações renovadas mesmo quando o filtro de Compliance é independente', async () => {
+    const historical = [
+      { id: 1, status: 'RENOVADA', qualificacao_id: 300 },
+      { id: 2, status: 'VENCIDA', qualificacao_id: 300 },
+    ];
+    fetchHistoryMock.mockResolvedValue(historical);
+    exportHistoryPdfMock.mockResolvedValue(undefined);
+    renderBuilder();
+
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
+
+    await waitFor(() => expect(fetchHistoryMock).toHaveBeenCalledWith(expect.objectContaining({
+      tipoId: 300,
+      setorIds: [1],
+      statuses: expect.arrayContaining(['RENOVADA', 'VALIDA', 'VENCIDA']),
+    })));
+    expect(exportHistoryPdfMock).toHaveBeenCalledWith(historical, expect.objectContaining({
+      filterLabels: expect.arrayContaining(['Qualificação: CRM']),
+    }));
+    expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('2 registro'));
+  });
+
+  it('não produz PDF de Compliance vazio quando não existem requisitos obrigatórios', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/relatorios/automacao')) return ok(automation);
+      if (url.includes('/pendencias')) return ok([]);
+      throw new Error(`unexpected ${url}`);
+    });
+    renderBuilder();
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      expect.stringContaining('/pendencias'),
+    ));
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Não há requisitos obrigatórios'),
+    ));
   });
 
   it('combina filtros, envia setores selecionados e permite ativar a programação', async () => {
