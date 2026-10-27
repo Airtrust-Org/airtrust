@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { apiEnvelope } from '@/react-app/lib/api-contract';
 import type { HistoricoQualificacao } from '@/react-app/hooks/useQualificacoesExt';
 import {
+  QUALIFICATION_REPORT_STATUS_OPTIONS,
   applyQualificationHistoryReportClientFilters,
+  fetchQualificationHistoryReport,
   buildQualificationHistoryReportQuery,
   buildQualificationHistoryReportRows,
   qualificationStatusLabel,
   type QualificationHistoryReportFilters,
 } from '../qualificationHistoryReport';
+
+vi.mock('@/react-app/lib/api-contract', () => ({ apiEnvelope: vi.fn() }));
 
 const baseFilters: QualificationHistoryReportFilters = {
   statuses: ['VENCIDA', 'VENCENDO_30', 'VALIDA'],
@@ -47,6 +52,41 @@ describe('qualificationHistoryReport', () => {
     expect(url.searchParams.get('categoria')).toBe('SIMULADOR');
     expect(url.searchParams.get('page')).toBe('2');
     expect(url.searchParams.get('limit')).toBe('500');
+  });
+
+  it('inclui status RENOVADA no relatório de histórico', () => {
+    expect(QUALIFICATION_REPORT_STATUS_OPTIONS).toContainEqual({
+      value: 'RENOVADA',
+      label: 'Renovadas',
+    });
+    const query = buildQualificationHistoryReportQuery({
+      statuses: ['RENOVADA', 'VALIDA'],
+      setorIds: [7],
+      tipoId: 31,
+    });
+    const params = new URL(query, 'https://airtrust.local').searchParams;
+    expect(params.get('statuses')).toBe('RENOVADA,VALIDA');
+    expect(params.get('setor_ids')).toBe('7');
+    expect(params.get('tipo_id')).toBe('31');
+  });
+
+  it('obtém todas as páginas usando pagination.pages do backend', async () => {
+    const api = vi.mocked(apiEnvelope);
+    api.mockReset();
+    api.mockResolvedValueOnce({
+      success: true,
+      data: [historyRow({ id: 1, status: 'RENOVADA' })],
+      pagination: { pages: 2 },
+    });
+    api.mockResolvedValueOnce({
+      success: true,
+      data: [historyRow({ id: 2, status: 'VALIDA' })],
+      pagination: { pages: 2 },
+    });
+    const results = await fetchQualificationHistoryReport({ statuses: ['RENOVADA', 'VALIDA'] });
+    expect(results.map((result) => result.id)).toEqual([1, 2]);
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(new URL(String(api.mock.calls[1][0]), 'https://airtrust.local').searchParams.get('page')).toBe('2');
   });
 
   it('preserva VENCENDO_30 como a regra canônica de em vencimento', () => {

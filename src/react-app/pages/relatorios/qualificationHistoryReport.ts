@@ -5,6 +5,7 @@ export const QUALIFICATION_REPORT_STATUS_OPTIONS = [
   { value: 'VENCIDA', label: 'Vencidas' },
   { value: 'VENCENDO_30', label: 'Em vencimento' },
   { value: 'VALIDA', label: 'Vigentes' },
+  { value: 'RENOVADA', label: 'Renovadas' },
 ] as const;
 
 export type QualificationReportStatus =
@@ -161,7 +162,8 @@ export async function fetchQualificationHistoryReport(
     );
     if (Array.isArray(envelope.data)) allRows.push(...envelope.data);
     const meta = envelope.meta as HistoricoMeta | undefined;
-    totalPages = Math.max(1, Number(meta?.total_pages || 1));
+    const pagination = envelope.pagination as { pages?: number } | undefined;
+    totalPages = Math.max(1, Number(pagination?.pages || meta?.total_pages || 1));
     page += 1;
   } while (page <= totalPages);
 
@@ -199,9 +201,10 @@ function summarize(rows: QualificationHistoryReportRow[]) {
       if (row.status === 'VENCIDA') acc.vencidas += 1;
       if (row.status === 'VENCENDO_30') acc.vencendo += 1;
       if (row.status === 'VALIDA') acc.vigentes += 1;
+      if (row.status === 'RENOVADA') acc.renovadas += 1;
       return acc;
     },
-    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0 },
+    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0, renovadas: 0 },
   );
 }
 
@@ -249,6 +252,7 @@ export async function exportQualificationHistoryExcel(
     ['Vencidas', stats.vencidas],
     ['Em vencimento', stats.vencendo],
     ['Vigentes', stats.vigentes],
+    ['Renovadas', stats.renovadas],
     ['Filtros', (context.filterLabels || []).join(' | ') || 'Sem filtros adicionais'],
   ]);
   summary.getRow(1).font = { bold: true, size: 14 };
@@ -330,7 +334,7 @@ export async function exportQualificationHistoryPdf(
     doc.text(`Emitido por: ${context.usuarioNome || 'Usuário autenticado'}`, margin, 24);
     doc.text(`Emissão: ${generatedAt.toLocaleString('pt-BR')}`, margin, 29);
     doc.text(
-      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}`,
+      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}  |  Renovadas: ${stats.renovadas}`,
       margin,
       34,
     );
