@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, XCircle } from 'lucide-react';
 import { cn } from '@/react-app/lib/utils';
 import ControleVoosStatCards from './ControleVoosStatCards';
 import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
@@ -9,6 +9,7 @@ import {
   type CvFrmsFlightDispatchItem,
   type FrmsDispatchGateReasonCode,
   type FrmsDispatchReadinessStatus,
+  type CvFrmsDailyAssessmentReason,
 } from '@/react-app/hooks/useControleVoos';
 
 /**
@@ -51,6 +52,13 @@ const FADIGA_LABELS: Record<string, string> = {
   ATENCAO: 'Atenção',
   CRITICO: 'Crítico',
   INDISPONIVEL: 'Sem conclusão',
+};
+
+const DAILY_REASON_LABELS: Record<Exclude<CvFrmsDailyAssessmentReason, null>, string> = {
+  CHECKIN_NAO_CONFIRMADO: 'Não há check-in confirmado para esta data e vínculo.',
+  CHECKIN_OU_DADOS_INCONSISTENTES: 'Check-in recebido, mas faltam dados obrigatórios ou há inconsistência.',
+  EVIDENCIA_REGULATORIA_INSUFICIENTE: 'Check-in recebido; a avaliação regulatória ainda não tem evidência suficiente.',
+  EVIDENCIA_OPERACIONAL_INSUFICIENTE: 'Check-in recebido; faltam evidências para concluir a decisão operacional.',
 };
 
 const CHECKIN_LABELS: Record<string, string> = {
@@ -130,7 +138,12 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
           </span>
         </td>
         <td className={cn('px-3 py-2', fadigaClass(membro.fadiga_diaria))}>
-          {FADIGA_LABELS[membro.fadiga_diaria] ?? membro.fadiga_diaria}
+          <span className="block">{FADIGA_LABELS[membro.fadiga_diaria] ?? membro.fadiga_diaria}</span>
+          {membro.fadiga_diaria === 'INDISPONIVEL' && membro.daily_assessment_reason && (
+            <span className="mt-1 block max-w-xs text-xs font-normal text-slate-600 dark:text-slate-400">
+              {DAILY_REASON_LABELS[membro.daily_assessment_reason]}
+            </span>
+          )}
         </td>
         <td className={cn('px-3 py-2', fadigaClass(membro.fadiga_acumulada))}>
           {FADIGA_LABELS[membro.fadiga_acumulada] ?? membro.fadiga_acumulada}
@@ -180,7 +193,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
 
 export default function ControleOperacionalFrmsPanel() {
   const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
-  const { data: painel, isLoading, error } = useFrmsOperacionalPainel(data);
+  const { data: painel, isLoading, isFetching, error, refetch, dataUpdatedAt } = useFrmsOperacionalPainel(data);
 
   const resumo = painel?.resumo;
   const voos = painel?.voos ?? [];
@@ -196,7 +209,19 @@ export default function ControleOperacionalFrmsPanel() {
             Os check-ins realizados e as condições do FRMS aparecem separadamente. Os alertas não impedem automaticamente a liberação pela Coordenação; siga os procedimentos operacionais aplicáveis.
           </p>
         </div>
-        <label className="space-y-1 text-xs">
+        <div className="flex items-end gap-3">
+          <button
+            type="button"
+            disabled={isFetching}
+            onClick={() => { void refetch(); }}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            aria-label="Atualizar informações FRMS"
+            data-testid="frms-gate-refresh"
+          >
+            <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+            {isFetching ? 'Atualizando…' : 'Atualizar FRMS'}
+          </button>
+          <label className="space-y-1 text-xs">
           <span className="block font-medium text-slate-500 dark:text-slate-400">
             Data da operação
           </span>
@@ -207,8 +232,17 @@ export default function ControleOperacionalFrmsPanel() {
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             data-testid="frms-gate-date-input"
           />
-        </label>
+          </label>
+        </div>
       </div>
+
+      {dataUpdatedAt > 0 && (
+        <p className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
+          Consulta atualizada às {new Intl.DateTimeFormat('pt-BR', {
+            timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',
+          }).format(new Date(dataUpdatedAt))} (Brasília). Check-ins registrados em outra sessão são reconsultados automaticamente.
+        </p>
+      )}
 
       {resumo && (
         <ControleVoosStatCards
