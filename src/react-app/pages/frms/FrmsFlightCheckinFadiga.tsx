@@ -245,7 +245,7 @@ export function isFadigaCheckinSubmitReady(input: {
 }
 
 function HistoricoTab({ collective }: { collective: boolean }) {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const inicio = `${hoje.slice(0, 8)}01`;
   const { data, isLoading } = useFadigaHistorico({ data_inicio: inicio, data_fim: hoje, limit: 30 });
   const rows = data?.data ?? [];
@@ -326,7 +326,7 @@ function HistoricoTab({ collective }: { collective: boolean }) {
 }
 
 function PainelGestorTab() {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const [data, setData] = useState(hoje);
   const { data: painel, isLoading, isError, error, refetch, isFetching } = useFadigaPainel(data);
   const rows = Array.isArray(painel) ? painel : [];
