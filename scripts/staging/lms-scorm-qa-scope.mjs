@@ -18,6 +18,14 @@ export function fixtureKindsForQaScope(scope = 'all') {
   return [...FIXTURES_BY_SCOPE[scope]];
 }
 
+/** Missing QA_SCOPE preserves the documented default; an explicitly empty or
+ * unknown scope must never silently fall back to full staging QA. */
+export function resolveQaScope(scope) {
+  const selected = scope === undefined ? 'all' : scope;
+  fixtureKindsForQaScope(selected);
+  return selected;
+}
+
 /**
  * Cleanup is a destructive staging operation. A state file alone must never
  * authorize deleting an arbitrary course ID (even inside the QA tenant).
