@@ -426,17 +426,34 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const course = state.courses.resume;
   const writes: Array<{ method: string; origin: string; pathname: string }> = [];
-  let captureCandidateWrites = false;
+  const blockedWrites: typeof writes = [];
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
-  page.on('request', request => {
-    // Editor initialization/auth refresh is not part of the candidate action.
-    if (!captureCandidateWrites || ['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    const url = new URL(request.url());
-    writes.push({ method: request.method(), origin: url.origin, pathname: url.pathname });
-  });
-
   await openCourseEditor(page, course);
+  // Install the mutation firewall AFTER editor initialization. Observing
+  // unexpected writes without blocking them is unsafe: a regression could
+  // actually upload or activate a candidate before the assertion runs.
+  await page.route('**/*', async route => {
+    const request = route.request();
+    const method = request.method().toUpperCase();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      await route.continue();
+      return;
+    }
+    const url = new URL(request.url());
+    const observed = { method, origin: url.origin, pathname: url.pathname };
+    writes.push(observed);
+    const allowedInit = method === 'POST' &&
+      url.protocol === 'https:' &&
+      url.hostname === STAGING_API_HOST &&
+      url.pathname === initPath;
+    if (!allowedInit) {
+      blockedWrites.push(observed);
+      await route.abort('blockedbyclient');
+      return;
+    }
+    await route.continue();
+  });
   await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
     .toBeDisabled();
   const inactiveButton = page.getByRole('button', {
@@ -452,7 +469,6 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
       u.pathname === initPath &&
       response.request().method() === 'POST';
   }, { timeout: 20_000 });
-  captureCandidateWrites = true;
   await inactiveButton.click();
   const initResponse = await rejectedInit;
   // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
@@ -465,6 +481,11 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   expect(/grant(?: SCORM)? F5|grant de staging/i.test(String(denial?.error)),
     'Expected explicit F5 grant rejection, not an unrelated RBAC denial',
   ).toBe(true);
+  // Allow async UI error handling to settle while the route firewall remains
+  // active. A late mutation is blocked before it reaches the environment.
+  await page.waitForTimeout(750);
+  expect(blockedWrites, 'No unexpected staging or off-origin write may be attempted')
+    .toEqual([]);
   // An exact allowlist also detects unexpected course writes or off-origin
   // requests, beyond just upload parts, conformance and activation.
   expect(writes, 'Denied intake must only POST init to the trusted staging Worker')
