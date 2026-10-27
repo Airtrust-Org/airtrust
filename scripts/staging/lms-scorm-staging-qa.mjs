@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
-import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope } from './lms-scorm-qa-scope.mjs';
+import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -287,6 +287,8 @@ async function removeVerifiedSyntheticCourse(token, item) {
 }
 
 async function prepare() {
+  // Reject invalid/empty scopes before any staging network request or tenant switch.
+  const qaScope = resolveQaScope(process.env.QA_SCOPE);
   fs.mkdirSync(ROOT, { recursive: true });
   await assertPinnedStagingRelease();
   const token = await qaToken();
@@ -294,7 +296,7 @@ async function prepare() {
   const created = [];
   // Validate the scope before any course creation. Negative-only QA needs
   // exactly one disposable course, not the four full-upload scenarios.
-  const kinds = fixtureKindsForQaScope(process.env.QA_SCOPE || 'all');
+  const kinds = fixtureKindsForQaScope(qaScope);
   const labels = { success: 'Success', reject: 'Reject', timeout: 'Timeout', resume: 'Resume' };
 
   try {
@@ -313,7 +315,7 @@ async function prepare() {
         ok: true,
         prepared: true,
         course_count: created.length,
-        qa_scope: process.env.QA_SCOPE || 'all',
+        qa_scope: qaScope,
         state_path: STATE_PATH,
         production_target_used: false,
       }),
@@ -337,12 +339,13 @@ async function prepare() {
 }
 
 async function cleanup() {
+  const qaScope = resolveQaScope(process.env.QA_SCOPE);
   assert(fs.existsSync(STATE_PATH), 'state QA SCORM ausente para cleanup');
   await assertPinnedStagingRelease();
   const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
   // Fail closed before authentication or any destructive request. Never trust
   // course IDs from a state file without matching the exact run and scope.
-  const items = assertDisposableQaCleanupState(state, process.env.QA_SCOPE || 'all', RUN_MARKER);
+  const items = assertDisposableQaCleanupState(state, qaScope, RUN_MARKER);
   const token = await qaToken();
   const results = [];
 
