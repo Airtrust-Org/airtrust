@@ -13,8 +13,9 @@ const { fetchWithAuthMock, fetchHistoryMock, exportHistoryPdfMock, toastMock } =
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
 }));
-vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', () => ({
-  fetchQualificationHistoryReport: (...args: unknown[]) => fetchHistoryMock(...args),
+vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/react-app/pages/relatorios/qualificationHistoryReport')>()),
+  fetchQualificationHistoryForType: (...args: unknown[]) => fetchHistoryMock(...args),
   exportQualificationHistoryPdf: (...args: unknown[]) => exportHistoryPdfMock(...args),
 }));
 vi.mock('@/react-app/hooks/useAuth', () => ({
@@ -138,13 +139,17 @@ describe('TrainingComplianceReportBuilder', () => {
 
     fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await waitFor(() => expect(screen.getByText('Histórico cadastrado — CRM')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Registros no histórico')).toBeInTheDocument());
+    expect(screen.getByText('Renovados')).toBeInTheDocument();
+    expect(screen.getByText('2', { selector: '.text-2xl' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
 
     await waitFor(() => expect(fetchHistoryMock).toHaveBeenCalledWith(expect.objectContaining({
-      tipoId: 300,
       setorIds: [1],
       statuses: expect.arrayContaining(['RENOVADA', 'VALIDA', 'VENCIDA']),
-    })));
+    }), expect.objectContaining({ id: 300, codigo: 'CRM' })));
     expect(exportHistoryPdfMock).toHaveBeenCalledWith(historical, expect.objectContaining({
       filterLabels: expect.arrayContaining(['Qualificação: CRM']),
     }));
