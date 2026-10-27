@@ -108,6 +108,33 @@ test('cleanup and failed-prepare rollback reject non-synthetic Worker readbacks'
     /QA_SCORM_CLEANUP_TARGET_IDENTITY_MISMATCH/);
 });
 
+
+import { summarizeDisposableQaCleanup } from '../staging/lms-scorm-qa-scope.mjs';
+
+test('QA cleanup summary never claims DELETE when fixture was already absent', () => {
+  assert.deepEqual(summarizeDisposableQaCleanup([
+    { kind: 'resume', deleteAttempted: false, deleted: false },
+  ]), {
+    course_count: 1, deleted_count: 0, already_absent_count: 1,
+    delete_requests: 0, all_courses_unreachable: true,
+    product_delete_endpoint_used: false,
+  });
+  assert.deepEqual(summarizeDisposableQaCleanup([
+    { kind: 'resume', deleteAttempted: true, deleted: true },
+    { kind: 'success', deleteAttempted: true, deleted: false },
+    { kind: 'reject', deleteAttempted: false, deleted: false },
+  ]), {
+    course_count: 3, deleted_count: 1, already_absent_count: 2,
+    delete_requests: 2, all_courses_unreachable: true,
+    product_delete_endpoint_used: true,
+  });
+  for (const invalid of [[], null, [{ kind: 'resume', deleted: true, deleteAttempted: false }],
+    [{ kind: 'resume', deleted: 'true', deleteAttempted: true }]]) {
+    assert.throws(() => summarizeDisposableQaCleanup(invalid),
+      { message: 'QA_SCORM_CLEANUP_OUTCOMES_INVALID' });
+  }
+});
+
 // Catch accidental duplicate/partial cleanup blocks at PR-test time, before
 // the staging workflow receives credentials or reaches a disposable course.
 test('SCORM QA entrypoint parses before any staging request', () => {

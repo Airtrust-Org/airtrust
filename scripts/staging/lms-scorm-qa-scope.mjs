@@ -97,6 +97,30 @@ export function assertDisposableQaCourseReadback(course, expected) {
   return true;
 }
 
+/** Distinguish verified deletion from an already-absent synthetic fixture.
+ * The caller must first perform the authenticated GET/DELETE/404 readback;
+ * this pure function only summarizes those verified outcomes.
+ */
+export function summarizeDisposableQaCleanup(results) {
+  if (!Array.isArray(results) || results.length < 1 ||
+      results.some(item => !item || typeof item.kind !== 'string' ||
+        typeof item.deleteAttempted !== 'boolean' ||
+        typeof item.deleted !== 'boolean' ||
+        (item.deleted && !item.deleteAttempted))) {
+    throw new Error('QA_SCORM_CLEANUP_OUTCOMES_INVALID');
+  }
+  const deletedCount = results.filter(item => item.deleted).length;
+  const deleteRequests = results.filter(item => item.deleteAttempted).length;
+  return {
+    course_count: results.length,
+    deleted_count: deletedCount,
+    already_absent_count: results.length - deletedCount,
+    delete_requests: deleteRequests,
+    all_courses_unreachable: true,
+    product_delete_endpoint_used: deleteRequests > 0,
+  };
+}
+
 /**
  * Offline contract for a future grant-authorized POSITIVE candidate QA.
  * Only mutating Playwright requests belong in this trace. No network I/O,

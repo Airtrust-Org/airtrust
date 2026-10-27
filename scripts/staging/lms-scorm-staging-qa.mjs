@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
-import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope, assertQaScopeReadyForStaging } from './lms-scorm-qa-scope.mjs';
+import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope, assertQaScopeReadyForStaging, summarizeDisposableQaCleanup } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -275,7 +275,7 @@ async function createCourse(token, key, label, setorId) {
 async function removeVerifiedSyntheticCourse(token, item) {
   const id = item.id;
   const existing = await authJson(token, `/api/lms/cursos/${id}`);
-  if (existing.status === 404) return; // Already removed: no DELETE.
+  if (existing.status === 404) return { deleteAttempted: false, deleted: false }; // Idempotent; no DELETE.
   assert(existing.status === 200 && existing.json?.success === true,
     'QA_SCORM_CLEANUP_READBACK_FAILED');
   assertDisposableQaCourseReadback(existing.json?.data, item);
@@ -284,6 +284,7 @@ async function removeVerifiedSyntheticCourse(token, item) {
     `cleanup curso ${id} retornou ${removed.status}`);
   const verify = await authJson(token, `/api/lms/cursos/${id}`);
   assert(verify.status === 404, `curso sintético ${id} ainda visível após cleanup`);
+  return { deleteAttempted: true, deleted: removed.status === 200 };
 }
 
 async function prepare() {
@@ -351,16 +352,14 @@ async function cleanup() {
 
   for (const item of items) {
     // Normal cleanup and failed-prepare rollback share the same readback gate.
-    await removeVerifiedSyntheticCourse(token, item);
-    results.push({ kind: item.kind, removed: true });
+    const outcome = await removeVerifiedSyntheticCourse(token, item);
+    results.push({ kind: item.kind, ...outcome });
   }
 
   const summary = {
     ok: true,
     cleanup: 'PASS',
-    course_count: results.length,
-    all_courses_unreachable: true,
-    product_delete_endpoint_used: true,
+    ...summarizeDisposableQaCleanup(results),
     production_target_used: false,
   };
   const out = path.join(ROOT, 'cleanup-summary.json');
