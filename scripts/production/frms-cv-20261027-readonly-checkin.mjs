@@ -37,8 +37,8 @@ export const QUERIES = Object.freeze({
 });
 
 function assertReadOnly(sql) {
-  if (!/^SELECT\\s/i.test(sql)) throw new Error('ONLY_SELECT_ALLOWED');
-  if (/\\b(INSERT|UPDATE|DELETE|REPLACE|MERGE|CREATE|ALTER|DROP|TRUNCATE|VACUUM|ATTACH|DETACH|REINDEX|PRAGMA)\\b/i.test(sql) || sql.includes(';')) {
+  if (!/^SELECT\s/i.test(sql)) throw new Error('ONLY_SELECT_ALLOWED');
+  if (/\b(INSERT|UPDATE|DELETE|REPLACE|MERGE|CREATE|ALTER|DROP|TRUNCATE|VACUUM|ATTACH|DETACH|REINDEX|PRAGMA)\b/i.test(sql) || sql.includes(';')) {
     throw new Error('MUTATING_OR_MULTISTATEMENT_SQL_BLOCKED');
   }
 }
@@ -109,7 +109,7 @@ export async function runProductionReadonly() {
   if (process.env.CONFIRM_READONLY !== 'AIRTRUST_FRMS_CV_READONLY_20261027') throw new Error('CONFIRMATION_REQUIRED');
   if (!/^[a-f0-9]{40}$/.test(process.env.EXPECTED_SHA || '')) throw new Error('SOURCE_SHA_REQUIRED');
   const tenant = await queryProduction(QUERIES.tenant, [TENANT_ID]);
-  if (tenant.length !== 1 || !/costa\\s*(?:do\\s*)?sol|\\bcds\\b/i.test(String(tenant[0].nome || '') + ' ' + String(tenant[0].codigo || ''))) {
+  if (tenant.length !== 1 || !/costa\s*(?:do\s*)?sol|\bcds\b/i.test(String(tenant[0].nome || '') + ' ' + String(tenant[0].codigo || ''))) {
     throw new Error('PRODUCTION_TENANT_GUARD_FAILED');
   }
   const flights = await queryProduction(QUERIES.flights, [TENANT_ID, AUDIT_DATE, AIRCRAFT_PREFIX]);
@@ -120,7 +120,7 @@ export async function runProductionReadonly() {
   report.sourceSha = process.env.EXPECTED_SHA;
   const out = String(process.env.AUDIT_REPORT_PATH || '');
   if (!out.startsWith('/')) throw new Error('REPORT_PATH_NOT_ABSOLUTE');
-  await writeFile(out, JSON.stringify(report, null, 2) + '\\n', {mode: 0o600});
+  await writeFile(out, JSON.stringify(report, null, 2) + '\n', {mode: 0o600});
   console.log('FRMS_CV_OCT27_READONLY_COMPLETED matches=' + report.matchedFlights + ' crew=' + report.uniqueAssigned + ' received=' + report.currentDate.received + ' pending=' + report.currentDate.pending + ' writes=0');
   return report;
 }
