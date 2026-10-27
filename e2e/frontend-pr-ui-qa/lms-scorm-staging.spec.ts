@@ -74,7 +74,7 @@ async function delayedRealResponse(
   await route.fulfill({ response });
 }
 
-async function openCourseEditor(page: Page, course: QaCourse) {
+async function openCourseEditor(page: Page, course: QaCourse, beforeZipSelect?: () => Promise<void>) {
   // The catalog fetches draft courses asynchronously after the page mounts.
   // A visible searchbox is NOT proof of a completed catalog query. Record the
   // real tenant-scoped draft API verdict before assessing the synthetic card.
@@ -149,6 +149,9 @@ async function openCourseEditor(page: Page, course: QaCourse) {
     page.getByRole('heading', { name: `Refinando ${course.title}` }),
   ).toBeVisible();
 
+  // The negative-path mutation firewall must be installed BEFORE choosing the ZIP.
+  // File selection itself can trigger network activity in future UI versions.
+  if (beforeZipSelect) await beforeZipSelect();
   const fileInput = page.locator('input[type="file"][accept=".zip"]').first();
   await fileInput.setInputFiles(course.zip_path);
   await expect(page.getByText(course.zip_name, { exact: true })).toBeVisible();
@@ -377,7 +380,8 @@ test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP'
   const resume = state.courses.resume;
   const attemptedWrites: Array<{ method: string; pathname: string }> = [];
 
-  await openCourseEditor(page, resume);
+  // Fail closed from the moment the ZIP is selected, not only after selection.
+  await openCourseEditor(page, resume, async () => {
   // Fail closed even if a future UI regression tries an unsolicited mutation.
   // Service Workers are blocked for this audit profile in Playwright config.
   await page.route('**/*', async route => {
@@ -389,6 +393,7 @@ test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP'
     const pathname = new URL(route.request().url()).pathname;
     attemptedWrites.push({ method, pathname });
     await route.abort('blockedbyclient');
+  });
   });
 
   await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
@@ -434,10 +439,9 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   const blockedWrites: typeof writes = [];
   const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
 
-  await openCourseEditor(page, course);
-  // Install the mutation firewall AFTER editor initialization. Observing
-  // unexpected writes without blocking them is unsafe: a regression could
-  // actually upload or activate a candidate before the assertion runs.
+  // Install after opening the editor but BEFORE selecting the ZIP. Otherwise
+  // an automatic upload on file selection could escape the negative QA firewall.
+  await openCourseEditor(page, course, async () => {
   await page.route('**/*', async route => {
     const request = route.request();
     const method = request.method().toUpperCase();
@@ -459,6 +463,7 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
     }
     await route.continue();
   });
+  });
   await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
     .toBeDisabled();
   const inactiveButton = page.getByRole('button', {
@@ -466,6 +471,8 @@ test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake 
   });
   await expect(inactiveButton).toBeVisible();
   await expect(inactiveButton).toBeEnabled();
+  expect(blockedWrites, 'ZIP selection must not attempt unauthorized writes').toEqual([]);
+  expect(writes, 'ZIP selection must not initiate a staging mutation').toEqual([]);
   // This request must be rejected by the real Worker F5 grant guard before
   // upload parts or candidate creation. Never mock an authorization grant.
   const rejectedInit = page.waitForResponse(response => {
