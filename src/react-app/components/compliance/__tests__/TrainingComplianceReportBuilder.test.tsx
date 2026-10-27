@@ -180,6 +180,20 @@ describe('TrainingComplianceReportBuilder', () => {
     expect(within(screen.getByRole('table')).getByText('Operações')).toBeInTheDocument();
   });
 
+  it('não apresenta erro de leitura do histórico como ausência de certificados na exportação', async () => {
+    fetchHistoryMock.mockRejectedValue(new Error('HISTORICO_SEM_PERMISSAO'));
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+    await screen.findByRole('alert');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Exportar histórico (PDF)' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar histórico (PDF)' }));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('HISTORICO_SEM_PERMISSAO'));
+    expect(toastMock.warning).not.toHaveBeenCalledWith(
+      expect.stringContaining('Nenhum registro cadastrado'),
+    );
+    expect(exportHistoryPdfMock).not.toHaveBeenCalled();
+  });
+
   it('não produz PDF de Compliance vazio quando não existem requisitos obrigatórios', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/relatorios/automacao')) return ok(automation);
