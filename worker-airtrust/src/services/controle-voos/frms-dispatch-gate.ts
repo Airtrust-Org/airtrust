@@ -168,10 +168,12 @@ function mapDailyCheckinSignal(item: FrmsOperationalSnapshotItem | undefined): D
   }
   const nivel = String(item.nivel_fadiga_calculado ?? '')
     .trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
-  if (['VERMELHO', 'CRITICO', 'ALTO', 'BAIXA'].includes(nivel)) return 'CRITICO';
+  // Faixas reconhecidas pelo adaptador operacional já existente
+  // (frmsOperationalSignals.ts); desconhecidas permanecem indisponíveis.
+  if (['VERMELHO', 'CRITICO', 'BAIXA'].includes(nivel)) return 'CRITICO';
   if (item.alertas.includes('KSS_ALTO') || item.alertas.includes('SONO_INSUFICIENTE')) return 'ATENCAO';
-  if (['AMARELO', 'MEDIO', 'MODERADO', 'TRANSICAO'].includes(nivel)) return 'ATENCAO';
-  if (['VERDE', 'BAIXO'].includes(nivel)) return 'NORMAL';
+  if (['AMARELO', 'ATENCAO', 'TRANSICAO', 'DEGRADADA'].includes(nivel)) return 'ATENCAO';
+  if (['VERDE', 'NORMAL', 'ALTA', 'BAIXO'].includes(nivel)) return 'NORMAL';
   return 'INDISPONIVEL';
 }
 
