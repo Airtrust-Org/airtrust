@@ -106,8 +106,9 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     expect(JSON.stringify(result)).not.toContain('real');
     expect(statements.filter(s=>s.sql.includes('FROM qualificacoes_historico'))[0].args)
       .toEqual([997,88,555]);
-    expect(statements.filter(s=>s.sql.includes('FROM lms_xapi_statements'))[0].args)
-      .toEqual([997,88]);
+    const xapiQuery = statements.find(s=>s.sql.includes('FROM lms_xapi_statements'));
+    expect(xapiQuery?.sql).toMatch(/WHERE empresa_id = \? AND matricula_id = \?/);
+    expect(xapiQuery?.args).toEqual([997,88]);
     expect(statements.some(s=>/\b(?:INSERT|UPDATE|DELETE)\b/i.test(s.sql))).toBe(false);
     expect(statements.some(s=>s.sql.includes('sqlite_master'))).toBe(false);
   });
@@ -134,6 +135,10 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
       [{cycleAttempts:1},/SCORM_QA_ATTEMPT_STATE_PRESENT/],
       [{xapiCount:1},/SCORM_QA_XAPI_STATE_PRESENT/],
       [{xapiCount:null},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:-1},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:0.5},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:Number.NaN},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:Number.POSITIVE_INFINITY},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
       [{xapiUnavailable:true},/SCORM_QA_XAPI_READBACK_UNAVAILABLE/],
     ] as const) {
       const {db}=dbMock(config);
