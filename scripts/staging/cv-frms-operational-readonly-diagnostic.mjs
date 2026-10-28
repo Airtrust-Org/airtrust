@@ -92,10 +92,34 @@ async function main(){
   const rows=query("SELECT empresa_id,COUNT(*) AS total FROM cv_voos WHERE empresa_id IN (999006,999013) AND data_programacao='2026-10-27' AND deleted_at IS NULL GROUP BY empresa_id");
   qaFlights={state:'READABLE',counts:[999006,999013].map(id=>({tenantLabel:id===999006?'qa_examiner_training':'qa_frms_ux',total:Number(rows.find(x=>Number(x.empresa_id)===id)?.total||0)}))};
  }catch{qaFlights={state:'QUERY_FAILED',counts:[]};}
- const schemaOk=missing.length===0&&Object.values(compile).every(x=>x==='PASS')&&qaFlights.state==='READABLE';
+ // Aggregate-only readback of the exact crew join used by the Coordination gate.
+ // No employee/flight identifiers, names, fatigue responses or individual rows are returned.
+ let qaCrew={state:'NOT_CHECKED',counts:[]};
+ if(compile.crew==='PASS'&&compile.flights==='PASS')try{
+  const rows=query(`SELECT v.empresa_id,
+    COUNT(DISTINCT v.id) AS flights,
+    COUNT(t.id) AS active_crew_links,
+    COUNT(f.id) AS visible_crew_links,
+    COUNT(DISTINCT CASE WHEN t.id IS NOT NULL THEN v.id END) AS flights_with_crew,
+    COUNT(DISTINCT CASE WHEN f.id IS NOT NULL THEN v.id END) AS flights_with_visible_crew
+    FROM cv_voos v
+    LEFT JOIN cv_voo_tripulantes t ON t.voo_id=v.id AND t.empresa_id=v.empresa_id AND t.deleted_at IS NULL
+    LEFT JOIN funcionarios f ON f.id=t.funcionario_id AND f.empresa_id=t.empresa_id AND f.deleted_at IS NULL
+    WHERE v.empresa_id IN (999006,999013) AND v.data_programacao='2026-10-27' AND v.deleted_at IS NULL
+    GROUP BY v.empresa_id`);
+  qaCrew={state:'READABLE',counts:[999006,999013].map(id=>{
+   const row=rows.find(x=>Number(x.empresa_id)===id)||{};
+   return {tenantLabel:id===999006?'qa_examiner_training':'qa_frms_ux',
+    flights:Number(row.flights||0),activeCrewLinks:Number(row.active_crew_links||0),
+    visibleCrewLinks:Number(row.visible_crew_links||0),
+    flightsWithCrew:Number(row.flights_with_crew||0),
+    flightsWithVisibleCrew:Number(row.flights_with_visible_crew||0)};
+  })};
+ }catch{qaCrew={state:'QUERY_FAILED',counts:[]};}
+ const schemaOk=missing.length===0&&Object.values(compile).every(x=>x==='PASS')&&qaFlights.state==='READABLE'&&qaCrew.state==='READABLE';
  const verdict=schemaOk?'SCHEMA_ONLY_PASS':'SCHEMA_FAIL';
- const fixtureState=qaFlights.state!=='READABLE'?'UNKNOWN':qaFlights.counts.some(x=>x.total>0)?'SYNTHETIC_FLIGHTS_PRESENT':'NO_SYNTHETIC_FLIGHTS_ON_DATE';
- console.log(JSON.stringify({date:'2026-10-27',sha,readOnly:true,writes:0,missingColumns:missing,compileProbes:compile,qaFlights,fixtureState,verdict},null,2));
+ const fixtureState=qaCrew.state!=='READABLE'?'UNKNOWN':qaCrew.counts.some(x=>x.flightsWithVisibleCrew>0)?'SYNTHETIC_CREW_PRESENT':qaCrew.counts.some(x=>x.activeCrewLinks>0)?'CREW_LINKS_NOT_VISIBLE_IN_GATE':'SYNTHETIC_FLIGHTS_NO_CREW_LINKS';
+ console.log(JSON.stringify({date:'2026-10-27',sha,readOnly:true,writes:0,missingColumns:missing,compileProbes:compile,qaFlights,qaCrew,fixtureState,verdict},null,2));
  if(!schemaOk)process.exitCode=1;
 }
 main().catch(e=>{console.error('CV_FRMS_STAGING_DIAGNOSTIC_FAILED:'+String(e?.message||'UNKNOWN').replace(/[^A-Z0-9_]/gi,'_').slice(0,60));process.exitCode=1;});

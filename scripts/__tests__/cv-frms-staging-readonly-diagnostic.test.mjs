@@ -22,7 +22,7 @@ test('only SELECT and PRAGMA, no remote write or clinical values returned',()=>{
 test('probes operational schema including 0498 and counts synthetic flights only',()=>{
  for(const name of ['cv_voos','cv_voo_tripulantes','frms_acumulo_rolling','hv_ano_calendario_min','frms_fadiga_checkin','escala_alocacoes'])assert.ok(s.includes(name));
  assert.match(s,/empresa_id IN \(999006,999013\)/);
- assert.match(s,/missingColumns:missing,compileProbes:compile,qaFlights,fixtureState,verdict/);
+ assert.match(s,/missingColumns:missing,compileProbes:compile,qaFlights,qaCrew,fixtureState,verdict/);
 });
 test('credentials stay inside staging and mutex is shared with QA',()=>{
  assert.match(w,/schema_d1_readonly:/);assert.match(w,/environment: staging/);assert.match(w,/airtrust-staging-mutations-and-scorm-qa/);
@@ -37,4 +37,15 @@ test('phase-2 probes cover actual CV and FRMS activity sources without materiali
  assert.match(s,/LIMIT 0/);
  assert.match(s,/Only schema names are emitted/);
  assert.doesNotMatch(s,/console\.log\(.*results/);
+});
+
+test('diagnoses synthetic 27 Oct crew through the exact active-tenant gate join, aggregates only',()=>{
+ assert.match(s,/COUNT\(t\.id\) AS active_crew_links/);
+ assert.match(s,/COUNT\(f\.id\) AS visible_crew_links/);
+ assert.match(s,/t\.voo_id=v\.id AND t\.empresa_id=v\.empresa_id AND t\.deleted_at IS NULL/);
+ assert.match(s,/f\.id=t\.funcionario_id AND f\.empresa_id=t\.empresa_id AND f\.deleted_at IS NULL/);
+ assert.match(s,/qaCrew,fixtureState,verdict/);
+ assert.match(s,/SYNTHETIC_FLIGHTS_NO_CREW_LINKS/);
+ assert.match(s,/CREW_LINKS_NOT_VISIBLE_IN_GATE/);
+ assert.doesNotMatch(s,/console\.log\(.*(?:crewRows|employeeRows|clinicalValues)/);
 });
