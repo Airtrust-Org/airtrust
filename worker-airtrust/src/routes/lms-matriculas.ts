@@ -442,7 +442,14 @@ app.get(
     const rows = await db
       .prepare(
         `
-      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
+      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM usuarios u
+          JOIN usuarios_empresas ue
+            ON ue.usuario_id = u.id AND ue.empresa_id = m.empresa_id
+          WHERE u.funcionario_id = m.funcionario_id
+            AND u.deleted_at IS NULL
+        ) THEN 1 ELSE 0 END AS aluno_vinculado
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
