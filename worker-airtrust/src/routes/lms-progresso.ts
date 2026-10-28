@@ -30,12 +30,6 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('/scorm/state/*', auth());
 app.use('/xapi/*', auth());
 
-function getCallerFuncionarioId(c: Context): number | null {
-  const raw = c.get('funcionarioId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
 function getCallerUserId(c: Context): number | undefined {
   const raw = c.get('userId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
