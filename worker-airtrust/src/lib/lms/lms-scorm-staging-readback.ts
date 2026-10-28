@@ -149,6 +149,19 @@ export async function readScormQaBackendEvidence(params: {
     score_max:number|null; score_min:number|null; score_scaled:number|null;
     session_count:number|null; last_commit_at:string|null;
   }>();
+  // A synthetic F0 commit increments session_count and writes last_commit_at.
+  // A malformed counter cannot be presented as zero sessions (including a
+  // nullable/NaN value); a persisted CMI/suspend payload cannot have zero
+  // sessions, and a positive counter without a commit timestamp is unproven.
+  // Keep the pristine prelaunch zero-session readback compatible.
+  const sessions = state?.session_count;
+  if (state && (typeof sessions !== 'number' || !Number.isSafeInteger(sessions) ||
+      sessions < 0 ||
+      ((state.cmi_json !== null || state.suspend_data !== null) &&
+       sessions === 0) ||
+      (sessions > 0 && !state.last_commit_at))) {
+    throw new ApiError('SCORM_QA_SESSION_STATE_UNPROVEN', 409);
+  }
   // F0's QA runtime, not a plan supplied by the test driver, must record
   // which candidate ZIP was actually served and committed to D1. Merely
   // attaching an existing enrollment to this package is not evidence.
