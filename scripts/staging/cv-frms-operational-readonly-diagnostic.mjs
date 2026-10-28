@@ -118,7 +118,8 @@ async function main(){
  }catch{qaCrew={state:'QUERY_FAILED',counts:[]};}
  const schemaOk=missing.length===0&&Object.values(compile).every(x=>x==='PASS')&&qaFlights.state==='READABLE'&&qaCrew.state==='READABLE';
  const verdict=schemaOk?'SCHEMA_ONLY_PASS':'SCHEMA_FAIL';
- const fixtureState=qaCrew.state!=='READABLE'?'UNKNOWN':qaCrew.counts.some(x=>x.flightsWithVisibleCrew>0)?'SYNTHETIC_CREW_PRESENT':qaCrew.counts.some(x=>x.activeCrewLinks>0)?'CREW_LINKS_NOT_VISIBLE_IN_GATE':'SYNTHETIC_FLIGHTS_NO_CREW_LINKS';
+ const examinerCrew=qaCrew.counts.find(x=>x.tenantLabel==='qa_examiner_training');
+ const fixtureState=qaCrew.state!=='READABLE'?'UNKNOWN':!examinerCrew?.flights?'NO_SYNTHETIC_FLIGHTS_ON_DATE':examinerCrew.flightsWithVisibleCrew>0?'SYNTHETIC_CREW_PRESENT':examinerCrew.activeCrewLinks>0?'CREW_LINKS_NOT_VISIBLE_IN_GATE':'SYNTHETIC_FLIGHTS_NO_CREW_LINKS';
  console.log(JSON.stringify({date:'2026-10-27',sha,readOnly:true,writes:0,missingColumns:missing,compileProbes:compile,qaFlights,qaCrew,fixtureState,verdict},null,2));
  if(!schemaOk)process.exitCode=1;
 }

@@ -45,6 +45,8 @@ test('diagnoses synthetic 27 Oct crew through the exact active-tenant gate join,
  assert.match(s,/t\.voo_id=v\.id AND t\.empresa_id=v\.empresa_id AND t\.deleted_at IS NULL/);
  assert.match(s,/f\.id=t\.funcionario_id AND f\.empresa_id=t\.empresa_id AND f\.deleted_at IS NULL/);
  assert.match(s,/qaCrew,fixtureState,verdict/);
+ assert.match(s,/examinerCrew=qaCrew\.counts\.find\(x=>x\.tenantLabel==='qa_examiner_training'\)/);
+ assert.match(s,/NO_SYNTHETIC_FLIGHTS_ON_DATE/);
  assert.match(s,/SYNTHETIC_FLIGHTS_NO_CREW_LINKS/);
  assert.match(s,/CREW_LINKS_NOT_VISIBLE_IN_GATE/);
  assert.doesNotMatch(s,/console\.log\(.*(?:crewRows|employeeRows|clinicalValues)/);
