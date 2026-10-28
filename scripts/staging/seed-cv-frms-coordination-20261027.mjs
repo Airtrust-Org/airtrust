@@ -62,6 +62,8 @@ function exactQueries() {
     collision: "SELECT COUNT(*) AS n FROM cv_voos WHERE empresa_id=999006 AND prefixo='QA-FR' AND (observacoes IS NULL OR observacoes<>'QA_FRMS_CV_20261027_V1') AND deleted_at IS NULL",
     foreignCheckins: "SELECT COUNT(*) AS n FROM frms_fadiga_checkin WHERE empresa_id=999006 AND data_checkin='2026-10-27' AND funcionario_id IN (SELECT id FROM funcionarios WHERE empresa_id=999006 AND matricula IN ('QA-PARTICIPANTE-ALFA','QA-PARTICIPANTE-BRAVO')) AND id<>'qa-frms-cv-checkin-20261027-v1' AND deleted_at IS NULL",
     crew: "SELECT COUNT(*) AS n FROM cv_voo_tripulantes t JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id WHERE v.empresa_id=999006 AND v.data_programacao='2026-10-27' AND v.prefixo='QA-FR' AND v.observacoes='QA_FRMS_CV_20261027_V1' AND t.deleted_at IS NULL",
+    picLink: "SELECT COUNT(*) AS n FROM cv_voo_tripulantes t JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id JOIN funcionarios f ON f.id=t.funcionario_id AND f.empresa_id=t.empresa_id WHERE v.empresa_id=999006 AND v.data_programacao='2026-10-27' AND v.prefixo='QA-FR' AND v.observacoes='QA_FRMS_CV_20261027_V1' AND t.funcao='PIC' AND f.matricula='QA-PARTICIPANTE-ALFA' AND t.deleted_at IS NULL AND f.deleted_at IS NULL",
+    sicLink: "SELECT COUNT(*) AS n FROM cv_voo_tripulantes t JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id JOIN funcionarios f ON f.id=t.funcionario_id AND f.empresa_id=t.empresa_id WHERE v.empresa_id=999006 AND v.data_programacao='2026-10-27' AND v.prefixo='QA-FR' AND v.observacoes='QA_FRMS_CV_20261027_V1' AND t.funcao='SIC' AND f.matricula='QA-PARTICIPANTE-BRAVO' AND t.deleted_at IS NULL AND f.deleted_at IS NULL",
     checkin: "SELECT COUNT(*) AS n FROM frms_fadiga_checkin WHERE id='qa-frms-cv-checkin-20261027-v1' AND empresa_id=999006 AND data_checkin='2026-10-27' AND deleted_at IS NULL",
     journey: "SELECT COUNT(*) AS n FROM frms_jornada WHERE id='qa-frms-cv-jornada-20261027-v1' AND empresa_id=999006 AND data='2026-10-27' AND deleted_at IS NULL",
   };
@@ -113,7 +115,7 @@ function preflight() {
   const result=Object.fromEntries(Object.entries(q).map(([name,sql])=>[name,count(sql)]));
   if (result.tenant!==1 || result.pic!==1 || result.sic!==1 || result.templates<1 ||
       result.flight>1 || result.collision!==0 || result.foreignCheckins!==0 ||
-      result.crew>2 || result.checkin>1 || result.journey>1) throw new Error('CV_FRMS_FIXTURE_PREFLIGHT_FAILED');
+      result.crew>2 || result.picLink>1 || result.sicLink>1 || result.crew!==result.picLink+result.sicLink || result.checkin>1 || result.journey>1) throw new Error('CV_FRMS_FIXTURE_PREFLIGHT_FAILED');
   console.log(JSON.stringify({scope:'staging:999006:2026-10-27',mode:'read-only',tenant:result.tenant,
     qaEmployees:result.pic+result.sic,syntheticFlightCandidates:result.templates,
     dedicatedFlight:result.flight,existingDedicatedCrew:result.crew,existingDedicatedCheckin:result.checkin,
@@ -123,8 +125,8 @@ function preflight() {
 }
 function postcondition(){
   const q=exactQueries();
-  const state={flight:count(q.flight),crew:count(q.crew),checkin:count(q.checkin),journey:count(q.journey)};
-  if(state.flight!==1 || state.crew!==2 || state.checkin!==1 || state.journey!==1) throw new Error('CV_FRMS_FIXTURE_POSTCONDITION_FAILED');
+  const state={flight:count(q.flight),crew:count(q.crew),picLink:count(q.picLink),sicLink:count(q.sicLink),checkin:count(q.checkin),journey:count(q.journey)};
+  if(state.flight!==1 || state.crew!==2 || state.picLink!==1 || state.sicLink!==1 || state.checkin!==1 || state.journey!==1) throw new Error('CV_FRMS_FIXTURE_POSTCONDITION_FAILED');
   console.log('CV_FRMS_SYNTHETIC_STAGING_FIXTURE_PASS flight=1 crew=2 checkin=1 journey=1');
 }
 function main(){
