@@ -63,6 +63,10 @@ export async function readScormQaBackendEvidence(params: {
     matricula_status:string; numero_ciclo:number;
     enrollment_score_final:number|null;
     enrollment_qualification_history_id:number|null;
+    enrollment_attempts:number;
+    cycle_attempts:number;
+    cycle_score_final:number|null;
+    cycle_qualification_history_id:number|null;
   } | null;
   try {
     bind = await db.prepare(
@@ -72,6 +76,10 @@ export async function readScormQaBackendEvidence(params: {
             m.status AS matricula_status,
             m.score_final AS enrollment_score_final,
             m.qualificacao_historico_id AS enrollment_qualification_history_id,
+            m.tentativas AS enrollment_attempts,
+            cy.tentativas AS cycle_attempts,
+            cy.score_final AS cycle_score_final,
+            cy.qualificacao_historico_id AS cycle_qualification_history_id,
             cy.numero_ciclo
        FROM lms_scorm_qa_evidence_bindings b
        JOIN lms_matriculas m
@@ -96,6 +104,10 @@ export async function readScormQaBackendEvidence(params: {
       matricula_status:string; numero_ciclo:number;
       enrollment_score_final:number|null;
       enrollment_qualification_history_id:number|null;
+      enrollment_attempts:number;
+      cycle_attempts:number;
+      cycle_score_final:number|null;
+      cycle_qualification_history_id:number|null;
     }>();
   } catch {
     // Missing QA schema, incompatible Schema V2 layout or D1 outage:
@@ -122,7 +134,11 @@ export async function readScormQaBackendEvidence(params: {
   // F0's QA runtime, not a plan supplied by the test driver, must record
   // which candidate ZIP was actually served and committed to D1. Merely
   // attaching an existing enrollment to this package is not evidence.
-  if (state?.cmi_json || state?.suspend_data || state?.session_count) {
+  // A persisted commit timestamp is evidence of a write even when the CMI,
+  // suspend payload and session counter are empty. Do not accept such a
+  // commit without the exact served/committed candidate provenance.
+  if (state?.cmi_json || state?.suspend_data || state?.session_count ||
+      state?.last_commit_at != null) {
     if (bind.launched_package_sha256 !== candidate.package_sha256 ||
         bind.last_committed_package_sha256 !== candidate.package_sha256) {
       throw new ApiError('SCORM_QA_COMMIT_EDITION_UNPROVEN', 409);
@@ -131,15 +147,36 @@ export async function readScormQaBackendEvidence(params: {
              bind.launched_package_sha256 !== candidate.package_sha256) {
     throw new ApiError('SCORM_QA_LAUNCH_EDITION_DRIFT', 409);
   }
-  // F0 is a suspend/resume-only synthetic exercise. Score columns other than
-  // score_raw and the enrollment's qualification pointer are independent D1
-  // evidence; neither may be silently treated as absent. This does NOT prove
-  // the absence of assessment attempts or external approvals.
+  // F0 is a suspend/resume-only synthetic exercise. Its enrollment/cycle
+  // attempt counters and independent score/qualification pointers must remain
+  // clean, even if the SCORM CMI appears incomplete.
   if ([bind.enrollment_score_final, bind.enrollment_qualification_history_id,
+       bind.cycle_score_final, bind.cycle_qualification_history_id,
        state?.score_raw, state?.score_max, state?.score_min, state?.score_scaled]
       .some(value => value !== null && value !== undefined)) {
     throw new ApiError('SCORM_QA_GRADED_STATE_PRESENT', 409);
   }
+  if (bind.enrollment_attempts !== 0 || bind.cycle_attempts !== 0) {
+    throw new ApiError('SCORM_QA_ATTEMPT_STATE_PRESENT', 409);
+  }
+  // xAPI is a separate tenant/enrollment-scoped persisted activity store.
+  // A fresh synthetic F0 enrollment must have no xAPI rows at all (including
+  // archived rows). Missing schema/query failure is UNPROVEN, not zero.
+  let xapi: { total:number } | null;
+  try {
+    xapi = await db.prepare(
+      `SELECT COUNT(*) AS total FROM lms_xapi_statements
+        WHERE empresa_id = ? AND matricula_id = ?`,
+    ).bind(empresaId, matriculaId).first<{total:number}>();
+  } catch {
+    throw new ApiError('SCORM_QA_XAPI_READBACK_UNAVAILABLE', 409);
+  }
+  if (!xapi || !Number.isSafeInteger(xapi.total) || xapi.total < 0) {
+    throw new ApiError('SCORM_QA_XAPI_READBACK_UNPROVEN', 409);
+  }
+  if (xapi.total !== 0) throw new ApiError('SCORM_QA_XAPI_STATE_PRESENT', 409);
+  // These scoped negative guards are NOT a witness of external approval
+  // absence or a source for the F5 physical assessment count contract.
   const histories = await db.prepare(
     `SELECT id, certificado_arquivo_id
        FROM qualificacoes_historico

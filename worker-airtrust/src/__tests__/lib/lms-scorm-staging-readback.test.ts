@@ -11,13 +11,22 @@ const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
 function dbMock({binding=true,history=[],candidate=true,table=true,
   launchedSha=qsha,committedSha=qsha,
   enrollmentScoreFinal=null,enrollmentQualificationHistoryId=null,
-  scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null}:{
+  scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null,
+  enrollmentAttempts=0,cycleAttempts=0,cycleScoreFinal=null,
+  cycleQualificationHistoryId=null,xapiCount=0,xapiUnavailable=false,
+  scormCmiJson='{"cmi":"real"}',scormSuspendData='resume-01',
+  scormSessionCount=2,scormLastCommitAt='2026-10-19T12:00:00Z'}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
   launchedSha?:string|null;committedSha?:string|null;
   enrollmentScoreFinal?:number|null;enrollmentQualificationHistoryId?:number|null;
   scormScoreRaw?:number|null;scormScoreMax?:number|null;
   scormScoreMin?:number|null;scormScoreScaled?:number|null;
+  enrollmentAttempts?:number;cycleAttempts?:number;cycleScoreFinal?:number|null;
+  cycleQualificationHistoryId?:number|null;
+  xapiCount?:number|null;xapiUnavailable?:boolean;
+  scormCmiJson?:string|null;scormSuspendData?:string|null;
+  scormSessionCount?:number|null;scormLastCommitAt?:string|null;
 }={}){
   const statements:{sql:string;args:unknown[]}[]=[];
   const fake={
@@ -39,13 +48,20 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
               last_committed_package_sha256:committedSha,
               matricula_status:'EM_ANDAMENTO',numero_ciclo:1,
               enrollment_score_final:enrollmentScoreFinal,
-              enrollment_qualification_history_id:enrollmentQualificationHistoryId}:null;
+              enrollment_qualification_history_id:enrollmentQualificationHistoryId,
+              enrollment_attempts:enrollmentAttempts,cycle_attempts:cycleAttempts,
+              cycle_score_final:cycleScoreFinal,
+              cycle_qualification_history_id:cycleQualificationHistoryId}:null;
+          }
+          if(sql.includes('FROM lms_xapi_statements')) {
+            if (xapiUnavailable) throw new Error('D1_ERROR: xAPI unavailable');
+            return xapiCount === null ? null : {total:xapiCount};
           }
           if(sql.includes('FROM lms_progresso_scorm'))
-            return {cmi_json:'{"cmi":"real"}',suspend_data:'resume-01',lesson_status:'incomplete',
+            return {cmi_json:scormCmiJson,suspend_data:scormSuspendData,lesson_status:'incomplete',
               completion_status:null,success_status:null,score_raw:scormScoreRaw,
               score_max:scormScoreMax,score_min:scormScoreMin,score_scaled:scormScoreScaled,
-              session_count:2,last_commit_at:'2026-10-19T12:00:00Z'};
+              session_count:scormSessionCount,last_commit_at:scormLastCommitAt};
           return null;
         },
         async all(){return {results:history};},
@@ -72,6 +88,30 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
         runtimeSha:'b'.repeat(40)})).rejects.toThrow();
     }
   });
+  it('requires exact package provenance for timestamp-only SCORM commits',async()=>{
+    const emptyProgress={scormCmiJson:null,scormSuspendData:null,
+      scormSessionCount:0,scormLastCommitAt:'2026-10-19T12:00:00Z'};
+    // The binding witness already rejects non-matching hashes. These two
+    // cases are witness-valid yet had an unproven commit edition when only
+    // last_commit_at was persisted.
+    for(const mismatch of [
+      {committedSha:null}, {launchedSha:null,committedSha:null},
+    ]) {
+      const {db}=dbMock({...emptyProgress,...mismatch});
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_COMMIT_EDITION_UNPROVEN/);
+    }
+    // A genuinely pristine row without a commit is still readable before
+    // the first F0 launch; the new guard must not invent a prior commit.
+    const {db}=dbMock({...emptyProgress,scormLastCommitAt:null,
+      launchedSha:null,committedSha:null});
+    const result=await readScormQaBackendEvidence({db,empresaId:997,
+      cursoId:15,packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)});
+    expect(result.lastCommitAt).toBeNull();
+    expect(result.committedPackageSha256).toBeNull();
+  });
   it('never returns CMI content or answers and binds every D1 query to tenant',async()=>{
     const {db,statements}=dbMock({history:[{id:700,certificado_arquivo_id:900}]});
     const result=await readScormQaBackendEvidence({
@@ -94,6 +134,9 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     expect(JSON.stringify(result)).not.toContain('real');
     expect(statements.filter(s=>s.sql.includes('FROM qualificacoes_historico'))[0].args)
       .toEqual([997,88,555]);
+    const xapiQuery = statements.find(s=>s.sql.includes('FROM lms_xapi_statements'));
+    expect(xapiQuery?.sql).toMatch(/WHERE empresa_id = \? AND matricula_id = \?/);
+    expect(xapiQuery?.args).toEqual([997,88]);
     expect(statements.some(s=>/\b(?:INSERT|UPDATE|DELETE)\b/i.test(s.sql))).toBe(false);
     expect(statements.some(s=>s.sql.includes('sqlite_master'))).toBe(false);
   });
@@ -105,11 +148,31 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
       {scormScoreMax:100},
       {scormScoreMin:0},
       {scormScoreScaled:0.9},
+      {cycleScoreFinal:0},
+      {cycleQualificationHistoryId:701},
     ]) {
       const {db}=dbMock(contaminated);
       await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
         packageId:pkg,packageSha256:qsha,matriculaId:88,
         runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_GRADED_STATE_PRESENT/);
+    }
+  });
+  it('rejects persisted enrollment/cycle attempts and foreign xAPI records',async()=> {
+    for(const [config,reason] of [
+      [{enrollmentAttempts:1},/SCORM_QA_ATTEMPT_STATE_PRESENT/],
+      [{cycleAttempts:1},/SCORM_QA_ATTEMPT_STATE_PRESENT/],
+      [{xapiCount:1},/SCORM_QA_XAPI_STATE_PRESENT/],
+      [{xapiCount:null},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:-1},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:0.5},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:Number.NaN},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiCount:Number.POSITIVE_INFINITY},/SCORM_QA_XAPI_READBACK_UNPROVEN/],
+      [{xapiUnavailable:true},/SCORM_QA_XAPI_READBACK_UNAVAILABLE/],
+    ] as const) {
+      const {db}=dbMock(config);
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(reason);
     }
   });
   it('rejects duplicate qualification instead of passing synthetic replay',async()=>{
