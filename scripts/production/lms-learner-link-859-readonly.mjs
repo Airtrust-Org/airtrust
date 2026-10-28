@@ -123,8 +123,8 @@ export async function run() {
   if (String(data?.sourceSha??'').toLowerCase()!==EXPECTED) throw Error('PRODUCTION_SHA_CHANGED');
   const rows={};
   for(const [key,sql] of Object.entries(QUERIES)){
-    if(!/^SELECT\\s/i.test(sql.trim()) ||
-       /\\b(?:UPDATE|INSERT|DELETE|ALTER|DROP|REPLACE|ATTACH|DETACH|PRAGMA|CREATE)\\b/i.test(sql))
+    if(!/^SELECT\s/i.test(sql.trim()) ||
+       /\b(?:UPDATE|INSERT|DELETE|ALTER|DROP|REPLACE|ATTACH|DETACH|PRAGMA|CREATE)\b/i.test(sql))
       throw Error('READONLY_SQL_GUARD_'+key);
     let output;
     try {
