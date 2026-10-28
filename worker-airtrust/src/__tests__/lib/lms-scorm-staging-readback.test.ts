@@ -13,7 +13,9 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   enrollmentScoreFinal=null,enrollmentQualificationHistoryId=null,
   scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null,
   enrollmentAttempts=0,cycleAttempts=0,cycleScoreFinal=null,
-  cycleQualificationHistoryId=null,xapiCount=0,xapiUnavailable=false}:{
+  cycleQualificationHistoryId=null,xapiCount=0,xapiUnavailable=false,
+  scormCmiJson='{"cmi":"real"}',scormSuspendData='resume-01',
+  scormSessionCount=2,scormLastCommitAt='2026-10-19T12:00:00Z'}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
   launchedSha?:string|null;committedSha?:string|null;
@@ -23,6 +25,8 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   enrollmentAttempts?:number;cycleAttempts?:number;cycleScoreFinal?:number|null;
   cycleQualificationHistoryId?:number|null;
   xapiCount?:number|null;xapiUnavailable?:boolean;
+  scormCmiJson?:string|null;scormSuspendData?:string|null;
+  scormSessionCount?:number|null;scormLastCommitAt?:string|null;
 }={}){
   const statements:{sql:string;args:unknown[]}[]=[];
   const fake={
@@ -54,10 +58,10 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
             return xapiCount === null ? null : {total:xapiCount};
           }
           if(sql.includes('FROM lms_progresso_scorm'))
-            return {cmi_json:'{"cmi":"real"}',suspend_data:'resume-01',lesson_status:'incomplete',
+            return {cmi_json:scormCmiJson,suspend_data:scormSuspendData,lesson_status:'incomplete',
               completion_status:null,success_status:null,score_raw:scormScoreRaw,
               score_max:scormScoreMax,score_min:scormScoreMin,score_scaled:scormScoreScaled,
-              session_count:2,last_commit_at:'2026-10-19T12:00:00Z'};
+              session_count:scormSessionCount,last_commit_at:scormLastCommitAt};
           return null;
         },
         async all(){return {results:history};},
@@ -83,6 +87,28 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
         packageId:pkg,packageSha256:qsha,matriculaId:88,
         runtimeSha:'b'.repeat(40)})).rejects.toThrow();
     }
+  });
+  it('requires exact package provenance for timestamp-only SCORM commits',async()=>{
+    const emptyProgress={scormCmiJson:null,scormSuspendData:null,
+      scormSessionCount:0,scormLastCommitAt:'2026-10-19T12:00:00Z'};
+    for(const mismatch of [
+      {committedSha:null}, {committedSha:'0'.repeat(64)},
+      {launchedSha:null}, {launchedSha:'0'.repeat(64)},
+    ]) {
+      const {db}=dbMock({...emptyProgress,...mismatch});
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_COMMIT_EDITION_UNPROVEN/);
+    }
+    // A genuinely pristine row without a commit is still readable before
+    // the first F0 launch; the new guard must not invent a prior commit.
+    const {db}=dbMock({...emptyProgress,scormLastCommitAt:null,
+      launchedSha:null,committedSha:null});
+    const result=await readScormQaBackendEvidence({db,empresaId:997,
+      cursoId:15,packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)});
+    expect(result.lastCommitAt).toBeNull();
+    expect(result.committedPackageSha256).toBeNull();
   });
   it('never returns CMI content or answers and binds every D1 query to tenant',async()=>{
     const {db,statements}=dbMock({history:[{id:700,certificado_arquivo_id:900}]});

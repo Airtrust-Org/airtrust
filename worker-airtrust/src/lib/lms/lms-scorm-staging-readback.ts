@@ -134,7 +134,11 @@ export async function readScormQaBackendEvidence(params: {
   // F0's QA runtime, not a plan supplied by the test driver, must record
   // which candidate ZIP was actually served and committed to D1. Merely
   // attaching an existing enrollment to this package is not evidence.
-  if (state?.cmi_json || state?.suspend_data || state?.session_count) {
+  // A persisted commit timestamp is evidence of a write even when the CMI,
+  // suspend payload and session counter are empty. Do not accept such a
+  // commit without the exact served/committed candidate provenance.
+  if (state?.cmi_json || state?.suspend_data || state?.session_count ||
+      state?.last_commit_at != null) {
     if (bind.launched_package_sha256 !== candidate.package_sha256 ||
         bind.last_committed_package_sha256 !== candidate.package_sha256) {
       throw new ApiError('SCORM_QA_COMMIT_EDITION_UNPROVEN', 409);
