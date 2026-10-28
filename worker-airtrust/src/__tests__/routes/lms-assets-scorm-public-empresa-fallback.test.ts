@@ -11,15 +11,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { verifyJWTMock, generateJWTMock } = vi.hoisted(() => ({
+const { verifyJWTMock, generateJWTMock, currentEmployeeMock } = vi.hoisted(() => ({
   verifyJWTMock: vi.fn(),
   generateJWTMock: vi.fn(async () => ({ token: 'test-token', expiresAt: '' })),
+  currentEmployeeMock: vi.fn(),
 }));
 
 vi.mock('../../utils/security', () => ({
   verifyJWT: verifyJWTMock,
   generateJWT: generateJWTMock,
 }));
+
+vi.mock('../../services/lms-learner-identity', () => ({ resolveLmsFuncionarioId: currentEmployeeMock }));
 
 // Simulate a public route: no tenant middleware ran, so getEmpresaIdOptional returns undefined.
 vi.mock('../../routes/escalas-shared', () => ({
@@ -117,6 +120,7 @@ function makeEnv(db: D1Database): Env {
 describe('SCORM public routes — empresa_id resolved from JWT payload (no tenant context)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentEmployeeMock.mockResolvedValue(null);
   });
 
   describe('GET /scorm/launch/:matricula_id', () => {
@@ -188,6 +192,77 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
       expect(response.status).toBe(401);
       const text = await response.text();
       expect(text).toContain('Empresa não identificada');
+    });
+
+    it('opens learner #859 after a real account link is corrected even if the JWT still has a stale employee ID', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6, funcionario_id: null, role: 'ALUNO', sub: '108', token_type: 'access',
+      });
+      currentEmployeeMock.mockResolvedValue(55);
+      const db = createMockDb([[
+        'FROM lms_matriculas m',
+        { first: () => ({
+          id: 859, funcionario_id: 55, curso_id: 67,
+          status: 'NAO_INICIADO', ativo: 1, publicado: 1,
+          scorm_package_r2_prefix: null,
+        }) },
+      ]]);
+      const response = await createApp().fetch(
+        new Request('https://api.airtrust.online/assets/session', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer still-valid-old-session', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricula_id: 859 }),
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+      expect(response.status).toBe(200);
+      expect(currentEmployeeMock).toHaveBeenCalledWith(db, '108', 6);
+      expect(generateJWTMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          funcionario_id: 55, asset_matricula_id: 859, asset_curso_id: 67,
+        }), 'test-secret', expect.any(Number),
+      );
+    });
+
+    it('rejects revoked or wrong employee links despite a stale JWT claiming the enrolled employee', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6, funcionario_id: 55, role: 'ALUNO', sub: '108', token_type: 'access',
+      });
+      currentEmployeeMock.mockResolvedValue(null);
+      const db = createMockDb([[
+        'FROM lms_matriculas m',
+        { first: () => ({ id: 859, funcionario_id: 55, curso_id: 67,
+          status: 'NAO_INICIADO', ativo: 1, publicado: 1 }) },
+      ]]);
+      const response = await createApp().fetch(
+        new Request('https://api.airtrust.online/assets/session', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer obsolete-identity', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricula_id: 859 }),
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+      expect(response.status).toBe(403);
+      expect(generateJWTMock).not.toHaveBeenCalled();
+    });
+
+    it('does not authorize a different employee in the same tenant', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6, funcionario_id: 55, role: 'ALUNO', sub: '108', token_type: 'access',
+      });
+      currentEmployeeMock.mockResolvedValue(56);
+      const db = createMockDb([[
+        'FROM lms_matriculas m',
+        { first: () => ({ id: 859, funcionario_id: 55, curso_id: 67,
+          status: 'NAO_INICIADO', ativo: 1, publicado: 1 }) },
+      ]]);
+      const response = await createApp().fetch(
+        new Request('https://api.airtrust.online/assets/session', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer other-employee', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricula_id: 859 }),
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+      expect(response.status).toBe(403);
+      expect(generateJWTMock).not.toHaveBeenCalled();
     });
 
     it('uses the current active package for an in-progress enrollment after a course update', async () => {
