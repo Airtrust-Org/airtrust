@@ -247,6 +247,24 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
     expect(row.scormCompletionStatus).toBe('incomplete');
     expect(row.successStatus).toBe('unknown');
   });
+  it('fails closed on malformed F0 session counts and missing commit time',async()=>{
+    for (const scormSessionCount of [null,-1,0.5,Number.NaN,Number.POSITIVE_INFINITY,0]) {
+      const {db}=dbMock({scormSessionCount});
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_SESSION_STATE_UNPROVEN/);
+    }
+    const {db}=dbMock({scormSessionCount:2,scormLastCommitAt:null});
+    await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+      packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_SESSION_STATE_UNPROVEN/);
+    // Before the first launch, a zero-session empty snapshot is still valid.
+    const {db:pristine}=dbMock({scormCmiJson:null,scormSuspendData:null,
+      scormSessionCount:0,scormLastCommitAt:null,launchedSha:null,committedSha:null});
+    await expect(readScormQaBackendEvidence({db:pristine,empresaId:997,cursoId:15,
+      packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)})).resolves.toMatchObject({sessionCount:0,lastCommitAt:null});
+  });
   it('rejects persisted enrollment/cycle attempts and foreign xAPI records',async()=> {
     for(const [config,reason] of [
       [{enrollmentAttempts:1},/SCORM_QA_ATTEMPT_STATE_PRESENT/],
