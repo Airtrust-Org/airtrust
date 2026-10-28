@@ -521,3 +521,7 @@ em staging sintético sob recovery/cleanup, nunca aplicado a matrícula
 real/produção. Replay de conclusão exige status CONCLUIDO, mesmo histórico
 e mesmo hash CMI antes/depois. Nenhum desses resultados é convertido pelo
 observador em atestação independente sem execução física e signer oficial.
+
+## Perfil formativo sem prova final (`FORMATIVE_NO_EXAM_V1`)
+
+Cursos SCORM 1.2 formativos sem prova final usam um perfil mínimo, versionado e derivado pelo servidor do manifesto estático do ZIP (nunca de `release.*`). A evidência exige apenas Chromium, os 9 casos de jornada e certificado PDF real, assinada pelo CI governado e presa ao SHA do pacote e ao SHA do runtime; a ligação a tenant/curso/pacote é feita pela aprovação administrativa. Cursos com nota mínima ou prova externa continuam sob o contrato completo acima (Chromium + WebKit). Procedimento, rollback e ordem de implantação: `SCORM_FORMATIVE_EDITION_REPLACEMENT_RUNBOOK.md`.

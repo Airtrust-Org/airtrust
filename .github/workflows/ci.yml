@@ -93,6 +93,10 @@ jobs:
         run: node --test scripts/__tests__/staging-player3-schema-v2-pins.test.mjs
       - name: validate SCORM 0566 staging schema trusted workflow and physical guards
         run: node --test scripts/__tests__/staging-scorm-handoff-0566-workflow.test.mjs
+      - name: validate SCORM 0569 edition-policy schema pins, DDL-only scope and offline integrity
+        run: |
+          node --test scripts/__tests__/staging-scorm-edition-policy-0569-workflow.test.mjs
+          python3 scripts/__tests__/test_scorm_edition_policy_schema_0569.py
       - name: validate F5 single-candidate staging authorization guard
         run: |
           node --test scripts/__tests__/f5-candidate-approval-guard.test.mjs \

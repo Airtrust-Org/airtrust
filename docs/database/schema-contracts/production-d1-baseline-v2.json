@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-24",
+    "last_reconciled_at": "2026-10-28",
     "last_reconciled_against": "0529 HFA integration bridge classified; current main 0530-0568 classifications preserved; HFA remote apply pending",
-    "schema_v2_digest": "ece117ccfb650579bdba2466265a65aa019b541ac15d0b218e7f84ceb590b879",
+    "schema_v2_digest": "645483dadc2335fa34340bc76eb70e044b04642b3033b227eea933cd2e74c06d",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1678,6 +1678,22 @@
       "reviewed_manifest": "lms-scorm-edition-handoff-0566.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
       "note": "DDL only, no archive/reset/user write. Writer default-off until governed schema, authenticated handoff and end-to-end browser validation."
+    },
+    {
+      "change_file": "0569_lms_scorm_edition_policy_approvals.sql",
+      "change_id": "lms-scorm-edition-policy-approvals-0569",
+      "sha256": "171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad",
+      "targets": [
+        "lms_matricula_ciclos",
+        "lms_scorm_package_approvals",
+        "lms_scorm_package_versions"
+      ],
+      "domain": "LMS SCORM: edition-pinned assessment policy + append-only administrative package approvals",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-policy-approvals-0569.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-policy-approvals-0569.md",
+      "note": "DDL only, zero backfill, no write to scores/completions/qualifications/certificates. Schema must be applied BEFORE the Worker that reads these columns."
     }
   ]
 }

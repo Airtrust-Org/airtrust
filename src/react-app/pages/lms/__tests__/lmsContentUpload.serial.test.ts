@@ -422,6 +422,19 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
   });
 
+  it('formative no-exam candidate stops after upload: no conformance, no activate, active content preserved', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      candidate: { ...CANDIDATE_VALIDATED, packageSha256: 'da0a36e661a1'.padEnd(64, '0'), certificationProfile: 'FORMATIVE_NO_EXAM_V1' },
+    });
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/candidata INATIVA.*conteúdo ativo foi preservado/s);
+    expect(calls.map((c) => c.split('?')[0])).toEqual(['/api/lms/cursos/44/scorm-upload']);
+  });
+
   it('dedup: re-uploading the already-ACTIVE identical ZIP resolves without conformance/activate', async () => {
     const fixture = scormZip();
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);

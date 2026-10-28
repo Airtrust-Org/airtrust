@@ -277,6 +277,7 @@ type ScormQualityShape = {
   packageId?: string;
   packageSha256?: string;
   status?: string;
+  certificationProfile?: string | null;
   publishable?: boolean;
   structural?: ScormGateSection;
   completionManifest?: ScormGateSection;
@@ -374,6 +375,17 @@ async function uploadScormZipPackage(params: {
   if (candidate.status === 'REJECTED') {
     // Pacote ativo anterior segue inalterado.
     throw scormGateError('O pacote foi rejeitado no Quality Gate estático', candidate);
+  }
+
+  // Formative courses without a final exam are never replaced by this one-button
+  // flow: they follow upload → homologação → aprovação administrativa → ativação
+  // in the course edition panel. The active content is untouched.
+  if (candidate.certificationProfile === 'FORMATIVE_NO_EXAM_V1' && candidate.status !== 'ACTIVE') {
+    onProgress?.(100);
+    throw new Error(
+      `Pacote formativo válido (SHA ${String(candidate.packageSha256 ?? '').slice(0, 12)}) recebido como edição candidata INATIVA. ` +
+      'O conteúdo ativo foi preservado. Conclua a homologação, a aprovação administrativa e a ativação em "Edições do pacote SCORM", no detalhe do curso.',
+    );
   }
 
   // O backend deduplica por SHA-256: reenviar o ZIP idêntico ao que já está

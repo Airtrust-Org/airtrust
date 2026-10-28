@@ -978,33 +978,124 @@ export type ScormPackageVersionRow = {
   status: string;
   packageSha256?: string;
   publishable?: boolean;
+  /** Server-derived. `FORMATIVE_NO_EXAM_V1` = formative course without a final exam. */
+  certificationProfile?: 'FORMATIVE_NO_EXAM_V1' | null;
+  assessmentPolicy?: 'SCORED' | 'FORMATIVE' | null;
+  arquivoNome?: string | null;
+  active?: boolean;
+  /** Only set on the ACTIVE row: the edition a rollback would restore. */
+  previousActivePackageId?: string | null;
   structural?: { status?: string };
   functionalCertification?: { status?: 'CERTIFIED' | 'UNCERTIFIED'; missing?: string[] };
+  formativeCertification?: { status?: 'CERTIFIED'; attestationSha256?: string };
   runtime?: { status?: string; errors?: string[] };
   conformance?: { status?: string };
   completionManifest?: { errors?: string[] };
 };
 
+export type ScormActivationConfirm = {
+  cursoId: number;
+  packageSha256: string;
+  acknowledgeInProgress?: number;
+};
+
+export type ScormActivationPreflight = {
+  packageId: string;
+  packageSha256: string;
+  status: string;
+  certificationProfile: string | null;
+  assessmentPolicy: string | null;
+  course: { id: number; titulo: string; currentPolicy: string; masteryScore: number | null };
+  active: { packageId: string; packageSha256: string; policy: string | null } | null;
+  checks: Array<{ id: string; ok: boolean; detail: string }>;
+  impact: { terminalToFreeze: number; inProgress: number; notStarted: number };
+  incomingPolicy: 'SCORED' | 'FORMATIVE' | null;
+  canActivate: boolean;
+};
+
+const packageVersionsKey = (cursoId: number) => ['lms', 'cursos', cursoId, 'scorm-package-versions'] as const;
+
 /** Candidate versions are intentionally separate from the active course. */
 export function useScormPackageVersions(cursoId: number, enabled = true) {
   return useQuery({
-    queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'],
+    queryKey: packageVersionsKey(cursoId),
     queryFn: () =>
       lmsRequest<{ data: ScormPackageVersionRow[] }>(`/cursos/${cursoId}/scorm-package-versions`),
     enabled: enabled && cursoId > 0,
   });
 }
 
+/** The exact checklist the server enforces at activation (same function server-side). */
+export function useScormActivationPreflight(cursoId: number, packageId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...packageVersionsKey(cursoId), packageId, 'preflight'],
+    queryFn: () =>
+      lmsRequest<ScormActivationPreflight>(
+        `/cursos/${cursoId}/scorm-package-versions/${packageId}/activation-preflight`),
+    enabled: enabled && cursoId > 0 && Boolean(packageId),
+    staleTime: 0,
+  });
+}
+
 export function useActivateScormPackageVersion(cursoId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (packageId: string) =>
-      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`, {
+    mutationFn: (input: string | { packageId: string; confirm?: ScormActivationConfirm }) => {
+      const { packageId, confirm } = typeof input === 'string' ? { packageId: input, confirm: undefined } : input;
+      return lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`, {
         method: 'POST',
+        body: JSON.stringify(confirm ? { confirm } : {}),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
+    },
+  });
+}
+
+/** Signed staging evidence produced by the governed CI signer (never typed by hand). */
+export function useImportFormativeAttestation(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { packageId: string; attestationJson: string }) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${input.packageId}/functional-attestation`, {
+        method: 'POST',
+        body: input.attestationJson,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) }),
+  });
+}
+
+export function useApproveFormativePackage(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      packageId: string; packageSha256: string; note: string; editorialReviewRef?: string | null;
+    }) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${input.packageId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          confirm: { cursoId, packageSha256: input.packageSha256 },
+          note: input.note,
+          editorialReviewRef: input.editorialReviewRef || null,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) }),
+  });
+}
+
+export function useRollbackScormPackage(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (restorePackageId: string) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/rollback`, {
+        method: 'POST',
+        body: JSON.stringify({ confirm: { cursoId, restorePackageId } }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'] });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
     },
   });
 }

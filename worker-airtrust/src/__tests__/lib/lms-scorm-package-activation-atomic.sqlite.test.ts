@@ -16,12 +16,14 @@ function fixture() {
     CREATE TABLE lms_scorm_package_versions (
       id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER, package_sha256 TEXT,
       r2_prefix TEXT, status TEXT, validation_result_json TEXT,
-      activated_at TEXT, activated_by INTEGER
+      activated_at TEXT, activated_by INTEGER, previous_active_package_id TEXT,
+      assessment_policy TEXT, certification_profile TEXT
     );
     CREATE TABLE lms_cursos (
       id INTEGER, empresa_id INTEGER, tipo_conteudo TEXT,
       scorm_package_r2_prefix TEXT, scorm_launch_file TEXT, scorm_versao TEXT,
       conteudo_arquivo_nome TEXT, updated_at TEXT, deleted_at TEXT,
+      scorm_assessment_policy TEXT NOT NULL DEFAULT 'SCORED',
       PRIMARY KEY(empresa_id,id)
     );
     CREATE TABLE lms_scorm_package_audit_log (

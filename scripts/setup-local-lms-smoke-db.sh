@@ -64,6 +64,9 @@ LMS_MIGRATIONS=(
   # Governed Schema V2 0557 mirror: isolated local smoke D1 only.
   # Production/staging schema remains governed by its own workflow.
   "$WORKER_DIR/migrations/0557_lms_cycle_evidence_archive.sql"
+  # Governed Schema V2 0569 mirror (byte-identical): edition-pinned SCORM assessment policy
+  # and administrative package approvals read by the Worker. Isolated local smoke D1 only.
+  "$WORKER_DIR/migrations/0569_lms_scorm_edition_policy_approvals.sql"
 )
 
 error() {

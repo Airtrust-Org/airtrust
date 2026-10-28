@@ -29,6 +29,7 @@ import {
 } from '../services/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
+import { assertCoursePolicyChangeAllowed } from '../lib/lms/lms-course-policy-guard';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
@@ -2160,6 +2161,7 @@ app.put(
         !hasRole(c, 'admin')) {
       throw new ApiError('Somente administrador pode alterar a política avaliativa SCORM.', 403);
     }
+    await assertCoursePolicyChangeAllowed(db, empresaId, cursoId, existing.scorm_assessment_policy, d.scorm_assessment_policy);
     // Reverting FORMATIVE to SCORED must never leave NULL mastery and create
     // another permanently unfinishable course. The caller must choose a real threshold.
     if (d.scorm_assessment_policy === 'SCORED' &&
