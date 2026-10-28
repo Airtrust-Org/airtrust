@@ -171,6 +171,14 @@ export async function readScormQaBackendEvidence(params: {
   if (bind.enrollment_attempts !== 0 || bind.cycle_attempts !== 0) {
     throw new ApiError('SCORM_QA_ATTEMPT_STATE_PRESENT', 409);
   }
+  // Enrollment and cycle can remain incomplete even after the SCORM runtime
+  // has persisted a terminal result. F0 only proves suspend/resume: a passed,
+  // failed or completed runtime is not valid negative assessment evidence.
+  if (['completed', 'passed', 'failed'].includes((state?.lesson_status ?? '').toLowerCase()) ||
+      state?.completion_status?.toLowerCase() === 'completed' ||
+      ['passed', 'failed'].includes((state?.success_status ?? '').toLowerCase())) {
+    throw new ApiError('SCORM_QA_TERMINAL_STATE_PRESENT', 409);
+  }
   // xAPI is a separate tenant/enrollment-scoped persisted activity store.
   // A fresh synthetic F0 enrollment must have no xAPI rows at all (including
   // archived rows). Missing schema/query failure is UNPROVEN, not zero.
