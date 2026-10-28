@@ -343,6 +343,7 @@ export async function recoverF0CandidateFixture(
     binding_id: string; binding_status: string; run_id: string; ciclo_id: number; sc_row_present: number;
     package_sha256: string; runtime_sha: string; enrollment_status: string;
     progresso_pct: number | null; data_inicio: string | null; score_final: number | null;
+    enrollment_qualification_history_id: number | null; enrollment_attempts: number | null;
     history_id: number | null; cycle_status: string; cmi_json: string | null;
     suspend_data: string | null; lesson_status: string | null;
     completion_status: string | null; success_status: string | null;
@@ -355,6 +356,8 @@ export async function recoverF0CandidateFixture(
       `SELECT b.id AS binding_id,b.status AS binding_status,b.run_id,b.ciclo_id,
               b.package_sha256,b.staging_runtime_sha AS runtime_sha,
               m.status AS enrollment_status,m.progresso_pct,m.data_inicio,m.score_final,
+              m.qualificacao_historico_id AS enrollment_qualification_history_id,
+              m.tentativas AS enrollment_attempts,
               q.id AS history_id,cy.status AS cycle_status,
               CASE WHEN sc.matricula_id IS NULL THEN 0 ELSE 1 END AS sc_row_present,
                sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
@@ -378,7 +381,7 @@ export async function recoverF0CandidateFixture(
          LEFT JOIN lms_progresso_scorm sc ON sc.empresa_id=b.empresa_id
            AND sc.matricula_id=b.matricula_id
          LEFT JOIN qualificacoes_historico q ON q.empresa_id=b.empresa_id
-           AND q.lms_matricula_id=b.matricula_id AND q.deleted_at IS NULL
+           AND q.lms_matricula_id=b.matricula_id
         WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
           AND b.package_sha256=? AND b.matricula_id=? AND b.ciclo_id=?
           AND b.run_id=? AND b.staging_runtime_sha=? AND b.synthetic=1
@@ -393,7 +396,10 @@ export async function recoverF0CandidateFixture(
       state.ciclo_id!==scope.cycleId || !['ACTIVE','REVOKED'].includes(state.binding_status) ||
       !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.enrollment_status) ||
       !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.cycle_status) ||
-      state.progresso_pct===null || state.progresso_pct>1 || state.score_final!==null ||
+      state.progresso_pct===null || !Number.isFinite(state.progresso_pct) ||
+      state.progresso_pct<0 || state.progresso_pct>1 || state.score_final!==null ||
+      state.enrollment_qualification_history_id!==null ||
+      !Number.isSafeInteger(state.enrollment_attempts) || state.enrollment_attempts!==0 ||
       state.history_id!==null || (state.lesson_status!==null && state.lesson_status!=='incomplete') ||
       (state.completion_status!==null && state.completion_status!=='incomplete') ||
       (state.success_status!==null && state.success_status!=='unknown') ||
@@ -425,10 +431,11 @@ export async function recoverF0CandidateFixture(
           data_inicio=NULL,updated_at=datetime('now')
         WHERE id=? AND empresa_id=? AND curso_id=? AND deleted_at IS NULL
           AND observacoes=? AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
-          AND score_final IS NULL AND COALESCE(progresso_pct,0)<=1
+          AND score_final IS NULL AND qualificacao_historico_id IS NULL
+          AND tentativas=0 AND progresso_pct BETWEEN 0 AND 1
           AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
             WHERE q.empresa_id=lms_matriculas.empresa_id
-              AND q.lms_matricula_id=lms_matriculas.id AND q.deleted_at IS NULL)
+              AND q.lms_matricula_id=lms_matriculas.id)
           AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
             WHERE b.empresa_id=lms_matriculas.empresa_id AND b.curso_id=lms_matriculas.curso_id
               AND b.package_id=? AND b.package_sha256=? AND b.matricula_id=lms_matriculas.id
@@ -461,12 +468,13 @@ export async function recoverF0CandidateFixture(
               AND b.matricula_id=? AND b.ciclo_id=? AND b.run_id=? AND b.status='REVOKED'
               AND b.synthetic=1 AND m.status='NAO_INICIADO' AND m.progresso_pct=0
               AND m.data_inicio IS NULL AND m.score_final IS NULL
+              AND m.qualificacao_historico_id IS NULL AND m.tentativas=0
               AND cy.status='NAO_INICIADO' AND cy.ciclo_atual=1
               AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm sc
                 WHERE sc.empresa_id=b.empresa_id AND sc.matricula_id=b.matricula_id)
               AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
                 WHERE q.empresa_id=b.empresa_id AND q.lms_matricula_id=b.matricula_id
-                  AND q.deleted_at IS NULL))
+                  ))
           THEN 1 ELSE json_extract('INVALID_JSON_F0_RECOVERY_SENTINEL','$.impossible') END AS verified`)
         .bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
           scope.enrollmentId,scope.cycleId,scope.runId),
