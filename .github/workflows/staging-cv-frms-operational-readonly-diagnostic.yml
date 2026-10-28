@@ -1,0 +1,76 @@
+name: Staging CV FRMS Operational Read-Only Diagnostic
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_CV_FRMS_STAGING_DIAG_READONLY
+        required: true
+        type: string
+      expected_deployed_sha:
+        description: Exact Worker and Pages staging SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify gated SHA and both staging components
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.expected_deployed_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_CV_FRMS_STAGING_DIAG_READONLY' ]] || { echo CONFIRMATION_INVALID; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo SHA_INVALID; exit 1; }
+          git merge-base --is-ancestor "$RELEASE_SHA" "$GITHUB_SHA" || { echo SHA_NOT_ANCESTOR; exit 1; }
+          node scripts/ci/verify-release-gates.mjs
+          node --input-type=module <<'NODE'
+          const sha=process.env.RELEASE_SHA;
+          const worker=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version',{headers:{'Cache-Control':'no-store'}});
+          if(!worker.ok)throw Error('STAGING_WORKER_UNREACHABLE');
+          const v=await worker.json();
+          if(v?.data?.sourceSha!==sha||v?.data?.environment!=='staging')throw Error('STAGING_WORKER_SHA_MISMATCH');
+          const pages=await fetch('https://staging.airtrust.pages.dev/',{headers:{'Cache-Control':'no-store'}});
+          if(!pages.ok||!(await pages.text()).includes(sha.slice(0,7)))throw Error('STAGING_PAGES_SHA_MISMATCH');
+          console.log('STAGING_SHA_VERIFIED');
+          NODE
+  doctor:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify fixed read-only diagnostic contract
+        run: node --test scripts/__tests__/cv-frms-staging-readonly-diagnostic.test.mjs
+      - name: Install Wrangler
+        run: npm --prefix worker-airtrust ci
+      - name: Probe schema and synthetic flight counts without data writes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+          STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+          EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+        run: node scripts/staging/cv-frms-operational-readonly-diagnostic.mjs
