@@ -20,7 +20,6 @@ export const SIC = 'QA-PARTICIPANTE-BRAVO';
 const FLIGHT_PREFIX = 'QA-FR';
 const CHECKIN_ID = 'qa-frms-cv-checkin-20261027-v1';
 const JOURNEY_ID = 'qa-frms-cv-jornada-20261027-v1';
-const SIC_JOURNEY_ID = 'qa-frms-cv-jornada-sic-20261027-v1';
 const CONFIRM = 'AIRTRUST_CV_FRMS_STAGING_FIXTURE_20261027';
 
 function assertTarget() {
@@ -67,7 +66,6 @@ function exactQueries() {
     sicLink: "SELECT COUNT(*) AS n FROM cv_voo_tripulantes t JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id JOIN funcionarios f ON f.id=t.funcionario_id AND f.empresa_id=t.empresa_id WHERE v.empresa_id=999006 AND v.data_programacao='2026-10-27' AND v.prefixo='QA-FR' AND v.observacoes='QA_FRMS_CV_20261027_V1' AND t.funcao='SIC' AND f.matricula='QA-PARTICIPANTE-BRAVO' AND t.deleted_at IS NULL AND f.deleted_at IS NULL",
     checkin: "SELECT COUNT(*) AS n FROM frms_fadiga_checkin WHERE id='qa-frms-cv-checkin-20261027-v1' AND empresa_id=999006 AND data_checkin='2026-10-27' AND deleted_at IS NULL",
     journey: "SELECT COUNT(*) AS n FROM frms_jornada WHERE id='qa-frms-cv-jornada-20261027-v1' AND empresa_id=999006 AND data='2026-10-27' AND deleted_at IS NULL",
-    sicJourney: "SELECT COUNT(*) AS n FROM frms_jornada WHERE id='qa-frms-cv-jornada-sic-20261027-v1' AND empresa_id=999006 AND data='2026-10-27' AND deleted_at IS NULL",
   };
 }
 export function fixtureSql() {
@@ -87,9 +85,6 @@ export function fixtureSql() {
     "INSERT INTO frms_jornada (id,tripulante_id,data,status,hora_apresentacao,hora_termino,duracao_jornada_minutos,horas_voo_minutos,registrado_por,origem,observacao,empresa_id,created_at,updated_at,deleted_at) " +
       "SELECT 'qa-frms-cv-jornada-20261027-v1',f.id,'2026-10-27','ES','09:30:00','17:00:00',450,150,'QA_FRMS_CV','MANUAL','QA SINTETICO - SEM VALIDADE OPERACIONAL',999006,datetime('now'),datetime('now'),NULL " +
       "FROM funcionarios f WHERE f.empresa_id=999006 AND f.matricula='QA-PARTICIPANTE-ALFA' AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM frms_jornada j WHERE j.id='qa-frms-cv-jornada-20261027-v1');",
-    "INSERT INTO frms_jornada (id,tripulante_id,data,status,hora_apresentacao,hora_termino,duracao_jornada_minutos,horas_voo_minutos,registrado_por,origem,observacao,empresa_id,created_at,updated_at,deleted_at) " +
-      "SELECT 'qa-frms-cv-jornada-sic-20261027-v1',f.id,'2026-10-27','ES','09:30:00','17:00:00',450,150,'QA_FRMS_CV','MANUAL','QA SINTETICO - SIC SEM CHECKIN',999006,datetime('now'),datetime('now'),NULL " +
-      "FROM funcionarios f WHERE f.empresa_id=999006 AND f.matricula='QA-PARTICIPANTE-BRAVO' AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM frms_jornada j WHERE j.id='qa-frms-cv-jornada-sic-20261027-v1');",
     "INSERT INTO frms_fadiga_checkin (id,empresa_id,funcionario_id,data_checkin,hora_checkin,kss_score,horas_sono,qualidade_sono,sintomas_json,observacoes,score_fadiga,nivel_fadiga,status_operacional,recomendacao,apto,requires_frat_review,computed_risk_level,requires_operational_review,report_source,submitted_at,wake_time,jornada_inicio_prevista,created_at,updated_at,deleted_at) " +
       "SELECT 'qa-frms-cv-checkin-20261027-v1',999006,f.id,'2026-10-27','06:30:00',3,7.5,4,'[]','QA SINTETICO - RESPOSTAS INVENTADAS PARA TESTE; SEM APTIDAO REAL',20,'VERDE','APTO','Somente teste sintético',1,0,'normal',0,'QA_SYNTHETIC','2026-10-27T09:30:00.000Z','06:00','09:30',datetime('now'),datetime('now'),NULL " +
       "FROM funcionarios f WHERE f.empresa_id=999006 AND f.matricula='QA-PARTICIPANTE-ALFA' AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM frms_fadiga_checkin ch WHERE ch.id='qa-frms-cv-checkin-20261027-v1');",
@@ -120,7 +115,7 @@ function preflight() {
   const result=Object.fromEntries(Object.entries(q).map(([name,sql])=>[name,count(sql)]));
   if (result.tenant!==1 || result.pic!==1 || result.sic!==1 || result.templates<1 ||
       result.flight>1 || result.collision!==0 || result.foreignCheckins!==0 ||
-      result.crew>2 || result.picLink>1 || result.sicLink>1 || result.crew!==result.picLink+result.sicLink || result.checkin>1 || result.journey>1 || result.sicJourney>1) throw new Error('CV_FRMS_FIXTURE_PREFLIGHT_FAILED');
+      result.crew>2 || result.picLink>1 || result.sicLink>1 || result.crew!==result.picLink+result.sicLink || result.checkin>1 || result.journey>1) throw new Error('CV_FRMS_FIXTURE_PREFLIGHT_FAILED');
   console.log(JSON.stringify({scope:'staging:999006:2026-10-27',mode:'read-only',tenant:result.tenant,
     qaEmployees:result.pic+result.sic,syntheticFlightCandidates:result.templates,
     dedicatedFlight:result.flight,existingDedicatedCrew:result.crew,existingDedicatedCheckin:result.checkin,
@@ -130,9 +125,9 @@ function preflight() {
 }
 function postcondition(){
   const q=exactQueries();
-  const state={flight:count(q.flight),crew:count(q.crew),picLink:count(q.picLink),sicLink:count(q.sicLink),checkin:count(q.checkin),journey:count(q.journey),sicJourney:count(q.sicJourney)};
-  if(state.flight!==1 || state.crew!==2 || state.picLink!==1 || state.sicLink!==1 || state.checkin!==1 || state.journey!==1 || state.sicJourney!==1) throw new Error('CV_FRMS_FIXTURE_POSTCONDITION_FAILED');
-  console.log('CV_FRMS_SYNTHETIC_STAGING_FIXTURE_PASS flight=1 crew=2 checkin=1 journeys=2');
+  const state={flight:count(q.flight),crew:count(q.crew),picLink:count(q.picLink),sicLink:count(q.sicLink),checkin:count(q.checkin),journey:count(q.journey)};
+  if(state.flight!==1 || state.crew!==2 || state.picLink!==1 || state.sicLink!==1 || state.checkin!==1 || state.journey!==1) throw new Error('CV_FRMS_FIXTURE_POSTCONDITION_FAILED');
+  console.log('CV_FRMS_SYNTHETIC_STAGING_FIXTURE_PASS flight=1 crew=2 checkin=1 journey=1');
 }
 function main(){
   const mode=process.argv[2];
