@@ -193,6 +193,63 @@ describe('TrainingComplianceReportBuilder', () => {
     expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
+  it('permite incluir ou excluir Renovadas em Situações incluídas, filtrando tabela e PDF', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/relatorios/automacao')) return ok(automation);
+      if (url.includes('/pendencias')) return ok([]);
+      throw new Error(`unexpected ${url}`);
+    });
+    const historical = [
+      { id: 101, funcionario_id: 10, funcionario_nome: 'Piloto Renovado', funcionario_setor: 'Tripulação', status: 'RENOVADA', qualificacao_id: 300, data_conclusao: '2025-01-01' },
+      { id: 102, funcionario_id: 11, funcionario_nome: 'Piloto Vigente', funcionario_setor: 'Tripulação', status: 'VALIDA', qualificacao_id: 300, data_conclusao: '2026-01-01' },
+      { id: 103, funcionario_id: 12, funcionario_nome: 'Piloto Vencido', funcionario_setor: 'Tripulação', status: 'VENCIDA', qualificacao_id: 300, data_conclusao: '2024-01-01' },
+    ];
+    fetchHistoryMock.mockResolvedValue(historical);
+    exportHistoryPdfMock.mockResolvedValue(undefined);
+    renderBuilder();
+    fireEvent.change(screen.getByLabelText('Treinamento'), { target: { value: '300' } });
+
+    await screen.findByRole('button', { name: 'Gerar PDF do histórico (3 registros)' });
+    const renewed = screen.getByRole('checkbox', { name: 'Renovadas' });
+    expect(renewed).toBeChecked();
+    expect(screen.getByText('Piloto Renovado')).toBeInTheDocument();
+
+    fireEvent.click(renewed);
+    const withoutRenewed = screen.getByRole('button', { name: 'Gerar PDF do histórico (2 registros)' });
+    expect(screen.queryByText('Piloto Renovado')).not.toBeInTheDocument();
+    expect(screen.getByText('Exibindo 2 de 3 certificados para as situações selecionadas.')).toBeInTheDocument();
+    fireEvent.click(withoutRenewed);
+    await waitFor(() => expect(exportHistoryPdfMock).toHaveBeenLastCalledWith(
+      [historical[1], historical[2]],
+      expect.objectContaining({ filterLabels: expect.arrayContaining([expect.stringContaining('vigentes')]) }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Somente renovadas' }));
+    expect(screen.getByRole('checkbox', { name: 'Renovadas' })).toBeChecked();
+    expect(screen.getAllByRole('checkbox', { name: 'Realizados' })[0]).not.toBeChecked();
+    expect(screen.getAllByRole('checkbox', { name: 'Vencidos' })[0]).not.toBeChecked();
+    expect(screen.getByText('Piloto Renovado')).toBeInTheDocument();
+    expect(screen.queryByText('Piloto Vigente')).not.toBeInTheDocument();
+    expect(screen.queryByText('Piloto Vencido')).not.toBeInTheDocument();
+    const managerButton = screen.getByRole('button', { name: 'Enviar ao gestor' });
+    expect(managerButton).toBeDisabled();
+    fireEvent.click(managerButton);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchWithAuthMock).not.toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/relatorios/enviar-gestores',
+      expect.anything(),
+    );
+    const onlyRenewed = screen.getByRole('button', { name: 'Gerar PDF do histórico (1 registro)' });
+    fireEvent.click(onlyRenewed);
+    await waitFor(() => expect(exportHistoryPdfMock).toHaveBeenLastCalledWith(
+      [historical[0]],
+      expect.objectContaining({ filterLabels: expect.arrayContaining(['Situações do histórico: renovadas']) }),
+    ));
+    expect(fetchHistoryMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Completo' }));
+    expect(screen.getByRole('button', { name: 'Enviar ao gestor' })).toBeEnabled();
+  });
+
   it('explica quando a qualificação existe mas o cadastro não está no setor filtrado', async () => {
     fetchHistoryMock.mockImplementation(async (filters: { setorIds?: number[] }) => (
       filters.setorIds?.length ? [] : [
