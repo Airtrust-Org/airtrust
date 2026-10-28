@@ -91,9 +91,11 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
   it('requires exact package provenance for timestamp-only SCORM commits',async()=>{
     const emptyProgress={scormCmiJson:null,scormSuspendData:null,
       scormSessionCount:0,scormLastCommitAt:'2026-10-19T12:00:00Z'};
+    // The binding witness already rejects non-matching hashes. These two
+    // cases are witness-valid yet had an unproven commit edition when only
+    // last_commit_at was persisted.
     for(const mismatch of [
-      {committedSha:null}, {committedSha:'0'.repeat(64)},
-      {launchedSha:null}, {launchedSha:'0'.repeat(64)},
+      {committedSha:null}, {launchedSha:null,committedSha:null},
     ]) {
       const {db}=dbMock({...emptyProgress,...mismatch});
       await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
