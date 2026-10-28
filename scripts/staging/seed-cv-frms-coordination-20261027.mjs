@@ -88,7 +88,27 @@ export function fixtureSql() {
       "FROM funcionarios f WHERE f.empresa_id=999006 AND f.matricula='QA-PARTICIPANTE-ALFA' AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM frms_fadiga_checkin ch WHERE ch.id='qa-frms-cv-checkin-20261027-v1');",
   ].join('\n');
 }
+function validateStagingSchema(){
+  const columnGroups=new Map();
+  for(const match of fixtureSql().matchAll(/INSERT INTO\s+([a-z_]+)\s*\(([^)]+)\)/gi)){
+    const table=match[1], supplied=new Set(match[2].split(',').map(s=>s.trim()));
+    if(!columnGroups.has(table))columnGroups.set(table,supplied);
+    else if([...supplied].some(x=>!columnGroups.get(table).has(x)))throw Error('CV_FRMS_INCONSISTENT_TABLE_INSERT');
+  }
+  if(columnGroups.size!==4)throw Error('CV_FRMS_UNEXPECTED_WRITE_TABLES');
+  for(const [table,supplied] of columnGroups){
+    const fields=select('PRAGMA table_info('+table+')');
+    if(fields.length===0)throw Error('CV_FRMS_REQUIRED_TABLE_ABSENT:'+table);
+    const known=new Set(fields.map(x=>String(x.name)));
+    if([...supplied].some(x=>!known.has(x)))throw Error('CV_FRMS_INSERT_COLUMN_ABSENT:'+table);
+    const required=fields.filter(x=>Number(x.notnull)===1 && Number(x.pk)!==1 && x.dflt_value==null && !supplied.has(String(x.name)));
+    if(required.length)throw Error('CV_FRMS_SCHEMA_REQUIRES_ADDITIONAL_COLUMNS:'+table);
+  }
+  console.log('CV_FRMS_INSERT_SCHEMA_COMPATIBLE');
+}
+
 function preflight() {
+  validateStagingSchema();
   const q=exactQueries();
   const result=Object.fromEntries(Object.entries(q).map(([name,sql])=>[name,count(sql)]));
   if (result.tenant!==1 || result.pic!==1 || result.sic!==1 || result.templates<1 ||
