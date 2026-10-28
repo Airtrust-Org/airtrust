@@ -64,6 +64,8 @@ export async function readScormQaBackendEvidence(params: {
     launched_package_sha256:string|null;
     last_committed_package_sha256:string|null;
     matricula_status:string; numero_ciclo:number;
+    enrollment_progress_pct:number|null;
+    enrollment_completed_at:string|null;
     enrollment_score_final:number|null;
     enrollment_qualification_history_id:number|null;
     enrollment_attempts:number;
@@ -77,6 +79,8 @@ export async function readScormQaBackendEvidence(params: {
             b.run_id, b.expires_at, b.launched_package_sha256,
             b.last_committed_package_sha256,
             m.status AS matricula_status,
+            m.progresso_pct AS enrollment_progress_pct,
+            m.data_conclusao AS enrollment_completed_at,
             m.score_final AS enrollment_score_final,
             m.qualificacao_historico_id AS enrollment_qualification_history_id,
             m.tentativas AS enrollment_attempts,
@@ -114,6 +118,8 @@ export async function readScormQaBackendEvidence(params: {
       launched_package_sha256:string|null;
       last_committed_package_sha256:string|null;
       matricula_status:string; numero_ciclo:number;
+    enrollment_progress_pct:number|null;
+    enrollment_completed_at:string|null;
       enrollment_score_final:number|null;
       enrollment_qualification_history_id:number|null;
       enrollment_attempts:number;
@@ -170,6 +176,14 @@ export async function readScormQaBackendEvidence(params: {
   }
   if (bind.enrollment_attempts !== 0 || bind.cycle_attempts !== 0) {
     throw new ApiError('SCORM_QA_ATTEMPT_STATE_PRESENT', 409);
+  }
+  // An incomplete enrollment status is not sufficient negative evidence:
+  // a stale completion date or high progress can coexist with EM_ANDAMENTO.
+  // The synthetic F0 suspend-only writer advances progress to at most 1%.
+  const progress = bind.enrollment_progress_pct;
+  if (typeof progress !== 'number' || !Number.isSafeInteger(progress) ||
+      progress < 0 || progress > 1 || bind.enrollment_completed_at !== null) {
+    throw new ApiError('SCORM_QA_ENROLLMENT_COMPLETION_STATE_PRESENT', 409);
   }
   // Enrollment and cycle can remain incomplete even after the SCORM runtime
   // has persisted a terminal result. F0 only proves suspend/resume: a passed,
