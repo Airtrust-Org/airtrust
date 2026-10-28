@@ -69,7 +69,7 @@ function makeApp() {
 }
 
 async function get(app: ReturnType<typeof makeApp>['app'], path: string, db: D1Database) {
-  return app.fetch(new Request('http://localhost' + path), { DB: db, ENVIRONMENT: 'test' } as Env, {} as ExecutionContext);
+  return app.fetch(new Request('http://localhost' + path), { DB: db, ENVIRONMENT: 'test' } as unknown as Env, {} as ExecutionContext);
 }
 
 describe('LMS learner enrollment visibility', () => {
