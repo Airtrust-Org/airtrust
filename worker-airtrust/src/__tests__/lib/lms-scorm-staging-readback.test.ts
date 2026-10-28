@@ -18,6 +18,7 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   cycleQualificationHistoryId=null,xapiCount=0,xapiUnavailable=false,
   qualificationCount=undefined,qualificationUnavailable=false,
   scormCmiJson='{"cmi":"real"}',scormSuspendData='resume-01',
+  lessonStatus='incomplete',completionStatus=null,successStatus=null,
   scormSessionCount=2,scormLastCommitAt='2026-10-19T12:00:00Z'}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
@@ -32,6 +33,7 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   xapiCount?:number|null;xapiUnavailable?:boolean;
   qualificationCount?:number|null;qualificationUnavailable?:boolean;
   scormCmiJson?:string|null;scormSuspendData?:string|null;
+  lessonStatus?:string|null;completionStatus?:string|null;successStatus?:string|null;
   scormSessionCount?:number|null;scormLastCommitAt?:string|null;
 }={}){
   const statements:{sql:string;args:unknown[]}[]=[];
@@ -77,8 +79,8 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
             return total === null ? null : {total};
           }
           if(sql.includes('FROM lms_progresso_scorm'))
-            return {cmi_json:scormCmiJson,suspend_data:scormSuspendData,lesson_status:'incomplete',
-              completion_status:null,success_status:null,score_raw:scormScoreRaw,
+            return {cmi_json:scormCmiJson,suspend_data:scormSuspendData,lesson_status:lessonStatus,
+              completion_status:completionStatus,success_status:successStatus,score_raw:scormScoreRaw,
               score_max:scormScoreMax,score_min:scormScoreMin,score_scaled:scormScoreScaled,
               session_count:scormSessionCount,last_commit_at:scormLastCommitAt};
           return null;
@@ -200,6 +202,26 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
         packageId:pkg,packageSha256:qsha,matriculaId:88,
         runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_GRADED_STATE_PRESENT/);
     }
+  });
+  it('rejects terminal SCORM runtime states despite incomplete enrollment and cycle',async()=>{
+    for (const contaminated of [
+      {lessonStatus:'completed'}, {lessonStatus:'passed'}, {lessonStatus:'failed'},
+      {completionStatus:'completed'}, {successStatus:'passed'},
+      {successStatus:'failed'},
+    ]) {
+      const {db}=dbMock(contaminated);
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_TERMINAL_STATE_PRESENT/);
+    }
+    const {db}=dbMock({lessonStatus:'incomplete',completionStatus:'incomplete',
+      successStatus:'unknown'});
+    const row=await readScormQaBackendEvidence({db,empresaId:997,
+      cursoId:15,packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)});
+    expect(row.lessonStatus).toBe('incomplete');
+    expect(row.scormCompletionStatus).toBe('incomplete');
+    expect(row.successStatus).toBe('unknown');
   });
   it('rejects persisted enrollment/cycle attempts and foreign xAPI records',async()=> {
     for(const [config,reason] of [
