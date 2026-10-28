@@ -3,7 +3,9 @@ import { installReadOnlyGuard } from './lib/read-only-network-guard.mjs';
 
 /**
  * FRMS/CV read-only acceptance against the PUBLISHED staging Worker and Pages.
- * Auth is a real centrally provisioned staging admin. No token or user spoofing.
+ * Auth is the real, centrally provisioned examiner QA admin for synthetic tenant 999006.
+ * The generic qa-agent identity belongs to tenant 999002 (no 27/10 CV fixture).
+ * No token or user spoofing.
  * No crew data or sensitive fatigue answers are printed in CI logs.
  */
 const BASE = 'https://staging.airtrust.pages.dev';
@@ -11,10 +13,10 @@ const DAY = '2026-10-27';
 test.use({ storageState: { cookies: [], origins: [] }, trace: 'off', screenshot: 'off', video: 'off' });
 
 async function loginViaRealStagingUi(page: Page) {
-  const email = String(process.env.STAGING_SMOKE_EMAIL || '').trim();
-  const password = String(process.env.STAGING_SMOKE_PASSWORD || '');
-  if (email !== 'qa-agent@staging.airtrust.invalid' || !password) {
-    throw new Error('CV_FRMS_CANONICAL_STAGING_IDENTITY_MISSING');
+  const email = String(process.env.QA_EXAMINER_ADMIN_EMAIL || '').trim();
+  const password = String(process.env.QA_EXAMINER_ADMIN_PASSWORD || '');
+  if (email !== 'qa-examiner-admin@staging.airtrust.invalid' || !password) {
+    throw new Error('CV_FRMS_ISOLATED_EXAMINER_IDENTITY_MISSING');
   }
   await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#airtrust-boot-fallback')).toHaveCount(0);

@@ -252,6 +252,31 @@ describe('F0 staging-only real candidate launch/commit/resume with Schema V2 056
       expect(f.count('lms_progresso_scorm')).toBe(0);
     } finally {f.db.close();}
   });
+  it('rejects malformed persisted session state before a launch or commit',async()=>{
+    for(const sample of [
+      {sessionCount:null,cmi:null,lastCommit:'2026-10-28 09:00:00'},
+      {sessionCount:'not-a-number',cmi:null,lastCommit:'2026-10-28 09:00:00'},
+      {sessionCount:-1,cmi:null,lastCommit:'2026-10-28 09:00:00'},
+      {sessionCount:1.5,cmi:null,lastCommit:'2026-10-28 09:00:00'},
+      {sessionCount:1,cmi:'{\"resume\":1}',lastCommit:null},
+      {sessionCount:0,cmi:'{\"resume\":1}',lastCommit:'2026-10-28 09:00:00'},
+      {sessionCount:0,cmi:null,lastCommit:'2026-10-28 09:00:00'},
+    ]) {
+      const f=fixture();
+      try {
+        await provisionScormF0QaBinding(f.d1,bindingInput,now);
+        f.db.prepare(`INSERT INTO lms_progresso_scorm
+          (matricula_id,empresa_id,session_count,last_commit_at,cmi_json)
+          VALUES(23,111,?,?,?)`).run(sample.sessionCount,sample.lastCommit,sample.cmi);
+        await expect(readF0CandidateRuntimeState(f.d1,scope))
+          .rejects.toThrow('SCORM_F0_RUNTIME_SESSION_STATE_UNPROVEN');
+        await expect(commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','state')))
+          .rejects.toThrow('SCORM_F0_RUNTIME_SESSION_STATE_UNPROVEN');
+        expect(f.count('audit_logs')).toBe(1); // provision only
+        expect(f.count('lms_progresso_scorm')).toBe(1); // no write
+      } finally {f.db.close();}
+    }
+  });
   it('rejects bad CMI payloads and enforces candidate edition immutability',()=>{
     expect(()=>validateF0IncompleteCommit({...commitBody('1/2','state'),cmi_json:'not-json'},23,24))
       .toThrow('SCORM_F0_CMI_INVALID');
