@@ -105,6 +105,7 @@ function createApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.onError(errorHandler);
   app.route('/', lmsAssetsRoutes);
+  app.route('/api/lms', lmsAssetsRoutes); // exercise the actual production mount for SCORM asset paths
   return app;
 }
 
@@ -135,7 +136,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
         ['FROM lms_matriculas', { first: () => ({ id: 859 }) }],
       ]);
       const response = await createApp().fetch(
-        new Request('https://api.airtrust.online/scorm/assets/6/67/index.html', {
+        new Request('https://api.airtrust.online/api/lms/scorm/assets/6/67/index.html', {
           headers: { Authorization: 'Bearer stale-employee-claim' },
         }), makeEnv(db), {} as ExecutionContext,
       );
@@ -153,7 +154,7 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
         ['FROM lms_cursos', { first: () => ({ id: 67, ativo: 1, publicado: 1, scorm_package_r2_prefix: null }) }],
       ]);
       const response = await createApp().fetch(
-        new Request('https://api.airtrust.online/scorm/assets/6/67/index.html', {
+        new Request('https://api.airtrust.online/api/lms/scorm/assets/6/67/index.html', {
           headers: { Authorization: 'Bearer revoked-employee-claim' },
         }), makeEnv(db), {} as ExecutionContext,
       );
