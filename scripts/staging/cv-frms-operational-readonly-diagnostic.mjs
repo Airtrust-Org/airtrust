@@ -21,6 +21,26 @@ const columns={
  escalas_quinzenas:['id','empresa_id','data_inicio','data_fim','numero','deleted_at'],
  frms_escala_quinzenal:['tripulante_id','data_inicio_embarque','data_fim_embarque','status_ciclo','deleted_at']
 };
+// Phase-2 coverage: source dependencies reached by the real FRMS snapshot but
+// not exercised by the initial 0463/0464 and rolling-column diagnostic.
+// Only schema names are emitted; no crew, clinical or operational rows.
+Object.assign(columns,{
+ cv_voos:[...columns.cv_voos,'sigvoos_flight_report_id','sigvoos_flight_number','origem_id','destino_id','origem_importacao','campos_editados_json','sigvoos_importado_em'],
+ cv_voo_tripulantes:[...columns.cv_voo_tripulantes,'id','etapa_id','sigvoos_staff_id','funcao_origem','horario_apresentacao','horario_dispensa'],
+ cv_voo_etapas:['id','empresa_id','deleted_at','sigvoos_leg_number','origem_icao','destino_icao','horario_motor_ligado','horario_decolagem','horario_pouso','horario_motor_desligado','tempo_total','tempo_navegacao','tempo_ifr','tempo_noturno','pousos_diurnos','pousos_noturnos','starts','pax','combustivel_inicio','combustivel_fim','origem_dados','metadata_sigvoos_json','sigvoos_importado_em','numero_etapa'],
+ cv_aeroportos:['id','codigo_icao','codigo','empresa_id','deleted_at'],
+ cv_conflitos_integracao:['empresa_id','status','deleted_at','entidade_tipo','entidade_id','campo','justificativa'],
+ cv_sigvoos_staging:['empresa_id','deleted_at','cv_tripulante_id','import_status','erro_msg','processado_em'],
+ frms_jornada:[...columns.frms_jornada,'hora_apresentacao','hora_termino','hora_corte_motor','hora_ultimo_pouso','horas_voo_minutos','duracao_jornada_minutos','hora_primeiro_acionamento','hora_primeira_decolagem','origem'],
+ treinamentos_participantes:['treinamento_id','funcionario_id'],
+ treinamentos_instrutores:['treinamento_id','funcionario_id'],
+ treinamentos_planejados:['id','empresa_id','deleted_at','instrutor_id','data_prevista','data_inicio','data_fim','sessao_id','simulador_id','hora_inicio','hora_fim','titulo','codigo_turma','status'],
+ treinamentos_dias:['id','empresa_id','deleted_at','treinamento_id','data','sessao_id','simulador_id','hora_inicio','hora_fim','status'],
+ simulador_agendamentos:['id','empresa_id','deleted_at','funcionario_id','instrutor_id','checador_id','examinador_id','data','hora_inicio','hora_fim','nome','tipo_sessao','status'],
+ sessoes_participantes:['sessao_id','funcionario_id','deleted_at'],
+ frms_recovery_activity_day:['id','empresa_id','funcionario_id','deleted_at','reference_date','activity_type','notes','duty_start_time','duty_end_time'],
+ frms_recovery_activity_segment:['id','empresa_id','funcionario_id','recovery_day_id','activity_type','start_time','end_time']
+});
 const probes={
  flights:"SELECT v.id,v.prefixo,v.status,v.data_programacao,v.horario_previsto_partida,v.aeronave_id,a.modelo FROM cv_voos v LEFT JOIN aeronaves a ON a.id=v.aeronave_id AND a.empresa_id=v.empresa_id AND a.deleted_at IS NULL WHERE v.empresa_id=0 AND v.data_programacao='1970-01-01' AND v.deleted_at IS NULL ORDER BY v.horario_previsto_partida,v.id LIMIT 0",
  crew:"SELECT t.funcionario_id,t.funcao,f.nome FROM cv_voo_tripulantes t JOIN funcionarios f ON f.id=t.funcionario_id AND f.empresa_id=t.empresa_id AND f.deleted_at IS NULL WHERE t.voo_id=0 AND t.empresa_id=0 AND t.deleted_at IS NULL LIMIT 0",
@@ -29,6 +49,15 @@ const probes={
  effectiveness:"SELECT fj.effectiveness_pct,fj.effectiveness_nivel,fj.effectiveness_componentes_json,fj.dia_periodo_embarcado,fj.total_dias_periodo,j.data,j.tripulante_id FROM frms_fatorizacao_jornada fj JOIN frms_jornada j ON j.id=fj.jornada_id WHERE fj.deleted_at IS NULL AND j.deleted_at IS NULL LIMIT 0",
  mission:"SELECT ea.funcionario_id,ea.data_inicio,ea.data_fim,ea.quinzena_id,ea.aeronave_id,ea.situacao_tipo,ea.status,eq.numero FROM escala_alocacoes ea LEFT JOIN escalas_quinzenas eq ON eq.id=ea.quinzena_id AND eq.deleted_at IS NULL WHERE ea.deleted_at IS NULL LIMIT 0"
 };
+// Compile-only equivalents of the previously untested operational-source joins.
+// The fixed impossible tenant/date and LIMIT 0 prohibit row materialization.
+Object.assign(probes,{
+ cv_jornadas_source:"SELECT t.id,t.etapa_id,t.sigvoos_staff_id,t.funcao_origem,t.horario_apresentacao,t.horario_dispensa,v.sigvoos_flight_report_id,v.sigvoos_flight_number,v.origem_importacao,v.campos_editados_json,e.sigvoos_leg_number,e.origem_icao,e.destino_icao,e.horario_motor_ligado,e.horario_decolagem,e.horario_pouso,e.horario_motor_desligado,e.tempo_total,e.tempo_navegacao,e.tempo_ifr,e.tempo_noturno,e.pousos_diurnos,e.pousos_noturnos,e.starts,e.pax,e.combustivel_inicio,e.combustivel_fim,e.origem_dados,e.metadata_sigvoos_json,ao.codigo_icao,ad.codigo_icao,c.campo,c.justificativa,s.import_status,s.erro_msg FROM cv_voo_tripulantes t JOIN cv_voos v ON v.id=t.voo_id AND v.empresa_id=t.empresa_id LEFT JOIN cv_voo_etapas e ON e.id=t.etapa_id AND e.empresa_id=t.empresa_id LEFT JOIN cv_aeroportos ao ON ao.id=v.origem_id AND ao.empresa_id=v.empresa_id LEFT JOIN cv_aeroportos ad ON ad.id=v.destino_id AND ad.empresa_id=v.empresa_id LEFT JOIN cv_conflitos_integracao c ON c.empresa_id=t.empresa_id AND c.entidade_id=t.id LEFT JOIN cv_sigvoos_staging s ON s.empresa_id=t.empresa_id AND s.cv_tripulante_id=t.id WHERE t.empresa_id=0 AND v.data_programacao='1970-01-01' LIMIT 0",
+ legacy_jornadas_source:"SELECT j.hora_apresentacao,j.hora_termino,j.hora_corte_motor,j.hora_ultimo_pouso,j.horas_voo_minutos,j.duracao_jornada_minutos,j.hora_primeiro_acionamento,j.hora_primeira_decolagem,j.origem FROM frms_jornada j JOIN funcionarios f ON f.id=CAST(j.tripulante_id AS INTEGER) WHERE f.empresa_id=0 AND j.data='1970-01-01' LIMIT 0",
+ training_activity_source:"SELECT td.data,td.sessao_id,td.simulador_id,t.titulo,t.codigo_turma,t.status,p.funcionario_id FROM treinamentos_dias td JOIN treinamentos_planejados t ON t.id=td.treinamento_id JOIN treinamentos_participantes p ON p.treinamento_id=t.id WHERE td.empresa_id=0 AND td.data='1970-01-01' LIMIT 0",
+ simulator_activity_source:"SELECT sa.data,sa.hora_inicio,sa.hora_fim,sa.nome,sa.tipo_sessao,sp.funcionario_id FROM simulador_agendamentos sa JOIN sessoes_participantes sp ON sp.sessao_id=sa.id WHERE sa.empresa_id=0 AND sa.data='1970-01-01' LIMIT 0",
+ recovery_activity_source:"SELECT rd.reference_date,rd.notes,rd.duty_start_time,rd.duty_end_time,rs.activity_type,rs.start_time,rs.end_time FROM frms_recovery_activity_day rd JOIN frms_recovery_activity_segment rs ON rs.recovery_day_id=rd.id AND rs.empresa_id=rd.empresa_id WHERE rd.empresa_id=0 AND rd.reference_date='1970-01-01' LIMIT 0"
+});
 function readOnly(sql) {
  const s=String(sql).trim();
  if(!/^(SELECT|PRAGMA)\b/i.test(s)||s.includes(';')||/\b(INSERT|UPDATE|DELETE|REPLACE|MERGE|CREATE|ALTER|DROP|TRUNCATE|VACUUM|ATTACH|DETACH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i.test(s)) throw Error('READ_ONLY_SQL_BLOCKED');
