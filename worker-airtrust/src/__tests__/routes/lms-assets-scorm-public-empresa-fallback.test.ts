@@ -123,6 +123,44 @@ describe('SCORM public routes — empresa_id resolved from JWT payload (no tenan
     currentEmployeeMock.mockResolvedValue(null);
   });
 
+  describe('bearer direct SCORM asset access after employee-link changes', () => {
+    it('uses the live employee link and not the obsolete access JWT on the asset path', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6, funcionario_id: null, role: 'ALUNO', sub: '108',
+        token_type: 'access',
+      });
+      currentEmployeeMock.mockResolvedValue(55);
+      const db = createMockDb([
+        ['FROM lms_cursos', { first: () => ({ id: 67, ativo: 1, publicado: 1, scorm_package_r2_prefix: null }) }],
+        ['FROM lms_matriculas', { first: () => ({ id: 859 }) }],
+      ]);
+      const response = await createApp().fetch(
+        new Request('https://api.airtrust.online/scorm/assets/6/67/index.html', {
+          headers: { Authorization: 'Bearer stale-employee-claim' },
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+      expect(response.status).toBe(200);
+      expect(currentEmployeeMock).toHaveBeenCalledWith(db, '108', 6);
+    });
+
+    it('rejects bearer SCORM assets after link revocation despite old token claim', async () => {
+      verifyJWTMock.mockResolvedValue({
+        empresa_id: 6, funcionario_id: 55, role: 'ALUNO', sub: '108',
+        token_type: 'access',
+      });
+      currentEmployeeMock.mockResolvedValue(null);
+      const db = createMockDb([
+        ['FROM lms_cursos', { first: () => ({ id: 67, ativo: 1, publicado: 1, scorm_package_r2_prefix: null }) }],
+      ]);
+      const response = await createApp().fetch(
+        new Request('https://api.airtrust.online/scorm/assets/6/67/index.html', {
+          headers: { Authorization: 'Bearer revoked-employee-claim' },
+        }), makeEnv(db), {} as ExecutionContext,
+      );
+      expect(response.status).toBe(403);
+    });
+  });
+
   describe('GET /scorm/launch/:matricula_id', () => {
     it('returns 200 with SCORM HTML when JWT carries empresa_id and no tenant context is set', async () => {
       verifyJWTMock.mockResolvedValue({
