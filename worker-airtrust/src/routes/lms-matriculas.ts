@@ -75,6 +75,7 @@ import {
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
+import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
@@ -88,31 +89,8 @@ app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
 registerLmsScormEditionHandoffRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
-function getCallerFuncionarioId(c: Context): number | null {
-  const raw = c.get('funcionarioId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
-/**
- * Versão async: tenta JWT first, se null faz lookup no DB via userId.
- * Resolve o caso em que o vínculo usuario→funcionario foi criado após o JWT ter sido gerado.
- */
 async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<number | null> {
-  const fromJwt = getCallerFuncionarioId(c);
-  if (fromJwt) return fromJwt;
-
-  // Fallback: userId está sempre no JWT; busca funcionario_id atual no DB
-  const userId = getCallerUserId(c);
-  if (!userId) return null;
-
-  const row = await db
-    .prepare('SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-    .bind(userId)
-    .first<{ funcionario_id: number | null }>();
-
-  const parsed = row?.funcionario_id;
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
+  return resolveLmsFuncionarioId(db, c.get('userId' as never), getEmpresaIdSafe(c));
 }
 
 async function createLmsInAppNotification(
@@ -244,7 +222,7 @@ app.get('/minhas-ead', async (c) => {
   const funcionarioId = await resolveCallerFuncionarioId(c, db);
 
   if (!funcionarioId) {
-    return c.json({ success: true, data: [] });
+    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
   const rows = await db
@@ -306,7 +284,6 @@ app.get('/minhas-ead', async (c) => {
         END,
         data_vencimento_qualificacao ASC NULLS LAST,
         m.updated_at DESC
-      LIMIT 50
     `,
     )
     .bind(funcionarioId, empresaId)
@@ -340,7 +317,7 @@ app.get('/minhas', async (c) => {
   const offset = (page - 1) * limit;
 
   if (!funcionarioId) {
-    return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
+    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
   const total = await db
@@ -465,7 +442,14 @@ app.get(
     const rows = await db
       .prepare(
         `
-      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
+      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM usuarios u
+          JOIN usuarios_empresas ue
+            ON ue.usuario_id = u.id AND ue.empresa_id = m.empresa_id
+          WHERE u.funcionario_id = m.funcionario_id
+            AND u.deleted_at IS NULL
+        ) THEN 1 ELSE 0 END AS aluno_vinculado
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
