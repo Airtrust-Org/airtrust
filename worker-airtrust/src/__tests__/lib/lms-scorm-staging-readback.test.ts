@@ -11,6 +11,7 @@ const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
 function dbMock({binding=true,history=[],candidate=true,table=true,
   syntheticEmployee=true,syntheticEnrollment=true,unpublishedCourse=true,
   incompleteEnrollment=true,incompleteCycle=true,
+  enrollmentProgressPct=1,enrollmentCompletedAt=null,
   launchedSha=qsha,committedSha=qsha,
   enrollmentScoreFinal=null,enrollmentQualificationHistoryId=null,
   scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null,
@@ -24,6 +25,7 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   candidate?:boolean;table?:boolean;
   syntheticEmployee?:boolean;syntheticEnrollment?:boolean;unpublishedCourse?:boolean;
   incompleteEnrollment?:boolean;incompleteCycle?:boolean;
+  enrollmentProgressPct?:number|null;enrollmentCompletedAt?:string|null;
   launchedSha?:string|null;committedSha?:string|null;
   enrollmentScoreFinal?:number|null;enrollmentQualificationHistoryId?:number|null;
   scormScoreRaw?:number|null;scormScoreMax?:number|null;
@@ -63,6 +65,8 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
               launched_package_sha256:launchedSha,
               last_committed_package_sha256:committedSha,
               matricula_status:'EM_ANDAMENTO',numero_ciclo:1,
+              enrollment_progress_pct:enrollmentProgressPct,
+              enrollment_completed_at:enrollmentCompletedAt,
               enrollment_score_final:enrollmentScoreFinal,
               enrollment_qualification_history_id:enrollmentQualificationHistoryId,
               enrollment_attempts:enrollmentAttempts,cycle_attempts:cycleAttempts,
@@ -201,6 +205,26 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
       await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
         packageId:pkg,packageSha256:qsha,matriculaId:88,
         runtimeSha:'b'.repeat(40)})).rejects.toThrow(/SCORM_QA_GRADED_STATE_PRESENT/);
+    }
+  });
+  it('rejects stale completion progress/date despite incomplete enrollment status',async()=>{
+    for (const contaminated of [
+      {enrollmentProgressPct:2}, {enrollmentProgressPct:100},
+      {enrollmentProgressPct:-1}, {enrollmentProgressPct:null},
+      {enrollmentProgressPct:0.5}, {enrollmentProgressPct:Number.NaN},
+      {enrollmentCompletedAt:'2026-10-19T12:00:00Z'},
+    ]) {
+      const {db}=dbMock(contaminated);
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)}))
+        .rejects.toThrow(/SCORM_QA_ENROLLMENT_COMPLETION_STATE_PRESENT/);
+    }
+    for (const enrollmentProgressPct of [0,1]) {
+      const {db}=dbMock({enrollmentProgressPct});
+      await expect(readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+        packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)})).resolves.toMatchObject({completionStatus:'EM_ANDAMENTO'});
     }
   });
   it('rejects terminal SCORM runtime states despite incomplete enrollment and cycle',async()=>{
