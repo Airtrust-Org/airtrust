@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {fixtureSql, DB, DB_ID, TENANT, DAY, MARKER, PIC, SIC} from '../staging/seed-cv-frms-coordination-20261027.mjs';
 
 const workflow=readFileSync(new URL('../../.github/workflows/staging-cv-frms-20261027-synthetic-fixture.yml',import.meta.url),'utf8');
@@ -18,8 +19,6 @@ test('fixture pinned exclusively to fictional tenant, date and staging D1',()=>{
 });
 test('fixture inserts only flight, dedicated PIC/SIC, synthetic journey/check-in',()=>{
   const sql=fixtureSql();
-  const statements=sql.split(';').map(s=>s.trim()).filter(Boolean);
-  assert.equal(statements.length,5);
   assert.equal((sql.match(/\bINSERT INTO\b/g)||[]).length,5);
   assert.deepEqual([...sql.matchAll(/\bINSERT INTO\s+([a-z_]+)/g)].map(m=>m[1]),[
     'cv_voos','cv_voo_tripulantes','cv_voo_tripulantes','frms_jornada','frms_fadiga_checkin'
@@ -61,4 +60,38 @@ test('unexpected mode or missing staging credentials cannot write',()=>{
   assert.match(script,/CV_FRMS_FIXTURE_POSTCONDITION_FAILED/);
   assert.match(script,/foreignCheckins/);
   assert.match(script,/collision/);
+});
+
+test('isolated SQLite: first apply and repeat remain idempotent, source is unchanged',()=>{
+  const sql=fixtureSql();
+  const py=String.raw`
+import sqlite3, sys
+db=sqlite3.connect(':memory:')
+db.executescript("""
+CREATE TABLE cv_voos (id INTEGER PRIMARY KEY, empresa_id INTEGER, prefixo TEXT, data_programacao TEXT, origem_id INTEGER, destino_id INTEGER, tipo_voo_id INTEGER, natureza_voo_id INTEGER, aeronave_id INTEGER, horario_previsto_partida TEXT, horario_previsto_chegada TEXT, status TEXT, observacoes TEXT, versao INTEGER, origem_importacao TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
+CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, matricula TEXT, ativo INTEGER, deleted_at TEXT);
+CREATE TABLE cv_voo_tripulantes (id INTEGER PRIMARY KEY, empresa_id INTEGER, voo_id INTEGER, funcionario_id INTEGER, funcao TEXT, horario_apresentacao TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
+CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, tripulante_id INTEGER, data TEXT, status TEXT, hora_apresentacao TEXT, hora_termino TEXT, duracao_jornada_minutos INTEGER, horas_voo_minutos INTEGER, registrado_por TEXT, origem TEXT, observacao TEXT, empresa_id INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT);
+CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT, hora_checkin TEXT, kss_score INTEGER, horas_sono REAL, qualidade_sono INTEGER, sintomas_json TEXT, observacoes TEXT, score_fadiga INTEGER, nivel_fadiga TEXT, status_operacional TEXT, recomendacao TEXT, apto INTEGER, requires_frat_review INTEGER, computed_risk_level TEXT, requires_operational_review INTEGER, report_source TEXT, submitted_at TEXT, wake_time TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
+INSERT INTO funcionarios VALUES(1,999006,'QA-PARTICIPANTE-ALFA',1,NULL);
+INSERT INTO funcionarios VALUES(2,999006,'QA-PARTICIPANTE-BRAVO',1,NULL);
+INSERT INTO cv_voos (id,empresa_id,prefixo,data_programacao,status,observacoes,origem_importacao) VALUES(1,999006,'QA-SRC','2026-10-27','planejado','ORIGINAL-SOURCE','MANUAL');
+""")
+sql=sys.stdin.read()
+for attempt in range(2):
+    db.executescript(sql)
+    def n(q): return db.execute(q).fetchone()[0]
+    assert n("SELECT COUNT(*) FROM cv_voos")==2
+    assert n("SELECT COUNT(*) FROM cv_voo_tripulantes")==2
+    assert n("SELECT COUNT(*) FROM frms_jornada")==1
+    assert n("SELECT COUNT(*) FROM frms_fadiga_checkin")==1
+    assert n("SELECT COUNT(*) FROM cv_voos WHERE id=1 AND observacoes='ORIGINAL-SOURCE'")==1
+    assert n("SELECT COUNT(*) FROM cv_voo_tripulantes WHERE funcionario_id=1 AND funcao='PIC'")==1
+    assert n("SELECT COUNT(*) FROM cv_voo_tripulantes WHERE funcionario_id=2 AND funcao='SIC'")==1
+    assert n("SELECT COUNT(*) FROM frms_fadiga_checkin WHERE funcionario_id=2")==0
+print('ISOLATED_CV_FRMS_SQLITE_IDEMPOTENT_PASS')
+`;
+  const result=spawnSync('python3',['-c',py],{input:sql,encoding:'utf8',timeout:15000});
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  assert.match(result.stdout,/ISOLATED_CV_FRMS_SQLITE_IDEMPOTENT_PASS/);
 });
