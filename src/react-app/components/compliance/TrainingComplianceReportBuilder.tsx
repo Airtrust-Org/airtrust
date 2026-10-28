@@ -351,8 +351,10 @@ export function TrainingComplianceReportBuilder({
   };
 
   const sendManagers = useMutation({
-    mutationFn: async () =>
-      readJson<{ setores: number; setores_enviados: number; destinatarios: number }>(
+    mutationFn: async () => {
+      if (statuses.length === 0)
+        throw new Error('Selecione uma situação de Compliance antes de enviar relatórios aos gestores.');
+      return readJson<{ setores: number; setores_enviados: number; destinatarios: number }>(
         await fetchWithAuth('/api/compliance-treinamentos/relatorios/enviar-gestores', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -368,7 +370,8 @@ export function TrainingComplianceReportBuilder({
             },
           }),
         }),
-      ),
+      );
+    },
     onSuccess: (result) => {
       toast.success(
         `Relatório enviado para ${result.destinatarios} gestor(es) em ${result.setores_enviados} setor(es).`,
@@ -470,7 +473,11 @@ export function TrainingComplianceReportBuilder({
           <button
             type="button"
             onClick={openManagerModal}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
+            disabled={statuses.length === 0}
+            title={statuses.length === 0
+              ? 'Somente renovações: exporte o PDF do histórico. O envio aos gestores exige situações de Compliance.'
+              : 'Enviar relatório de requisitos obrigatórios aos gestores.'}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             <Mail className="h-4 w-4" /> Enviar ao gestor
           </button>
