@@ -1392,7 +1392,7 @@ export default function LmsPlayer() {
         <div className="flex h-full min-h-0">
           <div className="relative min-w-0 flex-1">
             {!launchUrl && !newEditionRequired && isScormContent ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-5" role={assetSessionError ? 'alert' : 'status'}>
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-5" role={assetSessionError ? 'alert' : undefined} aria-live="polite">
                 <div className="max-w-md space-y-3 text-center text-white">
                   {assetSessionError ? (
                     <>
