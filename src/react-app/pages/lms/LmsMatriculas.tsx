@@ -758,6 +758,7 @@ export default function LmsMatriculas() {
   const reprovados = todasMatriculas.filter((m) => m.status === 'REPROVADO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
+  const semContaVinculada = matriculas.filter((m) => m.aluno_vinculado === 0).length;
   const activeFuncionarioIds = new Set(
     todasMatriculas.map((matricula) => matricula.funcionario_id).filter(Number.isFinite),
   );
@@ -843,6 +844,12 @@ export default function LmsMatriculas() {
           title="Alunos matriculados"
           description="Filtre rapidamente por nome e status para agir sobre a operação do curso."
         >
+          {semContaVinculada > 0 && (
+            <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {semContaVinculada} matrícula(s) nesta listagem estão sem conta vinculada ao funcionário nesta empresa.
+              Verifique o cadastro de usuários antes de reenviar convites. Não vincule contas apenas pela semelhança de nomes.
+            </div>
+          )}
           <div className="mb-5 flex flex-wrap gap-3">
             <div className="relative min-w-[220px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -964,6 +971,11 @@ export default function LmsMatriculas() {
                             className="font-medium text-slate-900 dark:text-slate-100"
                           />
                           <div className="text-xs text-slate-400 dark:text-slate-500">Matrícula #{m.id}</div>
+                          {m.aluno_vinculado === 0 && (
+                            <div className="mt-1 text-xs font-medium text-amber-700" title="Sem usuário com vínculo de funcionário e empresa para acessar este curso">
+                              Sem conta vinculada
+                            </div>
+                          )}
                           <div className="mt-2 md:hidden">
                             <ProgressBar value={getMatriculaProgress(m)} />
                           </div>
