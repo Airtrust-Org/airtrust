@@ -30,3 +30,11 @@ test('credentials stay inside staging and mutex is shared with QA',()=>{
  assert.match(w,/secrets\.CLOUDFLARE_ACCOUNT_ID/);
  assert.doesNotMatch(w,/secrets\.CLOUDFLARE_API_TOKEN\b|set\s+-x/);
 });
+
+test('phase-2 probes cover actual CV and FRMS activity sources without materializing rows',()=>{
+ for(const table of ['cv_voo_etapas','cv_conflitos_integracao','cv_sigvoos_staging','treinamentos_dias','simulador_agendamentos','frms_recovery_activity_segment']) assert.ok(s.includes(table));
+ for(const name of ['cv_jornadas_source','legacy_jornadas_source','training_activity_source','simulator_activity_source','recovery_activity_source']) assert.ok(s.includes(name));
+ assert.match(s,/LIMIT 0/);
+ assert.match(s,/Only schema names are emitted/);
+ assert.doesNotMatch(s,/console\.log\(.*results/);
+});
