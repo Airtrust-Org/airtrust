@@ -25,7 +25,7 @@ test('probes operational schema including 0498 and counts synthetic flights only
  assert.match(s,/missingColumns:missing,compileProbes:compile,qaFlights,fixtureState,verdict/);
 });
 test('credentials stay inside staging and mutex is shared with QA',()=>{
- assert.match(w,/environment: staging/);assert.match(w,/airtrust-staging-mutations-and-scorm-qa/);
+ assert.match(w,/schema_d1_readonly:/);assert.match(w,/environment: staging/);assert.match(w,/airtrust-staging-mutations-and-scorm-qa/);
  assert.match(w,/secrets\.CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
  assert.match(w,/secrets\.CLOUDFLARE_ACCOUNT_ID/);
  assert.doesNotMatch(w,/secrets\.CLOUDFLARE_API_TOKEN\b|set\s+-x/);

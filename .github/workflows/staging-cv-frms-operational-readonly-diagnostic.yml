@@ -49,7 +49,7 @@ jobs:
           if(!pages.ok||!(await pages.text()).includes(sha.slice(0,7)))throw Error('STAGING_PAGES_SHA_MISMATCH');
           console.log('STAGING_SHA_VERIFIED');
           NODE
-  doctor:
+  schema_d1_readonly:
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
