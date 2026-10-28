@@ -31,12 +31,14 @@ export async function readF0CandidateRuntimeState(db: D1Database, scope: F0Scope
     id:string; ciclo_id:number; run_id:string; launched_package_sha256:string|null;
     last_committed_package_sha256:string|null; cmi_json:string|null;
     suspend_data:string|null; session_count:number|null;
+    sc_row_present:number; last_commit_at:string|null;
   } | null;
   try {
     row = await db.prepare(
       `SELECT b.id,b.ciclo_id,b.run_id,b.launched_package_sha256,
               b.last_committed_package_sha256,
-              sc.cmi_json,sc.suspend_data,sc.session_count
+              CASE WHEN sc.matricula_id IS NULL THEN 0 ELSE 1 END AS sc_row_present,
+              sc.cmi_json,sc.suspend_data,sc.session_count,sc.last_commit_at
          FROM lms_scorm_qa_evidence_bindings b
          JOIN lms_scorm_package_versions p ON p.id=b.package_id
            AND p.empresa_id=b.empresa_id AND p.curso_id=b.curso_id
@@ -69,15 +71,27 @@ export async function readF0CandidateRuntimeState(db: D1Database, scope: F0Scope
       (row.launched_package_sha256 !== null && row.launched_package_sha256 !== scope.packageSha256) ||
       (row.last_committed_package_sha256 !== null &&
         (row.launched_package_sha256 !== scope.packageSha256 ||
-         row.last_committed_package_sha256 !== scope.packageSha256)) ||
-      ((row.cmi_json !== null || row.suspend_data !== null || Number(row.session_count ?? 0)>0) &&
-       row.last_committed_package_sha256 !== scope.packageSha256)) {
+         row.last_committed_package_sha256 !== scope.packageSha256))) {
     throw new ApiError('SCORM_F0_RUNTIME_BINDING_OR_EDITION_INVALID', 409);
+  }
+  // A missing progress row is the only unambiguous prelaunch zero. A
+  // persisted row with a malformed counter, orphan CMI or timestamp-only
+  // commit cannot be normalized to zero or reused for a fresh F0 commit.
+  if (row.sc_row_present === 1 && (
+      typeof row.session_count !== 'number' ||
+      !Number.isSafeInteger(row.session_count) || row.session_count < 0 ||
+      (row.session_count === 0 &&
+       (row.cmi_json !== null || row.suspend_data !== null)) ||
+      (row.session_count > 0 && !row.last_commit_at) ||
+      ((row.cmi_json !== null || row.suspend_data !== null ||
+        row.session_count > 0 || row.last_commit_at !== null) &&
+       row.last_committed_package_sha256 !== scope.packageSha256))) {
+    throw new ApiError('SCORM_F0_RUNTIME_SESSION_STATE_UNPROVEN', 409);
   }
   return {
     id: row.id, cycleId:row.ciclo_id, runId:row.run_id,
     cmiJson:row.cmi_json, suspendData:row.suspend_data,
-    sessionCount:Number(row.session_count ?? 0),
+    sessionCount:row.session_count ?? 0,
     launchedSha:row.launched_package_sha256,
     committedSha:row.last_committed_package_sha256,
   };
