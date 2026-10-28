@@ -226,6 +226,8 @@ export default function LmsPlayer() {
   const autoCompletionAttemptRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
+  const [assetSessionError, setAssetSessionError] = useState<string | null>(null);
+  const [assetSessionRetry, setAssetSessionRetry] = useState(0);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -542,6 +544,7 @@ export default function LmsPlayer() {
       sessionKeyRef.current = null;
       stableLaunchUrlRef.current = null;
       setAssetSessionReady(false);
+      setAssetSessionError(null);
       setIframeLoaded(false);
     }
     prevSessionKeyRef.current = sessionKey;
@@ -577,6 +580,7 @@ export default function LmsPlayer() {
 
         if (response.ok) {
           assetSessionKeyRef.current = sessionKey;
+          setAssetSessionError(null);
           setAssetSessionReady(true);
           return;
         }
@@ -590,6 +594,7 @@ export default function LmsPlayer() {
           sessionKeyRef.current = null;
           stableLaunchUrlRef.current = null;
           setAssetSessionReady(false);
+          setAssetSessionError('A sessão do conteúdo mudou. Atualize e tente novamente. (HTTP 409)');
           setIframeLoaded(false);
           void refetchMatriculaRef.current();
           return;
@@ -599,10 +604,12 @@ export default function LmsPlayer() {
         // alive; only initial asset-session failure blocks first launch.
         if (assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
+          setAssetSessionError(`Não foi possível autorizar a abertura do conteúdo (HTTP ${response.status}).`);
         }
       } catch {
         if (!cancelled && assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
+          setAssetSessionError('Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
         }
       }
     }
@@ -614,7 +621,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey, assetSessionRetry]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
@@ -1384,6 +1391,30 @@ export default function LmsPlayer() {
       <main className="relative flex-1">
         <div className="flex h-full min-h-0">
           <div className="relative min-w-0 flex-1">
+            {!launchUrl && !newEditionRequired && isScormContent ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-5" role={assetSessionError ? 'alert' : undefined} aria-live="polite">
+                <div className="max-w-md space-y-3 text-center text-white">
+                  {assetSessionError ? (
+                    <>
+                      <AlertTriangle className="mx-auto h-9 w-9 text-amber-400" />
+                      <p className="text-sm font-semibold">Não foi possível abrir o treinamento</p>
+                      <p className="text-xs text-white/70">{assetSessionError}</p>
+                      <button
+                        type="button"
+                        onClick={() => { setAssetSessionError(null); setAssetSessionRetry((value) => value + 1); }}
+                        className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
+                      >Tentar novamente</button>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="mx-auto h-9 w-9 animate-spin text-white/40" />
+                      <p className="text-sm text-white/65">Autorizando o acesso ao conteúdo...</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             {!iframeLoaded && launchUrl ? (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
                 <div className="text-center">
