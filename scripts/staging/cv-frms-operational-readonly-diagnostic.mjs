@@ -37,7 +37,7 @@ function readOnly(sql) {
 function query(sql) {
  const p=spawnSync('npx',['wrangler','d1','execute',DB,'--remote','--json','--command',readOnly(sql)],{cwd:path.join(root,'worker-airtrust'),encoding:'utf8',maxBuffer:4*1024*1024});
  if(p.status!==0) throw Error('D1_QUERY_FAILED');
- let json;try{json=JSON.parse(p.stdout);}catch{throw Error('D1_JSON_INVALID');}
+ let json;try{json=JSON.parse(p.stdout);}catch{const start=p.stdout.search(/[\[{]/);if(start<0)throw Error('D1_JSON_INVALID');try{json=JSON.parse(p.stdout.slice(start));}catch{throw Error('D1_JSON_INVALID');}}
  const first=Array.isArray(json)?json[0]:json;
  if(first?.success===false) throw Error('D1_QUERY_REJECTED');
  return first?.results||[];
@@ -63,8 +63,10 @@ async function main(){
   const rows=query("SELECT empresa_id,COUNT(*) AS total FROM cv_voos WHERE empresa_id IN (999006,999013) AND data_programacao='2026-10-27' AND deleted_at IS NULL GROUP BY empresa_id");
   qaFlights={state:'READABLE',counts:[999006,999013].map(id=>({tenantLabel:id===999006?'qa_examiner_training':'qa_frms_ux',total:Number(rows.find(x=>Number(x.empresa_id)===id)?.total||0)}))};
  }catch{qaFlights={state:'QUERY_FAILED',counts:[]};}
- const verdict=missing.length===0&&Object.values(compile).every(x=>x==='PASS')&&qaFlights.state==='READABLE'?'PASS':'FAIL';
- console.log(JSON.stringify({date:'2026-10-27',sha,readOnly:true,writes:0,missingColumns:missing,compileProbes:compile,qaFlights,verdict},null,2));
- if(verdict==='FAIL')process.exitCode=1;
+ const schemaOk=missing.length===0&&Object.values(compile).every(x=>x==='PASS')&&qaFlights.state==='READABLE';
+ const verdict=schemaOk?'SCHEMA_ONLY_PASS':'SCHEMA_FAIL';
+ const fixtureState=qaFlights.state!=='READABLE'?'UNKNOWN':qaFlights.counts.some(x=>x.total>0)?'SYNTHETIC_FLIGHTS_PRESENT':'NO_SYNTHETIC_FLIGHTS_ON_DATE';
+ console.log(JSON.stringify({date:'2026-10-27',sha,readOnly:true,writes:0,missingColumns:missing,compileProbes:compile,qaFlights,fixtureState,verdict},null,2));
+ if(!schemaOk)process.exitCode=1;
 }
 main().catch(e=>{console.error('CV_FRMS_STAGING_DIAGNOSTIC_FAILED:'+String(e?.message||'UNKNOWN').replace(/[^A-Z0-9_]/gi,'_').slice(0,60));process.exitCode=1;});

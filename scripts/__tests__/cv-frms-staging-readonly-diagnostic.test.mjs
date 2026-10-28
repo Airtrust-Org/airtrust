@@ -22,7 +22,7 @@ test('only SELECT and PRAGMA, no remote write or clinical values returned',()=>{
 test('probes operational schema including 0498 and counts synthetic flights only',()=>{
  for(const name of ['cv_voos','cv_voo_tripulantes','frms_acumulo_rolling','hv_ano_calendario_min','frms_fadiga_checkin','escala_alocacoes'])assert.ok(s.includes(name));
  assert.match(s,/empresa_id IN \(999006,999013\)/);
- assert.match(s,/missingColumns:missing,compileProbes:compile,qaFlights,verdict/);
+ assert.match(s,/missingColumns:missing,compileProbes:compile,qaFlights,fixtureState,verdict/);
 });
 test('credentials stay inside staging and mutex is shared with QA',()=>{
  assert.match(w,/environment: staging/);assert.match(w,/airtrust-staging-mutations-and-scorm-qa/);
