@@ -32,6 +32,7 @@ test('fixture inserts only flight, dedicated PIC/SIC, synthetic journey/check-in
 test('synthetic check-in is explicitly marked and SIC remains pending',()=>{
   const sql=fixtureSql();
   assert.match(sql,/'QA_SYNTHETIC'/);
+  assert.match(sql,/jornada_inicio_prevista/);
   assert.match(sql,/'QA-PARTICIPANTE-ALFA'/);
   assert.match(sql,/'QA-PARTICIPANTE-BRAVO'/);
   assert.equal((sql.match(/INSERT INTO frms_fadiga_checkin/g)||[]).length,1);
@@ -72,7 +73,7 @@ CREATE TABLE cv_voos (id INTEGER PRIMARY KEY, empresa_id INTEGER, prefixo TEXT, 
 CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, matricula TEXT, ativo INTEGER, deleted_at TEXT);
 CREATE TABLE cv_voo_tripulantes (id INTEGER PRIMARY KEY, empresa_id INTEGER, voo_id INTEGER, funcionario_id INTEGER, funcao TEXT, horario_apresentacao TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
 CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, tripulante_id INTEGER, data TEXT, status TEXT, hora_apresentacao TEXT, hora_termino TEXT, duracao_jornada_minutos INTEGER, horas_voo_minutos INTEGER, registrado_por TEXT, origem TEXT, observacao TEXT, empresa_id INTEGER, created_at TEXT, updated_at TEXT, deleted_at TEXT);
-CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT, hora_checkin TEXT, kss_score INTEGER, horas_sono REAL, qualidade_sono INTEGER, sintomas_json TEXT, observacoes TEXT, score_fadiga INTEGER, nivel_fadiga TEXT, status_operacional TEXT, recomendacao TEXT, apto INTEGER, requires_frat_review INTEGER, computed_risk_level TEXT, requires_operational_review INTEGER, report_source TEXT, submitted_at TEXT, wake_time TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
+CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT, hora_checkin TEXT, kss_score INTEGER, horas_sono REAL, qualidade_sono INTEGER, sintomas_json TEXT, observacoes TEXT, score_fadiga INTEGER, nivel_fadiga TEXT, status_operacional TEXT, recomendacao TEXT, apto INTEGER, requires_frat_review INTEGER, computed_risk_level TEXT, requires_operational_review INTEGER, report_source TEXT, submitted_at TEXT, wake_time TEXT, jornada_inicio_prevista TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
 INSERT INTO funcionarios VALUES(1,999006,'QA-PARTICIPANTE-ALFA',1,NULL);
 INSERT INTO funcionarios VALUES(2,999006,'QA-PARTICIPANTE-BRAVO',1,NULL);
 INSERT INTO cv_voos (id,empresa_id,prefixo,data_programacao,status,observacoes,origem_importacao) VALUES(1,999006,'QA-SRC','2026-10-27','planejado','ORIGINAL-SOURCE','MANUAL');
