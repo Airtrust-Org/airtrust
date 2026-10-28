@@ -9,6 +9,7 @@ import FrmsCheckinFadiga, {
   optionalBinaryResponseToPayload,
 } from '../FrmsFlightCheckinFadiga';
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
+import { frmsBrazilOperationalTodayIso } from '../frmsOperationalDate';
 import {
   buildFadigaPainelRequestPath,
   buildCheckinHojePath,
@@ -135,6 +136,10 @@ vi.mock('sonner', () => ({
 }));
 
 describe('FrmsCheckinFadiga helpers', () => {
+  it('usa a data operacional de Brasília nos rascunhos mesmo após a virada do dia UTC', () => {
+    expect(frmsBrazilOperationalTodayIso(new Date('2026-10-28T00:30:00Z'))).toBe('2026-10-27');
+  });
+
   it('só aceita duração personalizada finita dentro de 0–24 h', () => {
     const base = {
       sonoOpcao: 'outro' as const,
@@ -1241,8 +1246,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('restaura o rascunho do check-in após remount sem perder respostas já preenchidas', async () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 2,
@@ -1274,8 +1278,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('rascunho legado de faixa 8+ exige nova escolha exata sem perder outras respostas', () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1, sonoOpcao: 'h8', repousoHoras: 8,
@@ -1291,8 +1294,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('preserva o formulário e exige apenas reiniciar o PVT quando houve recarga no meio do teste', () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1,
