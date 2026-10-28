@@ -367,7 +367,13 @@ async function authenticateLmsAssetRequest(
   }
 
   const security = await validateAccessTokenSecurityState(env.DB, payload);
-  return { ...payload, role: security.role };
+  // Bearer access tokens can also request launch/assets directly. Keep their
+  // employee scope consistent with /minhas and asset-session even after a
+  // link was created or revoked after JWT issuance.
+  const currentFuncionarioId = await resolveLmsFuncionarioId(
+    env.DB, payload.sub, payload.empresa_id,
+  );
+  return { ...payload, role: security.role, funcionario_id: currentFuncionarioId };
 }
 
 function assertCourseAssetToken(
