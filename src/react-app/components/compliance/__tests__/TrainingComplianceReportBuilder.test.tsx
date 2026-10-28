@@ -231,6 +231,14 @@ describe('TrainingComplianceReportBuilder', () => {
     expect(screen.getByText('Piloto Renovado')).toBeInTheDocument();
     expect(screen.queryByText('Piloto Vigente')).not.toBeInTheDocument();
     expect(screen.queryByText('Piloto Vencido')).not.toBeInTheDocument();
+    const managerButton = screen.getByRole('button', { name: 'Enviar ao gestor' });
+    expect(managerButton).toBeDisabled();
+    fireEvent.click(managerButton);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchWithAuthMock).not.toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/relatorios/enviar-gestores',
+      expect.anything(),
+    );
     const onlyRenewed = screen.getByRole('button', { name: 'Gerar PDF do histórico (1 registro)' });
     fireEvent.click(onlyRenewed);
     await waitFor(() => expect(exportHistoryPdfMock).toHaveBeenLastCalledWith(
@@ -238,6 +246,8 @@ describe('TrainingComplianceReportBuilder', () => {
       expect.objectContaining({ filterLabels: expect.arrayContaining(['Situações do histórico: renovadas']) }),
     ));
     expect(fetchHistoryMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Completo' }));
+    expect(screen.getByRole('button', { name: 'Enviar ao gestor' })).toBeEnabled();
   });
 
   it('explica quando a qualificação existe mas o cadastro não está no setor filtrado', async () => {
