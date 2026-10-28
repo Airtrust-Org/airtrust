@@ -1,3 +1,7 @@
+// source_reference: PR #1854 and issues #1373/#776; tests for the isolated synthetic staging fixture.
+// operational_decision: This test file creates only in-memory SQLite records and never accesses real tenants.
+// dry_run_required: Validate the generated SQL locally and run workflow inspect before any authorized staging apply.
+// rollback_plan_required: In-memory data is discarded; remote recovery is governed by the staging workflow bookmark.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -33,6 +37,8 @@ test('synthetic check-in is explicitly marked and SIC remains pending',()=>{
   const sql=fixtureSql();
   assert.match(sql,/'QA_SYNTHETIC'/);
   assert.match(sql,/jornada_inicio_prevista/);
+  assert.match(sql,/jornada_inicio_prevista,created_at/);
+  assert.match(sql,/'09:30',datetime\('now'\)/);
   assert.match(sql,/'QA-PARTICIPANTE-ALFA'/);
   assert.match(sql,/'QA-PARTICIPANTE-BRAVO'/);
   assert.equal((sql.match(/INSERT INTO frms_fadiga_checkin/g)||[]).length,1);

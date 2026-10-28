@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 // Staging-only synthetic QA fixture, tenant 999006, 2026-10-27.
+// source_reference: GitHub Airtrust-Org/airtrust issues #1373/#776 and PR #1854; QA-only staging fixture for 2026-10-27.
+// operational_decision: Authorized ONLY for tenant 999006, fictitious PIC/SIC; no real crew or production writes.
+// dry_run_required: --inspect must succeed before --apply, with exact SHA/provenance/tenant/schema checks.
+// rollback_plan_required: preserve verified D1 Time Travel bookmark; halt on failure and recover only via governed isolated QA cleanup.
 // Existing flights, employees and check-ins outside the reserved QA marker are NEVER changed.
 // No production credential, employee identity, clinical value or row identifier in logs.
 import { spawnSync } from 'node:child_process';

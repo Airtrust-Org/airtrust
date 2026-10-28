@@ -38,13 +38,13 @@ jobs:
       - name: Check immutable candidate and release
         shell: bash
         env:
-          EXPECTED_MAIN: ${ inputs.expected_main_sha }}
-          EXPECTED_DEPLOYED: ${ inputs.expected_deployed_sha }}
-          CONFIRMATION: ${ inputs.confirmation }}
-          MODE: ${ inputs.mode }}
-          GITHUB_TOKEN: ${ github.token }}
-          GITHUB_REPOSITORY: ${ github.repository }}
-          RELEASE_SHA: ${ github.sha }}
+          EXPECTED_MAIN: ${{ inputs.expected_main_sha }}
+          EXPECTED_DEPLOYED: ${{ inputs.expected_deployed_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          MODE: ${{ inputs.mode }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY; exit 1; }
@@ -87,18 +87,18 @@ jobs:
         run: npm --prefix worker-airtrust ci
       - name: Read-only synthetic fixture preflight
         env:
-          CLOUDFLARE_API_TOKEN: ${ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
           STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
         run: node scripts/staging/seed-cv-frms-coordination-20261027.mjs --inspect
       - name: Verify staging D1 ID and capture recovery bookmark
-        if: ${ inputs.mode == 'apply' }}
+        if: ${{ inputs.mode == 'apply' }}
         id: recovery
         shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
@@ -119,17 +119,17 @@ jobs:
           console.log('CV_FRMS_STAGING_D1_RECOVERY_READY');
           NODE
       - name: Apply exclusively synthetic QA fixture
-        if: ${ inputs.mode == 'apply' }}
+        if: ${{ inputs.mode == 'apply' }}
         env:
-          CLOUDFLARE_API_TOKEN: ${ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
           STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
-          CONFIRM_CV_FRMS_STAGING_FIXTURE: ${ inputs.confirmation }}
-          VERIFIED_STAGING_RECOVERY_BOOKMARK: ${ steps.recovery.outputs.bookmark }}
+          CONFIRM_CV_FRMS_STAGING_FIXTURE: ${{ inputs.confirmation }}
+          VERIFIED_STAGING_RECOVERY_BOOKMARK: ${{ steps.recovery.outputs.bookmark }}
         run: node scripts/staging/seed-cv-frms-coordination-20261027.mjs --apply
       - name: Summarize restricted scope
-        if: ${ always() }}
+        if: ${{ always() }}
         shell: bash
         run: |
           echo 'Staging-only synthetic QA: tenant 999006; date 2026-10-27.' >> "$GITHUB_STEP_SUMMARY"
