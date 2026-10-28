@@ -91,7 +91,7 @@ describe('LMS learner enrollment visibility', () => {
     expect(state.queries[0].binds).toEqual([6, 42]);
     const enrollment = state.queries.find((query) => query.sql.includes('FROM lms_matriculas m'));
     expect(enrollment?.binds).toEqual([77, 6]);
-    expect(enrollment?.sql).not.toMatch(/LIMIT\\s+50\\b/i);
+    expect(enrollment?.sql).not.toContain('LIMIT 50');
   });
 
   it('GET /minhas also uses the persisted tenant-scoped employee identity', async () => {
@@ -121,7 +121,7 @@ describe('LMS learner enrollment visibility', () => {
     const { app, db } = makeApp();
     await get(app, '/minhas-ead', db);
     const lookup = state.queries[0];
-    expect(lookup.sql).toMatch(/f\\.empresa_id\\s*=\\s*\\?/);
+    expect(lookup.sql).toContain('f.empresa_id = ?');
     expect(lookup.sql).toContain('f.deleted_at IS NULL');
     expect(lookup.sql).toContain('u.deleted_at IS NULL');
     expect(lookup.binds).toEqual([6, 42]);
