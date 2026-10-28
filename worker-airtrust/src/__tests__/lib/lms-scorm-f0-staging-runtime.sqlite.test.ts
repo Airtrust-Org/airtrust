@@ -219,6 +219,42 @@ describe('F0 staging-only real candidate launch/commit/resume with Schema V2 056
       expect(f.count('lms_progresso_scorm')).toBe(0);
     } finally {f.db.close();}
   });
+  it('refuses F0 recovery when qualification history exists, including archived rows',async()=>{
+    for(const deletedAt of [null,'2026-10-20 10:00:00']) {
+      const f=fixture();
+      try {
+        await provisionScormF0QaBinding(f.d1,bindingInput,now);
+        const before=await readF0CandidateRuntimeState(f.d1,scope);
+        await witnessF0CandidateLaunch(f.d1,scope,before);
+        await commitF0CandidateSuspend(f.d1,scope,commitBody('1/2','suspend-state'));
+        f.db.prepare(`INSERT INTO qualificacoes_historico
+          (id,empresa_id,lms_matricula_id,deleted_at) VALUES(901,111,23,?)`).run(deletedAt);
+        await expect(recoverF0CandidateFixture(f.d1,{
+          ...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64),
+        })).rejects.toThrow('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID');
+        expect((f.db.prepare(`SELECT status FROM lms_scorm_qa_evidence_bindings`)
+          .get() as {status:string}).status).toBe('ACTIVE');
+        expect(f.count('lms_progresso_scorm')).toBe(1);
+        expect(f.count('qualificacoes_historico')).toBe(1);
+        expect(f.count('audit_logs')).toBe(3); // no recovery audit/write
+      } finally {f.db.close();}
+    }
+  });
+  it('rejects archived qualification appearing after an idempotent recovery',async()=>{
+    const f=fixture();
+    const params={...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64)};
+    try {
+      await provisionScormF0QaBinding(f.d1,bindingInput,now);
+      await recoverF0CandidateFixture(f.d1,params);
+      f.db.exec(`INSERT INTO qualificacoes_historico
+        (id,empresa_id,lms_matricula_id,deleted_at)
+        VALUES(902,111,23,'2026-10-20 10:00:00')`);
+      await expect(recoverF0CandidateFixture(f.d1,params))
+        .rejects.toThrow('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID');
+      expect(f.count('qualificacoes_historico')).toBe(1);
+      expect(f.count('audit_logs')).toBe(2); // provision + initial recovery only
+    } finally {f.db.close();}
+  });
   it('does not attest idempotent cleanup while a stale synthetic CMI row remains',async()=>{
     const f=fixture();
     const params={...scope,cycleId:24,runId:run,recoveryReceiptSha256:'d'.repeat(64)};

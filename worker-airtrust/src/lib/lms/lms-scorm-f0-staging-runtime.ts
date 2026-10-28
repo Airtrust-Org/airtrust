@@ -378,7 +378,7 @@ export async function recoverF0CandidateFixture(
          LEFT JOIN lms_progresso_scorm sc ON sc.empresa_id=b.empresa_id
            AND sc.matricula_id=b.matricula_id
          LEFT JOIN qualificacoes_historico q ON q.empresa_id=b.empresa_id
-           AND q.lms_matricula_id=b.matricula_id AND q.deleted_at IS NULL
+           AND q.lms_matricula_id=b.matricula_id
         WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
           AND b.package_sha256=? AND b.matricula_id=? AND b.ciclo_id=?
           AND b.run_id=? AND b.staging_runtime_sha=? AND b.synthetic=1
@@ -428,7 +428,7 @@ export async function recoverF0CandidateFixture(
           AND score_final IS NULL AND COALESCE(progresso_pct,0)<=1
           AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
             WHERE q.empresa_id=lms_matriculas.empresa_id
-              AND q.lms_matricula_id=lms_matriculas.id AND q.deleted_at IS NULL)
+              AND q.lms_matricula_id=lms_matriculas.id)
           AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
             WHERE b.empresa_id=lms_matriculas.empresa_id AND b.curso_id=lms_matriculas.curso_id
               AND b.package_id=? AND b.package_sha256=? AND b.matricula_id=lms_matriculas.id
@@ -466,7 +466,7 @@ export async function recoverF0CandidateFixture(
                 WHERE sc.empresa_id=b.empresa_id AND sc.matricula_id=b.matricula_id)
               AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
                 WHERE q.empresa_id=b.empresa_id AND q.lms_matricula_id=b.matricula_id
-                  AND q.deleted_at IS NULL))
+                  ))
           THEN 1 ELSE json_extract('INVALID_JSON_F0_RECOVERY_SENTINEL','$.impossible') END AS verified`)
         .bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
           scope.enrollmentId,scope.cycleId,scope.runId),
