@@ -333,3 +333,31 @@ describe('a regular scored edition replacing a formative one', () => {
     expect(blocked.canActivate).toBe(false);
   });
 });
+
+describe('history preservation (full-row snapshot)', () => {
+  // Every column of the historical rows except the single write-once freeze column must be byte-identical
+  // after activation and after rollback. Concluded work is never rewritten, only stamped with its own policy.
+  const snapshot = (db: SqliteD1Database) => ({
+    matriculas: db.database.prepare('SELECT * FROM lms_matriculas ORDER BY id').all(),
+    ciclos: (db.database.prepare('SELECT * FROM lms_matricula_ciclos ORDER BY id').all() as Record<string, unknown>[])
+      .map(({ assessment_policy: _frozen, ...rest }) => rest),
+    otherTenantCourse: db.database.prepare(`SELECT * FROM lms_cursos WHERE empresa_id=7`).all(),
+    otherTenantDiag: db.database.prepare(`SELECT * FROM lms_completion_diagnostics_snapshots WHERE empresa_id=7`).all(),
+  });
+
+  it('activation and rollback leave every historical row and other tenants untouched', async () => {
+    const db = fixture();
+    const before = snapshot(db);
+    await certifyAndApprove(db);
+    await activateScormPackageVersion({ ...base(db), packageId: FORM_ID, confirm: { ...confirm, acknowledgeInProgress: 1 } });
+    expect(snapshot(db)).toEqual(before);
+    await rollbackScormPackageVersion({
+      db: db.asD1(), bucket: ({ head: async () => ({}) }) as never, empresaId: 6, cursoId: 26, userId: 77,
+      confirm: { cursoId: 26, restorePackageId: SCORED_ID },
+    });
+    expect(snapshot(db)).toEqual(before);
+    // the one allowed difference: ended cycle 100 is stamped with the policy it ended under, forever
+    expect(cyclePolicy(db, 100)).toBe('SCORED');
+    expect(() => db.database.prepare(`UPDATE lms_matricula_ciclos SET assessment_policy='FORMATIVE' WHERE id=100`).run()).toThrow();
+  });
+});
