@@ -9,6 +9,8 @@ const access=()=>({
 });
 const qsha='c'.repeat(64),pkg='123e4567-e89b-42d3-a456-426614174001';
 function dbMock({binding=true,history=[],candidate=true,table=true,
+  syntheticEmployee=true,syntheticEnrollment=true,unpublishedCourse=true,
+  incompleteEnrollment=true,incompleteCycle=true,
   launchedSha=qsha,committedSha=qsha,
   enrollmentScoreFinal=null,enrollmentQualificationHistoryId=null,
   scormScoreRaw=null,scormScoreMax=null,scormScoreMin=null,scormScoreScaled=null,
@@ -19,6 +21,8 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
   scormSessionCount=2,scormLastCommitAt='2026-10-19T12:00:00Z'}:{
   binding?:boolean;history?:Array<{id:number;certificado_arquivo_id:number|null}>;
   candidate?:boolean;table?:boolean;
+  syntheticEmployee?:boolean;syntheticEnrollment?:boolean;unpublishedCourse?:boolean;
+  incompleteEnrollment?:boolean;incompleteCycle?:boolean;
   launchedSha?:string|null;committedSha?:string|null;
   enrollmentScoreFinal?:number|null;enrollmentQualificationHistoryId?:number|null;
   scormScoreRaw?:number|null;scormScoreMax?:number|null;
@@ -43,7 +47,15 @@ function dbMock({binding=true,history=[],candidate=true,table=true,
               active_prefix:'lms/scorm/997/15/_active/'}:null;
           if(sql.includes('FROM lms_scorm_qa_evidence_bindings b')) {
             if(!table)throw new Error('D1_ERROR: no such table: lms_scorm_qa_evidence_bindings');
-            return binding?{ciclo_id:555,staging_runtime_sha:'b'.repeat(40),
+            // Simulate D1 JOIN/WHERE predicates: if the guard is removed,
+            // a contaminated fixture would incorrectly return a binding.
+            const guarded =
+              (syntheticEmployee || !sql.includes("f.nome LIKE 'QA-PARTICIPANTE-%'")) &&
+              (syntheticEnrollment || !sql.includes("m.observacoes = 'QA_SCORM_F0:' || b.run_id")) &&
+              (unpublishedCourse || !sql.includes('c.publicado = 0')) &&
+              (incompleteEnrollment || !sql.includes("m.status IN ('NAO_INICIADO','EM_ANDAMENTO')")) &&
+              (incompleteCycle || !sql.includes("cy.status IN ('NAO_INICIADO','EM_ANDAMENTO')"));
+            return binding && guarded?{ciclo_id:555,staging_runtime_sha:'b'.repeat(40),
               approval_receipt_sha256:'f'.repeat(64),run_id:pkg,
               expires_at:'2999-01-01',
               launched_package_sha256:launchedSha,
@@ -94,6 +106,30 @@ describe('SCORM staging-only readback (no package activation or mutation)',()=>{
         packageId:pkg,packageSha256:qsha,matriculaId:88,
         runtimeSha:'b'.repeat(40)})).rejects.toThrow();
     }
+  });
+  it('rejects a synthetic flag attached to a non-QA learner, course or cycle',async()=>{
+    for (const bad of [
+      {syntheticEmployee:false}, {syntheticEnrollment:false},
+      {unpublishedCourse:false}, {incompleteEnrollment:false},
+      {incompleteCycle:false},
+    ]) {
+      const {db}=dbMock(bad);
+      await expect(readScormQaBackendEvidence({db,empresaId:997,
+        cursoId:15,packageId:pkg,packageSha256:qsha,matriculaId:88,
+        runtimeSha:'b'.repeat(40)}))
+        .rejects.toThrow(/SCORM_QA_F0_BINDING_WITNESS_INVALID/);
+    }
+    const {db,statements}=dbMock();
+    await readScormQaBackendEvidence({db,empresaId:997,cursoId:15,
+      packageId:pkg,packageSha256:qsha,matriculaId:88,
+      runtimeSha:'b'.repeat(40)});
+    const query=statements.find(row=>row.sql.includes('FROM lms_scorm_qa_evidence_bindings b'));
+    expect(query?.sql).toContain("f.nome LIKE 'QA-PARTICIPANTE-%'");
+    expect(query?.sql).toContain("m.observacoes = 'QA_SCORM_F0:' || b.run_id");
+    expect(query?.sql).toContain('c.publicado = 0');
+    expect(query?.sql).toContain("m.status IN ('NAO_INICIADO','EM_ANDAMENTO')");
+    expect(query?.sql).toContain("cy.status IN ('NAO_INICIADO','EM_ANDAMENTO')");
+    expect(query?.args).toEqual([997,15,pkg,qsha,88,'b'.repeat(40)]);
   });
   it('requires exact package provenance for timestamp-only SCORM commits',async()=>{
     const emptyProgress={scormCmiJson:null,scormSuspendData:null,

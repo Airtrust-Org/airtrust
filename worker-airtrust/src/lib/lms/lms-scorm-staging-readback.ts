@@ -52,6 +52,9 @@ export async function readScormQaBackendEvidence(params: {
   });
   // Explicit immutable candidate->enrollment->cycle binding: never infer
   // this association from a mutable course active pointer or CMI contents.
+  // The synthetic flag alone does not prove the enrollment belongs to the
+  // F0 QA participant. Mirror the F0 runtime's employee, enrollment marker,
+  // unpublished course and incomplete-cycle guards before reading state.
   // The binding table is an optional, Schema-V2-governed staging capability:
   // query it directly only for protected QA. Avoid adding schema introspection
   // to every LMS request or bypassing the shared schema snapshot.
@@ -85,13 +88,22 @@ export async function readScormQaBackendEvidence(params: {
        JOIN lms_matriculas m
          ON m.id = b.matricula_id AND m.empresa_id = b.empresa_id
          AND m.curso_id = b.curso_id AND m.deleted_at IS NULL
+       JOIN funcionarios f
+         ON f.id = m.funcionario_id AND f.empresa_id = b.empresa_id
+         AND f.deleted_at IS NULL AND f.nome LIKE 'QA-PARTICIPANTE-%'
+       JOIN lms_cursos c
+         ON c.id = b.curso_id AND c.empresa_id = b.empresa_id
+         AND c.deleted_at IS NULL AND c.publicado = 0
        JOIN lms_matricula_ciclos cy
          ON cy.id = b.ciclo_id AND cy.matricula_id = m.id
          AND cy.empresa_id = b.empresa_id AND cy.curso_id = b.curso_id
          AND cy.ciclo_atual = 1 AND cy.deleted_at IS NULL
+         AND cy.status IN ('NAO_INICIADO','EM_ANDAMENTO')
       WHERE b.empresa_id = ? AND b.curso_id = ? AND b.package_id = ?
         AND b.package_sha256 = ? AND b.matricula_id = ?
         AND b.status = 'ACTIVE' AND b.synthetic = 1
+        AND m.observacoes = 'QA_SCORM_F0:' || b.run_id
+        AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
         AND b.staging_runtime_sha = ?
         AND julianday(b.expires_at) > julianday('now')
       LIMIT 1`,
