@@ -177,23 +177,30 @@ export async function readScormQaBackendEvidence(params: {
   if (xapi.total !== 0) throw new ApiError('SCORM_QA_XAPI_STATE_PRESENT', 409);
   // These scoped negative guards are NOT a witness of external approval
   // absence or a source for the F5 physical assessment count contract.
-  const histories = await db.prepare(
-    `SELECT id, certificado_arquivo_id
-       FROM qualificacoes_historico
-      WHERE empresa_id = ? AND lms_matricula_id = ?
-        AND lms_matricula_ciclo_id = ? AND deleted_at IS NULL
-      ORDER BY id`,
-  ).bind(empresaId,matriculaId,bind.ciclo_id).all<{
-    id:number; certificado_arquivo_id:number|null;
-  }>();
-  const history = histories.results ?? [];
-  if (history.length > 1) throw new ApiError('SCORM_QA_DUPLICATE_QUALIFICATION', 409);
+  // A synthetic F0 suspend/resume enrollment must not have generated any
+  // qualification, including records from older cycles or soft-deleted
+  // history. A missing/invalid count is not evidence of absence.
+  let qualification: {total:number} | null;
+  try {
+    qualification = await db.prepare(
+      `SELECT COUNT(*) AS total FROM qualificacoes_historico
+        WHERE empresa_id = ? AND lms_matricula_id = ?`,
+    ).bind(empresaId,matriculaId).first<{total:number}>();
+  } catch {
+    throw new ApiError('SCORM_QA_QUALIFICATION_READBACK_UNAVAILABLE',409);
+  }
+  if (!qualification || !Number.isSafeInteger(qualification.total) ||
+      qualification.total < 0) {
+    throw new ApiError('SCORM_QA_QUALIFICATION_READBACK_UNPROVEN',409);
+  }
+  if (qualification.total !== 0) {
+    throw new ApiError('SCORM_QA_QUALIFICATION_STATE_PRESENT',409);
+  }
   const hex = async (raw:string|null|undefined) => {
     if (raw === null || raw === undefined) return null;
     const result=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
     return [...new Uint8Array(result)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
   };
-  const q = history[0] ?? null;
   return {
     source:'WORKER_D1_STAGING_READBACK' as const,
     empresaId, cursoId, packageId:candidate.id,
@@ -214,12 +221,8 @@ export async function readScormQaBackendEvidence(params: {
     scormScoreRaw:state?.score_raw ?? null,
     sessionCount:state?.session_count ?? 0,
     lastCommitAt:state?.last_commit_at ?? null,
-    qualificationHistoryCount:history.length,
-    qualificationHistoryId:q?.id ?? null,
-    certificateDocument:q?.certificado_arquivo_id != null ? {
-      enrollmentId:matriculaId, cycleId:bind.ciclo_id,
-      qualificationHistoryId:q.id, documentId:String(q.certificado_arquivo_id),
-      sha256:null, // not a DB field; must be proved by downloaded PDF bytes
-    } : null,
+    qualificationHistoryCount:qualification.total,
+    qualificationHistoryId:null,
+    certificateDocument:null,
   };
 }
