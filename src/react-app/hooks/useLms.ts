@@ -84,6 +84,8 @@ export interface LmsMatricula {
   curso_id: number;
   funcionario_id: number;
   funcionario_nome?: string;
+  /** 1 quando há conta vinculada ao funcionário neste tenant. */
+  aluno_vinculado?: 0 | 1;
   status: MatriculaStatus;
   progresso_pct: number;
   score_final: number | null;

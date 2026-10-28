@@ -354,7 +354,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
           </div>
         ) : error ? (
           <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            Erro ao carregar treinamentos.
+            {error instanceof Error ? error.message : 'Erro ao carregar treinamentos.'}
           </div>
         ) : total === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center dark:border-slate-700 dark:bg-slate-800">
