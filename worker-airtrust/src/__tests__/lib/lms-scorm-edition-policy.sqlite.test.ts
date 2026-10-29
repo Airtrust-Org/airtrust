@@ -273,7 +273,7 @@ describe('formative evidence, administrative approval and activation', () => {
     await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() });
     pre = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
     expect(pre.checks.filter(c => !c.ok).map(c => c.id)).toEqual(['ADMIN_APPROVAL']);
-    await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas' });
+    await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas', editorialReviewRef: 'rev-editorial-01' });
     pre = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
     expect(pre.canActivate).toBe(true);
     expect(pre.incomingPolicy).toBe('FORMATIVE');
@@ -306,18 +306,20 @@ describe('formative evidence, administrative approval and activation', () => {
     await expect(importFormativeAttestation({ ...base(db), empresaId: 7, packageId: FORM_ID, attestation: attestation() }))
       .rejects.toMatchObject({ statusCode: 404 });
     await expect(approveFormativePackage({ ...base(db), cursoId: 27, packageId: FORM_ID, confirm: { cursoId: 27, packageSha256: FORM_SHA },
-      note: 'Revisão editorial e jornada real conferidas' })).rejects.toMatchObject({ statusCode: 404 });
+      note: 'Revisão editorial e jornada real conferidas', editorialReviewRef: 'rev-editorial-01' })).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it('approval needs exact course+SHA confirmation, a real note, an admin identity and stored evidence', async () => {
     const db = fixture();
     const approve = (extra: Record<string, unknown>) => approveFormativePackage({ ...base(db), packageId: FORM_ID,
-      confirm, note: 'Revisão editorial e jornada real conferidas', ...extra } as never);
+      confirm, note: 'Revisão editorial e jornada real conferidas', editorialReviewRef: 'rev-editorial-01', ...extra } as never);
     await expect(approve({})).rejects.toMatchObject({ code: 'FORMATIVE_ATTESTATION_MISSING' });
     await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() });
     await expect(approve({ confirm: { cursoId: 26, packageSha256: 'a'.repeat(64) } })).rejects.toMatchObject({ code: 'ACTIVATION_CONFIRMATION_REQUIRED' });
     await expect(approve({ confirm: { cursoId: 99, packageSha256: FORM_SHA } })).rejects.toMatchObject({ code: 'ACTIVATION_CONFIRMATION_REQUIRED' });
     await expect(approve({ note: 'curto' })).rejects.toMatchObject({ code: 'FORMATIVE_NOTE_INVALID' });
+    await expect(approve({ editorialReviewRef: null })).rejects.toMatchObject({ code: 'FORMATIVE_REVIEW_REF_REQUIRED' });
+    await expect(approve({ editorialReviewRef: 'abc' })).rejects.toMatchObject({ code: 'FORMATIVE_REVIEW_REF_INVALID' });
     await expect(approve({ userId: null })).rejects.toMatchObject({ code: 'FORMATIVE_APPROVER_REQUIRED' });
     expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(0);
   });
@@ -325,7 +327,7 @@ describe('formative evidence, administrative approval and activation', () => {
   it('approval is idempotent, append-only, and freezes the evidence', async () => {
     const db = fixture();
     const first = await certifyAndApprove(db);
-    const again = await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas' });
+    const again = await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas', editorialReviewRef: 'rev-editorial-01' });
     expect(again).toMatchObject({ approvalId: first.approvalId, alreadyApproved: true });
     expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(1);
     const alreadyStored = row<{ validation_result_json: string }>(db,
@@ -355,11 +357,11 @@ describe('formative evidence, administrative approval and activation', () => {
     expect(pre.canActivate).toBe(false);
 
     const renewal = await approveFormativePackage({ ...base(db), packageId: FORM_ID,
-      confirm, note: 'Renovação editorial após novo QA real assinado' });
+      confirm, note: 'Renovação editorial após novo QA real assinado', editorialReviewRef: 'rev-editorial-01' });
     expect(renewal).toMatchObject({ approvalId: initial.approvalId, renewed: true, alreadyApproved: false });
     expect(renewal.renewalId).toBeTruthy();
     const repeated = await approveFormativePackage({ ...base(db), packageId: FORM_ID,
-      confirm, note: 'Renovação editorial após novo QA real assinado' });
+      confirm, note: 'Renovação editorial após novo QA real assinado', editorialReviewRef: 'rev-editorial-01' });
     expect(repeated).toMatchObject({ approvalId: initial.approvalId, alreadyApproved: true });
     expect((await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID })).canActivate).toBe(true);
     expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(1);
@@ -384,10 +386,10 @@ describe('formative evidence, administrative approval and activation', () => {
       attestation: attestation(FORM_SHA, { runtimeSha: next.runtimeSha }) });
     expect((await evaluateFormativeActivation({ ...next, packageId: FORM_ID })).canActivate).toBe(false);
     await expect(approveFormativePackage({ ...next, packageId: FORM_ID, userId: null,
-      confirm, note: 'Aprovação administrativa com nova evidência' }))
+      confirm, note: 'Aprovação administrativa com nova evidência', editorialReviewRef: 'rev-editorial-01' }))
       .rejects.toMatchObject({ code: 'FORMATIVE_APPROVER_REQUIRED' });
     const renewed = await approveFormativePackage({ ...next, packageId: FORM_ID,
-      confirm, note: 'Aprovação administrativa com nova evidência' });
+      confirm, note: 'Aprovação administrativa com nova evidência', editorialReviewRef: 'rev-editorial-01' });
     expect(renewed).toMatchObject({ approvalId: initial.approvalId, renewed: true });
     expect((await evaluateFormativeActivation({ ...next, packageId: FORM_ID })).canActivate).toBe(true);
     expect((await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID })).canActivate).toBe(false);
@@ -416,7 +418,7 @@ describe('formative evidence, administrative approval and activation', () => {
     await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() });
     await expect(activateScormPackageVersion({ ...base(db), packageId: FORM_ID, confirm }))
       .rejects.toMatchObject({ code: 'ACTIVATION_PREFLIGHT_FAILED' });
-    await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas' });
+    await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas', editorialReviewRef: 'rev-editorial-01' });
     await expect(activateScormPackageVersion({ ...base(db), packageId: FORM_ID }))
       .rejects.toMatchObject({ code: 'ACTIVATION_CONFIRMATION_REQUIRED' });
     await expect(activateScormPackageVersion({ ...base(db), packageId: FORM_ID, confirm: { ...confirm, packageSha256: OLD_SHA } }))

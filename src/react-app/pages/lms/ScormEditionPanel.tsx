@@ -162,7 +162,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               />
               <input
                 className="block w-full rounded border px-2 py-1 text-xs"
-                placeholder="Referência da revisão editorial (opcional)"
+                placeholder="Referência da revisão editorial independente (obrigatória)"
                 maxLength={200}
                 value={reviewRef}
                 onChange={(event) => setReviewRef(event.target.value)}
@@ -171,7 +171,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               <Button
                 variant="primary"
                 loading={approve.isPending}
-                disabled={!isAdmin || note.trim().length < 10 || approveConfirm !== sha12(sha)}
+                disabled={!isAdmin || note.trim().length < 10 || reviewRef.trim().length < 6 || approveConfirm !== sha12(sha)}
                 onClick={() => void approve
                   .mutateAsync({ packageId: pkg.packageId, packageSha256: sha, note: note.trim(), editorialReviewRef: reviewRef.trim() || null })
                   .then(() => toast.success('Aprovação administrativa registrada.'))

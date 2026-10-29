@@ -131,7 +131,8 @@ export async function approveFormativePackage(params: {
   const note = params.note.trim();
   if (note.length < 10 || note.length > 500) throw new ApiError('A justificativa deve ter entre 10 e 500 caracteres', 400, 'FORMATIVE_NOTE_INVALID');
   const ref = params.editorialReviewRef?.trim() || null;
-  if (ref !== null && (ref.length < 6 || ref.length > 200)) throw new ApiError('Referência da revisão editorial inválida', 400, 'FORMATIVE_REVIEW_REF_INVALID');
+  if (ref === null) throw new ApiError('Informe a referência da revisão editorial independente', 409, 'FORMATIVE_REVIEW_REF_REQUIRED');
+  if (ref.length < 6 || ref.length > 200) throw new ApiError('Referência da revisão editorial inválida', 400, 'FORMATIVE_REVIEW_REF_INVALID');
   const { quality, context } = profileContext(row, params.runtimeSha);
   const envelope = quality.formativeAttestation;
   if (!envelope) throw new ApiError('Importe a evidência de homologação antes de aprovar', 409, 'FORMATIVE_ATTESTATION_MISSING');
@@ -280,11 +281,19 @@ export async function evaluateFormativeActivation(params: {
           `SELECT COALESCE((
               SELECT r.attestation_sha256 FROM lms_scorm_package_approval_renewals r
                 WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
-            ),a.attestation_sha256) AS attestation_sha256
+            ),a.attestation_sha256) AS attestation_sha256,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM lms_scorm_package_approval_renewals r WHERE r.approval_id=a.id
+            ) THEN (
+              SELECT r.editorial_review_ref FROM lms_scorm_package_approval_renewals r
+                WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
+            ) ELSE a.editorial_review_ref END AS editorial_review_ref
             FROM lms_scorm_package_approvals a
             WHERE a.empresa_id=? AND a.curso_id=? AND a.package_id=? AND a.package_sha256=?`,
-        ).bind(params.empresaId, params.cursoId, row.id, row.package_sha256).first<{ attestation_sha256: string }>();
-        approvalOk = approval?.attestation_sha256 === digest;
+        ).bind(params.empresaId, params.cursoId, row.id, row.package_sha256).first<{ attestation_sha256: string; editorial_review_ref: string | null }>();
+        approvalOk = approval?.attestation_sha256 === digest &&
+          typeof approval.editorial_review_ref === 'string' &&
+          approval.editorial_review_ref.trim().length >= 6;
       }
     } catch (error) {
       add('PROFILE_ELIGIBLE', false, error instanceof ApiError ? error.message : 'Perfil inválido');

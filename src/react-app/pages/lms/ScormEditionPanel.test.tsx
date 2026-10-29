@@ -63,9 +63,11 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     await userEvent.type(screen.getByPlaceholderText(/Justificativa/), 'Revisão editorial conferida');
     expect(approve.disabled).toBe(true);
     await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), SHA.slice(0, 12));
+    expect(approve.disabled).toBe(true);
+    await userEvent.type(screen.getByPlaceholderText(/Referência da revisão editorial/), 'rev-editorial-01');
     expect(approve.disabled).toBe(false);
     await userEvent.click(approve);
-    expect(m.approve).toHaveBeenCalledWith({ packageId: 'pkg-new', packageSha256: SHA, note: 'Revisão editorial conferida', editorialReviewRef: null });
+    expect(m.approve).toHaveBeenCalledWith({ packageId: 'pkg-new', packageSha256: SHA, note: 'Revisão editorial conferida', editorialReviewRef: 'rev-editorial-01' });
   });
 
   it('non-admins cannot approve', () => {
