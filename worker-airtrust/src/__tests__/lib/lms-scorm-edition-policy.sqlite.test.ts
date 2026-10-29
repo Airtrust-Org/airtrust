@@ -338,6 +338,44 @@ describe('formative evidence, administrative approval and activation', () => {
     expect(() => db.database.prepare(`DELETE FROM lms_scorm_package_approvals`).run()).toThrow(/SCORM_APPROVAL_IMMUTABLE/);
   });
 
+  it('legacy approval without editorial reference cannot be reused and needs a fresh signed renewal', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-01T12:00:00.000Z'));
+    const db = fixture();
+    await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() });
+    const stored = row<{ validation_result_json: string }>(db,
+      'SELECT validation_result_json FROM lms_scorm_package_versions WHERE id=?', FORM_ID);
+    const digest = JSON.parse(stored.validation_result_json).formativeCertification.attestationSha256 as string;
+    const legacyId = crypto.randomUUID();
+    // This was allowed by schema 0569 before editorial references became mandatory.
+    db.database.prepare(`INSERT INTO lms_scorm_package_approvals
+      (id,empresa_id,curso_id,package_id,package_sha256,certification_profile,
+       attestation_sha256,editorial_review_ref,approver_id,approval_note)
+      VALUES (?,6,26,?,?,?,?,NULL,77,?)`)
+      .run(legacyId, FORM_ID, FORM_SHA, FORMATIVE_PROFILE, digest, 'Legacy approval without editorial reference');
+    let preflight = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
+    expect(preflight.canActivate).toBe(false);
+    expect(preflight.checks.find(check => check.id === 'ADMIN_APPROVAL')?.ok).toBe(false);
+    await expect(approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm,
+      note: 'Revisão editorial independente agora conferida', editorialReviewRef: 'rev-editorial-02' }))
+      .rejects.toMatchObject({ code: 'FORMATIVE_REVIEW_RENEWAL_REQUIRED' });
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approval_renewals').n).toBe(0);
+
+    vi.setSystemTime(new Date('2026-10-01T12:01:00.000Z'));
+    await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() });
+    preflight = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
+    expect(preflight.checks.find(check => check.id === 'ADMIN_APPROVAL')?.ok).toBe(false);
+    const renewal = await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm,
+      note: 'Nova jornada assinada e revisão editorial independente', editorialReviewRef: 'rev-editorial-02' });
+    expect(renewal).toMatchObject({ approvalId: legacyId, renewed: true, alreadyApproved: false });
+    expect(row<{ editorial_review_ref: string | null }>(db,
+      'SELECT editorial_review_ref FROM lms_scorm_package_approvals WHERE id=?', legacyId).editorial_review_ref).toBeNull();
+    expect(row<{ editorial_review_ref: string }>(db,
+      'SELECT editorial_review_ref FROM lms_scorm_package_approval_renewals WHERE approval_id=?', legacyId).editorial_review_ref)
+      .toBe('rev-editorial-02');
+    expect((await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID })).canActivate).toBe(true);
+  });
+
   it('renews expired evidence only with a fresh signed journey and a NEW admin approval, preserving history', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-01T12:00:00.000Z'));
