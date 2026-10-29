@@ -28,14 +28,16 @@ const SYNTHETIC_FORM = {
   aceite_privacidade: true as const,
 };
 
-function wrapper({ children }: { children: ReactNode }) {
+function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
     },
   });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return function TestWrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
 }
 
 describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
@@ -47,7 +49,7 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
     recoveryMock.mockRejectedValue(
       new Error('Informe como foi sua condição operacional ontem antes de concluir o check-in.'),
     );
-    const { result } = renderHook(() => useSubmitCheckin(), { wrapper });
+    const { result } = renderHook(() => useSubmitCheckin(), { wrapper: createWrapper() });
 
     await act(async () => {
       await expect(result.current.mutateAsync(SYNTHETIC_FORM)).rejects.toThrow(
@@ -55,7 +57,8 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
       );
     });
 
-    expect(recoveryMock).toHaveBeenCalledExactlyOnceWith(DATE);
+    expect(recoveryMock).toHaveBeenCalledTimes(1);
+    expect(recoveryMock).toHaveBeenCalledWith(DATE);
     expect(apiFetchMock).not.toHaveBeenCalled();
   });
 
@@ -66,7 +69,7 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
       status: 200,
       json: async () => ({ success: true, data: { checkin: { id: 'qa-checkin' } } }),
     });
-    const { result } = renderHook(() => useSubmitCheckin(), { wrapper });
+    const { result } = renderHook(() => useSubmitCheckin(), { wrapper: createWrapper() });
 
     await act(async () => {
       await expect(result.current.mutateAsync(SYNTHETIC_FORM)).resolves.toEqual({
@@ -74,7 +77,8 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
       });
     });
 
-    expect(recoveryMock).toHaveBeenCalledExactlyOnceWith(DATE);
+    expect(recoveryMock).toHaveBeenCalledTimes(1);
+    expect(recoveryMock).toHaveBeenCalledWith(DATE);
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(apiFetchMock).toHaveBeenCalledWith(
       '/api/frms/fadiga-checkin',
@@ -97,7 +101,7 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
         retry_submission: false,
       }),
     });
-    const { result } = renderHook(() => useSubmitCheckin(), { wrapper });
+    const { result } = renderHook(() => useSubmitCheckin(), { wrapper: createWrapper() });
 
     await act(async () => {
       await expect(result.current.mutateAsync(SYNTHETIC_FORM)).rejects.toThrow(
