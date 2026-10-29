@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import legacyRouter from './frms-fadiga-checkin-legacy';
+import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 
 export { resolveContextoPilotoLimites } from './frms-fadiga-checkin-legacy';
 
@@ -50,7 +51,7 @@ export function createFrmsFadigaCheckinRouter(
   const router = new Hono<AppEnv>();
 
   router.get('/daily-fatigue/alerts', async (c) => {
-    const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
+    const date = c.req.query('date') || frmsOperationalTodayIso();
     const teamRequest = legacyRequest(c, '/daily-fatigue');
     const teamUrl = new URL(teamRequest.url);
     teamUrl.search = '';
