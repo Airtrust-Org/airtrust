@@ -138,6 +138,47 @@ describe('atomic activation with edition-pinned assessment policy', () => {
     expect(row<{ p: string | null }>(db, `SELECT previous_active_package_id p FROM lms_scorm_package_versions WHERE id=?`, FORM_ID).p).toBe(SCORED_ID);
   });
 
+  it('stamps a scored successor and restores FORMATIVE on rollback without reclassifying terminal cycles', async () => {
+    const db = fixture({ formativeActive: true });
+    // A formative predecessor may have been introduced before edition-pinning.
+    // Stamp its policy exactly as the policy-aware activation does for outgoing editions.
+    db.database.prepare('UPDATE lms_scorm_package_versions SET assessment_policy=? WHERE id=?')
+      .run('FORMATIVE', SCORED_ID);
+    const nextId = '00000000-0000-4000-8000-00000000000c';
+    const nextSha = 'd'.repeat(64);
+    const nextJson = '{"regularScored":true}';
+    db.database.prepare(`INSERT INTO lms_scorm_package_versions
+      (id,empresa_id,curso_id,package_version,package_sha256,zip_size_bytes,r2_prefix,
+       launch_file,scorm_versao,uploaded_at,status,validation_result_json)
+      VALUES (?,?,26,'v3',?,1,?,'index.html','1.2','2026-10-28','VALIDATED',?)`)
+      .run(nextId, 6, nextSha, prefix(nextId), nextJson);
+    expect(await commitCertifiedScormActivation({
+      db: db.asD1(), empresaId: 6, cursoId: 26, packageId: nextId,
+      packageSha256: nextSha, prefix: prefix(nextId), launchFile: 'index.html',
+      originalFilename: 'scored.zip', actorId: 77, auditId: 'scored-audit',
+      validationJson: nextJson, policy: { incoming: 'SCORED' },
+    })).toBe(true);
+    expect(row<{ p: string }>(db, 'SELECT assessment_policy p FROM lms_scorm_package_versions WHERE id=?', nextId).p)
+      .toBe('SCORED');
+    expect(row<{ p: string }>(db, 'SELECT scorm_assessment_policy p FROM lms_cursos WHERE empresa_id=6 AND id=26').p)
+      .toBe('SCORED');
+    expect(cyclePolicy(db, 100)).toBe('FORMATIVE');
+    db.database.prepare("UPDATE lms_matricula_ciclos SET status='CONCLUIDO' WHERE id=101").run();
+    const restored = await rollbackScormPackageVersion({
+      db: db.asD1(), bucket: { head: async () => ({}) } as never,
+      empresaId: 6, cursoId: 26, userId: 77,
+      confirm: { cursoId: 26, restorePackageId: SCORED_ID },
+    });
+    expect(restored).toMatchObject({ restoredPackageId: SCORED_ID, rolledBackPackageId: nextId });
+    expect(row<{ p: string }>(db, 'SELECT scorm_assessment_policy p FROM lms_cursos WHERE empresa_id=6 AND id=26').p)
+      .toBe('FORMATIVE');
+    expect(cyclePolicy(db, 100)).toBe('FORMATIVE');
+    expect(cyclePolicy(db, 101)).toBe('SCORED');
+    expect(cyclePolicy(db, 200)).toBeNull();
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', nextId).s)
+      .toBe('SUPERSEDED');
+  });
+
   it('a stale or tampered validation JSON changes nothing — not even the cycle freeze', async () => {
     const db = fixture();
     expect(await commitCertifiedScormActivation(activation(db, '{"tampered":true}'))).toBe(false);

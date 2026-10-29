@@ -74,12 +74,13 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
         AND c.deleted_at IS NULL)`)
       .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson, cursoId, empresaId),
     db.prepare(`UPDATE lms_scorm_package_versions
-      SET status='ACTIVE', activated_at=datetime('now'), activated_by=?
+      SET status='ACTIVE', activated_at=datetime('now'), activated_by=?,
+          assessment_policy=COALESCE(?,assessment_policy)
       WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
         AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?
         AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
           AND c.deleted_at IS NULL)`)
-      .bind(actorId, packageId, empresaId, cursoId,
+      .bind(actorId, policy?.incoming ?? null, packageId, empresaId, cursoId,
         packageSha256, prefix, validationJson, cursoId, empresaId),
     // changes() is the candidate UPDATE row count from the preceding statement
     // on the same SQLite connection/transaction. Never move a pointer on zero writes.
