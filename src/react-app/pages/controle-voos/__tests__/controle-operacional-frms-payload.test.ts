@@ -49,10 +49,6 @@ describe('Coordenação: operational daily-fatigue response is fail-closed', () 
       { ...valid, resumo: { ...valid.resumo, voos_nao_liberados: 0 } },
       { ...valid, resumo: { ...valid.resumo, tripulantes_checkin_pendente: -1 } },
     ]) {
-      if (bad.voos?.[0]?.frms_status === 'LIBERAVEL') {
-        // The flight may be liberable only when the aggregate matches; it must not be
-        // silently displayed as a non-releasable flight with an inconsistent count.
-      }
       expect(() => validateCvFrmsOperacionalPainel(bad, date)).toThrow('CV_FRMS_OPERACIONAL_RESPONSE_INCOMPLETE');
     }
   });
