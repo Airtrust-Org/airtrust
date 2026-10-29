@@ -11,6 +11,14 @@ on:
         description: 'Exact already deployed Worker/Pages SHA'
         required: true
         type: string
+      pr_number:
+        description: 'Reviewed intake PR: 1696 original pilot or 1855 MGM (must match F0 grant)'
+        required: true
+        type: choice
+        default: '1696'
+        options:
+          - '1696'
+          - '1855'
       grant_id:
         description: 'Fresh, unedited single-candidate F0 authorization comment ID from issue 776'
         required: true
@@ -109,6 +117,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           F5_CONFIRMATION: ${{ inputs.confirmation }}
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_PR_NUMBER: ${{ inputs.pr_number }}
           F5_GRANT_ID: ${{ inputs.grant_id }}
           F5_TENANT_ID: ${{ inputs.tenant_id }}
           F5_COURSE_ID: ${{ inputs.course_id }}
@@ -214,6 +223,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           F5_CONFIRMATION: ${{ inputs.confirmation }}
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_PR_NUMBER: ${{ inputs.pr_number }}
           F5_GRANT_ID: ${{ inputs.grant_id }}
           F5_TENANT_ID: ${{ inputs.tenant_id }}
           F5_COURSE_ID: ${{ inputs.course_id }}
