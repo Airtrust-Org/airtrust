@@ -532,6 +532,26 @@ describe('a regular scored edition replacing a formative one', () => {
     expect(blocked.incomingPolicy).toBe('SCORED');
     expect(blocked.canActivate).toBe(false);
     expect(blocked.checks.find(check => check.id === 'SCORED_THRESHOLD_PRESENT')?.ok).toBe(false);
+    // The earlier preflight was valid, but an admin changed the threshold
+    // before the D1 transaction. The stale request must not enable SCORED.
+    expect(await commitCertifiedScormActivation({
+      db: db.asD1(), empresaId: 6, cursoId: 26, packageId: scoredCandidateId,
+      packageSha256: 'c'.repeat(64), prefix: prefix(scoredCandidateId),
+      launchFile: 'index.html', originalFilename: 'scored.zip',
+      actorId: 77, auditId: 'stale-scored-threshold',
+      validationJson: '{"legacy":true}',
+      observed: { activePackageId: SCORED_ID, coursePolicy: 'FORMATIVE' },
+      policy: { incoming: 'SCORED' },
+    })).toBe(false);
+    expect(row<{ p: string }>(db, 'SELECT scorm_assessment_policy p FROM lms_cursos WHERE empresa_id=6 AND id=26').p)
+      .toBe('FORMATIVE');
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', SCORED_ID).s)
+      .toBe('ACTIVE');
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', scoredCandidateId).s)
+      .toBe('VALIDATED');
+    expect(cyclePolicy(db, 100)).toBeNull();
+    expect(row<{ n: number }>(db, "SELECT COUNT(*) n FROM lms_scorm_package_audit_log WHERE id='stale-scored-threshold'").n)
+      .toBe(0);
   });
 });
 
