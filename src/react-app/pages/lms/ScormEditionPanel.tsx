@@ -133,7 +133,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
             ))}
           </ul>
 
-          {formative && !evidenceOk ? (
+          {formative && (!evidenceOk || !approvalOk) ? (
             <div className="rounded border border-dashed p-2">
               <label className="block text-xs font-medium">
                 Importar evidência assinada da homologação (JSON gerado pelo CI governado)
