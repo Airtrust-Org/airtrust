@@ -200,8 +200,10 @@ export default function ControleOperacionalFrmsPanel() {
   const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, isFetching, error, refetch, dataUpdatedAt } = useFrmsOperacionalPainel(data);
 
-  const resumo = painel?.resumo;
-  const voos = painel?.voos ?? [];
+  // React Query can retain the last successful payload after a refetch fails.
+  // Never keep showing previously green counters while the current query is in error.
+  const resumo = !error ? painel?.resumo : undefined;
+  const voos = !error ? (painel?.voos ?? []) : [];
 
   return (
     <div className="mb-6 space-y-4" data-testid="controle-operacional-frms-panel">
@@ -241,7 +243,7 @@ export default function ControleOperacionalFrmsPanel() {
         </div>
       </div>
 
-      {dataUpdatedAt > 0 && (
+      {!error && dataUpdatedAt > 0 && (
         <p className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
           Consulta atualizada às {new Intl.DateTimeFormat('pt-BR', {
             timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',
