@@ -998,3 +998,716 @@
       "sha256": "b88d560d149ecfbacf322b97ecfb40bea797d95a0fef102c862825c30244792c",
       "targets": [
         "cv_justificativas_voo"
+      ],
+      "domain": "tenant-scoped Controle de Voos Petrobras AA41-AA94 delay justification catalog with source categories",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-delay-justification-catalog-0507.json",
+      "note": "0507 is reviewed and prepared only. It adds the source category field and seeds exactly 54 Petrobras AA41-AA94 codes for empresa_id 6, preserving source titles/descriptions. Remote apply requires governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0508_training_compliance_daily_snapshots.sql",
+      "change_id": "training-compliance-daily-snapshots-0508",
+      "sha256": "03db09a365602bd52436e326a7e4bd98b40e905816546ce88f03cc8671f678ab",
+      "targets": [
+        "training_compliance_daily_snapshots"
+      ],
+      "domain": "tenant-scoped daily training-compliance aggregate snapshots for company, sector, role and sector+role trend reporting",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-daily-snapshots-0508.json",
+      "note": "0508 is reviewed and prepared only. It adds an aggregate-only, PII-free daily snapshot table for real Compliance trend reporting. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0509_controle_voos_flight_plan.sql",
+      "change_id": "controle-voos-flight-plan-0509",
+      "sha256": "e5909c563a3eea04df18d24f6d4dd36cb74417e2c4c3708f9c844e75142681bb",
+      "targets": [
+        "cv_planos_voo",
+        "cv_plano_voo_eventos"
+      ],
+      "domain": "tenant-scoped Controle de Voos structured flight-plan aggregate and append-only DECEA/SIGMA provider event ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-flight-plan-0509.json",
+      "note": "0509 is reviewed and prepared only. It adds one active structured flight plan per tenant flight, CAS versioning, closed workflow/provider domains and an append-only FPL/CHG/DLA/CNL provider event ledger. It stores no DECEA credentials. Remote apply requires the governed Schema V2 workflow, recovery point, ledger and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0510_controle_voos_petrobras_rve_export.sql",
+      "change_id": "controle-voos-petrobras-rve-export-0510",
+      "sha256": "74fbcc66819b5f0ea564f7efb87509b1109643b4d065e2bf7e52bcf46dea2cb5",
+      "targets": [
+        "cv_voos"
+      ],
+      "domain": "tenant-scoped Controle de Voos Petrobras daily RVE XML export identifiers on operational flights",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-petrobras-rve-export-0510.json",
+      "note": "0510 is reviewed and prepared only. It adds nullable Petrobras EQUIPAMENTO/ATENDIMENTO identifiers to cv_voos for deterministic daily RVE XML export after Coordenação finalization. Backfill is restricted to confident SIGVOOS attendance ids and strictly numeric aircraft codes. Remote apply requires governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0511_frms_duty_boundary_config.sql",
+      "change_id": "frms-duty-boundary-config-0511",
+      "sha256": "58a9f5a5839791e64fdd88c3d86183feb992d4fe63b67ed98fe8645ffcc8afef",
+      "targets": [
+        "frms_fadiga_config_empresa"
+      ],
+      "domain": "tenant-scoped FRMS duty-boundary configuration for post-flight cutoff offset and no-flight workday end",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-duty-boundary-config-0511.json",
+      "note": "0511 is reviewed and prepared only. It adds two additive tenant-scoped FRMS configuration columns and does not rewrite historical journey/check-in/effectiveness data. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0512_frms_regulatory_evidence_location_catalog.sql",
+      "change_id": "frms-regulatory-evidence-location-catalog-0512",
+      "sha256": "907b634a980717cd1897cfa9e0ab2e52cf7b25cd997a0b8e1d0e8a9cb6d94e81",
+      "targets": [],
+      "domain": "tenant-scoped FRMS documentary regulatory evidence and minimal operational location/weather catalogue",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-regulatory-evidence-location-catalog-0512.json",
+      "note": "0512 is a reviewed data-only governance change (no DDL targets). It attaches a hashed regulatory-source manifest to tenant 6 without inferring RBAC 117 Appendix B/C, and seeds only SBME plus six observed offshore helidecks with explicit timezone/weather policy. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0513_qualification_areas.sql",
+      "change_id": "qualification-areas-0513",
+      "sha256": "7334b72075970d480ff6faeb6171e4a75a53ab33be5c598a0061811519c83431",
+      "targets": [
+        "qualificacoes_areas",
+        "qualificacoes_tipos"
+      ],
+      "domain": "tenant-scoped qualification-area catalog separating model classification from employee organizational sectors and Training Compliance applicability",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualification-areas-0513.json",
+      "note": "0513 is reviewed and prepared only. It adds the tenant-scoped qualification-area catalog, an additive area_id on qualification models, tenant guards and a conservative Costa do Sol legacy classification backfill. It does not alter Training Compliance applicability or delete legacy model-sector links. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0514_auth_profile_authority_sync.sql",
+      "change_id": "auth-profile-authority-sync-0514",
+      "sha256": "c3675d09aabb8f2e5fff8051d1d0f56cd7a67a725e4608786ccfce5d984bb4ea",
+      "targets": [
+        "usuarios_empresas"
+      ],
+      "domain": "tenant membership compatibility role to explicit multi-profile authority synchronization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "auth-profile-authority-sync-0514.json",
+      "note": "0514 is reviewed and prepared only. It generically backfills legacy/default tenant roles that lack an equivalent explicit profile and adds additive INSERT/role-update triggers to preserve that invariant for future membership writes. It contains no user-specific grants, deletes or role normalization. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0515_qualification_expiry_email_stages.sql",
+      "change_id": "qualification-expiry-email-stages-0515",
+      "sha256": "07ec0d2e14a0c8e3a06ca3b03b4a46410f509f9fd781f661a6bc13244840b08f",
+      "targets": [],
+      "domain": "global qualification-expiry email stage configuration for 45-day advance warning and 30-day expiry-window entry",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualification-expiry-email-stages-0515.json",
+      "note": "0515 is reviewed and prepared only. It activates or creates the global EMAIL/low/45d and EMAIL/medium/30d stages without changing tenant-scoped notification history or other channels. Runtime delivery resolves employee plus active sector manager recipients and stage-level deduplication. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0516_qualification_expired_daily_alerts.sql",
+      "change_id": "qualification-expired-daily-alerts-0516",
+      "sha256": "9090059d1be859668791d5028cee359611159fa58b85f79a04ea547445fd4fc8",
+      "targets": [
+        "notificacoes_config"
+      ],
+      "domain": "tenant-configurable qualification notification stages with editable subjects/templates/frequency plus recurring expired-qualification alerts",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "qualification-expired-daily-alerts-0516.json",
+      "note": "0516 is reviewed and prepared only. It extends notificacoes_config with tenant override identity, editable subject and frequency fields; preserves global rows as defaults; corrects the 30-day default text; and adds a daily expired-qualification stage. Runtime delivery remains tenant-scoped and resolves employee plus active sector managers. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0517_training_compliance_conditions.sql",
+      "change_id": "training-compliance-conditions-0517",
+      "sha256": "7f963da6045707d23be7fca3fb171dda73aca87e6f8852555cbaefd05b4ac8fb",
+      "targets": [
+        "compliance_condicoes",
+        "funcionarios_compliance_condicoes",
+        "treinamento_requisitos"
+      ],
+      "domain": "Training Compliance risk/exposure/designation conditions, auditable applicability and evidence semantics",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-conditions-0517.json",
+      "note": "0517 is reviewed and prepared only. The seed catalog is expressed as independent INSERT statements to stay within the D1 compound-SELECT ceiling; semantics remain unchanged. It adds tenant-scoped condition assignments and requirement applicability/evidence metadata, without deriving obligations from qualification history or creating LMS enrollments. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0518_crm_qualification_consolidation.sql",
+      "change_id": "crm-qualification-consolidation-0518",
+      "sha256": "68e2d5a7901471e01215b459fea421696fd4e2783bf7177aa28a2dbf95220ea9",
+      "targets": [],
+      "domain": "qualificacoes / CRM consolidation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "crm-qualification-consolidation-0518.json",
+      "note": "0518 is reviewed and prepared only. It consolidates Costa do Sol non-crew CRM records into CRM Corporate, deduplicates same-employee/same-date history while preserving evidence, retires unused LOS/maintenance duplicate models by soft delete, preserves D3 for flight crew, records the CRM Corporate initial-EaD/periodic-presential rules, and creates the 4 h EAD CRM_DIR_RBAC119 qualification model without automatic Compliance assignment or expiry. It changes tenant data but does not assert new production schema. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0519_training_compliance_evidence_profiles.sql",
+      "change_id": "training-compliance-evidence-profiles-0519",
+      "sha256": "69b3b6f68792d9c75c0591c16d3bb4ffb9178793547c1c9fbda5ed2b5e3f87f2",
+      "targets": [
+        "lms_matriculas",
+        "qualificacoes_historico"
+      ],
+      "domain": "compliance / training evidence profiles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-evidence-profiles-0519.json",
+      "note": "0519 is reviewed and prepared only. It records the competency profile on LMS enrollments and qualification history so DGR/AVSEC evidence is matched to the effective Compliance profile. It does not assert production application. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0520_training_compliance_evidence_multi_profiles.sql",
+      "change_id": "training-compliance-evidence-multi-profiles-0520",
+      "sha256": "7eea5dea60019a79e872d2e46ec7f3886241232f9388996766a3cce64705a184",
+      "targets": [
+        "qualificacoes_historico_perfis_competencia"
+      ],
+      "domain": "compliance / training evidence multi profiles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-evidence-multi-profiles-0520.json",
+      "note": "0520 is reviewed and prepared only. It lets one qualification/certificate evidence row prove multiple allowed competency profiles through a tenant-scoped normalized relation, while retaining the 0519 scalar field as rollout compatibility. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0521_training_compliance_designation_overrides.sql",
+      "change_id": "training-compliance-designation-overrides-0521",
+      "sha256": "882f9bcbef44823b6b78fc9ee03fa68e258957b3f6b0a00a2cae3651dd384eb6",
+      "targets": [],
+      "domain": "compliance / reusable designation inclusion-exclusion overrides for RBAC 119 CRM management roles",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-designation-overrides-0521.json",
+      "note": "0521 is reviewed and prepared only. It seeds five Costa do Sol RBAC 119 management-role designation definitions and condition-scoped Compliance rules that require the dedicated CRM_DIR_RBAC119 while excluding generic CRM Corporate for the same designated occupants. It is data-only, infers no employee assignment and creates no LMS enrollment. Remote apply requires the governed Schema V2 workflow, staging preflight/recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0522_auth_profile_orphan_cleanup.sql",
+      "change_id": "auth-profile-orphan-cleanup-0522",
+      "sha256": "086e7a0b098e74bfbfb656c4c972918c00cf3b4c7b3f3b986d81cea8d518dbc0",
+      "targets": [
+        "usuarios_empresas"
+      ],
+      "domain": "tenant membership / explicit multi-profile authority orphan cleanup and delete synchronization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "auth-profile-orphan-cleanup-0522.json",
+      "evidence": "worker-airtrust/schema-v2/plans/auth-profile-orphan-cleanup-0522.md",
+      "note": "0522 is reviewed and prepared only. It removes explicit tenant-profile rows whose matching (usuario_id, empresa_id) membership no longer exists and adds an AFTER DELETE trigger so future authorized membership removal cannot leave stale profile authority. It does not alter any existing membership, valid profile grant, user, token, sector assignment or training record. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0523_training_compliance_governed_designation_rules.sql",
+      "change_id": "training-compliance-governed-designation-rules-0523",
+      "sha256": "473d3c2bff698c0882378aa64da4b803ff39e7a6c845e2eaf5ec45ad71823d25",
+      "targets": [],
+      "domain": "compliance / governed designation-based inclusion-exclusion rules",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-governed-designation-rules-0523.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-governed-designation-rules-0523.md",
+      "note": "0523 is a reviewed data-only forward repair. It restores the five RBAC 119 CRM Corporate designation exclusions after audited generic-API deletion, normalizes the designation rule metadata as regulatory/governed, and does not create or infer employee assignments. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0524_training_compliance_requirement_sanitization.sql",
+      "change_id": "training-compliance-requirement-sanitization-0524",
+      "sha256": "41a10d012505e3963b7cfb19c43787f50ff4dfaa67bed95d25ad2c1c90b6c5d0",
+      "targets": [],
+      "domain": "training compliance / requirement sanitization and reviewed audience reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-requirement-sanitization-0524.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-requirement-sanitization-0524.md",
+      "note": "0524 is a reviewed data-only sanitation. It removes redundant generic N/A fallbacks and orphaned active rules, reconciles FDM and current AW139/S-76 maintenance audiences, adds corporate AVSEC awareness, and preserves histories, enrollments, employee-specific rules and specific governed exclusions. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0525_organizational_structure_pj_normalization.sql",
+      "change_id": "organizational-structure-pj-normalization-0525",
+      "sha256": "87c98fa846cc3ef403a84a498642231bbbcb6d6ba717157f337515d495804a91",
+      "targets": [],
+      "domain": "organizational structure / bounded tenant-6 employee sector-function normalization",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "organizational-structure-pj-normalization-0525.json",
+      "evidence": "worker-airtrust/schema-v2/plans/organizational-structure-pj-normalization-0525.md",
+      "note": "0525 is a reviewed data-only organizational normalization. It creates only missing tenant-6 sectors/functions and sector-function mappings required by the reviewed 2026-09-28 source, normalizes 13 bounded active employee records by internal ID, clears only provisional TEMP-TRN matricula placeholders, versions no employee names, and changes no training history, RBAC or tenant membership. Remote apply requires the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0526_training_compliance_matrix_alignment.sql",
+      "change_id": "training-compliance-matrix-alignment-0526",
+      "sha256": "1473d8815f4dff920672c50db70f171f3c915e73c95f1d4852a531366f785f77",
+      "targets": [],
+      "domain": "training compliance / reviewed corporate matrix and qualification metadata alignment",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-matrix-alignment-0526.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-matrix-alignment-0526.md",
+      "note": "0526 is a reviewed data-only Training Compliance alignment for tenant 6. It preserves broader controlled-matrix audiences, keeps LOFT separate, sets SGSO/PRE/NR-20/NR-35 reviewed cycles, keeps AVSEC awareness company-wide, records the bounded 24-month Petrobras/IOGP client criterion for controlled Maintenance training, seeds only specific designation catalog entries, infers no employee designation, and writes no LMS enrollment, qualification history, certificate or completion evidence. Remote apply requires staging validation, the governed Schema V2 workflow, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0527_training_compliance_loft_bootstrap.sql",
+      "change_id": "training-compliance-loft-bootstrap-0527",
+      "sha256": "287b141826e634ef26b9a1f7c292d671838a3dd1b3aec7c518e07ea31c399594",
+      "targets": [],
+      "domain": "training compliance / LOFT prerequisite bootstrap for reviewed matrix alignment",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-loft-bootstrap-0527.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-loft-bootstrap-0527.md",
+      "note": "0527 is a reviewed data-only prerequisite discovered by the fail-closed 0526 staging preflight. It preserves an existing tenant-6 LOFT identity when available or creates the minimal model only when none exists, binds LOFT to the canonical same-tenant TREINAMENTO_OPERACIONAL category required by the 0457 FK contract, writes no histories/enrollments/requirements, and must be applied before 0526 only in environments missing LOFT."
+    },
+    {
+      "change_file": "0528_setor_compliance_responsibles.sql",
+      "change_id": "setor-compliance-responsibles-0528",
+      "sha256": "0a5458d43405e6ce3561a4e63b70de41a64275456f94d459bf084c2f3c9cc557",
+      "targets": [
+        "setores_responsaveis_compliance"
+      ],
+      "domain": "training compliance / sector alert responsibility separated from operational access",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "setor-compliance-responsibles-0528.json",
+      "evidence": "worker-airtrust/schema-v2/plans/setor-compliance-responsibles-0528.md",
+      "note": "0528 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0529_hfa_integration_bridge.sql",
+      "change_id": "hfa-integration-bridge-0529",
+      "sha256": "09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4",
+      "targets": [
+        "integracoes_hfa_config",
+        "integracoes_hfa_eventos"
+      ],
+      "domain": "SGSO / external HFA Safety integration bridge",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "hfa-integration-bridge-0529.json",
+      "evidence": "worker-airtrust/schema-v2/plans/hfa-integration-bridge-0529.md",
+      "note": "0529 is an additive tenant-scoped integration boundary. It stores only encrypted HFA connection configuration and RELPREV-to-HFA link/status metadata, exports no event automatically, starts no HFA analysis, consumes no HFA credit, and rewrites no existing SGSO record. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0530_training_qualification_catalog_placeholders.sql",
+      "change_id": "training-qualification-catalog-placeholders-0530",
+      "sha256": "20c203e9e7976ca4b1376ee44c3a6a81328a11fe6a6c585ecca1f0ba61679d9b",
+      "targets": [],
+      "domain": "training compliance / planned EAD qualification catalog models",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-qualification-catalog-placeholders-0530.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-qualification-catalog-placeholders-0530.md",
+      "note": "0530 is a tenant-6 data-only catalog change that creates five canonical qualification models for future EAD packages. It creates no LMS course, enrollment, compliance requirement or qualification history, invents no validity/duration, and is idempotent. Remote apply requires the governed Schema V2 workflow, staging validation, recovery point and exact-SHA production authorization."
+    },
+    {
+      "change_file": "0531_training_compliance_nr20_modality_repair.sql",
+      "change_id": "training-compliance-nr20-modality-repair-0531",
+      "sha256": "385fd0a8a532966813030cd946410d3c0837da25eabf7dfcf8d430f8c2fc4529",
+      "targets": [],
+      "domain": "training compliance / forward repair of reviewed NR-20 HIBRIDO modality",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-nr20-modality-repair-0531.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-nr20-modality-repair-0531.md",
+      "note": "0531 is a tenant-6 data-only forward repair for the reviewed 0526 NR-20 HIBRIDO requirement modality after production post-validation run 37231357958 exposed four preserved active requirements with null modality. It preserves those requirement ids, changes no audience, DDL, LMS data, qualification history or designation, and reruns the full 0526 postcondition suite after repair. Production apply requires the governed Schema V2 workflow, recovery point, staging validation and new exact-SHA production authorization."
+    },
+    {
+      "change_file": "0532_training_compliance_fdm_designation_only.sql",
+      "change_id": "training-compliance-fdm-designation-only-0532",
+      "sha256": "b4040b89a581fcce362e0c87611c6d79d88a132e82eb29d174d64f2358516c50",
+      "targets": [],
+      "domain": "training compliance / FDM designation-only applicability correction",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-fdm-designation-only-0532.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-designation-only-0532.md",
+      "note": "0532 is a tenant-6 data-only forward correction that removes broad organizational FDM-EAD obligations and preserves only the governed FDM_EQUIPE designation requirement. It changes no DDL, LMS enrollment, completion evidence or qualification history. Remote apply requires staging validation, a D1 recovery point and new exact-SHA production authorization; enrollment cleanup remains a separate governed operation."
+    },
+    {
+      "change_file": "0533_training_catalog_metadata_references.sql",
+      "change_id": "training-catalog-metadata-references-0533",
+      "sha256": "fe444f5419a77a5fd80ac720222455359b4ada0200e6ad293a3a319f2043a878",
+      "targets": [
+        "lms_cursos",
+        "qualificacoes_tipos"
+      ],
+      "domain": "training catalog / explicit references and reviewed course metadata",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-catalog-metadata-references-0533.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-catalog-metadata-references-0533.md",
+      "note": "0533 adds explicit training references metadata to qualification/LMS tables and performs tenant-6 reviewed catalog corrections. It also applies the Training Manager decision to reduce active Maintenance models reviewed at 36 months to a stricter 24-month AirTrust cycle with coherent history snapshots, corrects PT6C/Doutrination loads, makes NR-35 presencial and NR-20 hybrid for compliance, disables EAD-only auto-qualification for those two regulated courses, and moves LGPD to QSMS taxonomy. Production apply requires staging validation, D1 recovery point, ledger verification and exact-SHA authorization."
+    },
+    {
+      "change_file": "0534_training_compliance_final_matrix.sql",
+      "change_id": "training-compliance-final-matrix-0534",
+      "sha256": "31366ebd2e3ba20dda8040ab1a5f34a0c67ae0bae116028dfec7d81df67c33f0",
+      "targets": [],
+      "domain": "training compliance / final canonical QSMS and operational-safety matrix",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-final-matrix-0534.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-final-matrix-0534.md",
+      "note": "0534 is the tenant-6 forward alignment to the final Training Management matrix dated 2026-10-06, with NR-05 explicitly corrected to EAD. It supersedes prior conflicting applicability/metadata decisions, preserves historical qualification evidence, consolidates Regras de Ouro on the evidence-bearing model, retires only the active FDM-EAD Compliance obligation, adds FDM-MECANICO and BOWTIEXP qualification requirements, and requires governed staging/recovery/ledger validation before any production apply."
+    },
+    {
+      "change_file": "0535_training_compliance_integra_bootstrap.sql",
+      "change_id": "training-compliance-integra-bootstrap-0535",
+      "sha256": "b15d685133cf31b59d28bb945f62a0918311f13868e3103b12f4a7057b7c28e9",
+      "targets": [],
+      "domain": "training compliance / INTEGRA canonical model bootstrap after applied 0534",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-integra-bootstrap-0535.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-integra-bootstrap-0535.md",
+      "note": "0535 is the minimal tenant-6 forward repair for the sole failing 0534 staging postcondition: INTEGRA was entirely absent. It preserves existing identity/evidence when present, otherwise creates the canonical EAD 24-month/2-hour model and missing company-wide rule. No LMS course, enrollment, qualification history, employee or other-tenant write is introduced."
+    },
+    {
+      "change_file": "0536_training_compliance_fdm_three_audiences.sql",
+      "change_id": "training-compliance-fdm-three-audiences-0536",
+      "sha256": "27b33d0d16c0a0a227efe119ee0782bd2e72696bb65f6683bdfb2c06ccb20d00",
+      "targets": [],
+      "domain": "training compliance / FDM three audience rules and formal nominations",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-fdm-three-audiences-0536.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-fdm-three-audiences-0536.md",
+      "note": "0536 adds the three reviewed FDM audiences after the 0535 INTEGRA repair. It reuses FDM_COMITE and GATEKEEPER as distinct nominal designations, preserves FDM-MECANICO identity/history, creates pilot and Committee/Gatekeeper qualification models without inventing modality/hours/validity or LMS content, and never auto-assigns committee membership."
+    },
+    {
+      "change_file": "0537_training_catalog_source_backed_metadata.sql",
+      "change_id": "training-catalog-source-backed-metadata-0537",
+      "sha256": "6f46b02a0c3a210c3e5c8236eb1f5d465ecff9a28ef12d4042796a22bb846c6d",
+      "targets": [],
+      "domain": "training catalog / source-backed maintenance, FDM and LGPD metadata",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-catalog-source-backed-metadata-0537.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-catalog-source-backed-metadata-0537.md",
+      "note": "0537 corrects controlled-source metadata without schema DDL: PTM Rev.06 and Doutrinação 8h/4h/36m, standalone MGM/MOM/MCQ without fabricated hours, FDM Rev.09 audience hours, and internally evidenced 2h LGPD. Tenant 6 only; no enrollments, histories, certificates or employee assignments."
+    },
+    {
+      "change_file": "0538_training_compliance_manager_designation_nr05.sql",
+      "change_id": "training-compliance-manager-designation-nr05-0538",
+      "sha256": "6ee4d80214914d9d68d595853fae1b61e38fdc0dd5c6d9a2cb5c8b33b3cda4ab",
+      "targets": [],
+      "domain": "training compliance / explicit Gestor designation and approved NR-05 company-wide rule",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-manager-designation-nr05-0538.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-manager-designation-nr05-0538.md",
+      "note": "0538 follows source-backed 0537: Gestor training applicability moves from title inference to explicit GESTOR designation with runtime auto-enrollment, and NR-05 becomes EAD / 24 months / 2 hours / company-wide by Training Management decision."
+    },
+    {
+      "change_file": "0539_training_doutrinacao_bootstrap.sql",
+      "change_id": "training-doutrinacao-bootstrap-0539",
+      "sha256": "e10c80ea539a8f2313af4abc84cda8fd18eae640bb6e71efc34b64e970e93236",
+      "targets": [],
+      "domain": "training catalog / Maintenance Indoctrination identity bootstrap",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-doutrinacao-bootstrap-0539.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-doutrinacao-bootstrap-0539.md",
+      "note": "0539 repairs an environment-specific missing/inactive MNT_INTEGRACAO_DOUTRINACAO identity discovered before 0537 apply; it preserves an existing ID when possible or bootstraps from the Maintenance taxonomy, then normalizes PTM Rev.06 8h/4h/36m without employee, enrollment, history or certificate writes."
+    },
+    {
+      "change_file": "0540_training_maintenance_catalog_identities_bootstrap.sql",
+      "change_id": "training-maintenance-manuals-bootstrap-0540",
+      "sha256": "c26a03a1be5659b65530531185f5d7173c24ae824cfced0849d98fc39ffff265",
+      "targets": [],
+      "domain": "training catalog / Maintenance manual identity bootstrap",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-maintenance-manuals-bootstrap-0540.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-maintenance-manuals-bootstrap-0540.md",
+      "note": "0540 repairs the staging prerequisite layer discovered after two fail-closed attempts: it restores the canonical Maintenance Doutrinação category and MNT_MGM/MNT_MOM/MNT_MCQ identities without standalone hours or employee/LMS/history writes, before 0539 -> 0537 -> 0538."
+    },
+    {
+      "change_file": "0541_training_operational_category_bootstrap.sql",
+      "change_id": "training-operational-category-bootstrap-0541",
+      "sha256": "ed4f2d53c188b4b41df3cfaa10b7f88c2d389f6f6fed97eb63e84652f903e452",
+      "targets": [],
+      "domain": "training compliance / tenant-6 operational training category prerequisite for 0536",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-operational-category-bootstrap-0541.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-operational-category-bootstrap-0541.md",
+      "note": "0541 is a reviewed, tenant-6 only forward prerequisite for FDM three audiences 0536, needed because production read-only showed no TREINAMENTO_OPERACIONAL category. It creates the canonical category only if absent, without employee/LMS/history writes. File/manifest is not evidence of application; apply through governed Schema V2 after exact release authorization. Production PRAGMA confirms lms_integrada is absent, so reviewed SQL and production postconditions avoid this staging-only field."
+    },
+    {
+      "change_file": "0542_lms_scorm_formative_assessment_policy.sql",
+      "change_id": "lms-scorm-formative-assessment-0542",
+      "sha256": "85fe3b4766ef1010c29d3cc314cbc9bd8345d467ea0cb811473f403d51cd36cb",
+      "targets": [
+        "lms_cursos"
+      ],
+      "domain": "LMS / explicit formative versus scored SCORM assessment policy, tenant-6 CRM RBAC119 remediation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-formative-assessment-0542.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-formative-assessment-0542.md",
+      "note": "0542 adds fail-closed SCORED policy; narrowly updates a single tenant-6 CRM RBAC119 course to FORMATIVE only after a governed preflight confirms exactly one correct target and approved no-mastery intent. Ledger/manifest are preparation, not proof of a remote apply."
+    },
+    {
+      "change_file": "0543_fdm_target_qualification_links.sql",
+      "change_id": "fdm-target-qualification-links-0543",
+      "sha256": "371ecaa3e5e0f69fee1f534ccf093ccc1aa3dcc6fbacb16adb55b6cb9a68d0d1",
+      "targets": [],
+      "domain": "LMS FDM / narrowly bind tenant-6 course 71 to Tripulação and course 72 to Manutenção qualification models",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "fdm-target-qualification-links-0543.json",
+      "evidence": "worker-airtrust/schema-v2/plans/fdm-target-qualification-links-0543.md",
+      "note": "Only updates lms_cursos.qualificacao_tipo_id for tenant 6 courses 71 and 72, guarded by singleton qualification identities and zero destination enrollments. No changes to qualification history, employee records, SCORM, certificates, course 13 or 73. Governance requires SHA-specific permission, D1 recovery and production postconditions; manifest is not evidence of apply."
+    },
+    {
+      "change_file": "0544_avsec_corporativo_historico.sql",
+      "change_id": "avsec-corporativo-historico-0544",
+      "sha256": "f8e43d6ad12f634eebeb56598e2ecc5823426a09db1d1a5b4a50ddaa0c8e5dd1",
+      "targets": [],
+      "domain": "Compliance AVSEC / tenant-6 singular historical conscientiousness certificate reclassification",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "avsec-corporativo-historico-0544.json",
+      "evidence": "worker-airtrust/schema-v2/plans/avsec-corporativo-historico-0544.md",
+      "note": "0544 reclassifies exactly historical evidence id 5276 (employee 111) from D1 to AVSEC_CONSC by Training Management decision; dates/status/certificate note preserved and expiry remains 2026-02-19. Approved execution requires exact SHA, production recovery and Schema V2 pre/postconditions. No production write claimed."
+    },
+    {
+      "change_file": "0545_training_compliance_canonical_pdf_alignment.sql",
+      "change_id": "training-compliance-canonical-pdf-alignment-0545",
+      "sha256": "b9f95d02f919818f05fd72546f7a446fb824060b44de3dc0d92480b0be55641f",
+      "targets": [],
+      "domain": "Training Compliance canonical PDF QSMS and Safety Operational tenant 6",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-canonical-pdf-alignment-0545.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-pdf-alignment-0545.md",
+      "note": "0538 forward compensation: NR05 designated CIPA only, Regras de Ouro suspended pending target confirmation, missing function requirements filled and FDM-MECANICO hour restored. No history or enrollment writes."
+    },
+    {
+      "change_file": "0546_training_compliance_canonical_category_repair.sql",
+      "change_id": "training-compliance-canonical-category-repair-0546",
+      "sha256": "6be8d112321f5294447573c760a7fc9a0985b9ff3aaef85a133a929c98651789",
+      "targets": [],
+      "domain": "Compliance QSMS tenant-6 category-FK compliant 0545 replacement",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-canonical-category-repair-0546.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-canonical-category-repair-0546.md",
+      "note": "0546 fully replaces unapplied 0545. Preserves 28-model target and adds valid category TREINAMENTO_GERAL for NR05. No production write claimed."
+    },
+    {
+      "change_file": "0547_training_compliance_regras_ouro_corporate.sql",
+      "change_id": "training-compliance-regras-ouro-corporate-0547",
+      "sha256": "d963d2119fa9252dae66cadcc823e6405bcffd9b46d7ad2e79081f1f0edf1b78",
+      "targets": [],
+      "domain": "QSMS/Safety Training Compliance requirement / tenant-6 corporate Regras de Ouro",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-regras-ouro-corporate-0547.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-regras-ouro-corporate-0547.md",
+      "note": "2026-10-10 Management explicitly makes Regras de Ouro mandatory for all employees. Forward compensation after governed 0546; no automatic remote write or historical enrollment modification. Only eligible pending LMS cycles are created separately after source-specific approval."
+    },
+    {
+      "change_file": "0548_training_compliance_maintenance_iio_aprs_assistants.sql",
+      "change_id": "training-compliance-maintenance-iio-aprs-assistants-0548",
+      "sha256": "2bb266e9ff84e67ccb839e2e3c22bcbb2773eb31d3804316181a7b8672a894ef",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 maintenance IIO/APRS mandatory training assistant applicability",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-maintenance-iio-aprs-assistants-0548.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-maintenance-iio-aprs-assistants-0548.md",
+      "note": "Requirement-only: includes six active Auxiliar de Manutenção employees in IIO/APRS training. No signature authority or production write claimed. Distinct governed Schema V2 apply requires precise authorization."
+    },
+    {
+      "change_file": "0549_fdm_tripulacao_model_consolidation.sql",
+      "change_id": "fdm-tripulacao-model-consolidation-0549",
+      "sha256": "8fbdf20ffcec94043b5a97123ac90bffb42813a23ac872290dfe13618103dee1",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 FDM Tripulação model and enrollment-preserving consolidation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "fdm-tripulacao-model-consolidation-0549.json",
+      "evidence": "worker-airtrust/schema-v2/plans/fdm-tripulacao-model-consolidation-0549.md",
+      "note": "Data-only consolidation: preserves published course 71, its nine completed and two open enrolments, nine historical completions and two function requirements while retiring FDM-TRIPULACAO. Governed production application requires the exact reviewed manifest, D1 recovery point and postconditions."
+    },
+    {
+      "change_file": "0550_usuarios_costa_do_sol_viewer_aluno.sql",
+      "change_id": "usuarios-costa-do-sol-viewer-aluno-0550",
+      "sha256": "6b01667b60ee8893ce7ed65064644dd9caa7df7100e930415caf66ee5feecf64",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 user-profile authority reconciliation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "usuarios-costa-do-sol-viewer-aluno-0550.json",
+      "evidence": "worker-airtrust/schema-v2/plans/usuarios-costa-do-sol-viewer-aluno-0550.md",
+      "note": "Read-only production audit 2026-10-13: 26 student users have VIEWER default/explicit roles; separate single coordination identity retains COORDENACAO_VOO. Reviewed SQL updates only tenant 6 with guards, and awaits governed Schema V2 apply with recovery point and exact authorization. No production D1 write claimed. D1 TEMP transport removed after SQLITE_AUTH. New authorized apply pending."
+    },
+    {
+      "change_file": "0551_coordenacao_role_user_restore.sql",
+      "change_id": "coordenacao-role-user-restore-0551",
+      "sha256": "8a77552a043d5ed08625c938790f583de13d0cbf2ad4040dea1970556c95489f",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 coordination-only restoration of USER profile",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "coordenacao-role-user-restore-0551.json",
+      "evidence": "worker-airtrust/schema-v2/plans/coordenacao-role-user-restore-0551.md",
+      "note": "Data-only compensation to restore the sole coordination account to USER while preserving all 26 students converted by 0550. D1 write requires separate governed authorization."
+    },
+    {
+      "change_file": "0552_frms_sleep_opportunity.sql",
+      "change_id": "frms-sleep-opportunity-0552",
+      "sha256": "c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS ANAC RBAC 117 separation of sleep opportunity and effective sleep",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-sleep-opportunity-0552.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-sleep-opportunity-0552.md",
+      "note": "0552 is a nullable additive field for reported sleep opportunity. It does not backfill or change historical sleep, policy, coefficients, fatigue thresholds, tenant or RBAC. Runtime Worker must not be deployed until the governed migration has been applied and verified in the target environment. This is repo-reviewed only, not a production schema claim."
+    },
+    {
+      "change_file": "0553_retire_empty_lgpd_seg_info_model.sql",
+      "change_id": "retire-empty-lgpd-seg-info-model-0553",
+      "sha256": "63528601b365117d1f7d0aeaa46eb2ffffc912a091c4591001167dd1b4690610",
+      "targets": [],
+      "domain": "Costa do Sol tenant-6 empty LGPD qualification model retirement",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "retire-empty-lgpd-seg-info-model-0553.json",
+      "evidence": "worker-airtrust/schema-v2/plans/retire-empty-lgpd-seg-info-model-0553.md",
+      "note": "Data-only retirement permitted only when all checked active references are zero. Governed apply soft-deletes LGPD_SEG_INFO without transfers, enrolments or notifications."
+    },
+    {
+      "change_file": "0554_simulator_individual_check_evidence.sql",
+      "change_id": "simulator-individual-check-evidence-0554",
+      "sha256": "bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
+      "domain": "Simuladores: individual signed check evidence with tenant and per-fiche scope",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-individual-check-evidence-0554.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-evidence-0554.md",
+      "note": "Additive table/indexes/triggers only. Never synthesizes per-employee approvals from legacy session-level results. Runtime rollout is separately gated after governed schema apply."
+    },
+    {
+      "change_file": "0557_lms_cycle_evidence_archive.sql",
+      "change_id": "lms-cycle-evidence-0557",
+      "sha256": "6df04a3d9fa5f3975a914d978600ac00f492438c02655deb211893f208a32b8e",
+      "targets": [
+        "lms_ciclo_evidencias",
+        "lms_xapi_statements"
+      ],
+      "domain": "LMS integrity: immutable per-cycle SCORM/diagnostics and attribution of xAPI statements",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-cycle-evidence-0557.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-evidence-0557.md",
+      "note": "Additive DDL only. Runtime atomic enrollment/cycle reset is gated on migration 0557 and consumes only active-cycle xAPI. No production D1 data write or production schema application claimed; requires SHA-specific governance and recovery. Immutable audit storage is enforced by D1 triggers: archive snapshots and attributed xAPI cannot be updated/deleted, and tenant/cycle mismatch aborts attribution."
+    },
+    {
+      "change_file": "0560_simulator_individual_check_delete_guard.sql",
+      "change_id": "simulator-individual-check-delete-guard-0560",
+      "sha256": "5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56",
+      "targets": [
+        "sessoes_checks_resultados_individuais"
+      ],
+      "domain": "Simulator individual check evidence: physical DELETE protection",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simulator-individual-check-delete-guard-0560.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simulator-individual-check-delete-guard-0560.md",
+      "note": "Additive trigger; no D1/Compliance/history modifications. Apply separately after 0554; blocks all physical deletion of individual check evidence."
+    },
+    {
+      "change_file": "0563_controle_voos_pilot_fueling_identity.sql",
+      "change_id": "controle-voos-pilot-fueling-identity-0563",
+      "sha256": "f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: durable physical fueling event identity across independently versioned snapshots",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-fueling-identity-0563.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-fueling-identity-0563.md",
+      "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
+    },
+    {
+      "change_file": "0568_lms_scorm_qa_evidence_bindings.sql",
+      "change_id": "lms-scorm-qa-evidence-bindings-0568",
+      "sha256": "6f85d5e3d141e140c54ea5b62c2dc3143447187960b8d89d7b6ed6dc4f3eb197",
+      "targets": [
+        "lms_scorm_qa_evidence_bindings"
+      ],
+      "domain": "SCORM F5 synthetic QA: staging-only immutable candidate/enrollment/cycle evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "STAGING_APPLIED",
+      "reviewed_manifest": "lms-scorm-qa-evidence-bindings-0568.json",
+      "evidence": "docs/ops/SCORM_F0_SCHEMA_0568_STAGING_APPLY_EVIDENCE.md",
+      "note": "Applied exclusively in pinned staging D1 by official workflow run 40045168335 on exact reviewed SHA ca9039f24ff484daa926b9e23ccd517bcddfbd23, with verified recovery bookmark and all physical postchecks. No production apply, ZIP intake or activation."
+    },
+    {
+      "change_file": "ead-category-reconciliation-executor-0453.sql",
+      "change_id": null,
+      "sha256": "d32b22e055ae50614f16f3d4061ff47f6df48149b86db23ce1a61dcd9d211d69",
+      "targets": [
+        "ead_category_reconciliation_runs"
+      ],
+      "domain": "EAD category reconciliation executor ledger",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REPO_EXPECTED",
+      "reviewed_manifest": null
+    },
+    {
+      "change_file": "0566_lms_scorm_edition_handoffs.sql",
+      "change_id": "lms-scorm-edition-handoff-0566",
+      "sha256": "ebfcb95de6f2a6fee7e07e155697d67157ed96821f23c1cc36b15c5caf352fba",
+      "targets": [
+        "lms_scorm_edition_handoffs"
+      ],
+      "domain": "LMS SCORM: immutable in-cycle edition handoff evidence",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-handoff-0566.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
+      "note": "DDL only, no archive/reset/user write. Writer default-off until governed schema, authenticated handoff and end-to-end browser validation."
+    },
+    {
+      "change_file": "0569_lms_scorm_edition_policy_approvals.sql",
+      "change_id": "lms-scorm-edition-policy-approvals-0569",
+      "sha256": "171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad",
+      "targets": [
+        "lms_matricula_ciclos",
+        "lms_scorm_package_approvals",
+        "lms_scorm_package_versions"
+      ],
+      "domain": "LMS SCORM: edition-pinned assessment policy + append-only administrative package approvals",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-policy-approvals-0569.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-policy-approvals-0569.md",
+      "note": "DDL only, zero backfill, no write to scores/completions/qualifications/certificates. Schema must be applied BEFORE the Worker that reads these columns."
+    },
+    {
+      "change_file": "0570_lms_scorm_formative_approval_renewals.sql",
+      "change_id": "lms-scorm-formative-approval-renewals-0570",
+      "sha256": "209204d75995b90f650e36b6bd64ebfdce202758f8b7cf5e871d53d9535eb90f",
+      "targets": [
+        "lms_scorm_package_approval_renewals"
+      ],
+      "domain": "LMS SCORM: immutable, scope-checked formative approval renewal chain",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-formative-approval-renewals-0570.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-formative-approval-renewals-0570.md",
+      "note": "DDL-only, zero backfill. Staging Schema 0569 is prerequisite; initial approvals, enrollments, progress, qualifications and certificates remain untouched."
+    }
+  ]
+}
