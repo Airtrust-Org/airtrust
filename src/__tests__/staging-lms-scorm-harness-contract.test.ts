@@ -16,7 +16,7 @@ describe('staging LMS SCORM governed harness contract', () => {
     const source = read(specPath);
 
     // The previous browser QA proxied a delayed real conformance response
-    // through route.fetch({ timeout: ... }). The candidate-first UI guard
+    // through Playwright interception with a timeout. The candidate-first UI guard
     // deliberately does NOT invoke conformance or intercept requests.
     // Reintroducing interception requires a separately reviewed harness
     // contract; this test must fail rather than silently accept a mock.
