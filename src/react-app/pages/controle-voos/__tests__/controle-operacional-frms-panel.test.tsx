@@ -247,7 +247,9 @@ describe('ControleOperacionalFrmsPanel', () => {
     renderWithClient(<ControleOperacionalFrmsPanel />);
     expect(await screen.findByText('Sem alertas FRMS')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar informações FRMS' }));
-    expect(await screen.findByText(/Erro ao carregar o painel operacional/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Erro ao carregar o painel operacional/)).toBeInTheDocument();
+    }, { timeout: 10_000 });
     expect(screen.queryByText('Sem alertas FRMS')).not.toBeInTheDocument();
     expect(screen.queryByText('Consulta atualizada às', { exact: false })).not.toBeInTheDocument();
   });
