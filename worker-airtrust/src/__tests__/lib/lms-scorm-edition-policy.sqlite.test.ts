@@ -495,6 +495,36 @@ describe('rollback to the previous edition', () => {
     await expect(rollbackScormPackageVersion(rollbackBase(db))).rejects.toMatchObject({ code: 'ROLLBACK_THRESHOLD_MISSING' });
     expect(row<{ s: string }>(db, `SELECT status s FROM lms_scorm_package_versions WHERE id=?`, FORM_ID).s).toBe('ACTIVE');
   });
+
+  it('rejects a stale rollback when threshold or course policy changes after preflight, without freezing history', async () => {
+    for (const mutation of ['threshold', 'policy'] as const) {
+      const db = await activated();
+      db.database.prepare(`UPDATE lms_matricula_ciclos SET status='CONCLUIDO' WHERE id=101`).run();
+      const beforeAudit = row<{ n: number }>(db,
+        `SELECT COUNT(*) n FROM lms_scorm_package_audit_log`).n;
+      const racedDb = {
+        prepare: db.prepare.bind(db),
+        batch: async (...args: Parameters<SqliteD1Database['batch']>) => {
+          db.database.prepare(mutation === 'threshold'
+            ? `UPDATE lms_cursos SET scorm_mastery_score=NULL WHERE empresa_id=6 AND id=26`
+            : `UPDATE lms_cursos SET scorm_assessment_policy='SCORED' WHERE empresa_id=6 AND id=26`).run();
+          return db.batch(...args);
+        },
+      } as unknown as D1Database;
+      await expect(rollbackScormPackageVersion({ ...rollbackBase(db), db: racedDb }))
+        .rejects.toMatchObject({ code: 'ROLLBACK_RACE' });
+      expect(row<{ s: string }>(db,
+        `SELECT status s FROM lms_scorm_package_versions WHERE id=?`, FORM_ID).s).toBe('ACTIVE');
+      expect(row<{ s: string }>(db,
+        `SELECT status s FROM lms_scorm_package_versions WHERE id=?`, SCORED_ID).s).toBe('SUPERSEDED');
+      expect(row<{ p: string }>(db,
+        `SELECT scorm_package_r2_prefix p FROM lms_cursos WHERE empresa_id=6 AND id=26`).p)
+        .toBe(prefix(FORM_ID));
+      expect(cyclePolicy(db, 101)).toBeNull();
+      expect(row<{ n: number }>(db,
+        `SELECT COUNT(*) n FROM lms_scorm_package_audit_log`).n).toBe(beforeAudit);
+    }
+  });
 });
 
 describe('a regular scored edition replacing a formative one', () => {
