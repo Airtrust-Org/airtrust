@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,6 +68,34 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     expect(approve.disabled).toBe(false);
     await userEvent.click(approve);
     expect(m.approve).toHaveBeenCalledWith({ packageId: 'pkg-new', packageSha256: SHA, note: 'Revisão editorial conferida', editorialReviewRef: 'rev-editorial-01' });
+  });
+
+  it('allows legacy approvals missing editorial reference to renew signed evidence before reapproval', async () => {
+    // The signed journey is still valid, but the legacy administrative approval
+    // lacks editorial_review_ref. ADMIN_APPROVAL alone must not hide import.
+    m.preflight = preflight({}, ['ADMIN_APPROVAL']);
+    m.importEvidence.mockResolvedValue({});
+    m.approve.mockResolvedValue({});
+    render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
+
+    const attestation = '{"attestation":"renewed"}';
+    const file = new File([attestation], 'renewal.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => attestation });
+    await userEvent.upload(screen.getByLabelText(/Importar evidência assinada/), file);
+    await waitFor(() => expect(m.importEvidence).toHaveBeenCalledWith({
+      packageId: 'pkg-new', attestationJson: attestation,
+    }));
+
+    const approve = screen.getByText('Aprovar este pacote') as HTMLButtonElement;
+    expect(approve.disabled).toBe(true);
+    await userEvent.type(screen.getByPlaceholderText(/Justificativa/), 'Revisão independente renovada');
+    await userEvent.type(screen.getByPlaceholderText(/Referência da revisão editorial/), 'review-renewal-01');
+    await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), SHA.slice(0, 12));
+    await userEvent.click(approve);
+    expect(m.approve).toHaveBeenCalledWith({
+      packageId: 'pkg-new', packageSha256: SHA,
+      note: 'Revisão independente renovada', editorialReviewRef: 'review-renewal-01',
+    });
   });
 
   it('non-admins cannot approve', () => {
