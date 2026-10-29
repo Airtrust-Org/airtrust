@@ -77,7 +77,23 @@ export async function importFormativeAttestation(params: {
   const approved = await params.db.prepare(
     `SELECT 1 AS found FROM lms_scorm_package_approvals WHERE empresa_id=? AND curso_id=? AND package_id=?`,
   ).bind(params.empresaId, params.cursoId, row.id).first<{ found: number }>();
-  if (approved) throw new ApiError('Pacote já aprovado; a evidência não pode ser substituída', 409, 'FORMATIVE_ALREADY_APPROVED');
+  // The initial approval stays immutable. An approved, inactive candidate may
+  // import a DIFFERENT freshly signed witness; activation remains blocked until
+  // an administrator explicitly records an append-only approval renewal.
+  if (approved && quality.formativeCertification?.attestationSha256 === digest) {
+    throw new ApiError('A evidência já está registrada e aprovada', 409, 'FORMATIVE_ALREADY_APPROVED');
+  }
+  if (approved) {
+    const replay = await params.db.prepare(
+      `SELECT 1 AS found FROM lms_scorm_package_approvals a
+        WHERE a.empresa_id=? AND a.curso_id=? AND a.package_id=? AND
+          (a.attestation_sha256=? OR EXISTS (
+            SELECT 1 FROM lms_scorm_package_approval_renewals r
+            WHERE r.approval_id=a.id AND r.attestation_sha256=?
+          ))`,
+    ).bind(params.empresaId, params.cursoId, row.id, digest, digest).first<{ found: number }>();
+    if (replay) throw new ApiError('Evidência antiga já aprovada não pode ser reutilizada', 409, 'FORMATIVE_ATTESTATION_REPLAYED');
+  }
   const stored: FormativeStoredQuality = {
     ...quality, formativeAttestation: envelope,
     formativeCertification: { status: 'CERTIFIED', attestationSha256: digest, verifiedAt: new Date().toISOString() },
@@ -92,7 +108,7 @@ export async function importFormativeAttestation(params: {
       `INSERT INTO lms_scorm_package_audit_log (id,empresa_id,curso_id,package_id,action,actor_id,reason,created_at)
        SELECT ?,?,?,?,'VALIDATION_PASSED',?,?,datetime('now') WHERE changes()=1`,
     ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, row.id, params.userId,
-      `FORMATIVE_ATTESTATION_IMPORTED:${digest}`),
+      `${approved ? 'FORMATIVE_ATTESTATION_REFRESH_IMPORTED' : 'FORMATIVE_ATTESTATION_IMPORTED'}:${digest}`),
   ]);
   if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
     throw new ApiError('A edição mudou durante a importação; recarregue e tente de novo', 409, 'FORMATIVE_IMPORT_RACE');
@@ -124,12 +140,47 @@ export async function approveFormativePackage(params: {
   const digest = await formativeAttestationDigest(envelope);
 
   const existing = await params.db.prepare(
-    `SELECT id, attestation_sha256 FROM lms_scorm_package_approvals
-      WHERE empresa_id=? AND curso_id=? AND package_id=?`,
-  ).bind(params.empresaId, params.cursoId, row.id).first<{ id: string; attestation_sha256: string }>();
-  if (existing) {
-    if (existing.attestation_sha256 !== digest) throw new ApiError('Aprovação existente aponta para outra evidência', 409, 'FORMATIVE_APPROVAL_CONFLICT');
+    `SELECT a.id, COALESCE((
+        SELECT r.attestation_sha256 FROM lms_scorm_package_approval_renewals r
+          WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
+      ),a.attestation_sha256) AS attestation_sha256,
+      COALESCE((
+        SELECT MAX(r.sequence) FROM lms_scorm_package_approval_renewals r
+          WHERE r.approval_id=a.id
+      ),0) AS sequence
+      FROM lms_scorm_package_approvals a
+      WHERE a.empresa_id=? AND a.curso_id=? AND a.package_id=? AND a.package_sha256=?`,
+  ).bind(params.empresaId, params.cursoId, row.id, row.package_sha256)
+    .first<{ id: string; attestation_sha256: string; sequence: number }>();
+  if (existing?.attestation_sha256 === digest) {
     return { approvalId: existing.id, packageId: row.id, packageSha256: row.package_sha256, alreadyApproved: true };
+  }
+  if (existing) {
+    // Schema 0570 checks the tenant/course/package/ZIP, current signed evidence,
+    // previous digest and monotonic sequence inside the SAME D1 transaction.
+    // No UPDATE/DELETE of the original 0569 approval is permitted.
+    const renewalId = crypto.randomUUID();
+    const results = await params.db.batch([
+      params.db.prepare(
+        `INSERT INTO lms_scorm_package_approval_renewals
+          (id,approval_id,empresa_id,curso_id,package_id,package_sha256,sequence,
+           previous_attestation_sha256,attestation_sha256,approver_id,approval_note,editorial_review_ref)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).bind(renewalId, existing.id, params.empresaId, params.cursoId, row.id,
+        row.package_sha256, existing.sequence + 1, existing.attestation_sha256,
+        digest, params.userId, note, ref),
+      params.db.prepare(
+        `INSERT INTO lms_scorm_package_audit_log
+          (id,empresa_id,curso_id,package_id,action,actor_id,reason,created_at)
+         SELECT ?,?,?,?,'VALIDATION_PASSED',?,?,datetime('now') WHERE changes()=1`,
+      ).bind(crypto.randomUUID(), params.empresaId, params.cursoId, row.id,
+        params.userId, `FORMATIVE_ADMIN_RENEWED:${renewalId}`),
+    ]);
+    if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
+      throw new ApiError('Renovação concorrente; recarregue e confirme novamente', 409, 'FORMATIVE_RENEWAL_RACE');
+    }
+    return { approvalId: existing.id, renewalId, packageId: row.id,
+      packageSha256: row.package_sha256, alreadyApproved: false, renewed: true };
   }
   const approvalId = crypto.randomUUID();
   const results = await params.db.batch([
@@ -226,8 +277,12 @@ export async function evaluateFormativeActivation(params: {
       if (envelope && verdict.ok) {
         const digest = await formativeAttestationDigest(envelope);
         const approval = await params.db.prepare(
-          `SELECT attestation_sha256 FROM lms_scorm_package_approvals
-            WHERE empresa_id=? AND curso_id=? AND package_id=? AND package_sha256=?`,
+          `SELECT COALESCE((
+              SELECT r.attestation_sha256 FROM lms_scorm_package_approval_renewals r
+                WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
+            ),a.attestation_sha256) AS attestation_sha256
+            FROM lms_scorm_package_approvals a
+            WHERE a.empresa_id=? AND a.curso_id=? AND a.package_id=? AND a.package_sha256=?`,
         ).bind(params.empresaId, params.cursoId, row.id, row.package_sha256).first<{ attestation_sha256: string }>();
         approvalOk = approval?.attestation_sha256 === digest;
       }

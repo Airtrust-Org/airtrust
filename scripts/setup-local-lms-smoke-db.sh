@@ -67,6 +67,8 @@ LMS_MIGRATIONS=(
   # Governed Schema V2 0569 mirror (byte-identical): edition-pinned SCORM assessment policy
   # and administrative package approvals read by the Worker. Isolated local smoke D1 only.
   "$WORKER_DIR/migrations/0569_lms_scorm_edition_policy_approvals.sql"
+  # 0570 is the additive, append-only approval-renewal ledger; local DB only.
+  "$WORKER_DIR/migrations/0570_lms_scorm_formative_approval_renewals.sql"
 )
 
 error() {

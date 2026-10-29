@@ -29,6 +29,7 @@ on:
           - lms-scorm-edition-handoff-0566
           - lms-scorm-qa-evidence-bindings-0568
           - lms-scorm-edition-policy-approvals-0569
+          - lms-scorm-formative-approval-renewals-0570
       release_reason:
         description: Reason and authorization for the staging schema change
         required: true
@@ -58,8 +59,8 @@ jobs:
       PRODUCTION_DB_ID: 7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae
       REVIEWED_CHANGE_ID: ${{ inputs.change_id }}
       BASELINE_ID: production-d1-baseline-v2-20260714
-      REVIEWED_SQL_HASH: ${{ inputs.change_id == 'lms-scorm-edition-policy-approvals-0569' && '171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad' || inputs.change_id == 'hfa-integration-bridge-0529' && '09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4' || inputs.change_id == 'lms-scorm-qa-evidence-bindings-0568' && '6f85d5e3d141e140c54ea5b62c2dc3143447187960b8d89d7b6ed6dc4f3eb197' || inputs.change_id == 'lms-scorm-edition-handoff-0566' && 'ebfcb95de6f2a6fee7e07e155697d67157ed96821f23c1cc36b15c5caf352fba' || inputs.change_id == 'controle-voos-pilot-supplier-history-0564' && '0474f9d87e419b85e6a851766a34a8a3c8a2a3728976bf52a4644a191d63c4b8' || inputs.change_id == 'controle-voos-pilot-fueling-identity-0563' && 'f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456' || inputs.change_id == 'simulator-individual-check-delete-guard-0560' && '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56' || inputs.change_id == 'simulator-individual-check-evidence-0554' && 'bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5' || 'c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31' }}
-      REVIEWED_PLAN_HASH: ${{ inputs.change_id == 'lms-scorm-edition-policy-approvals-0569' && 'b1b93390616df33ad4e88aa5e3c3c6f269dae1d11fafd09f9e0991b227ecdab8' || inputs.change_id == 'hfa-integration-bridge-0529' && '2d71bcd602959a320fc3dc223ba127c07f53b3394608f235b4cdf2e0fd9222dd' || inputs.change_id == 'lms-scorm-qa-evidence-bindings-0568' && 'ff0e971ac739846159651689d3604c3a3bbea8add204fda1c49bbcdcb9261696' || inputs.change_id == 'lms-scorm-edition-handoff-0566' && '2dba1565554ae6c1a1bd8bfac803a227affa01332d46ede08408af9fb1308f2b' || inputs.change_id == 'controle-voos-pilot-supplier-history-0564' && '6e0b2968655fbb423d36f3413065120daa8f4c828e0e82cbeba2e01c32c97d81' || inputs.change_id == 'controle-voos-pilot-fueling-identity-0563' && '1be9c128e3f56e03f72a35702cd239735476460ba24209801d32bf10e44296ae' || inputs.change_id == 'simulator-individual-check-delete-guard-0560' && 'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463' || inputs.change_id == 'simulator-individual-check-evidence-0554' && '47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6' || '8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45' }}
+      REVIEWED_SQL_HASH: ${{ inputs.change_id == 'lms-scorm-formative-approval-renewals-0570' && '209204d75995b90f650e36b6bd64ebfdce202758f8b7cf5e871d53d9535eb90f' || inputs.change_id == 'lms-scorm-edition-policy-approvals-0569' && '171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad' || inputs.change_id == 'hfa-integration-bridge-0529' && '09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4' || inputs.change_id == 'lms-scorm-qa-evidence-bindings-0568' && '6f85d5e3d141e140c54ea5b62c2dc3143447187960b8d89d7b6ed6dc4f3eb197' || inputs.change_id == 'lms-scorm-edition-handoff-0566' && 'ebfcb95de6f2a6fee7e07e155697d67157ed96821f23c1cc36b15c5caf352fba' || inputs.change_id == 'controle-voos-pilot-supplier-history-0564' && '0474f9d87e419b85e6a851766a34a8a3c8a2a3728976bf52a4644a191d63c4b8' || inputs.change_id == 'controle-voos-pilot-fueling-identity-0563' && 'f920e8b75faab568c7abeaace086606d19904bc1a4b16fc010238d63fd572456' || inputs.change_id == 'simulator-individual-check-delete-guard-0560' && '5fe67c81dda03681d9a73eec4cc51989bd92270e4eca6b41b1eb1028b58b9e56' || inputs.change_id == 'simulator-individual-check-evidence-0554' && 'bcbdcf8bd78c3a3d6393624e62ae70e691190e3ae2d35c0951c0bc56470b4bf5' || 'c29e5b38d6e1da17b55312b3a1ff470266ebcf3cd7e178eecd4d0664cec7dd31' }}
+      REVIEWED_PLAN_HASH: ${{ inputs.change_id == 'lms-scorm-formative-approval-renewals-0570' && '4772d5c4c283f5c489c4f7d36248050c3b11e893e64090ebf05bc55469f479eb' || inputs.change_id == 'lms-scorm-edition-policy-approvals-0569' && 'b1b93390616df33ad4e88aa5e3c3c6f269dae1d11fafd09f9e0991b227ecdab8' || inputs.change_id == 'hfa-integration-bridge-0529' && '2d71bcd602959a320fc3dc223ba127c07f53b3394608f235b4cdf2e0fd9222dd' || inputs.change_id == 'lms-scorm-qa-evidence-bindings-0568' && 'ff0e971ac739846159651689d3604c3a3bbea8add204fda1c49bbcdcb9261696' || inputs.change_id == 'lms-scorm-edition-handoff-0566' && '2dba1565554ae6c1a1bd8bfac803a227affa01332d46ede08408af9fb1308f2b' || inputs.change_id == 'controle-voos-pilot-supplier-history-0564' && '6e0b2968655fbb423d36f3413065120daa8f4c828e0e82cbeba2e01c32c97d81' || inputs.change_id == 'controle-voos-pilot-fueling-identity-0563' && '1be9c128e3f56e03f72a35702cd239735476460ba24209801d32bf10e44296ae' || inputs.change_id == 'simulator-individual-check-delete-guard-0560' && 'b00948f0821692fb322cd18dc795769d8f03b057db7af9c9b729747d9d2b1463' || inputs.change_id == 'simulator-individual-check-evidence-0554' && '47b79c542348749d865425a5487f72689444f30553187778f51366b89bbcd0b6' || '8e4eefde2853f3a1adaa9ffac08fba364e277f99728c911a9ea9939cd0fb1b45' }}
       RELEASE_SHA: ${{ inputs.release_sha }}
       CHANGE_ID: ${{ inputs.change_id }}
     steps:
@@ -85,7 +86,8 @@ jobs:
              "$CHANGE_ID" == 'controle-voos-pilot-supplier-history-0564' ||
              "$CHANGE_ID" == 'lms-scorm-edition-handoff-0566' ||
              "$CHANGE_ID" == 'lms-scorm-qa-evidence-bindings-0568' ||
-             "$CHANGE_ID" == 'lms-scorm-edition-policy-approvals-0569' ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
+             "$CHANGE_ID" == 'lms-scorm-edition-policy-approvals-0569' ||
+             "$CHANGE_ID" == 'lms-scorm-formative-approval-renewals-0570' ]] || { echo 'UNAPPROVED_CHANGE_ID' >&2; exit 1; }
           [[ -n "$RELEASE_REASON" ]] || { echo 'REASON_REQUIRED' >&2; exit 1; }
           [[ "$STAGING_DB_ID" != "$PRODUCTION_DB_ID" ]] || { echo 'PRODUCTION_TARGET_REJECTED' >&2; exit 1; }
           node --input-type=module <<'NODE'
@@ -106,19 +108,24 @@ jobs:
             return response.json();
           }
           const pr = await github('/pulls/' + number);
-          // A merged HFA 0529 release must be pinned to the CURRENT protected main;
-          // only this additive change may use the merged-PR staging path.
+          // Only HFA 0529 and the MGM 0570 additive follow-up may use a merged-PR path;
+          // both require their exact merge SHA to equal CURRENT protected main.
           const sameRepo = pr.base?.ref === 'main' &&
             pr.head?.repo?.full_name === repo && !pr.head?.repo?.fork;
           const reviewedOpenHead = pr.state === 'open' &&
             pr.head?.sha?.toLowerCase() === sha;
           let reviewedMergedHfa = false;
-          if (sameRepo && process.env.CHANGE_ID === 'hfa-integration-bridge-0529' &&
-              pr.merged === true && pr.merge_commit_sha?.toLowerCase() === sha) {
+          let reviewedMergedMgm0570 = false;
+          if (sameRepo && pr.merged === true && pr.merge_commit_sha?.toLowerCase() === sha &&
+              (process.env.CHANGE_ID === 'hfa-integration-bridge-0529' ||
+               (process.env.CHANGE_ID === 'lms-scorm-formative-approval-renewals-0570' && number === '1855'))) {
             const mainRef = await github('/git/refs/heads/main');
-            reviewedMergedHfa = mainRef.object?.sha?.toLowerCase() === sha;
+            const currentProtectedMain = mainRef.object?.sha?.toLowerCase() === sha;
+            reviewedMergedHfa = currentProtectedMain && process.env.CHANGE_ID === 'hfa-integration-bridge-0529';
+            reviewedMergedMgm0570 = currentProtectedMain &&
+              process.env.CHANGE_ID === 'lms-scorm-formative-approval-renewals-0570' && number === '1855';
           }
-          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa)) {
+          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa || reviewedMergedMgm0570)) {
             throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
           }
           if (process.env.CHANGE_ID === 'lms-scorm-qa-evidence-bindings-0568') {
@@ -177,7 +184,9 @@ jobs:
           }
           const manifest = JSON.parse(readFileSync('release/worker-airtrust/schema-v2/' +
             process.env.CHANGE_ID + '.json', 'utf8'));
-          const expectedPath = process.env.CHANGE_ID === 'lms-scorm-edition-policy-approvals-0569'
+          const expectedPath = process.env.CHANGE_ID === 'lms-scorm-formative-approval-renewals-0570'
+            ? 'worker-airtrust/schema-v2/changes/0570_lms_scorm_formative_approval_renewals.sql'
+            : process.env.CHANGE_ID === 'lms-scorm-edition-policy-approvals-0569'
             ? 'worker-airtrust/schema-v2/changes/0569_lms_scorm_edition_policy_approvals.sql'
             : process.env.CHANGE_ID === 'hfa-integration-bridge-0529'
             ? 'worker-airtrust/schema-v2/changes/0529_hfa_integration_bridge.sql'
@@ -251,6 +260,15 @@ jobs:
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name IN ('idx_integracoes_hfa_eventos_empresa_status','idx_integracoes_hfa_eventos_relato','idx_integracoes_hfa_eventos_hfa_event')")" == '0' ]] || { echo 'HFA_0529_INDEXES_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('trg_integracoes_hfa_eventos_tenant_insert','trg_integracoes_hfa_eventos_tenant_update')")" == '0' ]] || { echo 'HFA_0529_TRIGGERS_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
             echo "sgso_relato_count=$(query_count "SELECT COUNT(*) AS total FROM sgso_relatos")" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGE_ID" == 'lms-scorm-formative-approval-renewals-0570' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM airtrust_schema_changes_v2 WHERE change_id='lms-scorm-edition-policy-approvals-0569' AND baseline_id='$BASELINE_ID' AND file_hash='171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad' AND plan_hash='b1b93390616df33ad4e88aa5e3c3c6f269dae1d11fafd09f9e0991b227ecdab8'")" == '1' ]] || { echo 'SCORM_0570_REQUIRES_0569_LEDGER' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_scorm_package_approvals','lms_scorm_package_versions','lms_matriculas','lms_matricula_ciclos','lms_progresso_scorm','qualificacoes_historico')")" == '6' ]] || { echo 'SCORM_0570_REQUIRED_TABLES_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='lms_scorm_package_approval_renewals'")" == '0' ]] || { echo 'SCORM_0570_TABLE_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name='idx_lms_scorm_approval_renewals_scope'")" == '0' ]] || { echo 'SCORM_0570_INDEX_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('trg_lms_scorm_approval_renewal_scope','trg_lms_scorm_approval_renewal_no_update','trg_lms_scorm_approval_renewal_no_delete')")" == '0' ]] || { echo 'SCORM_0570_TRIGGERS_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
+            for table in lms_scorm_package_approvals lms_scorm_package_versions lms_matriculas lms_matricula_ciclos lms_progresso_scorm qualificacoes_historico; do
+              printf '%s=%s\n' "count_$table" "$(query_count "SELECT COUNT(*) AS total FROM $table")" >> "$GITHUB_OUTPUT"
+            done
           elif [[ "$CHANGE_ID" == 'lms-scorm-edition-policy-approvals-0569' ]]; then
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name IN ('lms_cursos','lms_matriculas','lms_matricula_ciclos','lms_scorm_package_versions','lms_progresso_scorm','qualificacoes_historico')")" == '6' ]] || { echo 'SCORM_0569_SOURCE_TABLES_MISSING' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_scorm_package_versions') WHERE name IN ('assessment_policy','certification_profile')")" == '0' ]] || { echo 'SCORM_0569_VERSION_COLUMNS_ALREADY_PRESENT_WITHOUT_LEDGER' >&2; exit 1; }
@@ -349,6 +367,12 @@ jobs:
         shell: bash
         env:
           HFA_0529_RELATOS_BEFORE: ${{ steps.preflight.outputs.sgso_relato_count }}
+          SCORM_0570_APPROVALS_BEFORE: ${{ steps.preflight.outputs.count_lms_scorm_package_approvals }}
+          SCORM_0570_PACKAGES_BEFORE: ${{ steps.preflight.outputs.count_lms_scorm_package_versions }}
+          SCORM_0570_ENROLLMENTS_BEFORE: ${{ steps.preflight.outputs.count_lms_matriculas }}
+          SCORM_0570_CYCLES_BEFORE: ${{ steps.preflight.outputs.count_lms_matricula_ciclos }}
+          SCORM_0570_PROGRESS_BEFORE: ${{ steps.preflight.outputs.count_lms_progresso_scorm }}
+          SCORM_0570_QUALIFICATIONS_BEFORE: ${{ steps.preflight.outputs.count_qualificacoes_historico }}
           SCORM_0569_COURSES_BEFORE: ${{ steps.preflight.outputs.count_lms_cursos }}
           SCORM_0569_PACKAGES_BEFORE: ${{ steps.preflight.outputs.count_lms_scorm_package_versions }}
           SCORM_0569_ENROLLMENTS_BEFORE: ${{ steps.preflight.outputs.count_lms_matriculas }}
@@ -392,6 +416,17 @@ jobs:
             [[ "$(query_count "SELECT COUNT(*) AS total FROM integracoes_hfa_config")" == '0' ]] || { echo 'HFA_0529_UNEXPECTED_CONFIG_ROWS' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM integracoes_hfa_eventos")" == '0' ]] || { echo 'HFA_0529_UNEXPECTED_EVENT_ROWS' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM sgso_relatos")" == "$HFA_0529_RELATOS_BEFORE" ]] || { echo 'HFA_0529_SGSO_REPORTS_CHANGED' >&2; exit 1; }
+          elif [[ "$CHANGE_ID" == 'lms-scorm-formative-approval-renewals-0570' ]]; then
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='lms_scorm_package_approval_renewals'")" == '1' ]] || { echo 'SCORM_0570_TABLE_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='index' AND name='idx_lms_scorm_approval_renewals_scope'")" == '1' ]] || { echo 'SCORM_0570_INDEX_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='trigger' AND name IN ('trg_lms_scorm_approval_renewal_scope','trg_lms_scorm_approval_renewal_no_update','trg_lms_scorm_approval_renewal_no_delete')")" == '3' ]] || { echo 'SCORM_0570_TRIGGERS_MISSING' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_scorm_package_approval_renewals")" == '0' ]] || { echo 'SCORM_0570_UNEXPECTED_RENEWAL_BACKFILL' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_scorm_package_approvals")" == "$SCORM_0570_APPROVALS_BEFORE" ]] || { echo 'SCORM_0570_APPROVALS_CHANGED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_scorm_package_versions")" == "$SCORM_0570_PACKAGES_BEFORE" ]] || { echo 'SCORM_0570_PACKAGES_CHANGED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_matriculas")" == "$SCORM_0570_ENROLLMENTS_BEFORE" ]] || { echo 'SCORM_0570_ENROLLMENTS_CHANGED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_matricula_ciclos")" == "$SCORM_0570_CYCLES_BEFORE" ]] || { echo 'SCORM_0570_CYCLES_CHANGED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM lms_progresso_scorm")" == "$SCORM_0570_PROGRESS_BEFORE" ]] || { echo 'SCORM_0570_PROGRESS_CHANGED' >&2; exit 1; }
+            [[ "$(query_count "SELECT COUNT(*) AS total FROM qualificacoes_historico")" == "$SCORM_0570_QUALIFICATIONS_BEFORE" ]] || { echo 'SCORM_0570_QUALIFICATIONS_CHANGED' >&2; exit 1; }
           elif [[ "$CHANGE_ID" == 'lms-scorm-edition-policy-approvals-0569' ]]; then
             [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_scorm_package_versions') WHERE name IN ('assessment_policy','certification_profile')")" == '2' ]] || { echo 'SCORM_0569_VERSION_COLUMNS_MISSING' >&2; exit 1; }
             [[ "$(query_count "SELECT COUNT(*) AS total FROM pragma_table_info('lms_matricula_ciclos') WHERE name='assessment_policy'")" == '1' ]] || { echo 'SCORM_0569_CYCLE_COLUMN_MISSING' >&2; exit 1; }

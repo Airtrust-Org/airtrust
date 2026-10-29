@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { commitCertifiedScormActivation } from '../../lib/lms/lms-scorm-package-activation';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../../lib/lms/lms-effective-assessment-policy';
@@ -19,9 +19,10 @@ import { SCORM_FUNCTIONAL_HARNESS } from '../../lib/lms/lms-scorm-functional-cer
 const root = resolve(__dirname, '../../..');
 const ddl0465 = readFileSync(resolve(root, 'migrations/0465_lms_scorm_package_quality_gate_v1.sql'), 'utf8');
 const ddl0569 = readFileSync(resolve(root, 'schema-v2/changes/0569_lms_scorm_edition_policy_approvals.sql'), 'utf8');
+const ddl0570 = readFileSync(resolve(root, 'schema-v2/changes/0570_lms_scorm_formative_approval_renewals.sql'), 'utf8');
 
 const opened: SqliteD1Database[] = [];
-afterEach(() => { for (const db of opened.splice(0)) db.close(); });
+afterEach(() => { vi.useRealTimers(); for (const db of opened.splice(0)) db.close(); });
 
 const secret = 'test-only-secret-with-length-above-thirty-two-characters';
 const runtimeSha = 'b'.repeat(40);
@@ -60,6 +61,7 @@ function fixture(opts: { formativeActive?: boolean } = {}) {
   `);
   db.database.exec(ddl0465);
   db.database.exec(ddl0569);
+  db.database.exec(ddl0570);
   const policy = opts.formativeActive ? 'FORMATIVE' : 'SCORED';
   db.database.prepare(`INSERT INTO lms_cursos (id,empresa_id,titulo,tipo_conteudo,scorm_package_r2_prefix,
     scorm_launch_file,scorm_versao,scorm_mastery_score,scorm_assessment_policy)
@@ -269,9 +271,87 @@ describe('formative evidence, administrative approval and activation', () => {
     const again = await approveFormativePackage({ ...base(db), packageId: FORM_ID, confirm, note: 'Revisão editorial e jornada real conferidas' });
     expect(again).toMatchObject({ approvalId: first.approvalId, alreadyApproved: true });
     expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(1);
-    await expect(importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: attestation() }))
+    const alreadyStored = row<{ validation_result_json: string }>(db,
+      'SELECT validation_result_json FROM lms_scorm_package_versions WHERE id=?', FORM_ID);
+    const sameEnvelope = JSON.parse(alreadyStored.validation_result_json).formativeAttestation;
+    await expect(importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: sameEnvelope }))
       .rejects.toMatchObject({ code: 'FORMATIVE_ALREADY_APPROVED' });
     expect(() => db.database.prepare(`DELETE FROM lms_scorm_package_approvals`).run()).toThrow(/SCORM_APPROVAL_IMMUTABLE/);
+  });
+
+  it('renews expired evidence only with a fresh signed journey and a NEW admin approval, preserving history', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-01T12:00:00.000Z'));
+    const db = fixture();
+    const initial = await certifyAndApprove(db);
+    const before = row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_matricula_ciclos').n;
+    vi.setSystemTime(new Date('2026-11-02T12:00:00.000Z'));
+    let pre = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
+    expect(pre.checks.find(c => c.id === 'JOURNEY_EVIDENCE')).toMatchObject({ ok: false });
+    expect(pre.canActivate).toBe(false);
+
+    const fresh = attestation();
+    await importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: fresh });
+    pre = await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID });
+    expect(pre.checks.find(c => c.id === 'JOURNEY_EVIDENCE')).toMatchObject({ ok: true });
+    expect(pre.checks.find(c => c.id === 'ADMIN_APPROVAL')).toMatchObject({ ok: false });
+    expect(pre.canActivate).toBe(false);
+
+    const renewal = await approveFormativePackage({ ...base(db), packageId: FORM_ID,
+      confirm, note: 'Renovação editorial após novo QA real assinado' });
+    expect(renewal).toMatchObject({ approvalId: initial.approvalId, renewed: true, alreadyApproved: false });
+    expect(renewal.renewalId).toBeTruthy();
+    const repeated = await approveFormativePackage({ ...base(db), packageId: FORM_ID,
+      confirm, note: 'Renovação editorial após novo QA real assinado' });
+    expect(repeated).toMatchObject({ approvalId: initial.approvalId, alreadyApproved: true });
+    expect((await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID })).canActivate).toBe(true);
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(1);
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approval_renewals').n).toBe(1);
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_matricula_ciclos').n).toBe(before);
+    expect(cyclePolicy(db, 100)).toBeNull();
+    expect(() => db.database.prepare('DELETE FROM lms_scorm_package_approval_renewals').run())
+      .toThrow(/SCORM_RENEWAL_IMMUTABLE/);
+    expect(() => db.database.prepare(
+      `UPDATE lms_scorm_package_approval_renewals SET approval_note='tampered'`).run())
+      .toThrow(/SCORM_RENEWAL_IMMUTABLE/);
+  });
+
+  it('runtime SHA change requires signed re-certification and renewed admin approval, not old grants', async () => {
+    const db = fixture();
+    const initial = await certifyAndApprove(db);
+    const next = { ...base(db), runtimeSha: 'd'.repeat(40) };
+    expect((await evaluateFormativeActivation({ ...next, packageId: FORM_ID })).canActivate).toBe(false);
+    await expect(importFormativeAttestation({ ...next, packageId: FORM_ID, attestation: attestation() }))
+      .rejects.toMatchObject({ code: 'FORMATIVE_ATTESTATION_RUNTIME_SHA_MISMATCH' });
+    await importFormativeAttestation({ ...next, packageId: FORM_ID,
+      attestation: attestation(FORM_SHA, { runtimeSha: next.runtimeSha }) });
+    expect((await evaluateFormativeActivation({ ...next, packageId: FORM_ID })).canActivate).toBe(false);
+    await expect(approveFormativePackage({ ...next, packageId: FORM_ID, userId: null,
+      confirm, note: 'Aprovação administrativa com nova evidência' }))
+      .rejects.toMatchObject({ code: 'FORMATIVE_APPROVER_REQUIRED' });
+    const renewed = await approveFormativePackage({ ...next, packageId: FORM_ID,
+      confirm, note: 'Aprovação administrativa com nova evidência' });
+    expect(renewed).toMatchObject({ approvalId: initial.approvalId, renewed: true });
+    expect((await evaluateFormativeActivation({ ...next, packageId: FORM_ID })).canActivate).toBe(true);
+    expect((await evaluateFormativeActivation({ ...base(db), packageId: FORM_ID })).canActivate).toBe(false);
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approvals').n).toBe(1);
+  });
+
+  it('rejects forged cross-tenant renewal, wrong predecessor and duplicate sequence in the database', async () => {
+    const db = fixture();
+    await certifyAndApprove(db);
+    const current = row<{ id: string; attestation_sha256: string }>(db,
+      'SELECT id,attestation_sha256 FROM lms_scorm_package_approvals');
+    const insert = (empresa: number, previous: string, sequence: number) => db.database.prepare(
+      `INSERT INTO lms_scorm_package_approval_renewals
+      (id,approval_id,empresa_id,curso_id,package_id,package_sha256,sequence,
+      previous_attestation_sha256,attestation_sha256,approver_id,approval_note)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), current.id, empresa, 26,
+        FORM_ID, FORM_SHA, sequence, previous, 'a'.repeat(64), 77, 'Revisão editorial registrada');
+    expect(() => insert(7, current.attestation_sha256, 1)).toThrow(/SCORM_RENEWAL_SCOPE_INVALID/);
+    expect(() => insert(6, '0'.repeat(64), 1)).toThrow(/SCORM_RENEWAL_SCOPE_INVALID|SCORM_RENEWAL_CHAIN_INVALID/);
+    expect(() => insert(6, current.attestation_sha256, 2)).toThrow(/SCORM_RENEWAL_SCOPE_INVALID|SCORM_RENEWAL_SEQUENCE_INVALID/);
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_scorm_package_approval_renewals').n).toBe(0);
   });
 
   it('refuses activation without approval, without confirmation or without acknowledging in-progress learners', async () => {
@@ -381,7 +461,7 @@ describe('history preservation (full-row snapshot)', () => {
   const snapshot = (db: SqliteD1Database) => ({
     matriculas: db.database.prepare('SELECT * FROM lms_matriculas ORDER BY id').all(),
     ciclos: (db.database.prepare('SELECT * FROM lms_matricula_ciclos ORDER BY id').all() as Record<string, unknown>[])
-      .map(({ assessment_policy: _frozen, ...rest }) => rest),
+      .map(cycle => { const snapshot = { ...cycle }; delete snapshot.assessment_policy; return snapshot; }),
     otherTenantCourse: db.database.prepare(`SELECT * FROM lms_cursos WHERE empresa_id=7`).all(),
     otherTenantDiag: db.database.prepare(`SELECT * FROM lms_completion_diagnostics_snapshots WHERE empresa_id=7`).all(),
   });

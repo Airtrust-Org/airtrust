@@ -19,7 +19,8 @@ Este runbook descreve o procedimento; **ele não autoriza nenhuma execução**. 
 ## Ordem obrigatória de implantação
 
 1. **Schema V2 `lms-scorm-edition-policy-approvals-0569`** (aditivo, DDL-only, zero backfill) em staging pelo workflow `staging-apply-schema-v2.yml`; em produção pelo fluxo governado equivalente. *Schema antes do Worker.*
-2. Worker com o código desta mudança.
+2. **Schema V2 0570** (aditivo, DDL-only, sem backfill) antes do Worker que lê renovações.
+3. Worker com o código desta mudança.
 3. Só então o procedimento abaixo.
 
 Reverter o Worker é seguro e suficiente para voltar ao comportamento anterior; **nunca** `DROP` das colunas/tabela (provas imutáveis).
@@ -31,7 +32,7 @@ Todos os passos ficam em **Curso → Edições do pacote SCORM** (painel do deta
 1. **Enviar ZIP.** O botão de substituição para na validação quando o pacote é formativo (não executa conformance nem ativa); a edição fica `VALIDATED`/inativa. Confira o SHA-256 completo exibido contra o SHA do artefato aprovado.
 2. **Homologar (staging).** O CI governado roda a jornada real do aluno sobre os bytes exatos e assina a evidência (`sign-scorm-formative-attestation.mjs`, só em `main` protegida). Casos exigidos (9): `FIRST_ACCESS`, `REQUIRED_CONTENT_COVERAGE`, `REQUIRED_INTERACTIONS`, `PERSISTENCE_VERIFIED`, `SUSPEND_RESUME`, `EXPLICIT_FINALIZATION`, `REOPEN_COMPLETED`, `NO_STATUS_DOWNGRADE`, `TENANT_CYCLE_ISOLATION`. Validade da evidência: 30 dias.
 3. **Importar a evidência** no painel (arquivo JSON assinado). Item `JOURNEY_EVIDENCE` da pré-checagem passa a ✔. Evidência de outro SHA/runtime, adulterada ou vencida é recusada (409).
-4. **Aprovar** (administrador): justificativa + referência editorial opcional + digitar os 12 primeiros caracteres do SHA. Item `ADMIN_APPROVAL` ✔. Após a aprovação a evidência não pode ser substituída.
+4. **Aprovar** (administrador): justificativa + referência editorial opcional + digitar os 12 primeiros caracteres do SHA. Item `ADMIN_APPROVAL` ✔. A aprovação inicial nunca é alterada. Se o runtime mudar ou a atestação vencer (30 dias), execute nova jornada real assinada, importe evidência diferente e **renove a aprovação** com confirmação administrativa: Schema 0570 preserva cadeia append-only, SHA anterior, administrador e justificativa. Até a nova aprovação, a ativação permanece bloqueada; evidência antiga já aprovada não pode ser reutilizada.
 5. **Ativar.** A pré-checagem é a **mesma função** que a ativação executa. Informa quantos ciclos serão congelados e quantas matrículas em andamento passarão a seguir a nova edição (exige ciência da quantidade). Confirmação: SHA (12 caracteres) + curso. Se qualquer requisito falhar: 409 `ACTIVATION_PREFLIGHT_FAILED`, nada muda.
 6. **Conferir o resultado** (card da edição ativa): curso, SHA ativo, política. Verificar no player uma matrícula de teste/administrativa e, se aplicável, que conclusões antigas continuam intactas (ciclos encerrados mantêm `assessment_policy`).
 
@@ -47,7 +48,7 @@ No card da edição ativa → **Restaurar edição anterior** (digitar 12 caract
 
 ## Códigos de erro úteis
 
-`FORMATIVE_PROFILE_NOT_ELIGIBLE`, `FORMATIVE_ATTESTATION_<MOTIVO>` (`PACKAGE_SHA_MISMATCH`, `RUNTIME_SHA_MISMATCH`, `ATTESTATION_EXPIRED`, `ATTESTATION_SIGNATURE_INVALID`, `JOURNEY_NOT_CERTIFIED`…), `FORMATIVE_ATTESTATION_MISSING`, `FORMATIVE_ALREADY_APPROVED`, `ACTIVATION_CONFIRMATION_REQUIRED`, `ACTIVATION_IN_PROGRESS_ACK_REQUIRED`, `ACTIVATION_PREFLIGHT_FAILED`, `ROLLBACK_*`.
+`FORMATIVE_PROFILE_NOT_ELIGIBLE`, `FORMATIVE_ATTESTATION_<MOTIVO>` (`PACKAGE_SHA_MISMATCH`, `RUNTIME_SHA_MISMATCH`, `ATTESTATION_EXPIRED`, `ATTESTATION_SIGNATURE_INVALID`, `JOURNEY_NOT_CERTIFIED`…), `FORMATIVE_ATTESTATION_MISSING`, `FORMATIVE_ALREADY_APPROVED`, `FORMATIVE_ATTESTATION_REPLAYED`, `FORMATIVE_RENEWAL_RACE`, `ACTIVATION_CONFIRMATION_REQUIRED`, `ACTIVATION_IN_PROGRESS_ACK_REQUIRED`, `ACTIVATION_PREFLIGHT_FAILED`, `ROLLBACK_*`.
 
 ## O que este mecanismo **não** faz
 

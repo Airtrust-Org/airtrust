@@ -147,7 +147,9 @@ describe('migration governance', () => {
     // Like 0557 it is a byte-identical local mirror of the Schema V2 change (hash-pinned in
     // scripts/ci/ci-schema-bootstrap-contract.json) so the disposable lms-smoke DB has the columns.
     expect(files).toContain('0569_lms_scorm_edition_policy_approvals.sql');
-    const expectedLatest = 569;
+    // 0570 appends immutable, scope-checked formative approval renewals.
+    expect(files).toContain('0570_lms_scorm_formative_approval_renewals.sql');
+    const expectedLatest = 570;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

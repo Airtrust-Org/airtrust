@@ -33,3 +33,26 @@ test('0569 SQL is DDL-only and contains no data mutation of learner or course ro
     assert.ok(!sql.includes(forbidden), forbidden);
   }
 });
+
+test('0570 renewal migration is hash-pinned and strictly depends on applied 0569', () => {
+  const renewal = JSON.parse(readFileSync('worker-airtrust/schema-v2/lms-scorm-formative-approval-renewals-0570.json', 'utf8'));
+  assert.equal(renewal.changeId, 'lms-scorm-formative-approval-renewals-0570');
+  assert.equal(renewal.fileHash, sha(renewal.filePath));
+  assert.equal(renewal.planHash, sha(renewal.planPath));
+  for (const term of [renewal.changeId, renewal.fileHash, renewal.planHash,
+    'SCORM_0570_REQUIRES_0569_LEDGER', 'SCORM_0570_TABLE_ALREADY_PRESENT_WITHOUT_LEDGER',
+    'SCORM_0570_TRIGGERS_ALREADY_PRESENT_WITHOUT_LEDGER', 'SCORM_0570_TABLE_MISSING',
+    'SCORM_0570_TRIGGERS_MISSING', 'SCORM_0570_UNEXPECTED_RENEWAL_BACKFILL',
+    'SCORM_0570_APPROVALS_CHANGED', 'SCORM_0570_ENROLLMENTS_CHANGED',
+    'SCORM_0570_CYCLES_CHANGED', 'SCORM_0570_PROGRESS_CHANGED',
+    'SCORM_0570_QUALIFICATIONS_CHANGED']) check(term);
+});
+
+test('0570 merged-PR staging exception is pinned to PR 1855 and current protected main', () => {
+  for (const term of ["number === '1855'", 'reviewedMergedMgm0570',
+    'pr.merge_commit_sha?.toLowerCase() === sha', "github('/git/refs/heads/main')",
+    'currentProtectedMain', 'REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH',
+    'Verify eight required GitHub release gates for exact SHA',
+    'airtrust-staging-mutations-and-scorm-qa']) check(term);
+  assert.ok(!workflow.includes('cancel-in-progress: true'));
+});
