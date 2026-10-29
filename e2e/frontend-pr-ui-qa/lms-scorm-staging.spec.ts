@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
 
@@ -20,59 +20,12 @@ type QaState = {
   };
 };
 
-type ApiEnvelope = {
-  success?: boolean;
-  data?: {
-    status?: string;
-    packageId?: string;
-    packageSha256?: string;
-    publishable?: boolean;
-    structural?: { status?: string };
-    completionManifest?: { status?: string };
-    diagnostics?: { status?: string };
-    conformance?: {
-      status?: string;
-      tests?: Array<{ name?: string; status?: string; detail?: string }>;
-    };
-    functionalCertification?: { status?: string; missing?: string[] };
-    runtime?: {
-      status?: string;
-      functionalCompletionVerified?: boolean;
-      functionalCompletionReason?: string | null;
-      failureStage?: string;
-      failureCategory?: string;
-      initializeObserved?: boolean;
-      commitObserved?: boolean;
-      finishObserved?: boolean;
-      completionReached?: boolean;
-    };
-  };
-};
-
 const STATE_PATH =
   process.env.QA_LMS_SCORM_STATE_PATH || 'qa-state/staging-lms-scorm/state.json';
 const SUMMARY_PATH = 'qa-state/staging-lms-scorm/browser-summary.json';
 const STAGING_API_HOST = 'airtrust-api-staging.airtrust.workers.dev';
 
 test.describe.configure({ retries: 0 });
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function delayedRealResponse(
-  route: Route,
-  delayMs: number,
-  capture: (json: ApiEnvelope | null) => void,
-) {
-  // The governed timeout fixture intentionally waits for the real Browser Rendering
-  // conformance limit (~30s). Keep the Playwright proxy timeout above that backend limit.
-  const response = await route.fetch({ timeout: 45_000 });
-  const json = (await response.json().catch(() => null)) as ApiEnvelope | null;
-  capture(json);
-  await sleep(delayMs);
-  await route.fulfill({ response });
-}
 
 async function openCourseEditor(page: Page, course: QaCourse) {
   // The catalog fetches draft courses asynchronously after the page mounts.
@@ -96,7 +49,7 @@ async function openCourseEditor(page: Page, course: QaCourse) {
     throw new Error('QA_SCORM_DRAFT_CATALOG_API_HTTP_' + draftResponse.status());
   }
   const responseType = (draftResponse.headers()['content-type'] ?? '').toLowerCase();
-  if (!/(?:^|[+\/])json(?:[;\s]|$)/.test(responseType)) {
+  if (!/(?:^|[+/])json(?:[;\s]|$)/.test(responseType)) {
     throw new Error('QA_SCORM_DRAFT_CATALOG_NON_JSON_200');
   }
   const draftPayload = await draftResponse.json().catch(() => null) as {
@@ -154,263 +107,80 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   await expect(page.getByText(course.zip_name, { exact: true })).toBeVisible();
 }
 
-async function submitCourse(page: Page) {
-  await page
-    .getByRole('button', { name: /Salvar alterações|Substituir conteúdo/i })
-    .click();
-}
-
-test('LMS SCORM staging: protocol pass stays uncertified, static reject and timeout stay blocked', async ({ page }) => {
-  test.setTimeout(240_000);
-
+// The current catalog deliberately disables the legacy submit while a SCORM
+// ZIP is selected. Candidate intake is a distinct staging-only F5 operation
+// requiring a fresh exact grant. This browser test proves the UI guard, NOT
+// a real ZIP upload, SCORM conformance, completion, qualification or PDF.
+test('LMS SCORM staging: candidate-first UI blocks legacy replacement for all synthetic fixtures', async ({ page }) => {
+  test.setTimeout(180_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
-  const mutations: Array<{ method: string; url: string }> = [];
-
+  const scormWrites: string[] = [];
   page.on('request', (request) => {
-    const method = request.method().toUpperCase();
-    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return;
-    mutations.push({ method, url: request.url() });
-  });
-
-  let successUpload: ApiEnvelope | null = null;
-  let successConformance: ApiEnvelope | null = null;
-  let successActivate: ApiEnvelope | null = null;
-
-  await page.route(
-    `**/api/lms/cursos/${state.courses.success.id}/scorm-upload**`,
-    (route) => delayedRealResponse(route, 1_200, (json) => { successUpload = json; }),
-  );
-  await page.route(
-    `**/api/lms/cursos/${state.courses.success.id}/scorm-package-versions/*/conformance`,
-    (route) => delayedRealResponse(route, 1_200, (json) => { successConformance = json; }),
-  );
-  await page.route(
-    `**/api/lms/cursos/${state.courses.success.id}/scorm-package-versions/*/activate`,
-    (route) => delayedRealResponse(route, 1_200, (json) => { successActivate = json; }),
-  );
-
-  await openCourseEditor(page, state.courses.success);
-  await submitCourse(page);
-
-  await expect(page.getByText('Enviando ZIP...', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('25%', { exact: true })).toBeVisible();
-  await expect(page.getByText('Executando validação do player...', { exact: true })).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByText('65%', { exact: true })).toBeVisible();
-  // The API may reject conformance before activation. Report its sanitized
-  // contract verdict instead of masking the cause behind a 30-second UI timeout.
-  await expect.poll(() => successConformance !== null, {
-    timeout: 35_000,
-    message: 'A API de conformidade não retornou resposta à auditoria SCORM',
-  }).toBe(true);
-  const conformanceVerdict = successConformance?.data;
-  const evidence = conformanceVerdict?.conformance?.tests?.find(
-    (item) => item.name === 'FUNCTIONAL_COMPLETION_EVIDENCE',
-  );
-  const safeDiagnostic = {
-    api_success: successConformance?.success ?? false,
-    publishable: conformanceVerdict?.publishable ?? false,
-    structural: conformanceVerdict?.structural?.status ?? null,
-    manifest: conformanceVerdict?.completionManifest?.status ?? null,
-    diagnostics: conformanceVerdict?.diagnostics?.status ?? null,
-    conformance: conformanceVerdict?.conformance?.status ?? null,
-    functional_evidence: evidence?.status ?? null,
-    functional_reason: evidence?.detail ?? null,
-    runtime_status: conformanceVerdict?.runtime?.status ?? null,
-    runtime_failure_stage: conformanceVerdict?.runtime?.failureStage ?? null,
-    runtime_failure_category: conformanceVerdict?.runtime?.failureCategory ?? null,
-    runtime_driver_reason: conformanceVerdict?.runtime?.functionalCompletionReason ?? null,
-    runtime_driver_completed: conformanceVerdict?.runtime?.functionalCompletionVerified ?? false,
-    initialized: conformanceVerdict?.runtime?.initializeObserved ?? false,
-    committed: conformanceVerdict?.runtime?.commitObserved ?? false,
-    finished: conformanceVerdict?.runtime?.finishObserved ?? false,
-    completion_reached: conformanceVerdict?.runtime?.completionReached ?? false,
-  };
-  // Protocol/interactive driver PASS does not cover two browsers, resume,
-  // rejected assessment, tenant/cycle isolation or persisted qualifications.
-  // The currently active version must remain unchanged. This QA is not a
-  // full functional certification and must never report the ZIP as activated.
-  expect(conformanceVerdict?.conformance?.status,
-    `SCORM_PROTOCOL_FAILURE:${JSON.stringify(safeDiagnostic)}`,
-  ).toBe('PASS');
-  expect(conformanceVerdict?.publishable).toBe(false);
-  expect(conformanceVerdict?.functionalCertification?.status).toBe('UNCERTIFIED');
-  await expect(page.getByText(/aguarda certificação funcional completa/i)).toBeVisible({
-    timeout: 20_000,
-  });
-  expect(successUpload?.success).toBe(true);
-  expect(successUpload?.data?.status).toBe('VALIDATED');
-  expect(successConformance?.success).toBe(true);
-  expect(successConformance?.data?.runtime?.status).toBe('PASS');
-  expect(successActivate).toBeNull();
-  expect(mutations.some((entry) =>
-    entry.url.includes(`/cursos/${state.courses.success.id}/scorm-package-versions/`) &&
-    entry.url.includes('/activate'),
-  )).toBe(false);
-
-  await page.unroute(`**/api/lms/cursos/${state.courses.success.id}/scorm-upload**`);
-  await page.unroute(
-    `**/api/lms/cursos/${state.courses.success.id}/scorm-package-versions/*/conformance`,
-  );
-  await page.unroute(
-    `**/api/lms/cursos/${state.courses.success.id}/scorm-package-versions/*/activate`,
-  );
-
-  let rejectedUpload: ApiEnvelope | null = null;
-  await page.route(
-    `**/api/lms/cursos/${state.courses.reject.id}/scorm-upload**`,
-    (route) => delayedRealResponse(route, 1_000, (json) => { rejectedUpload = json; }),
-  );
-
-  await openCourseEditor(page, state.courses.reject);
-  await submitCourse(page);
-
-  await expect(page.getByText('Enviando ZIP...', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('25%', { exact: true })).toBeVisible();
-  await expect(page.getByText(/rejeitado no Quality Gate estático/i)).toBeVisible({
-    timeout: 20_000,
-  });
-
-  expect(rejectedUpload?.success).toBe(true);
-  expect(rejectedUpload?.data?.status).toBe('REJECTED');
-  expect(
-    mutations.some(
-      (entry) =>
-        entry.url.includes(`/cursos/${state.courses.reject.id}/scorm-package-versions/`) &&
-        entry.url.includes('/conformance'),
-    ),
-  ).toBe(false);
-  expect(
-    mutations.some(
-      (entry) =>
-        entry.url.includes(`/cursos/${state.courses.reject.id}/scorm-package-versions/`) &&
-        entry.url.includes('/activate'),
-    ),
-  ).toBe(false);
-
-  await page.unroute(`**/api/lms/cursos/${state.courses.reject.id}/scorm-upload**`);
-
-  let timeoutUpload: ApiEnvelope | null = null;
-  let timeoutConformance: ApiEnvelope | null = null;
-  await page.route(
-    `**/api/lms/cursos/${state.courses.timeout.id}/scorm-upload**`,
-    (route) => delayedRealResponse(route, 700, (json) => { timeoutUpload = json; }),
-  );
-  await page.route(
-    `**/api/lms/cursos/${state.courses.timeout.id}/scorm-package-versions/*/conformance`,
-    (route) => delayedRealResponse(route, 700, (json) => { timeoutConformance = json; }),
-  );
-
-  await openCourseEditor(page, state.courses.timeout);
-  await submitCourse(page);
-
-  await expect(page.getByText('Enviando ZIP...', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('25%', { exact: true })).toBeVisible();
-  await expect(page.getByText('Executando validação do player...', { exact: true })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(page.getByText('65%', { exact: true })).toBeVisible();
-  await expect(page.getByText(/não passou na validação de conformidade do player/i)).toBeVisible({
-    timeout: 60_000,
-  });
-
-  expect(timeoutUpload?.success).toBe(true);
-  expect(timeoutUpload?.data?.status).toBe('VALIDATED');
-  expect(timeoutConformance?.success).toBe(true);
-  expect(timeoutConformance?.data?.publishable).toBe(false);
-  expect(timeoutConformance?.data?.runtime?.status).toBe('TIMEOUT');
-  expect(
-    mutations.some(
-      (entry) =>
-        entry.url.includes(`/cursos/${state.courses.timeout.id}/scorm-package-versions/`) &&
-        entry.url.includes('/activate'),
-    ),
-  ).toBe(false);
-
-  const mutationViolations = mutations.filter((entry) => {
-    try {
-      return new URL(entry.url).hostname !== STAGING_API_HOST;
-    } catch {
-      return true;
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
+    const path = new URL(request.url()).pathname;
+    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(path)) {
+      scormWrites.push(path);
     }
   });
-  expect(mutationViolations).toEqual([]);
 
-  const summary = {
+  for (const course of [state.courses.success, state.courses.reject, state.courses.timeout]) {
+    await openCourseEditor(page, course);
+    await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Carregar somente candidato inativo (QA)' })).toBeEnabled();
+    await expect(page.getByText(/grant F5 exato da edição/i)).toBeVisible();
+  }
+
+  expect(scormWrites, 'Legacy submit must never upload, conform or activate a selected ZIP').toEqual([]);
+  writeFileSync(SUMMARY_PATH, JSON.stringify({
     ok: true,
-    live_frontend_provenance: 'PASS',
-    success: {
-      real_zip_upload: true,
-      visible_progress: [25, 65],
-      runtime_conformance: 'PASS',
-      functional_certification: 'UNCERTIFIED',
-      activated: false,
-      previous_package_preserved: true,
-    },
-    rejection: {
-      real_zip_upload: true,
-      static_gate: 'REJECTED',
-      conformance_called: false,
-      activated: false,
-      visible_error: true,
-    },
-    timeout: {
-      real_zip_upload: true,
-      visible_progress: [25, 65],
-      runtime_conformance: 'TIMEOUT',
-      activated: false,
-      visible_error: true,
-    },
-    production_mutations: 0,
-  };
-  writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+    scope: 'CANDIDATE_FIRST_UI_GUARD_ONLY',
+    guardedCourses: 3,
+    legacySubmitBlocked: true,
+    f5CandidateButtonVisible: true,
+    realZipUpload: 'NOT_RUN_NO_EXACT_F5_GRANT',
+    runtimeConformance: 'NOT_RUN_NO_EXACT_F5_GRANT',
+    staticRejectAndTimeout: 'NOT_RUN_BROWSER',
+    functionalCertification: 'UNCERTIFIED',
+    certificatePdf: 'NOT_RUN',
+    candidateActivated: false,
+    scormWrites: 0,
+    productionMutations: 0,
+  }, null, 2) + '\n', { mode: 0o600 });
 });
 
-// The EXTERNAL resume ZIP has no independent F5 admin grant or signed
-// editorial review. The legacy Replace Content path MUST reject it before
-// /scorm-upload. Actual candidate intake and Chromium/WebKit preview are
-// separately governed by staging-scorm-f5-readiness.yml with an exact grant.
-test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before upload', async ({ page }) => {
+// The EXTERNAL resume ZIP has no F5 admin grant or signed editorial review.
+// It must not be routed through the disabled legacy replacement button.
+// This is a UI-only negative guard, not a backend rejection or QA preview.
+test('LMS SCORM resume: EXTERNAL unreviewed ZIP cannot use legacy submit', async ({ page }) => {
   test.setTimeout(90_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
-  const resume = state.courses.resume;
-  const mutations: string[] = [];
   const unexpectedUploads: string[] = [];
   page.on('request', request => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    const url = request.url();
-    mutations.push(url);
-    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(new URL(url).pathname)) {
-      unexpectedUploads.push(new URL(url).pathname);
+    const path = new URL(request.url()).pathname;
+    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(path)) {
+      unexpectedUploads.push(path);
     }
   });
 
-  await openCourseEditor(page, resume);
-  await submitCourse(page);
-  await expect(page.getByText(/A substituição foi bloqueada antes do upload/i))
-    .toBeVisible({ timeout: 25_000 });
-  expect(unexpectedUploads,
-    'Unreviewed EXTERNAL ZIP must not start upload, conformance or activation',
-  ).toEqual([]);
-  expect(mutations.every(url => {
-    try { return new URL(url).hostname === STAGING_API_HOST; }
-    catch { return false; }
-  })).toBe(true);
+  await openCourseEditor(page, state.courses.resume);
+  await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Carregar somente candidato inativo (QA)' })).toBeEnabled();
+  expect(unexpectedUploads).toEqual([]);
 
-  const summary = {
-    source: 'GOVERNED_STAGING_LMS_SCORM_EXTERNAL_REPLACEMENT_GUARD',
-    scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
-    exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-    rejectedBeforeUpload: true,
-    uploadRequests: unexpectedUploads.length,
-    previewRendered: [],
-    previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
-    active: false,
-    certified: false,
-    committedCmiProven: false,
-    productionMutations: 0,
-  };
   writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
-    JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+    JSON.stringify({
+      source: 'STAGING_CANDIDATE_FIRST_UI_GUARD',
+      scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
+      exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
+      legacySubmitBlocked: true,
+      candidateIntakeNotAttempted: true,
+      uploadRequests: 0,
+      previewRendered: [],
+      previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
+      active: false,
+      certified: false,
+      committedCmiProven: false,
+      productionMutations: 0,
+    }, null, 2) + '\n', { mode: 0o600 });
 });

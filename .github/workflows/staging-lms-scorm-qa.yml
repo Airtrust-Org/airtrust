@@ -139,7 +139,7 @@ jobs:
           NODE
 
   qa:
-    name: Real LMS SCORM Upload QA
+    name: Candidate-first SCORM UI Guard (not functional certification)
     needs: guard
     runs-on: ubuntu-latest
     environment: staging
@@ -195,7 +195,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Exercise governed SCORM upload, external replacement guard, rejection and timeout in staging UI
+      - name: Verify candidate-first UI guard without an unapproved F5 ZIP intake
         shell: bash
         env:
           QA_SCOPE: ${{ inputs.qa_scope }}
@@ -229,18 +229,25 @@ jobs:
           import fs from 'node:fs';
           const browser = JSON.parse(fs.readFileSync('qa-state/staging-lms-scorm/browser-summary.json', 'utf8'));
           const cleanup = JSON.parse(fs.readFileSync('qa-state/staging-lms-scorm/cleanup-summary.json', 'utf8'));
+          if (browser.scope !== 'CANDIDATE_FIRST_UI_GUARD_ONLY' ||
+              browser.legacySubmitBlocked !== true || browser.scormWrites !== 0 ||
+              browser.realZipUpload !== 'NOT_RUN_NO_EXACT_F5_GRANT' ||
+              browser.functionalCertification !== 'UNCERTIFIED') {
+            throw new Error('CANDIDATE_FIRST_UI_GUARD_SUMMARY_INVALID');
+          }
           const lines = [
-            '## LMS SCORM staging acceptance',
+            '## LMS SCORM staging candidate-first UI guard (NOT functional certification)',
             '',
             '- exact Worker/frontend release provenance: PASS',
-            `- real synthetic ZIP upload: ${browser.success?.real_zip_upload ? 'PASS' : 'FAIL'}`,
-            `- visible upload progress/status: ${Array.isArray(browser.success?.visible_progress) ? 'PASS' : 'FAIL'}`,
-            `- Browser Rendering protocol conformance: ${browser.success?.runtime_conformance || 'FAIL'}`,
-            `- Functional certification pending (no false PASS): ${browser.success?.functional_certification === 'UNCERTIFIED' && !browser.success?.activated ? 'PASS' : 'FAIL'}`,
-            `- static rejection path: ${browser.rejection?.static_gate || 'FAIL'}`,
-            `- runtime timeout path: ${browser.timeout?.runtime_conformance || 'FAIL'}`,
-            `- rejected/timeout package activation blocked: ${!browser.rejection?.activated && !browser.timeout?.activated ? 'PASS' : 'FAIL'}`,
-            `- cleanup through product API: ${cleanup.cleanup || 'FAIL'}`,
+            '- legacy SCORM submit with selected ZIP: BLOCKED (3 synthetic courses)',
+            '- dedicated staging F5 intake button: VISIBLE; not clicked without exact grant',
+            '- actual ZIP upload: NOT RUN (F5 authorization required)',
+            '- static reject and timeout browser paths: NOT RUN (legacy path retired)',
+            '- static rejection/timeout API logic: covered by serial unit tests, not this browser run',
+            '- Chromium/WebKit completion, qualification and PDF: NOT RUN',
+            '- functional certification: UNCERTIFIED',
+            '- activation: NOT ATTEMPTED',
+            `- synthetic fixture cleanup: ${cleanup.cleanup || 'FAIL'}`,
             '- production target/data used: no',
             '- credentials emitted: no',
           ];
@@ -262,7 +269,7 @@ jobs:
           retention-days: 30
 
   result:
-    name: Staging LMS SCORM QA Passed
+    name: Staging LMS SCORM UI Guard Passed
     needs: [guard, qa]
     if: always()
     runs-on: ubuntu-latest
