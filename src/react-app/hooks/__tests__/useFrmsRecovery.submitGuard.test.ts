@@ -6,6 +6,7 @@ import {
   submitPendingFrmsRecoveryActivity,
   type RecoveryContextData,
 } from '../useFrmsRecovery';
+import { resetTenantDataLayer } from '@/react-app/lib/tenant-data-layer';
 
 const { getMock, postMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
@@ -42,6 +43,33 @@ describe('FRMS final check-in guards on yesterday flight or activity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearPendingFrmsRecoveryActivity(YESTERDAY);
+  });
+
+  it('discards a staged declaration on tenant switch before another identity can submit it', async () => {
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeDefined();
+
+    resetTenantDataLayer({ reason: 'tenant-switch', tenantId: 999006, broadcast: false });
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeUndefined();
+
+    getMock.mockResolvedValue(loaded(serverContext()));
+    await expect(submitPendingFrmsRecoveryActivity(TODAY))
+      .rejects.toThrow(/informe como foi/i);
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it('clears pending activity on logout and cross-tab session invalidation', () => {
+    for (const reason of ['logout', 'cross-tab'] as const) {
+      stagePendingFrmsRecoveryActivity(YESTERDAY, {
+        reference_date: YESTERDAY,
+        activity_type: 'OFF_DUTY',
+      }, true);
+      resetTenantDataLayer({ reason, tenantId: null, broadcast: false });
+      expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeUndefined();
+    }
   });
 
   it('rejects check-in when the server confirms no flight and the user skipped the activity', async () => {
