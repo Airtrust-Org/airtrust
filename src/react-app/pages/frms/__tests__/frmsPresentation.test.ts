@@ -33,6 +33,9 @@ describe('FRMS presentation helpers', () => {
     expect(formatFrmsActivity('ATIVIDADE')).toBe('Atividade operacional');
     expect(formatRecoveryState('PARTIAL')).toBe('Estado calculado: parcial');
     expect(formatRecoveryState('FULL')).toBe('Estado calculado: completo');
+    expect(formatRecoveryState('LIMITED')).toBe('Estado calculado: limitado');
+    expect(formatRecoveryState('STRONG')).toBe('Estado calculado: forte');
+    expect(formatRecoveryState('CONFIRMED')).toBe('Estado calculado: evidência favorável');
     expect(formatRecoveryState('NONE')).toBe('Sem crédito calculado');
     expect(formatRecoveryState('UNKNOWN')).toBe('Estado não avaliado');
     expect(formatDataQuality('INCOMPLETE')).toBe('Incompleta');
