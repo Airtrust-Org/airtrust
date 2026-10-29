@@ -22,7 +22,7 @@ import router from '../../routes/frms-fadiga-checkin-legacy';
 
 const calls: Array<{ sql: string; bindings: unknown[] }> = [];
 
-function env(): AppEnv['Bindings'] {
+function env(extraRows: Record<string, unknown>[] = []): AppEnv['Bindings'] {
   const db = {
     prepare(sql: string) {
       let bindings: unknown[] = [];
@@ -55,6 +55,7 @@ function env(): AppEnv['Bindings'] {
                 jornada_id: null,
                 checkin_id: null,
               },
+              ...extraRows,
             ],
           };
         },
@@ -92,4 +93,44 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
     expect(query!.sql).toContain('LEFT JOIN frms_fadiga_checkin ch');
     expect(query!.bindings.slice(0, 5)).toEqual([6, '2026-09-27', '2026-09-27', '2026-09-27', 6]);
   });
+  it('não converte classificação ausente ou inválida em risco normal', async () => {
+    const base = {
+      cargo: 'Piloto',
+      quinzena_numero: 2,
+      jornada_id: 'j-synthetic',
+      checkin_id: 'c-synthetic',
+      checkin_apresentacao: '07:00',
+      wake_time: '05:00',
+      horas_sono: 7,
+    };
+    const response = await router.request(
+      'http://localhost/daily-fatigue?date=2026-09-27&scope=team',
+      { headers: { authorization: 'Bearer synthetic' } },
+      env([
+        { ...base, funcionario_id: 301, computed_risk_level: null },
+        { ...base, funcionario_id: 302, computed_risk_level: 'unexpected' },
+        { ...base, funcionario_id: 303, computed_risk_level: 'normal' },
+        { ...base, funcionario_id: 304, computed_risk_level: 'attention' },
+      ]),
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { data: { items: Array<Record<string, unknown>> } };
+    for (const id of [301, 302]) {
+      expect(payload.data.items.find((item) => item.funcionario_id === id)).toMatchObject({
+        status: 'incomplete_checkin',
+        status_label: 'Check-in incompleto',
+        calculation_available: false,
+        requires_operational_review: 1,
+        data_source: 'crew_reported',
+      });
+    }
+    expect(payload.data.items.find((item) => item.funcionario_id === 303)).toMatchObject({
+      status: 'normal', calculation_available: true, requires_operational_review: 0,
+    });
+    expect(payload.data.items.find((item) => item.funcionario_id === 304)).toMatchObject({
+      status: 'attention', calculation_available: true, requires_operational_review: 1,
+    });
+  });
+
 });
