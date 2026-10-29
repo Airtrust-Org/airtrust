@@ -1,10 +1,10 @@
 /**
  * Certification profile for FORMATIVE SCORM courses WITHOUT a final exam.
  *
- * Proportional to the risk: one real authenticated journey in governed staging
- * (not two), one real certificate PDF (not two), and an authenticated,
- * audited administrative approval bound to the exact ZIP, tenant and course
- * (instead of an outside Ed25519 pedagogical review).
+ * Two independent authenticated browser journeys (Chromium and WebKit), each
+ * with a distinct backend certificate PDF, are required even without an exam.
+ * An authenticated, audited administrative approval binds the exact ZIP to
+ * tenant/course; the ZIP cannot self-certify.
  *
  * Nothing here is derived from the ZIP's self-declared release fields. The
  * static contract only proves that the manifest cannot be mistaken for a scored
@@ -92,6 +92,10 @@ export function evaluateFormativeNoExamContract(manifest: Record<string, unknown
 
 // ── Signed evidence (produced only by the governed staging QA runner) ────────
 
+export type FormativeCertificateDocument = {
+  enrollmentId: number; cycleId: number; qualificationHistoryId: number;
+  documentId: string; sha256: string;
+};
 export type FormativeAttestationPayload = {
   kind: typeof FORMATIVE_ATTESTATION_KIND;
   profile: typeof FORMATIVE_PROFILE;
@@ -103,13 +107,13 @@ export type FormativeAttestationPayload = {
   requiredSlides: number;
   requiredActivities: number;
   driverSha256: string;
-  browserEvidenceSha256: string;
-  backendWitnessSha256: string;
-  certificateDocument: {
-    enrollmentId: number; cycleId: number; qualificationHistoryId: number;
-    documentId: string; sha256: string;
+  browserEvidenceSha256: { CHROMIUM: string; WEBKIT: string };
+  backendWitnessSha256: { CHROMIUM: string; WEBKIT: string };
+  certificateDocuments: {
+    CHROMIUM: FormativeCertificateDocument;
+    WEBKIT: FormativeCertificateDocument;
   };
-  run: ScormFunctionalBrowserRun;
+  runs: [ScormFunctionalBrowserRun, ScormFunctionalBrowserRun];
 };
 export type FormativeAttestation = { payload: FormativeAttestationPayload; signature: string };
 export type FormativeAttestationContext = {
@@ -134,17 +138,24 @@ export function serializeFormativeAttestation(p: FormativeAttestationPayload): s
     kind: p.kind, profile: p.profile, scope: p.scope,
     packageSha256: p.packageSha256, runtimeSha: p.runtimeSha, harnessSha: p.harnessSha,
     issuedAt: p.issuedAt, requiredSlides: p.requiredSlides, requiredActivities: p.requiredActivities,
-    driverSha256: p.driverSha256, browserEvidenceSha256: p.browserEvidenceSha256,
-    backendWitnessSha256: p.backendWitnessSha256,
-    certificateDocument: {
-      enrollmentId: p.certificateDocument.enrollmentId, cycleId: p.certificateDocument.cycleId,
-      qualificationHistoryId: p.certificateDocument.qualificationHistoryId,
-      documentId: p.certificateDocument.documentId, sha256: p.certificateDocument.sha256,
+    driverSha256: p.driverSha256,
+    browserEvidenceSha256: {
+      CHROMIUM: p.browserEvidenceSha256.CHROMIUM, WEBKIT: p.browserEvidenceSha256.WEBKIT,
     },
-    run: {
-      harness: p.run.harness, browser: p.run.browser, packageSha256: p.run.packageSha256,
-      cases: p.run.cases.map(item => ({ name: item.name, status: item.status })),
+    backendWitnessSha256: {
+      CHROMIUM: p.backendWitnessSha256.CHROMIUM, WEBKIT: p.backendWitnessSha256.WEBKIT,
     },
+    certificateDocuments: Object.fromEntries((['CHROMIUM', 'WEBKIT'] as const).map(browser => {
+      const d = p.certificateDocuments[browser];
+      return [browser, {
+        enrollmentId: d.enrollmentId, cycleId: d.cycleId,
+        qualificationHistoryId: d.qualificationHistoryId, documentId: d.documentId, sha256: d.sha256,
+      }];
+    })),
+    runs: p.runs.map(run => ({
+      harness: run.harness, browser: run.browser, packageSha256: run.packageSha256,
+      cases: run.cases.map(item => ({ name: item.name, status: item.status })),
+    })),
   });
 }
 
@@ -173,15 +184,23 @@ export async function verifyFormativeAttestation(
   const p = env.payload;
   if (!exactKeys(p, ['kind', 'profile', 'scope', 'packageSha256', 'runtimeSha', 'harnessSha', 'issuedAt',
     'requiredSlides', 'requiredActivities', 'driverSha256', 'browserEvidenceSha256',
-    'backendWitnessSha256', 'certificateDocument', 'run'])) return no('ATTESTATION_SHAPE_INVALID');
+    'backendWitnessSha256', 'certificateDocuments', 'runs'])) return no('ATTESTATION_SHAPE_INVALID');
   if (p.kind !== FORMATIVE_ATTESTATION_KIND || p.profile !== FORMATIVE_PROFILE ||
       p.scope !== 'GOVERNED_STAGING_SYNTHETIC') return no('ATTESTATION_PROFILE_INVALID');
   if (!SHA256.test(env.signature)) return no('ATTESTATION_SIGNATURE_INVALID');
   if (!SHA256.test(context.packageSha256) || p.packageSha256 !== context.packageSha256) return no('PACKAGE_SHA_MISMATCH');
   if (!COMMIT.test(context.runtimeSha) || p.runtimeSha !== context.runtimeSha) return no('RUNTIME_SHA_MISMATCH');
   if (!COMMIT.test(p.harnessSha)) return no('HARNESS_SHA_INVALID');
-  if (!SHA256.test(p.driverSha256) || !SHA256.test(p.browserEvidenceSha256) ||
-      !SHA256.test(p.backendWitnessSha256)) return no('EVIDENCE_DIGEST_INVALID');
+  if (!SHA256.test(p.driverSha256) ||
+      !exactKeys(p.browserEvidenceSha256, ['CHROMIUM', 'WEBKIT']) ||
+      !exactKeys(p.backendWitnessSha256, ['CHROMIUM', 'WEBKIT']) ||
+      !(['CHROMIUM', 'WEBKIT'] as const).every(browser =>
+        SHA256.test(p.browserEvidenceSha256[browser]) &&
+        SHA256.test(p.backendWitnessSha256[browser])) ||
+      p.browserEvidenceSha256.CHROMIUM === p.browserEvidenceSha256.WEBKIT ||
+      p.backendWitnessSha256.CHROMIUM === p.backendWitnessSha256.WEBKIT) {
+    return no('EVIDENCE_DIGEST_INVALID');
+  }
   if (!Number.isSafeInteger(p.requiredSlides) || p.requiredSlides < 1 ||
       p.requiredSlides !== context.requiredSlides ||
       !Number.isSafeInteger(p.requiredActivities) || p.requiredActivities < 1 ||
@@ -189,23 +208,40 @@ export async function verifyFormativeAttestation(
   if (typeof p.issuedAt !== 'string' || !ISO.test(p.issuedAt) || !Number.isFinite(Date.parse(p.issuedAt)) ||
       Date.parse(p.issuedAt) > now + 60_000) return no('ATTESTATION_TIME_INVALID');
   if (now - Date.parse(p.issuedAt) > MAX_AGE_MS) return no('ATTESTATION_EXPIRED');
-  const doc = p.certificateDocument;
-  if (!exactKeys(doc, ['enrollmentId', 'cycleId', 'qualificationHistoryId', 'documentId', 'sha256']) ||
-      !Number.isSafeInteger(doc.enrollmentId) || doc.enrollmentId <= 0 ||
-      !Number.isSafeInteger(doc.cycleId) || doc.cycleId <= 0 ||
-      !Number.isSafeInteger(doc.qualificationHistoryId) || doc.qualificationHistoryId <= 0 ||
-      typeof doc.documentId !== 'string' || !doc.documentId.trim() || doc.documentId.length > 128 ||
-      !SHA256.test(doc.sha256)) return no('CERTIFICATE_WITNESS_INVALID');
-  const run = p.run;
-  if (!exactKeys(run, ['harness', 'browser', 'packageSha256', 'cases']) ||
-      run.harness !== SCORM_FUNCTIONAL_HARNESS || run.packageSha256 !== context.packageSha256 ||
-      !Array.isArray(run.cases) ||
-      run.cases.some(item => !exactKeys(item, ['name', 'status']))) return no('JOURNEY_RUN_INVALID');
-  const names = run.cases.map(item => item.name as string);
-  if (names.length !== FORMATIVE_REQUIRED_CASES.length ||
-      FORMATIVE_REQUIRED_CASES.some(name => !names.includes(name))) return no('JOURNEY_CASES_INCOMPLETE');
-  const verdict = evaluateScormFunctionalCertification(context.packageSha256, [run], {
-    requiresAssessment: false, requiredBrowsers: ['CHROMIUM'],
+  if (!exactKeys(p.certificateDocuments, ['CHROMIUM', 'WEBKIT'])) {
+    return no('CERTIFICATE_WITNESS_INVALID');
+  }
+  for (const browser of ['CHROMIUM', 'WEBKIT'] as const) {
+    const doc = p.certificateDocuments[browser];
+    if (!exactKeys(doc, ['enrollmentId', 'cycleId', 'qualificationHistoryId', 'documentId', 'sha256']) ||
+        !Number.isSafeInteger(doc.enrollmentId) || doc.enrollmentId <= 0 ||
+        !Number.isSafeInteger(doc.cycleId) || doc.cycleId <= 0 ||
+        !Number.isSafeInteger(doc.qualificationHistoryId) || doc.qualificationHistoryId <= 0 ||
+        typeof doc.documentId !== 'string' || !doc.documentId.trim() || doc.documentId.length > 128 ||
+        !SHA256.test(doc.sha256)) return no('CERTIFICATE_WITNESS_INVALID');
+  }
+  const first = p.certificateDocuments.CHROMIUM;
+  const second = p.certificateDocuments.WEBKIT;
+  if (first.enrollmentId === second.enrollmentId || first.cycleId === second.cycleId ||
+      first.qualificationHistoryId === second.qualificationHistoryId ||
+      first.documentId === second.documentId || first.sha256 === second.sha256) {
+    return no('CERTIFICATE_WITNESS_NOT_INDEPENDENT');
+  }
+  if (!Array.isArray(p.runs) || p.runs.length !== 2 ||
+      p.runs[0]?.browser !== 'CHROMIUM' || p.runs[1]?.browser !== 'WEBKIT') {
+    return no('JOURNEY_RUN_INVALID');
+  }
+  for (const run of p.runs) {
+    if (!exactKeys(run, ['harness', 'browser', 'packageSha256', 'cases']) ||
+        run.harness !== SCORM_FUNCTIONAL_HARNESS || run.packageSha256 !== context.packageSha256 ||
+        !Array.isArray(run.cases) ||
+        run.cases.some(item => !exactKeys(item, ['name', 'status']))) return no('JOURNEY_RUN_INVALID');
+    const names = run.cases.map(item => item.name as string);
+    if (names.length !== FORMATIVE_REQUIRED_CASES.length ||
+        FORMATIVE_REQUIRED_CASES.some(name => !names.includes(name))) return no('JOURNEY_CASES_INCOMPLETE');
+  }
+  const verdict = evaluateScormFunctionalCertification(context.packageSha256, p.runs, {
+    requiresAssessment: false,
   });
   if (verdict.status !== 'CERTIFIED') return no('JOURNEY_NOT_CERTIFIED');
   try {

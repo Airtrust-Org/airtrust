@@ -15,8 +15,19 @@ afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, f
 const sha = (b: Uint8Array | Buffer) => createHash('sha256').update(b).digest('hex');
 const secret = 'test-only-secret-with-length-above-thirty-two-characters';
 const runtimeSha = 'b'.repeat(40), harnessSha = 'c'.repeat(40);
+type EvidenceRow = {
+  [key: string]: unknown;
+  cases: Array<{ name: string; status: string }>;
+  certificateDocument: { enrollmentId: number; [key: string]: unknown };
+  backendWitness: {
+    completionStatus: string;
+    replay: { qualificationHistoryId: number; [key: string]: unknown };
+    [key: string]: unknown;
+  };
+};
 
-function setup(mutate: (row: Record<string, any>) => void = () => {}) {
+function setup(mutate: (row: EvidenceRow) => void = () => {},
+  mutateWebkit: (row: EvidenceRow) => void = () => {}) {
   const dir = mkdtempSync(join(tmpdir(), 'formative-signer-'));
   dirs.push(dir);
   const zip = Buffer.from(zipSync({
@@ -40,7 +51,7 @@ function setup(mutate: (row: Record<string, any>) => void = () => {}) {
     requiredSlides: 6, requiredActivities: 2, stagingRuntimeSha: runtimeSha, zipPath: join(dir, 'p.zip'),
   };
   const doc = { enrollmentId: 11, cycleId: 22, qualificationHistoryId: 33, documentId: 'doc-1', sha256: sha(pdf) };
-  const row: Record<string, any> = {
+  const row: EvidenceRow = {
     source: 'GOVERNED_STAGING_AUTHENTICATED_QA_V1', scope: 'GOVERNED_STAGING_SYNTHETIC', browser: 'CHROMIUM',
     packageId: candidate.packageId, packageSha256, empresaId: 5, cursoId: 9, runtimeSha, harnessSha,
     driverSha256: sha(driver), syntheticEnrollment: true, persistedBackendEvidence: true,
@@ -60,13 +71,29 @@ function setup(mutate: (row: Record<string, any>) => void = () => {}) {
       validity: { status: 'VALID', validFrom: '2026-10-28T00:00:00.000Z', validUntil: null },
     },
   };
+  const webkitPdf = Buffer.concat([Buffer.from('%PDF-1.4\\nWEBKIT\\n'), Buffer.alloc(201, 0x20), Buffer.from('\\n%%EOF')]);
+  const webkitDoc = {
+    enrollmentId: 12, cycleId: 23, qualificationHistoryId: 34,
+    documentId: 'doc-2', sha256: sha(webkitPdf),
+  };
+  const webkitRow = structuredClone(row);
+  webkitRow.browser = 'WEBKIT';
+  webkitRow.certificateDocument = webkitDoc;
+  Object.assign(webkitRow.backendWitness, {
+    enrollmentId: 12, cycleId: 23, qualificationHistoryId: 34, documentId: 'doc-2',
+  });
+  webkitRow.backendWitness.replay.qualificationHistoryId = 34;
   mutate(row);
+  mutateWebkit(webkitRow);
   writeFileSync(candidate.zipPath, zip);
   writeFileSync(join(dir, 'driver.json'), driver);
   writeFileSync(join(dir, 'chromium.json'), JSON.stringify(row));
-  writeFileSync(join(dir, 'cert.pdf'), pdf);
+  writeFileSync(join(dir, 'webkit.json'), JSON.stringify(webkitRow));
+  writeFileSync(join(dir, 'chromium.pdf'), pdf);
+  writeFileSync(join(dir, 'webkit.pdf'), webkitPdf);
   const sign = () => signFormativeScormEvidence({
-    candidate, chromiumFile: join(dir, 'chromium.json'), certificatePdfFile: join(dir, 'cert.pdf'),
+    candidate, chromiumFile: join(dir, 'chromium.json'), webkitFile: join(dir, 'webkit.json'),
+    certificatePdfFiles: { CHROMIUM: join(dir, 'chromium.pdf'), WEBKIT: join(dir, 'webkit.pdf') },
     driverFile: join(dir, 'driver.json'), secret, runtimeSha, harnessSha,
   });
   return { sign, packageSha256 };
@@ -101,13 +128,32 @@ describe('formative signer ⇄ Worker verifier', () => {
   });
 
   it.each([
-    ['a failed case', (r: Record<string, any>) => { r.cases[3].status = 'FAIL'; }, 'CASES_INCOMPLETE'],
-    ['a missing backend readback', (r: Record<string, any>) => { delete r.backendWitness; }, 'BACKEND_READBACK_MISSING'],
-    ['no cross-tenant denial', (r: Record<string, any>) => { r.verifiedCrossTenantDenial = false; }, 'E2E_INCOMPLETE'],
-    ['a different driver', (r: Record<string, any>) => { r.driverSha256 = '9'.repeat(64); }, 'UNTRUSTED_BROWSER_CHROMIUM'],
-    ['runtime drift', (r: Record<string, any>) => { r.runtimeSha = 'a'.repeat(40); }, 'UNTRUSTED_BROWSER_CHROMIUM'],
-    ['a certificate that is not downloadable', (r: Record<string, any>) => { r.certificateDownloadHttpStatus = 404; }, 'CERTIFICATE_BACKEND_WITNESS_MISSING'],
+    ['a failed case', (r: EvidenceRow) => { r.cases[3].status = 'FAIL'; }, 'CASES_INCOMPLETE_CHROMIUM'],
+    ['a missing backend readback', (r: EvidenceRow) => { Reflect.deleteProperty(r, 'backendWitness'); }, 'BACKEND_READBACK_MISSING'],
+    ['no cross-tenant denial', (r: EvidenceRow) => { r.verifiedCrossTenantDenial = false; }, 'E2E_INCOMPLETE_CHROMIUM'],
+    ['a different driver', (r: EvidenceRow) => { r.driverSha256 = '9'.repeat(64); }, 'UNTRUSTED_BROWSER_CHROMIUM'],
+    ['runtime drift', (r: EvidenceRow) => { r.runtimeSha = 'a'.repeat(40); }, 'UNTRUSTED_BROWSER_CHROMIUM'],
+    ['a certificate that is not downloadable', (r: EvidenceRow) => { r.certificateDownloadHttpStatus = 404; }, 'CERTIFICATE_BACKEND_WITNESS_MISSING_CHROMIUM'],
   ])('refuses to sign %s', (_name, mutate, reason) => {
     expect(() => setup(mutate).sign()).toThrow(reason as string);
+  });
+
+  it('requires a distinct WebKit browser run with its own persisted certificate', () => {
+    expect(() => setup(() => {}, r => { r.cases[1].status = 'INCONCLUSIVE'; }).sign())
+      .toThrow('CASES_INCOMPLETE_WEBKIT');
+    expect(() => setup(() => {}, r => { r.backendWitness.completionStatus = 'EM_ANDAMENTO'; }).sign())
+      .toThrow();
+    expect(() => setup(() => {}, r => { r.certificateDocument.enrollmentId = 11; }).sign())
+      .toThrow();
+  });
+
+  it('refuses a signed envelope missing WebKit even with a valid HMAC', async () => {
+    const { sign, packageSha256 } = setup();
+    const envelope = sign();
+    const payload = { ...envelope.payload, runs: [envelope.payload.runs[0]] };
+    const signed = { payload, signature: createHash('sha256').update('not-a-real-hmac').digest('hex') };
+    expect(await verifyFormativeAttestation(signed, {
+      packageSha256, runtimeSha, requiredSlides: 6, requiredActivities: 2,
+    }, secret)).toMatchObject({ ok: false, reason: 'JOURNEY_RUN_INVALID' });
   });
 });

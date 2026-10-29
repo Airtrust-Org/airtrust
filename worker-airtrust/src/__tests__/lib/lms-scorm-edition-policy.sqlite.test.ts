@@ -92,11 +92,19 @@ function attestation(sha = FORM_SHA, overrides: Partial<FormativeAttestationPayl
     kind: FORMATIVE_ATTESTATION_KIND, profile: FORMATIVE_PROFILE, scope: 'GOVERNED_STAGING_SYNTHETIC',
     packageSha256: sha, runtimeSha, harnessSha: 'c'.repeat(40),
     issuedAt: new Date().toISOString(), requiredSlides: 101, requiredActivities: 14,
-    driverSha256: '5'.repeat(64), browserEvidenceSha256: '1'.repeat(64), backendWitnessSha256: '2'.repeat(64),
-    certificateDocument: { enrollmentId: 1001, cycleId: 2001, qualificationHistoryId: 3001,
-      documentId: 'qa-doc-1', sha256: '3'.repeat(64) },
-    run: { harness: SCORM_FUNCTIONAL_HARNESS, browser: 'CHROMIUM', packageSha256: sha,
-      cases: FORMATIVE_REQUIRED_CASES.map(name => ({ name, status: 'PASS' as const })) },
+    driverSha256: '5'.repeat(64),
+    browserEvidenceSha256: { CHROMIUM: '1'.repeat(64), WEBKIT: '6'.repeat(64) },
+    backendWitnessSha256: { CHROMIUM: '2'.repeat(64), WEBKIT: '7'.repeat(64) },
+    certificateDocuments: {
+      CHROMIUM: { enrollmentId: 1001, cycleId: 2001, qualificationHistoryId: 3001,
+        documentId: 'qa-doc-1', sha256: '3'.repeat(64) },
+      WEBKIT: { enrollmentId: 1002, cycleId: 2002, qualificationHistoryId: 3002,
+        documentId: 'qa-doc-2', sha256: '4'.repeat(64) },
+    },
+    runs: (['CHROMIUM', 'WEBKIT'] as const).map(browser => ({
+      harness: SCORM_FUNCTIONAL_HARNESS, browser, packageSha256: sha,
+      cases: FORMATIVE_REQUIRED_CASES.map(name => ({ name, status: 'PASS' as const })),
+    })) as FormativeAttestationPayload['runs'],
     ...overrides,
   };
   return { payload, signature: createHmac('sha256', key).update(serializeFormativeAttestation(payload)).digest('hex') };
@@ -233,8 +241,12 @@ describe('formative evidence, administrative approval and activation', () => {
       attestation('a'.repeat(64)),
       attestation(FORM_SHA, { runtimeSha: 'd'.repeat(40) }),
       attestation(FORM_SHA, {}, 'another-secret-with-length-above-thirty-two-chars'),
-      attestation(FORM_SHA, { run: { harness: SCORM_FUNCTIONAL_HARNESS, browser: 'CHROMIUM', packageSha256: FORM_SHA,
-        cases: FORMATIVE_REQUIRED_CASES.map((name, i) => ({ name, status: i === 4 ? 'FAIL' as const : 'PASS' as const })) } }),
+      attestation(FORM_SHA, { runs: [
+        { harness: SCORM_FUNCTIONAL_HARNESS, browser: 'CHROMIUM', packageSha256: FORM_SHA,
+          cases: FORMATIVE_REQUIRED_CASES.map((name, i) => ({ name, status: i === 4 ? 'FAIL' as const : 'PASS' as const })) },
+        { harness: SCORM_FUNCTIONAL_HARNESS, browser: 'WEBKIT', packageSha256: FORM_SHA,
+          cases: FORMATIVE_REQUIRED_CASES.map(name => ({ name, status: 'PASS' as const })) },
+      ] }),
     ];
     for (const bad of attempts) {
       await expect(importFormativeAttestation({ ...base(db), packageId: FORM_ID, attestation: bad }))
