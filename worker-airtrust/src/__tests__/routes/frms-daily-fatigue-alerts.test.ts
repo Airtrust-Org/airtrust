@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { AppEnv, Env } from '../../types';
 import { createFrmsFadigaCheckinRouter } from '../../routes/frms-fadiga-checkin';
@@ -104,6 +104,25 @@ function createApp() {
 }
 
 describe('GET /api/frms/daily-fatigue/alerts', () => {
+  it('defaults to the Brazilian operational day when UTC has already rolled over', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-30T00:30:00Z')); // 21:30 on 29 Oct in Brasília.
+      const response = await createApp().fetch(
+        new Request('http://localhost/api/frms/daily-fatigue/alerts', {
+          headers: { 'x-role': 'ADMINISTRADOR' },
+        }),
+        {} as Env,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as any;
+      expect(body.data.date).toBe('2026-10-29');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('deriva alertas de equipe do snapshot diário sem depender de frms_alerta', async () => {
     const response = await createApp().fetch(
       new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-01', {
