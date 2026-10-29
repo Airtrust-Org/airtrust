@@ -405,7 +405,7 @@ function buildModifiers(input: {
   if (input.totalRecoveryCreditPoints > 0) {
     atenuadores.push({
       codigo: 'CREDITO_RECUPERACAO_REAL',
-      descricao: `${round1(input.totalRecoveryCreditPoints)} ponto(s) de recuperação real no período, derivados de standby/repouso absoluto.`,
+      descricao: `${round1(input.totalRecoveryCreditPoints)} ponto(s) de crédito calculado a partir de oportunidade de repouso/standby registrada; não comprova sono efetivo nem recuperação fisiológica.`,
       impacto_score: -round1(input.totalRecoveryCreditPoints),
     });
   }
