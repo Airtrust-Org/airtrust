@@ -114,6 +114,9 @@ jobs:
           node --test scripts/__tests__/staging-simulator-matrix-baseline-audit.test.mjs
           node --test scripts/__tests__/staging-simulator-planning-readonly-preflight.test.mjs
 
+      - name: FRMS daily team roster SQLite tenant and check-in visibility regression
+        run: node --test scripts/__tests__/frms-daily-team-roster-sqlite.test.mjs
+
       - name: validate staging FRMS schema doctor (read-only contract)
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance

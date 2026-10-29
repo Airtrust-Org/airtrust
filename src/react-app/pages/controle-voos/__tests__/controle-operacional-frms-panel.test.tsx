@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import ControleOperacionalFrmsPanel from '../components/ControleOperacionalFrmsPanel';
 import { apiClient } from '@/react-app/services/apiClient';
 import type { CvFrmsOperacionalPainel } from '@/react-app/hooks/useControleVoos';
+import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
 
 // Controle Operacional FRMS / Gate de Despacho V1 — painel compacto da
 // Coordenacao. Reusa exatamente a resposta ja sanitizada do backend
@@ -39,7 +40,7 @@ afterEach(() => {
 
 function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperacionalPainel {
   return {
-    data: '2026-08-24',
+    data: frmsBrazilOperationalTodayIso(),
     resumo: {
       voos_nao_liberados: 1,
       tripulantes_checkin_pendente: 1,

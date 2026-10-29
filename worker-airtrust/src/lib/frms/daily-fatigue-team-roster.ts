@@ -44,7 +44,9 @@ export async function loadDailyFatigueTeamRoster(params: {
           ch.computed_risk_level,
           ch.requires_operational_review
        FROM funcionarios f
-       JOIN current_fortnight cf
+       -- Preserve assigned-quinzena team rows, but never hide a real daily check-in
+       -- or journey just because the employee's fortnight assignment is missing.
+       LEFT JOIN current_fortnight cf
          ON (
            (cf.numero = 1 AND LOWER(TRIM(COALESCE(f.quinzena, ''))) IN
              ('primeira','1','1q','q1','1ª','1a','primeira quinzena'))
@@ -54,6 +56,7 @@ export async function loadDailyFatigueTeamRoster(params: {
          )
        LEFT JOIN frms_jornada fj
          ON fj.tripulante_id = f.id
+        AND fj.empresa_id = f.empresa_id
         AND fj.data = ?
         AND fj.deleted_at IS NULL
         AND fj.status IN ('ES','TS','TV','EX','RE','SA')
@@ -68,6 +71,7 @@ export async function loadDailyFatigueTeamRoster(params: {
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
          AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
          AND ${params.sectorScope.clause}
+         AND (cf.numero IS NOT NULL OR fj.id IS NOT NULL OR ch.id IS NOT NULL)
        ORDER BY
          CASE
            WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
