@@ -799,7 +799,9 @@ export function validateCvFrmsOperacionalPainel(
           !validFatigue.has(member.fadiga_acumulada)) return invalid();
     }
   }
-  if (counts.voos_nao_liberados + counts.voos_requerem_revisao + counts.voos_liberaveis !== row.voos.length) {
+  if (counts.voos_nao_liberados !== row.voos.filter(f => f.frms_status === 'NAO_LIBERADO').length ||
+      counts.voos_requerem_revisao !== row.voos.filter(f => f.frms_status === 'ATENCAO_COORDENACAO').length ||
+      counts.voos_liberaveis !== row.voos.filter(f => f.frms_status === 'LIBERAVEL').length) {
     return invalid();
   }
   return row as CvFrmsOperacionalPainel;
