@@ -195,7 +195,7 @@ describe('atomic activation with edition-pinned assessment policy', () => {
   it('rejects a scored preflight racing with a formative activation without changing policy or history', async () => {
     const db = fixture();
     const scoredId = '00000000-0000-4000-8000-00000000000e';
-    const scoredSha = 'e'.repeat(64);
+    const scoredSha = 'd'.repeat(64);
     const scoredJson = '{"scoredCandidate":true}';
     db.database.prepare(`INSERT INTO lms_scorm_package_versions
       (id,empresa_id,curso_id,package_version,package_sha256,zip_size_bytes,r2_prefix,

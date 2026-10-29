@@ -82,7 +82,7 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
         WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.package_sha256=?
           AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)
       AND ${candidateStillValid}`)
-      .bind(empresaId, cursoId, ...candidateArgs, ...candidateArgs),
+      .bind(empresaId, cursoId, ...candidateArgs.slice(0, 6), ...candidateArgs),
     db.prepare(`UPDATE lms_scorm_package_versions
       SET status='ACTIVE', activated_at=datetime('now'), activated_by=?,
           assessment_policy=COALESCE(?,assessment_policy)
