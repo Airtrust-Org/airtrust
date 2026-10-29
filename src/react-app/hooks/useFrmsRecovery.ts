@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
+import { registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
 
 export type RecoveryActivityType =
   | 'OFF_DUTY'
@@ -72,6 +73,11 @@ type PendingRecoveryActivity = {
 };
 
 const pendingRecoveryActivities = new Map<string, PendingRecoveryActivity>();
+
+// Unsaved declarations belong to the active session/tenant, not just the date.
+// Logout, tenant switch and cross-tab invalidation must discard them before
+// another identity can submit a previous user's draft as its own activity.
+registerTenantCacheReset('frms-pending-recovery-activity', () => pendingRecoveryActivities.clear());
 
 export const RECOVERY_ACTIVITY_REQUIRED_MESSAGE =
   'Informe como foi sua condição operacional ontem antes de concluir o check-in.';
