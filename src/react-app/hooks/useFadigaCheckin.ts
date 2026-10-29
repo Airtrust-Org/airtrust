@@ -182,14 +182,33 @@ export function normalizeFadigaPainelPayload(
     throw new Error('Formato inesperado no painel de fadiga da equipe.');
   }
 
-  return items.map<FadigaPainelEquipeItem>((item) => ({
+  // The team endpoint must supply an explicit operational classification and
+  // provenance for every row. Missing fields must not become green/normal or
+  // "not applicable" through a frontend default.
+  const validStatuses = new Set<FadigaPainelEquipeItem['status']>([
+    'normal', 'attention', 'critical', 'unfit_for_duty',
+    'not_submitted', 'incomplete_checkin', 'no_duty',
+  ]);
+  const validSources = new Set<FadigaPainelEquipeItem['data_source']>([
+    'crew_reported', 'missing_checkin', 'default_estimate', 'not_applicable',
+  ]);
+  return items.map<FadigaPainelEquipeItem>((item) => {
+    const status = item.status as FadigaPainelEquipeItem['status'];
+    const source = item.data_source as FadigaPainelEquipeItem['data_source'];
+    if (!validStatuses.has(status) || !validSources.has(source)) {
+      throw new Error('FRMS_TEAM_CLASSIFICATION_OR_PROVENANCE_MISSING');
+    }
+    // The Worker supplies this flag. Older payloads may omit it; in that case,
+    // derive a conservative review flag from the explicit risk classification.
+    const requiresReview = ['not_submitted', 'incomplete_checkin', 'attention', 'critical', 'unfit_for_duty'].includes(status);
+    return {
       id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || requestedDate}`),
       funcionario_id: Number(item.funcionario_id || 0),
       funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
       cargo: item.cargo == null ? null : String(item.cargo),
       data: String(item.date || requestedDate || ''),
-      status: String(item.status || 'normal') as FadigaPainelEquipeItem['status'],
-      data_source: String(item.data_source || 'not_applicable') as FadigaPainelEquipeItem['data_source'],
+      status,
+      data_source: source,
       kss_score: item.kss_score == null ? null : Number(item.kss_score),
       score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
       nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
@@ -198,8 +217,11 @@ export function normalizeFadigaPainelPayload(
       horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
       wake_time: item.wake_time == null ? null : String(item.wake_time),
       requires_operational_review:
-        item.requires_operational_review == null ? 0 : Number(item.requires_operational_review),
-    }));
+        item.requires_operational_review == null ? (requiresReview ? 1 : 0) :
+        (item.requires_operational_review === 1 || item.requires_operational_review === '1' ? 1 :
+          item.requires_operational_review === 0 || item.requires_operational_review === '0' ? 0 : 1),
+    };
+  });
 }
 
 export function mergeFadigaPainelHistory(
