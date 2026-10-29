@@ -80,6 +80,7 @@ function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperaci
 describe('ControleOperacionalFrmsPanel', () => {
   it('distingue sinal de check-in recebido da decisão regulatória ainda não avaliada', async () => {
     const response = painel();
+    response.resumo.tripulantes_checkin_pendente = 0;
     response.voos[0].tripulacao[0] = {
       ...response.voos[0].tripulacao[0],
       checkin_status: 'RECEBIDO',
@@ -147,6 +148,7 @@ describe('ControleOperacionalFrmsPanel', () => {
       { ...crew, funcionario_id: 1003, checkin_status: 'NAO_APLICAVEL' },
       { ...crew, funcionario_id: 1004, checkin_status: 'INDISPONIVEL' },
     ];
+    response.resumo.tripulantes_checkin_pendente = 2;
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(response);
       throw new Error(`unexpected url ${url}`);
@@ -227,6 +229,27 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getAllByText('SEM ALERTAS').length).toBeGreaterThan(0);
     expect(screen.queryByText('LIBERADO')).not.toBeInTheDocument();
     expect(screen.getByText('Recebido')).toBeInTheDocument();
+  });
+
+  it('oculta contadores antigos após erro de atualização da fila FRMS', async () => {
+    const response = painel();
+    response.resumo = {
+      voos_nao_liberados: 0,
+      tripulantes_checkin_pendente: 0,
+      voos_requerem_revisao: 0,
+      voos_liberaveis: 1,
+    };
+    response.voos[0].frms_status = 'LIBERAVEL';
+    response.voos[0].tripulacao[0].frms_status = 'LIBERAVEL';
+    response.voos[0].tripulacao[0].checkin_status = 'RECEBIDO';
+    getMock.mockResolvedValueOnce(apiOk(response)).mockRejectedValueOnce(new Error('Falha de rede QA'));
+
+    renderWithClient(<ControleOperacionalFrmsPanel />);
+    expect(await screen.findByText('Sem alertas FRMS')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar informações FRMS' }));
+    expect(await screen.findByText(/Erro ao carregar o painel operacional/)).toBeInTheDocument();
+    expect(screen.queryByText('Sem alertas FRMS')).not.toBeInTheDocument();
+    expect(screen.queryByText('Consulta atualizada às', { exact: false })).not.toBeInTheDocument();
   });
 
   it('mostra estado vazio quando nao ha voos programados na data', async () => {
