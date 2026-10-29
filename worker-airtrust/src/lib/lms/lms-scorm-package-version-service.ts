@@ -533,6 +533,8 @@ export async function activateScormPackageVersion(params: {
     originalFilename, actorId: params.userId,
     auditId: crypto.randomUUID(),
     validationJson: candidate.validation_result_json,
+    observed: { activePackageId: preflight.active?.packageId ?? null,
+      coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE' },
     policy: preflight.incomingPolicy ? { incoming: preflight.incomingPolicy } : undefined,
   });
   if (!activated) {

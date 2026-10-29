@@ -131,6 +131,7 @@ describe('atomic activation with edition-pinned assessment policy', () => {
     db: db.asD1(), empresaId: 6, cursoId: 26, packageId: FORM_ID, packageSha256: FORM_SHA,
     prefix: prefix(FORM_ID), launchFile: 'index.html', originalFilename: 'mgm.zip', actorId: 77,
     auditId: 'audit-1', validationJson: json,
+    observed: { activePackageId: SCORED_ID, coursePolicy: 'SCORED' as const },
     policy: { incoming: 'FORMATIVE' as const },
   });
 
@@ -166,7 +167,9 @@ describe('atomic activation with edition-pinned assessment policy', () => {
       db: db.asD1(), empresaId: 6, cursoId: 26, packageId: nextId,
       packageSha256: nextSha, prefix: prefix(nextId), launchFile: 'index.html',
       originalFilename: 'scored.zip', actorId: 77, auditId: 'scored-audit',
-      validationJson: nextJson, policy: { incoming: 'SCORED' },
+      validationJson: nextJson,
+      observed: { activePackageId: SCORED_ID, coursePolicy: 'FORMATIVE' },
+      policy: { incoming: 'SCORED' },
     })).toBe(true);
     expect(row<{ p: string }>(db, 'SELECT assessment_policy p FROM lms_scorm_package_versions WHERE id=?', nextId).p)
       .toBe('SCORED');
@@ -187,6 +190,48 @@ describe('atomic activation with edition-pinned assessment policy', () => {
     expect(cyclePolicy(db, 200)).toBeNull();
     expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', nextId).s)
       .toBe('SUPERSEDED');
+  });
+
+  it('rejects a scored preflight racing with a formative activation without changing policy or history', async () => {
+    const db = fixture();
+    const scoredId = '00000000-0000-4000-8000-00000000000e';
+    const scoredSha = 'e'.repeat(64);
+    const scoredJson = '{"scoredCandidate":true}';
+    db.database.prepare(`INSERT INTO lms_scorm_package_versions
+      (id,empresa_id,curso_id,package_version,package_sha256,zip_size_bytes,r2_prefix,
+       launch_file,scorm_versao,uploaded_at,status,validation_result_json)
+      VALUES (?,?,26,'v4',?,1,?,'index.html','1.2','2026-10-29','VALIDATED',?)`)
+      .run(scoredId, 6, scoredSha, prefix(scoredId), scoredJson);
+    // Both HTTP requests observed the original SCORED edition before either batch.
+    const staleScored = {
+      db: db.asD1(), empresaId: 6, cursoId: 26, packageId: scoredId,
+      packageSha256: scoredSha, prefix: prefix(scoredId), launchFile: 'index.html',
+      originalFilename: 'scored.zip', actorId: 77, auditId: 'stale-scored',
+      validationJson: scoredJson,
+      observed: { activePackageId: SCORED_ID, coursePolicy: 'SCORED' as const },
+    };
+    expect(await commitCertifiedScormActivation(activation(db, JSON.stringify(formativeQuality)))).toBe(true);
+    expect(await commitCertifiedScormActivation(staleScored)).toBe(false);
+    expect(row<{ s: string }>(db, `SELECT scorm_assessment_policy s FROM lms_cursos WHERE empresa_id=6 AND id=26`).s)
+      .toBe('FORMATIVE');
+    expect(row<{ s: string }>(db, `SELECT status s FROM lms_scorm_package_versions WHERE id=?`, FORM_ID).s)
+      .toBe('ACTIVE');
+    expect(row<{ s: string }>(db, `SELECT status s FROM lms_scorm_package_versions WHERE id=?`, scoredId).s)
+      .toBe('VALIDATED');
+    expect(cyclePolicy(db, 100)).toBe('SCORED');
+    expect(row<{ n: number }>(db, `SELECT COUNT(*) n FROM lms_scorm_package_audit_log WHERE id='stale-scored'`).n)
+      .toBe(0);
+    // A fresh preflight observes FORMATIVE and must explicitly restore SCORED.
+    expect(await commitCertifiedScormActivation({
+      ...staleScored, auditId: 'fresh-scored',
+      observed: { activePackageId: FORM_ID, coursePolicy: 'FORMATIVE' },
+      policy: { incoming: 'SCORED' },
+    })).toBe(true);
+    expect(row<{ s: string }>(db, `SELECT scorm_assessment_policy s FROM lms_cursos WHERE empresa_id=6 AND id=26`).s)
+      .toBe('SCORED');
+    expect(row<{ s: string }>(db, `SELECT assessment_policy s FROM lms_scorm_package_versions WHERE id=?`, scoredId).s)
+      .toBe('SCORED');
+    expect(cyclePolicy(db, 100)).toBe('SCORED');
   });
 
   it('a stale or tampered validation JSON changes nothing — not even the cycle freeze', async () => {

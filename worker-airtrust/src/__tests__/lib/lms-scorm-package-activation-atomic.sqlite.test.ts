@@ -56,6 +56,12 @@ function candidate(db: SqliteD1Database, id = 'b') {
     db: db.asD1(), empresaId: 6, cursoId: 41, packageId: id,
     packageSha256: sha(id), prefix: prefix(id), launchFile: 'index.html',
     originalFilename: `${id}.zip`, actorId: 10, auditId: `audit-${id}`, validationJson: json,
+    observed: {
+      activePackageId: (db.database.prepare(`SELECT id FROM lms_scorm_package_versions
+        WHERE empresa_id=6 AND curso_id=41 AND status='ACTIVE'`).get() as {id:string}|undefined)?.id ?? null,
+      coursePolicy: (db.database.prepare(`SELECT scorm_assessment_policy AS policy FROM lms_cursos
+        WHERE empresa_id=6 AND id=41`).get() as {policy:'SCORED'|'FORMATIVE'}).policy,
+    },
   };
 }
 function states(db: SqliteD1Database) {
@@ -124,7 +130,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
   it('keeps exactly the last successfully activated candidate when two compete', async () => {
     const db = fixture(), b = candidate(db,'b'), c = candidate(db,'c');
     expect(await commitCertifiedScormActivation(b)).toBe(true);
-    expect(await commitCertifiedScormActivation(c)).toBe(true);
+    expect(await commitCertifiedScormActivation(c)).toBe(false); // stale preflight
+    expect(await commitCertifiedScormActivation({...candidate(db,'c'),auditId:'audit-c-fresh'})).toBe(true);
     expect(states(db)).toEqual([
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'SUPERSEDED'}, {id:'c',status:'ACTIVE'},
     ]);

@@ -14,6 +14,8 @@ export type CertifiedScormActivation = Readonly<{
   actorId: number | null;
   auditId: string;
   validationJson: string | null;
+  /** Snapshot observed during the server-side preflight; CAS-checked inside D1. */
+  observed: Readonly<{ activePackageId: string | null; coursePolicy: 'SCORED' | 'FORMATIVE' }>;
   /**
    * Edition-pinned assessment policy transition. Absent = legacy activation:
    * the course-level policy and every cycle are left exactly as they were.
@@ -28,14 +30,21 @@ export type CertifiedScormActivation = Readonly<{
 
 export async function commitCertifiedScormActivation(input: CertifiedScormActivation): Promise<boolean> {
   const { db, empresaId, cursoId, packageId, packageSha256, prefix,
-    launchFile, originalFilename, actorId, auditId, validationJson, policy } = input;
+    launchFile, originalFilename, actorId, auditId, validationJson, observed, policy } = input;
   if (!validationJson) return false;
   // The candidate must still be the exact VALIDATED, attested bytes for any
   // pre-statement to run; otherwise a stale request must change nothing.
   const candidateStillValid = `EXISTS(SELECT 1 FROM lms_scorm_package_versions v
     WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.package_sha256=?
-      AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)`;
-  const candidateArgs = [packageId, empresaId, cursoId, packageSha256, prefix, validationJson];
+      AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)
+    AND EXISTS(SELECT 1 FROM lms_cursos c
+      WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL
+        AND c.scorm_assessment_policy=?
+        AND (SELECT a.id FROM lms_scorm_package_versions a
+          WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id
+            AND a.status='ACTIVE' LIMIT 1) IS ?)`;
+  const candidateArgs = [packageId, empresaId, cursoId, packageSha256, prefix,
+    validationJson, cursoId, empresaId, observed.coursePolicy, observed.activePackageId];
   const currentPolicy = `(SELECT c.scorm_assessment_policy FROM lms_cursos c
     WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL)`;
   // The recoverable predecessor is whatever is ACTIVE inside this very
@@ -45,8 +54,10 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
     SET previous_active_package_id=(SELECT a.id FROM lms_scorm_package_versions a
       WHERE a.empresa_id=? AND a.curso_id=? AND a.status='ACTIVE')
     WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
-      AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?`)
-    .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson);
+      AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?
+      AND ${candidateStillValid}`)
+    .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256,
+      prefix, validationJson, ...candidateArgs);
   const pre = policy ? [
     db.prepare(`UPDATE lms_scorm_package_versions SET assessment_policy=${currentPolicy}
       WHERE empresa_id=? AND curso_id=? AND status='ACTIVE' AND assessment_policy IS NULL
@@ -70,18 +81,16 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
       AND EXISTS(SELECT 1 FROM lms_scorm_package_versions v
         WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.package_sha256=?
           AND v.r2_prefix=? AND v.status='VALIDATED' AND v.validation_result_json=?)
-      AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
-        AND c.deleted_at IS NULL)`)
-      .bind(empresaId, cursoId, packageId, empresaId, cursoId, packageSha256, prefix, validationJson, cursoId, empresaId),
+      AND ${candidateStillValid}`)
+      .bind(empresaId, cursoId, ...candidateArgs, ...candidateArgs),
     db.prepare(`UPDATE lms_scorm_package_versions
       SET status='ACTIVE', activated_at=datetime('now'), activated_by=?,
           assessment_policy=COALESCE(?,assessment_policy)
       WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
         AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?
-        AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
-          AND c.deleted_at IS NULL)`)
+        AND ${candidateStillValid}`)
       .bind(actorId, policy?.incoming ?? null, packageId, empresaId, cursoId,
-        packageSha256, prefix, validationJson, cursoId, empresaId),
+        packageSha256, prefix, validationJson, ...candidateArgs),
     // changes() is the candidate UPDATE row count from the preceding statement
     // on the same SQLite connection/transaction. Never move a pointer on zero writes.
     // The policy moves in the same statement as the pointer: never one without the other.
