@@ -13,11 +13,17 @@ describe('GET /frms/operational-snapshot recovery presentation contract', () => 
     listSnapshotMock.mockResolvedValueOnce({ items: [
       { funcionario_id: 10, recovery_credit_points: 0, recovery_state: null, recovery_activity_type: null },
       { funcionario_id: 11, recovery_credit_points: 0, recovery_state: 'PARTIAL', recovery_activity_type: 'STANDBY_ONSITE' },
+      { funcionario_id: 12, recovery_credit_points: 1.5, recovery_state: null, recovery_activity_type: null },
+      { funcionario_id: 13, recovery_credit_points: -0.5, recovery_state: null, recovery_activity_type: null },
+      { funcionario_id: 14, recovery_credit_points: null, recovery_state: 'PARTIAL', recovery_activity_type: null },
     ], summary: {} });
     const response = await createApp().fetch(new Request('http://localhost/frms/operational-snapshot?data_inicio=2026-09-27&data_fim=2026-09-27'), { DB: {} as D1Database } as unknown as Env, {} as ExecutionContext);
     expect(response.status).toBe(200);
     const body = (await response.json()) as any;
     expect(body.data[0].recovery_credit_points).toBeNull();
     expect(body.data[1].recovery_credit_points).toBe(0);
+    expect(body.data[2].recovery_credit_points).toBe(1.5);
+    expect(body.data[3].recovery_credit_points).toBe(-0.5);
+    expect(body.data[4].recovery_credit_points).toBeNull();
   });
 });
