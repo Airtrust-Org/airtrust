@@ -141,7 +141,13 @@ export async function approveFormativePackage(params: {
   const digest = await formativeAttestationDigest(envelope);
 
   const existing = await params.db.prepare(
-    `SELECT a.id, COALESCE((
+    `SELECT a.id, CASE WHEN EXISTS (
+        SELECT 1 FROM lms_scorm_package_approval_renewals r WHERE r.approval_id=a.id
+      ) THEN (
+        SELECT r.editorial_review_ref FROM lms_scorm_package_approval_renewals r
+          WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
+      ) ELSE a.editorial_review_ref END AS editorial_review_ref,
+      COALESCE((
         SELECT r.attestation_sha256 FROM lms_scorm_package_approval_renewals r
           WHERE r.approval_id=a.id ORDER BY r.sequence DESC LIMIT 1
       ),a.attestation_sha256) AS attestation_sha256,
@@ -152,8 +158,17 @@ export async function approveFormativePackage(params: {
       FROM lms_scorm_package_approvals a
       WHERE a.empresa_id=? AND a.curso_id=? AND a.package_id=? AND a.package_sha256=?`,
   ).bind(params.empresaId, params.cursoId, row.id, row.package_sha256)
-    .first<{ id: string; attestation_sha256: string; sequence: number }>();
+    .first<{ id: string; attestation_sha256: string; sequence: number; editorial_review_ref: string | null }>();
   if (existing?.attestation_sha256 === digest) {
+    // An immutable pre-policy approval without editorial provenance cannot be
+    // silently treated as a valid new approval. Schema 0570 forbids reusing
+    // the same attestation digest for a renewal: require a fresh signed run.
+    if (!existing.editorial_review_ref || existing.editorial_review_ref.trim().length < 6) {
+      throw new ApiError(
+        'A aprovação legada não contém referência editorial. Importe uma nova jornada assinada e renove a aprovação.',
+        409, 'FORMATIVE_REVIEW_RENEWAL_REQUIRED',
+      );
+    }
     return { approvalId: existing.id, packageId: row.id, packageSha256: row.package_sha256, alreadyApproved: true };
   }
   if (existing) {
