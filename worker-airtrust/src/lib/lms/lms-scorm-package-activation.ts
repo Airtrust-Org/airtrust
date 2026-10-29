@@ -88,9 +88,17 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
           assessment_policy=COALESCE(?,assessment_policy)
       WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
         AND r2_prefix=? AND status='VALIDATED' AND validation_result_json=?
-        AND ${candidateStillValid}`)
+        -- The demotion is immediately preceding this statement in the D1 batch.
+        -- A stale observed predecessor yields zero demotions and must NOT promote.
+        AND ((? IS NULL AND changes()=0) OR (? IS NOT NULL AND changes()=1))
+        AND NOT EXISTS(SELECT 1 FROM lms_scorm_package_versions a
+          WHERE a.empresa_id=? AND a.curso_id=? AND a.status='ACTIVE')
+        AND EXISTS(SELECT 1 FROM lms_cursos c WHERE c.id=? AND c.empresa_id=?
+          AND c.deleted_at IS NULL AND c.scorm_assessment_policy=?)`)
       .bind(actorId, policy?.incoming ?? null, packageId, empresaId, cursoId,
-        packageSha256, prefix, validationJson, ...candidateArgs),
+        packageSha256, prefix, validationJson,
+        observed.activePackageId, observed.activePackageId, empresaId, cursoId,
+        cursoId, empresaId, observed.coursePolicy),
     // changes() is the candidate UPDATE row count from the preceding statement
     // on the same SQLite connection/transaction. Never move a pointer on zero writes.
     // The policy moves in the same statement as the pointer: never one without the other.
