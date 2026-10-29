@@ -47,6 +47,7 @@ export function formatFrmsActivity(value: string | null | undefined): string {
 
 const RECOVERY_STATE_LABELS: Record<string, string> = {
   FULL: 'Estado calculado: completo', PARTIAL: 'Estado calculado: parcial', INSUFFICIENT: 'Estado calculado: insuficiente',
+  LIMITED: 'Estado calculado: limitado', STRONG: 'Estado calculado: forte', CONFIRMED: 'Estado calculado: evidência favorável',
   NONE: 'Sem crédito calculado', UNKNOWN: 'Estado não avaliado', UNAVAILABLE: 'Estado indisponível',
 };
 export function formatRecoveryState(value: string | null | undefined): string | null {
