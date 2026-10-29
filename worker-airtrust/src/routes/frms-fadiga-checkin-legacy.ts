@@ -523,8 +523,9 @@ async function buildDailyFatigueStatus(params: {
       submitted: true,
       data_source: 'crew_reported',
       confidence: 'incomplete',
-      message:
-        'Check-in de fadiga incompleto. Informe apresentação, despertar e sono/repouso absoluto para habilitar o cálculo.',
+      message: isDailyRiskLevel(checkin.computed_risk_level)
+        ? 'Check-in de fadiga incompleto. Informe apresentação, despertar e sono/repouso absoluto para habilitar o cálculo.'
+        : 'Check-in registrado sem classificação de risco válida. Cálculo indisponível e revisão operacional necessária.',
       requires_operational_review: true,
       calculation_available: false,
       presentation_time: parseTimeToMinutes(presentationTime) == null ? null : presentationTime,
