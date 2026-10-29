@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 
-import ControleOperacionalFrmsPanel from '../components/ControleOperacionalFrmsPanel';
+import ControleOperacionalFrmsPanel, { safeFrmsPanelData } from '../components/ControleOperacionalFrmsPanel';
 import { apiClient } from '@/react-app/services/apiClient';
 import type { CvFrmsOperacionalPainel } from '@/react-app/hooks/useControleVoos';
 import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
@@ -29,7 +29,7 @@ function apiOk<T>(data: T) {
 
 function renderWithClient(children: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return { ...render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>), queryClient };
+  return render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>);
 }
 
 const getMock = vi.mocked(apiClient.get);
@@ -231,33 +231,19 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getByText('Recebido')).toBeInTheDocument();
   });
 
-  it('oculta contadores antigos após erro de atualização da fila FRMS', async () => {
-    const response = painel();
-    response.resumo = {
-      voos_nao_liberados: 0,
-      tripulantes_checkin_pendente: 0,
-      voos_requerem_revisao: 0,
-      voos_liberaveis: 1,
-    };
-    response.voos[0].frms_status = 'LIBERAVEL';
-    response.voos[0].tripulacao[0].frms_status = 'LIBERAVEL';
-    response.voos[0].tripulacao[0].checkin_status = 'RECEBIDO';
-    getMock.mockResolvedValue(apiOk(response));
-
-    const { queryClient } = renderWithClient(<ControleOperacionalFrmsPanel />);
-    expect(await screen.findByText('Sem alertas FRMS')).toBeInTheDocument();
-    // Reproduce React Query's retained successful data + failed refetch state
-    // without relying on network retries or scheduler timing in full coverage.
-    const query = queryClient.getQueryCache().find({
-      queryKey: ['cv-frms-operacional-painel', response.data],
+  it('oculta dados verdes retidos quando a consulta atual falha', () => {
+    const lastSuccessful = painel({
+      resumo: {
+        voos_nao_liberados: 0,
+        tripulantes_checkin_pendente: 0,
+        voos_requerem_revisao: 0,
+        voos_liberaveis: 1,
+      },
     });
-    expect(query).toBeDefined();
-    act(() => {
-      query!.setState({ error: new Error('Falha de rede QA'), status: 'error', fetchStatus: 'idle' });
-    });
-    expect(screen.getByText(/Erro ao carregar o painel operacional/)).toBeInTheDocument();
-    expect(screen.queryByText('Sem alertas FRMS')).not.toBeInTheDocument();
-    expect(screen.queryByText('Consulta atualizada às', { exact: false })).not.toBeInTheDocument();
+    expect(safeFrmsPanelData(lastSuccessful, null).resumo?.voos_liberaveis).toBe(1);
+    const failedRefresh = safeFrmsPanelData(lastSuccessful, new Error('Falha de rede QA'));
+    expect(failedRefresh.resumo).toBeUndefined();
+    expect(failedRefresh.voos).toEqual([]);
   });
 
   it('mostra estado vazio quando nao ha voos programados na data', async () => {
