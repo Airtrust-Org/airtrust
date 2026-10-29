@@ -354,7 +354,8 @@ export async function rollbackScormPackageVersion(params: {
   // Only a policy-aware activation moved the course policy; only then does the
   // rollback move it back. The restored edition was stamped by that activation.
   const policyAware = active.assessment_policy !== null && target.assessment_policy !== null;
-  if (policyAware && target.assessment_policy === 'SCORED') {
+  const scoredTarget = policyAware && target.assessment_policy === 'SCORED';
+  if (scoredTarget) {
     const course = await params.db.prepare(
       `SELECT scorm_mastery_score FROM lms_cursos WHERE id=? AND empresa_id=? AND deleted_at IS NULL`,
     ).bind(params.cursoId, params.empresaId).first<{ scorm_mastery_score: number | null }>();
@@ -366,22 +367,32 @@ export async function rollbackScormPackageVersion(params: {
     WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL)`;
   const stillActive = `EXISTS(SELECT 1 FROM lms_scorm_package_versions v
     WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.status='ACTIVE')`;
+  // Re-check course policy and scored threshold before the FIRST write.
+  // A zero-row UPDATE in D1 batch() does not undo preceding statements.
+  // Reject a stale rollback without freezing cycles or switching editions.
+  const courseGuard = `EXISTS(SELECT 1 FROM lms_cursos c
+    WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL
+    ${policyAware ? 'AND c.scorm_assessment_policy=?' : ''}
+    ${scoredTarget ? 'AND COALESCE(c.scorm_mastery_score,0)>0' : ''})`;
+  const courseGuardArgs = [params.cursoId, params.empresaId,
+    ...(policyAware ? [active.assessment_policy] : [])];
   const freeze = policyAware ? [params.db.prepare(
     `UPDATE lms_matricula_ciclos SET assessment_policy=${currentPolicy}
       WHERE empresa_id=? AND assessment_policy IS NULL AND deleted_at IS NULL
         AND status NOT IN ('NAO_INICIADO','EM_ANDAMENTO')
         AND (curso_id=? OR matricula_id IN (SELECT m.id FROM lms_matriculas m WHERE m.empresa_id=? AND m.curso_id=?))
-        AND ${stillActive}`,
+        AND ${stillActive} AND ${courseGuard}`,
   ).bind(params.cursoId, params.empresaId, params.empresaId, params.cursoId, params.empresaId,
-    params.cursoId, active.id, params.empresaId, params.cursoId)] : [];
+    params.cursoId, active.id, params.empresaId, params.cursoId, ...courseGuardArgs)] : [];
   const auditRolled = crypto.randomUUID();
   const auditRestored = crypto.randomUUID();
   const results = await params.db.batch([
     ...freeze,
     params.db.prepare(
       `UPDATE lms_scorm_package_versions SET status='SUPERSEDED'
-        WHERE id=? AND empresa_id=? AND curso_id=? AND status='ACTIVE'`,
-    ).bind(active.id, params.empresaId, params.cursoId),
+        WHERE id=? AND empresa_id=? AND curso_id=? AND status='ACTIVE'
+          AND ${courseGuard}`,
+    ).bind(active.id, params.empresaId, params.cursoId, ...courseGuardArgs),
     params.db.prepare(
       `UPDATE lms_scorm_package_versions SET status='ACTIVE', activated_at=datetime('now'), activated_by=?
         WHERE id=? AND empresa_id=? AND curso_id=? AND status='SUPERSEDED' AND changes()=1`,
