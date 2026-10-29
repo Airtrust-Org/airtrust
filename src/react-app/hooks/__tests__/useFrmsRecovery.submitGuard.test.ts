@@ -72,6 +72,63 @@ describe('FRMS final check-in guards on yesterday flight or activity', () => {
     }
   });
 
+  it('rejects an old context response after a tenant reset without posting a new tenant draft', async () => {
+    let resolveContext!: (value: ReturnType<typeof loaded>) => void;
+    getMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveContext = resolve;
+    }));
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    const submission = submitPendingFrmsRecoveryActivity(TODAY);
+
+    resetTenantDataLayer({ reason: 'tenant-switch', tenantId: 999006, broadcast: false });
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'ADMIN_TRAINING',
+      notes: 'New tenant draft',
+      duty_start_time: '08:00',
+      duty_end_time: '17:00',
+    }, true);
+    resolveContext(loaded(serverContext()));
+
+    await expect(submission).rejects.toThrow(/Resposta descartada/);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)?.input?.activity_type).toBe('ADMIN_TRAINING');
+  });
+
+  it('does not delete a new tenant draft when an old POST completes after reset', async () => {
+    let resolvePost!: (value: unknown) => void;
+    getMock.mockResolvedValue(loaded(serverContext()));
+    postMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePost = resolve;
+    }));
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    const submission = submitPendingFrmsRecoveryActivity(TODAY);
+    await vi.waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+
+    resetTenantDataLayer({ reason: 'logout', tenantId: null, broadcast: false });
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'ADMIN_TRAINING',
+      notes: 'Next session draft',
+      duty_start_time: '08:00',
+      duty_end_time: '17:00',
+    }, true);
+    resolvePost({
+      success: true,
+      data: { success: true, data: { activity: {}, assessment: {}, flight: serverContext().flight, source_discrepancy: false } },
+    });
+
+    await expect(submission).rejects.toThrow(/Resposta descartada/);
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)?.input?.activity_type).toBe('ADMIN_TRAINING');
+  });
+
   it('rejects check-in when the server confirms no flight and the user skipped the activity', async () => {
     getMock.mockResolvedValue(loaded(serverContext()));
     await expect(submitPendingFrmsRecoveryActivity(TODAY)).rejects.toThrow(/informe como foi/i);
