@@ -291,7 +291,9 @@ export async function evaluateFormativeActivation(params: {
     }
     add('ADMIN_APPROVAL', approvalOk, approvalOk ? 'Aprovação administrativa vinculada a este SHA' : 'Aprovação administrativa pendente');
     void attestationOk;
-  } else if (active?.assessment_policy === 'FORMATIVE') {
+  } else if (course.scorm_assessment_policy === 'FORMATIVE') {
+    // The course's effective policy is authoritative. Legacy ACTIVE editions may
+    // have no pinned policy, but a scored successor must still restore SCORED.
     // A regular edition replacing a formative one must restore a real threshold.
     incomingPolicy = 'SCORED';
     add('SCORED_THRESHOLD_PRESENT', (course.scorm_mastery_score ?? 0) > 0,

@@ -510,6 +510,29 @@ describe('a regular scored edition replacing a formative one', () => {
     const blocked = await evaluateFormativeActivation({ ...base(db), packageId: SCORED_ID });
     expect(blocked.canActivate).toBe(false);
   });
+
+  it('does not inherit FORMATIVE from a legacy active edition without a pinned policy', async () => {
+    const db = fixture({ formativeActive: true });
+    const scoredCandidateId = '00000000-0000-4000-8000-00000000000c';
+    db.database.prepare(`INSERT INTO lms_scorm_package_versions
+      (id,empresa_id,curso_id,package_version,package_sha256,zip_size_bytes,r2_prefix,launch_file,scorm_versao,
+       uploaded_at,status,validation_result_json)
+      VALUES (?,6,26,'v3',?,1,?,'index.html','1.2','2026-10-29','VALIDATED','{"legacy":true}')`)
+      .run(scoredCandidateId, 'c'.repeat(64), prefix(scoredCandidateId));
+    // The legacy ACTIVE row has NULL assessment_policy while the course is FORMATIVE.
+    expect(row<{ p: string | null }>(db,
+      'SELECT assessment_policy p FROM lms_scorm_package_versions WHERE id=?', SCORED_ID).p).toBeNull();
+    const preflight = await evaluateFormativeActivation({ ...base(db), packageId: scoredCandidateId });
+    expect(preflight.course.currentPolicy).toBe('FORMATIVE');
+    expect(preflight.active?.policy).toBeNull();
+    expect(preflight.incomingPolicy).toBe('SCORED');
+    expect(preflight.checks.find(check => check.id === 'SCORED_THRESHOLD_PRESENT')?.ok).toBe(true);
+    db.database.prepare('UPDATE lms_cursos SET scorm_mastery_score=NULL WHERE empresa_id=6 AND id=26').run();
+    const blocked = await evaluateFormativeActivation({ ...base(db), packageId: scoredCandidateId });
+    expect(blocked.incomingPolicy).toBe('SCORED');
+    expect(blocked.canActivate).toBe(false);
+    expect(blocked.checks.find(check => check.id === 'SCORED_THRESHOLD_PRESENT')?.ok).toBe(false);
+  });
 });
 
 describe('history preservation (full-row snapshot)', () => {
