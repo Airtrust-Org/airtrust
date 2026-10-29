@@ -124,7 +124,7 @@ describe('ControleOperacionalFrmsPanel', () => {
     renderWithClient(<ControleOperacionalFrmsPanel />);
     // Anchor the programmed flight, not the dynamic "Consulta atualizada às" clock.
     // At 07:00 BRT the old matcher matched both elements and failed CI spuriously.
-    await waitFor(() => expect(screen.getByText(/ATX-1001\\s+—\\s+24\\/08,\\s*07:00 \\(Brasília\\)/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/ATX-1001\s+—\s+24\/08,\s*07:00 \(Brasília\)/)).toBeInTheDocument());
     expect(document.body.textContent).not.toContain('2026-08-24T10:00:00Z');
   });
 
