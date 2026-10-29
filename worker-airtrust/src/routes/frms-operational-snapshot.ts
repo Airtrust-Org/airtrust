@@ -115,7 +115,6 @@ function normalizeSnapshotItemForApi<T extends {
   recovery_activity_type?: string | null;
 }>(item: T): T & { recovery_credit_points: number | null } {
   const credit = item.recovery_credit_points;
-  const hasFiniteCredit = typeof credit === 'number' && Number.isFinite(credit);
   const hasRecoveryEvidence = Boolean(
     item.recovery_state?.trim() || item.recovery_activity_type?.trim(),
   );
@@ -125,7 +124,9 @@ function normalizeSnapshotItemForApi<T extends {
   return {
     ...item,
     recovery_credit_points:
-      hasFiniteCredit && (hasRecoveryEvidence || credit !== 0) ? credit : null,
+      typeof credit === 'number' && Number.isFinite(credit) && (hasRecoveryEvidence || credit !== 0)
+        ? credit
+        : null,
   };
 }
 
