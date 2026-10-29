@@ -40,15 +40,14 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
     AND EXISTS(SELECT 1 FROM lms_cursos c
       WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL
         AND c.scorm_assessment_policy=?
-        -- A scored successor must still have a positive mastery threshold
-        -- INSIDE the activation batch, not only at the earlier preflight.
-        AND (? <> 'SCORED' OR COALESCE(c.scorm_mastery_score,0)>0)
+        -- Only a scored transition needs the threshold column; older
+        -- legacy activation fixtures do not model it.
+        ${policy?.incoming === 'SCORED' ? 'AND COALESCE(c.scorm_mastery_score,0)>0' : ''}
         AND (SELECT a.id FROM lms_scorm_package_versions a
           WHERE a.empresa_id=c.empresa_id AND a.curso_id=c.id
             AND a.status='ACTIVE' LIMIT 1) IS ?)`;
   const candidateArgs = [packageId, empresaId, cursoId, packageSha256, prefix,
-    validationJson, cursoId, empresaId, observed.coursePolicy,
-    policy?.incoming ?? 'UNCHANGED', observed.activePackageId];
+    validationJson, cursoId, empresaId, observed.coursePolicy, observed.activePackageId];
   const currentPolicy = `(SELECT c.scorm_assessment_policy FROM lms_cursos c
     WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL)`;
   // The recoverable predecessor is whatever is ACTIVE inside this very
