@@ -12,6 +12,7 @@ assert.ok(sql, 'canonical roster query not found');
 test('scope and membership contract rejects cross-tenant journeys', () => {
   assert.match(sql, /LEFT JOIN current_fortnight cf/);
   assert.match(sql, /fj\.empresa_id\s*=\s*f\.empresa_id/);
+  assert.match(sql, /f\.nome ASC,\s*f\.id ASC/);
   assert.match(sql, /ch\.empresa_id\s*=\s*f\.empresa_id/);
   assert.match(sql, /f\.empresa_id\s*=\s*\?/);
   assert.match(sql, /cf\.numero IS NOT NULL OR fj\.id IS NOT NULL OR ch\.id IS NOT NULL/);
@@ -29,6 +30,7 @@ test('synthetic SQLite returns reported crew even without fortnight, not foreign
     'CREATE TABLE frms_jornada(id TEXT,empresa_id INTEGER,tripulante_id INTEGER,data TEXT,status TEXT,deleted_at TEXT);',
     'CREATE TABLE frms_fadiga_checkin(id TEXT,empresa_id INTEGER,funcionario_id INTEGER,data_checkin TEXT,deleted_at TEXT,jornada_inicio_prevista TEXT,hora_checkin TEXT,kss_score INTEGER,horas_sono REAL,horas_sono_48h REAL,wake_time TEXT,score_fadiga INTEGER,nivel_fadiga TEXT,status_operacional TEXT,computed_risk_level TEXT,requires_operational_review INTEGER);',
     "INSERT INTO escalas_quinzenas VALUES(1,'2026-10-16','2026-10-31',999006,NULL);",
+    "INSERT INTO funcionarios VALUES(7,999006,'Escalado','PILOTO','PILOTO','primeira',NULL,1,'ATIVO');",
     "INSERT INTO funcionarios VALUES(1,999006,'Escalado','PILOTO','PILOTO','primeira',NULL,1,'ATIVO');",
     "INSERT INTO funcionarios VALUES(2,999006,'Checkin sem quinzena','PILOTO','PILOTO',NULL,NULL,1,'ATIVO');",
     "INSERT INTO funcionarios VALUES(3,999006,'Jornada de outro tenant','PILOTO','PILOTO',NULL,NULL,1,'ATIVO');",
@@ -44,10 +46,12 @@ test('synthetic SQLite returns reported crew even without fortnight, not foreign
     'args=(999006,day,day,day,999006,100,0)',
     'rows=db.execute(q,args).fetchall()',
     "ids={int(row['funcionario_id']) for row in rows}",
-    "assert ids=={1,2,4},'unexpected synthetic scope: '+repr(ids)",
+    "assert ids=={1,2,4,7},'unexpected synthetic scope: '+repr(ids)",
     "assert next(x for x in rows if x['funcionario_id']==2)['checkin_id']=='c2'",
     "assert next(x for x in rows if x['funcionario_id']==4)['jornada_id']=='j4'",
     'assert len(db.execute(q,(999006,day,day,day,999006,2,0)).fetchall())==2',
+    "assert db.execute(q,(999006,day,day,day,999006,1,2)).fetchone()['funcionario_id']==1,'tie-break page 3 must be crew 1'",
+    "assert db.execute(q,(999006,day,day,day,999006,1,3)).fetchone()['funcionario_id']==7,'tie-break page 4 must be crew 7'",
     "print('FRMS_DAILY_ROSTER_SQLITE_PASS')",
   ].join('\n');
   const result = spawnSync('python3', ['-c', py], { input: JSON.stringify({sql}), encoding: 'utf8', timeout: 15000 });
