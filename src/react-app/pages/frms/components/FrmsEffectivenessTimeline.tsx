@@ -242,10 +242,12 @@ export default function FrmsEffectivenessTimeline({
           item.horas_sono == null ? current?.sleep_hours ?? null : Number(item.horas_sono),
         landings_count: current?.landings_count ?? null,
         temperature_c: current?.temperature_c ?? null,
+        // O snapshot canônico é autoritativo para o dia: ausência de avaliação
+        // não pode herdar crédito do componente legado de efetividade.
         recovery_points:
-          item.recovery_credit_points == null
-            ? current?.recovery_points ?? null
-            : Number(item.recovery_credit_points),
+          item.recovery_credit_points != null && Number.isFinite(item.recovery_credit_points)
+            ? item.recovery_credit_points
+            : null,
         hora_apresentacao:
           item.hora_apresentacao ?? item.atividade_hora_inicio ?? current?.hora_apresentacao ?? null,
         hora_termino:
