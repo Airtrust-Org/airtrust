@@ -13,6 +13,21 @@ export function formatRecoveryCredit(value: number | null | undefined): string {
   return `${prefix}${numeric.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} pt`;
 }
 
+/** Missing recovery evidence is not a measured zero. Values are proportions in the stored components. */
+export function parseRecoveryPoints(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const value = (parsed as Record<string, unknown>).recuperacao;
+    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.round(numeric * 1000) / 10 : null;
+  } catch {
+    return null;
+  }
+}
+
 const CHECKIN_STATUS_LABELS: Record<string, string> = {
   RECEBIDO: 'Recebido', PENDENTE: 'Pendente', AUSENTE: 'Não realizado', NAO_APLICAVEL: 'Não aplicável',
 };
@@ -31,8 +46,8 @@ export function formatFrmsActivity(value: string | null | undefined): string {
 }
 
 const RECOVERY_STATE_LABELS: Record<string, string> = {
-  FULL: 'Recuperação completa', PARTIAL: 'Recuperação parcial', INSUFFICIENT: 'Recuperação insuficiente',
-  NONE: 'Sem recuperação confirmada', UNKNOWN: 'Recuperação não avaliada', UNAVAILABLE: 'Recuperação não avaliada',
+  FULL: 'Estado calculado: completo', PARTIAL: 'Estado calculado: parcial', INSUFFICIENT: 'Estado calculado: insuficiente',
+  NONE: 'Sem crédito calculado', UNKNOWN: 'Estado não avaliado', UNAVAILABLE: 'Estado indisponível',
 };
 export function formatRecoveryState(value: string | null | undefined): string | null {
   if (!value) return null;
