@@ -7,6 +7,7 @@ import {
   useFrmsOperacionalPainel,
   type CvFrmsCrewDispatchAssessment,
   type CvFrmsFlightDispatchItem,
+  type CvFrmsOperacionalPainel,
   type FrmsDispatchGateReasonCode,
   type FrmsDispatchReadinessStatus,
   type CvFrmsDailyAssessmentReason,
@@ -196,14 +197,19 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
   );
 }
 
+/** Prevent retained React Query data from displaying green cards on a failed refresh. */
+export function safeFrmsPanelData(painel: CvFrmsOperacionalPainel | undefined, error: Error | null) {
+  return {
+    resumo: error ? undefined : painel?.resumo,
+    voos: error ? [] : (painel?.voos ?? []),
+  };
+}
+
 export default function ControleOperacionalFrmsPanel() {
   const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, isFetching, error, refetch, dataUpdatedAt } = useFrmsOperacionalPainel(data);
 
-  // React Query can retain the last successful payload after a refetch fails.
-  // Never keep showing previously green counters while the current query is in error.
-  const resumo = !error ? painel?.resumo : undefined;
-  const voos = !error ? (painel?.voos ?? []) : [];
+  const { resumo, voos } = safeFrmsPanelData(painel, error);
 
   return (
     <div className="mb-6 space-y-4" data-testid="controle-operacional-frms-panel">
