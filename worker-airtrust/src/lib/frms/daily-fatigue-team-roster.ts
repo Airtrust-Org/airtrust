@@ -79,7 +79,8 @@ export async function loadDailyFatigueTeamRoster(params: {
            WHEN ch.computed_risk_level = 'attention' THEN 3
            ELSE 4
          END,
-         f.nome ASC
+         f.nome ASC,
+         f.id ASC
        LIMIT ? OFFSET ?`,
     )
     .bind(
