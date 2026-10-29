@@ -45,14 +45,6 @@ async function sha256(bytes: Uint8Array) {
   return hex(await crypto.subtle.digest('SHA-256', bytes));
 }
 
-function sha256Bytes(hexDigest: string) {
-  const bytes = new Uint8Array(hexDigest.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(hexDigest.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
 function errors(result: ScormQualityGateResult) {
   return [result.structural, result.completionManifest, result.diagnostics]
     .flatMap((section) => section.errors);
