@@ -204,7 +204,7 @@ describe('FortnightOperationalIndicator components', () => {
   it('painel consolidado mostra mitigação, aviso de período incompleto e timeline honesta', () => {
     useFrmsOperationalSnapshotMock.mockReturnValue({
       data: [
-        buildTimelineItem(),
+        buildTimelineItem({ recovery_activity_type: null }),
         buildTimelineItem({
           data_operacional: '2026-05-18',
           snapshot_status: 'CRITICO',
@@ -262,7 +262,9 @@ describe('FortnightOperationalIndicator components', () => {
     expect(screen.getByText('Crédito de recuperação calculado')).toBeInTheDocument();
     expect(screen.queryByText('Recuperação real')).not.toBeInTheDocument();
     expect(screen.getByText(/não comprovam sono efetivo nem recuperação fisiológica/)).toBeInTheDocument();
-    expect(screen.getByText('Crédito/estado de recuperação')).toBeInTheDocument();
+    expect(screen.getByText('Crédito calculado / estado do modelo')).toBeInTheDocument();
+    expect(screen.getByText('Estado calculado: parcial')).toBeInTheDocument();
+    expect(screen.queryByText('Recuperação parcial')).not.toBeInTheDocument();
     expect(screen.queryByText(/Jornada acumulada visível/)).not.toBeInTheDocument();
   });
 });
