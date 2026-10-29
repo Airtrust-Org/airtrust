@@ -789,16 +789,25 @@ export function validateCvFrmsOperacionalPainel(
   const validFatigue = new Set<FrmsDispatchFadigaNivel>([
     'NORMAL', 'ATENCAO', 'CRITICO', 'INDISPONIVEL',
   ]);
+  const validCheckinStatuses = new Set<FrmsDispatchCheckinStatus>([
+    'RECEBIDO', 'PENDENTE', 'AUSENTE', 'NAO_APLICAVEL', 'INDISPONIVEL',
+  ]);
+  // Backend counts distinct crew members with any non-RECEBIDO check-in,
+  // not the number of pending appearances across flights.
+  const pendingCrew = new Set<number>();
   for (const flight of row.voos) {
     if (!Number.isSafeInteger(flight?.voo_id) || flight.voo_id <= 0 ||
         !validStatuses.has(flight.frms_status) || !Array.isArray(flight.tripulacao)) return invalid();
     for (const member of flight.tripulacao) {
       if (!Number.isSafeInteger(member?.funcionario_id) || member.funcionario_id <= 0 ||
           !validStatuses.has(member.frms_status) ||
+          !validCheckinStatuses.has(member.checkin_status) ||
           !validFatigue.has(member.fadiga_diaria) ||
           !validFatigue.has(member.fadiga_acumulada)) return invalid();
+      if (member.checkin_status !== 'RECEBIDO') pendingCrew.add(member.funcionario_id);
     }
   }
+  if (counts.tripulantes_checkin_pendente !== pendingCrew.size) return invalid();
   if (counts.voos_nao_liberados !== row.voos.filter(f => f.frms_status === 'NAO_LIBERADO').length ||
       counts.voos_requerem_revisao !== row.voos.filter(f => f.frms_status === 'ATENCAO_COORDENACAO').length ||
       counts.voos_liberaveis !== row.voos.filter(f => f.frms_status === 'LIBERAVEL').length) {
