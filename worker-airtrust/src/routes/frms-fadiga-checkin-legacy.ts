@@ -29,6 +29,7 @@ import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-valida
 import { normalizeFitForDutyPayload, normalizeOptionalBinary } from './frms-fadiga-checkin-normalization';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
+import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 const router = new Hono<AppEnv>();
@@ -36,6 +37,10 @@ router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
 
 type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
+
+function isDailyRiskLevel(value: unknown): value is DailyRiskLevel {
+  return value === 'normal' || value === 'attention' || value === 'critical' || value === 'unfit_for_duty';
+}
 
 type NormalizedCheckinInput = {
   dataCheckin: string;
@@ -66,7 +71,7 @@ function nowSql(): string {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return frmsOperationalTodayIso();
 }
 
 function csvEscape(value: unknown): string {
@@ -510,7 +515,8 @@ async function buildDailyFatigueStatus(params: {
     parseTimeToMinutes(wakeTime) != null &&
     Number.isFinite(sleepHours) &&
     sleepHours > 0 &&
-    sleepHours <= 24;
+    sleepHours <= 24 &&
+    isDailyRiskLevel(checkin.computed_risk_level);
 
   if (!checkinComplete) {
     return {
@@ -518,8 +524,9 @@ async function buildDailyFatigueStatus(params: {
       submitted: true,
       data_source: 'crew_reported',
       confidence: 'incomplete',
-      message:
-        'Check-in de fadiga incompleto. Informe apresentação, despertar e sono/repouso absoluto para habilitar o cálculo.',
+      message: isDailyRiskLevel(checkin.computed_risk_level)
+        ? 'Check-in de fadiga incompleto. Informe apresentação, despertar e sono/repouso absoluto para habilitar o cálculo.'
+        : 'Check-in registrado sem classificação de risco válida. Cálculo indisponível e revisão operacional necessária.',
       requires_operational_review: true,
       calculation_available: false,
       presentation_time: parseTimeToMinutes(presentationTime) == null ? null : presentationTime,
@@ -538,7 +545,7 @@ async function buildDailyFatigueStatus(params: {
     };
   }
 
-  const riskLevel = String(checkin.computed_risk_level || 'normal');
+  const riskLevel = checkin.computed_risk_level as DailyRiskLevel;
   return {
     status: riskLevel,
     submitted: true,
@@ -687,7 +694,8 @@ router.get('/daily-fatigue', async (c) => {
         parseTimeToMinutes(wakeTime) != null &&
         Number.isFinite(sleepHours) &&
         sleepHours > 0 &&
-        sleepHours <= 24;
+        sleepHours <= 24 &&
+        isDailyRiskLevel(row.computed_risk_level);
 
       const status = !hasCheckin
         ? row.jornada_id
@@ -695,7 +703,7 @@ router.get('/daily-fatigue', async (c) => {
           : 'no_duty'
         : !checkinComplete
           ? 'incomplete_checkin'
-          : String(row.computed_risk_level || 'normal');
+          : String(row.computed_risk_level);
       const source =
         status === 'not_submitted'
           ? 'missing_checkin'

@@ -21,7 +21,7 @@ import { useFrmsJornadasEffectiveness } from '@/react-app/hooks/useFrms';
 import type { FrmsEffectivenessJornadaRow } from '@/react-app/hooks/useFrms';
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
 import { getEffectivenessHex, getEffectivenessLabel, type ConfigLimites } from '../frmsUtils';
-import { formatDataQuality } from '../frmsPresentation';
+import { formatDataQuality, formatRecoveryCredit, parseRecoveryPoints } from '../frmsPresentation';
 
 type ViewMode = 'effectiveness' | 'workload' | 'operational' | 'recovery';
 
@@ -69,17 +69,6 @@ function formatHours(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const minutes = Math.round(value * 60);
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`;
-}
-
-function parseRecoveryPoints(raw: string | null): number | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const value = Number(parsed.recuperacao ?? 0);
-    return Number.isFinite(value) ? Math.round(value * 1000) / 10 : null;
-  } catch {
-    return null;
-  }
 }
 
 function getNivelDotColor(pct: number | null, config: ConfigLimites): string {
@@ -136,7 +125,7 @@ function CustomTooltip({
         <span>Sono/repouso</span><strong>{formatHours(point.sleep_hours)}</strong>
         <span>Pousos</span><strong>{point.landings_count ?? '—'}</strong>
         <span>Temperatura máx.</span><strong>{point.temperature_c == null ? '—' : `${point.temperature_c.toFixed(1)} °C`}</strong>
-        <span>Recuperação</span><strong>{point.recovery_points == null ? '—' : `+${point.recovery_points.toFixed(1)} pt`}</strong>
+        <span>Crédito calculado</span><strong>{formatRecoveryCredit(point.recovery_points)}</strong>
       </div>
       {point.hora_apresentacao && (
         <p className="mt-2 text-slate-500">
@@ -157,7 +146,7 @@ const MODE_LABELS: Array<{ value: ViewMode; label: string }> = [
   { value: 'effectiveness', label: 'Efetividade' },
   { value: 'workload', label: 'Jornada / HV' },
   { value: 'operational', label: 'Pousos / temperatura' },
-  { value: 'recovery', label: 'Sono / recuperação' },
+  { value: 'recovery', label: 'Sono / crédito calculado' },
 ];
 
 export default function FrmsEffectivenessTimeline({
@@ -253,10 +242,12 @@ export default function FrmsEffectivenessTimeline({
           item.horas_sono == null ? current?.sleep_hours ?? null : Number(item.horas_sono),
         landings_count: current?.landings_count ?? null,
         temperature_c: current?.temperature_c ?? null,
+        // O snapshot canônico é autoritativo para o dia: ausência de avaliação
+        // não pode herdar crédito do componente legado de efetividade.
         recovery_points:
-          item.recovery_credit_points == null
-            ? current?.recovery_points ?? null
-            : Number(item.recovery_credit_points),
+          item.recovery_credit_points != null && Number.isFinite(item.recovery_credit_points)
+            ? item.recovery_credit_points
+            : null,
         hora_apresentacao:
           item.hora_apresentacao ?? item.atividade_hora_inicio ?? current?.hora_apresentacao ?? null,
         hora_termino:
@@ -395,7 +386,7 @@ export default function FrmsEffectivenessTimeline({
         </div>
       ) : mode === 'recovery' && !hasRecoveryHistory ? (
         <div className="flex min-h-44 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-5 text-center">
-          <p className="text-sm text-slate-600">Sem sono/recuperação confirmados neste período.</p>
+          <p className="text-sm text-slate-600">Sem dados de sono ou crédito calculado neste período.</p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={compact ? 230 : 270}>
@@ -480,7 +471,7 @@ export default function FrmsEffectivenessTimeline({
             {mode === 'recovery' ? (
               <>
                 <Line yAxisId="hours" type="monotone" dataKey="sleep_hours" name="Sono/repouso" stroke="#0284C7" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
-                <Line yAxisId="points" type="monotone" dataKey="recovery_points" name="Crédito recuperação" stroke="#059669" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
+                <Line yAxisId="points" type="monotone" dataKey="recovery_points" name="Crédito calculado" stroke="#059669" strokeWidth={1.8} dot={{ r: 3 }} connectNulls={false} />
               </>
             ) : null}
           </LineChart>
@@ -491,7 +482,7 @@ export default function FrmsEffectivenessTimeline({
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">Efetividade: somente check-in completo · Jornada/HV: real ou estimada, conforme fonte</span>
         {mode === 'workload' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1">Atividade, voo real, simulador e treinamento em horas; simulador permanece separado da HV regulatória</span>}
         {mode === 'operational' && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">Pousos + temperatura observada</span>}
-        {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono + crédito efetivamente aplicado</span>}
+        {mode === 'recovery' && <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1">Sono e crédito calculado; não comprovam recuperação fisiológica</span>}
       </div>
     </div>
   );

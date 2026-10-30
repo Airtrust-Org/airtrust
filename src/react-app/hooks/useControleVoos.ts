@@ -766,16 +766,55 @@ export function useRdvFila(filtros?: {
   });
 }
 
-const EMPTY_FRMS_OPERACIONAL_PAINEL: CvFrmsOperacionalPainel = {
-  data: '',
-  resumo: {
-    voos_nao_liberados: 0,
-    tripulantes_checkin_pendente: 0,
-    voos_requerem_revisao: 0,
-    voos_liberaveis: 0,
-  },
-  voos: [],
-};
+/**
+ * Never translate an incomplete/malformed FRMS operational response into
+ * "no flights" or green counters. Empty date + zero rows is not proof that
+ * the coordination daily-fatigue dataset was successfully queried.
+ */
+export function validateCvFrmsOperacionalPainel(
+  payload: unknown,
+  requestedDate: string,
+): CvFrmsOperacionalPainel {
+  const invalid = () => { throw new Error('CV_FRMS_OPERACIONAL_RESPONSE_INCOMPLETE'); };
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return invalid();
+  const row = payload as Partial<CvFrmsOperacionalPainel>;
+  if (row.data !== requestedDate || !row.resumo || !Array.isArray(row.voos)) return invalid();
+  const counts = row.resumo as CvFrmsOperacionalResumo;
+  const values = [counts.voos_nao_liberados, counts.voos_requerem_revisao,
+    counts.voos_liberaveis, counts.tripulantes_checkin_pendente];
+  if (values.some(v => !Number.isSafeInteger(v) || v < 0)) return invalid();
+  const validStatuses = new Set<FrmsDispatchReadinessStatus>([
+    'NAO_LIBERADO', 'ATENCAO_COORDENACAO', 'LIBERAVEL',
+  ]);
+  const validFatigue = new Set<FrmsDispatchFadigaNivel>([
+    'NORMAL', 'ATENCAO', 'CRITICO', 'INDISPONIVEL',
+  ]);
+  const validCheckinStatuses = new Set<FrmsDispatchCheckinStatus>([
+    'RECEBIDO', 'PENDENTE', 'AUSENTE', 'NAO_APLICAVEL', 'INDISPONIVEL',
+  ]);
+  // Backend counts distinct crew members with any non-RECEBIDO check-in,
+  // not the number of pending appearances across flights.
+  const pendingCrew = new Set<number>();
+  for (const flight of row.voos) {
+    if (!Number.isSafeInteger(flight?.voo_id) || flight.voo_id <= 0 ||
+        !validStatuses.has(flight.frms_status) || !Array.isArray(flight.tripulacao)) return invalid();
+    for (const member of flight.tripulacao) {
+      if (!Number.isSafeInteger(member?.funcionario_id) || member.funcionario_id <= 0 ||
+          !validStatuses.has(member.frms_status) ||
+          !validCheckinStatuses.has(member.checkin_status) ||
+          !validFatigue.has(member.fadiga_diaria) ||
+          !validFatigue.has(member.fadiga_acumulada)) return invalid();
+      if (member.checkin_status !== 'RECEBIDO') pendingCrew.add(member.funcionario_id);
+    }
+  }
+  if (counts.tripulantes_checkin_pendente !== pendingCrew.size) return invalid();
+  if (counts.voos_nao_liberados !== row.voos.filter(f => f.frms_status === 'NAO_LIBERADO').length ||
+      counts.voos_requerem_revisao !== row.voos.filter(f => f.frms_status === 'ATENCAO_COORDENACAO').length ||
+      counts.voos_liberaveis !== row.voos.filter(f => f.frms_status === 'LIBERAVEL').length) {
+    return invalid();
+  }
+  return row as CvFrmsOperacionalPainel;
+}
 
 /**
  * Painel operacional compacto (Controle Operacional FRMS / Gate de
@@ -791,7 +830,7 @@ export function useFrmsOperacionalPainel(data: string) {
       const response = await apiClient.get<unknown>(
         `${API}/operacional?data=${encodeURIComponent(data)}`,
       );
-      return extractPayload<CvFrmsOperacionalPainel>(response, EMPTY_FRMS_OPERACIONAL_PAINEL);
+      return validateCvFrmsOperacionalPainel(extractPayload<unknown>(response, null), data);
     },
     enabled: Boolean(data),
     // Outra sessão pode registrar o check-in com a fila já aberta.

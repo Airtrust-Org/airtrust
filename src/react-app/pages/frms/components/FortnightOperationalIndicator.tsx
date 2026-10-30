@@ -143,8 +143,8 @@ function FortnightTimelinePanel({
               <p className="text-sm font-semibold text-slate-900">{timeline.summary.pending_checkins}</p>
             </div>
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] text-emerald-700">Dias com recuperação</p>
-              <p className="text-sm font-semibold text-emerald-900">{timeline.summary.recovery_days}</p>
+              <p className="text-[11px] text-emerald-700">Dias com crédito calculado</p>
+              <p className="text-sm font-semibold text-emerald-900">{timeline.summary.recovery_credit_days}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-[11px] text-slate-500">Crítico / atenção</p>
@@ -157,7 +157,7 @@ function FortnightTimelinePanel({
           <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
             <p className="text-xs font-semibold text-slate-800">Padrões do período</p>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              Resumo descritivo dos dados confirmados. Não cria um novo score nem substitui a regra FRMS.
+              Resumo descritivo dos dados confirmados. Não cria um novo score nem substitui a regra FRMS. Créditos calculados não comprovam sono efetivo nem recuperação fisiológica.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <div>
@@ -183,15 +183,15 @@ function FortnightTimelinePanel({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Recuperação real</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
                 <p className="text-xs font-semibold text-emerald-800">
-                  {timeline.summary.recovery_days} dia(s) registrado(s)
+                  {timeline.summary.recovery_credit_days} dia(s) registrado(s)
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem voo + recuperação</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Sem voo + crédito calculado</p>
                 <p className="text-xs font-semibold text-slate-800">
-                  {timeline.summary.no_flight_recovery_days} dia(s)
+                  {timeline.summary.no_flight_recovery_credit_days} dia(s)
                 </p>
               </div>
             </div>
@@ -205,7 +205,7 @@ function FortnightTimelinePanel({
                   <th className="px-2 py-2 text-left">Atividade / jornada</th>
                   <th className="px-2 py-2 text-left">Sono / KSS</th>
                   <th className="px-2 py-2 text-left">Voo / simulador</th>
-                  <th className="px-2 py-2 text-left">Recuperação</th>
+                  <th className="px-2 py-2 text-left">Crédito calculado / estado do modelo</th>
                   <th className="px-2 py-2 text-left">Efetividade</th>
                   <th className="px-2 py-2 text-left">Situação / ação</th>
                 </tr>
@@ -272,13 +272,13 @@ function FortnightTimelinePanel({
                         ) : '—'}
                       </td>
                       <td className="px-2 py-2">
-                        {day.recovery_credit_points != null ? (
+                        {day.recovery_credit_points != null && day.recovery_credit_points > 0 ? (
                           <>
                             <div className="font-semibold text-emerald-700">{formatRecoveryCredit(day.recovery_credit_points)}</div>
-                            <div className="text-[11px] text-slate-500">{activity || formatRecoveryState(day.recovery_state) || 'Recuperação avaliada'}</div>
+                            <div className="text-[11px] text-slate-500">{activity || (formatRecoveryState(day.recovery_state) ? formatRecoveryState(day.recovery_state) : 'Crédito calculado')}</div>
                           </>
                         ) : (
-                          <div className="text-slate-500">{activity || formatRecoveryState(day.recovery_state) || '—'}</div>
+                          <div className="text-slate-500">{activity || (formatRecoveryState(day.recovery_state) ? formatRecoveryState(day.recovery_state) : 'Sem crédito calculado')}</div>
                         )}
                       </td>
                       <td className="px-2 py-2">

@@ -3,9 +3,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 
-import ControleOperacionalFrmsPanel from '../components/ControleOperacionalFrmsPanel';
+import ControleOperacionalFrmsPanel, { safeFrmsPanelData } from '../components/ControleOperacionalFrmsPanel';
 import { apiClient } from '@/react-app/services/apiClient';
 import type { CvFrmsOperacionalPainel } from '@/react-app/hooks/useControleVoos';
+import { frmsBrazilOperationalTodayIso } from '@/react-app/pages/frms/frmsOperationalDate';
 
 // Controle Operacional FRMS / Gate de Despacho V1 — painel compacto da
 // Coordenacao. Reusa exatamente a resposta ja sanitizada do backend
@@ -39,7 +40,7 @@ afterEach(() => {
 
 function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperacionalPainel {
   return {
-    data: '2026-08-24',
+    data: frmsBrazilOperationalTodayIso(),
     resumo: {
       voos_nao_liberados: 1,
       tripulantes_checkin_pendente: 1,
@@ -79,6 +80,7 @@ function painel(overrides: Partial<CvFrmsOperacionalPainel> = {}): CvFrmsOperaci
 describe('ControleOperacionalFrmsPanel', () => {
   it('distingue sinal de check-in recebido da decisão regulatória ainda não avaliada', async () => {
     const response = painel();
+    response.resumo.tripulantes_checkin_pendente = 0;
     response.voos[0].tripulacao[0] = {
       ...response.voos[0].tripulacao[0],
       checkin_status: 'RECEBIDO',
@@ -122,7 +124,9 @@ describe('ControleOperacionalFrmsPanel', () => {
       throw new Error(`unexpected url ${url}`);
     });
     renderWithClient(<ControleOperacionalFrmsPanel />);
-    await waitFor(() => expect(screen.getByText(/07:00.*Brasília/)).toBeInTheDocument());
+    // Anchor the programmed flight, not the dynamic "Consulta atualizada às" clock.
+    // At 07:00 BRT the old matcher matched both elements and failed CI spuriously.
+    await waitFor(() => expect(screen.getByText(/ATX-1001\s+—\s+24\/08,\s*07:00 \(Brasília\)/)).toBeInTheDocument());
     expect(document.body.textContent).not.toContain('2026-08-24T10:00:00Z');
   });
 
@@ -144,6 +148,7 @@ describe('ControleOperacionalFrmsPanel', () => {
       { ...crew, funcionario_id: 1003, checkin_status: 'NAO_APLICAVEL' },
       { ...crew, funcionario_id: 1004, checkin_status: 'INDISPONIVEL' },
     ];
+    response.resumo.tripulantes_checkin_pendente = 2;
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/operacional')) return apiOk(response);
       throw new Error(`unexpected url ${url}`);
@@ -224,6 +229,21 @@ describe('ControleOperacionalFrmsPanel', () => {
     expect(screen.getAllByText('SEM ALERTAS').length).toBeGreaterThan(0);
     expect(screen.queryByText('LIBERADO')).not.toBeInTheDocument();
     expect(screen.getByText('Recebido')).toBeInTheDocument();
+  });
+
+  it('oculta dados verdes retidos quando a consulta atual falha', () => {
+    const lastSuccessful = painel({
+      resumo: {
+        voos_nao_liberados: 0,
+        tripulantes_checkin_pendente: 0,
+        voos_requerem_revisao: 0,
+        voos_liberaveis: 1,
+      },
+    });
+    expect(safeFrmsPanelData(lastSuccessful, null).resumo?.voos_liberaveis).toBe(1);
+    const failedRefresh = safeFrmsPanelData(lastSuccessful, new Error('Falha de rede QA'));
+    expect(failedRefresh.resumo).toBeUndefined();
+    expect(failedRefresh.voos).toEqual([]);
   });
 
   it('mostra estado vazio quando nao ha voos programados na data', async () => {

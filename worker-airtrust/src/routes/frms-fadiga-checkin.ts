@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppEnv } from '../types';
 import legacyRouter from './frms-fadiga-checkin-legacy';
+import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 
 export { resolveContextoPilotoLimites } from './frms-fadiga-checkin-legacy';
 
@@ -43,13 +44,6 @@ function legacyRequest(c: Context<AppEnv>, pathname: string): Request {
   return new Request(url.toString(), c.req.raw);
 }
 
-function normalizeDailyFatigueItems(data: Record<string, unknown> | undefined): DailyFatigueStatusItem[] {
-  if (!data) return [];
-  if (Array.isArray(data.items)) return data.items as DailyFatigueStatusItem[];
-  if (data.funcionario_id != null) return [data as DailyFatigueStatusItem];
-  return [];
-}
-
 export function createFrmsFadigaCheckinRouter(
   options: FrmsFatigueRouterOptions = {},
 ): FrmsFatigueRouter {
@@ -57,28 +51,77 @@ export function createFrmsFadigaCheckinRouter(
   const router = new Hono<AppEnv>();
 
   router.get('/daily-fatigue/alerts', async (c) => {
-    const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
+    const date = c.req.query('date') || frmsOperationalTodayIso();
     const teamRequest = legacyRequest(c, '/daily-fatigue');
     const teamUrl = new URL(teamRequest.url);
     teamUrl.search = '';
     teamUrl.searchParams.set('date', date);
     teamUrl.searchParams.set('scope', 'team');
 
-    const statusResponse = await delegatedRouter.fetch(
-      new Request(teamUrl.toString(), teamRequest),
-      c.env,
-      c.executionCtx,
-    );
+    // The daily roster is paginated. A single implicit first page (100 crew)
+    // silently drops later check-in alerts; collect every page or fail closed.
+    // Non-managers are still scoped to their own record by the delegated route.
+    const pageSize = 500;
+    const maxPages = 20;
+    const statusItems: DailyFatigueStatusItem[] = [];
+    const seenCrew = new Set<number>();
+    const validStatuses = new Set([
+      'no_duty', 'normal', 'not_submitted', 'incomplete_checkin',
+      'attention', 'critical', 'unfit_for_duty',
+    ]);
+    const incomplete = () => c.json({
+      success: false,
+      error: 'FRMS_DAILY_FATIGUE_SNAPSHOT_INCOMPLETE',
+    }, 502);
 
-    if (!statusResponse.ok) return statusResponse;
+    for (let page = 0; page < maxPages; page++) {
+      const pageUrl = new URL(teamUrl);
+      pageUrl.searchParams.set('limit', String(pageSize));
+      pageUrl.searchParams.set('offset', String(page * pageSize));
+      const statusResponse = await delegatedRouter.fetch(
+        new Request(pageUrl.toString(), teamRequest),
+        c.env,
+        c.executionCtx,
+      );
+      if (!statusResponse.ok) return statusResponse;
 
-    const statusPayload = (await statusResponse.json()) as {
-      success?: boolean;
-      data?: Record<string, unknown>;
-    };
+      let statusPayload: { success?: boolean; data?: Record<string, unknown> };
+      try {
+        statusPayload = (await statusResponse.json()) as typeof statusPayload;
+      } catch {
+        return incomplete();
+      }
+      const data = statusPayload?.data;
+      if (statusPayload?.success !== true || !data || data.date !== date) {
+        return incomplete();
+      }
 
-    if (statusPayload.success === false) {
-      return c.json({ success: false, error: 'Erro ao carregar status de fadiga diária' }, 500);
+      if (Array.isArray(data.items)) {
+        if (data.items.length > pageSize) return incomplete();
+        for (const item of data.items as DailyFatigueStatusItem[]) {
+          const id = item?.funcionario_id;
+          if (!Number.isSafeInteger(id) || Number(id) <= 0 ||
+              !validStatuses.has(String(item?.status || '')) ||
+              seenCrew.has(Number(id))) {
+            return incomplete();
+          }
+          seenCrew.add(Number(id));
+          statusItems.push(item);
+        }
+        if (data.items.length < pageSize) break;
+        // Never silently truncate a roster beyond the bounded QA-safe scan.
+        if (page === maxPages - 1) {
+          return c.json({ success: false, error: 'FRMS_DAILY_FATIGUE_ROSTER_LIMIT' }, 503);
+        }
+      } else if (page === 0 && Number.isSafeInteger(data.funcionario_id) &&
+                 Number(data.funcionario_id) > 0 &&
+                 validStatuses.has(String(data.status || ''))) {
+        // The delegated route downgrades a non-manager's scope=team to self.
+        statusItems.push(data as DailyFatigueStatusItem);
+        break;
+      } else {
+        return incomplete();
+      }
     }
 
     const alertableStatuses = new Set([
@@ -89,7 +132,7 @@ export function createFrmsFadigaCheckinRouter(
       'unfit_for_duty',
     ]);
 
-    const items = normalizeDailyFatigueItems(statusPayload.data)
+    const items = statusItems
       .filter((item) => alertableStatuses.has(String(item.status || '')))
       .map((item) => {
         const status = String(item.status || '');

@@ -7,6 +7,7 @@ import {
   useFrmsOperacionalPainel,
   type CvFrmsCrewDispatchAssessment,
   type CvFrmsFlightDispatchItem,
+  type CvFrmsOperacionalPainel,
   type FrmsDispatchGateReasonCode,
   type FrmsDispatchReadinessStatus,
   type CvFrmsDailyAssessmentReason,
@@ -196,12 +197,19 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
   );
 }
 
+/** Prevent retained React Query data from displaying green cards on a failed refresh. */
+export function safeFrmsPanelData(painel: CvFrmsOperacionalPainel | undefined, error: Error | null) {
+  return {
+    resumo: error ? undefined : painel?.resumo,
+    voos: error ? [] : (painel?.voos ?? []),
+  };
+}
+
 export default function ControleOperacionalFrmsPanel() {
   const [data, setData] = useState(() => frmsBrazilOperationalTodayIso());
   const { data: painel, isLoading, isFetching, error, refetch, dataUpdatedAt } = useFrmsOperacionalPainel(data);
 
-  const resumo = painel?.resumo;
-  const voos = painel?.voos ?? [];
+  const { resumo, voos } = safeFrmsPanelData(painel, error);
 
   return (
     <div className="mb-6 space-y-4" data-testid="controle-operacional-frms-panel">
@@ -241,7 +249,7 @@ export default function ControleOperacionalFrmsPanel() {
         </div>
       </div>
 
-      {dataUpdatedAt > 0 && (
+      {!error && dataUpdatedAt > 0 && (
         <p className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
           Consulta atualizada às {new Intl.DateTimeFormat('pt-BR', {
             timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',

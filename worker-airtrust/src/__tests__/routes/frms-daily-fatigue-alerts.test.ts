@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { AppEnv, Env } from '../../types';
 import { createFrmsFadigaCheckinRouter } from '../../routes/frms-fadiga-checkin';
@@ -10,6 +10,23 @@ function createLegacyRouter() {
     const date = c.req.query('date');
     if (date === '2026-09-02') {
       return c.json({ success: false, error: 'upstream failure' }, 503);
+    }
+    const offset = Number(c.req.query('offset') || 0);
+    const limit = Number(c.req.query('limit') || 100);
+    if (date === '2026-09-03' || date === '2026-09-05') {
+      if (date === '2026-09-05' && offset > 0) {
+        return c.json({ success: false, error: 'page 2 unavailable' }, 503);
+      }
+      const crew = Array.from({ length: 501 }, (_, i) => ({
+        funcionario_id: i + 1,
+        funcionario_nome: 'Tripulante QA',
+        status: i === 500 ? 'not_submitted' : 'normal',
+        data_source: i === 500 ? 'missing_checkin' : 'crew_reported',
+      }));
+      return c.json({ success: true, data: { date, items: crew.slice(offset, offset + limit) } });
+    }
+    if (date === '2026-09-04') {
+      return c.json({ success: true, data: { date, items: null } });
     }
 
     if ((c.req.header('x-role') || '').toUpperCase() === 'PILOTO') {
@@ -27,6 +44,7 @@ function createLegacyRouter() {
     return c.json({
       success: true,
       data: {
+        date,
         items: [
           {
             funcionario_id: 101,
@@ -86,6 +104,25 @@ function createApp() {
 }
 
 describe('GET /api/frms/daily-fatigue/alerts', () => {
+  it('defaults to the Brazilian operational day when UTC has already rolled over', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-30T00:30:00Z')); // 21:30 on 29 Oct in Brasília.
+      const response = await createApp().fetch(
+        new Request('http://localhost/api/frms/daily-fatigue/alerts', {
+          headers: { 'x-role': 'ADMINISTRADOR' },
+        }),
+        {} as Env,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as any;
+      expect(body.data.date).toBe('2026-10-29');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('deriva alertas de equipe do snapshot diário sem depender de frms_alerta', async () => {
     const response = await createApp().fetch(
       new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-01', {
@@ -132,6 +169,39 @@ describe('GET /api/frms/daily-fatigue/alerts', () => {
     expect(body.data.items).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ tripulante_id: 105 })]),
     );
+  });
+
+  it('varre páginas além dos 100 primeiros tripulantes sem perder alerta real', async () => {
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-03', {
+        headers: { 'x-role': 'ADMINISTRADOR' },
+      }),
+      {} as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.count).toBe(1);
+    expect(body.data.items[0]).toMatchObject({
+      tripulante_id: 501,
+      alert_type: 'daily_fatigue_not_submitted',
+    });
+  });
+
+  it('falha fechado se o snapshot estiver malformado ou uma página posterior falhar', async () => {
+    for (const [date, status] of [['2026-09-04', 502], ['2026-09-05', 503]] as const) {
+      const response = await createApp().fetch(
+        new Request(`http://localhost/api/frms/daily-fatigue/alerts?date=${date}`, {
+          headers: { 'x-role': 'ADMINISTRADOR' },
+        }),
+        {} as Env,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(status);
+      const body = (await response.json()) as any;
+      expect(body.success).toBe(false);
+      expect(body.data?.count).toBeUndefined();
+    }
   });
 
   it('preserva o comportamento self quando o endpoint canônico restringe o escopo de equipe', async () => {

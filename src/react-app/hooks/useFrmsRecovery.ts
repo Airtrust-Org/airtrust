@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
+import { assertTenantDataScope, captureTenantDataScope, registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
 
 export type RecoveryActivityType =
   | 'OFF_DUTY'
@@ -72,6 +73,11 @@ type PendingRecoveryActivity = {
 };
 
 const pendingRecoveryActivities = new Map<string, PendingRecoveryActivity>();
+
+// Unsaved declarations belong to the active session/tenant, not just the date.
+// Logout, tenant switch and cross-tab invalidation must discard them before
+// another identity can submit a previous user's draft as its own activity.
+registerTenantCacheReset('frms-pending-recovery-activity', () => pendingRecoveryActivities.clear());
 
 export const RECOVERY_ACTIVITY_REQUIRED_MESSAGE =
   'Informe como foi sua condição operacional ontem antes de concluir o check-in.';
@@ -181,12 +187,16 @@ export async function submitPendingFrmsRecoveryActivity(
   assessmentDate: string,
 ): Promise<RecoveryActivityResult | null> {
   const referenceDate = previousOperationalDate(assessmentDate);
+  // Capture the session before the asynchronous source read: a tenant reset
+  // must not allow an old response to submit a newly staged declaration.
+  const sessionScope = captureTenantDataScope();
   // Confirm the previous-day operational source with the backend immediately before
   // final check-in submission. A failed/unavailable source never silently skips
   // the mandatory activity response.
   const context = await getRecovery<RecoveryContextData>(
     `/frms/readiness/recovery/context?date=${encodeURIComponent(referenceDate)}`,
   );
+  assertTenantDataScope(sessionScope);
   if (context?.flight?.detected) {
     // Real flight activity uses the canonical engine-cut boundary, not a
     // previous-day no-flight declaration, even on deployments without recovery schema.
@@ -211,6 +221,8 @@ export async function submitPendingFrmsRecoveryActivity(
     '/frms/readiness/recovery/activity',
     pending.input,
   );
+  // A reset while POST is in flight must not clear a different session's draft.
+  assertTenantDataScope(sessionScope);
   pendingRecoveryActivities.delete(referenceDate);
   return result;
 }
