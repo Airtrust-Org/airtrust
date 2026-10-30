@@ -107,6 +107,12 @@ export type FormativeAttestationPayload = {
   requiredSlides: number;
   requiredActivities: number;
   driverSha256: string;
+  pedagogicalReview: {
+    artifactSha256: string; driverSha256: string;
+    reviewerReference: string; approvalReference: string; approvedAt: string;
+    itemCount: number; reviewerKeyId: string;
+    reviewerPublicKeySha256: string; approvalSignatureSha256: string;
+  };
   browserEvidenceSha256: { CHROMIUM: string; WEBKIT: string };
   backendWitnessSha256: { CHROMIUM: string; WEBKIT: string };
   certificateDocuments: {
@@ -139,6 +145,17 @@ export function serializeFormativeAttestation(p: FormativeAttestationPayload): s
     packageSha256: p.packageSha256, runtimeSha: p.runtimeSha, harnessSha: p.harnessSha,
     issuedAt: p.issuedAt, requiredSlides: p.requiredSlides, requiredActivities: p.requiredActivities,
     driverSha256: p.driverSha256,
+    pedagogicalReview: {
+      artifactSha256: p.pedagogicalReview.artifactSha256,
+      driverSha256: p.pedagogicalReview.driverSha256,
+      reviewerReference: p.pedagogicalReview.reviewerReference,
+      approvalReference: p.pedagogicalReview.approvalReference,
+      approvedAt: p.pedagogicalReview.approvedAt,
+      itemCount: p.pedagogicalReview.itemCount,
+      reviewerKeyId: p.pedagogicalReview.reviewerKeyId,
+      reviewerPublicKeySha256: p.pedagogicalReview.reviewerPublicKeySha256,
+      approvalSignatureSha256: p.pedagogicalReview.approvalSignatureSha256,
+    },
     browserEvidenceSha256: {
       CHROMIUM: p.browserEvidenceSha256.CHROMIUM, WEBKIT: p.browserEvidenceSha256.WEBKIT,
     },
@@ -183,7 +200,7 @@ export async function verifyFormativeAttestation(
   const env = candidate as FormativeAttestation;
   const p = env.payload;
   if (!exactKeys(p, ['kind', 'profile', 'scope', 'packageSha256', 'runtimeSha', 'harnessSha', 'issuedAt',
-    'requiredSlides', 'requiredActivities', 'driverSha256', 'browserEvidenceSha256',
+    'requiredSlides', 'requiredActivities', 'driverSha256', 'pedagogicalReview', 'browserEvidenceSha256',
     'backendWitnessSha256', 'certificateDocuments', 'runs'])) return no('ATTESTATION_SHAPE_INVALID');
   if (p.kind !== FORMATIVE_ATTESTATION_KIND || p.profile !== FORMATIVE_PROFILE ||
       p.scope !== 'GOVERNED_STAGING_SYNTHETIC') return no('ATTESTATION_PROFILE_INVALID');
@@ -201,6 +218,27 @@ export async function verifyFormativeAttestation(
       p.backendWitnessSha256.CHROMIUM === p.backendWitnessSha256.WEBKIT) {
     return no('EVIDENCE_DIGEST_INVALID');
   }
+  const review = p.pedagogicalReview;
+  if (!exactKeys(review, [
+    'artifactSha256', 'driverSha256', 'reviewerReference', 'approvalReference',
+    'approvedAt', 'itemCount', 'reviewerKeyId', 'reviewerPublicKeySha256',
+    'approvalSignatureSha256',
+  ]) || !SHA256.test(review.artifactSha256) ||
+      review.driverSha256 !== p.driverSha256 ||
+      !SHA256.test(review.reviewerPublicKeySha256) ||
+      !SHA256.test(review.approvalSignatureSha256) ||
+      typeof review.reviewerReference !== 'string' ||
+      !/^[a-zA-Z0-9._:-]{6,128}$/.test(review.reviewerReference) ||
+      typeof review.reviewerKeyId !== 'string' ||
+      !/^[a-zA-Z0-9._:-]{6,128}$/.test(review.reviewerKeyId) ||
+      typeof review.approvalReference !== 'string' ||
+      review.approvalReference.trim().length < 10 || review.approvalReference.length > 128 ||
+      typeof review.approvedAt !== 'string' || !ISO.test(review.approvedAt) ||
+      !Number.isFinite(Date.parse(review.approvedAt)) ||
+      Date.parse(review.approvedAt) > now + 60_000 ||
+      now - Date.parse(review.approvedAt) > 365 * 86_400_000 ||
+      !Number.isSafeInteger(review.itemCount) ||
+      review.itemCount !== p.requiredActivities) return no('PEDAGOGICAL_REVIEW_INVALID');
   if (!Number.isSafeInteger(p.requiredSlides) || p.requiredSlides < 1 ||
       p.requiredSlides !== context.requiredSlides ||
       !Number.isSafeInteger(p.requiredActivities) || p.requiredActivities < 1 ||

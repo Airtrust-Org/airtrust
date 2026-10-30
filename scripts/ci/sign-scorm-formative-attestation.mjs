@@ -20,6 +20,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateGovernedScormZipDriver } from './validate-scorm-governed-driver.mjs';
 import { validateScormBackendWitness } from './sign-scorm-functional-attestation.mjs';
+import { validatePedagogicalReview } from './scorm-pedagogical-review-gate.mjs';
 
 const KIND = 'AIRTRUST_SCORM_FORMATIVE_ATTESTATION_V1';
 const PROFILE = 'FORMATIVE_NO_EXAM_V1';
@@ -34,6 +35,7 @@ const read = path => JSON.parse(readFileSync(path, 'utf8'));
 
 export function signFormativeScormEvidence({
   candidate, chromiumFile, webkitFile, certificatePdfFiles, driverFile, secret, runtimeSha, harnessSha,
+  reviewFile, approvalFile, trustedReviewerKeys,
 }) {
   assert(typeof secret === 'string' && secret.length >= 32, 'SECRET_MISSING');
   assert(commit.test(runtimeSha) && commit.test(harnessSha), 'COMMIT_INVALID');
@@ -50,6 +52,15 @@ export function signFormativeScormEvidence({
   assert(candidate.stagingRuntimeSha === runtimeSha, 'RUNTIME_SHA_DRIFT');
   const driverBytes = readFileSync(driverFile);
   validateGovernedScormZipDriver(zipBytes, JSON.parse(driverBytes.toString('utf8')), candidate);
+  // Only a real, independently signed review can authorize the formative attestation.
+  // Item count is derived from the server's formative contract, not a caller override.
+  const pedagogicalReview = validatePedagogicalReview({
+    reviewFile, driverFile, candidate: { ...candidate, reviewItemCount: candidate.requiredActivities },
+    approvalFile, trustedReviewerKeys,
+  });
+  assert(pedagogicalReview.driverSha256 === digest(driverBytes) &&
+    pedagogicalReview.itemCount === candidate.requiredActivities,
+  'PEDAGOGICAL_REVIEW_SCOPE_INVALID');
 
   assert(chromiumFile && webkitFile && certificatePdfFiles?.CHROMIUM &&
     certificatePdfFiles?.WEBKIT, 'TWO_BROWSER_INPUTS_REQUIRED');
@@ -109,7 +120,8 @@ export function signFormativeScormEvidence({
     packageSha256: candidate.packageSha256, runtimeSha, harnessSha,
     issuedAt: new Date().toISOString(),
     requiredSlides: candidate.requiredSlides, requiredActivities: candidate.requiredActivities,
-    driverSha256: digest(driverBytes), browserEvidenceSha256, backendWitnessSha256,
+    driverSha256: digest(driverBytes), pedagogicalReview,
+    browserEvidenceSha256, backendWitnessSha256,
     certificateDocuments, runs,
   };
   // Same canonical projection and order as the Worker WebCrypto verifier.
@@ -125,6 +137,8 @@ function main() {
   const result = signFormativeScormEvidence({
     candidate: args.candidate, chromiumFile: args.chromiumFile, webkitFile: args.webkitFile,
     certificatePdfFiles: args.certificatePdfFiles, driverFile: args.driverFile,
+    reviewFile: args.reviewFile, approvalFile: args.approvalFile,
+    trustedReviewerKeys: JSON.parse(process.env.SCORM_QA_REVIEWER_PUBLIC_KEYS_JSON || '{}'),
     secret: process.env.SCORM_QA_ATTESTATION_SECRET, runtimeSha: process.env.SCORM_QA_RUNTIME_SHA,
     harnessSha: process.env.GITHUB_SHA,
   });

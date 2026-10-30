@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, generateKeyPairSync, sign as ed25519Sign } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zipSync, strToU8 } from 'fflate';
@@ -36,7 +36,21 @@ function setup(mutate: (row: EvidenceRow) => void = () => {},
   }));
   const packageSha256 = sha(zip);
   const click = { op: 'click', selector: '#next' };
+  const approvedAt = new Date().toISOString();
+  const review = Buffer.from(JSON.stringify({
+    kind: 'AIRTRUST_SCORM_INDEPENDENT_PEDAGOGICAL_REVIEW_V1',
+    packageSha256, approved: true, independentOfPackageAuthor: true,
+    reviewerReference: 'reviewer-test-01',
+    approvalReference: 'approved-test-case-2026',
+    approvedAt,
+    items: [1, 2].map(n => ({
+      itemId: 'item-' + n, status: 'APPROVED', selectedIndex: 0,
+      rationale: 'Independent synthetic reviewer checked this formative item.',
+      reviewerReference: 'reviewer-test-01',
+    })),
+  }));
   const driver = Buffer.from(JSON.stringify({
+    authorReviewed: true, reviewArtifactSha256: sha(review),
     schemaVersion: 1, packageSha256, requiresAssessment: false, launchFile: 'index.html',
     requiredContent: [{ selector: '#slide' }],
     resume: { assertion: { selector: '#slide', state: 'visible' }, actions: [click] },
@@ -86,7 +100,28 @@ function setup(mutate: (row: EvidenceRow) => void = () => {},
   mutate(row);
   mutateWebkit(webkitRow);
   writeFileSync(candidate.zipPath, zip);
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const reviewerKeyId = 'review-key-01';
+  const message = [
+    'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
+    reviewerKeyId, packageSha256, sha(review), sha(driver),
+    'reviewer-test-01', 'approved-test-case-2026', approvedAt,
+  ].join('\n');
+  const approval = {
+    kind: 'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
+    reviewerKeyId, packageSha256, reviewSha256: sha(review),
+    driverSha256: sha(driver), reviewerReference: 'reviewer-test-01',
+    approvedAt, signature: ed25519Sign(null, Buffer.from(message), privateKey).toString('base64'),
+  };
+  const trustedReviewerKeys = {
+    [reviewerKeyId]: {
+      reviewerReference: 'reviewer-test-01', role: 'INDEPENDENT_PEDAGOGICAL_REVIEWER',
+      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    },
+  };
   writeFileSync(join(dir, 'driver.json'), driver);
+  writeFileSync(join(dir, 'review.json'), review);
+  writeFileSync(join(dir, 'approval.json'), JSON.stringify(approval));
   writeFileSync(join(dir, 'chromium.json'), JSON.stringify(row));
   writeFileSync(join(dir, 'webkit.json'), JSON.stringify(webkitRow));
   writeFileSync(join(dir, 'chromium.pdf'), pdf);
@@ -94,9 +129,11 @@ function setup(mutate: (row: EvidenceRow) => void = () => {},
   const sign = () => signFormativeScormEvidence({
     candidate, chromiumFile: join(dir, 'chromium.json'), webkitFile: join(dir, 'webkit.json'),
     certificatePdfFiles: { CHROMIUM: join(dir, 'chromium.pdf'), WEBKIT: join(dir, 'webkit.pdf') },
-    driverFile: join(dir, 'driver.json'), secret, runtimeSha, harnessSha,
+    driverFile: join(dir, 'driver.json'), reviewFile: join(dir, 'review.json'),
+    approvalFile: join(dir, 'approval.json'), trustedReviewerKeys,
+    secret, runtimeSha, harnessSha,
   });
-  return { sign, packageSha256 };
+  return { sign, packageSha256, dir, trustedReviewerKeys };
 }
 
 describe('formative signer ⇄ Worker verifier', () => {
@@ -120,6 +157,24 @@ describe('formative signer ⇄ Worker verifier', () => {
     const tampered = { ...envelope, payload: { ...envelope.payload, harnessSha: 'e'.repeat(40) } };
     expect(await verifyFormativeAttestation(tampered, ctx, secret))
       .toMatchObject({ ok: false, reason: 'ATTESTATION_SIGNATURE_INVALID' });
+  });
+
+  it('requires an independently signed editorial review and rejects forged approvals', async () => {
+    const { sign, dir } = setup();
+    const approved = sign();
+    expect(approved.payload.pedagogicalReview.itemCount).toBe(2);
+    expect(approved.payload.pedagogicalReview.reviewerKeyId).toBe('review-key-01');
+    const approvalPath = join(dir, 'approval.json');
+    const bad = JSON.parse(readFileSync(approvalPath, 'utf8'));
+    bad.signature = Buffer.alloc(64).toString('base64');
+    writeFileSync(approvalPath, JSON.stringify(bad));
+    expect(sign).toThrow('SCORM_PEDAGOGICAL_INDEPENDENT_REVIEW_SIGNATURE_INVALID');
+    const context = { packageSha256: approved.payload.packageSha256, runtimeSha,
+      requiredSlides: 6, requiredActivities: 2 };
+    const altered = structuredClone(approved);
+    altered.payload.pedagogicalReview.itemCount = 1;
+    expect(await verifyFormativeAttestation(altered, context, secret))
+      .toMatchObject({ ok: false, reason: 'PEDAGOGICAL_REVIEW_INVALID' });
   });
 
   it('the payload is environment-independent (no staging tenant/course/package ids)', () => {
