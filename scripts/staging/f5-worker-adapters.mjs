@@ -276,6 +276,9 @@ export function createF5WorkerAdapters({
         cmiSha256: data.cmiSha256, suspendSha256: data.suspendSha256,
         sessionCount: data.sessionCount, qualificationHistoryCount: data.qualificationHistoryCount,
         certificateDocument: data.certificateDocument, scormScoreRaw: data.scormScoreRaw,
+        // Pass through only the protected Worker's scoped physical witness.
+        // Never synthesize zero counts from missing fields or browser flags.
+        assessmentEvidence: data.assessmentEvidence,
       };
     },
 
