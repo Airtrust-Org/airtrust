@@ -16,6 +16,7 @@ import {
 } from '../lib/frms/readiness';
 import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 import { createLogger } from '../utils/logger';
+import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -138,7 +139,7 @@ router.get('/today', async (c) => {
     return c.json({ success: false, error: 'Funcionario nao encontrado para o usuario atual' }, 404);
   }
 
-  const referenceDate = c.req.query('date') || new Date().toISOString().slice(0, 10);
+  const referenceDate = c.req.query('date') || frmsOperationalTodayIso();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate)) {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
@@ -166,7 +167,7 @@ router.get('/today', async (c) => {
 
 router.get('/team', async (c) => {
   const empresaId = getEmpresaId(c);
-  const referenceDate = c.req.query('date') || new Date().toISOString().slice(0, 10);
+  const referenceDate = c.req.query('date') || frmsOperationalTodayIso();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate)) {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
