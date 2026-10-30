@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { buildInteractiveM8QaFiles } from './lms-scorm-m8-fixture.mjs';
+import { assertDisposableQaCleanupState, assertDisposableQaCourseReadback, fixtureKindsForQaScope, resolveQaScope, assertQaScopeReadyForStaging, summarizeDisposableQaCleanup } from './lms-scorm-qa-scope.mjs';
 
 import {
   assertAllowedStagingBaseUrl,
@@ -244,6 +245,10 @@ function makeZip(kind) {
 
 async function createCourse(token, key, label, setorId) {
   const title = `QA SCORM ${label} ${RUN_MARKER}`;
+  // Generate ZIP before POST; fixture failures must not orphan a remote course.
+  const zipName = `qa-scorm-${key}-${RUN_MARKER}.zip`;
+  const zipPath = path.join(ROOT, zipName);
+  fs.writeFileSync(zipPath, makeZip(key), { mode: 0o600 });
   const result = await authJson(token, '/api/lms/cursos', {
     method: 'POST',
     body: {
@@ -264,24 +269,41 @@ async function createCourse(token, key, label, setorId) {
   );
   const id = Number(result.json?.data?.id);
   assert(Number.isInteger(id) && id > 0, `create ${label} sem id`);
-  const zipName = `qa-scorm-${key}-${RUN_MARKER}.zip`;
-  const zipPath = path.join(ROOT, zipName);
-  fs.writeFileSync(zipPath, makeZip(key), { mode: 0o600 });
   return { id, title, kind: key, zip_path: zipPath, zip_name: zipName };
 }
 
+async function removeVerifiedSyntheticCourse(token, item) {
+  const id = item.id;
+  const existing = await authJson(token, `/api/lms/cursos/${id}`);
+  if (existing.status === 404) return { deleteAttempted: false, deleted: false }; // Idempotent; no DELETE.
+  assert(existing.status === 200 && existing.json?.success === true,
+    'QA_SCORM_CLEANUP_READBACK_FAILED');
+  assertDisposableQaCourseReadback(existing.json?.data, item);
+  const removed = await authJson(token, `/api/lms/cursos/${id}`, { method: 'DELETE' });
+  assert(removed.status === 200 || removed.status === 404,
+    `cleanup curso ${id} retornou ${removed.status}`);
+  const verify = await authJson(token, `/api/lms/cursos/${id}`);
+  assert(verify.status === 404, `curso sintético ${id} ainda visível após cleanup`);
+  return { deleteAttempted: true, deleted: removed.status === 200 };
+}
+
 async function prepare() {
+  // Reject invalid/empty scopes before any staging network request or tenant switch.
+  const qaScope = assertQaScopeReadyForStaging(process.env.QA_SCOPE);
   fs.mkdirSync(ROOT, { recursive: true });
   await assertPinnedStagingRelease();
   const token = await qaToken();
   const setorId = await qaSyntheticSectorId(token);
   const created = [];
+  // Validate the scope before any course creation. Negative-only QA needs
+  // exactly one disposable course, not the four full-upload scenarios.
+  const kinds = fixtureKindsForQaScope(qaScope);
+  const labels = { success: 'Success', reject: 'Reject', timeout: 'Timeout', resume: 'Resume' };
 
   try {
-    created.push(await createCourse(token, 'success', 'Success', setorId));
-    created.push(await createCourse(token, 'reject', 'Reject', setorId));
-    created.push(await createCourse(token, 'timeout', 'Timeout', setorId));
-    created.push(await createCourse(token, 'resume', 'Resume', setorId));
+    for (const kind of kinds) {
+      created.push(await createCourse(token, kind, labels[kind], setorId));
+    }
 
     const state = {
       schema_version: 1,
@@ -294,44 +316,50 @@ async function prepare() {
         ok: true,
         prepared: true,
         course_count: created.length,
+        qa_scope: qaScope,
         state_path: STATE_PATH,
         production_target_used: false,
       }),
     );
   } catch (error) {
+    // A partial prepare failure must not bypass the identity guard on DELETE.
+    const failures = [];
     for (const item of [...created].reverse()) {
-      await authJson(token, `/api/lms/cursos/${item.id}`, { method: 'DELETE' }).catch(() => null);
+      try {
+        await removeVerifiedSyntheticCourse(token, item);
+      } catch {
+        failures.push(item.kind);
+      }
+    }
+    if (failures.length > 0) {
+      // Preserve a failing workflow for manual recovery, never blind deletion.
+      throw new Error('QA_SCORM_PREPARE_ROLLBACK_UNVERIFIED:' + failures.join(','));
     }
     throw error;
   }
 }
 
 async function cleanup() {
+  const qaScope = resolveQaScope(process.env.QA_SCOPE);
   assert(fs.existsSync(STATE_PATH), 'state QA SCORM ausente para cleanup');
   await assertPinnedStagingRelease();
   const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+  // Fail closed before authentication or any destructive request. Never trust
+  // course IDs from a state file without matching the exact run and scope.
+  const items = assertDisposableQaCleanupState(state, qaScope, RUN_MARKER);
   const token = await qaToken();
   const results = [];
 
-  for (const item of Object.values(state.courses || {})) {
-    const id = Number(item?.id);
-    if (!Number.isInteger(id) || id <= 0) continue;
-    const removed = await authJson(token, `/api/lms/cursos/${id}`, { method: 'DELETE' });
-    assert(
-      removed.status === 200 || removed.status === 404,
-      `cleanup curso ${id} retornou ${removed.status}`,
-    );
-    const verify = await authJson(token, `/api/lms/cursos/${id}`);
-    assert(verify.status === 404, `curso sintético ${id} ainda visível após cleanup`);
-    results.push({ kind: item.kind, removed: true });
+  for (const item of items) {
+    // Normal cleanup and failed-prepare rollback share the same readback gate.
+    const outcome = await removeVerifiedSyntheticCourse(token, item);
+    results.push({ kind: item.kind, ...outcome });
   }
 
   const summary = {
     ok: true,
     cleanup: 'PASS',
-    course_count: results.length,
-    all_courses_unreachable: true,
-    product_delete_endpoint_used: true,
+    ...summarizeDisposableQaCleanup(results),
     production_target_used: false,
   };
   const out = path.join(ROOT, 'cleanup-summary.json');

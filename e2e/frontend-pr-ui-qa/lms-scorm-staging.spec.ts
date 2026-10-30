@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { assertLiveFrontendShaFromPage } from '../lib/live-sha-guard.mjs';
+import { isExactQaStagingInitRequest } from '../../scripts/staging/lms-scorm-qa-scope.mjs';
 
 type QaCourse = {
   id: number;
@@ -74,7 +75,7 @@ async function delayedRealResponse(
   await route.fulfill({ response });
 }
 
-async function openCourseEditor(page: Page, course: QaCourse) {
+async function openCourseEditor(page: Page, course: QaCourse, beforeZipSelect?: () => Promise<void>) {
   // The catalog fetches draft courses asynchronously after the page mounts.
   // A visible searchbox is NOT proof of a completed catalog query. Record the
   // real tenant-scoped draft API verdict before assessing the synthetic card.
@@ -149,6 +150,9 @@ async function openCourseEditor(page: Page, course: QaCourse) {
     page.getByRole('heading', { name: `Refinando ${course.title}` }),
   ).toBeVisible();
 
+  // The negative-path mutation firewall must be installed BEFORE choosing the ZIP.
+  // File selection itself can trigger network activity in future UI versions.
+  if (beforeZipSelect) await beforeZipSelect();
   const fileInput = page.locator('input[type="file"][accept=".zip"]').first();
   await fileInput.setInputFiles(course.zip_path);
   await expect(page.getByText(course.zip_name, { exact: true })).toBeVisible();
@@ -367,43 +371,53 @@ test('LMS SCORM staging: protocol pass stays uncertified, static reject and time
   writeFileSync(SUMMARY_PATH, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
 });
 
-// The EXTERNAL resume ZIP has no independent F5 admin grant or signed
-// editorial review. The legacy Replace Content path MUST reject it before
-// /scorm-upload. Actual candidate intake and Chromium/WebKit preview are
-// separately governed by staging-scorm-f5-readiness.yml with an exact grant.
-test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before upload', async ({ page }) => {
+// A selected EXTERNAL ZIP cannot use the legacy save/replace action. The
+// candidate-first editor disables that action instead of surfacing the old
+// synchronous replacement error. This is a UI guard only: it does not prove
+// Worker-side EXTERNAL rejection or any granted candidate conformance.
+test('LMS SCORM resume: legacy replacement disabled for unreviewed EXTERNAL ZIP', async ({ page }) => {
   test.setTimeout(90_000);
   const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
   const resume = state.courses.resume;
-  const mutations: string[] = [];
-  const unexpectedUploads: string[] = [];
-  page.on('request', request => {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return;
-    const url = request.url();
-    mutations.push(url);
-    if (/\/scorm-upload(?:\/|$)|\/scorm-package-versions\//.test(new URL(url).pathname)) {
-      unexpectedUploads.push(new URL(url).pathname);
-    }
+  const attemptedWrites: Array<{ method: string; pathname: string }> = [];
+
+  // Fail closed from the moment the ZIP is selected, not only after selection.
+  await openCourseEditor(page, resume, async () => {
+    // Fail closed even if a future UI regression tries an unsolicited mutation.
+    // Service Workers are blocked for this audit profile in Playwright config.
+    await page.route('**/*', async route => {
+      const method = route.request().method().toUpperCase();
+      if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        await route.continue();
+        return;
+      }
+      const pathname = new URL(route.request().url()).pathname;
+      attemptedWrites.push({ method, pathname });
+      await route.abort('blockedbyclient');
+    });
   });
 
-  await openCourseEditor(page, resume);
-  await submitCourse(page);
-  await expect(page.getByText(/A substituição foi bloqueada antes do upload/i))
-    .toBeVisible({ timeout: 25_000 });
-  expect(unexpectedUploads,
-    'Unreviewed EXTERNAL ZIP must not start upload, conformance or activation',
-  ).toEqual([]);
-  expect(mutations.every(url => {
-    try { return new URL(url).hostname === STAGING_API_HOST; }
-    catch { return false; }
-  })).toBe(true);
+  await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
+    .toBeDisabled();
+  await expect(page.getByRole('button', {
+    name: 'Carregar somente candidato inativo (QA)',
+  })).toBeVisible();
+  // Do not click the candidate button: a real init POST is separately governed
+  // and must not be mistaken for this no-write UI guard.
+  await page.waitForTimeout(500);
+  expect(attemptedWrites, 'Legacy replacement must not attempt a mutation')
+    .toEqual([]);
 
   const summary = {
-    source: 'GOVERNED_STAGING_LMS_SCORM_EXTERNAL_REPLACEMENT_GUARD',
+    source: 'GOVERNED_STAGING_LMS_SCORM_LEGACY_REPLACEMENT_UI_GUARD',
     scope: 'QA_EXAMINER_SYNTHETIC_TENANT_ONLY',
     exactZipSha256: 'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f',
-    rejectedBeforeUpload: true,
-    uploadRequests: unexpectedUploads.length,
+    // No Worker rejection was exercised: the disabled UI prevented a submit.
+    rejectedBeforeUpload: false,
+    rejectionMechanism: 'DISABLED_LEGACY_SUBMIT',
+    legacySubmitDisabled: true,
+    workerRejectionVerified: false,
+    uploadRequests: attemptedWrites.length,
     previewRendered: [],
     previewSkippedReason: 'NO_EXACT_F5_GRANT_FOR_EXTERNAL_CANDIDATE',
     active: false,
@@ -413,4 +427,100 @@ test('LMS SCORM resume: EXTERNAL unreviewed replacement fails closed before uplo
   };
   writeFileSync('qa-state/staging-lms-scorm/resume-preview-summary.json',
     JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+});
+
+/**
+ * Current governed editor deliberately prevents legacy "Substituir conteúdo"
+ * from combining a metadata save and an unreviewed SCORM activation.
+ * This negative-path QA is distinct from functional certification or a granted
+ * candidate-upload test: no staging grant is issued for disposable QA courses.
+ */
+test('LMS SCORM candidate-first: old submit is disabled and ungranted F5 intake is rejected', async ({ page }) => {
+  test.setTimeout(90_000);
+  const state = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as QaState;
+  const course = state.courses.resume;
+  const writes: Array<{ method: string; origin: string; pathname: string }> = [];
+  const blockedWrites: typeof writes = [];
+  // Explicit user action is the only allowed window for an init POST.
+  // ZIP selection must never be allowed to initialize an upload automatically.
+  let allowExplicitInit = false;
+  // At most one init POST may reach the real Worker even if the UI regresses.
+  // The later request-count assertion alone would detect a duplicate too late.
+  let forwardedInitCount = 0;
+  const initPath = `/api/lms/cursos/${course.id}/scorm-upload/streamed/init`;
+
+  // Install after opening the editor but BEFORE selecting the ZIP. Otherwise
+  // an automatic upload on file selection could escape the negative QA firewall.
+  await openCourseEditor(page, course, async () => {
+    await page.route('**/*', async route => {
+      const request = route.request();
+      const method = request.method().toUpperCase();
+      if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        await route.continue();
+        return;
+      }
+      const url = new URL(request.url());
+      const observed = { method, origin: url.origin, pathname: url.pathname };
+      writes.push(observed);
+      const allowedInit = allowExplicitInit && forwardedInitCount === 0 &&
+        isExactQaStagingInitRequest({ method, url: request.url(), courseId: course.id });
+      if (!allowedInit) {
+        blockedWrites.push(observed);
+        await route.abort('blockedbyclient');
+        return;
+      }
+      // Reserve the single allowed attempt before asynchronous forwarding.
+      forwardedInitCount += 1;
+      await route.continue();
+    });
+  });
+  await expect(page.getByRole('button', { name: 'Salvar dados (remova o ZIP)' }))
+    .toBeDisabled();
+  const inactiveButton = page.getByRole('button', {
+    name: 'Carregar somente candidato inativo (QA)',
+  });
+  await expect(inactiveButton).toBeVisible();
+  await expect(inactiveButton).toBeEnabled();
+  expect(blockedWrites, 'ZIP selection must not attempt unauthorized writes').toEqual([]);
+  expect(writes, 'ZIP selection must not initiate a staging mutation').toEqual([]);
+  // This request must be rejected by the real Worker F5 grant guard before
+  // upload parts or candidate creation. Never mock an authorization grant.
+  const rejectedInit = page.waitForResponse(response =>
+    isExactQaStagingInitRequest({
+      method: response.request().method(), url: response.url(), courseId: course.id,
+    }), { timeout: 20_000 });
+  const initResponse = await (async () => {
+    allowExplicitInit = true;
+    try {
+      await inactiveButton.click();
+      return await rejectedInit;
+    } finally {
+      // A click/response timeout must not leave the network gate open.
+      allowExplicitInit = false;
+    }
+  })();
+  expect(forwardedInitCount, 'Exactly one init POST may reach the Worker').toBe(1);
+  // An unrelated 401 or RBAC 403 is not evidence of the F5 grant guard.
+  expect(initResponse.status(), 'F5 grant denial must be HTTP 403').toBe(403);
+  const denial = await initResponse.json().catch(() => null) as {
+    success?: boolean; error?: unknown;
+  } | null;
+  expect(denial?.success).toBe(false);
+  expect(typeof denial?.error).toBe('string');
+  expect(/grant(?: SCORM)? F5|grant de staging/i.test(String(denial?.error)),
+    'Expected explicit F5 grant rejection, not an unrelated RBAC denial',
+  ).toBe(true);
+  // Allow async UI error handling to settle while the route firewall remains
+  // active. A late mutation is blocked before it reaches the environment.
+  await page.waitForTimeout(750);
+  expect(blockedWrites, 'No unexpected staging or off-origin write may be attempted')
+    .toEqual([]);
+  // An exact allowlist also detects unexpected course writes or off-origin
+  // requests, beyond just upload parts, conformance and activation.
+  expect(writes, 'Denied intake must only POST init to the trusted staging Worker')
+    .toEqual([{
+      method: 'POST',
+      origin: 'https://' + STAGING_API_HOST,
+      pathname: initPath,
+    }]);
 });

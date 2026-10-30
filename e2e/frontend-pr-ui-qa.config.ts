@@ -79,6 +79,10 @@ export default defineConfig({
   ],
   use: {
     baseURL: resolveFrontendBaseUrl(),
+    // The candidate-first negative QA installs a page.route mutation firewall.
+    // Service Workers can bypass Playwright page routing; block them only for
+    // LMS SCORM so a forbidden upload/activation cannot evade interception.
+    serviceWorkers: AUDIT_PROFILE === 'lms-scorm' ? 'block' : 'allow',
     // PRIVACY (BLOCKER C): this QA runs against REAL staging with a real session.
     // Playwright's automatic failure trace/screenshot would capture whatever page
     // is on screen — including the /funcionarios listing of real people before a

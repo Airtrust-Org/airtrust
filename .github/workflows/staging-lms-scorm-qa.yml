@@ -12,13 +12,14 @@ on:
         required: true
         type: string
       qa_scope:
-        description: 'Full QA or focused EXTERNAL resume replacement guard (F5 preview requires grant)'
+        description: 'Full QA or focused negative candidate/EXTERNAL guards (positive F5 requires exact grant)'
         required: true
         type: choice
         default: all
         options:
           - all
           - resume-inactive-preview
+          - candidate-first-no-grant
       pr_number:
         description: 'Open reviewed same-repository release PR (required only when SHA is not yet in main)'
         required: false
@@ -65,6 +66,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Block ungranted legacy positive QA before staging access
+        shell: bash
+        env:
+          QA_SCOPE: ${{ inputs.qa_scope }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { assertQaScopeReadyForStaging } from './scripts/staging/lms-scorm-qa-scope.mjs';
+          assertQaScopeReadyForStaging(process.env.QA_SCOPE);
+          NODE
 
       - name: Require trusted main ancestry or exact open reviewed release PR
         shell: bash
@@ -146,6 +158,7 @@ jobs:
     timeout-minutes: 15
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
+      QA_SCOPE: ${{ inputs.qa_scope }}
       QA_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
       QA_ADMIN_PASSWORD: ${{ secrets.QA_EXAMINER_ADMIN_PASSWORD || secrets.STAGING_SMOKE_PASSWORD }}
       QA_EXAMINER_ADMIN_EMAIL: ${{ secrets.QA_EXAMINER_ADMIN_EMAIL || 'qa-examiner-admin@staging.airtrust.invalid' }}
@@ -155,7 +168,24 @@ jobs:
       AUDIT_PROFILE: lms-scorm
       CI: 'true'
     steps:
+      # The guard checks the exact deployed Worker+Pages SHA. The QA harness
+      # must run from that same commit, not from a newer moving main HEAD.
+      # Otherwise a successful run could be misattributed to older staging.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify exact QA harness provenance before using staging credentials
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]] || {
+            echo 'QA_HARNESS_RELEASE_SHA_MISMATCH' >&2
+            exit 1
+          }
 
       - uses: actions/setup-node@v7
         with:
@@ -174,6 +204,7 @@ jobs:
       - name: Check SCORM QA harness and upload contract
         run: |
           node --check scripts/staging/lms-scorm-staging-qa.mjs
+          node --test scripts/__tests__/lms-scorm-qa-scope.test.mjs
           AUDIT_PROFILE=lms-scorm npx playwright test \
             --config=e2e/frontend-pr-ui-qa.config.ts \
             --project=chromium \
@@ -189,7 +220,7 @@ jobs:
           test "$(sha256sum qa-state/staging-lms-scorm/qa-scorm-resume-uncertified.zip | cut -d' ' -f1)" = \
             'a66beb51033394e8ea736e76d1c644a4b2e37e1e7926c37b37b63b5cc0f10d6f'
 
-      - name: Prepare disposable SCORM courses and ZIP fixtures
+      - name: Prepare only QA-scope-required disposable SCORM courses and ZIP fixtures
         run: node scripts/staging/lms-scorm-staging-qa.mjs
 
       - name: Install Chromium
@@ -204,6 +235,10 @@ jobs:
           if [[ "$QA_SCOPE" == 'resume-inactive-preview' ]]; then
             npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium \
               --grep 'LMS SCORM resume:'
+          elif [[ "$QA_SCOPE" == 'candidate-first-no-grant' ]]; then
+            # Negative scope ONLY. Do not claim real ZIP conformance, PDF or certification.
+            npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium \
+              --grep 'LMS SCORM candidate-first:'
           else
             npx playwright test --config=e2e/frontend-pr-ui-qa.config.ts --project=chromium
           fi
@@ -267,14 +302,32 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require governed LMS SCORM QA
+      - name: Require governed LMS SCORM QA with exact scope
         shell: bash
         env:
           GUARD: ${{ needs.guard.result }}
           QA: ${{ needs.qa.result }}
+          QA_SCOPE: ${{ inputs.qa_scope }}
         run: |
           set -euo pipefail
           echo "guard=$GUARD qa=$QA"
           [[ "$GUARD" == 'success' ]]
           [[ "$QA" == 'success' ]]
-          echo 'STAGING_LMS_SCORM_QA_PASS'
+          case "$QA_SCOPE" in
+            all)
+              echo 'STAGING_LMS_SCORM_QA_PASS'
+              echo 'Full staging LMS SCORM QA scope completed.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            resume-inactive-preview)
+              echo 'STAGING_LMS_SCORM_RESUME_NEGATIVE_GUARD_PASS_ONLY'
+              echo 'Only the EXTERNAL replacement negative guard was checked; no full QA, upload acceptance, or functional certification.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            candidate-first-no-grant)
+              echo 'STAGING_LMS_SCORM_CANDIDATE_NO_GRANT_NEGATIVE_PASS_ONLY'
+              echo 'Only the candidate-first no-grant negative guard was checked; no positive upload, conformance, activation, or functional certification.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo 'QA_SCOPE_NOT_RECOGNIZED' >&2
+              exit 1
+              ;;
+          esac
