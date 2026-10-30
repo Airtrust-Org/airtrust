@@ -33,6 +33,14 @@ import {
   runScormPackageConformance,
 } from '../lib/lms/lms-scorm-package-version-service';
 import {
+  approveFormativePackage,
+  evaluateFormativeActivation,
+  importFormativeAttestation,
+  readCandidate,
+  rollbackScormPackageVersion,
+} from '../lib/lms/lms-scorm-formative-service';
+import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
+import {
   abortF5StreamedIntake,
   authorizeF5IntakeOperation,
   beginF5StreamedIntake,
@@ -582,16 +590,100 @@ app.get('/:id/scorm-package-versions/:packageId/qa-evidence/:enrollmentId',
   },
 );
 
-app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+const ActivateSchema = z.object({
+  confirm: z.object({
+    cursoId: z.number().int().positive(),
+    packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    acknowledgeInProgress: z.number().int().min(0).optional(),
+  }).strict().optional(),
+}).strict();
+
+const ApproveSchema = z.object({
+  confirm: z.object({
+    cursoId: z.number().int().positive(),
+    packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict(),
+  note: z.string().trim().min(10).max(500),
+  editorialReviewRef: z.string().trim().min(6).max(200).nullable().optional(),
+}).strict();
+
+const RollbackSchema = z.object({
+  confirm: z.object({
+    cursoId: z.number().int().positive(),
+    restorePackageId: z.string().regex(/^[a-f0-9-]{36}$/i),
+  }).strict(),
+}).strict();
+
+async function readSmallJson(c: Context<{ Bindings: Env }>, limit: number, label: string): Promise<unknown> {
+  assertContentLengthWithinLimit(c.req.raw, limit, label);
+  const raw = await c.req.text();
+  if (raw.length > limit) throw new ApiError(`${label} muito extenso`, 413);
+  if (!raw.trim()) return {};
+  try { return JSON.parse(raw); } catch { throw new ApiError(`${label} inválido`, 400); }
+}
+
+function actorId(c: Context<{ Bindings: Env }>): number | null {
+  return Number((c.get as (key: string) => unknown)('userId')) || null;
+}
+
+function courseIdParam(c: Context<{ Bindings: Env }>): number {
   const cursoId = Number(c.req.param('id'));
   if (!Number.isInteger(cursoId) || cursoId <= 0) throw new ApiError('Curso inválido', 400, 'UPLOAD_COURSE_INVALID');
+  return cursoId;
+}
+
+app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+  const cursoId = courseIdParam(c);
+  const body = ActivateSchema.safeParse(await readSmallJson(c, 2_048, 'Confirmação de ativação'));
+  if (!body.success) throw new ApiError('Confirmação de ativação inválida', 400, 'ACTIVATION_CONFIRMATION_INVALID');
   const data = await activateScormPackageVersion({
-    db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: c.req.param('packageId'), userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+    db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: c.req.param('packageId'), userId: actorId(c),
     attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET,
     runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    confirm: body.data.confirm,
   });
   return c.json({ success: true, data });
 });
+
+// Read-only: the exact checklist the activation itself enforces (same function).
+app.get('/:id/scorm-package-versions/:packageId/activation-preflight',
+  requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
+    const { row: _row, ...data } = await evaluateFormativeActivation({
+      db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId: courseIdParam(c),
+      packageId: c.req.param('packageId'),
+      attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET, runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    });
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({ success: true, data });
+  });
+
+// Administrative approval bound to tenant + course + package SHA. Admin only.
+app.post('/:id/scorm-package-versions/:packageId/approve',
+  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+    const body = ApproveSchema.safeParse(await readSmallJson(c, 4_096, 'Aprovação'));
+    if (!body.success) throw new ApiError('Aprovação inválida', 400, 'FORMATIVE_APPROVAL_INVALID');
+    const data = await approveFormativePackage({
+      db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId: courseIdParam(c),
+      packageId: c.req.param('packageId'), userId: actorId(c),
+      confirm: body.data.confirm, note: body.data.note,
+      editorialReviewRef: body.data.editorialReviewRef ?? null,
+      attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET, runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+    });
+    return c.json({ success: true, data });
+  });
+
+// Restores the immediately previous edition atomically. Admin only.
+app.post('/:id/scorm-package-versions/rollback',
+  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
+    const body = RollbackSchema.safeParse(await readSmallJson(c, 2_048, 'Rollback'));
+    if (!body.success) throw new ApiError('Confirmação de rollback inválida', 400, 'ROLLBACK_CONFIRMATION_INVALID');
+    const data = await rollbackScormPackageVersion({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId: getEmpresaIdSafe(c), cursoId: courseIdParam(c),
+      userId: actorId(c), confirm: body.data.confirm,
+    });
+    return c.json({ success: true, data });
+  });
 
 // This endpoint is never used by a learner or a SCORM package. Admin RBAC and
 // a private CI signing secret are both required; unsigned JSON cannot certify.
@@ -607,6 +699,16 @@ app.post('/:id/scorm-package-versions/:packageId/functional-attestation',
     let document: unknown;
     try { document = JSON.parse(raw); } catch {
       throw new ApiError('Atestação inválida', 400);
+    }
+    const candidate = await readCandidate(c.env.DB, getEmpresaIdSafe(c), cursoId, c.req.param('packageId'));
+    if (candidate.certification_profile === FORMATIVE_PROFILE) {
+      const data = await importFormativeAttestation({
+        db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId, packageId: candidate.id,
+        userId: Number((c.get as (key: string) => unknown)('userId')) || null,
+        attestation: document, attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET,
+        runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
+      });
+      return c.json({ success: true, data });
     }
     const data = await importScormFunctionalAttestation({
       db: c.env.DB, empresaId: getEmpresaIdSafe(c), cursoId,

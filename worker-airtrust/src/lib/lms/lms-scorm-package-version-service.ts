@@ -5,6 +5,10 @@ import { canActivateCertifiedScormPackage, validateScormPackageQuality, type Sco
 import { applyRuntimeConformance } from './lms-scorm-quality-gate';
 import { runScormBrowserConformance } from './lms-scorm-browser-run';
 import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
+import {
+  assertActivationConfirmation, evaluateFormativeActivation,
+} from './lms-scorm-formative-service';
+import { FORMATIVE_PROFILE } from './lms-scorm-formative-profile';
 import { validateF5R2ArchiveReadOnly } from './lms-scorm-r2-reader.mjs';
 import {
   verifyTrustedScormAttestation,
@@ -21,6 +25,9 @@ type PackageRow = {
   id: string; empresa_id: number; curso_id: number; package_sha256: string; r2_prefix: string;
   launch_file: string; status: string; scorm_versao?: string | null; validation_result_json: string | null;
   active_prefix?: string | null;
+  assessment_policy?: 'SCORED' | 'FORMATIVE' | null;
+  certification_profile?: string | null;
+  previous_active_package_id?: string | null;
 };
 
 // Large SCORM packages can contain hundreds of small visual assets. Serial R2
@@ -38,17 +45,17 @@ async function sha256(bytes: Uint8Array) {
   return hex(await crypto.subtle.digest('SHA-256', bytes));
 }
 
-function sha256Bytes(hexDigest: string) {
-  const bytes = new Uint8Array(hexDigest.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(hexDigest.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
 function errors(result: ScormQualityGateResult) {
   return [result.structural, result.completionManifest, result.diagnostics]
     .flatMap((section) => section.errors);
+}
+
+/** Edition profile/policy are derived by the server from the static contract only. */
+function derivedEditionProfile(quality: ScormQualityGateResult, rejected: boolean): [string | null, string | null] {
+  if (rejected || quality.certificationProfile !== FORMATIVE_PROFILE || quality.assessmentPolicy !== 'FORMATIVE') {
+    return [null, null];
+  }
+  return ['FORMATIVE', FORMATIVE_PROFILE];
 }
 
 export async function createScormPackageCandidate(params: {
@@ -151,12 +158,14 @@ export async function createScormPackageCandidate(params: {
       `INSERT INTO lms_scorm_package_versions (
         id, empresa_id, curso_id, package_version, package_sha256, zip_size_bytes, r2_prefix, launch_file, scorm_versao,
         uploaded_by, uploaded_at, status, validation_version, validation_started_at, validation_finished_at,
-        validation_result_json, rejection_reasons_json, previous_active_package_id
+        validation_result_json, rejection_reasons_json, previous_active_package_id,
+        assessment_policy, certification_profile
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '1.2', ?, datetime('now'), ?, ?, datetime('now'), datetime('now'), ?, ?,
-        (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'))`,
+        (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'), ?, ?)`,
     ).bind(id, params.empresaId, params.cursoId, `${new Date().toISOString()}-${packageSha256.slice(0, 12)}`, packageSha256,
       params.bytes.byteLength, prefix, pkg.launchFile, params.userId, status, quality.validatorVersion,
-      JSON.stringify(storedQuality), JSON.stringify(errors(quality)), params.empresaId, params.cursoId).run();
+      JSON.stringify(storedQuality), JSON.stringify(errors(quality)), params.empresaId, params.cursoId,
+      ...derivedEditionProfile(quality, rejected)).run();
     await params.db.prepare(
       `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, reason, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
@@ -289,13 +298,14 @@ export async function createScormPackageCandidateFromR2Intake(params: {
         `INSERT INTO lms_scorm_package_versions (
           id, empresa_id, curso_id, package_version, package_sha256, zip_size_bytes, r2_prefix, launch_file, scorm_versao,
           uploaded_by, uploaded_at, status, validation_version, validation_started_at, validation_finished_at,
-          validation_result_json, rejection_reasons_json, previous_active_package_id
+          validation_result_json, rejection_reasons_json, previous_active_package_id,
+          assessment_policy, certification_profile
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'), datetime('now'), ?, ?,
-          (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'))`,
+          (SELECT id FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND status = 'ACTIVE'), ?, ?)`,
         ).bind(id, params.empresaId, params.cursoId, `${new Date().toISOString()}-${params.expectedSha256.slice(0, 12)}`,
           params.expectedSha256, result.zipBytes, prefix, metadata.launchFile, metadata.scormVersao, params.userId, status,
           quality.validatorVersion, JSON.stringify(storedQuality), JSON.stringify(errors(quality)), params.empresaId,
-          params.cursoId),
+          params.cursoId, ...derivedEditionProfile(quality, rejected)),
         params.db.prepare(
           `INSERT INTO lms_scorm_package_audit_log (id, empresa_id, curso_id, package_id, action, actor_id, created_at)
            VALUES (?, ?, ?, ?, 'UPLOAD', ?, datetime('now'))`,
@@ -357,6 +367,9 @@ export function packageReadModel(row: PackageRow) {
     r2Prefix: row.r2_prefix,
     launchFile: row.launch_file,
     arquivoNome: readScormUploadFilename(validation),
+    assessmentPolicy: row.assessment_policy ?? null,
+    certificationProfile: row.certification_profile ?? null,
+    previousActivePackageId: row.status === 'ACTIVE' ? row.previous_active_package_id ?? null : null,
   };
 }
 
@@ -364,6 +377,7 @@ export async function listScormPackageVersions(db: D1Database, empresaId: number
   const rows = await db.prepare(
     `SELECT p.id, p.empresa_id, p.curso_id, p.package_sha256, p.r2_prefix,
             p.launch_file, p.scorm_versao, p.status, p.validation_result_json,
+            p.assessment_policy, p.certification_profile, p.previous_active_package_id,
             c.scorm_package_r2_prefix AS active_prefix
        FROM lms_scorm_package_versions p
        JOIN lms_cursos c ON c.id = p.curso_id AND c.empresa_id = p.empresa_id
@@ -454,26 +468,51 @@ export async function removeFailedScormPackageCandidate(params: {
     candidateTombstoned:true,r2PrefixEmpty:true};
 }
 
-export async function activateScormPackageVersion(params: { db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null; attestationSecret?: string; runtimeSha?: string }) {
+export async function activateScormPackageVersion(params: {
+  db: D1Database; empresaId: number; cursoId: number; packageId: string; userId: number | null;
+  attestationSecret?: string; runtimeSha?: string;
+  /** Required whenever the activation moves the course assessment policy. */
+  confirm?: { cursoId?: unknown; packageSha256?: unknown; acknowledgeInProgress?: unknown };
+}) {
   const candidate = await params.db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, status, validation_result_json,
+            assessment_policy, certification_profile
        FROM lms_scorm_package_versions WHERE id = ? AND empresa_id = ? AND curso_id = ?`,
   ).bind(params.packageId, params.empresaId, params.cursoId).first<PackageRow>();
   if (!candidate) throw new ApiError('Versão candidata não encontrada', 404);
   const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
-  // Legacy validation JSON can contain publishable=true from a protocol-only
-  // browser run. Never promote it without a complete SHA-bound functional gate.
-  const storedAttestation = (quality as (ScormQualityGateResult & {
-    trustedAttestation?: TrustedScormAttestation;
-  }) | null)?.trustedAttestation;
-  const provenanceVerified = await verifyTrustedScormAttestation(storedAttestation, {
-    empresaId: params.empresaId, cursoId: params.cursoId,
-    packageId: candidate.id, packageSha256: candidate.package_sha256,
-    runtimeSha: params.runtimeSha ?? '',
-    requiresAssessment: quality?.functionalCertification?.requiresAssessment ?? true,
-  }, params.attestationSecret);
-  if (candidate.status !== 'VALIDATED' || !provenanceVerified ||
-      !canActivateCertifiedScormPackage(quality, candidate.package_sha256)) {
+
+  // One server-side evaluation decides policy transition and administrative
+  // evidence. The preflight screen calls the very same function.
+  const preflight = await evaluateFormativeActivation({
+    db: params.db, empresaId: params.empresaId, cursoId: params.cursoId, packageId: candidate.id,
+    attestationSecret: params.attestationSecret, runtimeSha: params.runtimeSha,
+  });
+  const formative = candidate.certification_profile === FORMATIVE_PROFILE;
+  if (preflight.incomingPolicy !== null && !preflight.canActivate) {
+    const failed = preflight.checks.filter((check) => !check.ok).map((check) => check.id).join(',');
+    throw new ApiError(`Pacote não pode ser ativado: requisitos pendentes (${failed})`, 409, 'ACTIVATION_PREFLIGHT_FAILED');
+  }
+  assertActivationConfirmation(preflight, candidate as never, params.cursoId, params.confirm);
+
+  if (!formative) {
+    // Regular (scored / external-exam) editions keep the full, unchanged gate:
+    // legacy validation JSON can contain publishable=true from a protocol-only
+    // browser run, so never promote it without a complete SHA-bound functional gate.
+    const storedAttestation = (quality as (ScormQualityGateResult & {
+      trustedAttestation?: TrustedScormAttestation;
+    }) | null)?.trustedAttestation;
+    const provenanceVerified = await verifyTrustedScormAttestation(storedAttestation, {
+      empresaId: params.empresaId, cursoId: params.cursoId,
+      packageId: candidate.id, packageSha256: candidate.package_sha256,
+      runtimeSha: params.runtimeSha ?? '',
+      requiresAssessment: quality?.functionalCertification?.requiresAssessment ?? true,
+    }, params.attestationSecret);
+    if (candidate.status !== 'VALIDATED' || !provenanceVerified ||
+        !canActivateCertifiedScormPackage(quality, candidate.package_sha256)) {
+      throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
+    }
+  } else if (candidate.status !== 'VALIDATED') {
     throw new ApiError('Pacote não pode ser ativado: todos os gates obrigatórios devem passar', 409);
   }
   const originalFilename = readScormUploadFilename(quality);
@@ -486,6 +525,9 @@ export async function activateScormPackageVersion(params: { db: D1Database; empr
     originalFilename, actorId: params.userId,
     auditId: crypto.randomUUID(),
     validationJson: candidate.validation_result_json,
+    observed: { activePackageId: preflight.active?.packageId ?? null,
+      coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE' },
+    policy: preflight.incomingPolicy ? { incoming: preflight.incomingPolicy } : undefined,
   });
   if (!activated) {
     throw new ApiError('A edição SCORM mudou durante a ativação; revalide o pacote', 409);

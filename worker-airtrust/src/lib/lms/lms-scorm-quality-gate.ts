@@ -6,6 +6,9 @@ import {
   type ScormFunctionalBrowserRun,
   type ScormFunctionalCertification,
 } from './lms-scorm-functional-certification';
+import {
+  evaluateFormativeNoExamContract, FORMATIVE_PROFILE, type FormativeContract,
+} from './lms-scorm-formative-profile';
 
 export const SCORM_QUALITY_GATE_VERSION = 'AIRTRUST_SCORM_PACKAGE_QUALITY_GATE_V1';
 export const COMPLETION_CONTRACT = 'AIRTRUST_COMPLETION_CONTRACT_V1';
@@ -30,6 +33,14 @@ export type ScormQualityGateResult = {
   functionalCertification: ScormFunctionalCertification;
   /** Untrusted author-declared review: informational ONLY, never an SME release approval. */
   authoringReview?: { externalExam: boolean; reviewed: boolean };
+  /**
+   * Server-derived from the manifest contract, never from release.* fields.
+   * Present only when the ZIP provably has no scored/external exam and may use
+   * the lighter formative certification profile. Absent = regular profile.
+   */
+  certificationProfile?: typeof FORMATIVE_PROFILE | null;
+  assessmentPolicy?: 'FORMATIVE' | null;
+  formativeContract?: FormativeContract;
   publishable: boolean;
 };
 
@@ -385,6 +396,12 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const manifest = parseJsonEntry(pkg, 'airtrust-completion-manifest.json');
   const externalExam = asRecord(manifest?.assessment)?.mode === 'EXTERNAL';
   const declaredReviewed = asRecord(manifest?.release)?.reviewed === true;
+  // Only the assessment/completion contract decides eligibility. The ZIP's own
+  // release.* marker (status, reviewed, functionalCertified) is self-declared
+  // metadata and is deliberately never read here.
+  const formativeContract = evaluateFormativeNoExamContract(manifest);
+  const formativeEligible = formativeContract.eligible && !externalExam &&
+    structural.status === 'PASS' && completion.status === 'PASS' && diagnostic.status === 'PASS';
   return {
     validatorVersion: SCORM_QUALITY_GATE_VERSION,
     structural,
@@ -393,6 +410,9 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
     conformance,
     functionalCertification: evaluateScormFunctionalCertification('', []),
     authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed },
+    certificationProfile: formativeEligible ? FORMATIVE_PROFILE : null,
+    assessmentPolicy: formativeEligible ? 'FORMATIVE' : null,
+    formativeContract,
     publishable: false,
   };
 }

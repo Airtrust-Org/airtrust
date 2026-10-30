@@ -11,7 +11,7 @@ const zipSha = 'b'.repeat(64);
 const base = {
   repo: REPO, ref: 'refs/heads/main', event: 'workflow_dispatch',
   actor: 'owner-user', confirmation: 'AIRTRUST_F5_STAGING_CANDIDATE',
-  sha, grantId: '12345', tenantId: '9001', courseId: '7101',
+  prNumber: String(PR), sha, grantId: '12345', tenantId: '9001', courseId: '7101',
   packageSha256: zipSha, zipBytes: '1000', operationId: '123e4567-e89b-12d3-a456-426614174000'
 };
 const grantBody = v => 'AIRTRUST_F5_STAGING_CANDIDATE_V1\n' + JSON.stringify(expectedGrant(v));
@@ -35,7 +35,8 @@ test('rejects changed SHA/scope, extra grants, and missing confirmation fail-clo
   for (const patch of [
     { sha: 'bad' }, { tenantId: '0' }, { courseId: 'bad' },
     { packageSha256: 'bad' }, { zipBytes: String(MAX_ZIP_BYTES + 1) },
-    { operationId: 'not-a-uuid' }, { confirmation: '' }
+    { operationId: 'not-a-uuid' }, { confirmation: '' },
+    { prNumber: '1856' }, { prNumber: '01696' }, { prNumber: '' }
   ]) assert.throws(() => assertConfig({ ...base, ...patch }));
   for (const change of [
     { release_sha: 'c'.repeat(40) }, { tenant_id: 9002 }, { course_id: 7102 },
@@ -46,6 +47,37 @@ test('rejects changed SHA/scope, extra grants, and missing confirmation fail-clo
     assert.throws(() => checkGrantBody('AIRTRUST_F5_STAGING_CANDIDATE_V1\n' + JSON.stringify(parsed), base),
       /F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
   }
+});
+
+test('MGM 1855 uses an explicit, independently scoped F0 grant and cannot reuse pilot 1696 authorization', async () => {
+  const mgm = { ...base, prNumber: '1855', tenantId: '6', courseId: '26',
+    packageSha256: 'da0a36e661a1b592c47867e162841e3fc91b56d09e1e2feb7ea4c39f3c50f0ae',
+    zipBytes: '419132' };
+  assert.doesNotThrow(() => assertConfig(mgm));
+  assert.equal(expectedGrant(mgm).pr, 1855);
+  assert.equal(expectedGrant(mgm).candidate_status, 'INACTIVE');
+  assert.equal(expectedGrant(mgm).activation, 'PROHIBITED');
+  assert.throws(() => checkGrantBody(grantBody(base), mgm), /F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.throws(() => checkGrantBody(grantBody(mgm), base), /F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+
+  const now = Date.now();
+  const checks = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
+  const get = async path => {
+    if (path === 'pulls/1855') return { state: 'open', draft: false, base: { ref: 'main' },
+      head: { sha, repo: { full_name: REPO, fork: false } } };
+    if (path === `commits/${sha}/check-runs?per_page=100`) return { check_runs: checks.map(name =>
+      ({ name, head_sha: sha, status: 'completed', conclusion: 'success' })) };
+    if (path === 'issues/comments/12345') return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(now - 1000).toISOString(),
+      updated_at: new Date(now - 1000).toISOString(),
+      body: grantBody(mgm), user: { login: 'owner-user' }
+    };
+    if (path.startsWith('collaborators/')) return { permission: 'admin' };
+    throw Error('unexpected GET ' + path);
+  };
+  assert.equal(await verify(mgm, 'read-token', get, now), true);
 });
 
 test('requires all official release gates on the exact candidate SHA', () => {
@@ -255,7 +287,7 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
 test('readiness workflow invokes the pinned F0 executor only after exact grant and provenance guards', () => {
   const workflow = readFileSync('.github/workflows/staging-scorm-f5-readiness.yml', 'utf8');
   const guard = readFileSync('scripts/staging/f5-candidate-approval-guard.mjs', 'utf8');
-  for (const required of ['grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
+  for (const required of ['pr_number:', 'F5_PR_NUMBER:', 'grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
     'zip_bytes:', 'operation_id:', 'f5-candidate-approval-guard.mjs',
     'run-f5-inactive-candidate.mjs', 'F5_F0_ADAPTER_MODULE',
     'F5_F0_ADAPTER_SHA256', 'SCORM_QA_ACCESS_TOKEN',

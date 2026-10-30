@@ -4,6 +4,7 @@
  * stuck-enrollment classifier. Extracted from middleware/lms-completion-integrity.ts
  * without changing its precedence, except for the SCORM status-family fix below.
  */
+import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import {
   evaluateLmsCompletionEvidence,
   resolveLmsCompletionScorePct,
@@ -54,7 +55,7 @@ export async function readEnrollmentEvidence(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.data_inicio,
               m.qualificacao_historico_id,
               c.id AS curso_id, c.tipo_conteudo, c.ativo, c.publicado,
-              c.scorm_mastery_score, c.scorm_assessment_policy, c.scorm_package_r2_prefix, c.scorm_launch_file,
+              c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.scorm_package_r2_prefix, c.scorm_launch_file,
               c.gerar_qualificacao_ao_concluir,
               p.lesson_status, p.completion_status, p.success_status,
               p.score_raw, p.score_min, p.score_max, p.score_scaled,

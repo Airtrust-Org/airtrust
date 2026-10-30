@@ -6,7 +6,13 @@
 import { pathToFileURL } from 'node:url';
 
 export const REPO = 'Airtrust-Org/airtrust';
-export const PR = 1696;
+export const PR = 1696; // Historical F5 pilot; do not silently redirect its grants.
+const ALLOWED_PR_NUMBERS = new Set(['1696', '1855']);
+function exactReviewedPrNumber(v) {
+  const value = String(v?.prNumber ?? '');
+  if (!ALLOWED_PR_NUMBERS.has(value)) throw Error('F5_REVIEWED_PR_NOT_ALLOWLISTED');
+  return Number(value);
+}
 export const LOCK = 'airtrust-staging-mutations-and-scorm-qa';
 export const MAX_ZIP_BYTES = 80 * 1024 * 1024;
 const hex40 = /^[a-f0-9]{40}$/;
@@ -16,6 +22,7 @@ const uuid = /^[0-9a-f-]{36}$/i;
 const prefix = 'AIRTRUST_F5_STAGING_CANDIDATE_V1\n';
 
 export function assertConfig(v) {
+  exactReviewedPrNumber(v);
   if (v.repo !== REPO || v.ref !== 'refs/heads/main' ||
       v.event !== 'workflow_dispatch' ||
       v.confirmation !== 'AIRTRUST_F5_STAGING_CANDIDATE' ||
@@ -33,7 +40,7 @@ export function expectedGrant(v) {
   return {
     schema: 'AIRTRUST_F5_STAGING_CANDIDATE_V1',
     repository: REPO,
-    pr: PR,
+    pr: exactReviewedPrNumber(v),
     release_sha: v.sha,
     environment: 'staging',
     tenant_id: Number(v.tenantId),
@@ -91,7 +98,7 @@ export async function verify(v, token, get, now = () => Date.now()) {
   // once before several GitHub requests. Numeric clocks remain test fixtures.
   const currentTime = typeof now === 'function' ? now : () => now;
   if (!token) throw Error('F5_GITHUB_READ_TOKEN_REQUIRED');
-  const pr = await get(`pulls/${PR}`);
+  const pr = await get(`pulls/${exactReviewedPrNumber(v)}`);
   const isReviewedOpenHead = pr.state === 'open' && !pr.draft && pr.head?.sha === v.sha;
   const isMergedPr = pr.state === 'closed' && pr.merged === true &&
     hex40.test(pr.merge_commit_sha ?? '');
@@ -148,6 +155,7 @@ async function main() {
   const v = {
     repo: e.GITHUB_REPOSITORY, ref: e.GITHUB_REF, event: e.GITHUB_EVENT_NAME,
     actor: e.GITHUB_ACTOR, confirmation: e.F5_CONFIRMATION,
+    prNumber: e.F5_PR_NUMBER,
     sha: e.F5_RELEASE_SHA, grantId: e.F5_GRANT_ID,
     tenantId: e.F5_TENANT_ID, courseId: e.F5_COURSE_ID,
     packageSha256: e.F5_PACKAGE_SHA256, zipBytes: e.F5_ZIP_BYTES,

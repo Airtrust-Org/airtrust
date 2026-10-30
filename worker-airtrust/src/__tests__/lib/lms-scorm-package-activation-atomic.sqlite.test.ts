@@ -16,12 +16,14 @@ function fixture() {
     CREATE TABLE lms_scorm_package_versions (
       id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER, package_sha256 TEXT,
       r2_prefix TEXT, status TEXT, validation_result_json TEXT,
-      activated_at TEXT, activated_by INTEGER
+      activated_at TEXT, activated_by INTEGER, previous_active_package_id TEXT,
+      assessment_policy TEXT, certification_profile TEXT
     );
     CREATE TABLE lms_cursos (
       id INTEGER, empresa_id INTEGER, tipo_conteudo TEXT,
       scorm_package_r2_prefix TEXT, scorm_launch_file TEXT, scorm_versao TEXT,
       conteudo_arquivo_nome TEXT, updated_at TEXT, deleted_at TEXT,
+      scorm_assessment_policy TEXT NOT NULL DEFAULT 'SCORED',
       PRIMARY KEY(empresa_id,id)
     );
     CREATE TABLE lms_scorm_package_audit_log (
@@ -54,6 +56,12 @@ function candidate(db: SqliteD1Database, id = 'b') {
     db: db.asD1(), empresaId: 6, cursoId: 41, packageId: id,
     packageSha256: sha(id), prefix: prefix(id), launchFile: 'index.html',
     originalFilename: `${id}.zip`, actorId: 10, auditId: `audit-${id}`, validationJson: json,
+    observed: {
+      activePackageId: (db.database.prepare(`SELECT id FROM lms_scorm_package_versions
+        WHERE empresa_id=6 AND curso_id=41 AND status='ACTIVE'`).get() as {id:string}|undefined)?.id ?? null,
+      coursePolicy: (db.database.prepare(`SELECT scorm_assessment_policy AS policy FROM lms_cursos
+        WHERE empresa_id=6 AND id=41`).get() as {policy:'SCORED'|'FORMATIVE'}).policy,
+    },
   };
 }
 function states(db: SqliteD1Database) {
@@ -122,7 +130,8 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
   it('keeps exactly the last successfully activated candidate when two compete', async () => {
     const db = fixture(), b = candidate(db,'b'), c = candidate(db,'c');
     expect(await commitCertifiedScormActivation(b)).toBe(true);
-    expect(await commitCertifiedScormActivation(c)).toBe(true);
+    expect(await commitCertifiedScormActivation(c)).toBe(false); // stale preflight
+    expect(await commitCertifiedScormActivation({...candidate(db,'c'),auditId:'audit-c-fresh'})).toBe(true);
     expect(states(db)).toEqual([
       {id:'a',status:'SUPERSEDED'}, {id:'b',status:'SUPERSEDED'}, {id:'c',status:'ACTIVE'},
     ]);

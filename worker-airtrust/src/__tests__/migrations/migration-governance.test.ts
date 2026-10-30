@@ -143,7 +143,13 @@ describe('migration governance', () => {
     // 0557 adds the reviewed LMS per-cycle evidence archive. It is
     // a local migration mirror of the separately governed Schema V2 change.
     expect(files).toContain('0557_lms_cycle_evidence_archive.sql');
-    const expectedLatest = 557;
+    // 0569 adds SCORM edition-pinned assessment policy + append-only package approvals.
+    // Like 0557 it is a byte-identical local mirror of the Schema V2 change (hash-pinned in
+    // scripts/ci/ci-schema-bootstrap-contract.json) so the disposable lms-smoke DB has the columns.
+    expect(files).toContain('0569_lms_scorm_edition_policy_approvals.sql');
+    // 0570 appends immutable, scope-checked formative approval renewals.
+    expect(files).toContain('0570_lms_scorm_formative_approval_renewals.sql');
+    const expectedLatest = 570;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

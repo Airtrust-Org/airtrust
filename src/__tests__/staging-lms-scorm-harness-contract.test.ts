@@ -12,14 +12,21 @@ function read(pathname: string) {
 }
 
 describe('staging LMS SCORM governed harness contract', () => {
-  it('keeps the Playwright proxy timeout above the real conformance timeout', () => {
+  it('uses real staging Worker responses without intercepting or synthesizing API traffic', () => {
     const source = read(specPath);
-    const match = source.match(/route\.fetch\(\{\s*timeout:\s*([\d_]+)\s*\}\)/);
 
-    expect(match, 'delayed real-response route.fetch timeout must stay explicit').not.toBeNull();
-
-    const timeoutMs = Number(match?.[1].replaceAll('_', ''));
-    expect(timeoutMs).toBeGreaterThan(30_000);
+    // The previous browser QA proxied a delayed real conformance response
+    // through Playwright interception with a timeout. The candidate-first UI guard
+    // deliberately does NOT invoke conformance or intercept requests.
+    // Reintroducing interception requires a separately reviewed harness
+    // contract; this test must fail rather than silently accept a mock.
+    expect(source).not.toMatch(/\b(?:page|context)\.route\s*\(/);
+    expect(source).not.toMatch(/\broute\.(?:fetch|fulfill|continue|abort)\s*\(/);
+    expect(source).toContain('draftUrl.hostname !== STAGING_API_HOST');
+    expect(source).toContain('draftResponse.status() !== 200');
+    expect(source).toContain('draftResponse.json().catch(() => null)');
+    expect(source).toContain("realZipUpload: 'NOT_RUN_NO_EXACT_F5_GRANT'");
+    expect(source).toContain("functionalCertification: 'UNCERTIFIED'");
   });
 
   it('keeps release provenance and target guards fail-closed', () => {

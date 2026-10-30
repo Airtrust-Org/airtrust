@@ -6,6 +6,7 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
+import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -506,7 +507,7 @@ app.get('/:id', async (c) => {
           (SELECT cy.data_inicio FROM lms_matricula_ciclos cy
             WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
               AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
-          c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+          c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
@@ -1274,7 +1275,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.tipo_conteudo, c.scorm_package_r2_prefix,
+        c.id AS curso_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.tipo_conteudo, c.scorm_package_r2_prefix,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1816,7 +1817,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.id AS curso_id, c.scorm_package_r2_prefix, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
+              c.id AS curso_id, c.scorm_package_r2_prefix, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL},
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -2102,7 +2103,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     .prepare(
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
-              c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+              c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
