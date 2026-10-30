@@ -191,6 +191,16 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
             </p>
           ) : null}
 
+          {policyMoves && !formative ? (
+            <Button
+              variant="secondary"
+              loading={runConformance.isPending}
+              onClick={() => void runConformance.mutateAsync(pkg.packageId)}
+            >
+              Executar conformance
+            </Button>
+          ) : null}
+
           {policyMoves ? (
             <div className="space-y-2">
               {data.canActivate ? <ConfirmSha sha={sha} value={activateConfirm} onChange={setActivateConfirm} /> : null}
@@ -203,7 +213,8 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               <Button
                 variant="primary"
                 loading={activate.isPending}
-                disabled={!data.canActivate || activateConfirm !== sha12(sha) || (inProgress > 0 && !ackInProgress)}
+                disabled={!data.canActivate || (!formative && !pkg.publishable) ||
+                  activateConfirm !== sha12(sha) || (inProgress > 0 && !ackInProgress)}
                 onClick={() => void activate
                   .mutateAsync({
                     packageId: pkg.packageId,

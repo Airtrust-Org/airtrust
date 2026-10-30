@@ -98,6 +98,27 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     });
   });
 
+  it('preserves conformance when a scored candidate replaces an active formative edition', async () => {
+    m.preflight = preflight({
+      incomingPolicy: 'SCORED',
+      course: { id: 26, titulo: 'MGM', currentPolicy: 'FORMATIVE', masteryScore: 70 },
+      active: { packageId: 'pkg-old', packageSha256: OLD, policy: 'FORMATIVE' },
+      impact: { terminalToFreeze: 18, inProgress: 0, notStarted: 3 },
+      canActivate: true,
+    });
+    m.conformance.mockResolvedValue({});
+    const scoredCandidate = {
+      ...candidate, certificationProfile: null, assessmentPolicy: 'SCORED' as const,
+      publishable: false, runtime: { status: 'PENDING' },
+    };
+    render(<ScormEditionPanel cursoId={26} versions={[scoredCandidate]} isAdmin />);
+    const run = screen.getByRole('button', { name: 'Executar conformance' });
+    await userEvent.click(run);
+    expect(m.conformance).toHaveBeenCalledWith('pkg-new');
+    expect((screen.getByRole('button', { name: 'Ativar edição' }) as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
   it('non-admins cannot approve', () => {
     m.preflight = preflight({}, ['ADMIN_APPROVAL']);
     render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin={false} />);
