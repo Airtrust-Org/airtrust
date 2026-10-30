@@ -29,6 +29,7 @@ import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-valida
 import { normalizeFitForDutyPayload, normalizeOptionalBinary } from './frms-fadiga-checkin-normalization';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
+import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 const router = new Hono<AppEnv>();
@@ -70,7 +71,7 @@ function nowSql(): string {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return frmsOperationalTodayIso();
 }
 
 function csvEscape(value: unknown): string {
