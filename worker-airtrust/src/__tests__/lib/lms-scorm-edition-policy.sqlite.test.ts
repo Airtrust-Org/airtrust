@@ -93,6 +93,15 @@ function attestation(sha = FORM_SHA, overrides: Partial<FormativeAttestationPayl
     packageSha256: sha, runtimeSha, harnessSha: 'c'.repeat(40),
     issuedAt: new Date().toISOString(), requiredSlides: 101, requiredActivities: 14,
     driverSha256: '5'.repeat(64),
+    // Synthetic fixture: hashes are structural placeholders under the test HMAC,
+    // never an independently approved or deployable pedagogical review.
+    pedagogicalReview: {
+      artifactSha256: '8'.repeat(64), driverSha256: '5'.repeat(64),
+      reviewerReference: 'reviewer-test-01', approvalReference: 'approved-test-case-2026',
+      approvedAt: new Date().toISOString(), itemCount: 14,
+      reviewerKeyId: 'review-key-01', reviewerPublicKeySha256: '9'.repeat(64),
+      approvalSignatureSha256: 'a'.repeat(64),
+    },
     browserEvidenceSha256: { CHROMIUM: '1'.repeat(64), WEBKIT: '6'.repeat(64) },
     backendWitnessSha256: { CHROMIUM: '2'.repeat(64), WEBKIT: '7'.repeat(64) },
     certificateDocuments: {

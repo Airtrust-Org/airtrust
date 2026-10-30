@@ -111,7 +111,7 @@ function setup(mutate: (row: EvidenceRow) => void = () => {},
     kind: 'AIRTRUST_SCORM_PEDAGOGICAL_APPROVAL_ED25519_V1',
     reviewerKeyId, packageSha256, reviewSha256: sha(review),
     driverSha256: sha(driver), reviewerReference: 'reviewer-test-01',
-    approvedAt, signature: ed25519Sign(null, Buffer.from(message), privateKey).toString('base64'),
+    approvedAt, signature: Buffer.from(ed25519Sign(null, Buffer.from(message), privateKey)).toString('base64'),
   };
   const trustedReviewerKeys = {
     [reviewerKeyId]: {
