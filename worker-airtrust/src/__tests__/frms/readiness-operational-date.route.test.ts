@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
-import type { Env } from '../../types';
+import type { AppEnv, Env } from '../../types';
 import readinessRouter from '../../routes/frms-readiness';
 
 vi.mock('../../middleware/auth', () => ({
@@ -33,7 +33,7 @@ function createApp() {
       };
     },
   };
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   app.route('/api/frms/readiness', readinessRouter);
   const request = (suffix: string) =>
     app.fetch(new Request(`http://localhost/api/frms/readiness/${suffix}`), { DB: db } as unknown as Env);
