@@ -88,6 +88,9 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const policyMoves = data?.incomingPolicy != null;
   const inProgress = data?.impact.inProgress ?? 0;
   const previous = versions.find((item) => item.packageId === pkg.previousActivePackageId);
+  const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
+  const awaitingApproval = pending.has('ADMIN_APPROVAL');
+  const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -107,7 +110,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   return (
     <div className="rounded-lg border p-3 text-sm" data-testid={`edition-${pkg.packageId}`}>
       <p className="font-medium">
-        {pkg.status}{pkg.status === 'ACTIVE' ? ' (edição ativa)' : ''} · SHA {sha12(sha)}
+        {pkg.status === 'ACTIVE' ? 'Conteúdo atual' : pkg.status === 'VALIDATED' ? 'Nova edição recebida' : pkg.status === 'REJECTED' ? 'ZIP recusado' : 'Edição anterior'} · SHA {sha12(sha)}
         {formative ? <span className="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-900">Formativo · sem prova final</span> : null}
         {pkg.assessmentPolicy === 'SCORED' ? <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs">Avaliativo</span> : null}
       </p>
@@ -121,17 +124,36 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
         <p key={reason} className="text-rose-600">{reason}</p>
       ))}
 
+      {validated && preflight.isPending ? <p role="status">Verificando se a nova edição pode substituir a atual…</p> : null}
+      {validated && preflight.isError ? (
+        <div role="alert" className="mt-2 text-rose-700">
+          Falha ao consultar as condições da substituição. A edição atual não foi alterada.
+          <Button type="button" variant="secondary" onClick={() => void preflight.refetch()}>Tentar novamente</Button>
+        </div>
+      ) : null}
       {validated && data ? (
         <div className="mt-3 space-y-3">
+          <p className="font-medium" role="status">
+            {activationReady
+              ? 'Pronto para substituir o conteúdo do curso.'
+              : awaitingEvidence
+                ? 'Novo ZIP recebido. Aguardando homologação técnica assinada.'
+                : awaitingApproval
+                  ? 'Homologação recebida. Aguardando aprovação administrativa.'
+                  : 'Novo ZIP recebido. Existem verificações pendentes.'}
+          </p>
           <p className="text-xs">
             Curso <strong>#{data.course.id} · {data.course.titulo}</strong>
             {data.active ? <> · edição ativa hoje: {sha12(data.active.packageSha256)}</> : null}
           </p>
-          <ul className="space-y-1" aria-label="Pré-checagem de ativação">
-            {checks.map((check) => (
-              <Step key={check.id} ok={check.ok} label={CHECK_LABEL[check.id] ?? check.id} detail={check.ok ? undefined : check.detail} />
-            ))}
-          </ul>
+          <details className="rounded border p-2 text-xs">
+            <summary className="cursor-pointer font-medium">Ver verificações da substituição ({checks.filter((check) => check.ok).length}/{checks.length})</summary>
+            <ul className="mt-2 space-y-1" aria-label="Pré-checagem de ativação">
+              {checks.map((check) => (
+                <Step key={check.id} ok={check.ok} label={CHECK_LABEL[check.id] ?? check.id} detail={check.ok ? undefined : check.detail} />
+              ))}
+            </ul>
+          </details>
 
           {formative && (!evidenceOk || !approvalOk) ? (
             <div className="rounded border border-dashed p-2">
@@ -213,7 +235,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               <Button
                 variant="primary"
                 loading={activate.isPending}
-                disabled={!data.canActivate || (!formative && !pkg.publishable) ||
+                disabled={!isAdmin || !activationReady ||
                   activateConfirm !== sha12(sha) || (inProgress > 0 && !ackInProgress)}
                 onClick={() => void activate
                   .mutateAsync({
@@ -223,7 +245,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
                   .then(() => toast.success('Edição ativada. Confira o resultado no curso.'))
                   .catch((error: unknown) => toast.error(errorText(error)))}
               >
-                Ativar edição
+                Substituir conteúdo do curso
               </Button>
             </div>
           ) : (
