@@ -1204,14 +1204,14 @@ function CourseDrawer({
                       />
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                          <p className="font-semibold">1. Enviar ZIP para homologação (sem publicar)</p>
-                          <p className="mt-1">Somente armazena e valida o ZIP, sem substituir o curso publicado, alterar matrículas, concluir treinamentos ou emitir certificados. A ativação exige homologação independente.</p>
+                          <p className="font-semibold">Substituição do ZIP atual — etapa 1: enviar nova edição</p>
+                          <p className="mt-1">Este envio inicia a substituição do conteúdo do mesmo curso. O ZIP será validado como nova edição, mas o atual continua disponível aos alunos até a homologação e a ativação aprovadas.</p>
                           <Button type="button" variant="primary" disabled={!contentFile || isSaving}
                             onClick={() => {
                               if (!contentFile || !initial?.id) return;
                               void onProductionCandidateUpload(initial.id, contentFile).then((receipt) => {
                                 setQaCandidateReceipt(receipt);
-                                toast.success('SCORM armazenado como candidato INATIVO. Conteúdo publicado preservado.');
+                                toast.success('Novo ZIP recebido para substituição. A edição atual permanece ativa até a homologação e a ativação.');
                               }).catch((error: unknown) => {
                                 toast.error(error instanceof Error ? error.message : 'Falha no recebimento do candidato inativo');
                               });
@@ -1223,6 +1223,11 @@ function CourseDrawer({
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
                               SHA-256: {qaCandidateReceipt.packageSha256}.
                               A versão usada pelos alunos NÃO foi alterada; certificação funcional pendente.
+                              <div className="mt-3">
+                                <Link to={`/lms/cursos/${initial.id}`} className="font-semibold text-emerald-800 underline hover:text-emerald-950">
+                                  Etapa 2: conferir homologação e ativar a edição aprovada em “Edições do pacote SCORM”
+                                </Link>
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -1261,7 +1266,7 @@ function CourseDrawer({
                           </p>
                           <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
-                            <p className="mt-2 font-medium">Use o botão “Enviar ZIP para homologação” acima. Para editar os dados do curso, primeiro remova o ZIP selecionado. Nenhum envio ativa o curso automaticamente.</p>
+                            <p className="mt-2 font-medium">Use o botão verde acima para iniciar a substituição deste ZIP. Depois, abra “Edições do pacote SCORM” nos detalhes do curso para acompanhar os requisitos e ativar a nova edição aprovada. Para editar metadados, remova o ZIP selecionado.</p>
                           ) : null}
                           {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
