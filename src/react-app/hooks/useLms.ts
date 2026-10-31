@@ -1020,7 +1020,7 @@ export function useScormPackageVersions(cursoId: number, enabled = true) {
   return useQuery({
     queryKey: packageVersionsKey(cursoId),
     queryFn: () =>
-      lmsRequest<{ data: ScormPackageVersionRow[] }>(`/cursos/${cursoId}/scorm-package-versions`),
+      lmsRequest<ScormPackageVersionRow[]>(`/cursos/${cursoId}/scorm-package-versions`),
     enabled: enabled && cursoId > 0,
   });
 }
