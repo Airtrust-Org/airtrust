@@ -31,7 +31,7 @@ describe('SCORM direct replacement administrator role boundary', () => {
     const response = await app.request('/replace', {
       method: 'POST',
       headers: { 'x-test-grant': 'lms.editar' },
-    }, { ENVIRONMENT: 'test', ENABLE_DEV_AUTH_BYPASS: 'false' } as Env);
+    }, { ENVIRONMENT: 'test', ENABLE_DEV_AUTH_BYPASS: 'false' } as unknown as Env);
     expect(response.status).toBe(403);
     const payload = await response.json() as { code?: string };
     expect(payload.code).toBe('RBAC_FORBIDDEN');
