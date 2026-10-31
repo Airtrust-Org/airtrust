@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { replaceValidatedFormativeScorm } from '../../lib/lms/lms-scorm-direct-replacement';
+import { preflightDirectFormativeReplacement, replaceValidatedFormativeScorm } from '../../lib/lms/lms-scorm-direct-replacement';
 
 const mocks = vi.hoisted(() => ({ evaluate: vi.fn(), commit: vi.fn(), head: vi.fn(), reclassify: vi.fn() }));
 vi.mock('../../lib/lms/lms-scorm-formative-service', async (original) => ({
@@ -67,6 +67,33 @@ describe('admin direct SCORM replacement — fail closed', () => {
       observed: { activePackageId: 'old', coursePolicy: 'SCORED' },
       policy: { incoming: 'FORMATIVE' },
     }));
+  });
+
+  it('resolves the real in-progress enrollment count before one-click legacy upload acknowledgement', async () => {
+    const modern = plan();
+    const legacy = {
+      ...modern, incomingPolicy: null,
+      impact: { terminalToFreeze: 0, inProgress: 0, notStarted: 0 },
+      row: { ...modern.row, certification_profile: null, assessment_policy: null },
+    };
+    mocks.evaluate.mockResolvedValueOnce(legacy).mockResolvedValueOnce(modern);
+    const p = makeParams();
+    const preflight = await preflightDirectFormativeReplacement(p);
+    expect(preflight.incomingPolicy).toBe('FORMATIVE');
+    expect(preflight.impact.inProgress).toBe(3);
+    expect(mocks.reclassify).toHaveBeenCalledOnce();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    // Simulates the upload route's server-generated acknowledgement after
+    // reclassification rather than its incorrect old preflight count of 0.
+    mocks.evaluate.mockResolvedValue(modern);
+    const result = await replaceValidatedFormativeScorm({
+      ...p, confirm: {
+        cursoId: 26, packageSha256: SHA,
+        acknowledgeInProgress: preflight.impact.inProgress,
+      },
+    });
+    expect(result.status).toBe('ACTIVE');
+    expect(mocks.commit).toHaveBeenCalledOnce();
   });
 
   it('repairs a legacy VALIDATED candidate and retries preflight before atomic activation', async () => {

@@ -40,7 +40,7 @@ import {
   rollbackScormPackageVersion,
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
-import { replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
+import { preflightDirectFormativeReplacement, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
   authorizeF5IntakeOperation,
@@ -330,8 +330,9 @@ app.post('/:id/scorm-replace',
     // Clicking the unambiguous replacement button acknowledges that any open
     // enrollment uses the incoming course policy; the server supplies its own
     // contemporaneous count and retains CAS protection on policy+active SHA.
-    const preflight = await evaluateFormativeActivation({
-      db: c.env.DB, empresaId, cursoId, packageId: candidate.packageId,
+    const preflight = await preflightDirectFormativeReplacement({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      packageId: candidate.packageId, userId: actorId(c),
     });
     const data = await replaceValidatedFormativeScorm({
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
@@ -703,6 +704,7 @@ app.get('/:id/scorm-package-versions/:packageId/activation-preflight',
       packageId: c.req.param('packageId'),
       attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET, runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
     });
+    void _row;
     c.header('Cache-Control', 'private, no-store');
     return c.json({ success: true, data });
   });

@@ -22,20 +22,15 @@ export type DirectReplacementConfirmation = {
   acknowledgeInProgress?: unknown;
 };
 
-export async function replaceValidatedFormativeScorm(params: {
-  db: D1Database;
-  bucket: R2Bucket;
-  empresaId: number;
-  cursoId: number;
-  packageId: string;
-  userId: number | null;
-  confirm: DirectReplacementConfirmation | undefined;
+/** Resolve a legacy candidate's profile BEFORE the upload route counts active
+ * enrollments for its one-click replacement acknowledgement. */
+export async function preflightDirectFormativeReplacement(params: {
+  db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
+  packageId: string; userId: number | null;
 }) {
   if (!Number.isSafeInteger(params.userId) || Number(params.userId) <= 0) {
     throw new ApiError('Somente um administrador autenticado pode substituir conteúdo', 403, 'SCORM_REPLACE_ADMIN_REQUIRED');
   }
-  // Reuse the canonical course/tenant/policy/cycle read model; only the two
-  // external approval checks are intentionally replaced by the static gates.
   let preflight = await evaluateFormativeActivation({
     db: params.db, empresaId: params.empresaId,
     cursoId: params.cursoId, packageId: params.packageId,
@@ -57,6 +52,24 @@ export async function replaceValidatedFormativeScorm(params: {
       });
     }
   }
+  return preflight;
+}
+
+export async function replaceValidatedFormativeScorm(params: {
+  db: D1Database;
+  bucket: R2Bucket;
+  empresaId: number;
+  cursoId: number;
+  packageId: string;
+  userId: number | null;
+  confirm: DirectReplacementConfirmation | undefined;
+}) {
+  if (!Number.isSafeInteger(params.userId) || Number(params.userId) <= 0) {
+    throw new ApiError('Somente um administrador autenticado pode substituir conteúdo', 403, 'SCORM_REPLACE_ADMIN_REQUIRED');
+  }
+  // Reuse the canonical course/tenant/policy/cycle read model; only the two
+  // external approval checks are intentionally replaced by the static gates.
+  const preflight = await preflightDirectFormativeReplacement(params);
   const row = preflight.row;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' ||
