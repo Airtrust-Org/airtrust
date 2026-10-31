@@ -11,6 +11,7 @@ import {
   assertActivationConfirmation, evaluateFormativeActivation,
 } from './lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from './lms-scorm-formative-profile';
+import { reclassifyLegacyFormativeCandidate } from './lms-scorm-legacy-formative-reclassification';
 import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
 import { parseStoredScormValidation, readScormUploadFilename } from './lms-scorm-package-filename';
 import type { ScormQualityGateResult } from './lms-scorm-quality-gate';
@@ -35,10 +36,27 @@ export async function replaceValidatedFormativeScorm(params: {
   }
   // Reuse the canonical course/tenant/policy/cycle read model; only the two
   // external approval checks are intentionally replaced by the static gates.
-  const preflight = await evaluateFormativeActivation({
+  let preflight = await evaluateFormativeActivation({
     db: params.db, empresaId: params.empresaId,
     cursoId: params.cursoId, packageId: params.packageId,
   });
+  // Existing uploads can predate Schema V2 0569. A receipt of VALIDATED
+  // confirms structural acceptance, not that the new policy columns were
+  // pinned. Revalidate trusted R2 members and CAS-pin only missing metadata.
+  if (preflight.row.status === 'VALIDATED' &&
+      preflight.row.assessment_policy == null &&
+      preflight.row.certification_profile == null) {
+    const upgraded = await reclassifyLegacyFormativeCandidate({
+      db: params.db, bucket: params.bucket, empresaId: params.empresaId,
+      cursoId: params.cursoId, packageId: params.packageId, actorId: params.userId!, row: preflight.row,
+    });
+    if (upgraded) {
+      preflight = await evaluateFormativeActivation({
+        db: params.db, empresaId: params.empresaId,
+        cursoId: params.cursoId, packageId: params.packageId,
+      });
+    }
+  }
   const row = preflight.row;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' ||
