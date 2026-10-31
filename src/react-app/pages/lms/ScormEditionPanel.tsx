@@ -90,6 +90,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const previous = versions.find((item) => item.packageId === pkg.previousActivePackageId);
   const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
   const awaitingApproval = pending.has('ADMIN_APPROVAL');
+  const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -133,7 +134,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
       {validated && data ? (
         <div className="mt-3 space-y-3">
           <p className="font-medium" role="status">
-            {data.canActivate
+            {activationReady
               ? 'Pronto para substituir o conteúdo do curso.'
               : awaitingEvidence
                 ? 'Novo ZIP recebido. Aguardando homologação técnica assinada.'
@@ -234,7 +235,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               <Button
                 variant="primary"
                 loading={activate.isPending}
-                disabled={!isAdmin || !data.canActivate || (!formative && !pkg.publishable) ||
+                disabled={!isAdmin || !activationReady ||
                   activateConfirm !== sha12(sha) || (inProgress > 0 && !ackInProgress)}
                 onClick={() => void activate
                   .mutateAsync({
