@@ -325,7 +325,17 @@ app.post('/:id/scorm-replace',
       userId: actorId(c), bytes, arquivoNome,
     });
     if (candidate.status !== 'VALIDATED') {
-      throw new ApiError('ZIP recusado pela validação automática; treinamento atual preservado', 409, 'SCORM_REPLACE_STATIC_GATE_FAILED');
+      const sections = [candidate.structural, candidate.completionManifest, candidate.diagnostics];
+      const reasons = sections.flatMap(section => section?.errors ?? [])
+        .filter((reason): reason is string => typeof reason === 'string')
+        .slice(0, 2).join('; ').slice(0, 240);
+      const explanation = candidate.status === 'ACTIVE'
+        ? 'Este SHA já consta como edição ativa; atualize a página antes de tentar novamente'
+        : reasons || 'O candidato deste SHA não foi aprovado nos gates atuais';
+      throw new ApiError(
+        `ZIP recusado pela validação automática; treinamento atual preservado. Motivo: ${explanation}`,
+        409, 'SCORM_REPLACE_STATIC_GATE_FAILED',
+      );
     }
     // Clicking the unambiguous replacement button acknowledges that any open
     // enrollment uses the incoming course policy; the server supplies its own
