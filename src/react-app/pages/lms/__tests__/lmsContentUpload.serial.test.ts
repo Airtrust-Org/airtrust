@@ -146,6 +146,26 @@ describe('production SCORM inactive candidate upload: never activates', () => {
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
   });
 
+  it('substitutes validated formative bytes in a single server-authorized upload', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(fixture.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      packageId: 'pkg-replaced', status: 'ACTIVE', packageSha256: sha,
+    }));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 26, file: scormFile(fixture.zip), replaceImmediately: true,
+    });
+    expect(receipt).toEqual({ packageId: 'pkg-replaced', packageSha256: sha, status: 'ACTIVE' });
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    expect(fetchWithAuthMock.mock.calls[0]?.[0])
+      .toBe('/api/lms/cursos/26/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+    const request = fetchWithAuthMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe('POST');
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'scorm:' + sha });
+  });
+
   it('is host-restricted and never sends a request from staging or preview', async () => {
     vi.unstubAllGlobals();
     await expect(uploadScormInactiveProductionCandidate({

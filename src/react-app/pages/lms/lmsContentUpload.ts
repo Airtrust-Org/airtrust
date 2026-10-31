@@ -493,7 +493,9 @@ export async function uploadScormInactiveProductionCandidate(params: {
   );
   const candidate = await parseApiResponse<ScormQualityShape>(response);
   if (candidate.status === 'REJECTED') {
-    throw scormGateError('Pacote recusado pela validação automática; versão ativa preservada', candidate);
+    throw scormGateError(replaceImmediately
+      ? 'Pacote recusado pela validação automática; versão ativa preservada'
+      : 'Pacote candidato recusado pelo Quality Gate estático; versão ativa preservada', candidate);
   }
   const expectedStatus = replaceImmediately ? 'ACTIVE' : 'VALIDATED';
   if (candidate.status !== expectedStatus ||
@@ -503,12 +505,14 @@ export async function uploadScormInactiveProductionCandidate(params: {
       (!replaceImmediately && (candidate.structural?.status !== 'PASS' ||
         candidate.completionManifest?.status !== 'PASS' ||
         candidate.diagnostics?.status !== 'PASS'))) {
-    throw new Error('Não foi possível confirmar o resultado do ZIP pelo Worker. Confira o curso antes de repetir o envio.');
+    throw new Error(replaceImmediately
+      ? 'Não foi possível confirmar o resultado do ZIP pelo Worker. Confira o curso antes de repetir o envio.'
+      : 'Recebimento do candidato não confirmado integralmente: estado, SHA ou gates inválidos. Não houve ativação.');
   }
   onProgress?.(100);
   onStatus?.(replaceImmediately
     ? 'Conteúdo substituído com sucesso; histórico preservado.'
-    : 'Pacote recebido sem alterar a versão ativa.');
+    : 'Candidato SCORM INATIVO recebido. Versão publicada permanece inalterada; homologação pendente.');
   return {
     packageId: candidate.packageId, packageSha256: candidate.packageSha256,
     status: expectedStatus,

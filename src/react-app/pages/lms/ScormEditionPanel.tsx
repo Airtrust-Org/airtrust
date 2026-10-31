@@ -158,7 +158,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
 
       {validated && data ? (
         <details open={!formative} className="mt-3 rounded border p-2">
-          <summary className="cursor-pointer text-xs font-medium">{formative ? 'Homologação avançada (opcional)' : 'Detalhes de ativação'}</summary>
+          <summary className="cursor-pointer text-xs font-medium">{formative ? 'Detalhes técnicos (opcional)' : 'Detalhes de ativação'}</summary>
         <div className="mt-3 space-y-3">
           <p className="font-medium" role="status">
             {activationReady
