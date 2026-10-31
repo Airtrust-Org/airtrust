@@ -41,12 +41,15 @@ const quality = {
   formativeContract: { eligible: true, requiredSlides: 101, requiredActivities: 14 },
 };
 
-function makeParams(status = 'REJECTED') {
+function makeParams(status = 'REJECTED', concurrentStatus?: string) {
   const original = { ...row, status };
-  const bind = vi.fn().mockReturnValue({
-    first: vi.fn().mockResolvedValue(original),
-    run: vi.fn().mockResolvedValue({ meta: { changes: 1 } }),
-  });
+  const first = vi.fn().mockResolvedValueOnce(original)
+    .mockResolvedValue({ ...original, status: concurrentStatus ?? status,
+      validation_result_json: concurrentStatus === 'VALIDATED'
+        ? JSON.stringify({ ...quality, uploadMetadata: { originalFilename: 'WINNER.zip' } })
+        : original.validation_result_json });
+  const run = vi.fn().mockResolvedValue({ meta: { changes: 1 } });
+  const bind = vi.fn().mockReturnValue({ first, run });
   const db = { prepare: vi.fn().mockReturnValue({ bind }) } as unknown as D1Database;
   const bucket = { put: vi.fn(), list: vi.fn() } as unknown as R2Bucket;
   return { db, bucket, empresaId: 6, cursoId: 26, userId: 17, bytes, arquivoNome: 'MGM.zip' };
@@ -86,6 +89,16 @@ describe('same-SHA SCORM candidate upload lifecycle', () => {
     expect(mocks.full).not.toHaveBeenCalled();
     expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(params.bucket.put).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a concurrent winner PASS receipt after losing the recovery CAS', async () => {
+    const params = makeParams('REJECTED', 'VALIDATED');
+    mocks.revalidate.mockResolvedValue(false);
+    const result = await createScormPackageCandidate(params);
+    expect(result.status).toBe('VALIDATED');
+    expect(result.arquivoNome).toBe('WINNER.zip');
+    // The loser must not issue the stale filename UPDATE after the readback.
+    expect(params.db.prepare).toHaveBeenCalledTimes(2);
   });
 
   it('does not retry a non-rejected same-SHA candidate', async () => {

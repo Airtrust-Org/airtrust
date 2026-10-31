@@ -107,6 +107,18 @@ export async function createScormPackageCandidate(params: {
           return { packageId: existing.id, packageSha256, status: 'VALIDATED' as const,
             ...freshQuality, arquivoNome: originalFilename };
         }
+        // A different request may have won the CAS. NEVER write the stale
+        // rejected receipt/filename to the now VALIDATED candidate.
+        const current = await params.db.prepare(
+          `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file,
+                  scorm_versao, status, validation_result_json, assessment_policy, certification_profile
+             FROM lms_scorm_package_versions
+            WHERE empresa_id=? AND curso_id=? AND package_sha256=?`,
+        ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
+        if (current?.status === 'VALIDATED' || current?.status === 'ACTIVE') {
+          return packageReadModel(current);
+        }
+        return { ...packageReadModel(current ?? existing), ...freshQuality, status: 'REJECTED' as const };
       }
     }
     const storedValidation = parseStoredScormValidation<ScormQualityGateResult>(
