@@ -715,6 +715,8 @@ function CourseDrawer({
   const [qaCandidateReceipt, setQaCandidateReceipt] = useState<{
     packageId: string; packageSha256: string; status: 'VALIDATED';
   } | null>(null);
+  const [isCandidateUploading, setIsCandidateUploading] = useState(false);
+  const candidateUploadLock = useRef(false);
   const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [thumbPreview, setThumbPreview] = useState<string | null>(storedThumbPreview);
@@ -766,6 +768,30 @@ function CourseDrawer({
     return () => URL.revokeObjectURL(url);
   }, [storedThumbPreview, thumbFile]);
 
+  async function handleCandidateUpload() {
+    if (!contentFile || !initial?.id || isSaving || candidateUploadLock.current) return;
+    if (!canUploadInactiveProduction && !canUploadStagingQa) return;
+    candidateUploadLock.current = true;
+    setIsCandidateUploading(true);
+    setQaCandidateReceipt(null);
+    try {
+      const receipt = canUploadInactiveProduction
+        ? await onProductionCandidateUpload(initial.id, contentFile)
+        : await onQaCandidateUpload(initial.id, contentFile);
+      setQaCandidateReceipt(receipt);
+      toast.success(
+        canUploadInactiveProduction
+          ? 'Novo ZIP recebido para substituição. A edição atual permanece ativa até a homologação e a ativação.'
+          : 'SCORM recebido pelo Worker como nova edição para homologação.',
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM');
+    } finally {
+      candidateUploadLock.current = false;
+      setIsCandidateUploading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (blocksUnsafeScormTypeConversion({
@@ -802,7 +828,7 @@ function CourseDrawer({
   const contentMeta = getTypeMeta(form.tipo_conteudo);
   const publicationMeta = getMatriculaStatusMeta(form.publicado === 1 ? 'PUBLICADO' : 'RASCUNHO');
   const safeClose = () => {
-    if (isSaving) return;
+    if (isSaving || isCandidateUploading) return;
     onClose();
   };
 
@@ -1200,22 +1226,15 @@ function CourseDrawer({
                                 ? 'PPTX até 200 MB.'
                                 : 'Pacote .zip SCORM.'
                         }
-                        disabled={isSaving}
+                        disabled={isSaving || isCandidateUploading}
                       />
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                           <p className="font-semibold">Substituição do ZIP atual — etapa 1: enviar nova edição</p>
                           <p className="mt-1">Este envio inicia a substituição do conteúdo do mesmo curso. O ZIP será validado como nova edição, mas o atual continua disponível aos alunos até a homologação e a ativação aprovadas.</p>
-                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
-                            onClick={() => {
-                              if (!contentFile || !initial?.id) return;
-                              void onProductionCandidateUpload(initial.id, contentFile).then((receipt) => {
-                                setQaCandidateReceipt(receipt);
-                                toast.success('Novo ZIP recebido para substituição. A edição atual permanece ativa até a homologação e a ativação.');
-                              }).catch((error: unknown) => {
-                                toast.error(error instanceof Error ? error.message : 'Falha no recebimento do candidato inativo');
-                              });
-                            }}>
+                          <Button type="button" variant="primary" disabled={!contentFile || isSaving || isCandidateUploading}
+                            loading={isCandidateUploading}
+                            onClick={() => void handleCandidateUpload()}>
                             Enviar ZIP como candidato INATIVO (sem publicar)
                           </Button>
                           {qaCandidateReceipt ? (
@@ -1237,16 +1256,9 @@ function CourseDrawer({
                           <p className="font-semibold">1. Enviar ZIP para homologação em staging (sem publicar)</p>
                           <p className="mt-1">Este envio usa o grant F5 exato da edição e não altera o conteúdo publicado,
                             matrículas, notas ou certificados. Não executa ativação nem certificação.</p>
-                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
-                            onClick={() => {
-                              if (!contentFile || !initial?.id) return;
-                              void onQaCandidateUpload(initial.id, contentFile).then((receipt) => {
-                                setQaCandidateReceipt(receipt);
-                                toast.success('SCORM recebido pelo Worker como candidato inativo.');
-                              }).catch((error: unknown) => {
-                                toast.error(error instanceof Error ? error.message : 'Falha ao enviar candidato de QA');
-                              });
-                            }}>
+                          <Button type="button" variant="primary" disabled={!contentFile || isSaving || isCandidateUploading}
+                            loading={isCandidateUploading}
+                            onClick={() => void handleCandidateUpload()}>
                             Carregar somente candidato inativo (QA)
                           </Button>
                           {qaCandidateReceipt ? (
@@ -1459,9 +1471,20 @@ function CourseDrawer({
             </div>
             <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving}>
+                <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving || isCandidateUploading}>
                   Cancelar
                 </Button>
+                {canUploadInactiveProduction && contentFile ? (
+                  <Button
+                    variant="primary"
+                    type="button"
+                    onClick={() => void handleCandidateUpload()}
+                    loading={isCandidateUploading}
+                    disabled={isSaving || isCandidateUploading}
+                  >
+                    Iniciar substituição do ZIP (validação obrigatória)
+                  </Button>
+                ) : null}
                 <Button variant="primary" type="submit" loading={isSaving} disabled={candidateFirstScorm && Boolean(contentFile)}>
                   {isEditing
                     ? candidateFirstScorm && contentFile
