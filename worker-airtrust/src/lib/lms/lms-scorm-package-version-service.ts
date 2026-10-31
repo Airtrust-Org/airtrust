@@ -9,6 +9,7 @@ import {
   assertActivationConfirmation, evaluateFormativeActivation,
 } from './lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from './lms-scorm-formative-profile';
+import { revalidateRejectedFormativeScormCandidate } from './lms-scorm-rejected-revalidation';
 import { validateF5R2ArchiveReadOnly } from './lms-scorm-r2-reader.mjs';
 import {
   verifyTrustedScormAttestation,
@@ -78,10 +79,48 @@ export async function createScormPackageCandidate(params: {
   const packageSha256 = await sha256(params.bytes);
   const originalFilename = normalizeScormUploadFilename(params.arquivoNome);
   const existing = await params.db.prepare(
-    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json
+    `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file, scorm_versao, status, validation_result_json, assessment_policy, certification_profile
        FROM lms_scorm_package_versions WHERE empresa_id = ? AND curso_id = ? AND package_sha256 = ?`,
   ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
   if (existing) {
+    // Historic REJECTED rows are unique by tenant/course/SHA. Returning their
+    // old verdict forever prevents a valid current ZIP from ever being retried.
+    // An explicit fresh same-SHA re-upload is the ONLY opportunity to re-run
+    // the current gate and repair the inactive candidate with CAS + audit.
+    let freshRejectedQuality: ScormQualityGateResult | null = null;
+    if (existing.status === 'REJECTED') {
+      const freshPkg = staticRejected ? staticPkg : extractAndValidateLmsPackage(params.bytes, 'scorm');
+      const freshQuality = staticRejected ? staticQuality : validateScormPackageQuality(freshPkg);
+      freshRejectedQuality = freshQuality;
+      const freshPass = freshQuality.structural.status === 'PASS' &&
+        freshQuality.completionManifest.status === 'PASS' &&
+        freshQuality.diagnostics.status === 'PASS';
+      if (freshPass) {
+        const recovered = await revalidateRejectedFormativeScormCandidate({
+          db: params.db, bucket: params.bucket, row: existing,
+          empresaId: params.empresaId, cursoId: params.cursoId,
+          actorId: params.userId, packageSha256, pkg: freshPkg,
+          quality: freshQuality,
+          storedQualityJson: JSON.stringify(withScormUploadMetadata(freshQuality, originalFilename)),
+        });
+        if (recovered) {
+          return { packageId: existing.id, packageSha256, status: 'VALIDATED' as const,
+            ...freshQuality, arquivoNome: originalFilename };
+        }
+        // A different request may have won the CAS. NEVER write the stale
+        // rejected receipt/filename to the now VALIDATED candidate.
+        const current = await params.db.prepare(
+          `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file,
+                  scorm_versao, status, validation_result_json, assessment_policy, certification_profile
+             FROM lms_scorm_package_versions
+            WHERE empresa_id=? AND curso_id=? AND package_sha256=?`,
+        ).bind(params.empresaId, params.cursoId, packageSha256).first<PackageRow>();
+        if (current?.status === 'VALIDATED' || current?.status === 'ACTIVE') {
+          return packageReadModel(current);
+        }
+        return { ...packageReadModel(current ?? existing), ...freshQuality, status: 'REJECTED' as const };
+      }
+    }
     const storedValidation = parseStoredScormValidation<ScormQualityGateResult>(
       existing.validation_result_json,
     );
@@ -118,6 +157,9 @@ export async function createScormPackageCandidate(params: {
         )
         .bind(originalFilename, params.cursoId, params.empresaId)
         .run();
+    }
+    if (freshRejectedQuality) {
+      return { ...packageReadModel(existing), ...freshRejectedQuality, status: 'REJECTED' as const };
     }
     return packageReadModel(existing);
   }
