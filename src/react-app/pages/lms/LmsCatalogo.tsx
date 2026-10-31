@@ -696,7 +696,7 @@ function CourseDrawer({
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
   onProductionCandidateUpload: (cursoId: number, file: File) => Promise<{
-    packageId: string; packageSha256: string; status: 'VALIDATED';
+    packageId: string; packageSha256: string; status: 'VALIDATED' | 'ACTIVE';
   }>;
   onQaCandidateUpload: (cursoId: number, file: File) => Promise<{
     packageId: string; packageSha256: string; status: 'VALIDATED'; zipBytes: number;
@@ -707,6 +707,7 @@ function CourseDrawer({
   availableAreas: { id: number; nome: string; codigo?: string | null }[];
 }) {
   const navigate = useNavigate();
+  const { isAdmin } = usePermissions();
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
@@ -728,6 +729,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
+  const directReplacement = canUploadInactiveProduction && isAdmin;
   const candidateFirstScorm = shouldSaveScormMetadataWithoutZip({
     isEditing, storedTipoConteudo: initial?.tipo_conteudo,
     tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
@@ -780,9 +782,11 @@ function CourseDrawer({
       const receipt = canUploadInactiveProduction
         ? await onProductionCandidateUpload(courseId, contentFile)
         : await onQaCandidateUpload(courseId, contentFile);
-      setQaCandidateReceipt(receipt);
+      setQaCandidateReceipt(receipt.status === 'VALIDATED' ? { packageId: receipt.packageId, packageSha256: receipt.packageSha256, status: 'VALIDATED' } : null);
       toast.success(
-        canUploadInactiveProduction
+        receipt.status === 'ACTIVE'
+          ? 'Conteúdo substituído. Matrículas e históricos foram preservados.'
+          : canUploadInactiveProduction
           ? 'Novo ZIP recebido. Consulte o status da substituição nos detalhes do curso.'
           : 'SCORM recebido pelo Worker como nova edição para homologação.',
       );
@@ -1238,7 +1242,9 @@ function CourseDrawer({
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
-                          <p className="mt-1">Selecione o ZIP e use o botão de envio no rodapé. Você será levado ao status da substituição. O treinamento atual só muda após a verificação e a aprovação exigidas pelo sistema.</p>
+                          <p className="mt-1">{directReplacement
+                            ? 'Selecione o ZIP. O sistema valida os arquivos e substitui o conteúdo formativo. Matrículas em andamento usarão a nova edição; históricos e conclusões anteriores ficam preservados.'
+                            : 'Envie a nova edição para validação. Apenas administradores podem substituir o conteúdo publicado.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1280,7 +1286,7 @@ function CourseDrawer({
                           </p>
                           <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
-                            <p className="mt-2 font-medium">Use “Enviar nova edição para substituição” no rodapé. O status será mostrado automaticamente; não envie o mesmo ZIP novamente para tentar ativá-lo.</p>
+                            <p className="mt-2 font-medium">Use o botão de substituição no rodapé. Não repita o envio sem conferir o resultado.</p>
                           ) : null}
                           {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
@@ -1484,7 +1490,7 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading}
                   >
-                    Enviar nova edição para substituição
+                    {directReplacement ? 'Validar ZIP e substituir conteúdo' : 'Enviar edição para validação'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
@@ -2043,7 +2049,8 @@ export default function LmsCatalogo() {
     setUploadStatus('Iniciando recebimento inativo em produção...');
     try {
       return await uploadScormInactiveProductionCandidate({
-        cursoId, file, onProgress: setUploadProgress, onStatus: setUploadStatus,
+        cursoId, file, replaceImmediately: isAdmin,
+        onProgress: setUploadProgress, onStatus: setUploadStatus,
       });
     } finally {
       setIsSavingCourse(false);

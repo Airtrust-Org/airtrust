@@ -10,7 +10,7 @@ const OLD = 'e'.repeat(64);
 
 const m = vi.hoisted(() => ({
   preflight: { data: undefined as unknown },
-  approve: vi.fn(), activate: vi.fn(), rollback: vi.fn(), importEvidence: vi.fn(), conformance: vi.fn(), refetch: vi.fn(),
+  approve: vi.fn(), activate: vi.fn(), directReplace: vi.fn(), rollback: vi.fn(), importEvidence: vi.fn(), conformance: vi.fn(), refetch: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -22,6 +22,7 @@ vi.mock('@/react-app/hooks/useLms', () => ({
   useScormActivationPreflight: () => m.preflight,
   useApproveFormativePackage: () => ({ mutateAsync: m.approve, isPending: false }),
   useActivateScormPackageVersion: () => ({ mutateAsync: m.activate, isPending: false }),
+  useReplaceValidatedScormDirect: () => ({ mutateAsync: m.directReplace, isPending: false }),
   useRollbackScormPackage: () => ({ mutateAsync: m.rollback, isPending: false }),
   useImportFormativeAttestation: () => ({ mutateAsync: m.importEvidence, isPending: false }),
   useRunScormPackageConformance: () => ({ mutateAsync: m.conformance, isPending: false }),
@@ -174,6 +175,40 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), SHA.slice(0, 12));
     expect((screen.getByRole('button', { name: 'Substituir conteúdo do curso' }) as HTMLButtonElement).disabled)
       .toBe(true);
+  });
+
+  it('allows administrator to replace a validated formative ZIP using only automatic validation', async () => {
+    m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
+    m.directReplace.mockResolvedValue({ status: 'ACTIVE' });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
+      await userEvent.click(screen.getByRole('button', { name: /Substituir agora — validação automática/ }));
+      expect(m.directReplace).toHaveBeenCalledWith({
+        packageId: 'pkg-new',
+        confirm: { cursoId: 26, packageSha256: SHA, acknowledgeInProgress: 3 },
+      });
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('does not replace the ZIP after a cancelled confirmation', async () => {
+    m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
+      await userEvent.click(screen.getByRole('button', { name: /Substituir agora — validação automática/ }));
+      expect(m.directReplace).not.toHaveBeenCalled();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('disables the replacement for non-admin users', () => {
+    m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
+    render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin={false} />);
+    expect((screen.getByRole('button', { name: /Substituir agora — validação automática/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('the active edition offers rollback to the previous one only after typing its SHA prefix', async () => {

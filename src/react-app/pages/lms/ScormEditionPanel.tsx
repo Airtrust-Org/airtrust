@@ -7,6 +7,7 @@ import {
   useImportFormativeAttestation,
   useRollbackScormPackage,
   useRunScormPackageConformance,
+  useReplaceValidatedScormDirect,
   useScormActivationPreflight,
 } from '@/react-app/hooks/useLms';
 import type { ScormPackageVersionRow } from '@/react-app/hooks/useLms';
@@ -70,6 +71,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const importEvidence = useImportFormativeAttestation(cursoId);
   const approve = useApproveFormativePackage(cursoId);
   const activate = useActivateScormPackageVersion(cursoId);
+  const directReplace = useReplaceValidatedScormDirect(cursoId);
   const rollback = useRollbackScormPackage(cursoId);
 
   const [note, setNote] = useState('');
@@ -131,7 +133,32 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
           <Button type="button" variant="secondary" onClick={() => void preflight.refetch()}>Tentar novamente</Button>
         </div>
       ) : null}
+      {validated && formative && data ? (
+        <div className="mt-3 space-y-2 rounded border border-emerald-300 bg-emerald-50 p-3 text-emerald-950">
+          <p className="font-semibold">Pronto para solicitar substituição com validação automática</p>
+          <p className="text-xs">A validação do servidor confere estrutura, manifesto, atividades, SHA e arquivos no armazenamento antes de trocar o conteúdo. Não é necessário importar JSON ou obter homologação manual.</p>
+          {data.incomingPolicy === 'FORMATIVE' ? (
+            <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>
+          ) : null}
+          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending}
+            onClick={() => {
+              if (!window.confirm(`Substituir o conteúdo do curso #${cursoId} pelo ZIP SHA ${sha12(sha)}? Conclusões anteriores serão preservadas; ${inProgress} matrícula(s) em andamento usarão a nova edição.`)) return;
+              void directReplace.mutateAsync({
+                packageId: pkg.packageId,
+                confirm: { cursoId, packageSha256: sha,
+                  ...(inProgress ? { acknowledgeInProgress: inProgress } : {}) },
+              }).then(() => toast.success('Conteúdo substituído. Histórico preservado.'))
+                .catch((error: unknown) => toast.error(errorText(error)));
+            }}>
+            Substituir agora — validação automática
+          </Button>
+          {!isAdmin ? <p className="text-xs">Somente administradores podem substituir o curso.</p> : null}
+        </div>
+      ) : null}
+
       {validated && data ? (
+        <details open={!formative} className="mt-3 rounded border p-2">
+          <summary className="cursor-pointer text-xs font-medium">{formative ? 'Homologação avançada (opcional)' : 'Detalhes de ativação'}</summary>
         <div className="mt-3 space-y-3">
           <p className="font-medium" role="status">
             {activationReady
@@ -255,6 +282,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
             </div>
           )}
         </div>
+        </details>
       ) : null}
 
       {pkg.status === 'ACTIVE' ? (
