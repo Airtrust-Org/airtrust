@@ -706,6 +706,7 @@ function CourseDrawer({
   uploadStatus: string;
   availableAreas: { id: number; nome: string; codigo?: string | null }[];
 }) {
+  const navigate = useNavigate();
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
@@ -769,21 +770,27 @@ function CourseDrawer({
   }, [storedThumbPreview, thumbFile]);
 
   async function handleCandidateUpload() {
-    if (!contentFile || !initial?.id || isSaving || candidateUploadLock.current) return;
+    const courseId = initial?.id;
+    if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
     try {
       const receipt = canUploadInactiveProduction
-        ? await onProductionCandidateUpload(initial.id, contentFile)
-        : await onQaCandidateUpload(initial.id, contentFile);
+        ? await onProductionCandidateUpload(courseId, contentFile)
+        : await onQaCandidateUpload(courseId, contentFile);
       setQaCandidateReceipt(receipt);
       toast.success(
         canUploadInactiveProduction
-          ? 'Novo ZIP recebido para substituição. A edição atual permanece ativa até a homologação e a ativação.'
+          ? 'Novo ZIP recebido. Consulte o status da substituição nos detalhes do curso.'
           : 'SCORM recebido pelo Worker como nova edição para homologação.',
       );
+      if (canUploadInactiveProduction) {
+        // The version GET is the backend authority; the ZIP receipt is not activation.
+        onClose();
+        navigate(`/lms/cursos/${courseId}`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM');
     } finally {
@@ -1230,13 +1237,8 @@ function CourseDrawer({
                       />
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                          <p className="font-semibold">Substituição do ZIP atual — etapa 1: enviar nova edição</p>
-                          <p className="mt-1">Este envio inicia a substituição do conteúdo do mesmo curso. O ZIP será validado como nova edição, mas o atual continua disponível aos alunos até a homologação e a ativação aprovadas.</p>
-                          <Button type="button" variant="primary" disabled={!contentFile || isSaving || isCandidateUploading}
-                            loading={isCandidateUploading}
-                            onClick={() => void handleCandidateUpload()}>
-                            Enviar ZIP como candidato INATIVO (sem publicar)
-                          </Button>
+                          <p className="font-semibold">Trocar o conteúdo deste curso</p>
+                          <p className="mt-1">Selecione o ZIP e use o botão de envio no rodapé. Você será levado ao status da substituição. O treinamento atual só muda após a verificação e a aprovação exigidas pelo sistema.</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1278,7 +1280,7 @@ function CourseDrawer({
                           </p>
                           <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
-                            <p className="mt-2 font-medium">Use o botão verde acima para iniciar a substituição deste ZIP. Depois, abra “Edições do pacote SCORM” nos detalhes do curso para acompanhar os requisitos e ativar a nova edição aprovada. Para editar metadados, remova o ZIP selecionado.</p>
+                            <p className="mt-2 font-medium">Use “Enviar nova edição para substituição” no rodapé. O status será mostrado automaticamente; não envie o mesmo ZIP novamente para tentar ativá-lo.</p>
                           ) : null}
                           {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
@@ -1482,10 +1484,11 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading}
                   >
-                    Iniciar substituição do ZIP (validação obrigatória)
+                    Enviar nova edição para substituição
                   </Button>
                 ) : null}
-                <Button variant="primary" type="submit" loading={isSaving} disabled={candidateFirstScorm && Boolean(contentFile)}>
+                {!(candidateFirstScorm && contentFile) ? (
+                <Button variant="primary" type="submit" loading={isSaving}>
                   {isEditing
                     ? candidateFirstScorm && contentFile
                       ? 'Salvar dados (remova o ZIP)'
@@ -1494,6 +1497,7 @@ function CourseDrawer({
                         : 'Salvar alterações'
                     : 'Criar curso'}
                 </Button>
+                ) : null}
               </div>
             </div>
           </form>
