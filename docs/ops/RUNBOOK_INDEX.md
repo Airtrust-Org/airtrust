@@ -4,6 +4,8 @@ Use este arquivo para chegar ao procedimento correto sem navegar por documentaç
 
 ## Desenvolvimento e continuidade
 
+- **Contrato operacional V7 (preferencial):** `docs/ops/FAST_RELEASE_V7.md` — execução contínua, risco proporcional e uma aprovação final quando exigida
+
 - Fluxo de execução ChatGPT/GitHub: `docs/ops/AGENT_WORKFLOW.md`
 - Handoff de frente: `docs/ops/WORK_FRONT_TEMPLATE.md`
 - Estado mestre vivo: GitHub issue #776

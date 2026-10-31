@@ -1,178 +1,33 @@
-# CLAUDE.md
+# AirTrust — CLAUDE.md | Guia de implementação
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Operação e release:** seguir `AGENTS.md` e `docs/ops/FAST_RELEASE_V7.md`. Para uma solicitação de correção/deploy, executar de ponta a ponta **as etapas permitidas**, sem pedir confirmações intermediárias. Commits em branch e PR de trabalho estão dentro da preparação autorizada; produção/schema/writes exigem suas autorizações específicas quando aplicáveis.
 
-## Project Overview
+## Autoridade
 
-AirTrust is a multi-tenant SaaS platform for aviation crew management (qualifications, scheduling, FRMS, LMS, SGSO). Production system with real data — never deploy, push, or run migrations without explicit authorization.
+`Airtrust-Org/airtrust`/`main` é a fonte de código. GitHub Actions executa os oito gates oficiais; Cloudflare hospeda Worker/Pages/D1/R2. GCB somente fallback de CI. Verificar estado vivo, não aplicar receitas antigas sobre workflow novo. Local/Mac apenas por necessidade técnica objetiva.
 
-## Delivery Authority
+## Stack e localização
 
-- GitHub `Airtrust-Org/airtrust` is the code authority for source, branches,
-  pull requests, and merges. Its `main` branch is the canonical integration
-  branch.
-- GitHub Actions is the primary/official CI and must produce all eight required gates:
-  `lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`,
-  `worker-tests-1`, `worker-tests-2`, `lms-smoke`, and `public-e2e`.
-  Google Cloud Build is contingency/fallback only when GitHub Actions is unavailable or
-  materially defective; it never bypasses missing required gates. The legacy name
-  `airtrust-gcb` does not prove execution occurred in Google Cloud Build.
-- Cloudflare hosts staging and production.
-- GitLab is historical/legacy only after the 2026-08-24 repository cutover;
-  do not open new development branches, merge requests, or release gates
-  there. Do not use it as a fallback when GitHub or GCB has a problem.
-- CircleCI is retired/legacy. Do not use it as a current merge, release, or
-  deployment gate, and do not fall back to it if GCB fails. Inspect
-  `origin/main:.github/workflows/ci.yml` and `origin/main:cloudbuild.ci.yaml`
-  before CI-dependent work.
+- Frontend: React 19, Router 7, Vite, TanStack Query, Zustand. Entrada: `src/react-app/main.tsx`. Alias `@` aponta para `src`.
+- Backend: Cloudflare Worker/Hono, D1/SQLite com `DB.prepare` parametrizado, R2 para arquivos. Entradas atuais devem ser verificadas em `worker-airtrust/src/index.ts` e `worker-airtrust/src/environment-entrypoint.ts`.
+- Testes: Vitest/Node e Playwright, conforme o módulo. Comandos usuais: `npm run lint`, `npm run build`, `npm run test:run`, `npm run test:worker`. Consultar `package.json` atual antes de execução; `npm run agent:test-plan` é **opcional**.
 
-## Architecture
+## Invariantes
 
-Two distinct runtimes sharing the same repository:
+- API privada exige auth + tenant + RBAC no backend; o frontend não concede permissões. Consultas tenant-owned incluem `empresa_id` ou escopo equivalente e binds SQL, conforme contrato real. Rotas públicas são exceções restritas. Nunca presumir hierarquia fixa de roles sem ler guards atuais.
+- Frontend usa transporte canônico de auth e invalidação de cache por tenant; cuidar de service worker e operação offline.
+- LMS/SCORM não fabrica conclusão/progresso; preservar ciclo, score, `lesson_status`, `suspend_data` e autorização de assets.
+- FRMS/EVD/Pilot App/SIGVOOS preservam origem/confiança de dados, sincronização, idempotência e integridade operacional.
+- Não registrar tokens, secrets ou PII em logs/commits/chat.
 
-| Layer | Tech | Entry point |
-|---|---|---|
-| Frontend SPA | React 19, React Router v7, Vite 6 | `src/react-app/main.tsx` |
-| Backend API | Cloudflare Workers, Hono v4 | `worker-airtrust/src/index.ts` |
+## Schema e deploy
 
-**Path alias**: `@` resolves to `./src` (configured in `vite.config.ts` and `tsconfig.json`).
+Migrations históricas em `worker-airtrust/migrations/` **não** devem ser reaplicadas por rotina. Para alteração moderna, consultar `worker-airtrust/schema-v2/` e usar o workflow governado `apply-schema-change-v2.yml` ou sucessor, com hashes, ledger, recovery e pós-condições. Não usar comandos diretos de Wrangler para produção como atalho.
 
-**Database**: Cloudflare D1 (SQLite). No ORM — raw SQL via `c.env.DB.prepare()`. Migrations are sequential under `worker-airtrust/migrations/`; determine the current highest migration from the repository instead of relying on a hard-coded historical number.
+Produção: workflow `.github/workflows/deploy-airtrust.yml` ou sucessor e autorização atual para SHA/artefato/escopo exatos. Verificar os oito gates e proteção da `main`. Staging proporcional ao risco, jamais dispensado quando exigido pelo contrato ou pela operação. Pós-deploy valida versão, saúde, proveniência e fluxo real. Não equiparar merge a publicação.
 
-**Storage**: Cloudflare R2 via `c.env.BUCKET`.
+## Fluxo mínimo
 
-## Development Commands
+Encontrar PR existente → inspecionar apenas delta/erro → corrigir causa em lote → teste focado/suíte afetada → CI → merge governado → publicação autorizada → pós-validação. Evitar reler a issue #776 integralmente e não repetir auditorias válidas do mesmo SHA. Comunicação em marcos relevantes, não em cada passo.
 
-```bash
-# Start both worker (Wrangler local :8787) and frontend (Vite :3000) concurrently
-npm start
-
-# Frontend only
-npm run dev
-
-# Worker only (local, no remote calls)
-npm run dev:worker:local
-
-# Type check
-npx tsc --noEmit
-
-# Build (production)
-npm run build
-
-# Lint (api-base conventions + secret guard + auth boundary guard)
-npm run lint
-
-# Frontend unit tests
-npm run test:run
-
-# Worker unit tests
-npm run test:worker
-
-# Run both test suites
-npm run test:all
-
-# E2E tests
-npm run test:e2e
-
-# Health check (local worker must be running)
-npm run health
-
-# Tail production logs
-npm run logs:tail
-```
-
-**Local DB setup** (first time):
-```bash
-npm run setup:local        # initialize local D1
-npm run setup:local:reset  # reset and re-initialize
-```
-
-Vite proxies `/api` → `VITE_DEV_PROXY_TARGET` (default `http://localhost:8787`). Set `VITE_DEV_PROXY_TARGET=https://api.airtrust.online/api` in `.env.local` to proxy directly to production (use with extreme care).
-
-## Multi-Tenancy
-
-Every authenticated request passes through `auth` + `tenantMiddleware` (applied globally in `index.ts`). These inject `c.get('empresaId')` and `c.get('userId')` into the Hono context.
-
-**Critical rule**: Every DB query touching tenant data MUST include a `WHERE empresa_id = ?` clause (or equivalent JOIN). Skipping this leaks data across tenants.
-
-Public routes are explicitly whitelisted in `index.ts` (search for `isPublicPath`).
-
-## Auth
-
-- JWT signed with `JWT_SECRET` (Wrangler secret). Library: `jose`.
-- Frontend stores tokens in sessionStorage (or localStorage with "remember me").
-- All authenticated API calls use `fetchWithAuth()` from `src/react-app/config/api.ts`, which handles token injection and automatic refresh on 401.
-- Backend roles: `admin > manager > instructor > editor > student > viewer`. Use `requireRole('admin')` middleware for admin-only routes.
-- Dev auth bypass: set `ENABLE_DEV_AUTH_BYPASS=true` in `worker-airtrust/.dev.vars` (never commit this file).
-
-## Backend Route Conventions
-
-Routes live in `worker-airtrust/src/routes/`. All routes returning data follow:
-```json
-{ "success": true, "data": [...] }
-// or error:
-{ "success": false, "error": "message" }
-```
-
-Zod validation via `@hono/zod-validator`. Rate limiting and no-cache headers are applied selectively in `index.ts` — check there before adding a new route that needs special handling.
-
-Domain events are processed after each request via `domainEventProcessorMiddleware`.
-
-## Frontend Conventions
-
-- All pages are lazy-loaded with `lazyWithRetry()` (retry logic for chunk-load failures).
-- Server state: TanStack React Query v5. Local state: Zustand.
-- Forms: React Hook Form + Zod.
-- Toasts: `sonner`.
-- Icons: `lucide-react`.
-- i18n: `useLanguage()` hook from `src/react-app/i18n/`.
-- Service Worker is registered only in production (`import.meta.env.PROD`).
-
-## Database Migrations
-
-Migrations are numbered sequentially under `worker-airtrust/migrations/`. Always inspect the repository for the current highest number before creating or applying a migration; historical documentation may be stale.
-
-**Never run migrations automatically.** Apply them manually:
-```bash
-# Local
-wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.dev.toml --local --file=worker-airtrust/migrations/XXXX_name.sql
-
-# Remote (requires explicit authorization) — use the reviewed wrapper, not raw wrangler.
-# It enforces clean main/origin parity and unconditionally refuses any migration
-# marked NO_GO_MIGRATION_PRODUCAO inside the SQL file (see scripts/apply-migration-production.sh).
-AIRTRUST_ALLOW_PROD_DB_WRITE=YES \
-AIRTRUST_CONFIRM_PROD_DB_WRITE="I understand this may modify production data" \
-bash scripts/apply-migration-production.sh worker-airtrust/migrations/XXXX_name.sql
-```
-
-If a migration file contains a `-- NO_GO_MIGRATION_PRODUCAO` comment, it cannot be applied to
-production through this wrapper under any flag. Lifting the block requires removing the marker
-in a reviewed PR — never a runtime override.
-
-If a schema change is needed but migration hasn't been authorized, implement the feature using existing schema and document the limitation.
-
-## Key Module Locations
-
-| Module | Backend route file(s) | Frontend pages |
-|---|---|---|
-| Qualificações | `routes/qualificacoes.ts`, `routes/qualificacoes-*.ts` | `pages/Qualificacoes.tsx`, `pages/qualificacoes/` |
-| Simuladores/Voo | `routes/simuladores-core.ts` | `pages/Simuladores.tsx`, `pages/simuladores/` |
-| Escalas (monthly roster) | `routes/escalas-core.ts`, `routes/escalas/` | `pages/escalas/` |
-| EVD (daily flight schedule) | `routes/escalas-evd.ts` | `pages/evd/` |
-| FRMS | `routes/frms.ts`, `routes/frms-*.ts` | `pages/frms/` |
-| LMS | `routes/lms-*.ts` | `pages/lms/` |
-| SGSO | `routes/sgso*.ts` | `pages/sgso/` |
-| Funcionários | `routes/funcionarios.ts` | `pages/Funcionarios.tsx` |
-
-## Linting Guards
-
-`npm run lint` runs the current canonical lint/safety guard chain declared in `package.json`. Inspect that script rather than relying on a stale enumerated list. It must pass before any PR is integrated.
-
-## Environment Environments
-
-| Env | Worker name | D1 database |
-|---|---|---|
-| local | (wrangler.dev.toml) | local SQLite |
-| development | `airtrust-api-development` | `airtrust-db-dev` |
-| staging | `airtrust-api-staging` | staging D1 |
-| production | `airtrust-api` | `airtrust-db` (real data) |
+Detalhes sob demanda: `docs/ops/RUNBOOK_INDEX.md`; código e workflows vigentes sempre prevalecem sobre texto histórico.
