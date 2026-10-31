@@ -10,7 +10,7 @@ const OLD = 'e'.repeat(64);
 
 const m = vi.hoisted(() => ({
   preflight: { data: undefined as unknown },
-  approve: vi.fn(), activate: vi.fn(), rollback: vi.fn(), importEvidence: vi.fn(), conformance: vi.fn(),
+  approve: vi.fn(), activate: vi.fn(), rollback: vi.fn(), importEvidence: vi.fn(), conformance: vi.fn(), refetch: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -51,7 +51,7 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
     expect(screen.getByText(/Importar evidência assinada/)).toBeTruthy();
     expect(screen.queryByText('Aprovar este pacote')).toBeNull();
-    expect((screen.getByText('Ativar edição') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText('Substituir conteúdo do curso') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('approval needs the typed SHA prefix and a real justification, and sends the exact SHA', async () => {
@@ -115,7 +115,7 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     const run = screen.getByRole('button', { name: 'Executar conformance' });
     await userEvent.click(run);
     expect(m.conformance).toHaveBeenCalledWith('pkg-new');
-    expect((screen.getByRole('button', { name: 'Ativar edição' }) as HTMLButtonElement).disabled)
+    expect((screen.getByRole('button', { name: 'Substituir conteúdo do curso' }) as HTMLButtonElement).disabled)
       .toBe(true);
   });
 
@@ -131,7 +131,7 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
     expect(screen.getByText(/ativação muda a política do curso/i)).toBeTruthy();
     expect(screen.getByText(/ciclos já encerrados \(18\)/)).toBeTruthy();
-    const button = screen.getByText('Ativar edição') as HTMLButtonElement;
+    const button = screen.getByText('Substituir conteúdo do curso') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), SHA.slice(0, 12));
     expect(button.disabled).toBe(true); // still needs the in-progress acknowledgement
@@ -147,7 +147,32 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     m.preflight = preflight({ impact: { terminalToFreeze: 1, inProgress: 0, notStarted: 0 } });
     render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
     await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), 'ffffffffffff');
-    expect((screen.getByText('Ativar edição') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText('Substituir conteúdo do curso') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('clearly shows the new ZIP is received but the active edition is not replaced before signed QA', () => {
+    m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
+    render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
+    expect(screen.getByText('Nova edição recebida', { exact: false })).toBeTruthy();
+    expect(screen.getByText(/Aguardando homologação técnica assinada/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Substituir conteúdo do curso' }) as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
+  it('shows a recoverable preflight error instead of suggesting another ZIP upload', async () => {
+    m.preflight = { data: undefined, isError: true, refetch: m.refetch };
+    render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin />);
+    expect(screen.getByRole('alert').textContent).toContain('A edição atual não foi alterada');
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    expect(m.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not enable replacement for a non-admin even if the candidate is certified', async () => {
+    m.preflight = preflight({ impact: { terminalToFreeze: 1, inProgress: 0, notStarted: 0 } });
+    render(<ScormEditionPanel cursoId={26} versions={[candidate]} isAdmin={false} />);
+    await userEvent.type(screen.getByLabelText('Confirmação do SHA-256'), SHA.slice(0, 12));
+    expect((screen.getByRole('button', { name: 'Substituir conteúdo do curso' }) as HTMLButtonElement).disabled)
+      .toBe(true);
   });
 
   it('the active edition offers rollback to the previous one only after typing its SHA prefix', async () => {
