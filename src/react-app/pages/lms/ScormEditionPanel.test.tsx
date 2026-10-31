@@ -117,6 +117,7 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     expect(m.conformance).toHaveBeenCalledWith('pkg-new');
     expect((screen.getByRole('button', { name: 'Substituir conteúdo do curso' }) as HTMLButtonElement).disabled)
       .toBe(true);
+    expect(screen.queryByText('Pronto para substituir o conteúdo do curso.')).toBeNull();
   });
 
   it('non-admins cannot approve', () => {
