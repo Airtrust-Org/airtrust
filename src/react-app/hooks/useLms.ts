@@ -1054,6 +1054,23 @@ export function useActivateScormPackageVersion(cursoId: number) {
   });
 }
 
+/** Administrator-only replacement of server-validated formative SCORM bytes. */
+export function useReplaceValidatedScormDirect(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { packageId: string; confirm: ScormActivationConfirm }) =>
+      lmsRequest<{ packageId: string; packageSha256: string; status: 'ACTIVE' }>(
+        `/cursos/${cursoId}/scorm-package-versions/${input.packageId}/replace-direct`, {
+          method: 'POST', body: JSON.stringify({ confirm: input.confirm }),
+        }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
+    },
+  });
+}
+
 /** Signed staging evidence produced by the governed CI signer (never typed by hand). */
 export function useImportFormativeAttestation(cursoId: number) {
   const qc = useQueryClient();
