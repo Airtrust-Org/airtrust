@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { replaceValidatedFormativeScorm } from '../../lib/lms/lms-scorm-direct-replacement';
+import { preflightDirectFormativeReplacement, replaceValidatedFormativeScorm } from '../../lib/lms/lms-scorm-direct-replacement';
 
-const mocks = vi.hoisted(() => ({ evaluate: vi.fn(), commit: vi.fn(), head: vi.fn() }));
+const mocks = vi.hoisted(() => ({ evaluate: vi.fn(), commit: vi.fn(), head: vi.fn(), reclassify: vi.fn() }));
 vi.mock('../../lib/lms/lms-scorm-formative-service', async (original) => ({
   ...(await original<typeof import('../../lib/lms/lms-scorm-formative-service')>()),
   evaluateFormativeActivation: mocks.evaluate,
+}));
+vi.mock('../../lib/lms/lms-scorm-legacy-formative-reclassification', () => ({
+  reclassifyLegacyFormativeCandidate: mocks.reclassify,
 }));
 vi.mock('../../lib/lms/lms-scorm-package-activation', () => ({
   commitCertifiedScormActivation: mocks.commit,
@@ -51,6 +54,7 @@ describe('admin direct SCORM replacement — fail closed', () => {
     mocks.evaluate.mockReset().mockResolvedValue(plan());
     mocks.head.mockReset().mockResolvedValue({ key: 'index.html' });
     mocks.commit.mockReset().mockResolvedValue(true);
+    mocks.reclassify.mockReset().mockResolvedValue(true);
   });
 
   it('activates only the same tenant/course/SHA and preserves prior course policy in CAS', async () => {
@@ -63,6 +67,63 @@ describe('admin direct SCORM replacement — fail closed', () => {
       observed: { activePackageId: 'old', coursePolicy: 'SCORED' },
       policy: { incoming: 'FORMATIVE' },
     }));
+  });
+
+  it('resolves the real in-progress enrollment count before one-click legacy upload acknowledgement', async () => {
+    const modern = plan();
+    const legacy = {
+      ...modern, incomingPolicy: null,
+      impact: { terminalToFreeze: 0, inProgress: 0, notStarted: 0 },
+      row: { ...modern.row, certification_profile: null, assessment_policy: null },
+    };
+    mocks.evaluate.mockResolvedValueOnce(legacy).mockResolvedValueOnce(modern);
+    const p = makeParams();
+    const preflight = await preflightDirectFormativeReplacement(p);
+    expect(preflight.incomingPolicy).toBe('FORMATIVE');
+    expect(preflight.impact.inProgress).toBe(3);
+    expect(mocks.reclassify).toHaveBeenCalledOnce();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    // Simulates the upload route's server-generated acknowledgement after
+    // reclassification rather than its incorrect old preflight count of 0.
+    mocks.evaluate.mockResolvedValue(modern);
+    const result = await replaceValidatedFormativeScorm({
+      ...p, confirm: {
+        cursoId: 26, packageSha256: SHA,
+        acknowledgeInProgress: preflight.impact.inProgress,
+      },
+    });
+    expect(result.status).toBe('ACTIVE');
+    expect(mocks.commit).toHaveBeenCalledOnce();
+  });
+
+  it('repairs a legacy VALIDATED candidate and retries preflight before atomic activation', async () => {
+    const modern = plan();
+    const legacy = {
+      ...modern, incomingPolicy: null,
+      checks: modern.checks.filter((check) => check.id !== 'PROFILE_ELIGIBLE'),
+      row: { ...modern.row, certification_profile: null, assessment_policy: null,
+        validation_result_json: JSON.stringify({
+          ...quality, certificationProfile: undefined,
+          assessmentPolicy: undefined, formativeContract: undefined,
+        }),
+      },
+    };
+    mocks.evaluate.mockResolvedValueOnce(legacy).mockResolvedValueOnce(modern);
+    expect((await replaceValidatedFormativeScorm(makeParams())).status).toBe('ACTIVE');
+    expect(mocks.reclassify).toHaveBeenCalledOnce();
+    expect(mocks.evaluate).toHaveBeenCalledTimes(2);
+    expect(mocks.commit).toHaveBeenCalledOnce();
+  });
+
+  it('preserves active edition when a legacy candidate cannot be safely reclassified', async () => {
+    const p = plan();
+    mocks.evaluate.mockResolvedValue({
+      ...p, row: { ...p.row, certification_profile: null, assessment_policy: null },
+      incomingPolicy: null,
+    });
+    mocks.reclassify.mockResolvedValue(false);
+    await expect(replaceValidatedFormativeScorm(makeParams())).rejects.toThrow(/perfil formativo/);
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 
   it('refuses unauthenticated or invalid administrator IDs before reading D1', async () => {

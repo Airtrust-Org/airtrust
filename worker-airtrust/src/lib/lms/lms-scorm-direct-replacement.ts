@@ -11,6 +11,7 @@ import {
   assertActivationConfirmation, evaluateFormativeActivation,
 } from './lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from './lms-scorm-formative-profile';
+import { reclassifyLegacyFormativeCandidate } from './lms-scorm-legacy-formative-reclassification';
 import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
 import { parseStoredScormValidation, readScormUploadFilename } from './lms-scorm-package-filename';
 import type { ScormQualityGateResult } from './lms-scorm-quality-gate';
@@ -20,6 +21,39 @@ export type DirectReplacementConfirmation = {
   packageSha256?: unknown;
   acknowledgeInProgress?: unknown;
 };
+
+/** Resolve a legacy candidate's profile BEFORE the upload route counts active
+ * enrollments for its one-click replacement acknowledgement. */
+export async function preflightDirectFormativeReplacement(params: {
+  db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
+  packageId: string; userId: number | null;
+}) {
+  if (!Number.isSafeInteger(params.userId) || Number(params.userId) <= 0) {
+    throw new ApiError('Somente um administrador autenticado pode substituir conteúdo', 403, 'SCORM_REPLACE_ADMIN_REQUIRED');
+  }
+  let preflight = await evaluateFormativeActivation({
+    db: params.db, empresaId: params.empresaId,
+    cursoId: params.cursoId, packageId: params.packageId,
+  });
+  // Existing uploads can predate Schema V2 0569. A receipt of VALIDATED
+  // confirms structural acceptance, not that the new policy columns were
+  // pinned. Revalidate trusted R2 members and CAS-pin only missing metadata.
+  if (preflight.row.status === 'VALIDATED' &&
+      preflight.row.assessment_policy == null &&
+      preflight.row.certification_profile == null) {
+    const upgraded = await reclassifyLegacyFormativeCandidate({
+      db: params.db, bucket: params.bucket, empresaId: params.empresaId,
+      cursoId: params.cursoId, packageId: params.packageId, actorId: params.userId!, row: preflight.row,
+    });
+    if (upgraded) {
+      preflight = await evaluateFormativeActivation({
+        db: params.db, empresaId: params.empresaId,
+        cursoId: params.cursoId, packageId: params.packageId,
+      });
+    }
+  }
+  return preflight;
+}
 
 export async function replaceValidatedFormativeScorm(params: {
   db: D1Database;
@@ -35,10 +69,7 @@ export async function replaceValidatedFormativeScorm(params: {
   }
   // Reuse the canonical course/tenant/policy/cycle read model; only the two
   // external approval checks are intentionally replaced by the static gates.
-  const preflight = await evaluateFormativeActivation({
-    db: params.db, empresaId: params.empresaId,
-    cursoId: params.cursoId, packageId: params.packageId,
-  });
+  const preflight = await preflightDirectFormativeReplacement(params);
   const row = preflight.row;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' ||
