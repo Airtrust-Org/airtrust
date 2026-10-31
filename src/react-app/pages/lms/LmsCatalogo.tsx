@@ -1224,7 +1224,7 @@ function CourseDrawer({
                               SHA-256: {qaCandidateReceipt.packageSha256}.
                               A versão usada pelos alunos NÃO foi alterada; certificação funcional pendente.
                               <div className="mt-3">
-                                <Link to={`/lms/cursos/${initial.id}`} className="font-semibold text-emerald-800 underline hover:text-emerald-950">
+                                <Link to={`/lms/cursos/${initial?.id}`} className="font-semibold text-emerald-800 underline hover:text-emerald-950">
                                   Etapa 2: conferir homologação e ativar a edição aprovada em “Edições do pacote SCORM”
                                 </Link>
                               </div>
