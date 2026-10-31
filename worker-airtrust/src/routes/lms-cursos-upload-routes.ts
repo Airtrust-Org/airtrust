@@ -19,7 +19,7 @@ import {
 } from '../lib/lms/lms-package-validator';
 import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
 import { ApiError } from '../middleware/error-handler';
-import { requirePermission } from '../middleware/rbac';
+import { requirePermission, requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { getEmpresaIdSafe } from './escalas-shared';
 import { requireOperacoesCurso } from './lms-cursos-rbac';
@@ -313,7 +313,7 @@ app.post(
 );
 
 app.post('/:id/scorm-replace',
-  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+  requireRole('admin'), requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
     if (c.req.query('confirm') !== 'REPLACE_AFTER_VALIDATION') {
       throw new ApiError('Confirmação explícita de substituição obrigatória', 400, 'SCORM_REPLACE_CONFIRMATION_INVALID');
     }
@@ -668,7 +668,7 @@ function courseIdParam(c: Context<{ Bindings: Env }>): number {
 // Default administrator flow: server-validated formative ZIP, no external
 // attestation upload or review ceremony. Full scored/exam route stays governed.
 app.post('/:id/scorm-package-versions/:packageId/replace-direct',
-  requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+  requireRole('admin'), requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const body = ActivateSchema.safeParse(await readSmallJson(c, 2_048, 'Confirmação de substituição'));
     if (!body.success || !body.data.confirm) {
