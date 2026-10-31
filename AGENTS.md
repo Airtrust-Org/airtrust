@@ -1,119 +1,36 @@
-# AirTrust — AGENTS.md (execução rápida e revisão por risco)
+# AirTrust — AGENTS.md | V7 Fast Release
 
-AirTrust é um SaaS multi-tenant de aviação com dados reais. Otimize por
-**correção verificável e menor retrabalho**; velocidade nunca justifica bypass
-de segurança, testes, branch protection, schema ou autorização.
+**Regra operacional:** `docs/ops/FAST_RELEASE_V7.md`. Corrigir e entregar com autonomia. A solicitação inicial do proprietário autoriza a preparação completa no escopo; **não** implica autorização irrestrita de produção, schema ou writes de dados reais. Não interromper para "prossiga" enquanto houver trabalho seguro e autorizado.
 
-## Autoridade e contexto mínimo
+## Estado e ferramentas
 
-- `Airtrust-Org/airtrust`, `main`: autoridade de código, PRs e releases.
-  GitHub Actions: CI oficial; Cloudflare: staging/produção. GCB: contingência,
-  não bypass; GitLab/CircleCI: legados.
-- Estado vivo do GitHub (código, checks, proteções e workflows) prevalece sobre
-  documentação/snapshots. Instruções canônicas V6/V3 seguem aplicáveis.
-- `docs/ops/RUNBOOK_INDEX.md`, `docs/ops/AGENT_WORKFLOW.md` e `CLAUDE.md`
-  são referências **sob demanda**, nunca leitura integral obrigatória.
+- Autoridade: GitHub `Airtrust-Org/airtrust`, `main`. CI: GitHub Actions. Cloudflare: runtime. GCB: fallback de CI, nunca bypass. GitLab/CircleCI: legado.
+- Começar pelo caso real, PR/branch existente, HEAD/base, último SHA revisado, diff, testes/checks pertinentes. Issue #776 é índice, não leitura integral obrigatória. Mesmo SHA reutiliza evidências válidas.
+- GitHub-first. Acesso local/Remote Desktop apenas quando teste, build, browser, arquivos locais ou limitação da integração exigirem. Não delegar a outro agente por volume.
+- Preservar branches e worktrees de outros executores. Sem reset/clean/stash, force-push, `git add .` ou refatoração fora do escopo de modo indiscriminado.
 
-**Ao iniciar ou retomar uma tarefa:** localizar caso e PR/branch existente;
-consultar `main`/base, HEAD, último SHA revisado, diff, checks e falhas
-pertinentes. A issue `#776` é apenas índice vivo: não reler centenas de
-comentários; a PR e seus checks são a evidência primária. Reutilizar a frente
-existente. Mesmo SHA = mesma evidência: não repetir auditoria/teste PASS sem
-mudança invalidante. Se `main` avançar, revisar somente o delta relevante.
+## Execução
 
-**GitHub-first:** fazer busca, leitura, edição, diff, PR, checks e workflows no
-GitHub quando suportado. Local/Remote Desktop somente para teste/build,
-reprodução de browser/offline/service worker, arquivo local ou limitação
-comprovada do conector. Não usar Mac para leitura/edição GitHub simples.
-Agentes externos só por limitação técnica objetiva. Se houver acesso local,
-conferir `~/SAAS/Airtrust`, `origin`, status, HEAD e `origin/main`, preservando
-alterações alheias. Nunca `reset`, `clean`, `stash`, force-push ou `git add .`
-indiscriminados. `npm run agent:context` e `npm run agent:test-plan` são
-ferramentas locais **opcionais**, não bootstrap de toda sessão.
+`causa suficiente → correção em lote → teste focado → suíte afetada → oito gates → merge governado → ambiente autorizado → validação real`
 
-## Fast Lane — fazer, testar, concluir
+- Não reiniciar auditorias, inspecionar logs verdes, repetir CI sem delta ou pollar por rotina. Corrigir falhas da mesma causa em lote; após duas falhas equivalentes, mudar o método.
+- Testes proporcionais: **baixo** (texto/layout isolado) permite dispensar staging se contrato permitir; **médio** (API, matrícula/visibilidade LMS, regra de negócio) exige regressão e staging quando necessário; **alto** (auth, RBAC, tenant, conclusão LMS, certificados, D1/R2, schema, escrita crítica) exige testes negativos e controles de staging/recovery aplicáveis.
+- Os oito gates obrigatórios são `lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`, `worker-tests-1`, `worker-tests-2`, `lms-smoke` e `public-e2e`. Não alterar baseline/ratchet nem enfraquecer branch protection.
+- Após checks/review/dependências satisfeitos, merge pelo processo governado. Desenvolvimento de outras branches pode continuar; serializar merge/deploy conflitante e mutações de schema/dados.
 
-`caso/erro → causa suficiente → correção coerente → teste focado →
-suíte afetada → gates necessários → integração governada → staging/aceite
-se aplicável → produção somente com autorização específica`
+## Segurança e domínio
 
-- Congelar escopo ao achar causa suficiente; não converter bug em auditoria.
-- Corrigir ocorrências da **mesma causa em lote** antes do próximo CI.
-- Não executar suíte ampla com teste focado falhando, nem rerodar CI sem
-  delta/justificativa; jamais elevar baseline/ratchet para ficar verde.
-- Após duas falhas equivalentes, mudar de método. Distinguir bug real de
-  falha de sessão, seletor, infraestrutura ou timeout.
-- Não abrir logs verdes nem fazer polling constante. Usar resultados por SHA.
-  Transformar regressões manuais repetitivas em testes automatizados.
-- Durante CI, continuar trabalho independente no mesmo escopo sem modificar
-  o SHA candidato congelado ou colidir com outro executor.
-- Prosseguir até conclusão segura ou **bloqueio real**; não parar em relatório.
+- Backend autentica e autoriza; escopo tenant/`empresa_id` (ou contrato equivalente) na consulta; SQL parametrizado; RBAC fail-closed; logs sem PII/secrets. Mudanças sensíveis testam permitido, negado e cross-tenant.
+- Frontend preserva `fetchWithAuth`, cache por tenant, retry controlado, offline/sync e service worker quando afetados.
+- LMS/SCORM preserva matrícula/ciclo, progresso, score, `lesson_status`, `suspend_data`, commit/finish, conclusão e autorização de assets. Não fabricar evidência de conclusão.
+- FRMS/EVD/SIGVOOS/Pilot App: dados ausentes não são zero, conformidade ou sincronização bem-sucedida; preservar integridade operacional e idempotência.
 
-## Padrão de implementação
+## Produção e autorização única
 
-Preservar contratos de API, UX, compatibilidade e dados. Corrigir causa, não
-sintoma; seguir helpers e padrões existentes. Evitar refatoração lateral,
-dependência nova ou mudança cosmética sem necessidade. Validar inputs,
-propagar erros reais e não fabricar sucesso, progresso nem dados operacionais.
+Aprovação de produção, quando exigida, deve estar vinculada a **SHA, artefato e escopo exatos**. Preparar tudo antes de solicitar uma única decisão final. Aprovação pelo GitHub Environment é válida somente quando houver política/identidade/escopo efetivamente verificáveis; não presumir requisitos de reviewer. Usar o workflow oficial, guardar proveniência, versionamento, health e validação do caso real. Schema V2, recovery e execução governada para qualquer migration/write remoto; nenhum script histórico ou SQL ad hoc.
 
-- **Backend:** autenticação/autorização no servidor, RBAC, escopo tenant/
-  `empresa_id` (ou contrato equivalente), SQL parametrizado, auditoria e
-  logs sem PII/secrets. Testar permitido/negado/cross-tenant nas mudanças
-  sensíveis. Rotas públicas exigem allowlist/controles específicos.
-- **Frontend:** `fetchWithAuth`/fluxo canônico, invalidação de cache no
-  tenant switch, estados offline/sync e service worker quando afetados.
-- **LMS/SCORM:** preservar matrícula/ciclo, score, `lesson_status`,
-  `suspend_data`, commit/finish, conclusão e autorização de assets. Não
-  sintetizar resultado ou remover proteção para resolver CORS/404.
-- **FRMS/EVD/SIGVOOS/Pilot App:** ausência de dados não significa zero,
-  segurança ou sincronização bem-sucedida. Preservar integridade operacional,
-  idempotência e casos offline/online aplicáveis.
+## Revisão e fechamento
 
-## Revisão automática de PR (Codex)
+Revisar riscos introduzidos pelo delta (segurança, regressão, dados, corrida, resiliência), não observações cosméticas. Findings exigem linha, condição, impacto, evidência e teste proposto. Comunicar só marcos materiais. Registrar na PR causa, alteração, teste, SHA, status do ambiente e bloqueio, se houver; atualizar #776 apenas quando necessário. **PR verde não é deploy**. Não inventar execução nem aprovação.
 
-Priorizar bugs **introduzidos ou expostos pelo delta**, não comentários
-cosméticos. Inspecionar principalmente:
-1. Segurança: vazamento cross-tenant, auth/RBAC, rota pública, secrets/PII,
-   write D1/R2 ou migration sem proteção.
-2. Regressões: API, LMS→Qualificações→Certificados,
-   Escalas/EVD→FRMS→SIGVOOS, offline→sync→XML, persistência e ciclo.
-3. Confiabilidade: perda de estado, concorrência, idempotência, erro
-   mascarado e recuperação.
-
-Cada finding precisa de **linha, condição concreta, impacto, evidência e
-correção/teste sugerido**. Separar confirmação de hipótese. Não reabrir finding
-resolvido no SHA atual. Se nada material for comprovável, dizer isso sem
-afirmar que release está aprovada. Lint e formatação pertencem à CI.
-
-## CI, deploy e limites inegociáveis
-
-Oito gates oficiais (confirmar contrato vivo): `lint`,
-`build-content-gates`, `worker-typecheck`, `frontend-coverage`,
-`worker-tests-1`, `worker-tests-2`, `lms-smoke`, `public-e2e`.
-
-Antes de merge: conferir HEAD/base, mergeabilidade, gates, dependências e
-branch protection; confirmar nova `main` após merge. Uma frente = PR/branch
-e executor coordenado. Paralelizar apenas trabalho independente; serializar
-merge/deploy no mesmo ambiente, schema/migrations e writes D1/R2.
-
-Staging usa workflow governado, secrets sintéticos do GitHub Environment
-`staging` e validação **real** do caso; consultar
-`docs/ops/STAGING_CREDENTIAL_CONTRACT.md` somente quando aplicável.
-Nunca levar credenciais para chat, `.env` versionado, logs ou commits.
-Migration versionada ≠ aplicada: Schema V2 requer manifest, hashes,
-baseline, plan, recovery, ledger e postchecks quando aplicável.
-Não improvisar SQL remoto, seed, import, backfill ou escrita sem governança.
-
-**Produção:** só com autorização explícita, atual e específica para SHA,
-artefato e escopo, workflow oficial e pós-validação. PR, CI, merge e staging
-não provam produção. Nunca contornar proteções nem usar scripts históricos
-como atalho.
-
-## Checkpoint e encerramento
-
-Registrar marco material na PR/issue específica e na linha da frente de
-`#776` quando aplicável: `objetivo | PR/branch | HEAD | último SHA revisado |
-causa | mudança | testes/checks | ambiente | bloqueio | próxima ação |
-não autorizado`. Evitar relatórios repetidos. Distinguir **comprovado,
-executado, não executado e bloqueado**; jamais inventar teste, autorização,
-migração, merge, deploy ou aceite.
+Referências técnicas sob demanda: `CLAUDE.md`, `docs/ops/AGENT_WORKFLOW.md`, `docs/ops/RUNBOOK_INDEX.md`; workflows e proteções atuais prevalecem.
