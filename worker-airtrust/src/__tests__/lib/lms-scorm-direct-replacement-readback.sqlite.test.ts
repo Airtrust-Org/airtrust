@@ -46,7 +46,8 @@ describe('SCORM direct replacement duplicate receipt — SQLite authoritative re
       packageId: 'fod-new', packageSha256: SHA, status: 'ACTIVE', cursoId: 61,
       assessmentPolicy: 'FORMATIVE', validationMode: 'SERVER_STATIC_GATE', alreadyActive: true,
     });
-    expect(head).toHaveBeenCalledExactlyOnceWith(prefix+'index.html');
+    expect(head).toHaveBeenCalledOnce();
+    expect(head).toHaveBeenCalledWith(prefix+'index.html');
     // Readback must never create another ACTIVATE audit or mutate either table.
     expect(db.database.prepare('SELECT status FROM lms_scorm_package_versions WHERE id=?')
       .get('fod-new')).toEqual({status:'ACTIVE'});
