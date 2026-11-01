@@ -43,7 +43,11 @@ function plan(overrides: Record<string, unknown> = {}) {
   };
 }
 const makeParams = (overrides: Record<string, unknown> = {}) => ({
-  db: {} as D1Database, bucket: { head: mocks.head } as unknown as R2Bucket,
+  db: {
+    prepare: vi.fn().mockReturnValue({
+      bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue(null) }),
+    }),
+  } as unknown as D1Database, bucket: { head: mocks.head } as unknown as R2Bucket,
   empresaId: 6, cursoId: 26, packageId: 'candidate', userId: 1,
   confirm: { cursoId: 26, packageSha256: SHA, acknowledgeInProgress: 3 },
   ...overrides,
@@ -171,9 +175,57 @@ describe('admin direct SCORM replacement — fail closed', () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it('cannot claim success if the CAS transaction loses a race', async () => {
+  it('returns the winning ACTIVE receipt after the identical SHA wins the CAS race', async () => {
     mocks.commit.mockResolvedValue(false);
-    await expect(replaceValidatedFormativeScorm(makeParams())).rejects.toThrow(/mudou durante/);
+    const db = (active: boolean) => ({
+    prepare: vi.fn().mockReturnValue({
+      bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue(active ? {
+          id: 'candidate', package_sha256: SHA,
+          r2_prefix: 'lms/scorm/6/26/_candidates/candidate/', launch_file: 'index.html',
+        } : null),
+      }),
+    }),
+  } as unknown as D1Database);
+    const receipt = await replaceValidatedFormativeScorm(makeParams({ db: db(true) }));
+    expect(receipt).toEqual(expect.objectContaining({
+      status: 'ACTIVE', alreadyActive: true, packageId: 'candidate', packageSha256: SHA,
+    }));
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.head).toHaveBeenCalledWith('lms/scorm/6/26/_candidates/candidate/index.html');
+  });
+
+  it('keeps a conflicting replacement fail-closed when the exact SHA is not active', async () => {
+    mocks.commit.mockResolvedValue(false);
+    const db = (active: boolean) => ({
+    prepare: vi.fn().mockReturnValue({
+      bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue(active ? {
+          id: 'candidate', package_sha256: SHA,
+          r2_prefix: 'lms/scorm/6/26/_candidates/candidate/', launch_file: 'index.html',
+        } : null),
+      }),
+    }),
+  } as unknown as D1Database);
+    await expect(replaceValidatedFormativeScorm(makeParams({ db: db(false) })))
+      .rejects.toThrow(/mudou durante/);
+  });
+
+  it('never acknowledges an ACTIVE edition if its launch file disappeared', async () => {
+    mocks.commit.mockResolvedValue(false);
+    const db = (active: boolean) => ({
+    prepare: vi.fn().mockReturnValue({
+      bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue(active ? {
+          id: 'candidate', package_sha256: SHA,
+          r2_prefix: 'lms/scorm/6/26/_candidates/candidate/', launch_file: 'index.html',
+        } : null),
+      }),
+    }),
+  } as unknown as D1Database);
+    mocks.head.mockResolvedValueOnce({ key: 'index.html' }).mockResolvedValueOnce(null);
+    await expect(replaceValidatedFormativeScorm(makeParams({ db: db(true) })))
+      .rejects.toThrow(/mudou durante/);
   });
 
   it('blocks identity/validation failures other than the retired approval ceremony', async () => {
