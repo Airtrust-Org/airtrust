@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithAuth } from '@/react-app/config/api';
-import { uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
+import { inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
 
 const { extractBrowserLmsPackageMock } = vi.hoisted(() => ({
   extractBrowserLmsPackageMock: vi.fn(),
@@ -147,7 +147,12 @@ describe('production SCORM inactive candidate upload: never activates', () => {
   });
 
   it('substitutes validated formative bytes in a single server-authorized upload', async () => {
-    const fixture = scormZip();
+    const fixture = scormZipWithCompletionContract({
+      assessment: { mode: 'NONE', scoringBySCORM: false, requiredInteractions: [], successStatus: 'completed' },
+      content: { requiredSlides: ['s1', 's2'] },
+      formative: { scored: false, requiredActivities: ['s2'] },
+      completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+    });
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
     const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(fixture.zip));
     const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -172,6 +177,71 @@ describe('production SCORM inactive candidate upload: never activates', () => {
       cursoId: 44, file: scormFile(scormZip().zip),
     })).rejects.toThrow(/disponível apenas em airtrust.online/);
     expect(fetchWithAuthMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('SCORM profile routing — prevent scored SOP bypass through admin formative button', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { location: { hostname: 'airtrust.online' } });
+    extractBrowserLmsPackageMock.mockReset();
+    fetchWithAuthMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function noExamContract() {
+    return {
+      assessment: { mode: 'NONE', requiredInteractions: [], scoringBySCORM: false, successStatus: 'completed' },
+      completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+      content: { requiredSlides: ['s1', 's2'] },
+      formative: { requiredActivities: ['s2'], scored: false },
+    };
+  }
+
+  it('recognizes the complete scoreless formative contract for direct replacement', async () => {
+    const f = scormZipWithCompletionContract(noExamContract());
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('FORMATIVE');
+  });
+
+  it('routes AW139/S76-style graded mastery packages to inactive intake, even for admin', async () => {
+    const f = scormZipWithCompletionContract({
+      ...noExamContract(),
+      assessment: { requiredInteractions: ['q01'], masteryScore: 80, successStatus: 'passed', failureStatus: 'failed' },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(f.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({ ...CANDIDATE_VALIDATED, packageSha256: sha }, 202));
+    const receipt = await uploadScormInactiveProductionCandidate({ cursoId: 63, file: scormFile(f.zip), replaceImmediately: false });
+    expect(receipt.status).toBe('VALIDATED');
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/63/scorm-upload');
+  });
+
+  it('blocks a forced direct replacement of a scored SOP before any network request', async () => {
+    const f = scormZipWithCompletionContract({
+      ...noExamContract(), assessment: { requiredInteractions: ['q'], masteryScore: 80, successStatus: 'passed' },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 62, file: scormFile(f.zip), replaceImmediately: true,
+    })).rejects.toThrow(/não comprova o perfil formativo/);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+  });
+
+  it('never directly replaces a private candidate or unproven/invalid manifest', async () => {
+    for (const manifest of [
+      { ...noExamContract(), release: { status: 'PRIVATE_CANDIDATE_NOT_CERTIFIED_DO_NOT_ACTIVATE' } },
+      { ...noExamContract(), formative: { requiredActivities: [], scored: false } },
+      { ...noExamContract(), completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1' } },
+    ]) {
+      const f = scormZipWithCompletionContract(manifest);
+      extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+      expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+    }
+    const f = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
   });
 });
 

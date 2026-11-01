@@ -268,6 +268,48 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
   }
 }
 
+/**
+ * A non-authoritative, UI-only selection hint. Direct replacement is limited
+ * to the EXACT formative/no-exam structural contract; all other ZIPs are
+ * uploaded as inactive versions for governed review and activation.
+ */
+export type ScormReplacementProfile = 'FORMATIVE' | 'GOVERNED';
+
+function isDirectFormativeContract(prepared: PreparedPackage): boolean {
+  const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (!file) return false;
+  try {
+    const manifest = JSON.parse(strFromU8(file.bytes)) as Record<string, unknown>;
+    const rec = (value: unknown): Record<string, unknown> | null =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    const a = rec(manifest.assessment), f = rec(manifest.formative), c = rec(manifest.completion),
+      content = rec(manifest.content), release = rec(manifest.release);
+    const validIds = (items: unknown): items is string[] =>
+      Array.isArray(items) && items.length > 0 &&
+      items.every(id => typeof id === 'string' && id.trim().length > 0) &&
+      new Set(items.map((id: string) => id.toLowerCase())).size === items.length;
+    const slides = content?.requiredSlides, activities = f?.requiredActivities;
+    const status = String(release?.status ?? '').toUpperCase();
+    return !status.startsWith('PRIVATE_') && !status.includes('DO_NOT_ACTIVATE') &&
+      a?.mode === 'NONE' && a.scoringBySCORM === false &&
+      Array.isArray(a.requiredInteractions) && a.requiredInteractions.length === 0 &&
+      !Object.prototype.hasOwnProperty.call(a, 'masteryScore') &&
+      !Object.prototype.hasOwnProperty.call(a, 'failureStatus') &&
+      (a.successStatus === undefined || a.successStatus === 'completed') &&
+      c?.strategy === 'AIRTRUST_COMPLETION_CONTRACT_V1' &&
+      c.passStatusFromSCORM === false && c.workerApprovalRequired === true &&
+      f?.scored === false && validIds(slides) && validIds(activities) &&
+      activities.every(id => slides.includes(id));
+  } catch {
+    return false;
+  }
+}
+
+export async function inspectScormReplacementProfile(file: File): Promise<ScormReplacementProfile> {
+  const prepared = await preparePackageUpload(file, 'scorm');
+  return isDirectFormativeContract(prepared) ? 'FORMATIVE' : 'GOVERNED';
+}
+
 function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: string) {
   return `${tipoConteudo}:${packageHash}`;
 }
@@ -475,6 +517,13 @@ export async function uploadScormInactiveProductionCandidate(params: {
   onStatus?.('Validando estrutura do ZIP SCORM...');
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, 'scorm');
+  if (replaceImmediately && !isDirectFormativeContract(prepared)) {
+    throw new Error(
+      'Este ZIP não comprova o perfil formativo sem prova. A substituição direta ' +
+      'foi bloqueada antes do upload. Envie como edição inativa para homologação; ' +
+      'o treinamento atual permanece preservado.',
+    );
+  }
   onStatus?.(replaceImmediately
     ? 'Validando e substituindo o conteúdo do curso...'
     : 'Enviando versão candidata sem substituir conteúdo...');
