@@ -59,6 +59,15 @@ function qaRow(plan, phase, packageId = plan.candidate.operationId) {
     completionStatus: active ? 'EM_ANDAMENTO' : 'NAO_INICIADO',
     scormScoreRaw: null,
     certificateDocument: null,
+    assessmentEvidence: {
+      source: 'WORKER_D1_F0_ASSESSMENT_READBACK_V1',
+      tenantId: c.tenantId, courseId: c.courseId,
+      enrollmentId: f.enrollmentId, cycleId: f.cycleId, runId: f.runId,
+      packageId, packageSha256: c.packageSha256, runtimeSha: plan.releaseSha,
+      observedAt: new Date().toISOString(),
+      assessmentAttemptCount: 0, assessmentApprovedCount: 0,
+      externalAssessmentApprovedCount: 0, certificateIssuedCount: 0,
+    },
   };
 }
 
@@ -128,8 +137,7 @@ function adaptersFor(plan, overrides = {}) {
         committedPackageSha256: plan.candidate.packageSha256,
         cmiSha256: receipt('1'), suspendSha256: receipt('2'), sessionCount: 1,
         completionStatus: 'EM_ANDAMENTO', qualificationHistoryCount: 0,
-        certificateDocument: null, assessmentAttempted: false,
-        assessmentApproved: false, externalAssessmentApproved: false, certificateIssued: false,
+        certificateDocument: null,
       };
     },
     async recoverSyntheticCandidate() { calls.push('recover'); return {
@@ -889,4 +897,83 @@ test('rechecks fixture expiry after private ZIP hashing and before first Worker 
   await assert.rejects(executeF5InactiveCandidate({ plan, source, adapters }),
     /PLAN_OR_F0_RECEIPT_INVALID/);
   assert.ok(!calls.includes('begin'));
+});
+
+test('F5 refuses missing, cross-scope or nonzero physical F0 assessment readback before browser QA', async () => {
+  const bytes = Buffer.from('synthetic ZIP for F0 assessment provenance guard');
+  const mutations = [
+    ['missing', row => { delete row.assessmentEvidence; }, 'UNPROVEN'],
+    ['wrong tenant', row => { row.assessmentEvidence.tenantId++; }, 'UNPROVEN'],
+    ['wrong cycle', row => { row.assessmentEvidence.cycleId++; }, 'UNPROVEN'],
+    ['wrong package id', row => { row.assessmentEvidence.packageId = 'different'; }, 'UNPROVEN'],
+    ['wrong edition sha', row => { row.assessmentEvidence.packageSha256 = 'f'.repeat(64); }, 'UNPROVEN'],
+    ['missing edition sha', row => { delete row.assessmentEvidence.packageSha256; }, 'UNPROVEN'],
+    ['wrong runtime sha', row => { row.assessmentEvidence.runtimeSha = 'f'.repeat(40); }, 'UNPROVEN'],
+    ['stale', row => { row.assessmentEvidence.observedAt = '2020-01-01T00:00:00Z'; }, 'UNPROVEN'],
+    ['attempted', row => { row.assessmentEvidence.assessmentAttemptCount = 1; }, 'NOT_EMPTY'],
+    ['approved', row => { row.assessmentEvidence.assessmentApprovedCount = 1; }, 'NOT_EMPTY'],
+    ['external approved', row => { row.assessmentEvidence.externalAssessmentApprovedCount = 1; }, 'NOT_EMPTY'],
+    ['certificate issued', row => { row.assessmentEvidence.certificateIssuedCount = 1; }, 'NOT_EMPTY'],
+  ];
+  for (const [label, mutate, code] of mutations) {
+    const plan = planFor(bytes);
+    const { calls, adapters } = adaptersFor(plan);
+    const original = adapters.readQaEvidence;
+    adapters.readQaEvidence = async params => {
+      const row = await original(params);
+      if (params.phase === 'BEFORE') mutate(row);
+      return row;
+    };
+    await assert.rejects(executeF5InactiveCandidate({
+      plan, source: sourceFor(bytes), adapters,
+    }), new RegExp('F5_EXECUTOR_ASSESSMENT_READBACK_' + code), label);
+    assert.ok(!calls.includes('execute'), label + ': no browser QA without F0 proof');
+    assert.ok(calls.includes('recover'), label + ': recover synthetic fixture');
+    assert.ok(calls.includes('remove-candidate'), label + ': compensate inactive candidate');
+  }
+});
+
+test('F5 refuses a missing AFTER assessment witness despite successful browser commits', async () => {
+  const bytes = Buffer.from('synthetic ZIP for post-browser F0 assessment provenance');
+  const plan = planFor(bytes);
+  const { calls, adapters } = adaptersFor(plan);
+  const original = adapters.readQaEvidence;
+  adapters.readQaEvidence = async params => {
+    const row = await original(params);
+    if (params.phase === 'AFTER') delete row.assessmentEvidence;
+    return row;
+  };
+  await assert.rejects(executeF5InactiveCandidate({
+    plan, source: sourceFor(bytes), adapters,
+  }), /F5_EXECUTOR_ASSESSMENT_READBACK_UNPROVEN/);
+  assert.ok(calls.includes('execute'), 'browser commit alone does not certify F0 absence');
+  assert.ok(calls.includes('recover'), 'failed postcondition must recover synthetics');
+  assert.ok(calls.includes('remove-candidate'), 'failed candidate must be compensated');
+});
+
+test('F5 refuses a contaminated F0 synthetic baseline before browser QA', async () => {
+  const bytes = Buffer.from('synthetic ZIP for fresh F0 baseline guard');
+  const mutations = [
+    ['prior session', row => { row.sessionCount = 1; }],
+    ['prior CMI', row => { row.cmiSha256 = receipt('1'); }],
+    ['prior suspend data', row => { row.suspendSha256 = receipt('2'); }],
+    ['prior launch', row => { row.servedPackageSha256 = row.packageSha256; }],
+    ['prior commit', row => { row.committedPackageSha256 = row.packageSha256; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const plan = planFor(bytes);
+    const { calls, adapters } = adaptersFor(plan);
+    const original = adapters.readQaEvidence;
+    adapters.readQaEvidence = async params => {
+      const row = await original(params);
+      if (params.phase === 'BEFORE') mutate(row);
+      return row;
+    };
+    await assert.rejects(executeF5InactiveCandidate({
+      plan, source: sourceFor(bytes), adapters,
+    }), /F5_EXECUTOR_BEFORE_SYNTHETIC_FIXTURE_NOT_PRISTINE/, label);
+    assert.ok(!calls.includes('execute'), label + ': no browser QA on stale F0 state');
+    assert.ok(calls.includes('recover'), label + ': recover synthetic fixture');
+    assert.ok(calls.includes('remove-candidate'), label + ': compensate inactive candidate');
+  }
 });
