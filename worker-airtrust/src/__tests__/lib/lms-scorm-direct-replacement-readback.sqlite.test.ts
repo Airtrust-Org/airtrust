@@ -21,12 +21,18 @@ function fixture() {
       scorm_assessment_policy TEXT, scorm_package_r2_prefix TEXT,
       scorm_launch_file TEXT, PRIMARY KEY(empresa_id,id)
     );
+    CREATE TABLE lms_scorm_package_audit_log (
+      id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
+      package_id TEXT, action TEXT, actor_id INTEGER, created_at TEXT
+    );
   `);
   db.database.prepare(`INSERT INTO lms_scorm_package_versions VALUES
     (?,?,?,?,?,'index.html','ACTIVE','FORMATIVE','FORMATIVE_NO_EXAM_V1')`)
     .run('fod-new',6,61,SHA,prefix);
   db.database.prepare(`INSERT INTO lms_cursos
     VALUES(61,6,NULL,'scorm','FORMATIVE',?,'index.html')`).run(prefix);
+  db.database.prepare(`INSERT INTO lms_scorm_package_audit_log
+    VALUES('activation-receipt',6,61,'fod-new','ACTIVATED',1,'2026-10-31')`).run();
   // Real second tenant; an exact package ID cannot be borrowed across tenants.
   db.database.prepare(`INSERT INTO lms_cursos
     VALUES(61,7,NULL,'scorm','FORMATIVE','lms/scorm/7/61/other/','index.html')`).run();
@@ -65,6 +71,8 @@ describe('SCORM direct replacement duplicate receipt — SQLite authoritative re
     ['stale launch', {}, "UPDATE lms_cursos SET scorm_launch_file='other.html' WHERE empresa_id=6 AND id=61"],
     ['wrong course policy', {}, "UPDATE lms_cursos SET scorm_assessment_policy='SCORED' WHERE empresa_id=6 AND id=61"],
     ['deleted course', {}, "UPDATE lms_cursos SET deleted_at='2026-10-31' WHERE empresa_id=6 AND id=61"],
+    ['missing activation audit', {}, "DELETE FROM lms_scorm_package_audit_log WHERE package_id='fod-new'"],
+    ['non-activation audit', {}, "UPDATE lms_scorm_package_audit_log SET action='VALIDATION_PASSED' WHERE package_id='fod-new'"],
   ])('fails closed on %s mismatch', async (_label, overrides, sql) => {
     const { db, head, params } = fixture();
     if (sql) db.database.exec(sql);
