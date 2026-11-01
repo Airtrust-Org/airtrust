@@ -40,7 +40,7 @@ import {
   rollbackScormPackageVersion,
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
-import { preflightDirectFormativeReplacement, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
+import { preflightDirectFormativeReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
   authorizeF5IntakeOperation,
@@ -324,6 +324,15 @@ app.post('/:id/scorm-replace',
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       userId: actorId(c), bytes, arquivoNome,
     });
+    if (candidate.status === 'ACTIVE') {
+      // Idempotent exact-SHA resubmission after the first request completed.
+      // Do not re-run activation, invalidate snapshots or change enrollments.
+      const receipt = await readAlreadyActiveFormativeReplacement({
+        db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+        packageId: candidate.packageId, packageSha256: candidate.packageSha256,
+      });
+      if (receipt) return c.json({ success: true, data: receipt });
+    }
     if (candidate.status !== 'VALIDATED') {
       const sections = [candidate.structural, candidate.completionManifest, candidate.diagnostics];
       const reasons = sections.flatMap(section => section?.errors ?? [])
