@@ -1289,6 +1289,14 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     ? `${launchUrl}${launchUrl.includes('?') ? '&' : '?'}airtrust_scorm=${encodeURIComponent(assetCacheBuster)}`
     : launchUrl;
 
+  // The SCORM iframe cannot inspect the React grandparent path across origins.
+  // Factory V3 recognizes preview=1 and skips enrollment resume state, avoiding
+  // spurious edition mismatch banners in administrator previews.
+  // Learner launches and review must never receive this flag.
+  const scormEntryUrl = previewMode
+    ? launchUrlWithCacheBuster + (launchUrlWithCacheBuster.includes('?') ? '&' : '?') + 'preview=1'
+    : launchUrlWithCacheBuster;
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1352,7 +1360,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
   window.API_1484_11 = stub2004;
 })();
 </script>
-<iframe id="scorm-frame" src="${escapeHtml(launchUrlWithCacheBuster)}" allow="autoplay; fullscreen" sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts"></iframe>
+<iframe id="scorm-frame" src="${escapeHtml(scormEntryUrl)}" allow="autoplay; fullscreen" sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts"></iframe>
 <div id="status-bar">
   <span id="status-dot"></span>
   <span id="status-text">Carregando SCORM...</span>
