@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
@@ -695,7 +695,7 @@ function CourseDrawer({
     form: CreateCursoDTO,
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
-  onProductionCandidateUpload: (cursoId: number, file: File) => Promise<{
+  onProductionCandidateUpload: (cursoId: number, file: File, replaceImmediately: boolean) => Promise<{
     packageId: string; packageSha256: string; status: 'VALIDATED' | 'ACTIVE';
   }>;
   onQaCandidateUpload: (cursoId: number, file: File) => Promise<{
@@ -714,6 +714,7 @@ function CourseDrawer({
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
   const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
   const [contentFile, setContentFile] = useState<File | null>(null);
+  const [scormProfile, setScormProfile] = useState<ScormReplacementProfile | 'CHECKING'>('CHECKING');
   const [qaCandidateReceipt, setQaCandidateReceipt] = useState<{
     packageId: string; packageSha256: string; status: 'VALIDATED';
   } | null>(null);
@@ -729,7 +730,19 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin;
+  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile === 'FORMATIVE';
+  useEffect(() => {
+    if (!canUploadInactiveProduction || !contentFile) {
+      setScormProfile('CHECKING');
+      return;
+    }
+    let current = true;
+    setScormProfile('CHECKING');
+    void inspectScormReplacementProfile(contentFile)
+      .then(profile => { if (current) setScormProfile(profile); })
+      .catch(() => { if (current) setScormProfile('GOVERNED'); });
+    return () => { current = false; };
+  }, [canUploadInactiveProduction, contentFile]);
   const candidateFirstScorm = shouldSaveScormMetadataWithoutZip({
     isEditing, storedTipoConteudo: initial?.tipo_conteudo,
     tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
@@ -775,19 +788,20 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
+    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
     try {
       const receipt = canUploadInactiveProduction
-        ? await onProductionCandidateUpload(courseId, contentFile)
+        ? await onProductionCandidateUpload(courseId, contentFile, directReplacement)
         : await onQaCandidateUpload(courseId, contentFile);
       setQaCandidateReceipt(receipt.status === 'VALIDATED' ? { packageId: receipt.packageId, packageSha256: receipt.packageSha256, status: 'VALIDATED' } : null);
       toast.success(
         receipt.status === 'ACTIVE'
           ? 'Conteúdo substituído. Matrículas e históricos foram preservados.'
           : canUploadInactiveProduction
-          ? 'Novo ZIP recebido. Consulte o status da substituição nos detalhes do curso.'
+          ? 'Edição inativa recebida. O conteúdo publicado não foi alterado; homologue antes de ativar.'
           : 'SCORM recebido pelo Worker como nova edição para homologação.',
       );
       if (canUploadInactiveProduction) {
@@ -1243,8 +1257,8 @@ function CourseDrawer({
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
                           <p className="mt-1">{directReplacement
-                            ? 'Selecione o ZIP. O sistema valida os arquivos e substitui o conteúdo formativo. Matrículas em andamento usarão a nova edição; históricos e conclusões anteriores ficam preservados.'
-                            : 'Envie a nova edição para validação. Apenas administradores podem substituir o conteúdo publicado.'}</p>
+                            ? 'Perfil formativo sem prova identificado. O Worker revalidará os gates antes de substituir a edição. Históricos e conclusões anteriores permanecem preservados.'
+                            : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1488,9 +1502,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
                   >
-                    {directReplacement ? 'Validar ZIP e substituir conteúdo' : 'Enviar edição para validação'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
@@ -2043,13 +2057,13 @@ export default function LmsCatalogo() {
     }
   }
 
-  async function handleProductionCandidateUpload(cursoId: number, file: File) {
+  async function handleProductionCandidateUpload(cursoId: number, file: File, replaceImmediately: boolean) {
     setIsSavingCourse(true);
     setUploadProgress(0);
-    setUploadStatus('Iniciando recebimento inativo em produção...');
+    setUploadStatus(replaceImmediately ? 'Validando substituição formativa no Worker...' : 'Enviando edição inativa para homologação...');
     try {
       return await uploadScormInactiveProductionCandidate({
-        cursoId, file, replaceImmediately: isAdmin,
+        cursoId, file, replaceImmediately,
         onProgress: setUploadProgress, onStatus: setUploadStatus,
       });
     } finally {
