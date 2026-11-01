@@ -75,7 +75,11 @@ export async function readAlreadyActiveFormativeReplacement(params: {
       AND c.deleted_at IS NULL AND c.tipo_conteudo='scorm'
       AND c.scorm_assessment_policy='FORMATIVE'
       AND c.scorm_package_r2_prefix=v.r2_prefix
-      AND c.scorm_launch_file=v.launch_file LIMIT 1`)
+      AND c.scorm_launch_file=v.launch_file
+      AND EXISTS(SELECT 1 FROM lms_scorm_package_audit_log a
+        WHERE a.empresa_id=v.empresa_id AND a.curso_id=v.curso_id
+          AND a.package_id=v.id AND a.action='ACTIVATED')
+      LIMIT 1`)
     .bind(params.packageId, params.empresaId, params.cursoId,
       params.packageSha256, FORMATIVE_PROFILE)
     .first<{ id: string; package_sha256: string; r2_prefix: string; launch_file: string }>();
