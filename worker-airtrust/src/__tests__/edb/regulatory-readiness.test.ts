@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { hashSignableEdbPayload } from '../../services/edb/canonicalization';
+import { hashSignableEdbPayload } from '../../lib/edb/canonicalization';
 import {
   createEmptyEdbFlightRecord,
   type EdbFlightRecord,
   type EdbSignatureProof,
   type EdbSignatureType,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import { assessEdbRegulatoryReadiness } from '../../services/edb/regulatory-readiness';
 import {
   bindPicTechnicalAcknowledgement,
   createTechnicalSituationSnapshot,
   type EdbPicTechnicalAcknowledgement,
   type EdbTechnicalSituationSnapshot,
-} from '../../services/edb/technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 const REVISION_ID = 'edbrev-1-r1';
 

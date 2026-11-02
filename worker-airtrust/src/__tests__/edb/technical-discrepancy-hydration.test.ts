@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hydrateEdbTechnicalDiscrepancyLedger } from '../../repositories/edb/edb-technical-discrepancy-hydration';
-import { getEdbTechnicalDiscrepancyStatus } from '../../services/edb/technical-discrepancy-ledger';
+import { getEdbTechnicalDiscrepancyStatus } from '../../lib/edb/technical-discrepancy-ledger';
 
 const BASE = {
   identity: {

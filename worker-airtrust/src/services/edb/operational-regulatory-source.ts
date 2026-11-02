@@ -1,4 +1,4 @@
-import type { EdbTechnicalDiscrepancy } from './contracts';
+import type { EdbTechnicalDiscrepancy } from '../../lib/edb/contracts';
 
 export type EdbRegulatoryDataOrigin = 'MANUAL' | 'SIGVOOS' | 'IMPORTACAO' | 'SISTEMA';
 

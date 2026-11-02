@@ -1,4 +1,4 @@
-import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from './lms-progress-guardrails';
+import { hasCompleteScormSlideCoverage, isTrustedScorm12Finish, extractScormLocationFromCmiJson } from '../lib/lms/lms-progress-guardrails';
 import { resolveLmsCompletionScorePct } from './lms-completion-evidence';
 import type { ScormManifestClosureEvidence } from './lms-scorm-completion-context';
 

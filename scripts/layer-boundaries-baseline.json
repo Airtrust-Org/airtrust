@@ -8,22 +8,6 @@
     "no-hono-in-core|worker-airtrust/src/services/controle-voos/rdv-workflow.ts|hono",
     "no-hono-in-core|worker-airtrust/src/services/employee-sector-access.ts|hono",
     "no-hono-in-core|worker-airtrust/src/services/operational-domain-access-core.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/operational-domain-access.ts|hono",
-    "no-low-to-services|worker-airtrust/src/repositories/dashboardMetricsRepository.ts|worker-airtrust/src/services/employee-sector-access",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-audit-repository.ts|worker-airtrust/src/services/edb/audit-chain",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-audit-repository.ts|worker-airtrust/src/services/edb/canonical-json",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-diary-repository.ts|worker-airtrust/src/services/edb/canonical-json",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-diary-repository.ts|worker-airtrust/src/services/edb/diary-governance",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-diary-repository.ts|worker-airtrust/src/services/edb/technical-discrepancy-ledger",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-revision-view-repository.ts|worker-airtrust/src/services/edb/canonicalization",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-revision-view-repository.ts|worker-airtrust/src/services/edb/contracts",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-revision-view-repository.ts|worker-airtrust/src/services/edb/persisted-record-validation",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-technical-awareness-repository.ts|worker-airtrust/src/services/edb/canonicalization",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-technical-awareness-repository.ts|worker-airtrust/src/services/edb/contracts",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-technical-awareness-repository.ts|worker-airtrust/src/services/edb/technical-awareness",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-technical-discrepancy-hydration.ts|worker-airtrust/src/services/edb/technical-discrepancy-ledger",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-volume-hydration.ts|worker-airtrust/src/services/edb/diary-governance",
-    "no-low-to-services|worker-airtrust/src/repositories/edb/edb-volume-hydration.ts|worker-airtrust/src/services/edb/technical-discrepancy-ledger",
-    "no-low-to-services|worker-airtrust/src/repositories/lmsRelatoriosRepository.ts|worker-airtrust/src/services/lms-progress-guardrails"
+    "no-hono-in-core|worker-airtrust/src/services/operational-domain-access.ts|hono"
   ]
 }
