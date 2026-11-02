@@ -37,6 +37,8 @@ existirem planos, vínculos ou tentativas. Antes de qualquer uso, restaurar o po
 recuperação capturado no preflight pelo workflow governado. Nenhum SQL remoto improvisado.
 
 ## Fora do escopo
-Não aplica em nenhum ambiente e não registra hashes no workflow de staging. Rotas do aluno,
-publicação pela UI e ativação em produção são lotes futuros.
+Não aplica nada por si só. A aplicação em staging é feita pelo workflow governado
+`staging-apply-schema-v2.yml`, que fixa estes hashes e exige a 0569 e a 0571 no ledger, os oito
+gates do SHA exato e ator autorizado; produção exige autorização separada. Rotas do aluno e
+telas ficam atrás de flags de staging e não alteram o writer de conclusão.
 Teste offline: `python3 scripts/__tests__/test_lms_exam_attempts_schema_0572.py`.

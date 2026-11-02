@@ -32,7 +32,9 @@ existirem questões publicadas. Antes de qualquer uso, restaurar o ponto de recu
 capturado no preflight pelo workflow governado. Nenhum SQL remoto improvisado.
 
 ## Fora do escopo
-Não aplica em staging nem produção, não registra hashes no workflow `staging-apply-schema-v2.yml`
-e não substitui a autorização específica de SHA/escopo. Provas, tentativas, correção,
-vínculo curso/edição e ligação ao writer `completeLmsMatricula` são mudanças futuras.
+Não aplica nada por si só. A aplicação em staging é feita pelo workflow governado
+`staging-apply-schema-v2.yml`, que fixa estes hashes e exige confirmação, os oito gates do
+SHA exato e ator autorizado; produção exige autorização separada. Provas, tentativas, correção,
+vínculo curso/edição e ligação ao writer `completeLmsMatricula` são a mudança 0572 e lotes
+seguintes.
 Teste offline: `python3 scripts/__tests__/test_lms_exam_question_schema_0571.py`.
