@@ -4,7 +4,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { desalocarAeronaveInativa } from './escalas-alocacoes';
 
 const aeronaves = new Hono<{ Bindings: Env }>();
