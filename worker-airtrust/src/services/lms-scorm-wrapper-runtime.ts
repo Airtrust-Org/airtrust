@@ -149,6 +149,19 @@ export function buildScormVisitTrackingScript(): string {
  */
 export function buildScormProgressParsersScript(): string {
   return `
+  // A package in preview/review of an unreleased screen shows a counter ("14/90")
+  // that is a visit, not progress. The DOM counter must never become the bookmark
+  // there: the next launch would jump the package past screens never completed.
+  function isPackagePreviewDocument(doc) {
+    try {
+      if (!doc) return false;
+      if (doc.querySelector('.preview-banner')) return true;
+      var gate = doc.getElementById('gateStatus');
+      var text = gate ? String(gate.textContent || '') : '';
+      return /pr[eé]-?visualiza/i.test(text);
+    } catch (_previewError) { return false; }
+  }
+
   function parseProgressFromText(text) {
     if (!text) return null;
     var regex = /(\\d+)\\s*\\/\\s*(\\d+)/g;

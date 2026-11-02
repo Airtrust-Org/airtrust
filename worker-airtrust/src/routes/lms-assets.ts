@@ -1895,6 +1895,11 @@ ${buildScormNativeResumeOwnershipScript()}
         return;
       }
 
+      if (isPackagePreviewDocument(doc)) {
+        diag(' PROBE_LOCATION_SKIPPED reason=package-preview');
+        return;
+      }
+
       var effectiveCurrent = parsed.current;
       var effectiveTotal = parsed.total;
 

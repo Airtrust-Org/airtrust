@@ -1,3 +1,4 @@
+import { parseScormLocationPair } from './lms-progress-guardrails';
 /** Persisted lms_progresso_scorm evidence columns for the current enrollment cycle. */
 export type PersistedScormEvidence = Readonly<{
   lesson_status?: string|null; completion_status?: string|null; success_status?: string|null;
@@ -64,6 +65,40 @@ function overlayPersistedEvidence(
   }
 }
 
+/**
+ * F5 packages (suspend_data v4) restore `active = max(a, location - 1)`. When the
+ * cursor sits past a screen never completed (`d` has a hole), that screen opens
+ * only as a preview and the learner can never finish. The cursor is rewound to
+ * the first hole and the bookmark clamped to the cursor; nothing is credited.
+ */
+function repairStrandedCursor(cmi:Record<string,unknown>,isScorm2004:boolean):void{
+  const raw=cmi['cmi.suspend_data'];
+  if(typeof raw!=='string'||!raw.trim())return;
+  let state:Record<string,unknown>;
+  try{
+    const parsed=JSON.parse(raw) as unknown;
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return;
+    state=parsed as Record<string,unknown>;
+  }catch{return;}
+  const cursor=state.a,done=state.d;
+  if(state.v!==4||state.c===true||!Number.isInteger(cursor)||!Array.isArray(done))return;
+  const locationKey=isScorm2004?'cmi.location':'cmi.core.lesson_location';
+  const declared=Number(cmi['airtrust.total_slides']);
+  const total=Number.isSafeInteger(declared)&&declared>0?declared
+    :parseScormLocationPair(String(cmi[locationKey]??''))?.total??0;
+  if(!Number.isSafeInteger(total)||total<1||total>1000)return;
+  const completed=new Set(done.filter(n=>Number.isInteger(n)&&n>=0&&n<total));
+  let firstHole=0;
+  while(firstHole<total&&completed.has(firstHole))firstHole++;
+  const target=Math.min(Number(cursor),firstHole>=total?total-1:firstHole);
+  if(target!==cursor){
+    state.a=target;
+    cmi['cmi.suspend_data']=JSON.stringify(state);
+  }
+  const pair=parseScormLocationPair(String(cmi[locationKey]??''));
+  if(pair&&pair.current>target+1)cmi[locationKey]=`${target+1}/${pair.total}`;
+}
+
 /** Build a fresh or resumed virtual CMI snapshot for the Player 2 wrapper. */
 export function buildScormLaunchState(
   rawCmiJson:string|null,
@@ -85,6 +120,7 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
+  if(!completedReview)repairStrandedCursor(cmi,isScorm2004);
   // A verified handoff bookmark is only a UI hint (the player shows it). It is never
   // injected as `lesson_location`: F5 packages treat a location without matching
   // suspend_data as an incompatible edition and lock themselves into preview. Only the
