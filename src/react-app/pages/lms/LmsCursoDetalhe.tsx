@@ -385,7 +385,7 @@ export default function LmsCursoDetalhe() {
           </LmsSurface>
         </div>
         {canManage && curso.tipo_conteudo === 'scorm' ? (
-          <LmsSurface title="Edições do pacote SCORM" description="Enviar → validar → homologar → aprovar → ativar → conferir. A edição ativa só muda após todos os requisitos.">
+          <LmsSurface title="Edições do pacote SCORM" description="Para ZIPs formativos válidos, selecionar o arquivo substitui automaticamente a edição atual. ZIPs avaliativos mantêm seus controles de certificação.">
             {packageVersions.isPending ? (
               <p role="status" className="text-sm text-slate-500">Consultando edições SCORM…</p>
             ) : packageVersions.isError ? (
