@@ -1622,6 +1622,10 @@ ${buildScormPayloadFingerprintScript()}
     var currentMarker = parseLocationMarker(currentLocation);
     if (!backupMarker) return;
     if (currentMarker && currentMarker.current >= backupMarker.current) return;
+    // A v4 package keeps its own authoritative cursor (suspend_data.a). A browser
+    // backup ahead of it would re-open the screens the learner never completed.
+    var cursorCap = readSuspendCursorCap();
+    if (cursorCap !== null && backupMarker.current > cursorCap) return;
 
     setScormLocation(String(backup.location));
     if (IS_2004) {
