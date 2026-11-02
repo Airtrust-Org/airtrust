@@ -96,7 +96,6 @@ const LARGE_FILE_LINE_CAPS = {
   // Keep this cap tight; further growth should extract catalog/creation logic instead of raising it.
   // 0519 adds profile-aware evidence selection and transitional schema compatibility.
   // Keep this explicit until the Compliance router is split into smaller modules.
-  'routes/compliance-treinamentos.ts': 2070,
   // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
   // Extraction remains a follow-up and is not mixed into this incident closure.
   'routes/simuladores-fichas.ts': 2500,
