@@ -158,6 +158,58 @@ describe('completed enrollment review virtual CMI', () => {
     expect(cmi['cmi.core.entry']).toBe('resume');
   });
 
+  describe('stranded F5 cursor repair', () => {
+    const suspend = (a: number, d: number[], extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ v: 4, p: 'PKG', a, d, s: {}, g: [], h: {}, vs: {}, q: { answers: [] }, c: false, ...extra });
+    const launch = (loc: string, sd: string, extra: Record<string, unknown> = {}) => {
+      const raw = JSON.stringify({
+        'cmi.core.lesson_location': loc, 'cmi.suspend_data': sd, 'airtrust.total_slides': 59, ...extra,
+      });
+      const cmi = JSON.parse(buildScormLaunchState(raw, null, false).initialCmiJson);
+      return { cmi, state: JSON.parse(cmi['cmi.suspend_data']) };
+    };
+    const allBut = (hole: number, upTo: number) =>
+      Array.from({ length: upTo }, (_, i) => i).filter(i => i !== hole);
+
+    it('rewinds the cursor to the first uncompleted screen without crediting it', () => {
+      const { cmi, state } = launch('59/59', suspend(58, allBut(2, 58)));
+      expect(state.a).toBe(2);
+      expect(state.d).toEqual(allBut(2, 58));
+      expect(cmi['cmi.core.lesson_location']).toBe('3/59');
+    });
+
+    it('clamps a bookmark that is ahead of the cursor', () => {
+      const { cmi, state } = launch('14/59', suspend(3, [0, 1, 2]));
+      expect(state.a).toBe(3);
+      expect(cmi['cmi.core.lesson_location']).toBe('4/59');
+    });
+
+    it('clamps both location aliases (SCORM 1.2 snapshots carry cmi.core.lesson_location and cmi.location)', () => {
+      const { cmi, state } = launch('59/59', suspend(58, allBut(2, 58)), { 'cmi.location': '59/59' });
+      expect(state.a).toBe(2);
+      expect(cmi['cmi.core.lesson_location']).toBe('3/59');
+      expect(cmi['cmi.location']).toBe('3/59');
+    });
+
+    it('leaves a consistent state untouched', () => {
+      const sd = suspend(5, [0, 1, 2, 3, 4]);
+      const { cmi } = launch('6/59', sd);
+      expect(cmi['cmi.suspend_data']).toBe(sd);
+      expect(cmi['cmi.core.lesson_location']).toBe('6/59');
+    });
+
+    it('does not touch a finished course or non-v4 / location-only packages', () => {
+      const done = suspend(58, allBut(2, 58), { c: true });
+      expect(launch('59/59', done).cmi['cmi.suspend_data']).toBe(done);
+      const legacy = 'active-checkpoint';
+      const cmi = JSON.parse(buildScormLaunchState(JSON.stringify({
+        'cmi.core.lesson_location': '17/55', 'cmi.suspend_data': legacy,
+      }), null, false).initialCmiJson);
+      expect(cmi['cmi.suspend_data']).toBe(legacy);
+      expect(cmi['cmi.core.lesson_location']).toBe('17/55');
+    });
+  });
+
   it('rejects malformed, completion-capable, or out-of-range handoff bookmarks', () => {
     expect(readScormNavigationBookmark(JSON.stringify({
       status: 'MATCHED_ANCHOR', targetPosition: 33, activeTotal: 43,
