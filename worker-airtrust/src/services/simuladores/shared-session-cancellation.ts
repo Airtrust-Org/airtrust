@@ -1,4 +1,4 @@
-import { isProtectedFichaStatus } from './simuladores-shared-session-helpers';
+import { isProtectedFichaStatus } from './shared-session-helpers';
 
 export async function cleanupFailedSharedCreate(db: D1Database, sessaoId: number) {
   const linkId = String(sessaoId);

@@ -25,7 +25,8 @@ import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { normalizeFichaRole, resolveFichaScope } from '../utils/ficha-role-scope';
-import { audit, requireAdminForDelete } from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { audit } from '../services/simuladores/shared';
 import { syncHorasVooFromSimulador } from '../shared/handlers/horasVooFromSimulador.handler';
 import {
   getMissingNotechsItens,

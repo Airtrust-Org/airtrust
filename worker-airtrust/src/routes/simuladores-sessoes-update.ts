@@ -22,21 +22,8 @@ import {
   sendSimulatorSessionEmailNotifications,
   shouldNotifySimulatorSessionUpdate,
 } from '../services/simuladores-session-notifications';
-import {
-  requireAdminForDelete,
-  timeToMinutes,
-  syncSessaoEscalaEventos,
-  findSessaoConflict,
-  audit,
-  getSimuladorModeloAeronave,
-  normalizeModeloAeronave,
-  resolveTemplateIdSessao,
-  normalizeChecksSessao,
-  criarQualificacoesPlanejadas,
-  listarParticipantesDaSessaoParaQualificacao,
-  sincronizarQualificacoesDaSessaoConcluida,
-  instrutorEstaEntreParticipantes,
-} from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { timeToMinutes, syncSessaoEscalaEventos, findSessaoConflict, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, resolveTemplateIdSessao, normalizeChecksSessao, criarQualificacoesPlanejadas, listarParticipantesDaSessaoParaQualificacao, sincronizarQualificacoesDaSessaoConcluida, instrutorEstaEntreParticipantes } from '../services/simuladores/shared';
 import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import { getSchemaColumns } from '../utils/db-schema';
