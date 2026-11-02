@@ -1613,6 +1613,16 @@ ${buildScormPayloadFingerprintScript()}
 
 
 
+  function readSuspendCursorCap() {
+    try {
+      var raw = cmi['cmi.suspend_data'];
+      if (typeof raw !== 'string' || !raw) return null;
+      var state = JSON.parse(raw);
+      if (!state || state.v !== 4 || state.c === true || !Number.isInteger(state.a) || state.a < 0) return null;
+      return state.a + 1;
+    } catch (_capError) { return null; }
+  }
+
   function applyLocalResumeBackup() {
     var backup = readLocalResumeBackup();
     if (!backup) return;
@@ -1622,6 +1632,10 @@ ${buildScormPayloadFingerprintScript()}
     var currentMarker = parseLocationMarker(currentLocation);
     if (!backupMarker) return;
     if (currentMarker && currentMarker.current >= backupMarker.current) return;
+    // A v4 package keeps its own authoritative cursor (suspend_data.a). A browser
+    // backup ahead of it would re-open the screens the learner never completed.
+    var cursorCap = readSuspendCursorCap();
+    if (cursorCap !== null && backupMarker.current > cursorCap) return;
 
     setScormLocation(String(backup.location));
     if (IS_2004) {
