@@ -1613,16 +1613,6 @@ ${buildScormPayloadFingerprintScript()}
 
 
 
-  function readSuspendCursorCap() {
-    try {
-      var raw = cmi['cmi.suspend_data'];
-      if (typeof raw !== 'string' || !raw) return null;
-      var state = JSON.parse(raw);
-      if (!state || state.v !== 4 || state.c === true || !Number.isInteger(state.a) || state.a < 0) return null;
-      return state.a + 1;
-    } catch (_capError) { return null; }
-  }
-
   function applyLocalResumeBackup() {
     var backup = readLocalResumeBackup();
     if (!backup) return;
