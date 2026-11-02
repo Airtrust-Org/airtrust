@@ -23,7 +23,7 @@ function restore(){
    videoState=o.vs||{};sectionMapSelection=o.h&&typeof o.h==='object'&&!Array.isArray(o.h)?o.h:{};assessment=o.q&&Array.isArray(o.q.answers)?o.q:assessment;
  }
  courseCompleted=Boolean(o?.c)&&/passed|completed/i.test(status);
- if(o&&!courseCompleted){let hole=0;while(hole<T&&done.has(hole))hole++;hole=Math.min(hole,T-1);if(active>hole)active=hole;const m=loc.match(/^(\d+)/);if(m)active=Math.max(active,Math.min(Number(m[1])-1,hole))}
+ if(o&&!courseCompleted){const m=loc.match(/^(\d+)/);if(m)active=Math.max(active,Math.min(Number(m[1])-1,T-1))}
  if(courseCompleted){for(let i=0;i<T;i++)done.add(i);active=T-1}
  view=active;mode=courseCompleted?'review':'journey'
 }

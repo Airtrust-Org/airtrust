@@ -71,7 +71,7 @@ function overlayPersistedEvidence(
  * only as a preview and the learner can never finish. The cursor is rewound to
  * the first hole and the bookmark clamped to the cursor; nothing is credited.
  */
-function repairStrandedCursor(cmi:Record<string,unknown>,isScorm2004:boolean):void{
+function repairStrandedCursor(cmi:Record<string,unknown>):void{
   const raw=cmi['cmi.suspend_data'];
   if(typeof raw!=='string'||!raw.trim())return;
   let state:Record<string,unknown>;
@@ -82,10 +82,11 @@ function repairStrandedCursor(cmi:Record<string,unknown>,isScorm2004:boolean):vo
   }catch{return;}
   const cursor=state.a,done=state.d;
   if(state.v!==4||state.c===true||!Number.isInteger(cursor)||!Array.isArray(done))return;
-  const locationKey=isScorm2004?'cmi.location':'cmi.core.lesson_location';
+  const locationKeys=['cmi.core.lesson_location','cmi.location'];
+  const pairs=locationKeys.map(key=>parseScormLocationPair(String(cmi[key]??'')));
   const declared=Number(cmi['airtrust.total_slides']);
   const total=Number.isSafeInteger(declared)&&declared>0?declared
-    :parseScormLocationPair(String(cmi[locationKey]??''))?.total??0;
+    :(pairs.find(Boolean)?.total??0);
   if(!Number.isSafeInteger(total)||total<1||total>1000)return;
   const completed=new Set(done.filter(n=>Number.isInteger(n)&&n>=0&&n<total));
   let firstHole=0;
@@ -95,8 +96,11 @@ function repairStrandedCursor(cmi:Record<string,unknown>,isScorm2004:boolean):vo
     state.a=target;
     cmi['cmi.suspend_data']=JSON.stringify(state);
   }
-  const pair=parseScormLocationPair(String(cmi[locationKey]??''));
-  if(pair&&pair.current>target+1)cmi[locationKey]=`${target+1}/${pair.total}`;
+  // Both aliases are clamped: the wrapper prefers whichever stays ahead of the cursor.
+  locationKeys.forEach((key,i)=>{
+    const pair=pairs[i];
+    if(pair&&pair.current>target+1)cmi[key]=`${target+1}/${pair.total}`;
+  });
 }
 
 /** Build a fresh or resumed virtual CMI snapshot for the Player 2 wrapper. */
@@ -120,7 +124,7 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
-  if(!completedReview)repairStrandedCursor(cmi,isScorm2004);
+  if(!completedReview)repairStrandedCursor(cmi);
   // A verified handoff bookmark is only a UI hint (the player shows it). It is never
   // injected as `lesson_location`: F5 packages treat a location without matching
   // suspend_data as an incompatible edition and lock themselves into preview. Only the

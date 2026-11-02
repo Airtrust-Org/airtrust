@@ -184,6 +184,13 @@ describe('completed enrollment review virtual CMI', () => {
       expect(cmi['cmi.core.lesson_location']).toBe('4/59');
     });
 
+    it('clamps both location aliases (SCORM 1.2 snapshots carry cmi.core.lesson_location and cmi.location)', () => {
+      const { cmi, state } = launch('59/59', suspend(58, allBut(2, 58)), { 'cmi.location': '59/59' });
+      expect(state.a).toBe(2);
+      expect(cmi['cmi.core.lesson_location']).toBe('3/59');
+      expect(cmi['cmi.location']).toBe('3/59');
+    });
+
     it('leaves a consistent state untouched', () => {
       const sd = suspend(5, [0, 1, 2, 3, 4]);
       const { cmi } = launch('6/59', sd);
