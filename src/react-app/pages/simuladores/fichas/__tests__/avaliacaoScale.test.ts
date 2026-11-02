@@ -5,7 +5,7 @@ import {
   FICHA_AVALIACAO_FAIXAS,
   FICHA_AVALIACAO_NOTAS,
   getFichaAvaliacaoScaleCss,
-} from '../avaliacaoScale';
+} from '../../../../lib/simuladores/avaliacaoScale';
 
 describe('avaliacaoScale', () => {
   it('expõe notas de 1 a 10 e os descritores operacionais obrigatorios', () => {

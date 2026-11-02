@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
-import { formatMinutes } from './lmsUi';
+import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {
   parseGranularDiagnostic,
@@ -130,6 +130,7 @@ export function buildScormPlayerSessionKey(params: {
  */
 const MAX_SCORM_CANDIDATE_RECHECKS = 1;
 const SCORM_CANDIDATE_RECHECK_DELAY_MS = 1_000;
+const FINALIZE_REREAD_DELAYS_MS = [300, 700, 1_500];
 
 const SCORM_UNRESOLVED_MESSAGE =
   'O conteúdo chegou ao fim, mas não enviou a confirmação SCORM. Seu progresso foi preservado.';
@@ -786,7 +787,14 @@ export default function LmsPlayer() {
           ? `O AirTrust ainda não confirmou a conclusão (código: ${code}).`
           : 'O AirTrust ainda não conseguiu concluir esta matrícula.');
       }
-      const { data: latest } = await refetchMatricula();
+      // /finalizar already answered CONCLUIDO; the read right after it can still
+      // see a stale matrícula, so re-read a few times before declaring failure.
+      let latest = (await refetchMatricula()).data;
+      for (const delayMs of FINALIZE_REREAD_DELAYS_MS) {
+        if (latest?.status === 'CONCLUIDO') break;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        latest = (await refetchMatricula()).data;
+      }
       if (latest?.status !== 'CONCLUIDO') {
         throw new Error('A matrícula ainda não consta como concluída no servidor.');
       }

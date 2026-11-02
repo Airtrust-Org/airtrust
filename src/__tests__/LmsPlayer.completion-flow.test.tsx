@@ -357,12 +357,31 @@ describe('LmsPlayer completion flow', () => {
         : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
     ));
     renderPlayer();
-    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled(), { timeout: 5_000 });
     const posts = fetchWithAuthMock.mock.calls.filter(([url, init]) =>
       String(url).endsWith('/finalizar') && (init as RequestInit | undefined)?.method === 'POST');
     expect(posts).toHaveLength(1);
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(screen.queryByText('Catálogo do aluno')).not.toBeInTheDocument();
+  });
+
+  it('relê a matrícula quando a primeira leitura após /finalizar ainda vem velha', async () => {
+    (matriculaMock as typeof matriculaMock & { completion_diagnostic: Record<string, unknown> | null }).completion_diagnostic = {
+      status: 'accepted', explicit_completion: true, reached_final_location: true,
+      score_pct: 100, mastery_score: 70,
+    };
+    refetchMatriculaMock
+      .mockResolvedValueOnce({ data: { ...matriculaMock, status: 'EM_ANDAMENTO' } })
+      .mockResolvedValue({ data: { ...matriculaMock, status: 'CONCLUIDO' } });
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      String(url).endsWith('/finalizar')
+        ? { ok: true, json: async () => ({ success: true, data: { novo_status: 'CONCLUIDO' } }) }
+        : { ok: true, json: async () => ({ success: true, data: { diagnostics: null } }) }
+    ));
+    renderPlayer();
+    expect(await screen.findByText('Catálogo do aluno', undefined, { timeout: 5_000 })).toBeInTheDocument();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastSuccessMock).toHaveBeenCalled();
   });
 
   it('invalida caches LMS ao desmontar o player', () => {

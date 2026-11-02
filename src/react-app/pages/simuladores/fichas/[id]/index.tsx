@@ -59,7 +59,7 @@ import {
 import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
-import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../notechs';
+import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../../../../lib/simuladores/notechs';
 
 interface ManobraAvaliacao {
   id: number;

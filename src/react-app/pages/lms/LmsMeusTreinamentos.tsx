@@ -3,7 +3,7 @@ import { BookOpen } from 'lucide-react';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { CardMeusEAD } from '@/react-app/components/dashboard/CardMeusEAD';
-import { LmsModuleTabs, LmsPageShell } from './lmsUi';
+import { LmsModuleTabs, LmsPageShell } from '../../components/lms/lmsUi';
 
 /**
  * Área de treinamentos própria para aluno/instrutor.

@@ -6,7 +6,7 @@ const modal = readFileSync(
   'src/react-app/components/modals/ModalAtribuirQualificacao.tsx',
   'utf8',
 );
-const lmsUi = readFileSync('src/react-app/pages/lms/lmsUi.tsx', 'utf8');
+const lmsUi = readFileSync('src/react-app/components/lms/lmsUi.tsx', 'utf8');
 const historicoWorker = readFileSync('worker-airtrust/src/routes/qualificacoes/historico.ts', 'utf8');
 const tiposWorker = readFileSync('worker-airtrust/src/routes/qualificacoes/tipos.ts', 'utf8');
 const certificadosWorker = readFileSync(
