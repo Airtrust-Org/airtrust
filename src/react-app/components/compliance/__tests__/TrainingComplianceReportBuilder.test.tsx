@@ -13,8 +13,8 @@ const { fetchWithAuthMock, fetchHistoryMock, exportHistoryPdfMock, toastMock } =
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
 }));
-vi.mock('@/react-app/pages/relatorios/qualificationHistoryReport', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/react-app/pages/relatorios/qualificationHistoryReport')>()),
+vi.mock('@/react-app/components/relatorios/qualificationHistoryReport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/react-app/components/relatorios/qualificationHistoryReport')>()),
   fetchQualificationHistoryForType: (...args: unknown[]) => fetchHistoryMock(...args),
   exportQualificationHistoryPdf: (...args: unknown[]) => exportHistoryPdfMock(...args),
 }));

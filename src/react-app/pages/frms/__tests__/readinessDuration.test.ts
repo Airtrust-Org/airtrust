@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PVTB_V2_PROTOCOL } from '../operationalReadiness';
+import { PVTB_V2_PROTOCOL } from '../../../lib/frms/operationalReadiness';
 
 describe('FRMS readiness duration', () => {
   it('keeps the check-in readiness test at one minute', () => {

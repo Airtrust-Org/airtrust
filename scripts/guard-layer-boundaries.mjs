@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Layer-boundary guard for the Worker (worker-airtrust/src).
+ * Layer-boundary guard for the Worker (worker-airtrust/src) and the SPA (src/react-app).
  *
  * The Worker has route handlers, services, lib, repositories, utils, shared and
  * middleware, but nothing stopped an inner layer from importing an outer one.
@@ -17,7 +17,11 @@
  *   no-low-to-services   repositories|utils|shared                         -> services
  *   no-hono-in-core      services|lib|repositories                         -> 'hono'
  *
- * Only relative imports are resolved. Test files are ignored. The check is
+ * Frontend rules (src/react-app):
+ *   fe-no-inner-to-pages  components|hooks|utils|lib|services|config|... -> pages
+ *   fe-no-low-to-ui       utils|lib|services|config|constants|types|schemas -> components|hooks
+ *
+ * Relative imports and the `@/` alias (-> src/) are resolved. Test files are ignored. The check is
  * import-statement based (import / export-from / dynamic import / require), not
  * a substring search, so comments and strings do not cause false positives.
  */
@@ -27,6 +31,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'worker-airtrust/src');
+const FE_SRC = path.join(ROOT, 'src/react-app');
+const ALIAS_ROOT = path.join(ROOT, 'src');
 const BASELINE_PATH = path.join(ROOT, 'scripts/layer-boundaries-baseline.json');
 
 export const RULES = [
@@ -48,6 +54,26 @@ export const RULES = [
     toModule: 'hono',
     why: 'Core layers must not depend on the HTTP framework. Resolve { db, empresaId, userId } in the route and pass them in.',
   },
+];
+
+export const FE_RULES = [
+  {
+    id: 'fe-no-inner-to-pages',
+    from: ['components', 'hooks', 'utils', 'lib', 'services', 'config', 'context', 'contexts', 'constants', 'types', 'schemas', 'i18n'],
+    toLayer: 'pages',
+    why: 'Pages are the outermost layer. Move the shared piece (types, helpers, constants) next to the consumer layer: lib, utils, hooks or components.',
+  },
+  {
+    id: 'fe-no-low-to-ui',
+    from: ['utils', 'lib', 'services', 'config', 'constants', 'types', 'schemas'],
+    toLayer: ['components', 'hooks'],
+    why: 'utils/lib/services must not depend on React components or hooks. Pass data in, or move the code up into hooks/components.',
+  },
+];
+
+const SURFACES = [
+  { name: 'worker', src: SRC, rules: RULES },
+  { name: 'frontend', src: FE_SRC, rules: FE_RULES },
 ];
 
 const IMPORT_RE =
@@ -73,13 +99,20 @@ export function extractImports(source) {
 }
 
 /** Violation keys for one file: `rule|from-file|target`. Paths are repo-relative, posix style. */
-export function findViolationsInFile(absFile, source, srcRoot = SRC, repoRoot = ROOT) {
+export function findViolationsInFile(
+  absFile,
+  source,
+  srcRoot = SRC,
+  repoRoot = ROOT,
+  rules = RULES,
+  aliasRoot = ALIAS_ROOT,
+) {
   const fromLayer = layerOf(absFile, srcRoot);
   if (!fromLayer) return [];
   const out = [];
   const fromRel = path.relative(repoRoot, absFile).split(path.sep).join('/');
   for (const spec of extractImports(source)) {
-    for (const rule of RULES) {
+    for (const rule of rules) {
       if (!rule.from.includes(fromLayer)) continue;
       if (rule.toModule) {
         if (spec === rule.toModule || spec.startsWith(`${rule.toModule}/`)) {
@@ -87,9 +120,12 @@ export function findViolationsInFile(absFile, source, srcRoot = SRC, repoRoot = 
         }
         continue;
       }
-      if (!spec.startsWith('.')) continue;
-      const target = path.resolve(path.dirname(absFile), spec);
-      if (layerOf(target, srcRoot) === rule.toLayer) {
+      let target;
+      if (spec.startsWith('.')) target = path.resolve(path.dirname(absFile), spec);
+      else if (spec.startsWith('@/')) target = path.resolve(aliasRoot, spec.slice(2));
+      else continue;
+      const toLayers = Array.isArray(rule.toLayer) ? rule.toLayer : [rule.toLayer];
+      if (toLayers.includes(layerOf(target, srcRoot))) {
         const targetRel = path.relative(repoRoot, target).split(path.sep).join('/');
         out.push(`${rule.id}|${fromRel}|${targetRel}`);
       }
@@ -113,8 +149,11 @@ function walk(dir, files = []) {
 
 export function collectViolations() {
   const all = new Set();
-  for (const file of walk(SRC)) {
-    for (const key of findViolationsInFile(file, fs.readFileSync(file, 'utf8'))) all.add(key);
+  for (const surface of SURFACES) {
+    for (const file of walk(surface.src)) {
+      const source = fs.readFileSync(file, 'utf8');
+      for (const key of findViolationsInFile(file, source, surface.src, ROOT, surface.rules)) all.add(key);
+    }
   }
   return [...all].sort();
 }
@@ -159,7 +198,7 @@ function main() {
     console.error(`layer-boundaries: ${fresh.length} NEW layer violation(s):\n`);
     for (const key of fresh) {
       const [ruleId, from, target] = key.split('|');
-      const rule = RULES.find((r) => r.id === ruleId);
+      const rule = [...RULES, ...FE_RULES].find((r) => r.id === ruleId);
       console.error(`  [${ruleId}] ${from}\n      imports ${target}\n      ${rule?.why ?? ''}\n`);
     }
     process.exit(1);

@@ -36,7 +36,7 @@ import {
   useGuiasInstrutor,
   useProximasSessoesComGuia,
   type GuiaInstrutor,
-} from '@/react-app/lib/guias-instrutor/api';
+} from '@/react-app/hooks/guias-instrutor/api';
 import { getNomeExibicaoGuia, formatarNomeSessaoVisivel } from '@/react-app/lib/guias-instrutor/helpers';
 
 const AERONAVES = ['AW139', 'SK76'] as const;

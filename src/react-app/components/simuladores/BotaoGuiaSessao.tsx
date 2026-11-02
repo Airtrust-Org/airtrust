@@ -10,7 +10,7 @@
 import { useNavigate } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
-import { useGuiaDaSessao } from '@/react-app/lib/guias-instrutor/api';
+import { useGuiaDaSessao } from '@/react-app/hooks/guias-instrutor/api';
 
 export function BotaoGuiaSessao({ sessaoId }: { sessaoId: number }) {
   const { podeVisualizar, isLoading } = useGuiasInstrutorPermissions();

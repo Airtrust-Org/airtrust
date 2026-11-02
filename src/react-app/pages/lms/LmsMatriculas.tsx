@@ -39,7 +39,7 @@ import { useFuncionariosRQ } from '@/react-app/hooks/useFuncionarios';
 import type { LmsMatricula, MatriculaStatus, MatricularLoteResult } from '@/react-app/hooks/useLms';
 import type { Funcionario } from '@/react-app/hooks/useFuncionarios';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
-import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from './lmsUi';
+import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from '../../components/lms/lmsUi';
 import {
   isLmsEnrollmentAlertable,
   LmsEnrollmentAlertModal,

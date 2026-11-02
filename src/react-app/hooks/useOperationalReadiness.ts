@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
-import type { VigilanceTrial } from '@/react-app/pages/frms/operationalReadiness';
+import type { VigilanceTrial } from '@/react-app/lib/frms/operationalReadiness';
 
 export type ReadinessClassification =
   | 'baseline_building'

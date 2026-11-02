@@ -25,14 +25,14 @@ vi.mock('@/react-app/components/shared/Breadcrumbs', () => ({ Breadcrumbs: () =>
 vi.mock('@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions', () => ({
   useGuiasInstrutorPermissions: () => mockPermissoes,
 }));
-vi.mock('@/react-app/lib/useTenantQueryKey', () => ({
+vi.mock('@/react-app/hooks/useTenantQueryKey', () => ({
   useTenantQueryKey: () => ({ tenantKey: (...args: unknown[]) => args, empresaId: 1 }),
 }));
 vi.mock('@/react-app/config/api', () => ({
   API_BASE_URL: 'https://api.airtrust.online/api',
   fetchWithAuth: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) }),
 }));
-vi.mock('@/react-app/lib/guias-instrutor/api', () => ({
+vi.mock('@/react-app/hooks/guias-instrutor/api', () => ({
   useGuiasInstrutor: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
 }));
 

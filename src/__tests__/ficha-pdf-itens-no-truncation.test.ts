@@ -38,7 +38,7 @@ vi.mock('@/react-app/utils/pdfPreview', () => ({
 }));
 
 import { gerarPDFFichaCliente, getFichaPdfTableLayout } from '@/react-app/services/pdf-ficha-client';
-import { NOTECHS_ITENS } from '@/react-app/pages/simuladores/fichas/notechs';
+import { NOTECHS_ITENS } from '@/react-app/lib/simuladores/notechs';
 
 // Nome real e conhecido (CRED-EXA / EXA-PAD-01) longo o bastante para exigir
 // quebra de linha na coluna ITENS — referência do incidente original de corte.

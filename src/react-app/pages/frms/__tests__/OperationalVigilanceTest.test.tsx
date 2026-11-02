@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from '../OperationalVigilanceTest';
-import { PVTB_V2_PROTOCOL } from '../operationalReadiness';
+import { PVTB_V2_PROTOCOL } from '../../../lib/frms/operationalReadiness';
 
 afterEach(() => {
   vi.useRealTimers();

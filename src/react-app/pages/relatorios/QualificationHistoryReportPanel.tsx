@@ -13,7 +13,7 @@ import {
   fetchQualificationHistoryReport,
   type QualificationHistoryReportFilters,
   type QualificationReportStatus,
-} from './qualificationHistoryReport';
+} from '../../components/relatorios/qualificationHistoryReport';
 
 type Setor = { id: number; nome: string; ativo?: number | boolean };
 

@@ -15,7 +15,7 @@ import { apiFetch } from '@/react-app/lib/apiFetch';
 import {
   buildFichaAvaliacaoScaleHtml,
   getFichaAvaliacaoScaleCss,
-} from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
+} from '@/react-app/lib/simuladores/avaliacaoScale';
 
 interface PDFData {
   ficha: any;

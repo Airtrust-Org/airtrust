@@ -20,7 +20,7 @@ import {
   guiaHtmlUrl,
   guiaPdfUrl,
   useGuiaInstrutor,
-} from '@/react-app/lib/guias-instrutor/api';
+} from '@/react-app/hooks/guias-instrutor/api';
 import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
 
 /**
