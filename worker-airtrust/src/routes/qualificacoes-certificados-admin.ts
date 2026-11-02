@@ -29,7 +29,7 @@ import { convertTemplateJsonToHtml, isTemplateJson } from '../utils/template-jso
 import {
   tableHasColumn,
   resolveCargaHorariaCertificado,
-} from './qualificacoes-certificados-helpers';
+} from '../services/qualificacoes/certificados-helpers';
 import adminOpsRoutes from './qualificacoes-certificados-admin-ops';
 
 const app = new Hono<{ Bindings: Env }>();

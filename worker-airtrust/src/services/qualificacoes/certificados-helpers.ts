@@ -3,11 +3,11 @@
  * de qualificacoes-certificados.
  */
 import type { D1Database } from '@cloudflare/workers-types';
-import { notFound } from '../middleware/error-handler';
+import { notFound } from '../../middleware/error-handler';
 import {
   assertFuncionarioInScope,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../employee-sector-access';
 
 // ─── Tipos locais ────────────────────────────────────────────────────────────
 

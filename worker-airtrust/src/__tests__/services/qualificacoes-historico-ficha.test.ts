@@ -135,7 +135,7 @@ describe('upsertQualificacaoHistoricoDaFicha', () => {
     const { db, calls } = createMockDb([
       ["PRAGMA table_info('qualificacoes_historico')", { all: () => ({ results: [] }) }],
       [
-        'PRAGMA table_info(qualificacoes_tipos)',
+        "PRAGMA table_info('qualificacoes_tipos')",
         { all: () => ({ results: [{ name: 'empresa_id' }] }) },
       ],
       [
@@ -377,7 +377,7 @@ describe('upsertQualificacaoHistoricoDaFicha', () => {
     const { db, calls } = createMockDb([
       ["PRAGMA table_info('qualificacoes_historico')", { all: () => ({ results: [] }) }],
       [
-        'PRAGMA table_info(qualificacoes_tipos)',
+        "PRAGMA table_info('qualificacoes_tipos')",
         { all: () => ({ results: [{ name: 'empresa_id' }] }) },
       ],
       [

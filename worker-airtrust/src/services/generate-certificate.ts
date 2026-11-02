@@ -26,7 +26,7 @@ import {
   resolveConteudoProgramaticoCertificado,
   resolveInstrutorCertificadoData,
   resolveFuncionarioInstrutorNaEmpresa,
-} from '../routes/qualificacoes-certificados-helpers';
+} from './qualificacoes/certificados-helpers';
 import { generateCertificateValidationHash } from '../utils/certificate-validation-hash';
 import { isCertificateEligibleQualificationRecord } from '../lib/status/status-codes';
 

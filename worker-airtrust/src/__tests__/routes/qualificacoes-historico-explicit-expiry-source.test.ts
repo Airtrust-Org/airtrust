@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveHistoricoReadExpiry } from '../../routes/qualificacoes/historico-helpers';
+import { resolveHistoricoReadExpiry } from '../../services/qualificacoes/historico-helpers';
 
 describe('resolveHistoricoReadExpiry', () => {
   it('preserves an explicitly stored documentary expiry', () => {

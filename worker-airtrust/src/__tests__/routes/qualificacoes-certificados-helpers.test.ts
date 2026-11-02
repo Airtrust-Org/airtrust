@@ -10,7 +10,7 @@ import {
   resolveFuncionarioInstrutorNaEmpresa,
   resolveInstrutorCertificadoData,
   resolveConteudoProgramaticoCertificado,
-} from '../../routes/qualificacoes-certificados-helpers';
+} from '../../services/qualificacoes/certificados-helpers';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
