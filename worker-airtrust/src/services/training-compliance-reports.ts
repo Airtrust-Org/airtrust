@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { Env } from '../types';
-import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
 import { sendEmailDetailed } from '../lib/email';
 import { getSetorGestoresBySetor } from './setores-gestores';
 
