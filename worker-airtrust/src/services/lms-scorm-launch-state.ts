@@ -85,15 +85,18 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
-  // A verified handoff bookmark changes navigation only; no old learner evidence is restored.
-  if(!completedReview&&navigationBookmark&&
-    Number.isSafeInteger(navigationBookmark.position)&&
-    Number.isSafeInteger(navigationBookmark.total)&&navigationBookmark.position>=1&&
-    navigationBookmark.position<=navigationBookmark.total&&
-    !cmi['cmi.location']&&!cmi['cmi.core.lesson_location']){
-    const location=`${navigationBookmark.position}/${navigationBookmark.total}`;
-    if(isScorm2004)cmi['cmi.location']=location;
-    else cmi['cmi.core.lesson_location']=location;
+  // A verified handoff bookmark is only a UI hint (the player shows it). It is never
+  // injected as `lesson_location`: F5 packages treat a location without matching
+  // suspend_data as an incompatible edition and lock themselves into preview. Only the
+  // synthetic location an earlier launch seeded (exactly the anchor) is dropped; a
+  // location the package authored later (any other value) is preserved.
+  if(!completedReview&&navigationBookmark&&!cmi['cmi.suspend_data']){
+    const synthetic=`${navigationBookmark.position}/${navigationBookmark.total}`;
+    const locationKey=isScorm2004?'cmi.location':'cmi.core.lesson_location';
+    if(String(cmi[locationKey]??'')===synthetic){
+      delete cmi[locationKey];
+      delete cmi[isScorm2004?'cmi.entry':'cmi.core.entry'];
+    }
   }
   if(completedReview){
     // Review resumes the terminal snapshot when it is consistent; otherwise
