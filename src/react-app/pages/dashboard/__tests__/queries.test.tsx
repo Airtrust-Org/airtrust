@@ -14,7 +14,7 @@ vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: fetchWithAuthMock,
 }));
 
-vi.mock('@/react-app/lib/useTenantQueryKey', () => ({
+vi.mock('@/react-app/hooks/useTenantQueryKey', () => ({
   useTenantQueryKey: () => useTenantQueryKeyMock(),
 }));
 

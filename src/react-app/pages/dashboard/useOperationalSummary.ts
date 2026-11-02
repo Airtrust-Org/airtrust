@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 import { tenantQueryKey } from '@/react-app/lib/query-client';
-import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
+import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 import type {
   AlertaRaw,
   DashboardMetrics,

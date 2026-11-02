@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGuiasInstrutorPermissions } from '../useGuiasInstrutorPermissions';
 
-vi.mock('@/react-app/lib/useTenantQueryKey', () => ({
+vi.mock('@/react-app/hooks/useTenantQueryKey', () => ({
   useTenantQueryKey: () => ({ empresaId: 1, tenantKey: (...args: unknown[]) => args }),
 }));
 

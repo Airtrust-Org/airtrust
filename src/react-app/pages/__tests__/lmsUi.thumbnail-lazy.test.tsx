@@ -8,7 +8,7 @@ vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: fetchWithAuthMock,
 }));
 
-import { useLmsCourseThumbnailUrl } from '../lms/lmsUi';
+import { useLmsCourseThumbnailUrl } from '../../components/lms/lmsUi';
 
 describe('useLmsCourseThumbnailUrl', () => {
   beforeEach(() => {

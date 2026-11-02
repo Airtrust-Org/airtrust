@@ -3,7 +3,7 @@ import {
   deriveReadinessAssessment,
   summarizeVigilanceTrials,
   type VigilanceTrial,
-} from '../operationalReadiness';
+} from '../../../lib/frms/operationalReadiness';
 import { assessThermalExposure } from '../thermalExposure';
 
 describe('operational readiness', () => {

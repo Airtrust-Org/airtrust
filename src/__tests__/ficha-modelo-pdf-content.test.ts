@@ -72,7 +72,7 @@ import {
   buildFichaModeloPdfData,
   type ModeloSessaoManobra,
 } from '@/react-app/pages/simuladores/fichas/fichaModeloPdf';
-import { NOTECHS_ITENS } from '@/react-app/pages/simuladores/fichas/notechs';
+import { NOTECHS_ITENS } from '@/react-app/lib/simuladores/notechs';
 
 const A139_I_01_12_MANOBRAS: ModeloSessaoManobra[] = [
   {

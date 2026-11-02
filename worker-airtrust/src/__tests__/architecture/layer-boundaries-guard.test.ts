@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { extractImports, findViolationsInFile } from '../../../../scripts/guard-layer-boundaries.mjs';
+import { extractImports, FE_RULES, findViolationsInFile } from '../../../../scripts/guard-layer-boundaries.mjs';
 
 const REPO = '/repo';
 const SRC = '/repo/worker-airtrust/src';
@@ -47,5 +47,24 @@ describe('layer-boundaries guard', () => {
     const src = "// import { a } from '../routes/foo';\n/* import { b } from '../routes/bar'; */";
     expect(extractImports(src)).toEqual([]);
     expect(check('services/x.ts', src)).toEqual([]);
+  });
+
+  describe('frontend rules', () => {
+    const FE_SRC = '/repo/src/react-app';
+    const feCheck = (rel: string, source: string): string[] =>
+      findViolationsInFile(path.join(FE_SRC, rel), source, FE_SRC, REPO, FE_RULES, '/repo/src');
+
+    it('flags components/hooks/services importing pages, via relative path or @/ alias', () => {
+      expect(feCheck('components/A.tsx', "import X from '../pages/Home';")).toHaveLength(1);
+      expect(feCheck('hooks/useX.ts', "import type { T } from '@/react-app/pages/frms/x';")).toHaveLength(1);
+      expect(feCheck('pages/Home.tsx', "import A from '../components/A';")).toEqual([]);
+    });
+
+    it('flags utils/lib/services importing hooks or components, but not the reverse', () => {
+      expect(feCheck('utils/u.ts', "import { useToast } from '@/react-app/hooks/useToast';")).toHaveLength(1);
+      expect(feCheck('lib/l.ts', "import { useAuth } from '../hooks/useAuth';")).toHaveLength(1);
+      expect(feCheck('hooks/useX.ts', "import { u } from '../utils/u';")).toEqual([]);
+      expect(feCheck('components/A.tsx', "import { u } from '../utils/u';")).toEqual([]);
+    });
   });
 });

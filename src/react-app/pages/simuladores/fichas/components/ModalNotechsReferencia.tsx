@@ -12,8 +12,8 @@ import {
   NOTECHS_PROVENIENCIA_AVISO,
   getNotechsDescritores,
   getNotechsItensPorGrupo,
-} from '../notechs';
-import { FICHA_AVALIACAO_FAIXAS } from '../avaliacaoScale';
+} from '../../../../lib/simuladores/notechs';
+import { FICHA_AVALIACAO_FAIXAS } from '../../../../lib/simuladores/avaliacaoScale';
 
 interface ModalNotechsReferenciaProps {
   isOpen: boolean;

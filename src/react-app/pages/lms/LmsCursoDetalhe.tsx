@@ -29,7 +29,7 @@ import {
   LmsPageShell,
   LmsStatPill,
   LmsSurface,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 import { getAdminCoursePreviewPath, supportsAdminCoursePreview } from './lmsAdminPreview';
 
 export default function LmsCursoDetalhe() {

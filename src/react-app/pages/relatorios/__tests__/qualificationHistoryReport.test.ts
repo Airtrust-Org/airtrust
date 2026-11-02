@@ -10,7 +10,7 @@ import {
   buildQualificationHistoryReportRows,
   qualificationStatusLabel,
   type QualificationHistoryReportFilters,
-} from '../qualificationHistoryReport';
+} from '../../../components/relatorios/qualificationHistoryReport';
 
 vi.mock('@/react-app/lib/api-contract', () => ({ apiEnvelope: vi.fn() }));
 

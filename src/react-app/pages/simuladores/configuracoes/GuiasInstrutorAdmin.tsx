@@ -16,9 +16,9 @@ import { Breadcrumbs } from '@/react-app/components/shared/Breadcrumbs';
 import { PageHeader } from '@/react-app/components/UI/PageHeader';
 import { Button, Card, EmptyState, Input, Select } from '@/react-app/components/UI';
 import { useGuiasInstrutorPermissions } from '@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions';
-import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
+import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 import { fetchWithAuth, API_BASE_URL } from '@/react-app/config/api';
-import { useGuiasInstrutor, type GuiaInstrutor } from '@/react-app/lib/guias-instrutor/api';
+import { useGuiasInstrutor, type GuiaInstrutor } from '@/react-app/hooks/guias-instrutor/api';
 import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
 
 async function postJson(path: string, body: unknown) {
