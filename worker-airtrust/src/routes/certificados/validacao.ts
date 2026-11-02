@@ -3,7 +3,7 @@ import { rateLimiter, rateLimitPresets } from '../../middleware/rate-limit';
 import type { Env } from '../../types';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
 import { generateCertificateValidationHash } from '../../utils/certificate-validation-hash';
-import { tableHasColumn } from '../qualificacoes-certificados-helpers';
+import { tableHasColumn } from '../../services/qualificacoes/certificados-helpers';
 
 const validacao = new Hono<{ Bindings: Env }>();
 const CERTIFICATE_SCAN_BATCH_SIZE = 250;

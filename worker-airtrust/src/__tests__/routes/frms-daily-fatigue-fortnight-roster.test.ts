@@ -9,11 +9,11 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: () => 6,
 }));
 
-vi.mock('../../lib/frms/access', () => ({
+vi.mock('../../middleware/frms-access', () => ({
   canSeeFrmsTeamScopeForContext: vi.fn(async () => true),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all' })),
   buildFuncionarioScopeWhere: vi.fn(() => ({ clause: '1=1', bindings: [] })),
 }));

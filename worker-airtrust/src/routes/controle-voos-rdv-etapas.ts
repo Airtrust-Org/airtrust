@@ -10,37 +10,13 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getEmpresaIdSafe,
-  getActorId,
-  getFlightOrThrow,
-  getActiveRdvByFlight,
-  recordFlightEvent,
-  maybeRecordSystemAudit,
-  type FlightRow,
-} from '../repositories/controle-voos/rdv-repository';
-import {
-  RDV_CAPABILITIES,
-  requireAnyRdvAccess,
-  assertRdvSelfScope,
-} from '../services/controle-voos/rdv-workflow';
+import { getFlightOrThrow, getActiveRdvByFlight, recordFlightEvent, type FlightRow } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe, getActorId, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES } from '../services/controle-voos/rdv-workflow';
+import { requireAnyRdvAccess, assertRdvSelfScope } from '../middleware/controle-voos-rdv-access';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
-import {
-  assertEtapaEditable,
-  bumpRdvVersion,
-  computeEtapaPesoTotal,
-  computeEtapaTempos,
-  getEtapaOrThrow,
-  listEtapas,
-  mergeEtapaInput,
-  nextNumeroEtapa,
-  normalizeEtapaInput,
-  recordEtapaRevisions,
-  resolveEtapaEditMode,
-  syncRdvAggregatesFromEtapas,
-  validateEtapaInput,
-  type EtapaInput,
-} from '../services/controle-voos/rdv-etapas';
+import { bumpRdvVersion, computeEtapaPesoTotal, computeEtapaTempos, getEtapaOrThrow, listEtapas, mergeEtapaInput, nextNumeroEtapa, normalizeEtapaInput, recordEtapaRevisions, syncRdvAggregatesFromEtapas, validateEtapaInput, type EtapaInput } from '../services/controle-voos/rdv-etapas';
+import { assertEtapaEditable, resolveEtapaEditMode } from '../middleware/controle-voos-rdv-access';
 
 const rdvEtapas = new Hono<{ Bindings: Env }>();
 

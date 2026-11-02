@@ -46,7 +46,7 @@ vi.mock('../../middleware/rbac', () => ({
     },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: async (c: any) => {
     const role = String(c.get('userRole') || '').toLowerCase();
     if (role === 'admin') return { mode: 'all', setorIds: [], funcionarioId: null };

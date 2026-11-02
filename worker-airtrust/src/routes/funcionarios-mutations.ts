@@ -19,7 +19,7 @@ import { getEmpresaId } from '../middleware/tenant';
 import {
   requireOperationalAccess,
   assertSetorWithinOperationalScope,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 
 // A funcionário's domain comes from their own setor (setores.dominio_codigo),
 // which varies per employee. update/delete resolve it dynamically from the
@@ -36,7 +36,7 @@ import { publishDomainEvent } from '../shared/domainEvents';
 import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { vincularUsuarioAoFuncionarioPorEmail } from '../services/vinculo-usuario-funcionario';
 import {
   classifyFuncionarioNaturalKeyConflict,

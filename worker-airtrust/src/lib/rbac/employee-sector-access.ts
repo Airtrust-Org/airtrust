@@ -1,5 +1,8 @@
-import type { Context } from 'hono';
-import { forbidden } from '../middleware/error-handler';
+/**
+ * Regras puras de escopo setorial de funcionários (sem dependência do Hono).
+ * O adaptador que lê o Context da requisição fica em services/employee-sector-access.
+ */
+import { forbidden } from '../../middleware/error-handler';
 
 export type EmployeeSectorAccess =
   | { mode: 'all'; setorIds: []; funcionarioId: null }
@@ -246,20 +249,6 @@ export async function resolveEmployeeSectorAccess(
   }
 
   return resolveOwnFuncionarioScope(db, empresaId, userId, options?.funcionarioId);
-}
-
-export async function getEmployeeSectorAccess(
-  c: Context<any>,
-  empresaId: number,
-): Promise<EmployeeSectorAccess> {
-  const getContextValue = c.get as (key: string) => unknown;
-  const userId = Number(getContextValue('userId') || 0);
-  const userRole = getContextValue('userRole');
-  const funcionarioId = Number(getContextValue('funcionarioId') || 0);
-
-  return resolveEmployeeSectorAccess(c.env.DB, empresaId, userId, userRole, {
-    funcionarioId: Number.isInteger(funcionarioId) && funcionarioId > 0 ? funcionarioId : null,
-  });
 }
 
 export function buildFuncionarioScopeWhere(

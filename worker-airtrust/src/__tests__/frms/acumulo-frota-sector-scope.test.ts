@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';
-import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 import * as parameterGovernanceModule from '../../lib/frms/parameter-governance';
 import { LIMITES_DEFAULT } from '../../lib/frms/types';
 

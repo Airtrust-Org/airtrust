@@ -8,7 +8,7 @@ import type {
   EdbCrewMember,
   EdbMaintenanceSnapshot,
   EdbOperatorRegulation,
-} from './contracts';
+} from '../../lib/edb/contracts';
 import type { EdbRdvShadowSource } from './rdv-shadow-projection';
 
 export interface ControleVoosCrewForEdb {

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
-import { buildFuncionarioScopeWhere } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere } from '../../middleware/employee-sector-access';
 import { buscarAlertas } from '../../lib/frms/db-service-alertas';
-import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 vi.mock('../../lib/frms/db-service-acumulo', () => ({ buscarAcumuloFrota: vi.fn() }));
 import { buscarAcumuloFrota } from '../../lib/frms/db-service-acumulo';

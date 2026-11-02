@@ -186,6 +186,10 @@ Para cada um:
 - ⏳ **Pendente de A4:** `getEscalaVerificada*`, `parseBody`, schemas Zod e `gerarEventosBase` continuam em `routes/escalas-shared.ts` (uso interno ao domínio Escalas).
 - Nota: `utils/tenant-context.ts` já exporta outro `getEmpresaIdSafe` (retorna `null`, não lança). Os contratos são diferentes e foram deliberadamente mantidos separados.
 
+- ✅ **Fase 2/3 (PRs #1889, #1890, #1891 e fase 3):** helpers de Simuladores e Qualificações movidos de `routes/` para `services/`; regras de camadas do frontend; `validateInstrutorAssignment` extraído; motor do snapshot de conformidade (`buildSnapshot`) movido para `services/training-compliance-snapshot-builder`; cluster puro do EDB (`audit-chain`, `canonical-json`, `canonicalization`, `contracts`, `diary-governance`, `persisted-record-validation`, `technical-awareness`, `technical-discrepancy-ledger`) e `lms-progress-guardrails` movidos para `lib/`; regras de escopo setorial separadas do adaptador do Hono. Baseline do Worker: 37 → **8**.
+- ✅ **Fase 4 (Hono fora do núcleo):** adaptadores do `Context` movidos para `middleware/` (`employee-sector-access`, `operational-domain-access`, `lms-schema-snapshot`, `frms-access`, `controle-voos-rdv-context`, `controle-voos-rdv-access`); regras puras ficaram em `services|lib|repositories`. **Baseline do Worker: 37 → 0.** O guard continua bloqueando qualquer violação nova.
+- ⏳ **Ainda aberto (não são violações do guard):** handlers gigantes sem extração de regra (Escalas, LMS matrículas, SGSO KPIs, Treinamentos Planejados), AppError ainda em `middleware/error-handler`, 3 clientes HTTP no frontend, páginas-monólito, sondagem de schema em runtime (A3, exige Schema V2).
+
 ## 7. Fora do escopo / limitações desta auditoria
 
 - **Somente análise estática** (grep, AST leve via script e contagem). Nenhum teste, build ou smoke foi executado.

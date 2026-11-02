@@ -5,7 +5,7 @@ import {
   hashEdbAuditEventDraft,
   verifyEdbAuditChain,
   type EdbAuditEvent,
-} from '../../services/edb/audit-chain';
+} from '../../lib/edb/audit-chain';
 
 const actor = {
   actorRef: 'employee:10',

@@ -4,7 +4,7 @@ import {
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   parseScormLocationPair,
-} from './lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 
 export type ProgressRecoveryEnrollment = {
   id: number;

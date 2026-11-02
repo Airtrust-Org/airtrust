@@ -10,7 +10,7 @@ import {
   buildFuncionarioScopeWhere,
   filterRequestedSetorIdsByAccess,
   type EmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 
 // ──────────────────────────────────────────────
 // Helper to simulate backfill classification

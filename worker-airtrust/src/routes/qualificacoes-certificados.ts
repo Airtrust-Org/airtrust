@@ -7,7 +7,7 @@ import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria'
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   assertScopedHistoricoAccess,
   canAdministerHistoricalDeletedEmployeeCertificates,
@@ -15,7 +15,7 @@ import {
   tableHasColumn,
   type Documento,
   resolveCertificadoContext,
-} from './qualificacoes-certificados-helpers';
+} from '../services/qualificacoes/certificados-helpers';
 import certificadosWriteRoutes from './qualificacoes-certificados-write';
 import {
   listTrainingComplianceEvidenceProfilesForQualification,

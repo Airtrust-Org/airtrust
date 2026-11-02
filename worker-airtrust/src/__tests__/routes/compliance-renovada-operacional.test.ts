@@ -10,7 +10,7 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: () => 6,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   appendEmployeeSectorFilter: vi.fn(),
   assertFuncionarioInScope: vi.fn(async () => undefined),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),

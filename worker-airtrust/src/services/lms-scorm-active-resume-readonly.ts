@@ -1,4 +1,4 @@
-import { parseScormLocationPair } from './lms-progress-guardrails';
+import { parseScormLocationPair } from '../lib/lms/lms-progress-guardrails';
 import { planScormActiveResume, type ScormActiveResumePlan } from './lms-scorm-active-resume-plan';
 
 /**

@@ -23,7 +23,7 @@ import {
   isTenantRbacEnabled,
   normalizeTenantRole,
   type OperationalReadScope,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 
 function getContextValue(c: Context<{ Bindings: Env }>, key: string): unknown {
   return (c.get as (k: string) => unknown)(key);

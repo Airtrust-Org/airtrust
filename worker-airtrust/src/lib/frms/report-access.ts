@@ -1,5 +1,5 @@
 /** FRMS reporting projection of the existing employee-sector policy (not a new RBAC). */
-import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 /** Read directly for every request; do not cache across role/sector/tenant changes. */
 export async function loadFrmsReportCrewScope(

@@ -58,7 +58,7 @@ vi.mock('../../routes/qualificacoes/historico-write', () => ({
   default: new Hono(),
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
+vi.mock('../../services/qualificacoes/historico-helpers', () => ({
   safe: <T>(handler: T) => handler,
   buildOrderByClause: () => 'qh.data_vencimento ASC',
   generateETag: () => '"test-etag"',
@@ -74,7 +74,7 @@ vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
   categoriaCandidatosAtivosExpr: () => '1',
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: employeeSectorAccessMock,
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));

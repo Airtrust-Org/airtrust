@@ -35,14 +35,14 @@ import {
   preferScormValue,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { getCallerUserId, logLmsMatriculaAudit } from './lms-matriculas-audit';
 import type { Env } from '../types';
 import {
   assertFuncionarioInScope,
   employeeSectorSql,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';

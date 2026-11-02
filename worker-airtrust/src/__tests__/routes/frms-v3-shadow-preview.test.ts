@@ -16,7 +16,7 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (context: unknown) => Number((context as { req: { header: (key: string) => string | undefined } }).req.header('x-empresa-id') || 0),
 }));
-vi.mock('../../lib/frms/access', () => ({
+vi.mock('../../middleware/frms-access', () => ({
   canSeeFrmsTeamScopeForContext: async (context: unknown) => (context as { req: { header: (key: string) => string | undefined } }).req.header('x-role') === 'manager',
 }));
 vi.mock('../../lib/frms/operational-snapshot', () => ({

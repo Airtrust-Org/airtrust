@@ -8,8 +8,8 @@ import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+} from '../middleware/employee-sector-access';
+import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
 type CompliancePeople = TrainingComplianceSnapshot['people'];
