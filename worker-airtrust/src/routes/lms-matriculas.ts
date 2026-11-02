@@ -223,6 +223,10 @@ app.get('/minhas-ead', async (c) => {
   const funcionarioId = await resolveCallerFuncionarioId(c, db);
 
   if (!funcionarioId) {
+    // Administradores/gestores podem administrar cursos sem cadastro como funcionários.
+    // Sem identidade de aluno não existem matrículas próprias; nunca consultar
+    // matrículas de outros funcionários como fallback.
+    if (hasRole(c, 'admin', 'manager')) return c.json({ success: true, data: [] });
     throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
@@ -318,6 +322,11 @@ app.get('/minhas', async (c) => {
   const offset = (page - 1) * limit;
 
   if (!funcionarioId) {
+    // A lista pessoal de quem administra sem vínculo funcional é vazia;
+    // a gestão usa endpoints próprios e continua sob RBAC/tenant.
+    if (hasRole(c, 'admin', 'manager')) {
+      return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
+    }
     throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
