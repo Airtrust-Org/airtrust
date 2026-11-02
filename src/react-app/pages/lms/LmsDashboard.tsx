@@ -26,7 +26,7 @@ import {
   LmsPageShell,
   LmsSummaryTag,
   LmsStatPill,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 
 function daysSince(date: string | null | undefined) {
   if (!date) return 0;

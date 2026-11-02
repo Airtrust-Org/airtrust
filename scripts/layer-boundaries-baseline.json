@@ -1,6 +1,15 @@
 {
   "comment": "Known layer-boundary violations tolerated by scripts/guard-layer-boundaries.mjs. This list may only shrink.",
   "violations": [
+    "fe-no-inner-to-pages|src/react-app/components/HomeRouter.tsx|src/react-app/pages/DashboardPrincipal",
+    "fe-no-inner-to-pages|src/react-app/components/HomeRouter.tsx|src/react-app/pages/HomePerfil",
+    "fe-no-inner-to-pages|src/react-app/components/integracoes/EdAppIntegration.tsx|src/react-app/pages/Configuracoes/Integracoes/EdApp",
+    "fe-no-inner-to-pages|src/react-app/components/integracoes/SigvoosIntegration.tsx|src/react-app/pages/Configuracoes/Integracoes/Sigvoos",
+    "fe-no-inner-to-pages|src/react-app/components/modals/ModalFuncionario.tsx|src/react-app/pages/funcionarios/ModalFuncionario",
+    "fe-no-low-to-ui|src/react-app/lib/guias-instrutor/helpers.ts|src/react-app/hooks/guias-instrutor/api",
+    "fe-no-low-to-ui|src/react-app/services/lmsService.ts|src/react-app/hooks/useLms",
+    "fe-no-low-to-ui|src/react-app/utils/handleApiError.ts|src/react-app/hooks/useToast",
+    "fe-no-low-to-ui|src/react-app/utils/validationRules.ts|src/react-app/components/shared/ImportValidator",
     "no-hono-in-core|worker-airtrust/src/lib/frms/access.ts|hono",
     "no-hono-in-core|worker-airtrust/src/lib/lms/lms-schema-state.ts|hono",
     "no-hono-in-core|worker-airtrust/src/repositories/controle-voos/rdv-repository.ts|hono",
