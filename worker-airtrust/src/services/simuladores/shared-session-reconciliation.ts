@@ -1,11 +1,11 @@
-import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './simuladores-shared';
-import { createSharedAssignmentKey } from './simuladores-shared-session-logic';
-import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
-import { isProtectedFichaStatus, prepareStatement } from './simuladores-shared-session-helpers';
-import { getSimuladorAgendamentosColumns } from './simuladores-shared-session-validation';
-import type { ModeloSessaoMapRow } from './simuladores-shared-session-validation';
-import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './simuladores-shared-session-fichas';
-import type { LoadedSharedDetail } from './simuladores-shared-session-detail';
+import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './shared';
+import { createSharedAssignmentKey } from './shared-session-logic';
+import type { NormalizedSharedSessionRequest } from './shared-session-logic';
+import { isProtectedFichaStatus, prepareStatement } from './shared-session-helpers';
+import { getSimuladorAgendamentosColumns } from './shared-session-validation';
+import type { ModeloSessaoMapRow } from './shared-session-validation';
+import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './shared-session-fichas';
+import type { LoadedSharedDetail } from './shared-session-detail';
 
 export type SharedPersistenceContext = {
   participanteIds: number[];

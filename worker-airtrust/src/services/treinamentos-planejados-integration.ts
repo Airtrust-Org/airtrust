@@ -3,7 +3,7 @@ import {
   normalizeTipoTreinamento,
   publishQualificacaoEvent,
   resolveCargaHorariaByTipo,
-} from '../routes/qualificacoes/historico-helpers';
+} from './qualificacoes/historico-helpers';
 import {
   COMPLETED_STATUS_VALUES,
   isPlannedQualificationStatus,

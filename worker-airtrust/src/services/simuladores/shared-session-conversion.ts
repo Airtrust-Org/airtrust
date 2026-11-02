@@ -1,9 +1,9 @@
-import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './simuladores-shared';
-import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
-import { isProtectedFichaStatus, prepareStatement, runStatement } from './simuladores-shared-session-helpers';
-import { getSimuladorAgendamentosColumns } from './simuladores-shared-session-validation';
-import type { ModeloSessaoMapRow } from './simuladores-shared-session-validation';
-import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './simuladores-shared-session-fichas';
+import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './shared';
+import type { NormalizedSharedSessionRequest } from './shared-session-logic';
+import { isProtectedFichaStatus, prepareStatement, runStatement } from './shared-session-helpers';
+import { getSimuladorAgendamentosColumns } from './shared-session-validation';
+import type { ModeloSessaoMapRow } from './shared-session-validation';
+import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './shared-session-fichas';
 
 /**
  * Converts an existing PLANNED, evidence-free simple session into a shared

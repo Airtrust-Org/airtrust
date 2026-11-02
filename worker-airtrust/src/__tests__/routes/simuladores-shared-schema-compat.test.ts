@@ -2,9 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   simuladoresHasEmpresaId,
   getSimuladorModeloAeronave,
-} from '../../routes/simuladores-shared';
-import { assertEntityOwnership } from '../../routes/simuladores-shared-session-validation';
-import type { NormalizedSharedSessionRequest } from '../../routes/simuladores-shared-session-logic';
+} from '../../services/simuladores/shared';
+import { assertEntityOwnership } from '../../services/simuladores/shared-session-validation';
+import type { NormalizedSharedSessionRequest } from '../../services/simuladores/shared-session-logic';
 
 /**
  * Schema compatibility tests for the simuladores table.

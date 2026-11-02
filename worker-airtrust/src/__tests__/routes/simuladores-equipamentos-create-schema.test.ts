@@ -31,8 +31,8 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/simuladores-shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../routes/simuladores-shared')>();
+vi.mock('../../services/simuladores/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/simuladores/shared')>();
   return {
     ...actual,
     requireAdminForDelete: vi.fn(),

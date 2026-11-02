@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertEntityOwnership } from '../../routes/simuladores-shared-session-validation';
-import type { NormalizedSharedSessionRequest } from '../../routes/simuladores-shared-session-logic';
+import { assertEntityOwnership } from '../../services/simuladores/shared-session-validation';
+import type { NormalizedSharedSessionRequest } from '../../services/simuladores/shared-session-logic';
 
 /**
  * Direct unit coverage of assertEntityOwnership for EXA-V01..V04 payloads,

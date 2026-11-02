@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import { audit } from './simuladores-shared';
+import { audit } from '../services/simuladores/shared';
 import { createLogger, toError } from '../utils/logger';
 import { requireOperationalAccess } from '../services/operational-domain-access';
 
