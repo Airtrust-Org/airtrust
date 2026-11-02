@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-02",
-    "last_reconciled_against": "0571 LMS exam question bank classified, schema pending governed staging apply; prior classifications preserved",
-    "schema_v2_digest": "d9ac727a0a3e4880375f193275965dfaf26f390ba4a6768657376c64863f724b",
+    "last_reconciled_against": "0572 LMS exam attempts classified, schema pending governed staging apply; prior classifications preserved",
+    "schema_v2_digest": "006ff11fcd8dfd063ed2df65c01649f4836f665b0b90f2e93847b13b8f75c15d",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1723,6 +1723,23 @@
       "reviewed_manifest": "lms-exam-question-bank-0571.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-exam-question-bank-0571.md",
       "note": "DDL-only, zero backfill, no attempt/grade tables and no write to courses, enrollments, qualifications or certificates. Schema must be applied BEFORE the Worker route is enabled in staging."
+    },
+    {
+      "change_file": "0572_lms_exam_attempts.sql",
+      "change_id": "lms-exam-attempts-0572",
+      "sha256": "490e5271744b4aa5388175664eb5eb428f228de526a90c9fc4af6130c52b4ac1",
+      "targets": [
+        "lms_exam_attempt_responses",
+        "lms_exam_attempts",
+        "lms_exam_edition_bindings",
+        "lms_exam_plans"
+      ],
+      "domain": "LMS exams: immutable published plans, edition-to-exam binding, per-cycle attempts and responses",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-exam-attempts-0572.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-exam-attempts-0572.md",
+      "note": "DDL-only, zero backfill, storage only: a passed attempt is evidence for the canonical completion writer, never a completion. Requires 0569 and 0571 applied first."
     }
   ]
 }

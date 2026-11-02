@@ -234,6 +234,9 @@ export function evaluateScormClosureReadiness(params: {
   const { commit, wasCompleted, cmiJson, location, masteryScore, scorePct } = params;
   const manifest = params.manifest ?? null;
   const manifestCoverage = manifest?.coverage.verified === true;
+  // EXTERNAL packages stay pending until a passed exam attempt of the active
+  // cycle/edition is attached by the Worker; the package itself never grants it.
+  const externalPending = manifest?.coverage.assessment_mode === 'EXTERNAL' && !manifest.externalExam;
   // Legacy rows without an explicit policy remain SCORED, never FORMATIVE.
   // This is the same fail-closed default as evaluateLmsCompletionEvidence.
   const policy = params.policy ?? 'SCORED';
@@ -279,7 +282,7 @@ export function evaluateScormClosureReadiness(params: {
     ...(policy === 'FORMATIVE' && !everySlide
       ? [manifest ? 'manifest_required_units' : 'distinct_slide_coverage'] : []),
     ...(!terminal ? ['terminal_scorm_status'] : []),
-    ...(manifest?.coverage.assessment_mode === 'EXTERNAL' ? ['verified_external_assessment'] : []),
+    ...(externalPending ? ['verified_external_assessment'] : []),
     ...(scoreRequired && !validMastery ? ['course_mastery_policy'] : []),
     ...(scoreRequired && !validScore ? ['assessment_score'] : []),
     ...(scoreRequired && validMastery && validScore && !scorePassed ? ['assessment_pass'] : []),
@@ -289,7 +292,7 @@ export function evaluateScormClosureReadiness(params: {
   if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
   else if (failed) code = 'EXPLICIT_FAILURE';
   else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
-  else if (manifest?.coverage.assessment_mode === 'EXTERNAL') code = 'EXTERNAL_ASSESSMENT_PENDING';
+  else if (externalPending) code = 'EXTERNAL_ASSESSMENT_PENDING';
   else if (policy === 'FORMATIVE' && (!everySlide || !lastStep)) code = 'PROGRESS_EVIDENCE_MISSING';
   else if (policy !== 'SCORED' && policy !== 'FORMATIVE') code = 'SCORM_ASSESSMENT_POLICY_INVALID';
   else if (scoreRequired && !validMastery) code = 'MASTERY_SCORE_MISSING';
@@ -340,6 +343,15 @@ export function buildPersistedScormClosureReadiness(
     }),
     manifest: manifest ?? null,
   });
+}
+
+/**
+ * True only when the study evidence is complete and the AirTrust exam is the single
+ * thing missing. This is the gate to start an exam attempt, never a completion.
+ */
+export function isStudyCompleteAwaitingExam(readiness: ScormClosureReadiness): boolean {
+  return readiness.code === 'EXTERNAL_ASSESSMENT_PENDING' &&
+    readiness.missing.length === 1 && readiness.missing[0] === 'verified_external_assessment';
 }
 
 /** Legacy boolean guard delegates to the same Player 2.0 terminal checklist. */

@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-exam-attempts-0572",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0572_lms_exam_attempts.sql",
+  "fileHash": "490e5271744b4aa5388175664eb5eb428f228de526a90c9fc4af6130c52b4ac1",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-exam-attempts-0572.md",
+  "planHash": "89ed2479b4193cd27c76c7c3f755193130e2c8592a2a5afed735693934e2adad"
+}

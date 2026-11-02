@@ -19,3 +19,9 @@ Vitest focado em `worker-airtrust/src/__tests__/lib/lms-independent-question-ban
 - A rota administrativa está montada em `/api/lms/exams/admin`, **desligada por padrão**: responde 503 fora de `ENVIRONMENT=staging` com a flag de revisão.
 - O schema é a mudança numerada `0571` (`worker-airtrust/schema-v2/changes/0571_lms_exam_question_bank.sql`), **não aplicada** em nenhum ambiente. Aplicar exige registrar hashes no workflow de staging e autorização específica.
 - Continua fora: tentativas, correção persistida, vínculo curso/edição, ligação ao `completeLmsMatricula` e tela do aluno.
+
+## Estado após o Lote 2 (02/11/2026)
+- Schema `0572` (planos publicados imutáveis, vínculo edição→prova append-only com classificação regulatória obrigatória, tentativas por ciclo, respostas): **não aplicado** em nenhum ambiente; exige 0569 e 0571 antes.
+- `services/lms-exams/exam-attempt-store.ts`: publicar plano, vincular à edição, iniciar/retomar tentativa (idempotente), gravar resposta, enviar e corrigir no Worker. Sem rota de aluno ainda: quem chamar deve autenticar, provar a titularidade da matrícula e checar `isStudyCompleteAwaitingExam` antes.
+- A prova aprovada só entra na conclusão como evidência: `ScormManifestClosureEvidence.externalExam` é preenchido para pacotes `assessment.mode=EXTERNAL` com tentativa aprovada no ciclo ativo e na edição servida. Sem o schema (produção hoje) a busca falha fechada e o comportamento continua `EXTERNAL_ASSESSMENT_PENDING`.
+- `decideScoreF5Finalization` continua sem uso em runtime: ligá-la exige a política congelada no ciclo e a generalização do engine, previstas para o lote da tela do aluno.

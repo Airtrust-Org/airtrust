@@ -621,7 +621,7 @@ app.get('/:id', async (c) => {
         })
       : null;
   const scormClosureReadiness = tipoConteudo === 'scorm'
-    ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null))
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null, undefined, c.env.DB))
     : null;
   const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
     handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
@@ -1401,7 +1401,7 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  const sucesso = canFinalizeScormEnrollment({ manifest: await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, mergedCmiJson, d.suspend_data),
+  const sucesso = canFinalizeScormEnrollment({ manifest: await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, mergedCmiJson, d.suspend_data, c.env.DB),
     commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
     masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
@@ -1908,7 +1908,7 @@ app.post('/:id/finalizar', async (c) => {
       status: matricula.status,
       scorm_assessment_policy: matricula.scorm_assessment_policy,
       scorm_mastery_score: matricula.scorm_mastery_score,
-    }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data))
+    }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data, c.env.DB))
     : null;
   if (scormClosure && !scormClosure.eligible_for_server_verification) {
     await logLmsMatriculaAudit(db, c, {
@@ -2193,7 +2193,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         status: existing.status,
         scorm_assessment_policy: existing.scorm_assessment_policy,
         scorm_mastery_score: existing.scorm_mastery_score,
-      }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, existing, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data));
+      }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, existing, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data, c.env.DB));
       // The only exception is a separately governed administrative override:
       // real SCORM completion still uses the exact same closure verdict as
       // commit and learner finalization. Overrides are never SCORM PASS.

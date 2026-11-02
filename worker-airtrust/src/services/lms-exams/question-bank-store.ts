@@ -87,9 +87,8 @@ const SELECT = 'SELECT empresa_id,curso_id,question_key,revision,status,content_
   'edit_version,created_by,last_edited_by,reviewed_by,published_by,content_sha256 '+
   'FROM lms_exam_question_revisions WHERE empresa_id=? AND curso_id=? '+
   'AND question_key=? AND revision=? LIMIT 1';
-async function fetchRevision(db:D1Database,scope:QuestionAdminActor,
+async function fetchScoped(db:D1Database,s:{empresaId:number;cursoId:number},
   questionId:string,revision:number):Promise<StoredQuestion> {
-  const {scope:s}=actorScope(scope);
   inputId(questionId,revision);
   const row=await db.prepare(SELECT)
     .bind(s.empresaId,s.cursoId,questionId,revision).first<DbRow>();
@@ -104,6 +103,30 @@ async function fetchRevision(db:D1Database,scope:QuestionAdminActor,
     deny('EXAM_PUBLISHED_REVISION_HASH_MISMATCH');
   }
   return state;
+}
+async function fetchRevision(db:D1Database,scope:QuestionAdminActor,
+  questionId:string,revision:number):Promise<StoredQuestion> {
+  return fetchScoped(db,actorScope(scope).scope,questionId,revision);
+}
+/**
+ * Private loader for the exam runtime: exact PUBLISHED revisions by tenant+course.
+ * The returned objects hold the answer key and must never reach a learner response.
+ */
+export async function loadPublishedQuestions(db:D1Database,
+  scope:{empresaId:number;cursoId:number},
+  refs:readonly {questionId:string;revision:number}[]):Promise<QuestionRevision[]> {
+  if(!scope||!Number.isSafeInteger(scope.empresaId)||scope.empresaId<1||
+      !Number.isSafeInteger(scope.cursoId)||scope.cursoId<1||
+      !Array.isArray(refs)||refs.length<1||refs.length>600) {
+    deny('EXAM_QUESTION_REFERENCE_INVALID');
+  }
+  const out:QuestionRevision[]=[];
+  for(const ref of refs){
+    const stored=await fetchScoped(db,scope,ref.questionId,ref.revision);
+    if(stored.revision.status!=='PUBLISHED')deny('EXAM_QUESTION_NOT_PUBLISHED');
+    out.push(stored.revision);
+  }
+  return out;
 }
 export async function getAdminQuestion(db:D1Database,actor:QuestionAdminActor,
   questionId:string,revision:number):Promise<StoredQuestion> {

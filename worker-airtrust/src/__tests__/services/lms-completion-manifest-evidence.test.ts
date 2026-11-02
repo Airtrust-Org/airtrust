@@ -7,6 +7,7 @@ import {
 } from '../../services/lms-completion-manifest-evidence';
 import {
   evaluateScormClosureReadiness,
+  isStudyCompleteAwaitingExam,
   type ScormCommitLike,
 } from '../../services/lms-matricula-runtime-domain';
 import {
@@ -125,6 +126,27 @@ describe('política de avaliação do servidor: NONE não equivale a EXTERNAL', 
       code: 'EXTERNAL_ASSESSMENT_PENDING' });
     expect(r.missing).toContain('verified_external_assessment');
   });
+  it('EXTERNAL libera a conclusão só com prova aprovada anexada pelo Worker', () => {
+    const base = evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full);
+    const approved = { ...base, externalExam: { attemptId: 'att-0123456789abcdef', planSha256: 'd'.repeat(64) } };
+    expect(readiness(approved, full)).toMatchObject({
+      eligible_for_server_verification: true, code: 'SCORM_READY_FOR_SERVER_VERIFICATION', missing: [] });
+    // A prova aprovada não dispensa o resto do estudo nem a confirmação do aluno.
+    const partial = ledger([1, 2, 3]);
+    const noStudy = { ...evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), partial), externalExam: approved.externalExam };
+    expect(readiness(noStudy, partial).eligible_for_server_verification).toBe(false);
+    expect(readiness(approved, full, { ...finalize, commit_event: 'SCORM_FINISH' })
+      .eligible_for_server_verification).toBe(false);
+    expect(readiness({ ...base, externalExam: null }, full).code).toBe('EXTERNAL_ASSESSMENT_PENDING');
+  });
+  it('isStudyCompleteAwaitingExam: só quando a prova é a única pendência', () => {
+    const ext = evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full);
+    expect(isStudyCompleteAwaitingExam(readiness(ext, full))).toBe(true);
+    const partial = ledger([1, 2, 3]);
+    expect(isStudyCompleteAwaitingExam(readiness(evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), partial), partial))).toBe(false);
+    expect(isStudyCompleteAwaitingExam(readiness(evidenceFor(manifest({ assessmentMode: 'NONE' }), full), full))).toBe(false);
+    expect(isStudyCompleteAwaitingExam(readiness(ext, full, { ...finalize, commit_event: 'SCORM_FINISH' }))).toBe(false);
+  });
   it('NONE sem status terminal não concede conclusão automaticamente', () => {
     const r = readiness(evidenceFor(manifest({ assessmentMode: 'NONE' }), full), full,
       { commit_event: 'SCORM_USER_FINALIZE' });
@@ -179,6 +201,29 @@ describe('carregamento do contexto (R2 somente leitura)', () => {
     expect(await loadScormManifestClosureEvidence({ ...params(fakeBucket(rawManifest)), contentType: 'pdf' })).toBeNull();
     expect(await loadScormManifestClosureEvidence(params(fakeBucket(rawManifest, true)))).toBeNull();
     expect(await readActiveCompletionManifest({ bucket: fakeBucket(rawManifest), empresaId: 7, cursoId: 9, activePrefix: PREFIX })).not.toBeNull();
+  });
+  it('só consulta a prova aprovada quando o pacote é EXTERNAL e nunca lança', async () => {
+    let queries = 0;
+    const dbWith = (row: unknown, throws = false) => ({
+      prepare: () => ({ bind: () => ({ first: async () => {
+        queries += 1;
+        if (throws) throw new Error('no such table: lms_exam_attempts');
+        return row;
+      } }) }),
+    }) as unknown as D1Database;
+    const external = { ...rawManifest, assessment: { mode: 'EXTERNAL' } };
+    const row = { attempt_id: 'att-0123456789abcdef', plan_sha256: 'd'.repeat(64) };
+    const ok = await loadScormManifestClosureEvidence({ ...params(fakeBucket(external)), db: dbWith(row) });
+    expect(ok?.externalExam).toEqual({ attemptId: 'att-0123456789abcdef', planSha256: 'd'.repeat(64) });
+    expect((await loadScormManifestClosureEvidence({ ...params(fakeBucket(external)), db: dbWith(null) }))?.externalExam).toBeNull();
+    // Schema 0572 ausente (produção hoje): continua pendente, sem erro.
+    expect((await loadScormManifestClosureEvidence({ ...params(fakeBucket(external)), db: dbWith(null, true) }))?.externalExam).toBeNull();
+    // Uma linha qualquer (ex.: a da matrícula) nunca vale como prova aprovada.
+    expect((await loadScormManifestClosureEvidence({ ...params(fakeBucket(external)), db: dbWith({ id: 1, status: 'EM_ANDAMENTO' }) }))?.externalExam).toBeNull();
+    queries = 0;
+    const none = await loadScormManifestClosureEvidence({ ...params(fakeBucket(rawManifest)), db: dbWith(row) });
+    expect(none?.externalExam).toBeUndefined();
+    expect(queries).toBe(0);
   });
   it('wrapper de rota nunca lança e ignora linha inválida', async () => {
     const row = { id: 1, curso_id: 9, scorm_package_r2_prefix: PREFIX, tipo_conteudo: 'scorm' };
