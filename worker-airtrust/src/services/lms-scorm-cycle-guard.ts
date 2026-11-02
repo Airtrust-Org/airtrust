@@ -1,4 +1,4 @@
-import { ApiError } from '../middleware/error-handler';
+import { ApiError } from '../lib/errors/api-error';
 
 /**
  * Enrollments are reused for a governed new cycle; a still-open old iframe

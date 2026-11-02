@@ -7,6 +7,18 @@
  */
 
 import type { ErrorHandler } from 'hono';
+import { ApiError } from '../lib/errors/api-error';
+
+// Re-export: o contrato público de middleware/error-handler continua o mesmo.
+export {
+  ApiError,
+  badRequest,
+  forbidden,
+  internalError,
+  notFound,
+  serviceUnavailable,
+  unauthorized,
+} from '../lib/errors/api-error';
 
 type SupportedErrorStatus = 400 | 401 | 403 | 404 | 500 | 503;
 
@@ -56,21 +68,6 @@ export function safeServerMessage(status: number): string {
 
 function shouldExposeServerDetail(environment: string, status: number): boolean {
   return environment === 'development' || status < 500;
-}
-
-/**
- * Classe de erro customizada para API
- * Permite definir status code e mensagem específica
- */
-export class ApiError extends Error {
-  constructor(
-    public message: string,
-    public statusCode: number = 500,
-    public code?: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
 }
 
 /**
@@ -156,48 +153,3 @@ export const errorHandler: ErrorHandler = (err, c) => {
     500,
   );
 };
-
-/**
- * Helper para lançar erro 400 (Bad Request)
- */
-export function badRequest(message: string, code?: string): never {
-  throw new ApiError(message, 400, code);
-}
-
-/**
- * Helper para lançar erro 401 (Unauthorized)
- */
-export function unauthorized(message: string = 'Não autorizado', code?: string): never {
-  throw new ApiError(message, 401, code);
-}
-
-/**
- * Helper para lançar erro 403 (Forbidden)
- */
-export function forbidden(message: string = 'Acesso negado', code?: string): never {
-  throw new ApiError(message, 403, code);
-}
-
-/**
- * Helper para lançar erro 404 (Not Found)
- */
-export function notFound(message: string = 'Recurso não encontrado', code?: string): never {
-  throw new ApiError(message, 404, code);
-}
-
-/**
- * Helper para lançar erro 500 (Internal Server Error)
- */
-export function internalError(message: string = 'Erro interno', code?: string): never {
-  throw new ApiError(message, 500, code);
-}
-
-/**
- * Helper para lançar erro 503 (Service Unavailable)
- * Usado quando uma checagem de segurança obrigatória (ex: blocklist de
- * tokens revogados) não pode ser executada — a falha deve impedir a
- * autenticação (fail-closed), não permiti-la silenciosamente.
- */
-export function serviceUnavailable(message: string = 'Serviço indisponível', code?: string): never {
-  throw new ApiError(message, 503, code);
-}

@@ -5,7 +5,7 @@
  * da Coordenação) — nenhum dos dois define este acesso a dados
  * independentemente.
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 
 export type FlightStatus =
   | 'planejado'

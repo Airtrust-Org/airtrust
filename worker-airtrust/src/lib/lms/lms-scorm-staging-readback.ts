@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import { readScormQaCandidate } from './lms-scorm-candidate-preview';
 import { assertScormF0BindingWitness } from './lms-scorm-f0-binding-contract';
 

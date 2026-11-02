@@ -9,7 +9,7 @@
  * acesso a um RDV específico exige vínculo de tripulação (ver
  * `assertRdvSelfScope`).
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import {
   buildRdvVersionGuardedInsert,
   type RdvRow,

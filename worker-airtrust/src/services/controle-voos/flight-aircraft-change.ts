@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import { listEligibleFlightCrew } from './crew-eligibility';
 
 export async function assertCrewEligibleForAircraftChange(

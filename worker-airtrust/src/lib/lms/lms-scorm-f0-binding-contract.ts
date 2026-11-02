@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 
 /**
  * Candidate-scoped F0 witness. This is a *validation* contract, not a grant
