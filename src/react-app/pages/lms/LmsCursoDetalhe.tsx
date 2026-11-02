@@ -44,7 +44,9 @@ export default function LmsCursoDetalhe() {
   const { data: matriculas } = useMinhasMatriculas(!canManage);
   const matricular = useMatricularCurso();
 
-  const matricula: LmsMatricula | undefined = matriculas?.find((m) => m.curso_id === Number(id));
+  const matricula: LmsMatricula | undefined = canManage
+    ? undefined
+    : matriculas?.find((m) => m.curso_id === Number(id));
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const canPreview = Boolean(previewPath);
   const hasContent = supportsAdminCoursePreview(curso);
