@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import type { RdvInput } from '../../repositories/controle-voos/rdv-repository';
 
 function parseNonNegativeNumber(value: unknown, field: string): number {

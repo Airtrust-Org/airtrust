@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import type { Logger } from '../../utils/logger';
 
 export type SchemaPresence = 'present' | 'absent' | 'unknown';

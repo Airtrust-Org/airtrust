@@ -1,4 +1,4 @@
-import { ApiError } from '../middleware/error-handler';
+import { ApiError } from '../lib/errors/api-error';
 import { extractProgressPctFromCmiJson } from './lms-matricula-runtime-domain';
 import {
   extractScormLocationFromCmiJson,
