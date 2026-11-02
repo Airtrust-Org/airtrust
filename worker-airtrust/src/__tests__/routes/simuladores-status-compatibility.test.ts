@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   criarQualificacoesPlanejadas,
   sincronizarQualificacoesDaSessaoConcluida,
-} from '../../routes/simuladores-shared';
+} from '../../services/simuladores/shared';
 
 type HistoricoRow = {
   id: number;

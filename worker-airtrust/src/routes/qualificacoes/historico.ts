@@ -19,21 +19,8 @@ import {
   getEmployeeSectorAccess,
 } from '../../services/employee-sector-access';
 import { forbidden } from '../../middleware/error-handler';
-import {
-  safe,
-  buildOrderByClause,
-  generateETag,
-  getCacheTtlMs,
-  histCache,
-  type StatsCacheData,
-  ensureHistoricoSchema,
-  ensureModelosAeronaveModeloColumn,
-  SORTABLE_COLUMNS,
-  MODELO_AERONAVE_EXPR,
-  resolveHistoricoReadExpiry,
-  buildCategoriaResolutionJoinClause,
-  categoriaCandidatosAtivosExpr,
-} from './historico-helpers';
+import { safe } from './safe-handler';
+import { buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr } from '../../services/qualificacoes/historico-helpers';
 import {
   CANCELLED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -42,7 +29,7 @@ import {
   QUALIFICACAO_STATUS,
   sqlStatusEqualsAny,
 } from '../../lib/status/status-codes';
-import { getCertificadosStorageColumns } from '../qualificacoes-certificados-helpers';
+import { getCertificadosStorageColumns } from '../../services/qualificacoes/certificados-helpers';
 import {
   resolveOperationalReadScope,
   appendOperationalReadFilter,

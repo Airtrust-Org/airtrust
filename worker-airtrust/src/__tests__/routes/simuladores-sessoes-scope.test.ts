@@ -28,8 +28,8 @@ vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
 }));
 
-vi.mock('../../routes/simuladores-shared', async () => {
-  const actual = await vi.importActual('../../routes/simuladores-shared');
+vi.mock('../../services/simuladores/shared', async () => {
+  const actual = await vi.importActual('../../services/simuladores/shared');
   return {
     ...actual,
     findSessaoConflict: vi.fn(async () => null),

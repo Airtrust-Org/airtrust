@@ -4,7 +4,7 @@
  * Used by the main fichas router and fichas-simulador routes.
  */
 
-import { audit } from './simuladores-shared';
+import { audit } from '../services/simuladores/shared';
 import { hasSchemaTable } from '../utils/db-schema';
 import { upsertQualificacaoHistoricoDaFicha } from '../services/qualificacoes-historico-ficha';
 import { realizarG1SemPendente } from '../services/qualificacoes-g1-sem';

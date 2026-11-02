@@ -1,4 +1,4 @@
-import { buildOperationalFichaManobras } from '../constants/notechs';
+import { buildOperationalFichaManobras } from '../../constants/notechs';
 
 export async function loadFichaManobrasForModelo(
   db: D1Database,

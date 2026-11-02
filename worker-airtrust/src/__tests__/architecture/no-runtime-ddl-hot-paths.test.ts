@@ -21,7 +21,7 @@ const HOT_PATH_FILES = [
   ['routes/notificacoes-convocacao.ts', join(testDir, '../../routes/notificacoes-convocacao.ts')],
   ['routes/preferencias.ts', join(testDir, '../../routes/preferencias.ts')],
   ['routes/integracoes_sigvoos.ts', join(testDir, '../../routes/integracoes_sigvoos.ts')],
-  ['routes/qualificacoes/historico-helpers.ts', join(testDir, '../../routes/qualificacoes/historico-helpers.ts')],
+  ['services/qualificacoes/historico-helpers.ts', join(testDir, '../../services/qualificacoes/historico-helpers.ts')],
   ['routes/qualificacoes/tipos.ts', join(testDir, '../../routes/qualificacoes/tipos.ts')],
   ['routes/simuladores-modelos.ts', join(testDir, '../../routes/simuladores-modelos.ts')],
   ['services/sigvoos-frms.ts', join(testDir, '../../services/sigvoos-frms.ts')],

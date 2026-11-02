@@ -4,7 +4,7 @@ import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requirePermission } from '../middleware/rbac';
 import { requireOperacoes } from './simuladores-modelos-rbac';
-import { audit } from './simuladores-shared';
+import { audit } from '../services/simuladores/shared';
 import {
   loadSimulatorCurriculumCycleConfig,
   resolveAnnualCurriculumCycle,

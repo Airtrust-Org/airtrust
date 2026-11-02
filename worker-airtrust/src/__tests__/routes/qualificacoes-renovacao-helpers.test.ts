@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveParametrosRenovacaoQualificacao } from '../../routes/qualificacoes/historico-helpers';
+import { resolveParametrosRenovacaoQualificacao } from '../../services/qualificacoes/historico-helpers';
 
 describe('resolveParametrosRenovacaoQualificacao', () => {
   it('mantem renovacao de G1-SEM com vencimento exatamente em 6 meses', () => {

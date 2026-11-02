@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   criarQualificacoesPlanejadas,
   listarParticipantesDaSessaoParaQualificacao,
-} from '../../routes/simuladores-shared';
+} from '../../services/simuladores/shared';
 
 type ParticipanteRow = {
   sessao_id: number;

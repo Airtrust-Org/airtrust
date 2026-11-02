@@ -3,7 +3,7 @@ import {
   criarQualificacoesPlanejadas,
   listarParticipantesDaSessaoParaQualificacao,
   sincronizarQualificacoesDaSessaoConcluida,
-} from '../../routes/simuladores-shared';
+} from '../../services/simuladores/shared';
 
 type ParticipanteRow = {
   sessao_id: number;

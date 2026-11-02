@@ -1,8 +1,8 @@
 import {
   calculateSharedSessionParticipantSummaries,
   createSharedAssignmentKey,
-} from './simuladores-shared-session-logic';
-import { allStatement, firstStatement } from './simuladores-shared-session-helpers';
+} from './shared-session-logic';
+import { allStatement, firstStatement } from './shared-session-helpers';
 
 export async function loadSharedDetail(db: D1Database, empresaId: number, sessaoId: number) {
   const sessao = await firstStatement<any>(

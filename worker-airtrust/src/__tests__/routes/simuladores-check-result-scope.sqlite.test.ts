@@ -19,7 +19,7 @@ vi.mock('../../middleware/tenant', () => ({
 vi.mock('../../services/operational-domain-access', () => ({
   requireOperationalAccess: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-vi.mock('../../routes/simuladores-shared', () => ({ audit: vi.fn() }));
+vi.mock('../../services/simuladores/shared', () => ({ audit: vi.fn() }));
 
 import fichasExtras from '../../routes/simuladores-fichas-extras';
 

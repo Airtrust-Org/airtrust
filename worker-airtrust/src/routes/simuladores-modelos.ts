@@ -11,15 +11,8 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { sanitizeModeloSessaoObservacoesForStorage, validateModeloSessaoObservacoesInput } from '../../../src/shared/simuladores/modelos-sessao-observacoes';
-import {
-  TipoSessaoSchema,
-  ModeloSessaoSchema,
-  requireAdminForDelete,
-  audit,
-  filtrarChecksCompativeisComModelo,
-  listarTiposCheckPorIds,
-  normalizeModeloAeronave,
-} from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { TipoSessaoSchema, ModeloSessaoSchema, audit, filtrarChecksCompativeisComModelo, listarTiposCheckPorIds, normalizeModeloAeronave } from '../services/simuladores/shared';
 import { requirePermission } from '../middleware/rbac';
 import { requireOperacoes } from './simuladores-modelos-rbac';
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';

@@ -56,9 +56,9 @@ vi.mock('../../services/employee-sector-access', () => ({
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', async () => {
-  const actual = await vi.importActual<typeof import('../../routes/qualificacoes/historico-helpers')>(
-    '../../routes/qualificacoes/historico-helpers',
+vi.mock('../../services/qualificacoes/historico-helpers', async () => {
+  const actual = await vi.importActual<typeof import('../../services/qualificacoes/historico-helpers')>(
+    '../../services/qualificacoes/historico-helpers',
   );
 
   return {
