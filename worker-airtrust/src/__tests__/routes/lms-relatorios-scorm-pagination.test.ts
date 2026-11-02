@@ -26,7 +26,7 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: TestContext, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: (c: TestContext) =>
     Number(c.req.header('x-test-empresa-id') || c.get('empresaId') || 0),
 }));

@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { requirePermission } from '../middleware/rbac';
 import type { Env, Variables } from '../types';
 import {

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';

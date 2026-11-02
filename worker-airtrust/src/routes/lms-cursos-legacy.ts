@@ -21,7 +21,7 @@ import {
   buildCourseSetorScope,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import {
   employeeSectorSql,
   getEmployeeSectorAccess,
