@@ -320,6 +320,8 @@ export default function LmsPlayer() {
     edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
+  const handoffAvailable = (matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)
+    ?.scorm_handoff_available === true;
   // Server suggestion is read-only: never credit units or unlock commits from a bookmark.
   const activeResumeProposal = (matricula as (typeof matricula & {
     active_resume_proposal?: {
@@ -1021,9 +1023,11 @@ export default function LmsPlayer() {
   }
 
   async function preserveAndResumeActiveEdition() {
-    if (!isTenantAdmin || startingNewEdition) return;
+    if (startingNewEdition) return;
     const confirmed = window.confirm(
-      'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?',
+      isTenantAdmin
+        ? 'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?'
+        : 'Este curso foi atualizado. Seu histórico anterior será guardado com segurança e você retomará a nova edição na posição sugerida. O progresso anterior não conta para a nova edição, então será preciso rever as telas para concluir. Continuar?',
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -1378,24 +1382,28 @@ export default function LmsPlayer() {
               </p>
             )}
           </div>
-          {isTenantAdmin ? (
+          {handoffAvailable || isTenantAdmin ? (
             <div className="flex flex-col gap-2 sm:items-end">
-              {(matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)?.scorm_handoff_available === true && (
+              {handoffAvailable && (
                 <button
                   onClick={() => void preserveAndResumeActiveEdition()}
                   disabled={startingNewEdition}
                   className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
                 >
-                  {startingNewEdition ? 'Preservando e preparando retomada...' : 'Preservar histórico e retomar edição ativa'}
+                  {startingNewEdition
+                    ? 'Preservando e preparando retomada...'
+                    : isTenantAdmin ? 'Preservar histórico e retomar edição ativa' : 'Continuar na nova edição'}
                 </button>
               )}
-              <button
-                onClick={() => void startVerifiedNewEdition()}
-                disabled={startingNewEdition}
-                className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
-              >
-                {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
-              </button>
+              {isTenantAdmin && (
+                <button
+                  onClick={() => void startVerifiedNewEdition()}
+                  disabled={startingNewEdition}
+                  className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+                >
+                  {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
+                </button>
+              )}
             </div>
           ) : (
             <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
@@ -1478,6 +1486,15 @@ export default function LmsPlayer() {
                       </span>
                     )}
                   </p>
+                  {handoffAvailable && (
+                    <button
+                      onClick={() => void preserveAndResumeActiveEdition()}
+                      disabled={startingNewEdition}
+                      className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
+                    >
+                      {startingNewEdition ? 'Preparando a nova edição...' : 'Continuar na nova edição'}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : null}

@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { ApiError } from '../middleware/error-handler';
-import { requireRole } from '../middleware/rbac';
+import { hasRole } from '../middleware/rbac';
+import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import type { Env } from '../types';
 import { getCallerUserId } from './lms-matriculas-audit';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -11,7 +12,10 @@ import { writeScormEditionHandoff } from '../services/lms-scorm-edition-handoff-
 export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): void {
   // Same-cycle transition. The client can request the operation but cannot
   // supply a target package, resume plan, or operation scope.
-  app.post('/:id/scorm-edition-handoff', requireRole('admin'), async (c) => {
+  // The learner who owns the enrollment may request the transition for their
+  // own enrollment (everything else is derived and verified server-side);
+  // admins/managers may do it for any enrollment in their tenant.
+  app.post('/:id/scorm-edition-handoff', async (c) => {
     if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED !== 'true') {
       throw new ApiError('Continuidade entre edições SCORM ainda não está habilitada', 404);
     }
@@ -21,8 +25,9 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
     if (!Number.isSafeInteger(matriculaId) || matriculaId <= 0) {
       throw new ApiError('ID de matrícula inválido', 400);
     }
+    const canManage = hasRole(c, 'admin', 'manager');
     const row = await db.prepare(`
-      SELECT m.id,m.curso_id,m.status,m.data_inicio,m.qualificacao_historico_id,
+      SELECT m.id,m.funcionario_id,m.curso_id,m.status,m.data_inicio,m.qualificacao_historico_id,
         cy.id AS ciclo_id,cy.data_inicio AS cycle_started_at,
         c.tipo_conteudo,c.scorm_package_r2_prefix,p.package_sha256,
         ps.cmi_json,ps.suspend_data
@@ -40,11 +45,17 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
         AND m.qualificacao_historico_id IS NULL AND c.tipo_conteudo='scorm'
       ORDER BY p.id DESC LIMIT 1`)
       .bind(matriculaId,empresaId)
-      .first<{id:number;curso_id:number;status:string;data_inicio:string|null;
+      .first<{id:number;funcionario_id:number;curso_id:number;status:string;data_inicio:string|null;
         qualificacao_historico_id:number|null;ciclo_id:number;cycle_started_at:string|null;
         tipo_conteudo:string;scorm_package_r2_prefix:string;package_sha256:string;
         cmi_json:string|null;suspend_data:string|null}>();
     if (!row) throw new ApiError('Matrícula, ciclo ou pacote ativo não elegível', 409);
+    if (!canManage) {
+      const callerFuncionarioId = await resolveLmsFuncionarioId(db, c.get('userId' as never), empresaId);
+      if (!callerFuncionarioId || callerFuncionarioId !== Number(row.funcionario_id)) {
+        throw new ApiError('Acesso negado', 403);
+      }
+    }
     const mismatch = await detectLmsEditionMismatch({
       bucket:c.env.BUCKET,contentType:row.tipo_conteudo,
       activePrefix:row.scorm_package_r2_prefix,empresaId,cursoId:Number(row.curso_id),
