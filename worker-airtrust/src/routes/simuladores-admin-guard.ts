@@ -7,7 +7,7 @@ import type { Env } from '../types';
  * domain helpers are in services/simuladores/shared.
  */
 export function requireAdminForDelete(c: Context<{ Bindings: Env }>): Response | null {
-  const userRole = (c as any).get('userRole');
+  const userRole: unknown = c.get('userRole' as never);
   const normalizedRole =
     typeof userRole === 'string' ? userRole.toLowerCase() : String(userRole || '').toLowerCase();
 
