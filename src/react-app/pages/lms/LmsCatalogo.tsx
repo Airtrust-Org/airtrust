@@ -92,6 +92,16 @@ import {
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Non-manager accounts (including COMPLIANCE/USUARIO) can still be learners.
+ * Managers only query their own enrollments while explicitly in learner mode.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function shouldLoadPersonalEnrollments(canManage: boolean, studentMode: boolean): boolean {
+  return !canManage || studentMode;
+}
+
+
 type TabId = 'meus' | 'catalogo';
 
 const DEFAULT_CATEGORIES = [
@@ -1881,8 +1891,7 @@ export default function LmsCatalogo() {
     },
     { enabled: canManage },
   );
-  // Only the learner view needs personal enrollments; admin catalog never requires an employee link.
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(studentMode);
+  // The admin catalog does not need an employee link, but all non-manager roles\n  // (including COMPLIANCE and USUARIO) still need their personal enrollments.\n  const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);\n  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(loadPersonalEnrollments);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
@@ -1909,7 +1918,7 @@ export default function LmsCatalogo() {
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
   // Disabled queries may still expose stale React Query cache; never use personal rows in admin mode.
-  const myMatriculas = studentMode ? (matriculas ?? []) : [];
+  const myMatriculas = loadPersonalEnrollments ? (matriculas ?? []) : [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
   const enrolledIds = new Set(
     myMatriculas.filter((m) => m.status !== 'CANCELADO').map((m) => m.curso_id),

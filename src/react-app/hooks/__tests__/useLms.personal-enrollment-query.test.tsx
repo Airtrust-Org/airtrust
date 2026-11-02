@@ -53,6 +53,16 @@ describe('useMinhasMatriculas — employee-link boundary', () => {
     );
   });
 
+  it('returns existing enrollment for a non-manager who explicitly enables the learner query', async () => {
+    request.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [{ id: 81, curso_id: 55, status: 'EM_ANDAMENTO' }] }),
+    });
+    const { result } = renderHook(() => useMinhasMatriculas(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.data?.[0]?.curso_id).toBe(55));
+    expect(result.current.data?.[0]?.status).toBe('EM_ANDAMENTO');
+  });
+
   it('retains the default learner behavior when no enablement flag is passed', async () => {
     renderHook(() => useMinhasMatriculas(), { wrapper: makeWrapper() });
     await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
