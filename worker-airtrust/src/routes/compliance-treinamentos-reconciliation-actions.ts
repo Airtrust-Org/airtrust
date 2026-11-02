@@ -11,7 +11,7 @@ import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, 
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { createComplianceEnrollmentAtomic } from '../services/training-compliance-create-enrollment';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 
 export type LmsEnrollment = {
   id: number;

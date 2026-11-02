@@ -5,7 +5,7 @@ import {
   type EdbFlightRecord,
   type EdbMaintenanceSnapshot,
   type EdbOperatorRegulation,
-} from './contracts';
+} from '../../lib/edb/contracts';
 
 export type EdbProjectionGapCode =
   | 'AIRCRAFT_IDENTITY_INCOMPLETE'

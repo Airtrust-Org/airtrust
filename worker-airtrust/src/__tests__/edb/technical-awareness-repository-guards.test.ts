@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { EdbSignatureProof } from '../../services/edb/contracts';
+import type { EdbSignatureProof } from '../../lib/edb/contracts';
 import {
   bindPicTechnicalAcknowledgement,
   createTechnicalSituationSnapshot,
-} from '../../services/edb/technical-awareness';
+} from '../../lib/edb/technical-awareness';
 import {
   appendEdbPicTechnicalAcknowledgement,
   persistEdbTechnicalSituation,

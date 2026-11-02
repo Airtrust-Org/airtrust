@@ -4,12 +4,12 @@ import {
   canonicalJson,
   hashSignableEdbPayload,
   sha256Hex,
-} from '../../services/edb/canonicalization';
+} from '../../lib/edb/canonicalization';
 import {
   createEmptyEdbFlightRecord,
   type EdbFlightRecord,
   type EdbSignatureProof,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import { loadVerifiedEdbRevisionView } from '../../repositories/edb/edb-revision-view-repository';
 
 const REVISION_ID = 'rev-100-1';

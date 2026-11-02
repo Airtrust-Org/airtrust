@@ -20,7 +20,7 @@ import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   resolveLmsEffectiveProgress,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import { createLogger } from '../utils/logger';
 import type { Env } from '../types';

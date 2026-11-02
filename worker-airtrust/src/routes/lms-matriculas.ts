@@ -35,7 +35,7 @@ import {
   preferScormValue,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { getCallerUserId, logLmsMatriculaAudit } from './lms-matriculas-audit';
 import type { Env } from '../types';
 import {

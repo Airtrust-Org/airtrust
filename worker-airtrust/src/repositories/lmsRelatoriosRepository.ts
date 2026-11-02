@@ -2,7 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import {
   buildScormCompletionDiagnostic,
   resolveLmsEffectiveProgress,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 
 /**
  * lmsRelatoriosRepository.ts

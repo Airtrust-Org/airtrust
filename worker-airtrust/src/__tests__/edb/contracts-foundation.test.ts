@@ -3,7 +3,7 @@ import {
   EDB_CONTRACT_VERSION,
   createEmptyEdbFlightRecord,
   type EdbCrewMember,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 
 describe('eDB regulatory contract foundation', () => {
   it('creates a neutral draft without synthesizing unavailable regulated facts', () => {
