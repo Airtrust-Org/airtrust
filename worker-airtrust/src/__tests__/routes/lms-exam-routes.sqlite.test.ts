@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../middleware/auth', () => ({
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    const empresaId = Number(c.env?.__mockEmpresaId ?? 6);
+    c.set('userId', Number(c.env?.__mockUserId ?? 500));
+    c.set('userRole', c.env?.__mockRole ?? 'student');
+    c.set('empresaId', empresaId);
+    c.set('tenantContext', {
+      empresaId, empresaCodigo: 'emp', empresaNome: 'Empresa', role: c.env?.__mockRole ?? 'student',
+      plano: 'pro', permissions: ['*'],
+    });
+    await next();
+  },
+}));
+
+import { Hono } from 'hono';
+import learnerRoutes from '../../routes/lms-exam-learner';
+import adminRoutes from '../../routes/lms-exam-question-bank-admin';
+import { OTHER_USER, PKG, externalBucket, lmsExamDb, publishExam } from '../helpers/exam-lms-fixture';
+
+const app = new Hono();
+// The real app maps ApiError (RBAC, auth) through its global handler.
+app.onError((e, c) => c.json({ code: (e as { code?: string }).code ?? 'ERROR' },
+  ((e as { statusCode?: number }).statusCode ?? 500) as 403));
+app.route('/api/lms/exams/admin', adminRoutes);
+app.route('/api/lms/exams', learnerRoutes);
+
+function call(db: ReturnType<typeof lmsExamDb>, path: string, init: RequestInit = {}, over: Record<string, unknown> = {}) {
+  const env = {
+    DB: db.asD1(), BUCKET: externalBucket(), ENVIRONMENT: 'staging',
+    LMS_EXAM_LEARNER_STAGING: 'REVIEWED_SCHEMA_ONLY', LMS_EXAM_QUESTION_ADMIN_STAGING: 'REVIEWED_SCHEMA_ONLY',
+    ...over,
+  };
+  return app.fetch(new Request('https://t.local' + path, init), env as never);
+}
+const json = (method: string, body?: unknown, headers: Record<string, string> = {}) => ({
+  method, headers: { 'content-type': 'application/json', ...headers },
+  body: body === undefined ? undefined : JSON.stringify(body),
+});
+
+describe('rotas do aluno — prova externa', () => {
+  it('desligadas por padrão: 503 fora de staging ou sem a flag', async () => {
+    const db = lmsExamDb(); await publishExam(db);
+    expect((await call(db, '/api/lms/exams/matriculas/10/prova', {}, { ENVIRONMENT: 'production' })).status).toBe(503);
+    expect((await call(db, '/api/lms/exams/matriculas/10/prova', {}, { LMS_EXAM_LEARNER_STAGING: undefined })).status).toBe(503);
+  });
+  it('fluxo completo: estado → iniciar (idempotente) → responder → enviar → aprovado → finalizar', async () => {
+    const db = lmsExamDb(); await publishExam(db);
+    const state = await (await call(db, '/api/lms/exams/matriculas/10/prova')).json() as any;
+    expect(state.data).toMatchObject({ state: 'READY', finalizeRequired: false });
+
+    const noKey = await call(db, '/api/lms/exams/matriculas/10/tentativas', json('POST'));
+    expect(noKey.status).toBe(422);
+    const h = { 'Idempotency-Key': 'idem-route-0001' };
+    const started = await call(db, '/api/lms/exams/matriculas/10/tentativas', json('POST', undefined, h));
+    expect(started.status).toBe(201);
+    const attempt = (await started.json() as any).data;
+    expect(JSON.stringify(attempt)).not.toMatch(/correctChoiceId|explanation|SEGREDO/);
+    const again = await (await call(db, '/api/lms/exams/matriculas/10/tentativas', json('POST', undefined, h))).json() as any;
+    expect(again.data.attemptId).toBe(attempt.attemptId);
+
+    const put = (qid: string, cid: string, over = {}) =>
+      call(db, `/api/lms/exams/tentativas/${attempt.attemptId}/respostas`, json('PUT', { questionId: qid, choiceId: cid }), over);
+    expect((await put('q99', 'o1')).status).toBe(422);
+    expect((await put('q1', 'o1', { __mockUserId: OTHER_USER })).status).toBe(403);
+    for (let i = 1; i <= 7; i++) expect((await put('q' + i, 'o1')).status).toBe(200);
+
+    const sent = await call(db, `/api/lms/exams/tentativas/${attempt.attemptId}/enviar`, json('POST'));
+    expect(sent.status).toBe(200);
+    expect(((await sent.json()) as any).data.result).toMatchObject({ passed: true, answered: 7, unanswered: 3 });
+    expect((await put('q8', 'o1')).status).toBe(409);
+
+    const after = await (await call(db, '/api/lms/exams/matriculas/10/prova')).json() as any;
+    expect(after.data).toMatchObject({ state: 'PASSED', finalizeRequired: true });
+    const retry = await call(db, '/api/lms/exams/matriculas/10/tentativas', json('POST', undefined, { 'Idempotency-Key': 'idem-route-0002' }));
+    expect(retry.status).toBe(409);
+    expect(((await retry.json()) as any).code).toBe('EXAM_ALREADY_PASSED');
+  });
+  it('estudo incompleto não inicia tentativa e devolve só códigos de pendência', async () => {
+    const db = lmsExamDb({ viewed: [1] }); await publishExam(db);
+    const r = await call(db, '/api/lms/exams/matriculas/10/tentativas', json('POST', undefined, { 'Idempotency-Key': 'idem-route-0001' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ code: 'EXAM_STUDY_NOT_COMPLETE' });
+  });
+  it('outra pessoa recebe 404 na matrícula alheia', async () => {
+    const db = lmsExamDb(); await publishExam(db);
+    expect((await call(db, '/api/lms/exams/matriculas/10/prova', {}, { __mockUserId: OTHER_USER })).status).toBe(404);
+  });
+});
+
+describe('rotas admin — publicar prova e vincular à edição', () => {
+  const asAdmin = { __mockRole: 'admin', __mockUserId: 1 };
+  it('publica o plano uma vez, vincula à edição e recusa reenvio', async () => {
+    const db = lmsExamDb(); const plan = await publishExam(db, false);
+    // publishExam already published the plan; a fresh version goes through the route.
+    const v2 = { ...plan, version: 2 };
+    const pub = await call(db, '/api/lms/exams/admin/cursos/26/provas', json('POST', { plan: v2 }), asAdmin);
+    expect(pub.status).toBe(201);
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/provas', json('POST', { plan: v2 }), asAdmin)).status).toBe(409);
+    expect((await call(db, '/api/lms/exams/admin/cursos/27/provas', json('POST', { plan: v2 }), asAdmin)).status).toBe(422);
+    const bindBody = { packageSha256: PKG, statutoryAssessmentRequired: true, approvalNote: 'Aprovado após revisão editorial' };
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', { ...bindBody, statutoryAssessmentRequired: null }), asAdmin)).status).toBe(422);
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', bindBody), asAdmin)).status).toBe(201);
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', bindBody), asAdmin)).status).toBe(409);
+  });
+  it('aluno não administra provas', async () => {
+    const db = lmsExamDb(); const plan = await publishExam(db, false);
+    const r = await call(db, '/api/lms/exams/admin/cursos/26/provas', json('POST', { plan: { ...plan, version: 2 } }), { __mockRole: 'student' });
+    expect(r.status).toBe(403);
+    expect(await r.json()).toMatchObject({ code: 'RBAC_FORBIDDEN' });
+  });
+});

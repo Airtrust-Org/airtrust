@@ -149,6 +149,7 @@ import lmsMatriculasCompletionDiagnosticsRoutes from './routes/lms-matriculas-co
 import lmsAssetsRoutes from './routes/lms-assets';
 import lmsProgressoRoutes from './routes/lms-progresso';
 import lmsExamQuestionBankAdminRoutes from './routes/lms-exam-question-bank-admin';
+import lmsExamLearnerRoutes from './routes/lms-exam-learner';
 import lmsRelatoriosRoutes from './routes/lms-relatorios';
 import lmsEdappLegadoRoutes from './routes/lms-edapp-legado';
 import conhecimentoAtivoRoutes from './routes/conhecimento-ativo';
@@ -804,6 +805,8 @@ app.route('/api/lms/matriculas', lmsMatriculasRoutes);
 app.route('/api/lms/matriculas/mel-manutencao', lmsMatriculasMelManutencaoRoutes);
 // Default-off: answers 503 unless ENVIRONMENT=staging and the review flag is set.
 app.route('/api/lms/exams/admin', lmsExamQuestionBankAdminRoutes);
+// Default-off learner runtime (staging flag); passing only yields evidence for /finalizar.
+app.route('/api/lms/exams', lmsExamLearnerRoutes);
 app.route('/api/lms', lmsProgressoRoutes);
 app.route('/api/lms', lmsAssetsRoutes);
 app.route('/api/lms', lmsRelatoriosRoutes);

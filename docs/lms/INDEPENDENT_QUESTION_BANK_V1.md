@@ -25,3 +25,12 @@ Vitest focado em `worker-airtrust/src/__tests__/lib/lms-independent-question-ban
 - `services/lms-exams/exam-attempt-store.ts`: publicar plano, vincular à edição, iniciar/retomar tentativa (idempotente), gravar resposta, enviar e corrigir no Worker. Sem rota de aluno ainda: quem chamar deve autenticar, provar a titularidade da matrícula e checar `isStudyCompleteAwaitingExam` antes.
 - A prova aprovada só entra na conclusão como evidência: `ScormManifestClosureEvidence.externalExam` é preenchido para pacotes `assessment.mode=EXTERNAL` com tentativa aprovada no ciclo ativo e na edição servida. Sem o schema (produção hoje) a busca falha fechada e o comportamento continua `EXTERNAL_ASSESSMENT_PENDING`.
 - `decideScoreF5Finalization` continua sem uso em runtime: ligá-la exige a política congelada no ciclo e a generalização do engine, previstas para o lote da tela do aluno.
+
+## Estado após o Lote 3 (02/11/2026)
+- **Rotas do aluno** em `/api/lms/exams` (`routes/lms-exam-learner.ts`), desligadas por padrão: 503 fora de `ENVIRONMENT=staging` com `LMS_EXAM_LEARNER_STAGING=REVIEWED_SCHEMA_ONLY`.
+  - `GET /matriculas/:id/prova` estado (`NOT_AVAILABLE|STUDY_PENDING|READY|PASSED|COMPLETED`), `POST /matriculas/:id/tentativas` (cabeçalho `Idempotency-Key`), `PUT /tentativas/:id/respostas`, `POST /tentativas/:id/enviar`.
+  - Titularidade e prontidão do estudo são recalculadas no servidor a cada chamada (`services/lms-exams/exam-gate.ts`); só o titular da matrícula passa e matrícula alheia responde 404.
+  - Aprovar não conclui: o aluno chama o `POST /api/lms/matriculas/:id/finalizar` existente, que agora enxerga a prova aprovada como evidência. Não há segundo writer.
+- **Rotas admin** (mesmo prefixo `/exams/admin`, mesma flag de staging): `POST /cursos/:id/provas` publica o plano (imutável) e `POST /cursos/:id/provas/:examId/versoes/:v/vinculo` o vincula à edição, com a classificação regulatória obrigatória.
+- **Tela** `LmsProva` em `/lms/provas/:matriculaId` (radios agrupados por questão, salvamento a cada resposta, confirmação de envio com aviso de questões em branco, resultado sem gabarito) e botão "Ir para a prova final" no player quando a prova é a única pendência.
+- Continua fora: consulta ao conteúdo durante a prova, tela de admin para montar a prova, limite/intervalo de retentativas (hoje sem limite), tempo, acomodações e a ligação de `decideScoreF5Finalization`.

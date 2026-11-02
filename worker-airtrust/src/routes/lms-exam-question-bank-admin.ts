@@ -12,15 +12,16 @@ import {auth} from '../middleware/auth';
 import {requireRole} from '../middleware/rbac';
 import {getEmpresaId,getTenantContext} from '../middleware/tenant';
 import type {Env} from '../types';
-import {QuestionBankError, type QuestionContent} from '../lib/lms-exams/question-bank-domain';
+import {type ExamPlan, type QuestionContent} from '../lib/lms-exams/question-bank-domain';
 import {
   QuestionStoreError,createAdminQuestionDraft,editAdminQuestionDraft,
   getAdminQuestion,listAdminQuestions,reviewAdminQuestion,
   publishAdminQuestion,forkAdminPublishedQuestion,
 } from '../services/lms-exams/question-bank-store';
+import {bindExamToEdition,publishExamPlan,type ExamAdminActor} from '../services/lms-exams/exam-attempt-store';
+import {exact,examErrorCode,examHttpStatus,parseBoundedJson,positive} from './lms-exam-route-helpers';
 
 const routes=new Hono<{Bindings:Env}>();
-const MAX_BODY=48*1024;
 
 routes.use('*',async(c,next)=>{
   const flag=Reflect.get(c.env, 'LMS_EXAM_QUESTION_ADMIN_STAGING');
@@ -37,73 +38,18 @@ routes.use('*',async(c,next)=>{
   c.header('Pragma','no-cache');
 });
 
-function positive(value:string):number{
-  const n=Number(value);
-  if(!/^[1-9][0-9]*$/.test(value)||!Number.isSafeInteger(n)){
-    throw new QuestionStoreError('EXAM_QUESTION_REFERENCE_INVALID');
-  }
-  return n;
-}
 function actor(c:Parameters<typeof getEmpresaId>[0],courseId:string){
   const id=Number((c.get as (key:string)=>unknown)('userId'));
   const role=getTenantContext(c).role;
   return {empresaId:getEmpresaId(c),cursoId:positive(courseId),
     userId:id,tenantRole:role};
 }
-async function parseBoundedJson(c: {req:{raw:Request}}):Promise<Record<string,unknown>>{
-  const type=c.req.raw.headers.get('content-type')||'';
-  if(!/^application\/json(?:;|$)/i.test(type)) {
-    throw new QuestionStoreError('EXAM_JSON_CONTENT_TYPE_REQUIRED');
-  }
-  const declared=Number(c.req.raw.headers.get('content-length')||0);
-  if(Number.isFinite(declared) && declared>MAX_BODY){
-    throw new QuestionStoreError('EXAM_JSON_BODY_TOO_LARGE');
-  }
-  const reader=c.req.raw.body?.getReader();
-  if(!reader)throw new QuestionStoreError('EXAM_JSON_REQUIRED');
-  const chunks:Uint8Array[]=[];
-  let bytes=0;
-  try {
-    for(;;){
-      const {done,value}=await reader.read();
-      if(done)break;
-      bytes+=value.byteLength;
-      if(bytes>MAX_BODY){
-        await reader.cancel();
-        throw new QuestionStoreError('EXAM_JSON_BODY_TOO_LARGE');
-      }
-      chunks.push(value);
-    }
-  }finally{reader.releaseLock();}
-  const joined=new Uint8Array(bytes);
-  let offset=0;
-  for(const chunk of chunks){joined.set(chunk,offset);offset+=chunk.length;}
-  let data:unknown;
-  try{data=JSON.parse(new TextDecoder().decode(joined));}
-  catch{throw new QuestionStoreError('EXAM_JSON_INVALID');}
-  if(!data||typeof data!=='object'||Array.isArray(data)){
-    throw new QuestionStoreError('EXAM_JSON_INVALID');
-  }
-  return data as Record<string,unknown>;
-}
-function exact(body:Record<string,unknown>,keys:readonly string[]):void{
-  if(Object.keys(body).sort().join('|')!==[...keys].sort().join('|')){
-    throw new QuestionStoreError('EXAM_JSON_FIELDS_INVALID');
-  }
-}
 function getVersion(c:{req:{param:(key:string)=>string}}){
   return positive(c.req.param('revision'));
 }
 routes.onError((error,c)=>{
-  if(error instanceof QuestionStoreError||error instanceof QuestionBankError){
-    const code=error.code;
-    const status=code.includes('NOT_FOUND')?404:
-      code.includes('RBAC')||code.includes('TENANT')?403:
-      code.includes('CONCURRENT')||code.includes('IMMUTABLE')||
-      code.includes('NOT_EDITABLE')||code.includes('REQUIRED')?409:422;
-    // No SQL, answer keys, payload or stack traces returned to clients.
-    return c.json({success:false,code},status);
-  }
+  const code=examErrorCode(error);
+  if(code)return c.json({success:false,code},examHttpStatus(code));
   throw error;
 });
 routes.get('/cursos/:cursoId/questoes',async c=>{
@@ -152,6 +98,35 @@ routes.post('/cursos/:cursoId/questoes/:questionId/versoes/:revision/nova-revisa
   const a=actor(c,c.req.param('cursoId'));
   const data=await forkAdminPublishedQuestion(c.env.DB,a,
     c.req.param('questionId'),getVersion(c));
+  return c.json({success:true,data},201);
+});
+function examActor(c:Parameters<typeof getEmpresaId>[0]):ExamAdminActor{
+  return {empresaId:getEmpresaId(c),userId:Number((c.get as (key:string)=>unknown)('userId')),
+    tenantRole:getTenantContext(c).role};
+}
+// Plans: published once, immutable. The body carries references to published
+// questions only (no answer key); the Worker re-validates every reference.
+routes.post('/cursos/:cursoId/provas',async c=>{
+  const cursoId=positive(c.req.param('cursoId'));
+  const body=await parseBoundedJson(c);
+  exact(body,['plan']);
+  const plan=body.plan as ExamPlan;
+  if(!plan||plan.courseId!==cursoId){
+    throw new QuestionStoreError('EXAM_PLAN_INVALID_COURSE');
+  }
+  const data=await publishExamPlan(c.env.DB,examActor(c),plan);
+  return c.json({success:true,data},201);
+});
+routes.post('/cursos/:cursoId/provas/:examId/versoes/:version/vinculo',async c=>{
+  const body=await parseBoundedJson(c);
+  exact(body,['packageSha256','statutoryAssessmentRequired','approvalNote']);
+  const data=await bindExamToEdition(c.env.DB,examActor(c),{
+    cursoId:positive(c.req.param('cursoId')),examId:c.req.param('examId'),
+    version:positive(c.req.param('version')),
+    packageSha256:body.packageSha256 as string,
+    statutoryAssessmentRequired:body.statutoryAssessmentRequired as boolean,
+    approvalNote:body.approvalNote as string,
+  });
   return c.json({success:true,data},201);
 });
 export default routes;
