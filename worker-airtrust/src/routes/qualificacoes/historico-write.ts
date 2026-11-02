@@ -29,7 +29,7 @@ import {
   isG1SemQualificacaoCode,
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
-import { requireOperationalAccess } from '../../services/operational-domain-access';
+import { requireOperationalAccess } from '../../middleware/operational-domain-access';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo

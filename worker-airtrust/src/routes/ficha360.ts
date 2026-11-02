@@ -18,7 +18,7 @@ import { getSchemaColumns } from '../utils/db-schema';
 import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { resolveLmsEffectiveProgress } from '../lib/lms/lms-progress-guardrails';
 
 const app = new Hono<{ Bindings: Env }>();

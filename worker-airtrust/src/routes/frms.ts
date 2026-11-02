@@ -101,7 +101,7 @@ import {
 } from '../lib/frms/day-explanation-domain';
 import { buildFrmsEffectivenessComparison, buildFrmsSimulationComparison, COMPLETE_FRMS_CHECKIN_EXISTS_SQL, maskFrmsTimelineRows } from '../lib/frms/effectiveness-read-policy';
 import { getSigvoosConfig } from '../services/sigvoos-frms';
-import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../middleware/employee-sector-access';
 import fadigaAcumulada from './frms-fadiga-acumulada';
 import firaRoutes from './frms-fira';
 import frmsRelatoriosConfig from './frms-relatorios-config';

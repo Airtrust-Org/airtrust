@@ -9,8 +9,8 @@ import {
   getQualificationComplianceSummary,
 } from '../services/dashboardService';
 import { buildSnapshot as buildTrainingComplianceSnapshot } from './compliance-treinamentos';
-import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
-import type { EmployeeSectorAccess } from '../services/employee-sector-access';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
+import type { EmployeeSectorAccess } from '../middleware/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());

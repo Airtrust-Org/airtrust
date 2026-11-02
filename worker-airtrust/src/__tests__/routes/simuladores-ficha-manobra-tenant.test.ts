@@ -4,7 +4,7 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: () => 6,
 }));
 
-vi.mock('../../services/operational-domain-access', () => ({
+vi.mock('../../middleware/operational-domain-access', () => ({
   requireOperationalAccess:
     () => async (_c: unknown, next: () => Promise<void>) => {
       await next();

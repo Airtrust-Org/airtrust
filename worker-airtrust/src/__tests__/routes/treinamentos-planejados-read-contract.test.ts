@@ -24,7 +24,7 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: async () => ({ mode: 'all', setorIds: [], funcionarioId: null }),
   filterRequestedSetorIdsByAccess: (requested: number[]) => requested,
 }));

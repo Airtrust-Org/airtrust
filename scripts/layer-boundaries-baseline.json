@@ -1,13 +1,4 @@
 {
   "comment": "Known layer-boundary violations tolerated by scripts/guard-layer-boundaries.mjs. This list may only shrink.",
-  "violations": [
-    "no-hono-in-core|worker-airtrust/src/lib/frms/access.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/lib/lms/lms-schema-state.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/repositories/controle-voos/rdv-repository.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/controle-voos/rdv-etapas.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/controle-voos/rdv-workflow.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/employee-sector-access.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/operational-domain-access-core.ts|hono",
-    "no-hono-in-core|worker-airtrust/src/services/operational-domain-access.ts|hono"
-  ]
+  "violations": []
 }

@@ -6,7 +6,7 @@ import type { Env } from '../types';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 
 const setores = new Hono<{ Bindings: Env }>();
 

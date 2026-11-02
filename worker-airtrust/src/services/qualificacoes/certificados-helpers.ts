@@ -7,7 +7,7 @@ import { notFound } from '../../middleware/error-handler';
 import {
   assertFuncionarioInScope,
   type EmployeeSectorAccess,
-} from '../employee-sector-access';
+} from '../../middleware/employee-sector-access';
 
 // ─── Tipos locais ────────────────────────────────────────────────────────────
 

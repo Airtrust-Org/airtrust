@@ -26,7 +26,7 @@ import {
   employeeSectorSql,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { assertCoursePolicyChangeAllowed } from '../lib/lms/lms-course-policy-guard';

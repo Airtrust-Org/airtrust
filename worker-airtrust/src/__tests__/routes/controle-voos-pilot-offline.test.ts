@@ -93,9 +93,12 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../repositories/controle-voos/rdv-repository', () => ({
+vi.mock('../../middleware/controle-voos-rdv-context', () => ({
   getActorId: () => 70,
   getEmpresaIdSafe: () => 7,
+}));
+
+vi.mock('../../repositories/controle-voos/rdv-repository', () => ({
   getFlightOrThrow,
   getActiveRdvByFlight,
   getFuncionarioIdForUser,
@@ -108,6 +111,9 @@ vi.mock('../../services/controle-voos/rdv-workflow', () => ({
     editarRascunhoProprio: 'voos.rdv.editar_rascunho_proprio',
     criarProprio: 'voos.rdv.criar_proprio',
   },
+}));
+
+vi.mock('../../middleware/controle-voos-rdv-access', () => ({
   requireAnyRdvAccess: () => async (_c: any, next: () => Promise<void>) => next(),
   assertRdvSelfScope,
   hasRdvCapability,

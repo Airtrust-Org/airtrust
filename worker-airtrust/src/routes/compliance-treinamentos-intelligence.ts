@@ -21,7 +21,7 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 import {
   buildTrainingComplianceReportRows,

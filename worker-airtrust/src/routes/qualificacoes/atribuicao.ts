@@ -19,9 +19,9 @@ import {
   appendEmployeeSectorFilter,
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 import { z } from 'zod';
-import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../middleware/operational-domain-access';
 import {
   createQualificationHistoryAtomic,
   QualificationAtomicError,

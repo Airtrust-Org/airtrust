@@ -24,7 +24,7 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
 }));
 

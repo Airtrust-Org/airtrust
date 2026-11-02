@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canSeeFrmsTeamScope, canSeeFrmsTeamScopeForContext } from '../../lib/frms/access';
+import { canSeeFrmsTeamScope } from '../../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../../middleware/frms-access';
 
 
 

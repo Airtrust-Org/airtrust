@@ -13,7 +13,7 @@ import type { Env, ApiResponse, QualificacaoReclassQueueItem } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 
 // Reclassification mutates an existing qualificacoes_historico row (its
 // target tipo), so it's resourceType 'qualificacao_historico' — domain

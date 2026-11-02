@@ -7,7 +7,7 @@ import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria'
 import {
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   canReuseMatriculaCycle,
   ensureMatriculaCycle,
