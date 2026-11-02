@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FICHA_AVALIACAO_FAIXAS } from '../avaliacaoScale';
+import { FICHA_AVALIACAO_FAIXAS } from '../../../../lib/simuladores/avaliacaoScale';
 import {
   NOTECHS_CATEGORIA,
   NOTECHS_DESCRITORES,
@@ -12,7 +12,7 @@ import {
   getNotechsItensPorGrupo,
   isNotechsCategoria,
   splitManobrasNotechs,
-} from '../notechs';
+} from '../../../../lib/simuladores/notechs';
 
 describe('NOTECHS — grupos e itens (Parte 2 do modelo funcional)', () => {
   it('tem exatamente 4 grupos (Cooperação, Liderança, Consciência Situacional, Tomada de Decisão)', () => {

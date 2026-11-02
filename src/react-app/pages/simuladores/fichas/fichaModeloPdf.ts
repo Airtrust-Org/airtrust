@@ -10,7 +10,7 @@ import type { FichaPDFData } from '@/react-app/services/pdf-ficha-client';
 import { getSpecialEventSessionDefinition } from '@/shared/simuladores/special-event-sessions';
 import { resolveModeloSessaoObservacoesOverride } from '@/shared/simuladores/modelos-sessao-observacoes';
 import { NOTECHS_CANONICAL_ITEMS } from '@/shared/simuladores/notechs-canonical';
-import { NOTECHS_ITENS as LEGACY_NOTECHS_ITEMS } from './notechs';
+import { NOTECHS_ITENS as LEGACY_NOTECHS_ITEMS } from '../../../lib/simuladores/notechs';
 
 export interface ModeloSessaoResumo {
   id: number;

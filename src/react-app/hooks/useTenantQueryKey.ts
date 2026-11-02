@@ -1,5 +1,5 @@
-import { useAuth } from '../hooks/useAuth';
-import { tenantQueryKey } from './query-client';
+import { useAuth } from './useAuth';
+import { tenantQueryKey } from '../lib/query-client';
 
 /**
  * Hook that returns the current empresaId for tenant-scoped query keys.

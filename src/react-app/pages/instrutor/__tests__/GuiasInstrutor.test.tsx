@@ -12,7 +12,7 @@ vi.mock('@/react-app/hooks/guias-instrutor/useGuiasInstrutorPermissions', () => 
   useGuiasInstrutorPermissions: () => mockPermissoes,
 }));
 
-vi.mock('@/react-app/lib/guias-instrutor/api', () => ({
+vi.mock('@/react-app/hooks/guias-instrutor/api', () => ({
   useGuiasInstrutor: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useProximasSessoesComGuia: () => ({ data: [], isLoading: false }),
   baixarGuiaPdf: vi.fn(),
