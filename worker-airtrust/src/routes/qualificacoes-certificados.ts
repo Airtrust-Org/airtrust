@@ -7,7 +7,7 @@ import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria'
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   assertScopedHistoricoAccess,
   canAdministerHistoricalDeletedEmployeeCertificates,

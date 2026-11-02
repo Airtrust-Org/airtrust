@@ -21,7 +21,7 @@ import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
 } from '../../../src/shared/simuladores/ficha-header';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import {
   fichaInstructorMetaJoin,
   fichaInstructorMetaSelect,

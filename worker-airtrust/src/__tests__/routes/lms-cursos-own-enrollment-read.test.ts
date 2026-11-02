@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { hasOwnEnrolledCourseReadAccess } from '../../routes/lms-cursos-legacy';
-import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 const student: EmployeeSectorAccess = {
   mode: 'self', funcionarioId: 17, setorIds: [4],

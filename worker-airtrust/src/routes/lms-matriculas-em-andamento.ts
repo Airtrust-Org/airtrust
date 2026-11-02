@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
-import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { resolveLmsEffectiveProgress } from '../lib/lms/lms-progress-guardrails';
 import { parsePositiveInt } from '../services/lms-matricula-runtime-domain';
 import type { Env } from '../types';

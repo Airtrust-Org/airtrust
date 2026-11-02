@@ -5,7 +5,7 @@ import {
   assertOperationalAccess,
   resolveResourceDomain,
   requireOperationalAccess,
-} from '../../services/operational-domain-access';
+} from '../../middleware/operational-domain-access';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
@@ -1447,7 +1447,7 @@ describe('multi-participant session authorization (Item 5)', () => {
   it('assertFuncionarioIdsWithinOperationalScope: adicionar participante do próprio setor é permitido, de setor externo é negado', async () => {
     const db = createFixtureDb(buildFixturesWithTwoSetorParticipants());
     const { assertFuncionarioIdsWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     await expect(
       assertFuncionarioIdsWithinOperationalScope({
@@ -1475,7 +1475,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('permite quando o setor de destino está no domínio+escopo do gestor', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1490,7 +1490,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('permite gestor de Manutenção mover funcionário para setor de Manutenção (não default OPERACOES)', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1505,7 +1505,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('nega quando o domínio do setor de destino está fora do escopo do gestor', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1520,7 +1520,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('nega (fail-closed) quando o setor de destino não tem domínio classificado', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1535,7 +1535,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('nega quando o setor é do mesmo domínio mas fora do setor gerenciado (Bloqueador 3 aplicado ao Item 3)', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1550,7 +1550,7 @@ describe('assertSetorWithinOperationalScope (Item 3 — funcionário creation/tr
   it('é no-op em tenant legado (RBAC desativado)', async () => {
     const db = makeDb();
     const { assertSetorWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertSetorWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1567,7 +1567,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('permite atribuir qualificação OPERACOES a funcionário do próprio setor', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1583,7 +1583,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('permite gestor de Manutenção atribuir qualificação de Manutenção (não default OPERACOES)', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1604,7 +1604,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
       ],
     });
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
@@ -1621,7 +1621,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('permite somente em renovação o fallback pelo domínio do setor para tipo legado sem domínio', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
@@ -1650,7 +1650,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('nega quando o funcionário está em outro setor do mesmo domínio', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1666,7 +1666,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('nega (fail-closed) quando a categoria da qualificação não tem domínio classificado', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1682,7 +1682,7 @@ describe('assertQualificacaoAtribuicaoWithinOperationalScope (Item 3 — atribui
   it('é no-op em tenant legado (RBAC desativado)', async () => {
     const db = makeDb();
     const { assertQualificacaoAtribuicaoWithinOperationalScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     await expect(
       assertQualificacaoAtribuicaoWithinOperationalScope({
         db: db as unknown as D1Database,
@@ -1700,7 +1700,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('administrador nunca é restrito, mesmo com RBAC ativo', async () => {
     const db = makeDb();
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
       empresaId: 2,
@@ -1713,7 +1713,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('instrutor/aluno nunca são restritos por este helper (modelo de acesso próprio)', async () => {
     const db = makeDb();
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const instrutorScope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
       empresaId: 2,
@@ -1733,7 +1733,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('gestor em tenant legado (RBAC desativado) não é restrito', async () => {
     const db = makeDb();
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
       empresaId: 1, // legado
@@ -1746,7 +1746,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('gestor com RBAC ativo é restrito aos seus domínios+setores', async () => {
     const db = makeDb();
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
       empresaId: 2,
@@ -1761,7 +1761,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('setor gerido sem domínio E sem qualificação vinculada permanece AMBIGUOUS_UNCLASSIFIED — fail-closed, nunca libera adivinhando', async () => {
     const db = makeDb();
     const { resolveOperationalAccess, resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     // O gestor 110 gerencia setores 10 (OPERACOES, classificado) e 12 (sem
     // dominio_codigo, sem nenhuma qualificação vinculada) — ambos com linha
@@ -1799,7 +1799,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
       ],
     });
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
@@ -1826,7 +1826,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
       ],
     });
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
@@ -1844,7 +1844,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
       qualificacoesTiposSetores: [{ tipo_id: 1, setor_id: 12, empresa_id: 3, deleted_at: null }],
     });
     const { resolveOperationalReadScope } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
 
     const scope = await resolveOperationalReadScope({
       db: db as unknown as D1Database,
@@ -1859,7 +1859,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
   it('resolveManagedSectorDomainFallback: setor de outro tenant nunca resolve, mesmo com o mesmo ID', async () => {
     const db = makeDb();
     const { resolveManagedSectorDomainFallback, activeDomainCodes } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const activeCodes = await activeDomainCodes(db as unknown as D1Database);
 
     // Setor 20 existe, mas pertence à empresa 3 — consultando pela empresa 2
@@ -1879,7 +1879,7 @@ describe('resolveOperationalReadScope (Item 1 — read-side filtering)', () => {
 describe('appendOperationalReadFilter (Item 1 — SQL filter builder)', () => {
   it('é no-op quando o escopo não é restrito', async () => {
     const { appendOperationalReadFilter } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const conditions: string[] = ['x = 1'];
     const bindings: unknown[] = [];
     appendOperationalReadFilter(
@@ -1897,7 +1897,7 @@ describe('appendOperationalReadFilter (Item 1 — SQL filter builder)', () => {
 
   it('adiciona filtro IN por domínio e por setor quando restrito', async () => {
     const { appendOperationalReadFilter } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     appendOperationalReadFilter(
@@ -1912,7 +1912,7 @@ describe('appendOperationalReadFilter (Item 1 — SQL filter builder)', () => {
 
   it('fail-closed: restrito com domínios/setores vazios nunca retorna tudo', async () => {
     const { appendOperationalReadFilter } =
-      await import('../../services/operational-domain-access');
+      await import('../../middleware/operational-domain-access');
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     appendOperationalReadFilter(

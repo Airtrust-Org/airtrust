@@ -19,7 +19,7 @@ import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import type { Env } from '../types';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { ensureMatriculaCycle } from '../services/lms-matricula-cycle';
 

@@ -10,7 +10,7 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
   assertScopedHistoricoAccess,
@@ -25,7 +25,7 @@ import {
   buildCertificadoR2Key,
   CertificateGenerationError,
 } from '../services/generate-certificate';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import {
   listTrainingComplianceEvidenceProfilesForQualification,
   normalizeTrainingComplianceEvidenceProfile,

@@ -9,7 +9,7 @@ import {
   requireOperationalAccess,
   resolveOperationalReadScope,
   normalizeTenantRole,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 
 export const requireOperacoesSessao = (action: 'create' | 'update' | 'delete') =>
   requireOperationalAccess({ domain: 'OPERACOES', action, resourceType: 'simulador_sessao' });

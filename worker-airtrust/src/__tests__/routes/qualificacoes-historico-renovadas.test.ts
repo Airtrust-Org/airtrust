@@ -74,7 +74,7 @@ vi.mock('../../services/qualificacoes/historico-helpers', () => ({
   categoriaCandidatosAtivosExpr: () => '1',
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: employeeSectorAccessMock,
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));

@@ -6,7 +6,7 @@ import { getTenantContext } from '../middleware/tenant';
 import {
   buildFuncionarioScopeWhere,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   evaluateRosterEligibility,
   resolveSimulatorPlanningConfig,

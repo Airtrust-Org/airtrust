@@ -10,20 +10,10 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getActiveRdvByFlight,
-  getActorId,
-  getEmpresaIdSafe,
-  getFlightOrThrow,
-  getFuncionarioIdForUser,
-  isCrewOnFlight,
-} from '../repositories/controle-voos/rdv-repository';
-import {
-  RDV_CAPABILITIES,
-  assertRdvSelfScope,
-  hasRdvCapability,
-  requireAnyRdvAccess,
-} from '../services/controle-voos/rdv-workflow';
+import { getActiveRdvByFlight, getFlightOrThrow, getFuncionarioIdForUser, isCrewOnFlight } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES } from '../services/controle-voos/rdv-workflow';
+import { assertRdvSelfScope, hasRdvCapability, requireAnyRdvAccess } from '../middleware/controle-voos-rdv-access';
 import {
   buildPilotOfflineLeaseClaims,
   signPilotOfflineLease,

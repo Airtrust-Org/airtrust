@@ -36,14 +36,14 @@ import {
   employeeSectorSql,
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import {
   resolveOperationalReadScope,
   appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 import { resolveLmsEffectiveProgress } from '../lib/lms/lms-progress-guardrails';
 
 const app = new Hono<{ Bindings: Env }>();

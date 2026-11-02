@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
   type FrmsOperationalSnapshotItem,
 } from '../lib/frms/operational-snapshot';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import { buildDecisaoFields } from '../lib/frms/decision-policy';
 
 type ProjectionContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;

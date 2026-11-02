@@ -16,7 +16,7 @@ vi.mock('../../middleware/tenant', () => ({
 }));
 
 // Exercise the handler's own row-level authorization with an authorized caller.
-vi.mock('../../services/operational-domain-access', () => ({
+vi.mock('../../middleware/operational-domain-access', () => ({
   requireOperationalAccess: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 vi.mock('../../services/simuladores/shared', () => ({ audit: vi.fn() }));

@@ -17,7 +17,7 @@ vi.mock('../../middleware/auth', () => ({
 vi.mock('../../middleware/tenant', () => ({
   getTenantContext: (c: any) => ({ empresaId: Number(c.get('empresaId')) }),
 }));
-vi.mock('../../services/operational-domain-access', () => ({
+vi.mock('../../middleware/operational-domain-access', () => ({
   requireOperationalAccess: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 

@@ -17,7 +17,7 @@ import { getSchemaColumns } from '../../utils/db-schema';
 import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 import { forbidden } from '../../middleware/error-handler';
 import { safe } from './safe-handler';
 import { buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr } from '../../services/qualificacoes/historico-helpers';
@@ -35,7 +35,7 @@ import {
   appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
-} from '../../services/operational-domain-access';
+} from '../../middleware/operational-domain-access';
 import { buildQualificationHistoryDomainColumn } from './historico-domain';
 import writeRouter from './historico-write';
 

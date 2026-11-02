@@ -11,7 +11,7 @@ import { AppError } from '../utils/errors';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import {
   gerarChaveR2,
   gerarNomeArquivoPadronizado,
