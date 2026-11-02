@@ -61,7 +61,7 @@ describe('operational reliability audit ratchets', () => {
   });
   it('atomically compensates failed simulator-session creation', () => {
     const route = read('worker-airtrust/src/routes/simuladores-sessoes.ts');
-    const cleanup = read('worker-airtrust/src/routes/simuladores-shared-session-cancellation.ts');
+    const cleanup = read('worker-airtrust/src/services/simuladores/shared-session-cancellation.ts');
 
     expect(route).toContain('let createdSessaoId: number | null = null');
     expect(route).toContain('await cleanupFailedSharedCreate(c.env.DB, createdSessaoId)');

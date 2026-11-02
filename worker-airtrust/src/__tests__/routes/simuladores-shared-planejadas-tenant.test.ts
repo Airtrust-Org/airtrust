@@ -14,7 +14,7 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { criarQualificacoesPlanejadas } from '../../routes/simuladores-shared';
+import { criarQualificacoesPlanejadas } from '../../services/simuladores/shared';
 
 const NodeDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
   new (location: string): DatabaseSync;

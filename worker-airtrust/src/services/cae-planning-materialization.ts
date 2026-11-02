@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { executeSharedSessionCreation } from '../routes/simuladores-shared-session-helpers';
-import { validateAndNormalizeSharedSessionRequest } from '../routes/simuladores-shared-session-logic';
+import { executeSharedSessionCreation } from './simuladores/shared-session-helpers';
+import { validateAndNormalizeSharedSessionRequest } from './simuladores/shared-session-logic';
 import { canMaterializeSimulatorSessions } from './cae-planning-approval';
 import { executeNormalSessionCreation } from './cae-planning-normal-session';
 import type { SimulatorPlanningSourceSnapshot } from './cae-planning-revalidation';

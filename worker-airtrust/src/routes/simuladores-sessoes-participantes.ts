@@ -7,13 +7,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getTenantContext } from '../middleware/tenant';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
-import {
-  requireAdminForDelete,
-  syncSessaoEscalaEventos,
-  filtrarChecksCompativeisComModelo,
-  getSimuladorModeloAeronave,
-  resolveTemplateIdSessao,
-} from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { syncSessaoEscalaEventos, filtrarChecksCompativeisComModelo, getSimuladorModeloAeronave, resolveTemplateIdSessao } from '../services/simuladores/shared';
 import {
   requireOperationalAccess,
   assertFuncionarioIdsWithinOperationalScope,
