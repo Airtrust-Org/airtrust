@@ -220,8 +220,7 @@ function emitScormCommitTelemetry(
   });
 }
 
-// Enriquece a linha da matrícula com o progresso efetivo (nunca fabrica conclusão:
-// a regra vive em resolveLmsEffectiveProgress).
+// Preserva o progresso efetivo sem fabricar conclusão (resolveLmsEffectiveProgress).
 function withEffectiveProgress(row: Record<string, unknown>) {
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: row.status as string | null,
@@ -243,13 +242,9 @@ app.get('/minhas-ead', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const funcionarioId = await resolveCallerFuncionarioId(c, db);
 
-  if (!funcionarioId) {
-    // Administradores/gestores podem administrar cursos sem cadastro como funcionários.
-    // Sem identidade de aluno não existem matrículas próprias; nunca consultar
-    // matrículas de outros funcionários como fallback.
-    if (hasRole(c, 'admin', 'manager')) return c.json({ success: true, data: [] });
-    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
-  }
+  // Sem vínculo funcional, a conta administrativa não possui matrículas pessoais.
+  if (!funcionarioId && hasRole(c, 'admin', 'manager')) return c.json({ success: true, data: [] });
+  if (!funcionarioId) throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
 
   const rows = await listMinhasEadEnrollments(db, { funcionarioId, empresaId });
 
@@ -268,14 +263,10 @@ app.get('/minhas', async (c) => {
   const limit = Math.min(parsePositiveInt(c.req.query('limit'), 100), 200);
   const offset = (page - 1) * limit;
 
-  if (!funcionarioId) {
-    // A lista pessoal de quem administra sem vínculo funcional é vazia;
-    // a gestão usa endpoints próprios e continua sob RBAC/tenant.
-    if (hasRole(c, 'admin', 'manager')) {
-      return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
-    }
-    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
+  if (!funcionarioId && hasRole(c, 'admin', 'manager')) {
+    return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
   }
+  if (!funcionarioId) throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
 
   const total = await countMinhasEnrollments(db, { funcionarioId, empresaId });
   const rows = await listMinhasEnrollments(db, { funcionarioId, empresaId, limit, offset });
