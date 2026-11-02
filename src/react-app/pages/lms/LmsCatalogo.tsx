@@ -92,6 +92,16 @@ import {
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Non-manager accounts (including COMPLIANCE/USUARIO) can still be learners.
+ * Managers only query their own enrollments while explicitly in learner mode.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function shouldLoadPersonalEnrollments(canManage: boolean, studentMode: boolean): boolean {
+  return !canManage || studentMode;
+}
+
+
 type TabId = 'meus' | 'catalogo';
 
 const DEFAULT_CATEGORIES = [
@@ -1840,7 +1850,8 @@ export default function LmsCatalogo() {
   const operationalAccess = useOperationalAccess();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
   const canManage = isAdmin || isGestor;
-  const restrictToEnrolledCourses = isAluno || isInstrutor;
+  // Management role takes precedence when the same account also has learner permissions.
+  const restrictToEnrolledCourses = !canManage && (isAluno || isInstrutor);
   const roleView = resolveLmsCatalogRoleView({ canManage, restrictToEnrolledCourses });
   const showAdministrativeFilters = roleView.showAdministrativeFilters;
 
@@ -1880,7 +1891,10 @@ export default function LmsCatalogo() {
     },
     { enabled: canManage },
   );
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas();
+  // The admin catalog does not need an employee link, but all non-manager roles
+  // (including COMPLIANCE and USUARIO) still need their personal enrollments.
+  const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);
+  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(loadPersonalEnrollments);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
@@ -1906,7 +1920,8 @@ export default function LmsCatalogo() {
   const loadingCourses = canManage
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
-  const myMatriculas = matriculas ?? [];
+  // Disabled queries may still expose stale React Query cache; never use personal rows in admin mode.
+  const myMatriculas = loadPersonalEnrollments ? (matriculas ?? []) : [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
   const enrolledIds = new Set(
     myMatriculas.filter((m) => m.status !== 'CANCELADO').map((m) => m.curso_id),

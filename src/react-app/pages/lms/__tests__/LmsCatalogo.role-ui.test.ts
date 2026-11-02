@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canMutateLmsCourse, resolveLmsCatalogRoleView } from '../LmsCatalogo';
+import { canMutateLmsCourse, resolveLmsCatalogRoleView, shouldLoadPersonalEnrollments } from '../LmsCatalogo';
 
 describe('resolveLmsCatalogRoleView', () => {
   it('remove filtros administrativos e usa visão limpa para aluno', () => {
@@ -36,6 +36,25 @@ describe('resolveLmsCatalogRoleView', () => {
       showAdministrativeFilters: true,
       title: 'Catálogo LMS',
     });
+  });
+});
+
+describe('personal enrollment query by catalog role', () => {
+  it('does not request employee-linked enrollments for admin or gestor in management view', () => {
+    expect(shouldLoadPersonalEnrollments(true, false)).toBe(false);
+  });
+
+  it('loads existing enrollments for COMPLIANCE/USUARIO without ALUNO or INSTRUTOR role', () => {
+    // No management privilege and no explicit learner tab are required.
+    const nonManagerCanResume = shouldLoadPersonalEnrollments(false, false);
+    expect(nonManagerCanResume).toBe(true);
+    const existingEnrollments = [{ curso_id: 55, status: 'EM_ANDAMENTO' }];
+    const visible = nonManagerCanResume ? existingEnrollments : [];
+    expect(visible).toContainEqual({ curso_id: 55, status: 'EM_ANDAMENTO' });
+  });
+
+  it('loads enrollments for gestores in their personal learner tab', () => {
+    expect(shouldLoadPersonalEnrollments(true, true)).toBe(true);
   });
 });
 

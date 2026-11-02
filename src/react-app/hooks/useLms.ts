@@ -712,10 +712,11 @@ export function useLmsStats(enabled = true) {
   });
 }
 
-export function useMinhasMatriculas() {
+export function useMinhasMatriculas(enabled = true) {
   return useQuery({
     queryKey: lmsKeys.minhasMatriculas(),
     queryFn: () => lmsRequest<LmsMatricula[]>('/matriculas/minhas'),
+    enabled,
     staleTime: 30_000,
   });
 }
