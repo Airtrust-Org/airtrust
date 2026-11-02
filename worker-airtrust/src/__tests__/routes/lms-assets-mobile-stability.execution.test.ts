@@ -273,16 +273,17 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
 
   it('backup local à frente do cursor v4 do pacote não reabre telas nunca concluídas', async () => {
     const store: Record<string, string> = {};
-    g.localStorage = {
+    const gl = g as unknown as { localStorage?: unknown };
+    gl.localStorage = {
       getItem: (k: string) => store[k] ?? null,
       setItem: (k: string, v: string) => { store[k] = String(v); },
       removeItem: (k: string) => { delete store[k]; },
       clear: () => { Object.keys(store).forEach(k => delete store[k]); },
     };
-    g.localStorage.setItem('airtrust:scorm:resume:911:7', JSON.stringify({
+    store['airtrust:scorm:resume:911:7'] = JSON.stringify({
       schema_version: 2, matricula_id: 911, ciclo_id: 7, numero_ciclo: 1, location: '59/59',
       progress_pct: 100, updated_at: new Date().toISOString(), total_slides: 59, reason: 'test',
-    }));
+    });
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);
     const html = buildLaunchPage({
@@ -303,7 +304,7 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
     api.LMSInitialize('');
     expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('3/59');
-    delete g.localStorage;
+    delete gl.localStorage;
   });
 
   it('mudança apenas de session_time não dispara novo commit (fingerprint ignora campos de tempo)', async () => {
