@@ -100,6 +100,38 @@ describe('server-verified SCORM completion recovery', () => {
       ...base, diagnostic: { ...diagnostic, score_pct: 50 },
     })).toBe(false);
   });
+
+  // Regressão: curso FORMATIVE sem prova interna (nota nula) mas com
+  // scorm_mastery_score herdado de uma configuração SCORED antiga (70). A nota
+  // ausente era lida como 0 e travava o encerramento no último slide.
+  describe('FORMATIVE package without an internal score', () => {
+    const formative = {
+      ...base,
+      assessmentPolicy: 'FORMATIVE' as const,
+      diagnostic: { ...diagnostic, score_pct: null, mastery_score: 70 },
+    };
+    it('reconciles when the server accepted explicit completion at the final location', () => {
+      expect(canReconcilePersistedScormCompletion(formative)).toBe(true);
+    });
+    it('still requires explicit completion, final location and an accepted diagnostic', () => {
+      expect(canReconcilePersistedScormCompletion({
+        ...formative, diagnostic: { ...formative.diagnostic, explicit_completion: false },
+      })).toBe(false);
+      expect(canReconcilePersistedScormCompletion({
+        ...formative, diagnostic: { ...formative.diagnostic, reached_final_location: false },
+      })).toBe(false);
+      expect(canReconcilePersistedScormCompletion({
+        ...formative, diagnostic: { ...formative.diagnostic, status: 'candidate' },
+      })).toBe(false);
+    });
+    it('never relaxes the score rule for SCORED or unknown-policy courses', () => {
+      for (const assessmentPolicy of ['SCORED', null, undefined] as const) {
+        expect(canReconcilePersistedScormCompletion({
+          ...formative, assessmentPolicy,
+        })).toBe(false);
+      }
+    });
+  });
 });
 
 describe('SCORM closure panel shows evidence only at the appropriate stage', () => {
