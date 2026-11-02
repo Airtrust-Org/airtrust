@@ -455,6 +455,7 @@ async function authenticateScopedScormCommitAsset(
   c.set('empresaId', empresaId);
   c.set('userEmail', payload.email);
   c.set('userRole', security.role);
+  c.set('canonicalTenantRole', security.role);
   c.set('funcionarioId', payload.funcionario_id ?? null);
   return true;
 }
@@ -543,6 +544,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     c.set('empresaId', payload.empresa_id ?? 0);
     c.set('userEmail', payload.email);
     c.set('userRole', security.role);
+    c.set('canonicalTenantRole', security.role);
     c.set('funcionarioId', payload.funcionario_id ?? null);
 
     // ============ PERFIL ATIVO DE SESSÃO (multi-perfil) ============

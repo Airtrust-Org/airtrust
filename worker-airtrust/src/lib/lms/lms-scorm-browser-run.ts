@@ -104,6 +104,21 @@ export function scormBrowserFailureCode(error: unknown): string {
   return 'UNKNOWN_ERROR';
 }
 
+/**
+ * Conservative certification policy for the Browser Rendering trace.
+ * External exams are backend-scored and must NEVER be inferred absent from
+ * an empty SCORM interaction list (which only describes in-package exercises).
+ */
+export function requiresScormAssessmentEvidence(contract: unknown): boolean {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return true;
+  const assessment = (contract as { assessment?: unknown }).assessment;
+  if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) return true;
+  const declared = assessment as { mode?: unknown; requiredInteractions?: unknown };
+  if (declared.mode === 'EXTERNAL') return true;
+  return Array.isArray(declared.requiredInteractions)
+    ? declared.requiredInteractions.length > 0 : true;
+}
+
 export async function runScormBrowserConformance(params: {
   browserBinding: unknown; candidateSha256: string; launchFile: string; assets: CandidateAsset[];
   /** Injectable ONLY for focused infrastructure-failure tests; default is real Cloudflare Browser Rendering. */
@@ -141,7 +156,19 @@ export async function runScormBrowserConformance(params: {
       return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
     });
     failureStage = 'LOAD_SCO_ASSETS';
-    await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
+    // networkidle0 waits for all incidental resources, not for SCO readiness.
+    // It can timeout on an otherwise healthy course (fonts/images/telemetry).
+    // DOMContentLoaded awaits parser-blocking course scripts; the next bounded
+    // check independently proves that the SCORM adapter initialized.
+    await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS });
+    failureStage = 'VERIFY_SCORM_INITIALIZATION';
+    await page.waitForFunction(() => {
+      const probe: unknown = Reflect.get(globalThis, '__AIRTRUST_SCORM_TRACE');
+      if (typeof probe !== 'function') return false;
+      const state: unknown = probe();
+      return typeof state === 'object' && state !== null &&
+        'initialized' in state && state.initialized === true;
+    }, { timeout: TIMEOUT_MS });
     // Drive authored M8 interactions by actually clicking course controls,
     // never by calling SCORMSetValue or forcing internal course state.
     failureStage = 'DRIVE_SCO_INTERACTIONS';
@@ -182,9 +209,9 @@ export async function runScormBrowserConformance(params: {
         const declared = contract?.assessment?.masteryScore;
         expectedSuccessStatus = typeof contract?.assessment?.successStatus === 'string'
           ? contract.assessment.successStatus : null;
-        if (Array.isArray(contract?.assessment?.requiredInteractions)) {
-          requiresAssessmentEvidence = contract.assessment.requiredInteractions.length > 0;
-        }
+        // Empty requiredInteractions is not proof that a separate Worker
+        // exam is absent: assessment.mode=EXTERNAL must stay fail-closed.
+        requiresAssessmentEvidence = requiresScormAssessmentEvidence(contract);
         if (typeof declared === 'number' && Number.isFinite(declared) &&
             declared >= 0 && declared <= 100) masteryScore = declared;
       } catch {

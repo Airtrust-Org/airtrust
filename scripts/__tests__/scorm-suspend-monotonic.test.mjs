@@ -89,3 +89,42 @@ test('keeps synthetic navigation fixture cursor strict without broadening F5/CFI
  }
  assert.equal(observeMonotonicSuspend(state(),qa(2)).ok,false);
 });
+
+test('Factory V3 MGM v4 treats a as cursor and s as scenario state',()=>{
+ const v4=(overrides={})=>JSON.stringify({
+  v:4,p:'MGM_RC4_SHA_BOUND',a:1,d:[0],s:{},g:[],h:{},
+  vs:{},q:{answers:[null,null],passed:false},c:false,...overrides,
+ });
+ assert.deepEqual(observeMonotonicSuspend(v4(),v4()),{
+  ok:true,reason:'BYTE_IDENTICAL'});
+ const advanced=v4({d:[0,1],s:{scenario03:1},g:['hotspot:1'],
+   h:{hotspot:1},q:{answers:[1,null],passed:false}});
+ assert.deepEqual(observeMonotonicSuspend(v4(),advanced),{
+  ok:true,reason:'MONOTONIC_CHECKPOINT'});
+ // The actual on-wire "s" is an object, never a numeric cursor.
+ assert.equal(observeMonotonicSuspend(v4(),v4({a:2})).reason,'RESUME_CURSOR_DRIFT');
+ assert.equal(observeMonotonicSuspend(v4(),v4({a:0})).ok,false);
+ assert.equal(observeMonotonicSuspend(v4(),v4({p:'OTHER_EDITION'})).ok,false);
+});
+test('Factory V3 MGM v4 rejects dropped answers and completion evidence',()=>{
+ const original={v:4,p:'MGM_RC4_SHA_BOUND',a:5,
+  d:[0,1,2,3,4],s:{scenario02:1},g:['hotspot:0','hotspot:1'],
+  h:{hotspot:1},vs:{intro:1},q:{answers:[1,null],passed:false},c:true};
+ const state4=(overrides={})=>JSON.stringify({...original,...overrides});
+ for(const bad of [
+  {d:[0,1,2,3]}, {g:['hotspot:0']},{s:{}},{s:{scenario02:0}},
+  {h:{}},{vs:{}},{q:{answers:[null,null],passed:false}},
+  {c:false},{a:'5'},{s:1},{g:{}},{h:[]},{p:''},{v:3},
+ ])assert.equal(observeMonotonicSuspend(state4(),state4(bad)).ok,false,
+  'must reject '+JSON.stringify(bad));
+});
+test('Factory V3 MGM v4 never silently replaces legacy cursor schemas',()=>{
+ const old=state({p:'legacy',s:1});
+ const v4=JSON.stringify({v:4,p:'MGM_RC4_SHA_BOUND',a:1,d:[],s:{},g:[],
+   h:{},vs:{},q:{answers:[]},c:false});
+ assert.equal(observeMonotonicSuspend(old,v4).ok,false);
+ assert.equal(observeMonotonicSuspend(v4,old).ok,false);
+ assert.equal(observeMonotonicSuspend(v4,JSON.stringify({
+   v:4,p:'MGM_RC4_SHA_BOUND',a:1,d:[],s:{},g:[],h:{},vs:{},c:false,
+ })).ok,false);
+});

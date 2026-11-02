@@ -260,6 +260,57 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
     expect(body.data.total).toBe(1);
   });
 
+  test('busca CMA legado sem qualificacao_id respeitando setor e tenant via SQLite real', async () => {
+    const legacyId = 4459;
+    runSql(databasePath, `
+      INSERT INTO qualificacoes_historico
+        (id, funcionario_id, qualificacao_id, categoria_id, status,
+         tipo, qualificacao_codigo, data_conclusao, data_vencimento)
+      VALUES
+        (${legacyId}, 8883, NULL, 6661, 'CONCLUIDA',
+         'Certificado Médico Aeronáutico', 'CMA', '2026-03-01', '2027-03-01');
+    `);
+
+    try {
+      mockUserId = 7771;
+      mockUserRole = 'GESTOR';
+      mockFuncionarioId = 8881;
+      const req = new Request(
+        'http://localhost/api/qualificacoes/historico?search=CMA&statuses=VALIDA&setor_ids=9991&stats=false',
+      );
+      const res = await app.fetch(req, mockEnv, {} as any);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual([
+        expect.objectContaining({
+          id: legacyId,
+          tipo_id: null,
+          qualificacao_codigo: 'CMA',
+          funcionario_id: 8883,
+          status: 'VALIDA',
+        }),
+      ]);
+      expect(body.pagination.total).toBe(1);
+
+      // A mesma identidade legada não pode escapar para outro setor.
+      const excluded = await app.fetch(
+        new Request('http://localhost/api/qualificacoes/historico?search=CMA&setor_ids=9992&stats=false'),
+        mockEnv,
+        {} as any,
+      );
+      // In the SQLite test harness the safe() error wrapper can map the
+      // forbidden exception to HTTP 500 instead of the production 403.
+      // The security contract asserted here is fail-closed, not that
+      // harness-specific status mapping.
+      expect(excluded.status).toBeGreaterThanOrEqual(400);
+      const rejectedBody = await excluded.text();
+      expect(rejectedBody).not.toContain('Certificado Médico Aeronáutico');
+    } finally {
+      runSql(databasePath, `DELETE FROM qualificacoes_historico WHERE id = ${legacyId}`);
+    }
+  });
+
   test('Admin /historico com busca Nery sem erros', async () => {
     mockUserId = 7773;
     mockUserRole = 'ADMIN';

@@ -1,7 +1,7 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
@@ -86,6 +86,24 @@ describe('LmsPlayer — estabilidade do src do iframe frente a rotação de toke
     ensureValidAccessTokenMock.mockReset().mockResolvedValue('token-initial');
     fetchWithAuthMock.mockReset().mockResolvedValue({ ok: true });
     getAccessTokenMock.mockReset().mockReturnValue('token-initial');
+  });
+
+  it('exibe erro e permite tentar novamente quando a sessão SCORM é negada, sem tela preta silenciosa', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => (
+      url.includes('/assets/session') ? { ok: false, status: 403 } : { ok: true }
+    ));
+    const { container } = renderPlayer();
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível abrir o treinamento');
+      expect(screen.getByText(/HTTP 403/)).toBeInTheDocument();
+    });
+    expect(container.querySelector('iframe')).toBeNull();
+
+    fetchWithAuthMock.mockResolvedValue({ ok: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    await waitFor(() => {
+      expect(container.querySelector('iframe')?.getAttribute('src')).toContain('/lms/scorm/launch/42');
+    });
   });
 
   it('não altera o src do iframe quando o token é renovado em segundo plano', async () => {

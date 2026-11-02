@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { auth } from '../middleware/auth';
+import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { hasRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from './escalas-shared';
@@ -29,12 +30,6 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('/scorm/state/*', auth());
 app.use('/xapi/*', auth());
 
-function getCallerFuncionarioId(c: Context): number | null {
-  const raw = c.get('funcionarioId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
 function getCallerUserId(c: Context): number | undefined {
   const raw = c.get('userId' as never) as unknown;
   const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
@@ -42,16 +37,7 @@ function getCallerUserId(c: Context): number | undefined {
 }
 
 async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<number | null> {
-  const fromJwt = getCallerFuncionarioId(c);
-  if (fromJwt) return fromJwt;
-  const userId = getCallerUserId(c);
-  if (!userId) return null;
-  const row = await db
-    .prepare('SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-    .bind(userId)
-    .first<{ funcionario_id: number | null }>();
-  const parsed = row?.funcionario_id;
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
+  return resolveLmsFuncionarioId(db, c.get('userId' as never), getEmpresaIdSafe(c));
 }
 
 async function logLmsProgressAudit(

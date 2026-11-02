@@ -154,10 +154,32 @@ export function shouldShowScormClosureDetails(input: {
 
 // Only enables an authenticated attempt at the existing server-side qualification
 // and completion gate; this predicate never marks a course as passed.
+/**
+ * After an acknowledged SCORM commit the player must re-read the enrollment
+ * when it may carry new server evidence: either more slide visits were
+ * recorded, or the learner is on the final slide. The final click of a
+ * formative package adds no new slide, so without the second condition the
+ * cached matrícula stays stale and automatic closure never triggers.
+ */
+export function shouldRefetchAfterScormSave(input: {
+  serverSaved: boolean;
+  reviewMode: boolean;
+  viewedSlideCount: number | null;
+  recordedSlideCount: number;
+  location: string | null | undefined;
+}): boolean {
+  if (!input.serverSaved || input.reviewMode) return false;
+  if (input.viewedSlideCount != null && input.viewedSlideCount > input.recordedSlideCount) return true;
+  const parsed = parseSlideLocation(input.location);
+  return parsed != null && parsed.total > 0 && parsed.current >= parsed.total;
+}
+
 export function canReconcilePersistedScormCompletion(params: {
   reviewMode: boolean;
   isScormContent: boolean;
   matriculaStatus: string | null | undefined;
+  /** Course policy. Only an explicit FORMATIVE course is exempt from the score rule. */
+  assessmentPolicy?: 'SCORED' | 'FORMATIVE' | null;
   diagnostic: {
     status?: string | null;
     explicit_completion?: boolean | null;
@@ -174,6 +196,11 @@ export function canReconcilePersistedScormCompletion(params: {
     diagnostic.explicit_completion !== true ||
     diagnostic.reached_final_location !== true
   ) return false;
+  // A FORMATIVE package has no internal exam, so there is no score to compare:
+  // a null score used to be read as 0 and blocked every such course whenever a
+  // leftover mastery score (e.g. 70) remained on the course. The server stays
+  // the authority (closure_readiness + /finalizar), exactly as for SCORED.
+  if (params.assessmentPolicy === 'FORMATIVE') return true;
   const mastery = Number(diagnostic.mastery_score ?? 0);
   const score = Number(diagnostic.score_pct);
   return Number.isFinite(score) && score >= Math.max(0, mastery);
@@ -226,6 +253,8 @@ export default function LmsPlayer() {
   const autoCompletionAttemptRef = useRef<number | null>(null);
   const [playerToken, setPlayerToken] = useState<string | null>(() => getAccessToken() ?? token);
   const [assetSessionReady, setAssetSessionReady] = useState(false);
+  const [assetSessionError, setAssetSessionError] = useState<string | null>(null);
+  const [assetSessionRetry, setAssetSessionRetry] = useState(0);
   const [completionState, setCompletionState] = useState<
     'idle' | 'saving' | 'pending' | 'error' | 'unresolved'
   >('idle');
@@ -291,6 +320,8 @@ export default function LmsPlayer() {
     edition_mismatch?: { required: true; previous_total: number; active_total: number; reason?: 'PACKAGE_VERSION_CHANGED' | 'SLIDE_IDS_CHANGED' | 'PACKAGE_SHA_CHANGED' } | null;
   }) | undefined)?.edition_mismatch ?? null;
   const newEditionRequired = editionMismatch?.required === true;
+  const handoffAvailable = (matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)
+    ?.scorm_handoff_available === true;
   // Server suggestion is read-only: never credit units or unlock commits from a bookmark.
   const activeResumeProposal = (matricula as (typeof matricula & {
     active_resume_proposal?: {
@@ -320,6 +351,7 @@ export default function LmsPlayer() {
     reviewMode: effectiveReviewMode,
     isScormContent,
     matriculaStatus: matricula?.status,
+    assessmentPolicy: curso?.scorm_assessment_policy ?? null,
     diagnostic: completionDiagnostic,
   }) && closureReadiness?.eligible_for_server_verification !== false;
   const canFinalize =
@@ -369,10 +401,15 @@ export default function LmsPlayer() {
     isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
     (isScoredScorm
       ? closureReadiness?.eligible_for_server_verification === true
-      : allSlidesVisited && (granularDiagnostic
-        ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
-          granularDiagnostic.assessment.passed !== false)
-        : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
+      // The persisted server verdict also unlocks FORMATIVE: package diagnostics
+      // live only in memory and vanish on reload, which stranded the learner at
+      // 25/25. A package-reported failed assessment still blocks.
+      : (closureReadiness?.eligible_for_server_verification === true &&
+          granularDiagnostic?.assessment.passed !== false) ||
+        (allSlidesVisited && (granularDiagnostic
+          ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+            granularDiagnostic.assessment.passed !== false)
+          : Boolean(legacyFinalSlide && legacyAssessmentEvidence))));
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
@@ -542,6 +579,7 @@ export default function LmsPlayer() {
       sessionKeyRef.current = null;
       stableLaunchUrlRef.current = null;
       setAssetSessionReady(false);
+      setAssetSessionError(null);
       setIframeLoaded(false);
     }
     prevSessionKeyRef.current = sessionKey;
@@ -577,6 +615,7 @@ export default function LmsPlayer() {
 
         if (response.ok) {
           assetSessionKeyRef.current = sessionKey;
+          setAssetSessionError(null);
           setAssetSessionReady(true);
           return;
         }
@@ -590,6 +629,7 @@ export default function LmsPlayer() {
           sessionKeyRef.current = null;
           stableLaunchUrlRef.current = null;
           setAssetSessionReady(false);
+          setAssetSessionError('A sessão do conteúdo mudou. Atualize e tente novamente. (HTTP 409)');
           setIframeLoaded(false);
           void refetchMatriculaRef.current();
           return;
@@ -599,10 +639,12 @@ export default function LmsPlayer() {
         // alive; only initial asset-session failure blocks first launch.
         if (assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
+          setAssetSessionError(`Não foi possível autorizar a abertura do conteúdo (HTTP ${response.status}).`);
         }
       } catch {
         if (!cancelled && assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
+          setAssetSessionError('Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
         }
       }
     }
@@ -614,7 +656,7 @@ export default function LmsPlayer() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey]);
+  }, [activeHandoffId, assetContentType, assetMatriculaId, id, playerToken, sessionKey, assetSessionRetry]);
 
   useEffect(() => {
     const persisted = parseSlideLocation(persistedLocation);
@@ -923,9 +965,14 @@ export default function LmsPlayer() {
         }
         // Only refresh server-authoritative missing slides after an acknowledged
         // commit. A local counter/probe alone is not proof that D1 saved it.
-        if (event.data.server_saved === true && !effectiveReviewMode &&
-            typeof event.data.viewed_slide_count === 'number' &&
-            event.data.viewed_slide_count > (closureReadiness?.slide_coverage?.recorded ?? 0)) {
+        if (shouldRefetchAfterScormSave({
+          serverSaved: event.data.server_saved === true,
+          reviewMode: effectiveReviewMode,
+          viewedSlideCount: typeof event.data.viewed_slide_count === 'number'
+            ? event.data.viewed_slide_count : null,
+          recordedSlideCount: closureReadiness?.slide_coverage?.recorded ?? 0,
+          location: typeof event.data.location === 'string' ? event.data.location : null,
+        })) {
           void refetchMatricula();
         }
         return;
@@ -976,9 +1023,11 @@ export default function LmsPlayer() {
   }
 
   async function preserveAndResumeActiveEdition() {
-    if (!isTenantAdmin || startingNewEdition) return;
+    if (startingNewEdition) return;
     const confirmed = window.confirm(
-      'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?',
+      isTenantAdmin
+        ? 'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?'
+        : 'Este curso foi atualizado. Seu histórico anterior será guardado com segurança e você retomará a nova edição na posição sugerida. O progresso anterior não conta para a nova edição, então será preciso rever as telas para concluir. Continuar?',
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -1333,41 +1382,34 @@ export default function LmsPlayer() {
               </p>
             )}
           </div>
-          {isTenantAdmin ? (
+          {handoffAvailable || isTenantAdmin ? (
             <div className="flex flex-col gap-2 sm:items-end">
-              {(matricula as (typeof matricula & { scorm_handoff_available?: boolean }) | undefined)?.scorm_handoff_available === true && (
+              {handoffAvailable && (
                 <button
                   onClick={() => void preserveAndResumeActiveEdition()}
                   disabled={startingNewEdition}
                   className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
                 >
-                  {startingNewEdition ? 'Preservando e preparando retomada...' : 'Preservar histórico e retomar edição ativa'}
+                  {startingNewEdition
+                    ? 'Preservando e preparando retomada...'
+                    : isTenantAdmin ? 'Preservar histórico e retomar edição ativa' : 'Continuar na nova edição'}
                 </button>
               )}
-              <button
-                onClick={() => void startVerifiedNewEdition()}
-                disabled={startingNewEdition}
-                className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
-              >
-                {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
-              </button>
+              {isTenantAdmin && (
+                <button
+                  onClick={() => void startVerifiedNewEdition()}
+                  disabled={startingNewEdition}
+                  className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 disabled:opacity-60"
+                >
+                  {startingNewEdition ? 'Preparando ciclo excepcional...' : 'Novo ciclo (exceção)'}
+                </button>
+              )}
             </div>
           ) : (
             <span className="block w-full min-w-0 break-words text-xs font-medium sm:w-auto">Solicite à Gerência de Treinamento a análise de continuidade da sua matrícula.</span>
           )}
         </div>
       )}
-
-      {!newEditionRequired && activeHandoffId != null && (() => {
-        const bookmark = (matricula as (typeof matricula & {
-          active_scorm_resume_position?: { position: number; total: number } | null;
-        }) | undefined)?.active_scorm_resume_position;
-        return bookmark ? (
-          <div className="shrink-0 border-b border-emerald-400/30 bg-emerald-950/80 px-4 py-2 text-xs text-emerald-100">
-            Histórico anterior preservado. Retomada sugerida na unidade {bookmark.position}/{bookmark.total}; o marcador serve para navegação e não concede crédito de estudo.
-          </div>
-        ) : null;
-      })()}
 
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
@@ -1384,6 +1426,30 @@ export default function LmsPlayer() {
       <main className="relative flex-1">
         <div className="flex h-full min-h-0">
           <div className="relative min-w-0 flex-1">
+            {!launchUrl && !newEditionRequired && isScormContent ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-5" role={assetSessionError ? 'alert' : undefined} aria-live="polite">
+                <div className="max-w-md space-y-3 text-center text-white">
+                  {assetSessionError ? (
+                    <>
+                      <AlertTriangle className="mx-auto h-9 w-9 text-amber-400" />
+                      <p className="text-sm font-semibold">Não foi possível abrir o treinamento</p>
+                      <p className="text-xs text-white/70">{assetSessionError}</p>
+                      <button
+                        type="button"
+                        onClick={() => { setAssetSessionError(null); setAssetSessionRetry((value) => value + 1); }}
+                        className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
+                      >Tentar novamente</button>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="mx-auto h-9 w-9 animate-spin text-white/40" />
+                      <p className="text-sm text-white/65">Autorizando o acesso ao conteúdo...</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             {!iframeLoaded && launchUrl ? (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
                 <div className="text-center">
@@ -1409,6 +1475,15 @@ export default function LmsPlayer() {
                       </span>
                     )}
                   </p>
+                  {handoffAvailable && (
+                    <button
+                      onClick={() => void preserveAndResumeActiveEdition()}
+                      disabled={startingNewEdition}
+                      className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
+                    >
+                      {startingNewEdition ? 'Preparando a nova edição...' : 'Continuar na nova edição'}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1473,6 +1548,7 @@ export default function LmsPlayer() {
                             SCORE_BELOW_MASTERY: 'nota abaixo do mínimo exigido',
                             MASTERY_SCORE_MISSING: 'curso sem nota mínima válida configurada',
                             COMPLETION_EVIDENCE_INSUFFICIENT: 'o conteúdo ainda não informou conclusão válida',
+                            EXTERNAL_ASSESSMENT_PENDING: 'estudo concluído; falta a avaliação externa para certificar',
                             EXPLICIT_FAILURE: 'avaliação não aprovada',
                             SCORM_ASSESSMENT_POLICY_INVALID: 'política de avaliação inválida',
                           } as Record<string, string>)[closureReadiness.code] ??

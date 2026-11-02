@@ -203,6 +203,284 @@ test('Pilot vault survives offline refresh, close/reopen and Service Worker stay
 });
 
 
+test.describe('Completed RDV online consultation with mocked authorization', () => {
+  // Online API mocks must remain observable in WebKit; the Service Worker path
+  // is exercised independently by the real vault/offline tests below.
+  test.use({ serviceWorkers: 'block' });
+
+  test('reopens a completed flight without edit lease when secure vault is supported; otherwise fails closed', async ({ page }) => {
+  // Playwright WebKit builds differ in whether IndexedDB can persist a non-extractable
+  // CryptoKey. Do not fake an encrypted vault or weaken production crypto to hide this.
+  await page.goto('/');
+  const canPersistDeviceKey = await page.evaluate(async () => {
+    const key = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+    );
+    const name = 'pilot-ci-crypto-key-probe';
+    const request = indexedDB.open(name, 1);
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onupgradeneeded = () => request.result.createObjectStore('meta');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const supported = await new Promise<boolean>((resolve) => {
+      const tx = db.transaction('meta', 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onabort = () => resolve(false);
+      tx.onerror = () => resolve(false);
+      try {
+        tx.objectStore('meta').put({ key }, 'probe');
+      } catch {
+        try { tx.abort(); } catch {}
+        resolve(false);
+      }
+    });
+    db.close();
+    indexedDB.deleteDatabase(name);
+    return supported;
+  });
+  if (!canPersistDeviceKey) {
+    // This path is a real security assertion, not a skipped test: never proceed
+    // with an unprotected offline key in an incompatible browser.
+    await page.goto('/pilot/');
+    await expect(page.locator('#session-status')).toContainText(
+      'Este navegador não permite guardar com segurança a chave offline',
+    );
+    await expect(page.locator('#legacy-vault-card')).toBeHidden();
+    await expect(page.locator('#flight-detail-card')).toBeHidden();
+    return;
+  }
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+  });
+  let editLeaseRequests = 0;
+  await page.addInitScript(() => localStorage.setItem('airtrust_token', 'synthetic-access'));
+  await page.route('**/api/controle-voos/voos/meus', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: [{
+      id: 42, prefixo: 'PR-QA', numero_voo: 'QA-42',
+      data_programacao: today, origem_id: 1, destino_id: 2,
+      versao: 4, rdv_versao: 2,
+    }] }),
+  }));
+  await page.route('**/api/controle-voos/voos/42/offline-lease', (route) => {
+    editLeaseRequests += 1;
+    return route.fulfill({ status: 409, contentType: 'application/json',
+      body: JSON.stringify({ success: false, error: 'Read-only RDV' }) });
+  });
+  await page.route('**/api/controle-voos/voos/42/offline-package', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: {
+      contract: { name: 'airtrust-pilot-offline-package', version: 1,
+        read_only: true, sync_supported: true, regulated_edb: false,
+        package_id: 'qa-flight-42-v4' },
+      identity: { tenant_id: 7, user_id: 70, funcionario_id: 77 },
+      voo: { id: 42, prefixo: 'PR-QA', numero_voo: 'QA-42',
+        data_programacao: today, origem_id: 1, destino_id: 2,
+        status: 'concluido_operacionalmente', versao: 4 },
+      rdv: { id: 90, numero: 'RDV-QA-42',
+        status: 'preenchimento_finalizado', workflow_status: 'enviado', versao: 2 },
+      origem: { codigo_icao: 'SBME' }, destino: { codigo_icao: 'SBAA' },
+      tripulantes: [], etapas: [], abastecimentos: [],
+      aeronave: { modelo: 'Helicóptero de teste' },
+      workspace: { contract: { name: 'airtrust-pilot-workspace' }, planning: { documentos: [] } },
+    } }),
+  }));
+  await page.goto('/pilot/');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#session-status')).not.toContainText('Não foi possível iniciar o Pilot App');
+  // Normalize the selected day on WebKit regardless of browser timezone.
+  await page.locator('#authorized-flight-date').fill(today);
+  await page.locator('#authorized-flight-date').dispatchEvent('change');
+  try {
+    await expect(page.getByRole('button', { name: 'Abrir voo' })).toHaveCount(1);
+  } catch (error) {
+    // Only emitted on an actual failure. Distinguishes auth, date filtering,
+    // failed bootstrap, missing API data and hidden controls on WebKit.
+    const diagnostic = await page.evaluate(() => {
+      const get = (selector: string) => document.querySelector(selector);
+      return {
+        session: get('#session-status')?.textContent,
+        onlineList: get('#online-flights')?.textContent,
+        onlineListHtml: get('#online-flights')?.innerHTML?.slice(0, 1000),
+        selectedDate: (get('#authorized-flight-date') as HTMLInputElement | null)?.value,
+        connectivity: get('#connectivity')?.textContent,
+        listHidden: get('#online-flights-card')?.className,
+        flightDetailHidden: get('#flight-detail-card')?.className,
+      };
+    });
+    console.log('PILOT_READONLY_WEBKIT_DIAGNOSTIC', JSON.stringify(diagnostic));
+    throw error;
+  }
+
+  await page.getByRole('button', { name: 'Abrir voo' }).click();
+  await expect(page.locator('#flight-detail-card')).toBeVisible();
+  await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
+  await expect(page.locator('#rdv-editor-card')).toBeHidden();
+  await expect(page.locator('#pilot-workspace-view')).toContainText('RDV-QA-42');
+  expect(editLeaseRequests).toBe(0);
+
+  await page.locator('#close-detail').click();
+  await expect(page.locator('#flight-detail-card')).toBeHidden();
+  await page.getByRole('button', { name: 'Abrir voo' }).click();
+  await expect(page.locator('#flight-detail-card')).toBeVisible();
+  await expect(page.locator('#flight-detail-card')).toHaveClass(/read-only-flight/);
+  expect(editLeaseRequests).toBe(0);
+  });
+
+  test('keeps finalized RDV send-only after failed handoff, exit, reopen and retry', async ({ page }) => {
+    await page.goto('/');
+    const supportsEncryptedVault = await page.evaluate(async () => {
+      const key = await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+      );
+      const request = indexedDB.open('pilot-qa-send-retry-probe', 1);
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onupgradeneeded = () => request.result.createObjectStore('meta');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const supported = await new Promise<boolean>((resolve) => {
+        const tx = db.transaction('meta', 'readwrite');
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = () => resolve(false);
+        tx.onerror = () => resolve(false);
+        try { tx.objectStore('meta').put({ key }, 'key'); }
+        catch { try { tx.abort(); } catch {}; resolve(false); }
+      });
+      db.close();
+      indexedDB.deleteDatabase('pilot-qa-send-retry-probe');
+      return supported;
+    });
+    test.skip(!supportsEncryptedVault, 'WebKit environment cannot securely persist CryptoKey in IndexedDB');
+
+    const today = await page.evaluate(() => {
+      const d = new Date();
+      return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+    });
+    let leaseRequests = 0;
+    let sendAttempts = 0;
+    let workflow = 'rascunho';
+    await page.addInitScript(() => localStorage.setItem('airtrust_token', 'synthetic-access'));
+    await page.route('**/api/controle-voos/voos/meus', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: [{
+        id: 42, prefixo: 'PR-QA', numero_voo: 'QA-SEND',
+        data_programacao: today, origem_id: 1, destino_id: 2,
+        versao: 4, rdv_versao: 2,
+      }] }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/offline-lease', (route) => {
+      leaseRequests += 1;
+      return route.fulfill({ status: 409, contentType: 'application/json',
+        body: JSON.stringify({ success: false }) });
+    });
+    await page.route('**/api/controle-voos/voos/42/offline-package', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: {
+        contract: { name: 'airtrust-pilot-offline-package', version: 1,
+          read_only: true, sync_supported: true, regulated_edb: false, package_id: 'qa-send-42-v4' },
+        identity: { tenant_id: 7, user_id: 70, funcionario_id: 77 },
+        voo: { id: 42, prefixo: 'PR-QA', numero_voo: 'QA-SEND',
+          data_programacao: today, origem_id: 1, destino_id: 2,
+          status: 'concluido_operacionalmente', versao: 4 },
+        rdv: { id: 90, numero: 'RDV-QA-SEND', status: 'preenchimento_finalizado',
+          workflow_status: workflow, versao: workflow === 'enviado' ? 3 : 2 },
+        origem: { codigo_icao: 'SBME' }, destino: { codigo_icao: 'SBAA' },
+        tripulantes: [], etapas: [], abastecimentos: [], aeronave: { modelo: 'QA' },
+        workspace: { contract: { name: 'airtrust-pilot-workspace' }, planning: { documentos: [] } },
+      } }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/rdv/alertas', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }),
+    }));
+    await page.route('**/api/controle-voos/voos/42/rdv/enviar', (route) => {
+      sendAttempts += 1;
+      if (sendAttempts === 1) {
+        return route.fulfill({ status: 503, contentType: 'application/json',
+          body: JSON.stringify({ success: false, code: 'TEMPORARY_FAILURE', error: 'Retry later' }) });
+      }
+      workflow = 'enviado';
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: {
+          id: 90, numero: 'RDV-QA-SEND', versao: 3, status: 'preenchimento_finalizado',
+          workflow_status: 'enviado', enviado_em: '2026-10-24T19:00:00.000Z',
+        } }) });
+    });
+    page.on('dialog', (dialog) => void dialog.accept());
+
+    await page.goto('/pilot/');
+    await expect(page.locator('#workspace')).toBeVisible();
+    await page.locator('#authorized-flight-date').fill(today);
+    await page.locator('#authorized-flight-date').dispatchEvent('change');
+    await page.getByRole('button', { name: 'Abrir voo' }).click();
+    await expect(page.locator('#rdv-editor-card')).toBeHidden();
+    const retryAction = page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' });
+    await expect(retryAction).toBeVisible();
+    await retryAction.click();
+    await expect(page.locator('#session-status')).toContainText('Recebimento não confirmado');
+    expect(sendAttempts).toBe(1);
+    expect(leaseRequests).toBe(0);
+
+    await page.locator('#close-detail').click();
+    await expect(page.locator('#flight-detail-card')).toBeHidden();
+    await page.getByRole('button', { name: 'Abrir voo' }).click();
+    await expect(page.locator('#rdv-editor-card')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' })).toBeVisible();
+    await page.getByRole('button', { name: 'Atualizar status e reenviar à Coordenação' }).click();
+    await expect(page.locator('#handoff-success-card')).toBeVisible();
+    expect(sendAttempts).toBe(2);
+    expect(leaseRequests).toBe(0);
+  });
+});
+
+test('skips the legacy PIN prompt only when old encrypted stores are empty', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { PilotVault } = await import('/pilot/pilot-vault.js');
+    const legacy = await PilotVault.open();
+    await legacy.provision('654321');
+    // An old vault config alone does not mean flight records require recovery.
+  });
+
+  await page.goto('/pilot/');
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.locator('#workspace')).toBeVisible();
+
+  const proof = await page.evaluate(async () => {
+    const open = (name: string) => new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const get = (db: IDBDatabase, id: string) => new Promise<any>((resolve, reject) => {
+      const request = db.transaction('meta', 'readonly').objectStore('meta').get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const v1 = await open('airtrust-pilot-v1');
+    const v2 = await open('airtrust-pilot-v2');
+    const legacy = await get(v1, 'vault-config');
+    const current = await get(v2, 'vault-config');
+    const receipt = await get(v2, 'legacy-pin-v1-recovery-proof');
+    return {
+      legacyPreserved: legacy?.version === 1,
+      currentReady: current?.version === 2 && current.device_key?.extractable === false,
+      emptyRecoveryVerified: receipt?.completed === true && receipt.records_verified === 0,
+    };
+  });
+  expect(proof).toEqual({
+    legacyPreserved: true,
+    currentReady: true,
+    emptyRecoveryVerified: true,
+  });
+
+  await page.reload();
+  await expect(page.locator('#legacy-vault-card')).toBeHidden();
+  await expect(page.locator('#workspace')).toBeVisible();
+});
+
 test('recovers encrypted legacy draft and outbox only after PIN, with verified V2 read-back and intact V1', async ({ page }) => {
   const legacyPin = '654321';
   const marker = `pilot-legacy-recovery-${Date.now()}`;

@@ -37,6 +37,9 @@ type QueryHandler = { all?: () => Promise<unknown> | unknown };
 function makeTestEnv(handlers: Array<[string, QueryHandler]>) {
   const db = {
     prepare: vi.fn((query: string) => {
+      if (query.includes('SELECT f.id AS funcionario_id')) {
+        return { bind: () => ({ first: async () => ({ funcionario_id: 77 }) }) };
+      }
       const entry = handlers.find(([matcher]) => query.includes(matcher));
       if (!entry) throw new Error(`Unhandled query: ${query.slice(0, 160)}`);
       const handler = entry[1];

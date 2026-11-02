@@ -46,10 +46,18 @@ export type ScormFunctionalCertification = {
 export function evaluateScormFunctionalCertification(
   expectedSha256: string,
   trustedRuns: readonly ScormFunctionalBrowserRun[],
-  policy: { requiresAssessment: boolean } = { requiresAssessment: true },
+  policy: {
+    requiresAssessment: boolean;
+    /** Default: both browsers. Only the versioned formative profile may narrow
+     * this, because the second browser stays in the regular compatibility suite. */
+    requiredBrowsers?: readonly ScormFunctionalBrowser[];
+  } = { requiresAssessment: true },
 ): ScormFunctionalCertification {
   const missing: string[] = [];
-  if (!Array.isArray(trustedRuns) || trustedRuns.length !== 2) {
+  const requiredBrowsers: readonly ScormFunctionalBrowser[] =
+    policy.requiredBrowsers && policy.requiredBrowsers.length > 0
+      ? policy.requiredBrowsers : ['CHROMIUM', 'WEBKIT'];
+  if (!Array.isArray(trustedRuns) || trustedRuns.length !== requiredBrowsers.length) {
     missing.push('BROWSER_RUN_COUNT_INVALID');
   }
   // Formative courses may have no scored assessment. The declared and
@@ -59,7 +67,7 @@ export function evaluateScormFunctionalCertification(
     (name !== 'ASSESSMENT_INSUFFICIENT' && name !== 'ASSESSMENT_APPROVED' &&
       name !== 'ASSESSMENT_THRESHOLD'));
 
-  for (const browser of ['CHROMIUM', 'WEBKIT'] as const) {
+  for (const browser of requiredBrowsers) {
     const runs = Array.isArray(trustedRuns) ? trustedRuns.filter(run => run?.browser === browser) : [];
     if (runs.length !== 1) {
       missing.push(`${browser}:RUN_REQUIRED_UNIQUE`);

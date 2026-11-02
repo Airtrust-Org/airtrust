@@ -306,4 +306,89 @@ describe('OperationalVigilanceTest — PVT-B V2 paradigm', () => {
     expect(screen.getByText('Teste em andamento')).toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
   });
+
+  it('captures responses via keyboard Space and Enter keys conforming to the PVT contract', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    render(<OperationalVigilanceTest durationMs={30_000} onComplete={vi.fn()} />);
+
+    startAndReachStimulus();
+    const box = screen.getByTestId('pvtb-box');
+    expect(box).toHaveAttribute('data-phase', 'stimulus');
+
+    act(() => {
+      vi.advanceTimersByTime(220);
+    });
+    fireEvent.keyDown(box, { key: ' ' });
+
+    expect(screen.getByText(/^2\d\d ms$/)).toBeInTheDocument();
+    expect(screen.getByText(/tempo da última resposta/i)).toBeInTheDocument();
+  });
+
+  it('preserves exact DOM node identity and constant dimensions across all lifecycle transitions', () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let completed: OperationalVigilanceResult | null = null;
+    render(
+      <OperationalVigilanceTest
+        durationMs={2_500}
+        onComplete={(result) => {
+          completed = result;
+        }}
+      />,
+    );
+
+    const initialBox = screen.getByTestId('pvtb-box');
+    const initialFrame = screen.getByTestId('pvtb-stimulus-frame');
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 1. Transition instructions -> waiting
+    fireEvent.click(screen.getByRole('button', { name: /iniciar teste/i }));
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(screen.getByTestId('pvtb-stimulus-frame')).toBe(initialFrame);
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 2. Transition waiting -> stimulus
+    act(() => {
+      vi.advanceTimersByTime(PVTB_V2_PROTOCOL.feedbackHoldMs + 20);
+    });
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(initialBox).toHaveAttribute('data-phase', 'stimulus');
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 3. Transition stimulus -> feedback
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    fireEvent.keyDown(initialBox, { key: 'Enter' });
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 4. Invalidation mid-test
+    fireEvent(window, new Event('blur'));
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(initialBox).toHaveAttribute('data-phase', 'invalidated');
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 5. Clean restart
+    fireEvent.click(screen.getByRole('button', { name: /reiniciar teste/i }));
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+
+    // 6. Complete test
+    act(() => {
+      vi.advanceTimersByTime(PVTB_V2_PROTOCOL.feedbackHoldMs + 20);
+    });
+    act(() => {
+      vi.advanceTimersByTime(180);
+    });
+    fireEvent.pointerDown(initialBox);
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(completed).not.toBeNull();
+    expect(screen.getByTestId('pvtb-box')).toBe(initialBox);
+    expect(initialBox).toHaveAttribute('data-phase', 'complete');
+    expect(initialBox.className).toMatch(/h-72 min-h-72 w-full/);
+  });
 });

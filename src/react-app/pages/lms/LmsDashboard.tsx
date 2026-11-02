@@ -44,7 +44,8 @@ export default function LmsDashboard() {
     isError: hasStatsError,
     error: statsError,
   } = useLmsStats(isManager);
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas();
+  // The management dashboard uses tenant-scoped stats, not the administrator's employee identity.
+  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(!isManager);
 
   const mats = matriculas ?? [];
   const isLoading = isManager ? loadingStats : loadingMatriculas;

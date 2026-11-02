@@ -5,6 +5,7 @@ export const QUALIFICATION_REPORT_STATUS_OPTIONS = [
   { value: 'VENCIDA', label: 'Vencidas' },
   { value: 'VENCENDO_30', label: 'Em vencimento' },
   { value: 'VALIDA', label: 'Vigentes' },
+  { value: 'RENOVADA', label: 'Renovadas' },
 ] as const;
 
 export type QualificationReportStatus =
@@ -161,11 +162,68 @@ export async function fetchQualificationHistoryReport(
     );
     if (Array.isArray(envelope.data)) allRows.push(...envelope.data);
     const meta = envelope.meta as HistoricoMeta | undefined;
-    totalPages = Math.max(1, Number(meta?.total_pages || 1));
+    const pagination = envelope.pagination as { pages?: number } | undefined;
+    totalPages = Math.max(1, Number(pagination?.pages || meta?.total_pages || 1));
     page += 1;
   } while (page <= totalPages);
 
   return applyQualificationHistoryReportClientFilters(allRows, filters);
+}
+
+export interface QualificationHistoryTypeIdentity {
+  id: number;
+  nome: string;
+  codigo?: string | null;
+}
+
+function normalizeQualificationIdentity(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleUpperCase('pt-BR');
+}
+
+/**
+ * Reconcile the canonical tipo ID with legacy history identified by code/name.
+ * The search endpoint enforces the same tenant, employee, sector and operational
+ * read scopes as the ID endpoint. Exact client-side identity checking prevents
+ * fuzzy search matches (e.g. CMA-2 or a matching employee name) leaking into the
+ * report. This is read-only and never creates requirements or qualifications.
+ */
+export async function fetchQualificationHistoryForType(
+  filters: QualificationHistoryReportFilters,
+  type: QualificationHistoryTypeIdentity,
+): Promise<HistoricoQualificacao[]> {
+  const directRows = await fetchQualificationHistoryReport({ ...filters, tipoId: type.id });
+  const searchTerm = String(type.codigo || type.nome || '').trim();
+  if (!searchTerm) return directRows;
+
+  const matchedRows = await fetchQualificationHistoryReport({
+    ...filters,
+    tipoId: undefined,
+    search: searchTerm,
+  });
+  const canonicalCode = normalizeQualificationIdentity(type.codigo);
+  const canonicalName = normalizeQualificationIdentity(type.nome);
+  const indexed = new Map<number, HistoricoQualificacao>(
+    directRows.map((row) => [row.id, row]),
+  );
+
+  for (const row of matchedRows) {
+    const rowCode = normalizeQualificationIdentity(row.qualificacao_codigo || row.codigo);
+    const rowName = normalizeQualificationIdentity(
+      row.qualificacao_nome || row.qualificacao_desc || row.tipo,
+    );
+    if ((canonicalCode && rowCode === canonicalCode) ||
+        (canonicalName && rowName === canonicalName) ||
+        Number(row.qualificacao_id) === type.id) {
+      indexed.set(row.id, row);
+    }
+  }
+
+  return Array.from(indexed.values());
 }
 
 export function buildQualificationHistoryReportRows(
@@ -186,7 +244,7 @@ export function buildQualificationHistoryReportRows(
       categoria: row.qualificacao_categoria || row.categoria || '-',
       status,
       statusLabel: qualificationStatusLabel(status),
-      dataConclusao: formatDateBr(row.data_conclusao),
+      dataConclusao: formatDateBr(row.data_conclusao || row.data_realizacao),
       dataVencimento: formatDateBr(row.data_vencimento),
     };
   });
@@ -199,9 +257,10 @@ function summarize(rows: QualificationHistoryReportRow[]) {
       if (row.status === 'VENCIDA') acc.vencidas += 1;
       if (row.status === 'VENCENDO_30') acc.vencendo += 1;
       if (row.status === 'VALIDA') acc.vigentes += 1;
+      if (row.status === 'RENOVADA') acc.renovadas += 1;
       return acc;
     },
-    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0 },
+    { total: 0, vencidas: 0, vencendo: 0, vigentes: 0, renovadas: 0 },
   );
 }
 
@@ -249,6 +308,7 @@ export async function exportQualificationHistoryExcel(
     ['Vencidas', stats.vencidas],
     ['Em vencimento', stats.vencendo],
     ['Vigentes', stats.vigentes],
+    ['Renovadas', stats.renovadas],
     ['Filtros', (context.filterLabels || []).join(' | ') || 'Sem filtros adicionais'],
   ]);
   summary.getRow(1).font = { bold: true, size: 14 };
@@ -330,7 +390,7 @@ export async function exportQualificationHistoryPdf(
     doc.text(`Emitido por: ${context.usuarioNome || 'Usuário autenticado'}`, margin, 24);
     doc.text(`Emissão: ${generatedAt.toLocaleString('pt-BR')}`, margin, 29);
     doc.text(
-      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}`,
+      `Total: ${stats.total}  |  Vencidas: ${stats.vencidas}  |  Em vencimento: ${stats.vencendo}  |  Vigentes: ${stats.vigentes}  |  Renovadas: ${stats.renovadas}`,
       margin,
       34,
     );

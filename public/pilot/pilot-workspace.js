@@ -230,6 +230,17 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
   }
   panel.append(section);
 
+  renderFlightDocumentsInto(panel, planning, actions);
+
+  if (planning.observacoes) {
+    const obs = el('section', { className: 'pilot-workspace-section' });
+    obs.append(el('h3', { text: 'Observações do planejamento' }));
+    obs.append(el('p', { className: 'pilot-workspace-copy', text: text(planning.observacoes) }));
+    panel.append(obs);
+  }
+}
+
+function renderFlightDocumentsInto(panel, planning, actions = {}) {
   const documents = Array.isArray(planning.documentos) ? planning.documentos : [];
   const documentAvailability = actions.documentAvailability || {};
   const currentDocuments = [...documents]
@@ -309,13 +320,17 @@ function renderPlanning(panel, packageData, workspace, actions = {}) {
   }
   docsSection.append(docsList);
   panel.append(docsSection);
+}
 
-  if (planning.observacoes) {
-    const obs = el('section', { className: 'pilot-workspace-section' });
-    obs.append(el('h3', { text: 'Observações do planejamento' }));
-    obs.append(el('p', { className: 'pilot-workspace-copy', text: text(planning.observacoes) }));
-    panel.append(obs);
+// Shared by the planning tab and the visible in-flight document shelf.
+export function renderPilotFlightDocuments(container, packageData, actions = {}) {
+  container.replaceChildren();
+  const workspace = packageData?.workspace;
+  if (!workspace || workspace?.contract?.name !== 'airtrust-pilot-workspace') {
+    appendNotice(container, 'Atualize o voo online para consultar os anexos da Coordenação.', 'attention');
+    return;
   }
+  renderFlightDocumentsInto(container, workspace.planning || {}, actions);
 }
 
 function renderRdv(panel, packageData) {

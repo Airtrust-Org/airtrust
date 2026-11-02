@@ -27,6 +27,7 @@ import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
 import { previousOperationalDate, useFrmsRecoveryContext, type RecoveryActivityType } from '@/react-app/hooks/useFrmsRecovery';
 import {
@@ -37,14 +38,6 @@ import {
 } from './fadigaCheckinDraft';
 
 /* eslint-disable react-refresh/only-export-components */
-
-function getTodayLocalKey(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 const NIVEL_COLOR: Record<string, string> = {
   VERDE: 'bg-emerald-100 text-emerald-800 border-emerald-200',
@@ -252,7 +245,7 @@ export function isFadigaCheckinSubmitReady(input: {
 }
 
 function HistoricoTab({ collective }: { collective: boolean }) {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const inicio = `${hoje.slice(0, 8)}01`;
   const { data, isLoading } = useFadigaHistorico({ data_inicio: inicio, data_fim: hoje, limit: 30 });
   const rows = data?.data ?? [];
@@ -333,7 +326,7 @@ function HistoricoTab({ collective }: { collective: boolean }) {
 }
 
 function PainelGestorTab() {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const [data, setData] = useState(hoje);
   const { data: painel, isLoading, isError, error, refetch, isFetching } = useFadigaPainel(data);
   const rows = Array.isArray(painel) ? painel : [];
@@ -502,7 +495,7 @@ function TriStateButtons({
 export default function FrmsFlightCheckinFadiga() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = getTodayLocalKey();
+  const today = frmsBrazilOperationalTodayIso();
   const { isAdmin, isGestor, role } = usePermissions();
   const { user, empresaAtualId } = useAuth();
   const draftKey = useMemo(
@@ -559,7 +552,7 @@ export default function FrmsFlightCheckinFadiga() {
     Boolean(restoredDraft?.vigilanceInProgress && !restoredDraft?.vigilanceResult),
   );
 
-  const { data: existente, refetch } = useCheckinHoje();
+  const { data: existente, refetch } = useCheckinHoje(today);
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
@@ -669,6 +662,12 @@ export default function FrmsFlightCheckinFadiga() {
 
   const submit = async () => {
     if (submitMutation.isPending) return;
+    // A form left open across midnight must never silently submit yesterday's
+    // clinical self-report under a stale operational date.
+    if (today !== frmsBrazilOperationalTodayIso()) {
+      toast.error('A data operacional mudou. Atualize a página e confirme o check-in para o novo dia.');
+      return;
+    }
 
     setSubmitAttempted(true);
     if (!canSubmitWithReadiness) {
@@ -816,6 +815,10 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
               Ferramenta de triagem operacional: este check-in gera sinalização para revisão humana.
               Não é diagnóstico médico e não determina automaticamente aptidão ou restrição operacional.
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900">
+              Data operacional do check-in: {today.slice(8, 10)}/{today.slice(5, 7)}/{today.slice(0, 4)} (Brasília)
             </div>
 
             {existente && (

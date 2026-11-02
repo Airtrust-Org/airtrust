@@ -16,8 +16,9 @@ import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { useActivateScormPackageVersion, useLmsCurso, useMinhasMatriculas, useMatricularCurso, useRunScormPackageConformance, useScormPackageVersions } from '@/react-app/hooks/useLms';
-import type { LmsMatricula, ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { useLmsCurso, useMinhasMatriculas, useMatricularCurso, useScormPackageVersions } from '@/react-app/hooks/useLms';
+import type { LmsMatricula } from '@/react-app/hooks/useLms';
+import ScormEditionPanel from './ScormEditionPanel';
 import {
   formatMinutes,
   getMatriculaStatusMeta,
@@ -38,18 +39,18 @@ export default function LmsCursoDetalhe() {
   const { isAdmin, isGestor } = usePermissions();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
+  const canManage = isAdmin || isGestor;
   const { data: curso, isLoading } = useLmsCurso(Number(id));
-  const { data: matriculas } = useMinhasMatriculas();
+  const { data: matriculas } = useMinhasMatriculas(!canManage);
   const matricular = useMatricularCurso();
 
-  const matricula: LmsMatricula | undefined = matriculas?.find((m) => m.curso_id === Number(id));
-  const canManage = isAdmin || isGestor;
+  const matricula: LmsMatricula | undefined = canManage
+    ? undefined
+    : matriculas?.find((m) => m.curso_id === Number(id));
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const canPreview = Boolean(previewPath);
   const hasContent = supportsAdminCoursePreview(curso);
   const packageVersions = useScormPackageVersions(Number(id), canManage && curso?.tipo_conteudo === 'scorm');
-  const runConformance = useRunScormPackageConformance(Number(id));
-  const activatePackage = useActivateScormPackageVersion(Number(id));
 
   const learningGoals = useMemo(() => {
     if (!curso) return [];
@@ -385,7 +386,22 @@ export default function LmsCursoDetalhe() {
             </div>
           </LmsSurface>
         </div>
-        {canManage && curso.tipo_conteudo === 'scorm' ? <LmsSurface title="Quality Gate SCORM" description="Candidatos só substituem o pacote ativo após os gates."><div className="space-y-2">{(packageVersions.data?.data ?? []).map((pkg: ScormPackageVersionRow) => <div key={pkg.packageId} className="rounded-lg border p-3 text-sm"><p className="font-medium">{pkg.status} · SHA {String(pkg.packageSha256 ?? '').slice(0, 12)}</p><p>Estático: {pkg.structural?.status ?? '—'} · Runtime: {pkg.runtime?.status ?? pkg.conformance?.status ?? 'PENDENTE'} · Certificação funcional: {pkg.functionalCertification?.status === 'CERTIFIED' ? 'certificada' : 'pendente'} · Publicável: {pkg.publishable ? 'sim' : 'não'}</p>{(pkg.runtime?.errors ?? pkg.completionManifest?.errors ?? []).map((reason: string) => <p key={reason} className="text-rose-600">{reason}</p>)}<div className="mt-2 flex gap-2"><Button variant="secondary" loading={runConformance.isPending} onClick={() => void runConformance.mutateAsync(pkg.packageId)}>Executar conformance</Button><Button variant="primary" disabled={!pkg.publishable} loading={activatePackage.isPending} onClick={() => void activatePackage.mutateAsync(pkg.packageId)}>Ativar versão</Button></div></div>)}</div></LmsSurface> : null}
+        {canManage && curso.tipo_conteudo === 'scorm' ? (
+          <LmsSurface title="Edições do pacote SCORM" description="Para ZIPs formativos válidos, selecionar o arquivo substitui automaticamente a edição atual. ZIPs avaliativos mantêm seus controles de certificação.">
+            {packageVersions.isPending ? (
+              <p role="status" className="text-sm text-slate-500">Consultando edições SCORM…</p>
+            ) : packageVersions.isError ? (
+              <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-rose-700">
+                <span>Não foi possível consultar as edições do pacote. O envio não deve ser repetido sem verificar o recibo.</span>
+                <Button variant="secondary" type="button" onClick={() => void packageVersions.refetch()}>
+                  Tentar novamente
+                </Button>
+              </div>
+            ) : (
+              <ScormEditionPanel cursoId={Number(id)} versions={packageVersions.data ?? []} isAdmin={isAdmin} />
+            )}
+          </LmsSurface>
+        ) : null}
         {curso.conteudo_programatico ? (
           <LmsSurface
             title="Conteúdo programático"

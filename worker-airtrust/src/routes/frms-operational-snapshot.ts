@@ -114,12 +114,19 @@ function normalizeSnapshotItemForApi<T extends {
   recovery_state?: string | null;
   recovery_activity_type?: string | null;
 }>(item: T): T & { recovery_credit_points: number | null } {
+  const credit = item.recovery_credit_points;
   const hasRecoveryEvidence = Boolean(
     item.recovery_state?.trim() || item.recovery_activity_type?.trim(),
   );
+  // A non-zero calculated credit is evidence even when a legacy assessment has no
+  // state/activity label. Conversely, a missing credit must never become a measured
+  // zero solely because a state label exists.
   return {
     ...item,
-    recovery_credit_points: hasRecoveryEvidence ? Number(item.recovery_credit_points ?? 0) : null,
+    recovery_credit_points:
+      typeof credit === 'number' && Number.isFinite(credit) && (hasRecoveryEvidence || credit !== 0)
+        ? credit
+        : null,
   };
 }
 

@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-scorm-formative-approval-renewals-0570",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0570_lms_scorm_formative_approval_renewals.sql",
+  "fileHash": "209204d75995b90f650e36b6bd64ebfdce202758f8b7cf5e871d53d9535eb90f",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-scorm-formative-approval-renewals-0570.md",
+  "planHash": "4772d5c4c283f5c489c4f7d36248050c3b11e893e64090ebf05bc55469f479eb"
+}

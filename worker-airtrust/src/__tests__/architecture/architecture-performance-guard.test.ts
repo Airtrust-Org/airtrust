@@ -28,7 +28,9 @@ const LARGE_FILE_LINE_CAPS = {
   'services/sigvoos-frms.ts': 2937,
   // Upload/storage logic was extracted into testable modules. The compatibility
   // router retains the prior CRUD implementation and is frozen at the old cap.
-  'routes/lms-cursos-legacy.ts': 3000,
+  // Cap raised 2026-10-28 by one line: counted 3001 (edition-policy guard on the
+  // course PUT is one call; the logic lives in lib/lms/lms-course-policy-guard.ts).
+  'routes/lms-cursos-legacy.ts': 3001,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.

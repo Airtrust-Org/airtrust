@@ -76,6 +76,7 @@ export async function buscarAlertas(
       `SELECT COUNT(*) as total
        FROM frms_alerta a
        LEFT JOIN frms_jornada j ON j.id = a.jornada_id
+        AND CAST(j.tripulante_id AS INTEGER) = CAST(a.tripulante_id AS INTEGER)
        LEFT JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
        WHERE ${where}`,
     )
@@ -91,6 +92,7 @@ export async function buscarAlertas(
               COALESCE(f.nome, 'Tripulante #' || a.tripulante_id) as nome_tripulante
        FROM frms_alerta a
         LEFT JOIN frms_jornada j ON j.id = a.jornada_id
+         AND CAST(j.tripulante_id AS INTEGER) = CAST(a.tripulante_id AS INTEGER)
        LEFT JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
        WHERE ${where}
         ORDER BY date(j.data) DESC, a.created_at DESC LIMIT ? OFFSET ?`,

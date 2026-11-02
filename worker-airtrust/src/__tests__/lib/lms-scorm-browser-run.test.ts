@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { analyzeTrace, classifyScormBrowserError, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
+import { analyzeTrace, classifyScormBrowserError, requiresScormAssessmentEvidence, runScormBrowserConformance, scormBrowserFailureCode } from '../../lib/lms/lms-scorm-browser-run';
 
 const startedAt = '2026-08-22T00:00:00.000Z';
 const lifecycle = [
@@ -73,6 +73,89 @@ describe('SCORM Browser Rendering staging infrastructure failure boundaries', ()
     expect(scormBrowserFailureCode({ name: 'UnexpectedPersonalName', code: 'secret-embedded-code' })).toBe('UNKNOWN_ERROR');
     expect(scormBrowserFailureCode(new TypeError('some private URL'))).toBe('TYPE_ERROR');
   });
+});
+
+
+describe('SCORM Browser Rendering bounded readiness rather than network-idle', () => {
+  function fakeBrowser(waitFailure = false) {
+    const page = {
+      setRequestInterception: vi.fn(async () => undefined),
+      on: vi.fn(),
+      setContent: vi.fn(async () => undefined),
+      waitForFunction: vi.fn(async () => {
+        if (waitFailure) throw new Error('TimeoutError: browser readiness timed out');
+        return undefined;
+      }),
+      evaluate: vi.fn()
+        .mockResolvedValueOnce({ supported: false, completed: false, steps: 0, reason: 'NO_FACTORY_M8_DRIVER' })
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          trace: [{ method: 'LMSInitialize' }, { method: 'LMSCommit' }, { method: 'LMSFinish' }],
+          values: { 'cmi.core.lesson_status': 'incomplete' },
+          initialized: true, finished: true, lastError: '0',
+        }),
+    };
+    const browser = { newPage: async () => page, close: vi.fn(async () => undefined) };
+    return { page, browser };
+  }
+
+  it('waits for DOMContentLoaded plus observed LMSInitialize, never networkidle0', async () => {
+    const { page, browser } = fakeBrowser();
+    const runtime = await runScormBrowserConformance({
+      browserBinding: {}, candidateSha256: 'b'.repeat(64), launchFile: 'index.html',
+      assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
+      launchBrowser: async () => browser as never,
+    });
+    expect(page.setContent).toHaveBeenCalledWith(expect.any(String), {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    });
+    expect(page.waitForFunction).toHaveBeenCalledOnce();
+    expect(runtime).toMatchObject({ status: 'PASS', initializeObserved: true, commitObserved: true, finishObserved: true });
+  });
+
+  it('fails closed with a safe diagnostic when SCO never initializes', async () => {
+    const { page, browser } = fakeBrowser(true);
+    const runtime = await runScormBrowserConformance({
+      browserBinding: {}, candidateSha256: 'b'.repeat(64), launchFile: 'index.html',
+      assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
+      launchBrowser: async () => browser as never,
+    });
+    expect(page.setContent).toHaveBeenCalledOnce();
+    expect(runtime).toMatchObject({
+      status: 'TIMEOUT', failureStage: 'VERIFY_SCORM_INITIALIZATION',
+      failureCategory: 'BROWSER_TIMEOUT',
+      errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+    });
+  });
+});
+
+describe('External assessment contract is never inferred absent from formative interactions', () => {
+  it('requires Worker assessment evidence for EXTERNAL with no SCO interactions', () => {
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'EXTERNAL', requiredInteractions: [] },
+    })).toBe(true);
+  });
+
+  it('requires Worker evidence for EXTERNAL when interactions are omitted', () => {
+    expect(requiresScormAssessmentEvidence({ assessment: { mode: 'EXTERNAL' } })).toBe(true);
+  });
+
+  it('preserves formative no-exam course policy without required interactions', () => {
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'NONE', requiredInteractions: [] },
+    })).toBe(false);
+    expect(requiresScormAssessmentEvidence({
+      assessment: { mode: 'NONE', requiredInteractions: ['formative-1'] },
+    })).toBe(true);
+  });
+
+  it.each([null, [], 'malformed', {}, { assessment: null },
+    { assessment: { mode: 'UNKNOWN' } }])(
+    'fails closed on missing or malformed assessment declarations: %s',
+    contract => {
+      expect(requiresScormAssessmentEvidence(contract)).toBe(true);
+    },
+  );
 });
 
 describe('SCORM Browser Run trace analysis', () => {

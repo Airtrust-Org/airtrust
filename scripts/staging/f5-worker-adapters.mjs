@@ -186,12 +186,18 @@ export function createF5WorkerAdapters({
       }
       const result = await json(`${coursePath(courseId)}/scorm-upload/streamed/${params.operationId}/status?sha256=${params.packageSha256}`,
         { method: 'GET' });
+      // A successful status response is not proof of this operation's identity.
+      // A cross-operation/tenant response must never authorize compensation.
       if (result?.source !== 'WORKER_F5_INTAKE_STATUS' ||
-          !['INTAKE_PRESENT', 'CANDIDATE_PRESENT', 'CLEAN'].includes(result.state)) {
+          result.operationId !== params.operationId ||
+          !['INTAKE_PRESENT', 'CANDIDATE_PRESENT', 'CLEAN'].includes(result.state) ||
+          (result.state === 'INTAKE_PRESENT' &&
+            result.packageSha256 !== params.packageSha256)) {
         fail('AMBIGUOUS_INTAKE_READBACK_INVALID');
       }
       if (result.state === 'CANDIDATE_PRESENT' &&
           (result.candidate?.packageSha256 !== params.packageSha256 ||
+           result.candidate?.active !== false ||
            result.candidate?.createdByOperation !== true || result.candidate?.alreadyExisted !== false)) {
         fail('AMBIGUOUS_CANDIDATE_OWNERSHIP_UNPROVEN');
       }

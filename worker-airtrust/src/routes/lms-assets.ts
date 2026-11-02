@@ -22,6 +22,7 @@ import {
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
   buildScormQueuedCommitScript,
+  buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from './escalas-shared';
@@ -29,7 +30,8 @@ import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
-import { buildScormLaunchState, readScormNavigationBookmark } from '../services/lms-scorm-launch-state';
+import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
+import { buildScormLaunchState, readScormNavigationBookmark, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -365,7 +367,13 @@ async function authenticateLmsAssetRequest(
   }
 
   const security = await validateAccessTokenSecurityState(env.DB, payload);
-  return { ...payload, role: security.role };
+  // Bearer access tokens can also request launch/assets directly. Keep their
+  // employee scope consistent with /minhas and asset-session even after a
+  // link was created or revoked after JWT issuance.
+  const currentFuncionarioId = await resolveLmsFuncionarioId(
+    env.DB, payload.sub, payload.empresa_id,
+  );
+  return { ...payload, role: security.role, funcionario_id: currentFuncionarioId };
 }
 
 function assertCourseAssetToken(
@@ -476,6 +484,15 @@ app.post('/assets/session', auth(), async (c) => {
     throw new ApiError('Empresa não identificada no token', 401);
   }
 
+  // The enrollment list resolves the employee link from D1 on every request.
+  // The access JWT may predate an admin's correction of usuarios.funcionario_id:
+  // using its old claim here yields a false 403 and a blank learner player.
+  // Resolve under the same tenant and active-employee constraints as /minhas.
+  // Never fall back to the token's stale funcionario_id if the link was revoked.
+  const currentFuncionarioId = await resolveLmsFuncionarioId(
+    c.env.DB, accessPayload.sub, empresaId,
+  );
+
   let cursoId = 0;
   let scopedMatriculaId: number | undefined;
   let scopedScormPackagePrefix: string | undefined;
@@ -509,7 +526,7 @@ app.post('/assets/session', auth(), async (c) => {
     if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
 
     const canManage = isPrivilegedRole(accessPayload.role);
-    const callerFuncionarioId = Number(accessPayload.funcionario_id ?? 0);
+    const callerFuncionarioId = currentFuncionarioId ?? 0;
     if (!canManage) {
       if (!callerFuncionarioId || callerFuncionarioId !== matricula.funcionario_id) {
         throw new ApiError('Acesso negado', 403);
@@ -582,7 +599,7 @@ app.post('/assets/session', auth(), async (c) => {
       empresa_id: empresaId,
       empresas: accessPayload.empresas,
       permissions: accessPayload.permissions,
-      funcionario_id: accessPayload.funcionario_id ?? null,
+      funcionario_id: currentFuncionarioId,
       nome: accessPayload.nome,
     },
     jwtSecret,
@@ -1084,13 +1101,14 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const isScorm2004 = matricula.scorm_versao === '2004';
   const progressoScorm = await db
     .prepare(
-      `SELECT suspend_data, cmi_json
+      `SELECT suspend_data, cmi_json, lesson_status, completion_status, success_status,
+              score_raw, score_max, score_min, score_scaled
          FROM lms_progresso_scorm
         WHERE matricula_id = ?
           AND empresa_id = ?`,
     )
     .bind(matricula.id, empresaId)
-    .first<{ suspend_data: string | null; cmi_json: string | null }>();
+    .first<{ suspend_data: string | null; cmi_json: string | null } & PersistedScormEvidence>();
 
   const ciclo = await db
     .prepare(
@@ -1124,21 +1142,21 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
   }
 
-  if (matricula.status !== 'CONCLUIDO') {
-    const mismatch = await detectLmsEditionMismatch({
-      bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
-      empresaId, cursoId: matricula.curso_id,
-      cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
-      enrollmentStartedAt: matricula.data_inicio,
-    });
-    if (mismatch) throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
-  }
+  // Completed review also checks the edition: an old cursor is never replayed into another one.
+  const mismatch = await detectLmsEditionMismatch({
+    bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
+    empresaId, cursoId: matricula.curso_id,
+    cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
+    enrollmentStartedAt: matricula.data_inicio,
+  });
+  if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
     matricula.status === 'CONCLUIDO',
     navigationBookmark,
+    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch) },
   );
 
   const html = buildLaunchPage({
@@ -1271,6 +1289,14 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     ? `${launchUrl}${launchUrl.includes('?') ? '&' : '?'}airtrust_scorm=${encodeURIComponent(assetCacheBuster)}`
     : launchUrl;
 
+  // The SCORM iframe cannot inspect the React grandparent path across origins.
+  // Factory V3 recognizes preview=1 and skips enrollment resume state, avoiding
+  // spurious edition mismatch banners in administrator previews.
+  // Learner launches and review must never receive this flag.
+  const scormEntryUrl = previewMode
+    ? launchUrlWithCacheBuster + (launchUrlWithCacheBuster.includes('?') ? '&' : '?') + 'preview=1'
+    : launchUrlWithCacheBuster;
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1334,7 +1360,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
   window.API_1484_11 = stub2004;
 })();
 </script>
-<iframe id="scorm-frame" src="${escapeHtml(launchUrlWithCacheBuster)}" allow="autoplay; fullscreen" sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts"></iframe>
+<iframe id="scorm-frame" src="${escapeHtml(scormEntryUrl)}" allow="autoplay; fullscreen" sandbox="allow-downloads allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts"></iframe>
 <div id="status-bar">
   <span id="status-dot"></span>
   <span id="status-text">Carregando SCORM...</span>
@@ -1660,6 +1686,7 @@ ${buildScormPayloadFingerprintScript()}
   }
 
 ${buildScormVisitTrackingScript()}
+${buildScormTerminalLockScript()}
 
   function emitProgress(payload) {
     if (MATRICULA_ID == null) return;
@@ -2388,6 +2415,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     LMSSetValue: function(element, value) {
+      if (protectTerminalValue(element, value)) return 'true';
       var previousValue = cmi[element];
       var nextValue = value;
       var decision = 'accepted';
@@ -2468,6 +2496,7 @@ ${buildScormSessionCloseRuntimeScript()}
       return cmi[element] !== undefined ? String(cmi[element]) : '';
     },
     SetValue: function(element, value) {
+      if (protectTerminalValue(element, value)) return 'true';
       var previousValue = cmi[element];
       var nextValue = value;
       var decision = 'accepted';

@@ -6,6 +6,7 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
+import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -75,10 +76,11 @@ import {
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import { findLatestMatriculaForFuncionario, readMatriculaForCourseList } from '../repositories/lms-matricula-queries';
+import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
-import { assertScormCommitCycle } from '../services/lms-scorm-cycle-guard';
+import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
@@ -88,31 +90,8 @@ app.use('*', auth());
 app.route('/convites', lmsMatriculasConvitesRoutes);
 registerLmsScormEditionHandoffRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
-function getCallerFuncionarioId(c: Context): number | null {
-  const raw = c.get('funcionarioId' as never) as unknown;
-  const parsed = typeof raw === 'string' ? Number(raw) : (raw as number | null | undefined);
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
-}
-
-/**
- * Versão async: tenta JWT first, se null faz lookup no DB via userId.
- * Resolve o caso em que o vínculo usuario→funcionario foi criado após o JWT ter sido gerado.
- */
 async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<number | null> {
-  const fromJwt = getCallerFuncionarioId(c);
-  if (fromJwt) return fromJwt;
-
-  // Fallback: userId está sempre no JWT; busca funcionario_id atual no DB
-  const userId = getCallerUserId(c);
-  if (!userId) return null;
-
-  const row = await db
-    .prepare('SELECT funcionario_id FROM usuarios WHERE id = ? AND deleted_at IS NULL LIMIT 1')
-    .bind(userId)
-    .first<{ funcionario_id: number | null }>();
-
-  const parsed = row?.funcionario_id;
-  return Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
+  return resolveLmsFuncionarioId(db, c.get('userId' as never), getEmpresaIdSafe(c));
 }
 
 async function createLmsInAppNotification(
@@ -244,7 +223,7 @@ app.get('/minhas-ead', async (c) => {
   const funcionarioId = await resolveCallerFuncionarioId(c, db);
 
   if (!funcionarioId) {
-    return c.json({ success: true, data: [] });
+    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
   const rows = await db
@@ -306,7 +285,6 @@ app.get('/minhas-ead', async (c) => {
         END,
         data_vencimento_qualificacao ASC NULLS LAST,
         m.updated_at DESC
-      LIMIT 50
     `,
     )
     .bind(funcionarioId, empresaId)
@@ -340,7 +318,7 @@ app.get('/minhas', async (c) => {
   const offset = (page - 1) * limit;
 
   if (!funcionarioId) {
-    return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
+    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
   }
 
   const total = await db
@@ -465,7 +443,14 @@ app.get(
     const rows = await db
       .prepare(
         `
-      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
+      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM usuarios u
+          JOIN usuarios_empresas ue
+            ON ue.usuario_id = u.id AND ue.empresa_id = m.empresa_id
+          WHERE u.funcionario_id = m.funcionario_id
+            AND u.deleted_at IS NULL
+        ) THEN 1 ELSE 0 END AS aluno_vinculado
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
@@ -522,7 +507,7 @@ app.get('/:id', async (c) => {
           (SELECT cy.data_inicio FROM lms_matricula_ciclos cy
             WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
               AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
-          c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
+          c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
           qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
@@ -636,7 +621,7 @@ app.get('/:id', async (c) => {
         })
       : null;
   const scormClosureReadiness = tipoConteudo === 'scorm'
-    ? buildPersistedScormClosureReadiness(matricula, progressoScorm)
+    ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null))
     : null;
   const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
     handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
@@ -1247,7 +1232,7 @@ app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), asyn
     )
     .bind(matriculaId, empresaId)
     .run();
-  await syncMatriculaCycleFromMatricula(db, { matriculaId });
+  await syncMatriculaCycleFromMatricula(db, { matriculaId, empresaId });
 
   await createLmsInAppNotification(db, {
     funcionarioId: existing.funcionario_id,
@@ -1290,7 +1275,7 @@ app.post('/scorm/commit', async (c) => {
       `
       SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct, m.tentativas,
         m.qualificacao_historico_id,
-        c.id AS curso_id, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+        c.id AS curso_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.tipo_conteudo, c.scorm_package_r2_prefix,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
         qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1310,7 +1295,7 @@ app.post('/scorm/commit', async (c) => {
       progresso_pct: number;
       tentativas: number;
       qualificacao_historico_id: number | null;
-      curso_id: number;
+      curso_id: number; tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'FORMATIVE' | 'SCORED' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -1416,7 +1401,7 @@ app.post('/scorm/commit', async (c) => {
     scoreMax: effectiveScoreMax,
     scoreScaled: effectiveScoreScaled,
   });
-  const sucesso = canFinalizeScormEnrollment({
+  const sucesso = canFinalizeScormEnrollment({ manifest: await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, mergedCmiJson, d.suspend_data),
     commit: d, wasCompleted: matriculaWasConcluido, cmiJson: mergedCmiJson,
     location: mergedLocation, policy: matricula.scorm_assessment_policy,
     masteryScore: matricula.scorm_mastery_score, scorePct: effectiveScorePct });
@@ -1497,8 +1482,8 @@ app.post('/scorm/commit', async (c) => {
       cmi_json: mergedCmiJson,
     },
   });
-  // Upsert progresso SCORM
-  await db
+  // Upsert progresso SCORM só enquanto o ciclo informado é o atual (#1541: guarda no próprio write).
+  assertCycleWrite((await db
     .prepare(
       `
       INSERT INTO lms_progresso_scorm
@@ -1506,7 +1491,7 @@ app.post('/scorm/commit', async (c) => {
          score_raw, score_max, score_min, score_scaled,
          session_time, total_time, suspend_data, launch_data, cmi_json,
          session_count, last_commit_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now') WHERE ${CYCLE_WRITE_GUARD}
       ON CONFLICT(matricula_id) DO UPDATE SET
         lesson_status = excluded.lesson_status,
         completion_status = excluded.completion_status,
@@ -1563,9 +1548,9 @@ app.post('/scorm/commit', async (c) => {
         d.launch_data ?? null,
         preferIncomingScormState,
       ),
-      mergedCmiJson,
+      mergedCmiJson, ...cycleGuardBinds(Number(d.ciclo_id), d.matricula_id, empresaId),
     )
-    .run();
+    .run()).meta?.changes);
 
   emitScormCommitTelemetry(c, {
     matriculaId: d.matricula_id,
@@ -1700,7 +1685,7 @@ app.post('/scorm/commit', async (c) => {
         empresaId,
       )
       .run();
-    await syncMatriculaCycleFromMatricula(db, { matriculaId: d.matricula_id });
+    await syncMatriculaCycleFromMatricula(db, { matriculaId: d.matricula_id, empresaId });
   }
 
   novoStatus = statusFinal;
@@ -1832,7 +1817,7 @@ app.post('/:id/finalizar', async (c) => {
     .prepare(
       `SELECT m.id, m.empresa_id, m.funcionario_id, m.status, m.progresso_pct,
               m.qualificacao_historico_id,
-              c.id AS curso_id, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, c.scorm_assessment_policy,
+              c.id AS curso_id, c.scorm_package_r2_prefix, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL},
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
@@ -1851,7 +1836,7 @@ app.post('/:id/finalizar', async (c) => {
       progresso_pct: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
-      tipo_conteudo: string | null;
+      tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       scorm_mastery_score: number | null;
@@ -1923,7 +1908,7 @@ app.post('/:id/finalizar', async (c) => {
       status: matricula.status,
       scorm_assessment_policy: matricula.scorm_assessment_policy,
       scorm_mastery_score: matricula.scorm_mastery_score,
-    }, scormAtual)
+    }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data))
     : null;
   if (scormClosure && !scormClosure.eligible_for_server_verification) {
     await logLmsMatriculaAudit(db, c, {
@@ -2118,7 +2103,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     .prepare(
       `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
-              c.tipo_conteudo, c.scorm_mastery_score, c.scorm_assessment_policy, c.gerar_qualificacao_ao_concluir,
+              c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
               qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
               qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
@@ -2137,7 +2122,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       curso_id: number;
       curso_titulo: string;
       qualificacao_tipo_id: number | null;
-      tipo_conteudo: string | null;
+      tipo_conteudo: string | null; scorm_package_r2_prefix: string | null;
       scorm_mastery_score: number | null;
       scorm_assessment_policy: 'SCORED' | 'FORMATIVE' | null;
       gerar_qualificacao_ao_concluir: number;
@@ -2208,7 +2193,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         status: existing.status,
         scorm_assessment_policy: existing.scorm_assessment_policy,
         scorm_mastery_score: existing.scorm_mastery_score,
-      }, scormAtual);
+      }, scormAtual, await loadManifestEvidenceForEnrollment(c.env.BUCKET, existing, empresaId, scormAtual?.cmi_json, scormAtual?.suspend_data));
       // The only exception is a separately governed administrative override:
       // real SCORM completion still uses the exact same closure verdict as
       // commit and learner finalization. Overrides are never SCORM PASS.
@@ -2364,7 +2349,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       )
       .bind(status, observacoes ?? null, dataConclusao, matriculaId, empresaId)
       .run();
-    await syncMatriculaCycleFromMatricula(db, { matriculaId });
+    await syncMatriculaCycleFromMatricula(db, { matriculaId, empresaId });
   }
 
   const updated = await db

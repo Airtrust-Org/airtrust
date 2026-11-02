@@ -12,6 +12,8 @@ export async function readScormActiveResumeProposal(params: {
   activePrefix: string | null;
   cycleStartedAt: string | null | undefined;
   cmiJson: string | null | undefined;
+  /** Column suspend_data, used when cmi_json does not inline it. */
+  suspendData?: string | null;
   /** Read append-only handoff provenance only when the governed schema is enabled. */
   handoffHistoryEnabled?: boolean;
 }): Promise<ScormActiveResumePlan | null> {
@@ -136,24 +138,76 @@ export async function readScormActiveResumeProposal(params: {
       previousPrefix = null;
     }
   }
-  const previousSlideIds = previousPrefix ? await readSlides(previousPrefix) : null;
+  const manifestSlideIds = previousPrefix ? await readSlides(previousPrefix) : null;
+  // The learner's own Factory snapshot is self-describing: it carries the
+  // stable unit IDs of the edition that wrote it. It is a navigation map even
+  // when the historical R2 manifest/audit lineage is gone; a conflicting
+  // manifest makes the provenance ambiguous, so neither map is used.
+  const ownSnapshot = readNativeSnapshot(cmi, params.suspendData);
+  const candidateIds = manifestSlideIds && ownSnapshot &&
+    manifestSlideIds.join('\u0000') !== ownSnapshot.ids.join('\u0000')
+    ? null : (manifestSlideIds ?? ownSnapshot?.ids ?? null);
+  const markerPosition = marker && marker.current >= 1 &&
+    marker.current <= marker.total ? marker.current : null;
+  // lesson_location indexes the authored unit list only when both totals agree
+  // (a 46-screen counter over 45 required units would shift every anchor);
+  // otherwise only the package-authored cursor of the same snapshot can anchor.
+  const markerIndexesIds = Boolean(candidateIds && markerPosition !== null &&
+    marker?.total === candidateIds.length);
+  const snapshotPosition = ownSnapshot && candidateIds && ownSnapshot.cursor !== null &&
+    ownSnapshot.cursor < candidateIds.length ? ownSnapshot.cursor + 1 : null;
+  const idAnchor = markerIndexesIds ? markerPosition
+    : candidateIds && markerPosition === null ? snapshotPosition
+    : candidateIds && snapshotPosition !== null ? snapshotPosition : null;
+  // Without a trustworthy ID anchor the plan degrades to a proportional,
+  // non-certifying suggestion over the learner's own location counter.
+  const previousSlideIds = candidateIds && (idAnchor !== null || markerPosition === null)
+    ? candidateIds : null;
+  const fromSnapshot = Boolean(previousSlideIds && !manifestSlideIds);
   const viewed = cmi['airtrust.viewed_slides'];
-  const previousVisitedIds = previousSlideIds && Array.isArray(viewed)
-    ? [...new Set(viewed.filter((value: unknown) =>
+  const viewedPositions: unknown[] = Array.isArray(viewed) && markerIndexesIds ? viewed
+    : ownSnapshot && previousSlideIds ? ownSnapshot.visited.map((index) => index + 1)
+    : Array.isArray(viewed) ? viewed : [];
+  const previousVisitedIds = previousSlideIds
+    ? [...new Set(viewedPositions.filter((value: unknown) =>
         Number.isSafeInteger(value) && Number(value) >= 1 &&
         Number(value) <= previousSlideIds.length).map((value: unknown) =>
           previousSlideIds[Number(value) - 1]))]
     : [];
-
-  const previousPosition = marker && marker.current >= 1 &&
-    marker.current <= marker.total ? marker.current : null;
+  const previousPosition = previousSlideIds ? idAnchor : markerPosition;
   const previousCursorId = previousSlideIds && previousPosition &&
     previousPosition <= previousSlideIds.length
     ? previousSlideIds[previousPosition - 1] : null;
   return planScormActiveResume({
     activeSlideIds, previousSlideIds, previousVisitedIds,
-    previousCursorId, previousPosition, previousTotal: marker?.total ?? null,
+    previousCursorId, previousPosition,
+    previousTotal: previousSlideIds ? previousSlideIds.length : marker?.total ?? null,
     cycleId: params.cycleId ?? null,
-    activePackageSha256, previousPackageSha256,
+    activePackageSha256,
+    // A snapshot-only map has no verified package hash; never label it with one.
+    previousPackageSha256: fromSnapshot ? null : previousPackageSha256,
   });
+}
+
+/** Factory/M8 suspend_data: `ids` (stable unit IDs), `a` (cursor index), `d` (visited indexes). */
+function readNativeSnapshot(
+  cmi: Record<string, unknown>, suspendData: string | null | undefined,
+): { ids: string[]; cursor: number | null; visited: number[] } | null {
+  const inline = cmi['cmi.suspend_data'];
+  const raw = typeof inline === 'string' && inline.trim() ? inline : suspendData;
+  if (typeof raw !== 'string' || raw.length > 65_536) return null;
+  try {
+    const state = JSON.parse(raw) as Record<string, unknown>;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return null;
+    const ids = state.ids;
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 1000 ||
+        !ids.every((id: unknown) => typeof id === 'string' && id.length > 0 && id.length <= 256) ||
+        new Set(ids).size !== ids.length) return null;
+    const inRange = (n: unknown): n is number =>
+      Number.isSafeInteger(n) && Number(n) >= 0 && Number(n) < ids.length;
+    const visited = Array.isArray(state.d) && state.d.every(inRange) ? state.d as number[] : [];
+    return { ids: ids as string[], cursor: inRange(state.a) ? state.a : null, visited };
+  } catch {
+    return null;
+  }
 }

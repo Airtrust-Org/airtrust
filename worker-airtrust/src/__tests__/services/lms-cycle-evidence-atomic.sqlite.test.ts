@@ -18,14 +18,9 @@ function fixture(withMigration=true) {
       tentativas INTEGER,qualificacao_historico_id INTEGER,matriculado_por INTEGER,
       ultimo_slide INTEGER,ultima_pagina INTEGER,created_at TEXT,updated_at TEXT
     );
-    CREATE TABLE lms_matricula_ciclos (
-      id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula_id INTEGER,curso_id INTEGER,
-      funcionario_id INTEGER,numero_ciclo INTEGER,origem TEXT,status TEXT,ciclo_atual INTEGER,
-      deleted_at TEXT,observacoes TEXT,data_matricula TEXT,progresso_pct INTEGER,
-      tentativas INTEGER,created_at TEXT,updated_at TEXT
-    );
-    CREATE UNIQUE INDEX idx_test_current ON lms_matricula_ciclos(matricula_id)
-      WHERE ciclo_atual=1 AND deleted_at IS NULL;
+    CREATE TABLE lms_historico_importado (id INTEGER PRIMARY KEY,empresa_id INTEGER,funcionario_id INTEGER,
+      curso_id INTEGER,status TEXT,progresso_pct INTEGER,score_final REAL,qualificacao_historico_id INTEGER,
+      data_conclusao TEXT,completed_at TEXT,created_at TEXT,updated_at TEXT,deleted_at TEXT);
     CREATE TABLE lms_progresso_scorm (
       matricula_id INTEGER,empresa_id INTEGER,lesson_status TEXT,
       completion_status TEXT,success_status TEXT,score_raw REAL,score_min REAL,
@@ -46,6 +41,7 @@ function fixture(withMigration=true) {
     CREATE TABLE documentos (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, arquivo TEXT, deleted_at TEXT
     );
+    ${readFileSync(resolve(process.cwd(),'migrations/0346_lms_matricula_ciclos_ssot.sql'),'utf8')}
     CREATE TABLE audit_logs (
       id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT,entity_type TEXT,
       entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT
@@ -116,7 +112,11 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
     const oldQualification=one(db,"SELECT * FROM qualificacoes_historico WHERE id=700");
     const oldDocument=one(db,"SELECT * FROM documentos WHERE id=910");
     await reset(db);
-    expect(one(db,"SELECT * FROM qualificacoes_historico WHERE id=700")).toEqual(oldQualification);
+    // Only the attribution to the validating (previous) cycle is added (#1541).
+    expect(one(db,"SELECT * FROM qualificacoes_historico WHERE id=700")).toEqual({
+      ...oldQualification,lms_matricula_ciclo_id:99,
+      updated_at:one(db,"SELECT updated_at FROM qualificacoes_historico WHERE id=700").updated_at,
+    });
     expect(one(db,"SELECT * FROM documentos WHERE id=910")).toEqual(oldDocument);
     expect(one(db,"SELECT qualificacao_historico_id,status,progresso_pct FROM lms_matriculas WHERE id=384"))
       .toEqual({qualificacao_historico_id:null,status:'NAO_INICIADO',progresso_pct:0});
@@ -141,6 +141,7 @@ describe('LMS immutable cycle evidence, D1 SQLite transaction',()=>{
   });
   it('enforces xAPI archived cycle tenant and matrícula match in D1',async()=>{
     const db=fixture();
+    db.database.exec("INSERT INTO lms_matriculas (id,empresa_id,curso_id,funcionario_id,status) VALUES(888,2,34,78,'CONCLUIDO')");
     db.database.exec("INSERT INTO lms_matricula_ciclos (id,empresa_id,matricula_id,numero_ciclo,origem,status,ciclo_atual) VALUES(200,2,888,1,'LMS','CONCLUIDO',1)");
     expect(()=>db.database.exec("UPDATE lms_xapi_statements SET archived_cycle_id=200 WHERE id=500"))
       .toThrow('LMS_XAPI_ARCHIVE_TENANT_CYCLE_MISMATCH');

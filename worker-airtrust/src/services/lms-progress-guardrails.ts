@@ -223,6 +223,7 @@ type ScormSnapshotInput = {
 type ScormSnapshot = {
   completed: boolean;
   failed: boolean;
+  passed: boolean;
   locationCurrent: number;
   progressPct: number;
   payloadBytes: number;
@@ -242,6 +243,8 @@ function buildScormSnapshot(input: Nullable<ScormSnapshotInput>): ScormSnapshot 
       lessonStatus: input?.lesson_status,
       successStatus: input?.success_status,
     }),
+    passed: normalizeScormToken(input?.lesson_status) === 'passed' ||
+      normalizeScormToken(input?.success_status) === 'passed',
     locationCurrent: location?.current ?? 0,
     progressPct: Number.isFinite(progressPct) ? progressPct : 0,
     payloadBytes:
@@ -259,6 +262,8 @@ export function shouldPreferIncomingScormState(params: {
 
   if (!params.current) return true;
   if (incoming.completed !== current.completed) return incoming.completed;
+  // Both terminal: a reopened SCO reporting "completed" must not replace "passed".
+  if (current.completed && incoming.passed !== current.passed) return incoming.passed;
   if (incoming.locationCurrent !== current.locationCurrent) {
     return incoming.locationCurrent > current.locationCurrent;
   }
@@ -390,6 +395,62 @@ function preserveObservedScormSlides(
     [...new Set([...oldList, ...newList])].sort((x, y) => (x as number) - (y as number));
 }
 
+/** Non-terminal audit key: regressive values a reopened SCO attempted to commit. */
+export const SCORM_RUNTIME_REGRESSION_AUDIT_KEY = 'airtrust.runtime_regression';
+
+const SCORM_TERMINAL_STATUS_RANKS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  'cmi.core.lesson_status': { passed: 2, completed: 1 },
+  'cmi.completion_status': { completed: 1 },
+  'cmi.success_status': { passed: 1 },
+};
+const SCORM_BEST_SCORE_KEYS = ['cmi.core.score.raw', 'cmi.score.raw', 'cmi.score.scaled'] as const;
+
+function scormStatusRank(key: string, value: unknown): number {
+  return SCORM_TERMINAL_STATUS_RANKS[key]?.[normalizeScormToken(
+    typeof value === 'string' ? value : null,
+  )] ?? 0;
+}
+
+function finiteScormNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(String(value));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Within one cycle a persisted terminal CMI is evidence: later commits from a
+ * reopened package (incomplete/0, or completed/0 after passed/100) may add
+ * visits but never lower status rank or best score. Attempted regressive
+ * values are kept only in a non-terminal audit field.
+ */
+function preserveTerminalScormEvidence(
+  current: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null,
+  merged: Record<string, unknown> | null,
+  currentIsTerminal: boolean,
+): void {
+  if (!current || !incoming || !merged || !currentIsTerminal) return;
+  const attempted: Record<string, unknown> = {};
+  for (const key of Object.keys(SCORM_TERMINAL_STATUS_RANKS)) {
+    if (scormStatusRank(key, current[key]) > scormStatusRank(key, incoming[key]) &&
+        incoming[key] !== undefined) attempted[key] = incoming[key];
+    if (scormStatusRank(key, current[key]) > scormStatusRank(key, merged[key])) {
+      merged[key] = current[key];
+    }
+  }
+  for (const key of SCORM_BEST_SCORE_KEYS) {
+    const best = finiteScormNumber(current[key]);
+    if (best === null) continue;
+    const next = finiteScormNumber(incoming[key]);
+    if (incoming[key] !== undefined && (next === null || next < best)) attempted[key] = incoming[key];
+    const kept = finiteScormNumber(merged[key]);
+    if (kept === null || kept < best) merged[key] = current[key];
+  }
+  if (Object.keys(attempted).length > 0) {
+    merged[SCORM_RUNTIME_REGRESSION_AUDIT_KEY] = attempted;
+  }
+}
+
 export function mergeScormRuntimeState(params: {
   currentCmiJson?: Nullable<string>;
   incomingCmiJson?: Nullable<string>;
@@ -429,6 +490,10 @@ export function mergeScormRuntimeState(params: {
   const mergedLocationValue = blockedTerminalRegression || preservedLocationFromCurrent
     ? currentLocationValue
     : (incomingLocationValue ?? currentLocationValue);
+
+  // #1311: even a terminal-to-terminal write (passed/100 -> completed/0) must
+  // not lower the strongest status or the best score held in this cycle.
+  preserveTerminalScormEvidence(currentCmi, incomingCmi, mergedCmi, isTerminalCmi(currentCmi));
 
   const currentSuspendData = normalizeScormText(params.currentSuspendData);
   const incomingSuspendData = normalizeScormText(params.incomingSuspendData);

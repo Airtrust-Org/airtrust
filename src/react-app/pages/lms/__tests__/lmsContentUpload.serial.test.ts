@@ -1,8 +1,8 @@
 import { strToU8, zipSync } from 'fflate';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithAuth } from '@/react-app/config/api';
-import { uploadStructuredLmsPackage } from '../lmsContentUpload';
+import { inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
 
 const { extractBrowserLmsPackageMock } = vi.hoisted(() => ({
   extractBrowserLmsPackageMock: vi.fn(),
@@ -33,6 +33,18 @@ function scormZip(manifestXml?: string) {
     'media/asset-1.webp': new Uint8Array([1, 2, 3, 4]),
   };
   return { entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })), zip: zipSync(files) };
+}
+
+function scormZipWithCompletionContract(contract: Record<string, unknown>) {
+  const base = scormZip();
+  const entries = [...base.entries, {
+    path: 'airtrust-completion-manifest.json',
+    bytes: strToU8(JSON.stringify(contract)),
+  }];
+  const files: Record<string, Uint8Array> = Object.fromEntries(
+    entries.map(({ path, bytes }) => [path, bytes]),
+  );
+  return { entries, zip: zipSync(files) };
 }
 
 // MEL V4: namespaced <ns0:resource> — parseLaunchFile must still resolve index.html.
@@ -70,6 +82,168 @@ const CANDIDATE_VALIDATED = {
   completionManifest: { status: 'PASS', errors: [] },
   diagnostics: { status: 'PASS', errors: [] },
 };
+
+
+describe('production SCORM inactive candidate upload: never activates', () => {
+  beforeEach(() => {
+    fetchWithAuthMock.mockReset();
+    extractBrowserLmsPackageMock.mockReset();
+    vi.stubGlobal('window', { location: { hostname: 'airtrust.online' } });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('stores exact-ZIP SHA only as VALIDATED without conformance or activation', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const statuses: string[] = [];
+    const expectedDigest = await crypto.subtle.digest('SHA-256', new Uint8Array(fixture.zip));
+    const expectedSha = [...new Uint8Array(expectedDigest)]
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, packageSha256: expectedSha,
+    }, 202));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+      onStatus: status => statuses.push(status),
+    });
+    expect(receipt).toEqual({
+      packageId: 'pkg-1', packageSha256: expectedSha, status: 'VALIDATED',
+    });
+    expect(statuses.at(-1)).toMatch(/INATIVO.*inalterada/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/44/scorm-upload');
+    const request = fetchWithAuthMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe('POST');
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'scorm:' + expectedSha });
+    expect((request.body as FormData).has('arquivo')).toBe(true);
+    expect(fetchWithAuthMock.mock.calls.some(call => /conformance|activate|content-upload/.test(String(call[0])))).toBe(false);
+  });
+
+  it('rejects server-side failed static gate without calling activation', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, status: 'REJECTED',
+      structural: { status: 'FAIL', errors: ['estrutura incorreta'] },
+    }, 202));
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+    })).rejects.toThrow(/Quality Gate estático.*estrutura incorreta/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unverifiable candidate SHA response; never marks receipt successful', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, packageSha256: '0'.repeat(64),
+    }, 202));
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(fixture.zip),
+    })).rejects.toThrow(/estado, SHA ou gates inválidos/);
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('substitutes validated formative bytes in a single server-authorized upload', async () => {
+    const fixture = scormZipWithCompletionContract({
+      assessment: { mode: 'NONE', scoringBySCORM: false, requiredInteractions: [], successStatus: 'completed' },
+      content: { requiredSlides: ['s1', 's2'] },
+      formative: { scored: false, requiredActivities: ['s2'] },
+      completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(fixture.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      packageId: 'pkg-replaced', status: 'ACTIVE', packageSha256: sha,
+    }));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 26, file: scormFile(fixture.zip), replaceImmediately: true,
+    });
+    expect(receipt).toEqual({ packageId: 'pkg-replaced', packageSha256: sha, status: 'ACTIVE' });
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    expect(fetchWithAuthMock.mock.calls[0]?.[0])
+      .toBe('/api/lms/cursos/26/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+    const request = fetchWithAuthMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe('POST');
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'scorm:' + sha });
+  });
+
+  it('is host-restricted and never sends a request from staging or preview', async () => {
+    vi.unstubAllGlobals();
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 44, file: scormFile(scormZip().zip),
+    })).rejects.toThrow(/disponível apenas em airtrust.online/);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('SCORM profile routing — prevent scored SOP bypass through admin formative button', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { location: { hostname: 'airtrust.online' } });
+    extractBrowserLmsPackageMock.mockReset();
+    fetchWithAuthMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function noExamContract() {
+    return {
+      assessment: { mode: 'NONE', requiredInteractions: [], scoringBySCORM: false, successStatus: 'completed' },
+      completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+      content: { requiredSlides: ['s1', 's2'] },
+      formative: { requiredActivities: ['s2'], scored: false },
+    };
+  }
+
+  it('recognizes the complete scoreless formative contract for direct replacement', async () => {
+    const f = scormZipWithCompletionContract(noExamContract());
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('FORMATIVE');
+  });
+
+  it('routes AW139/S76-style graded mastery packages to inactive intake, even for admin', async () => {
+    const f = scormZipWithCompletionContract({
+      ...noExamContract(),
+      assessment: { requiredInteractions: ['q01'], masteryScore: 80, successStatus: 'passed', failureStatus: 'failed' },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(f.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({ ...CANDIDATE_VALIDATED, packageSha256: sha }, 202));
+    const receipt = await uploadScormInactiveProductionCandidate({ cursoId: 63, file: scormFile(f.zip), replaceImmediately: false });
+    expect(receipt.status).toBe('VALIDATED');
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/63/scorm-upload');
+  });
+
+  it('blocks a forced direct replacement of a scored SOP before any network request', async () => {
+    const f = scormZipWithCompletionContract({
+      ...noExamContract(), assessment: { requiredInteractions: ['q'], masteryScore: 80, successStatus: 'passed' },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    await expect(uploadScormInactiveProductionCandidate({
+      cursoId: 62, file: scormFile(f.zip), replaceImmediately: true,
+    })).rejects.toThrow(/não comprova o perfil formativo/);
+    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+  });
+
+  it('never directly replaces a private candidate or unproven/invalid manifest', async () => {
+    for (const manifest of [
+      { ...noExamContract(), release: { status: 'PRIVATE_CANDIDATE_NOT_CERTIFIED_DO_NOT_ACTIVATE' } },
+      { ...noExamContract(), formative: { requiredActivities: [], scored: false } },
+      { ...noExamContract(), completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1' } },
+    ]) {
+      const f = scormZipWithCompletionContract(manifest);
+      extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+      expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+    }
+    const f = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+  });
+});
 
 describe('uploadStructuredLmsPackage — SCORM governed package-version flow', () => {
   beforeEach(() => {
@@ -197,6 +371,93 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
   });
 
+  const blockedR5Cases: Array<[string, Record<string, unknown>]> = [
+    ['private R5 release', { release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE', reviewed: false }, assessment: { mode: 'NONE' } }],
+    ['private R5 QA upload (actual MGM RC1 contract)', { release: { status: 'PRIVATE_QA_UPLOAD_ONLY', reviewed: false }, assessment: { mode: 'NONE' } }],
+    ['private draft with mixed-case release marker', { release: { status: ' private_review_pending ' }, assessment: { mode: 'NONE' } }],
+    ['explicit non-activation without private prefix', { release: { status: 'CANDIDATE_DO_NOT_ACTIVATE' }, assessment: { mode: 'NONE' } }],
+    ['external examination R5', { release: { status: 'REVIEWED' }, assessment: { mode: 'EXTERNAL' } }],
+  ];
+  it.each(blockedR5Cases)('blocks %s before any network upload or activation', async (_label, contract) => {
+    const fixture = scormZipWithCompletionContract(contract);
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({});
+    const statuses: string[] = [];
+
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm',
+      file: scormFile(fixture.zip, 'REAL_R5_NAO_ATIVAR.zip'),
+      onStatus: status => statuses.push(status),
+    })).rejects.toThrow(/bloqueada antes do upload.*conteúdo ativo permanece inalterado/i);
+    expect(calls).toHaveLength(0);
+    // Local archive validation runs before the preflight; no upload begins.
+    expect(statuses).toEqual(['Validando pacote...']);
+  });
+
+  it('surfaces ONLY allowlisted Browser Rendering diagnostic metadata and never activates', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'ERROR', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'BROWSER_LAUNCH', failureCategory: 'BROWSER_QUOTA',
+        failureCode: 'TIMEOUT_ERROR',
+      },
+    } });
+
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+    })).rejects.toThrow(/Diagnóstico seguro do navegador: BROWSER_LAUNCH \/ BROWSER_QUOTA \/ TIMEOUT_ERROR/);
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
+  });
+
+  it('keeps an infrastructure timeout distinct from an invalid ZIP and never activates it', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'TIMEOUT', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'VERIFY_SCORM_INITIALIZATION',
+        failureCategory: 'BROWSER_TIMEOUT', failureCode: 'TIMEOUT_ERROR',
+      },
+    } });
+    await expect(uploadStructuredLmsPackage({
+      cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+    })).rejects.toThrow(/recebido como candidato inativo.*infraestrutura.*VERIFY_SCORM_INITIALIZATION.*BROWSER_TIMEOUT/s);
+    expect(calls.filter(call => call.includes('/scorm-upload'))).toHaveLength(1);
+    expect(calls.filter(call => call.includes('/conformance'))).toHaveLength(1);
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
+  });
+
+  it('does not reflect unrecognized diagnostic strings or browser exception details', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({ conformance: {
+      ...CANDIDATE_VALIDATED, publishable: false,
+      runtime: {
+        status: 'ERROR', errors: ['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+        failureStage: 'BROWSER_LAUNCH https://private.example/token=secret',
+        failureCategory: 'BROWSER_ACCESS',
+        failureCode: 'CREDENTIALS=secret',
+      },
+    } });
+
+    try {
+      await uploadStructuredLmsPackage({
+        cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip),
+      });
+      throw new Error('must fail closed');
+    } catch (error) {
+      expect(String(error)).toContain('SCORM_BROWSER_INFRASTRUCTURE_ERROR');
+      expect(String(error)).toContain('BROWSER_ACCESS');
+      expect(String(error)).not.toContain('private.example');
+      expect(String(error)).not.toContain('CREDENTIALS=');
+    }
+    expect(calls.some(call => call.includes('/activate'))).toBe(false);
+  });
+
   it('F: publishable=true calls activate exactly once and returns the active prefix/launch', async () => {
     const fixture = scormZip();
     extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
@@ -249,6 +510,19 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
       uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
     ).rejects.toThrow(/conformidade/i);
     expect(calls.some((c) => c.includes('/activate'))).toBe(false);
+  });
+
+  it('formative no-exam candidate stops after upload: no conformance, no activate, active content preserved', async () => {
+    const fixture = scormZip();
+    extractBrowserLmsPackageMock.mockReturnValue(fixture.entries);
+    const calls = wireScorm({
+      candidate: { ...CANDIDATE_VALIDATED, packageSha256: 'da0a36e661a1'.padEnd(64, '0'), certificationProfile: 'FORMATIVE_NO_EXAM_V1' },
+    });
+
+    await expect(
+      uploadStructuredLmsPackage({ cursoId: 44, tipoConteudo: 'scorm', file: scormFile(fixture.zip) }),
+    ).rejects.toThrow(/candidata INATIVA.*conteúdo ativo foi preservado/s);
+    expect(calls.map((c) => c.split('?')[0])).toEqual(['/api/lms/cursos/44/scorm-upload']);
   });
 
   it('dedup: re-uploading the already-ACTIVE identical ZIP resolves without conformance/activate', async () => {

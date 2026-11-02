@@ -37,6 +37,7 @@ export default function QualificationHistoryReportPanel() {
     'VENCIDA',
     'VENCENDO_30',
     'VALIDA',
+    'RENOVADA',
   ]);
   const [setorId, setSetorId] = useState('');
   const [funcionarioId, setFuncionarioId] = useState('');

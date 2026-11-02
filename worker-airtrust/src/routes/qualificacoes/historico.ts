@@ -400,11 +400,14 @@ export const getHistoricoListHandler = safe(async (c) => {
     }
 
     if (search) {
+      // Historical snapshots may be unlinked from qualificacoes_tipos.
+      // Match the persisted identity too, while preserving tenant, employee,
+      // operational-domain and requested-sector predicates applied above.
       conditions.push(
-        `(f.nome LIKE ? OR f.matricula LIKE ? OR qt.nome LIKE ? OR qt.codigo LIKE ? OR ${MODELO_AERONAVE_EXPR} LIKE ?)`,
+        `(f.nome LIKE ? OR f.matricula LIKE ? OR qt.nome LIKE ? OR qt.codigo LIKE ? OR qh.qualificacao_codigo LIKE ? OR qh.tipo LIKE ? OR ${MODELO_AERONAVE_EXPR} LIKE ?)`,
       );
       const pattern = `%${search}%`;
-      params.push(pattern, pattern, pattern, pattern, pattern);
+      params.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern);
     }
 
     if (funcionario_id) {

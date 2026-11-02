@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   detectMismatch: vi.fn(),
   readProposal: vi.fn(),
   writeHandoff: vi.fn(),
+  resolveFuncionario: vi.fn(),
+}));
+
+vi.mock('../../services/lms-learner-identity', () => ({
+  resolveLmsFuncionarioId: mocks.resolveFuncionario,
 }));
 
 vi.mock('../../services/lms-edition-mismatch', () => ({
@@ -157,8 +162,39 @@ describe('POST /:id/scorm-edition-handoff', () => {
     expect(mocks.writeHandoff).not.toHaveBeenCalled();
   });
 
-  it('rejects a non-admin before reading or writing enrollment data', async () => {
-    const { db, calls } = createDb(null);
+  const ownRow = {
+    id: 74,
+    funcionario_id: 555,
+    curso_id: 33,
+    status: 'EM_ANDAMENTO',
+    data_inicio: '2026-10-01T00:00:00Z',
+    qualificacao_historico_id: null,
+    ciclo_id: 902,
+    cycle_started_at: '2026-10-01T00:00:00Z',
+    tipo_conteudo: 'scorm',
+    scorm_package_r2_prefix: 'lms/scorm/17/33/active/',
+    package_sha256: packageSha256,
+    cmi_json: '{"cmi.core.lesson_location":"32/37"}',
+  };
+
+  it('lets the learner who owns the enrollment request the handoff', async () => {
+    mocks.resolveFuncionario.mockResolvedValue(555);
+    const { db } = createDb(ownRow);
+    const response = await createApp('student').request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.writeHandoff).toHaveBeenCalledWith(db, expect.objectContaining({
+      empresaId: 17, matriculaId: 74, actorId: 81, targetSha256: packageSha256,
+    }));
+  });
+
+  it('rejects a learner who does not own the enrollment before writing anything', async () => {
+    mocks.resolveFuncionario.mockResolvedValue(999);
+    const { db } = createDb(ownRow);
     const response = await createApp('student').request(
       '/74/scorm-edition-handoff',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
@@ -166,7 +202,34 @@ describe('POST /:id/scorm-edition-handoff', () => {
     );
 
     expect(response.status).toBe(403);
-    expect(calls).toHaveLength(0);
+    expect(mocks.readProposal).not.toHaveBeenCalled();
+    expect(mocks.writeHandoff).not.toHaveBeenCalled();
+  });
+
+  it('does not let a manager act on another employee\'s enrollment (sector scope is not checked here)', async () => {
+    mocks.resolveFuncionario.mockResolvedValue(999);
+    const { db } = createDb(ownRow);
+    const response = await createApp('manager').request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.readProposal).not.toHaveBeenCalled();
+    expect(mocks.writeHandoff).not.toHaveBeenCalled();
+  });
+
+  it('rejects a user with no linked employee identity', async () => {
+    mocks.resolveFuncionario.mockResolvedValue(null);
+    const { db } = createDb(ownRow);
+    const response = await createApp('student').request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(403);
     expect(mocks.writeHandoff).not.toHaveBeenCalled();
   });
 

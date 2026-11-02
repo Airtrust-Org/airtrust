@@ -3,6 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Mail, Settings2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchWithAuth } from '@/react-app/config/api';
+import {
+  exportQualificationHistoryPdf,
+  fetchQualificationHistoryForType,
+  buildQualificationHistoryReportRows,
+} from '@/react-app/pages/relatorios/qualificationHistoryReport';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import {
@@ -50,6 +55,11 @@ const ALL_STATUSES: ReportStatus[] = [
   'NAO_REALIZADO',
 ];
 const PENDING_STATUSES: ReportStatus[] = ['EM_ANDAMENTO', 'VENCENDO', 'VENCIDO', 'NAO_REALIZADO'];
+const HISTORICAL_STATUS_BY_COMPLIANCE = {
+  CONFORME: 'VALIDA',
+  VENCENDO: 'VENCENDO_30',
+  VENCIDO: 'VENCIDA',
+} as const;
 const STATUS_LABELS: Record<ReportStatus, string> = {
   CONFORME: 'Realizados',
   EM_ANDAMENTO: 'Em andamento',
@@ -104,9 +114,11 @@ export function TrainingComplianceReportBuilder({
   const [functionId, setFunctionId] = useState(initialFunctionId ? String(initialFunctionId) : '');
   const [employeeId, setEmployeeId] = useState('');
   const [trainingTypeId, setTrainingTypeId] = useState('');
-  const [statuses, setStatuses] = useState<ReportStatus[]>(PENDING_STATUSES);
+  const [statuses, setStatuses] = useState<ReportStatus[]>(ALL_STATUSES);
+  const [includeRenewed, setIncludeRenewed] = useState(true);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [windowDays, setWindowDays] = useState('');
+  const [historyExporting, setHistoryExporting] = useState(false);
   const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [managerSectorIds, setManagerSectorIds] = useState<Set<number>>(new Set());
   const [automationDraft, setAutomationDraft] = useState<AutomationPolicy | null>(null);
@@ -174,8 +186,83 @@ export function TrainingComplianceReportBuilder({
   const funcaoNome = catalogs?.funcoes.find((item) => item.id === Number(functionId))?.nome || null;
   const funcionarioNome =
     (catalogs?.funcionarios || []).find((item) => item.id === Number(employeeId))?.nome || null;
-  const treinamentoNome =
-    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId))?.nome || null;
+  const selectedTrainingType =
+    trainingTypes.find((item) => Number(item.id) === Number(trainingTypeId)) || null;
+  const treinamentoNome = selectedTrainingType?.nome || null;
+  const qualificationHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history', empresaAtualId,
+      sectorId, functionId, employeeId, trainingTypeId,
+      selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(selectedTrainingType && numericOrNull(trainingTypeId)),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          setorIds: numericOrNull(sectorId) ? [Number(sectorId)] : undefined,
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
+  const unfilteredSectorHistory = useQuery({
+    queryKey: [
+      'training-compliance', 'qualification-history-other-sectors', empresaAtualId,
+      functionId, employeeId, trainingTypeId, selectedTrainingType?.nome, selectedTrainingType?.codigo,
+    ],
+    enabled: Boolean(
+      selectedTrainingType && sectorId &&
+      qualificationHistory.isSuccess && (qualificationHistory.data?.length || 0) === 0,
+    ),
+    queryFn: () =>
+      fetchQualificationHistoryForType(
+        {
+          statuses: ['VALIDA', 'VENCENDO_30', 'VENCIDA', 'RENOVADA'],
+          funcionarioId: numericOrNull(employeeId) || undefined,
+          funcao: funcaoNome || undefined,
+        },
+        {
+          id: Number(selectedTrainingType!.id),
+          nome: selectedTrainingType!.nome,
+          codigo: selectedTrainingType!.codigo,
+        },
+      ),
+  });
+  const selectedHistoryStatuses = useMemo(() => {
+    const selected = new Set<string>();
+    if (statuses.includes('CONFORME')) selected.add(HISTORICAL_STATUS_BY_COMPLIANCE.CONFORME);
+    if (statuses.includes('VENCENDO')) selected.add(HISTORICAL_STATUS_BY_COMPLIANCE.VENCENDO);
+    if (statuses.includes('VENCIDO')) selected.add(HISTORICAL_STATUS_BY_COMPLIANCE.VENCIDO);
+    if (includeRenewed) selected.add('RENOVADA');
+    return selected;
+  }, [includeRenewed, statuses]);
+  const allHistoryRows = useMemo(
+    () => buildQualificationHistoryReportRows(qualificationHistory.data || []),
+    [qualificationHistory.data],
+  );
+  const historyRows = useMemo(
+    () => allHistoryRows.filter((item) => selectedHistoryStatuses.has(item.status)),
+    [allHistoryRows, selectedHistoryStatuses],
+  );
+  const historyRowIds = useMemo(() => new Set(historyRows.map((item) => item.id)), [historyRows]);
+  const historySummary = useMemo(() => ({
+    total: historyRows.length,
+    funcionarios: new Set(
+      (qualificationHistory.data || [])
+        .filter((item) => historyRowIds.has(item.id))
+        .map((item) => item.funcionario_id),
+    ).size,
+    renovados: historyRows.filter((item) => item.status === 'RENOVADA').length,
+    vigentes: historyRows.filter((item) => item.status === 'VALIDA').length,
+    vencendo: historyRows.filter((item) => item.status === 'VENCENDO_30').length,
+    vencidos: historyRows.filter((item) => item.status === 'VENCIDA').length,
+  }), [historyRows, historyRowIds, qualificationHistory.data]);
   const allStatusesSelected = sameStatuses(statuses, ALL_STATUSES);
   const summary = useMemo<TrainingComplianceReportSummary>(() => {
     const compliant = rows.filter(
@@ -206,13 +293,68 @@ export function TrainingComplianceReportBuilder({
   };
 
   const exportPdf = async () => {
+    if (reportRows.isError || !reportRows.data) {
+      toast.error('Não foi possível carregar os requisitos obrigatórios para exportação.');
+      return;
+    }
+    if (rows.length === 0) {
+      toast.warning('Não há requisitos obrigatórios nesse recorte. Para consultar certificados já cadastrados, use Exportar histórico (PDF).');
+      return;
+    }
     const report = await generateTrainingCompliancePdf(rows, summary, reportContext);
     downloadTrainingCompliancePdf(report.blob, report.filename);
   };
 
+  const exportHistoryPdf = async () => {
+    const qualificationId = numericOrNull(trainingTypeId);
+    if (!qualificationId) {
+      toast.warning('Selecione uma qualificação para exportar seu histórico.');
+      return;
+    }
+
+    setHistoryExporting(true);
+    try {
+      const retry = qualificationHistory.data ? null : await qualificationHistory.refetch();
+      if (retry?.isError) {
+        throw retry.error instanceof Error
+          ? retry.error
+          : new Error('Falha ao consultar o histórico de qualificações.');
+      }
+      const history = (qualificationHistory.data || retry?.data || [])
+        .filter((item) => historyRowIds.has(item.id));
+      if (history.length === 0) {
+        toast.warning('Nenhum registro corresponde às situações selecionadas para este histórico.');
+        return;
+      }
+      await exportQualificationHistoryPdf(history, {
+        empresaNome,
+        usuarioNome: user?.nome || user?.email || 'Usuário autenticado',
+        filterLabels: [
+          setorNome ? `Setor: ${setorNome}` : 'Todos os setores autorizados',
+          treinamentoNome ? `Qualificação: ${treinamentoNome}` : '',
+          funcaoNome ? `Função: ${funcaoNome}` : '',
+          funcionarioNome ? `Funcionário: ${funcionarioNome}` : '',
+          `Situações do histórico: ${[
+            statuses.includes('CONFORME') ? 'vigentes' : '',
+            statuses.includes('VENCENDO') ? 'em vencimento' : '',
+            statuses.includes('VENCIDO') ? 'vencidas' : '',
+            includeRenewed ? 'renovadas' : '',
+          ].filter(Boolean).join(', ')}`,
+        ].filter(Boolean),
+      });
+      toast.success(`PDF de histórico gerado com ${history.length} registro(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao gerar o histórico.');
+    } finally {
+      setHistoryExporting(false);
+    }
+  };
+
   const sendManagers = useMutation({
-    mutationFn: async () =>
-      readJson<{ setores: number; setores_enviados: number; destinatarios: number }>(
+    mutationFn: async () => {
+      if (statuses.length === 0)
+        throw new Error('Selecione uma situação de Compliance antes de enviar relatórios aos gestores.');
+      return readJson<{ setores: number; setores_enviados: number; destinatarios: number }>(
         await fetchWithAuth('/api/compliance-treinamentos/relatorios/enviar-gestores', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -228,7 +370,8 @@ export function TrainingComplianceReportBuilder({
             },
           }),
         }),
-      ),
+      );
+    },
     onSuccess: (result) => {
       toast.success(
         `Relatório enviado para ${result.destinatarios} gestor(es) em ${result.setores_enviados} setor(es).`,
@@ -274,11 +417,11 @@ export function TrainingComplianceReportBuilder({
   });
 
   const toggleStatus = (status: ReportStatus) => {
-    setStatuses((current) => {
-      if (current.includes(status))
-        return current.length === 1 ? current : current.filter((item) => item !== status);
-      return ALL_STATUSES.filter((item) => item === status || current.includes(item));
-    });
+    setStatuses((current) =>
+      current.includes(status)
+        ? current.filter((item) => item !== status)
+        : ALL_STATUSES.filter((item) => item === status || current.includes(item)),
+    );
   };
   const openManagerModal = () => {
     const selected = numericOrNull(sectorId);
@@ -293,23 +436,48 @@ export function TrainingComplianceReportBuilder({
         <div>
           <h2 className="font-semibold text-slate-900">Gerador de relatórios</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Combine setor, função, funcionário, treinamento e situação. O PDF reflete exatamente o
-            recorte selecionado.
+            Ao selecionar uma qualificação, o botão principal gera o PDF do histórico cadastrado,
+            inclusive renovações. Os requisitos obrigatórios são um relatório separado.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void exportPdf()}
-            disabled={reportRows.isLoading}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            onClick={() => void (selectedTrainingType ? exportHistoryPdf() : exportPdf())}
+            disabled={selectedTrainingType
+              ? historyExporting || qualificationHistory.isFetching || qualificationHistory.isError || historyRows.length === 0
+              : reportRows.isLoading || reportRows.isError || rows.length === 0}
+            title={selectedTrainingType
+              ? 'Gera o PDF com todos os certificados exibidos no Histórico cadastrado, inclusive renovados.'
+              : 'Gera o PDF de requisitos obrigatórios da matriz de Compliance.'}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            <Download className="h-4 w-4" /> Exportar PDF
+            <Download className="h-4 w-4" />
+            {historyExporting
+              ? 'Gerando PDF...'
+              : selectedTrainingType
+                ? `Gerar PDF do histórico (${historyRows.length} ${historyRows.length === 1 ? 'registro' : 'registros'})`
+                : 'Gerar PDF de requisitos'}
           </button>
+          {selectedTrainingType && rows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void exportPdf()}
+              disabled={reportRows.isLoading || reportRows.isError}
+              title="Relatório separado de requisitos obrigatórios, diferente do histórico de certificados."
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" /> PDF de requisitos obrigatórios
+            </button>
+          )}
           <button
             type="button"
             onClick={openManagerModal}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
+            disabled={statuses.length === 0}
+            title={statuses.length === 0
+              ? 'Somente renovações: exporte o PDF do histórico. O envio aos gestores exige situações de Compliance.'
+              : 'Enviar relatório de requisitos obrigatórios aos gestores.'}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             <Mail className="h-4 w-4" /> Enviar ao gestor
           </button>
@@ -371,25 +539,46 @@ export function TrainingComplianceReportBuilder({
           <div className="flex gap-2 text-xs">
             <button
               type="button"
-              onClick={() => setStatuses(PENDING_STATUSES)}
+              onClick={() => {
+                setStatuses(PENDING_STATUSES);
+                setIncludeRenewed(false);
+              }}
               className="rounded-md border bg-white px-2 py-1"
             >
               Pendências
             </button>
             <button
               type="button"
-              onClick={() => setStatuses(ALL_STATUSES)}
+              onClick={() => {
+                setStatuses(ALL_STATUSES);
+                setIncludeRenewed(true);
+              }}
               className="rounded-md border bg-white px-2 py-1"
             >
               Completo
             </button>
             <button
               type="button"
-              onClick={() => setStatuses(['CONFORME'])}
+              onClick={() => {
+                setStatuses(['CONFORME']);
+                setIncludeRenewed(true);
+              }}
               className="rounded-md border bg-white px-2 py-1"
             >
               Realizados
             </button>
+            {selectedTrainingType && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatuses([]);
+                  setIncludeRenewed(true);
+                }}
+                className="rounded-md border bg-white px-2 py-1"
+              >
+                Somente renovadas
+              </button>
+            )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-3">
@@ -403,6 +592,16 @@ export function TrainingComplianceReportBuilder({
               {STATUS_LABELS[item]}
             </label>
           ))}
+          {selectedTrainingType && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={includeRenewed}
+                onChange={(event) => setIncludeRenewed(event.target.checked)}
+              />{' '}
+              Renovadas
+            </label>
+          )}
           <label className="ml-auto flex items-center gap-2 text-sm font-medium text-red-700">
             <input
               type="checkbox"
@@ -414,6 +613,102 @@ export function TrainingComplianceReportBuilder({
         </div>
       </div>
 
+      {selectedTrainingType && (
+        <section aria-label="Histórico de qualificações cadastradas" className="mt-5 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+          <h3 className="text-base font-semibold text-slate-900">
+            Histórico cadastrado — {selectedTrainingType.codigo || selectedTrainingType.nome}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Certificados registrados em Qualificações. As situações marcadas acima filtram a tabela e o PDF;
+            Renovações são registros históricos, não requisitos obrigatórios.
+          </p>
+          {qualificationHistory.isPending ? (
+            <p className="mt-3 text-sm text-slate-700">Consultando histórico de qualificações...</p>
+          ) : qualificationHistory.isError ? (
+            <div className="mt-3 text-sm text-red-700" role="alert">
+              Não foi possível carregar o histórico: {qualificationHistory.error instanceof Error
+                ? qualificationHistory.error.message : 'erro de consulta'}.
+              <button type="button" className="ml-2 underline" onClick={() => void qualificationHistory.refetch()}>
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="mt-3 text-xs text-slate-600">
+                Exibindo {historyRows.length} de {allHistoryRows.length} certificados para as situações selecionadas.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <Metric label="Registros no histórico" value={historySummary.total} />
+                <Metric label="Funcionários" value={historySummary.funcionarios} />
+                <Metric label="Renovados" value={historySummary.renovados} />
+                <Metric label="Vigentes" value={historySummary.vigentes} />
+                <Metric label="Vencendo" value={historySummary.vencendo} />
+                <Metric label="Vencidos" value={historySummary.vencidos} />
+              </div>
+              {historyRows.length > 0 ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-sky-200 text-slate-600">
+                        <th className="p-2">Funcionário</th>
+                        <th className="p-2">Setor</th>
+                        <th className="p-2">Situação</th>
+                        <th className="p-2">Conclusão</th>
+                        <th className="p-2">Vencimento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.slice(0, 20).map((item) => (
+                        <tr key={item.id} className="border-b border-sky-100">
+                          <td className="p-2">{item.funcionario}</td>
+                          <td className="p-2">{item.setor}</td>
+                          <td className="p-2">{item.statusLabel}</td>
+                          <td className="p-2">{item.dataConclusao}</td>
+                          <td className="p-2">{item.dataVencimento}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {historyRows.length > 20 && (
+                    <p className="mt-2 text-xs text-slate-600">
+                      Exibindo 20 de {historyRows.length} registros filtrados. O PDF inclui todos os registros do recorte.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-slate-700">
+                  <p>{allHistoryRows.length > 0
+                    ? 'Nenhum certificado corresponde às situações selecionadas.'
+                    : 'Nenhum registro encontrado para esta qualificação e os filtros de setor, função e funcionário.'}</p>
+                  {sectorId && unfilteredSectorHistory.isFetching && (
+                    <p className="mt-1">Conferindo registros disponíveis nos demais setores autorizados...</p>
+                  )}
+                  {sectorId && unfilteredSectorHistory.isSuccess &&
+                    (unfilteredSectorHistory.data?.length || 0) > 0 && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <p>
+                          Existem {unfilteredSectorHistory.data!.length} registros desta qualificação
+                          em todos os setores autorizados, mas nenhum pertence ao setor
+                          selecionado no cadastro atual.
+                        </p>
+                        <button type="button" className="mt-2 font-semibold underline"
+                          onClick={() => setSectorId('')}>
+                          Ver em todos os setores
+                        </button>
+                      </div>
+                    )}
+                </div>
+              )}
+              <p className="mt-3 text-xs text-slate-600">
+                As situações Realizados, Vencendo, Vencidos e Renovadas filtram o histórico;
+                Em andamento e Nunca fez aplicam-se somente à matriz de Compliance. O prazo e o filtro Só críticos
+                aplicam-se somente aos requisitos obrigatórios abaixo.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+      <h3 className="mt-5 text-sm font-semibold text-slate-900">Requisitos obrigatórios (matriz de Compliance)</h3>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Pessoas no recorte" value={summary.pessoas} />
         <Metric label="Requisitos" value={summary.requisitos_obrigatorios} />

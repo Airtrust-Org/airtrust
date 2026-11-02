@@ -93,3 +93,45 @@ describe('mergeFadigaPainelHistory', () => {
     expect(otherDate.kss_score).toBeNull();
   });
 });
+
+describe('team fatigue classification provenance fail-closed', () => {
+  const baseRow = {
+    funcionario_id: 15,
+    funcionario_nome: 'Tripulante Sintético',
+    date: '2026-10-27',
+    status: 'normal',
+    data_source: 'crew_reported',
+  };
+
+  it('does not silently label an unclassified row normal or not applicable', () => {
+    for (const row of [
+      { ...baseRow, status: undefined },
+      { ...baseRow, status: 'unexpected_status' },
+      { ...baseRow, data_source: undefined },
+      { ...baseRow, data_source: 'unexpected_source' },
+    ]) {
+      expect(() => normalizeFadigaPainelPayload({ date: '2026-10-27', items: [row] }))
+        .toThrow('FRMS_TEAM_CLASSIFICATION_OR_PROVENANCE_MISSING');
+    }
+  });
+
+  it('preserves an explicit no-duty row without inventing a fatigue score', () => {
+    const [row] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, status: 'no_duty', data_source: 'not_applicable' }],
+    });
+    expect(row.status).toBe('no_duty');
+    expect(row.data_source).toBe('not_applicable');
+    expect(row.score_fadiga).toBeNull();
+    expect(row.requires_operational_review).toBe(0);
+  });
+
+  it('keeps operational review required when a risky row omits the review flag', () => {
+    const [row] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, status: 'not_submitted', data_source: 'missing_checkin' }],
+    });
+    expect(row.requires_operational_review).toBe(1);
+    expect(row.status).toBe('not_submitted');
+  });
+});

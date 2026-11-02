@@ -129,15 +129,33 @@ describe('completed enrollment review virtual CMI', () => {
     expect(cmi['cmi.core.entry']).toBe('resume');
   });
 
-  it('uses a verified handoff bookmark for navigation without restoring old learner evidence', () => {
+  it('never injects a handoff bookmark as a bare lesson_location (F5 cores would lock to preview)', () => {
     const result = buildScormLaunchState(null, null, false, false, { position: 33, total: 43 });
     const cmi = JSON.parse(result.initialCmiJson);
-    expect(result.hasResumeState).toBe(true);
-    expect(cmi['cmi.core.lesson_location']).toBe('33/43');
-    expect(cmi['cmi.core.entry']).toBe('resume');
+    expect(result.hasResumeState).toBe(false);
+    expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+    expect(cmi['cmi.core.entry']).toBeUndefined();
     expect(cmi['cmi.suspend_data']).toBeUndefined();
     expect(cmi['cmi.core.lesson_status']).toBeUndefined();
     expect(cmi['cmi.core.score.raw']).toBeUndefined();
+  });
+
+  it('drops a bare location persisted by an earlier handoff launch', () => {
+    const stale = JSON.stringify({ 'cmi.core.lesson_location': '2/59', 'cmi.core.entry': 'resume' });
+    const result = buildScormLaunchState(stale, null, false, false, { position: 2, total: 59 });
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(false);
+    expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+    expect(cmi['cmi.core.entry']).toBeUndefined();
+  });
+
+  it('preserves a package-authored location after a handoff (only the synthetic anchor is dropped)', () => {
+    const saved = JSON.stringify({ 'cmi.core.lesson_location': '20/59', 'cmi.core.entry': 'resume' });
+    const result = buildScormLaunchState(saved, null, false, false, { position: 2, total: 59 });
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(true);
+    expect(cmi['cmi.core.lesson_location']).toBe('20/59');
+    expect(cmi['cmi.core.entry']).toBe('resume');
   });
 
   it('rejects malformed, completion-capable, or out-of-range handoff bookmarks', () => {

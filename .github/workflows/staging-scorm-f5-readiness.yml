@@ -11,6 +11,14 @@ on:
         description: 'Exact already deployed Worker/Pages SHA'
         required: true
         type: string
+      pr_number:
+        description: 'Reviewed intake PR: 1696 original pilot or 1855 MGM (must match F0 grant)'
+        required: true
+        type: choice
+        default: '1696'
+        options:
+          - '1696'
+          - '1855'
       grant_id:
         description: 'Fresh, unedited single-candidate F0 authorization comment ID from issue 776'
         required: true
@@ -109,6 +117,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           F5_CONFIRMATION: ${{ inputs.confirmation }}
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_PR_NUMBER: ${{ inputs.pr_number }}
           F5_GRANT_ID: ${{ inputs.grant_id }}
           F5_TENANT_ID: ${{ inputs.tenant_id }}
           F5_COURSE_ID: ${{ inputs.course_id }}
@@ -176,11 +185,31 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/staging/f5-materialize-private-zip.mjs
+      # Larger R5 ZIPs require a short-lived provider-signed HTTPS GET URL.
+      # A signed URL can be reused until expiry; it is not one-use. The provider
+      # must enforce signature and private-object ACL. GitHub never logs its URL.
+      # Both protected environment values must be approved for this exact ZIP.
+      - name: Fetch and hash exact private R5 ZIP on ephemeral runner
+        if: ${{ inputs.package_sha256 != '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' || inputs.zip_bytes != '40644' }}
+        shell: bash
+        env:
+          F5_ENVIRONMENT: staging
+          GITHUB_REF: ${{ github.ref }}
+          F5_CONFIRMATION: ${{ inputs.confirmation }}
+          F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
+          F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
+          F5_PRIVATE_ZIP_DOWNLOAD_URL: ${{ secrets.F5_PRIVATE_ZIP_DOWNLOAD_URL }}
+          F5_PRIVATE_ZIP_ALLOWED_HOST: ${{ vars.F5_PRIVATE_ZIP_ALLOWED_HOST }}
+        run: |
+          set -euo pipefail
+          node scripts/staging/f5-fetch-private-candidate.mjs
       - name: Execute one inactive candidate through the pinned F0 adapters
         shell: bash
         env:
           F5_EXECUTOR_PLAN_PATH: ${{ runner.temp }}/f5-executor-plan.json
-          F5_PRIVATE_ZIP_PATH: ${{ inputs.package_sha256 == '6240d3d143d9f01d46daea96fb1b37e5d8f2793e5b6980cadedb7bb73b8ac83a' && inputs.zip_bytes == '40644' && format('{0}/f5-private-candidate.zip', runner.temp) || vars.F5_PRIVATE_ZIP_PATH }}
+          F5_PRIVATE_ZIP_PATH: ${{ runner.temp }}/f5-private-candidate.zip
           F5_F0_ADAPTER_MODULE: ${{ runner.temp }}/f5-provisioned-f0-adapter.mjs
           F5_F0_ADAPTER_SHA256: ${{ steps.f0-mount.outputs.adapter_sha256 }}
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
@@ -194,6 +223,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           F5_CONFIRMATION: ${{ inputs.confirmation }}
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_PR_NUMBER: ${{ inputs.pr_number }}
           F5_GRANT_ID: ${{ inputs.grant_id }}
           F5_TENANT_ID: ${{ inputs.tenant_id }}
           F5_COURSE_ID: ${{ inputs.course_id }}
@@ -211,6 +241,8 @@ jobs:
           F5_EVIDENCE_OUTPUT_PATH: ${{ runner.temp }}/f5-inactive-candidate-evidence.json
           F5_SANITIZED_EVIDENCE_PATH: ${{ runner.temp }}/f5-inactive-candidate-summary.json
           F5_RELEASE_SHA: ${{ inputs.release_sha }}
+          F5_TENANT_ID: ${{ inputs.tenant_id }}
+          F5_COURSE_ID: ${{ inputs.course_id }}
           F5_PACKAGE_SHA256: ${{ inputs.package_sha256 }}
           F5_ZIP_BYTES: ${{ inputs.zip_bytes }}
           F5_OPERATION_ID: ${{ inputs.operation_id }}
