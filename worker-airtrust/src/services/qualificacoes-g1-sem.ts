@@ -1,4 +1,4 @@
-import { tableHasColumn } from '../routes/qualificacoes-certificados-helpers';
+import { getSchemaColumns } from '../utils/db-schema';
 
 type G1SemHistoricoRow = {
   id: number;
@@ -190,7 +190,7 @@ async function buscarTipoG1Sem(
   db: D1Database,
   funcionarioId?: number | string | null,
 ): Promise<{ id: number; categoria: string | null } | null> {
-  const tiposHasEmpresaId = await tableHasColumn(db, 'qualificacoes_tipos', 'empresa_id');
+  const tiposHasEmpresaId = (await getSchemaColumns(db, 'qualificacoes_tipos')).has('empresa_id');
 
   if (tiposHasEmpresaId) {
     // The tenant column exists in this schema — every lookup path from here
