@@ -39,12 +39,12 @@ export default function LmsCursoDetalhe() {
   const { isAdmin, isGestor } = usePermissions();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
+  const canManage = isAdmin || isGestor;
   const { data: curso, isLoading } = useLmsCurso(Number(id));
-  const { data: matriculas } = useMinhasMatriculas();
+  const { data: matriculas } = useMinhasMatriculas(!canManage);
   const matricular = useMatricularCurso();
 
   const matricula: LmsMatricula | undefined = matriculas?.find((m) => m.curso_id === Number(id));
-  const canManage = isAdmin || isGestor;
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const canPreview = Boolean(previewPath);
   const hasContent = supportsAdminCoursePreview(curso);
