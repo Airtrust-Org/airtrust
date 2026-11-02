@@ -3,7 +3,7 @@
  * de qualificacoes-certificados.
  */
 import type { D1Database } from '@cloudflare/workers-types';
-import { notFound } from '../../middleware/error-handler';
+import { notFound } from '../../lib/errors/api-error';
 import {
   assertFuncionarioInScope,
   type EmployeeSectorAccess,

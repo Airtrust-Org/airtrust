@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import {
   extractAndValidateLmsPackage,
   LMS_PACKAGE_LIMITS,

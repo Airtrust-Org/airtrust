@@ -60,7 +60,7 @@ const LARGE_FILE_LINE_CAPS = {
   // corrupted cross-tenant curso_id/funcionario_id/qualificacao_id can no
   // longer leak another tenant's data or feed a completion write).
   // Cap raised 2026-09-30: 0519 stamps competency-profile lineage on enrollment paths.
-  'routes/lms-matriculas.ts': 3056,
+  'routes/lms-matriculas.ts': 2949,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
   // — governed operational context wired into the check-in contexto-piloto
@@ -122,10 +122,6 @@ const SQL_PREPARE_CAPS = {
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
   'routes/treinamentos-planejados.ts': 52,
-  // Cap raised 2026-07-30 (hotfix/lms-compliance-final): +1 .prepare() for the
-  // resolveLmsEffectiveProgress-enriched /minhas-ead and /curso/:id mapping
-  // plus the observações UPDATE split out of the canonical completion path.
-  'routes/lms-matriculas.ts': 48,
   // New offender 2026-08-18 (fix/qualification-writer-convergence, TRAIN-002):
   // +1 .prepare() for the renovacao_de chain-link UPDATE, split out from the
   // status-transition UPDATE so both the fresh-realization and the

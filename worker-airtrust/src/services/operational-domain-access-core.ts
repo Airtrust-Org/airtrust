@@ -22,7 +22,7 @@
  *     rollout plan.
  */
 
-import { ApiError, forbidden } from '../middleware/error-handler';
+import { ApiError, forbidden } from '../lib/errors/api-error';
 import { normalizeTenantRole } from '../middleware/tenant';
 import { resolveEmployeeSectorAccess } from '../middleware/employee-sector-access';
 
