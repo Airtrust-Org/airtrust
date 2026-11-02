@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mergeScormRuntimeState } from '../../services/lms-progress-guardrails';
+import { mergeScormRuntimeState } from '../../lib/lms/lms-progress-guardrails';
 
 describe('mergeScormRuntimeState — proteção de suspend_data', () => {
   it('bloqueia encolhimento em sessão normal (longe do teto SCORM)', () => {

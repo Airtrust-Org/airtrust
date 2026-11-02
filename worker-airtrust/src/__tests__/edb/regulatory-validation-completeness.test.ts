@@ -3,7 +3,7 @@ import {
   createEmptyEdbFlightRecord,
   type EdbFlightRecord,
   type EdbSignatureProof,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import { validateForPicFlightSignature } from '../../services/edb/regulatory-validation';
 
 const REVISION_ID = 'edbrev-qa-completeness-r1';

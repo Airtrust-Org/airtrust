@@ -1,4 +1,4 @@
-import type { EdbFlightRecord } from './contracts';
+import type { EdbFlightRecord } from '../../lib/edb/contracts';
 import {
   operatorSignatureDeadlineAt,
   validateForOperatorSignature,
@@ -12,7 +12,7 @@ import {
   verifyPicTechnicalAcknowledgementBinding,
   type EdbPicTechnicalAcknowledgement,
   type EdbTechnicalSituationSnapshot,
-} from './technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 export type EdbReadinessStepId =
   | 'TECHNICAL_SNAPSHOT'

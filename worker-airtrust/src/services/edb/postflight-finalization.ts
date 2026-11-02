@@ -1,11 +1,11 @@
-import type { EdbFlightRecord } from './contracts';
+import type { EdbFlightRecord } from '../../lib/edb/contracts';
 import { validateForPicFlightSignature } from './regulatory-validation';
 import {
   technicalSituationMatches,
   verifyPicTechnicalAcknowledgementBinding,
   type EdbPicTechnicalAcknowledgement,
   type EdbTechnicalSituationSnapshot,
-} from './technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 export interface FinalizedPostflightRecord {
   record: EdbFlightRecord;
