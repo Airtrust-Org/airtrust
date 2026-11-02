@@ -13,7 +13,7 @@
 // inspection; rollback of the whole fixture is scripts/staging/seed-qa-examiner-training.mjs --rollback).
 // rollback_plan_required: see docs/ops/staging-release-runbook.md.
 // KNOWN LIMITATION: request/response field names below were derived from
-// reading worker-airtrust/src/services/simuladores/shared-session-logic.ts and
+// reading worker-airtrust/src/routes/simuladores-shared-session-logic.ts and
 // simuladores-fichas*.ts, not from an actual authenticated run against
 // staging (out of scope for this PR — no procedure execution against real
 // staging was authorized). Before the first real run, verify the exact
