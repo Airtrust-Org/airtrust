@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-exam-question-bank-0571",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0571_lms_exam_question_bank.sql",
+  "fileHash": "132c60338f3ae0fcbc1c41377ba445b77b21efb57e26d43c4c1a5568edaa6d70",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-exam-question-bank-0571.md",
+  "planHash": "bffbf1cec0d7417d52562e725c86c42e239f7663e7939dc08d70112f947830a8"
+}

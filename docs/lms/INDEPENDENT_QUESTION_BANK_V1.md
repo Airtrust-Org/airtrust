@@ -12,3 +12,10 @@ Frente: issue #1661. Este primeiro lote define **apenas o domínio Worker** para
 
 ## Gate e próxima fase
 Vitest focado em `worker-airtrust/src/__tests__/lib/lms-independent-question-bank.test.ts`. Depois: schema V2 revisável, serviço administrativo RBAC multi-tenant, endpoints separados de edição/versão de perguntas e montagem de provas, UI de autoria, provas do aluno com consulta, integração com terminal canônico e E2E físico. Este contrato sem DB não previne sozinho competição de revisões; a transação D1 é indispensável.
+
+## Estado após o Lote 1 (02/11/2026)
+- Cada prova (`ExamPlan`) declara `acceptedQuestionSourceSha256`: atestado editorial das origens de ZIP cujas questões ela aceita. A origem da questão (`sourceSha256`) é só proveniência; trocar a edição do ZIP não invalida o banco.
+- Questões sem resposta na submissão contam como erradas (`unanswered` no resultado); respostas duplicadas, desconhecidas ou em excesso continuam recusadas.
+- A rota administrativa está montada em `/api/lms/exams/admin`, **desligada por padrão**: responde 503 fora de `ENVIRONMENT=staging` com a flag de revisão.
+- O schema é a mudança numerada `0571` (`worker-airtrust/schema-v2/changes/0571_lms_exam_question_bank.sql`), **não aplicada** em nenhum ambiente. Aplicar exige registrar hashes no workflow de staging e autorização específica.
+- Continua fora: tentativas, correção persistida, vínculo curso/edição, ligação ao `completeLmsMatricula` e tela do aluno.

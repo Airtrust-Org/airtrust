@@ -1,8 +1,9 @@
 /**
- * AirTrust LMS — independent bank editor API (NOT yet mounted).
+ * AirTrust LMS — independent bank editor API (default-off).
  *
- * Staging-only default-off route. Mount in index.ts only after Schema V2
- * approval; F4 Player3 owns current index.ts and must not be overwritten.
+ * Mounted at /api/lms/exams/admin but default-off: every request answers 503
+ * unless ENVIRONMENT is staging and the review flag is set. Production stays
+ * closed until the Schema V2 change is applied and the gate is revisited.
  * Authorization: JWT, tenant middleware and ADMIN role, then private store.
  * No student endpoint here, no exams runtime, no completion/certificate write.
  */

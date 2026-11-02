@@ -1,15 +1,18 @@
-"""SQLite executable contract for the REVIEW-ONLY LMS question bank schema.
+"""Offline Schema V2 integrity tests for 0571 (LMS question bank).
 
-No Cloudflare credentials or remote DB. A passing rehearsal is NOT a schema
-migration or approval.
+No Cloudflare credentials or remote DB. A passing rehearsal is NOT an apply
+authorization.
 """
 from pathlib import Path
+import hashlib
 import json
 import sqlite3
 import unittest
 
-SCRIPT = (Path(__file__).resolve().parents[2] / "worker-airtrust/schema-v2/plans/"
-          "lms-independent-question-bank.REVIEW-ONLY.sql.txt")
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "worker-airtrust/schema-v2/changes/0571_lms_exam_question_bank.sql"
+PLAN = ROOT / "worker-airtrust/schema-v2/plans/lms-exam-question-bank-0571.md"
+MANIFEST = ROOT / "worker-airtrust/schema-v2/lms-exam-question-bank-0571.json"
 CONTENT = {
     "moduleId": "m1", "topicId": "safety", "sourceUnitId": "u1",
     "sourceSha256": "a" * 64, "prompt": "Pergunta real?",
@@ -17,7 +20,7 @@ CONTENT = {
     "correctChoiceId": "o1", "explanation": "Razão técnica",
 }
 
-class SqliteQuestionBankReview(unittest.TestCase):
+class SqliteQuestionBank0571(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.execute("PRAGMA foreign_keys=ON")
@@ -153,6 +156,25 @@ class SqliteQuestionBankReview(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("DELETE FROM lms_exam_question_audit")
         self.db.rollback()
+
+class Manifest0571Tests(unittest.TestCase):
+    def test_manifest_hashes_and_paths_match_files(self):
+        m = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(m["changeId"], "lms-exam-question-bank-0571")
+        self.assertEqual(m["baselineId"], "production-d1-baseline-v2-20260714")
+        self.assertEqual(m["fileHash"], hashlib.sha256(SCRIPT.read_bytes()).hexdigest())
+        self.assertEqual(m["planHash"], hashlib.sha256(PLAN.read_bytes()).hexdigest())
+        self.assertEqual(ROOT / m["filePath"], SCRIPT)
+        self.assertEqual(ROOT / m["planPath"], PLAN)
+
+    def test_sql_is_a_plain_additive_change(self):
+        sql = SCRIPT.read_text(encoding="utf-8")
+        for forbidden in ("IF NOT EXISTS", "PRAGMA", "DROP ", "DELETE FROM", "UPDATE lms_"):
+            self.assertNotIn(forbidden, sql)
+        self.assertEqual(sql.count("CREATE TABLE"), 2)
+        self.assertEqual(sql.count("CREATE INDEX"), 2)
+        self.assertEqual(sql.count("CREATE TRIGGER"), 7)
+
 
 if __name__ == "__main__":
     unittest.main()

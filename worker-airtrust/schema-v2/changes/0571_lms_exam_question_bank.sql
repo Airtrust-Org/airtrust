@@ -1,13 +1,7 @@
--- AIRTRUST EXAMS / D1 SCHEMA V2 — REVIEW ONLY, NOT AN APPLICABLE MIGRATION
--- source_reference: issue #1661 / PR #1662
--- operational_decision: independent LMS question revision storage
--- dry_run_required: true
--- rollback_plan_required: true
--- No data edits, no flags, no rollout, no implicit authorization.
--- Assign a unique numbered Schema V2 change/manifest only after governance review.
-PRAGMA foreign_keys=ON;
-
-CREATE TABLE IF NOT EXISTS lms_exam_question_revisions (
+-- 0571: independent LMS exam question bank (authoring + review + publication only).
+-- Additive DDL. No backfill and no writes to courses, enrollments, cycles, progress,
+-- qualifications or certificates. No attempt/grade tables: the learner runtime is a later change.
+CREATE TABLE lms_exam_question_revisions (
   empresa_id INTEGER NOT NULL,
   curso_id INTEGER NOT NULL,
   question_key TEXT NOT NULL CHECK(length(question_key) BETWEEN 1 AND 80),
@@ -34,11 +28,11 @@ CREATE TABLE IF NOT EXISTS lms_exam_question_revisions (
   ),
   CHECK(reviewed_by IS NULL OR reviewed_by<>last_edited_by)
 );
-CREATE INDEX IF NOT EXISTS idx_lms_exam_questions_tenant_course_status
+CREATE INDEX idx_lms_exam_questions_tenant_course_status
   ON lms_exam_question_revisions(empresa_id,curso_id,status,question_key,revision);
 
 -- Audit contains NO prompt, choices, correct answer or rationale.
-CREATE TABLE IF NOT EXISTS lms_exam_question_audit (
+CREATE TABLE lms_exam_question_audit (
   audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
   empresa_id INTEGER NOT NULL,
   curso_id INTEGER NOT NULL,
@@ -50,10 +44,10 @@ CREATE TABLE IF NOT EXISTS lms_exam_question_audit (
   content_sha256 TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_lms_exam_question_audit_scope
+CREATE INDEX idx_lms_exam_question_audit_scope
   ON lms_exam_question_audit(empresa_id,curso_id,question_key,revision,audit_id);
 
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_insert_scope
+CREATE TRIGGER trg_lms_exam_question_insert_scope
 BEFORE INSERT ON lms_exam_question_revisions
 BEGIN
  SELECT CASE WHEN NOT EXISTS (
@@ -71,7 +65,7 @@ BEGIN
  ) THEN RAISE(ABORT,'LMS_EXAM_NEW_REVISION_REQUIRES_PUBLISHED_PARENT') END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_update_guards
+CREATE TRIGGER trg_lms_exam_question_update_guards
 BEFORE UPDATE ON lms_exam_question_revisions
 BEGIN
  SELECT CASE WHEN OLD.status='PUBLISHED'
@@ -101,11 +95,11 @@ BEGIN
  THEN RAISE(ABORT,'LMS_EXAM_INVALID_REVISION_TRANSITION') END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_no_delete
+CREATE TRIGGER trg_lms_exam_question_no_delete
 BEFORE DELETE ON lms_exam_question_revisions
 BEGIN SELECT RAISE(ABORT,'LMS_EXAM_REVISION_DELETE_FORBIDDEN'); END;
 
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_insert
+CREATE TRIGGER trg_lms_exam_question_audit_insert
 AFTER INSERT ON lms_exam_question_revisions
 BEGIN
  INSERT INTO lms_exam_question_audit
@@ -113,7 +107,7 @@ BEGIN
  VALUES(NEW.empresa_id,NEW.curso_id,NEW.question_key,NEW.revision,'CREATED',
   NEW.created_by,NEW.edit_version,NULL);
 END;
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_update
+CREATE TRIGGER trg_lms_exam_question_audit_update
 AFTER UPDATE ON lms_exam_question_revisions
 BEGIN
  INSERT INTO lms_exam_question_audit
@@ -124,12 +118,9 @@ BEGIN
  WHEN 'PUBLISHED' THEN NEW.published_by ELSE NEW.last_edited_by END,
  NEW.edit_version,NEW.content_sha256);
 END;
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_no_update
+CREATE TRIGGER trg_lms_exam_question_audit_no_update
 BEFORE UPDATE ON lms_exam_question_audit
 BEGIN SELECT RAISE(ABORT,'LMS_EXAM_AUDIT_IMMUTABLE'); END;
-CREATE TRIGGER IF NOT EXISTS trg_lms_exam_question_audit_no_delete
+CREATE TRIGGER trg_lms_exam_question_audit_no_delete
 BEFORE DELETE ON lms_exam_question_audit
 BEGIN SELECT RAISE(ABORT,'LMS_EXAM_AUDIT_IMMUTABLE'); END;
-
--- No schema for exams/attempts yet. Publication and evaluation stay disabled
--- until that contract and the authoritative LMS terminal are reviewed.

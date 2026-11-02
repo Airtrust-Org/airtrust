@@ -80,15 +80,15 @@ export default function QuestionBankAdmin({
     try{
       const value=await req<Stored>(url+'/'+encodeURIComponent(item.questionId)+
         '/versoes/'+item.revision);
-      if(value.revision.sourceSha256!==trainingSourceSha256){
-        throw Error('EDIÇÃO DE CURSO INCOMPATÍVEL');
-      }
       setCurrent(value);setQuestionId(value.revision.questionId);
       const r=value.revision;
       setForm({moduleId:r.moduleId,topicId:r.topicId,
         sourceUnitId:r.sourceUnitId,sourceSha256:r.sourceSha256,
         prompt:r.prompt,choices:r.choices.map(o=>({...o})),
         correctChoiceId:r.correctChoiceId,explanation:r.explanation});
+      if(r.sourceSha256!==trainingSourceSha256){
+        setMessage('Questão criada para outra edição do conteúdo: confira antes de incluí-la numa prova desta edição.');
+      }
     }catch{
       setError('Não foi possível abrir a versão desta questão.');
     }finally{setBusy(false);}

@@ -23,7 +23,8 @@ function plan(rows: readonly QuestionRevision[], pct=70): ExamPlan {
   return {
     schema:EXAM_PLAN_SCHEMA,tenantId:999006,courseId:327,
     examId:'exam1',version:1,trainingSourceSha256:sha,
-    trainingEditionSha256:'b'.repeat(64),consultationAllowed:true,
+    trainingEditionSha256:'b'.repeat(64),acceptedQuestionSourceSha256:[sha],
+    consultationAllowed:true,
     sections:[{moduleId:'m1',minScorePct:pct,questions:rows.map(q=>({
       questionId:q.questionId,revision:q.revision,contentSha256:q.contentSha256!,
     }))}],
@@ -83,8 +84,17 @@ describe('Independent authorable bank and immutable published revisions',()=>{
     await expect(validateExamPlan(approved,[q])).resolves.toBeUndefined();
     await expect(validateExamPlan({...approved,tenantId:5},[q]))
       .rejects.toThrow('UNTRUSTED_EXAM_QUESTION_VERSION');
-    await expect(validateExamPlan({...approved,trainingSourceSha256:'c'.repeat(64)},[q]))
+    // A question from another ZIP edition is rejected unless the plan attests it.
+    const other='c'.repeat(64);
+    await expect(validateExamPlan({...approved,trainingSourceSha256:other,
+      acceptedQuestionSourceSha256:[other]},[q]))
       .rejects.toThrow('UNTRUSTED_EXAM_QUESTION_VERSION');
+    await expect(validateExamPlan({...approved,acceptedQuestionSourceSha256:[sha,other]},[q]))
+      .resolves.toBeUndefined();
+    await expect(validateExamPlan({...approved,acceptedQuestionSourceSha256:[other]},[q]))
+      .rejects.toThrow('INVALID_EXAM_PLAN');
+    await expect(validateExamPlan({...approved,acceptedQuestionSourceSha256:[]},[q]))
+      .rejects.toThrow('INVALID_EXAM_PLAN');
     await expect(validateExamPlan(approved,[{...q,prompt:'silent tamper'}]))
       .rejects.toThrow('UNTRUSTED_EXAM_QUESTION_VERSION');
     await expect(validateExamPlan(approved,[{...q,status:'DRAFT'}]))
@@ -119,8 +129,23 @@ describe('Independent authorable bank and immutable published revisions',()=>{
     expect(pass.passed).toBe(true);
     expect(pass.grantsCompletion).toBe(false);
     expect(pass.grantsCertificate).toBe(false);
-    await expect(gradeExternalExam(p,bank,answers(7).slice(1)))
-      .rejects.toThrow('EXAM_ANSWERS_INCOMPLETE');
+    expect(pass).toMatchObject({answered:10,unanswered:0});
+  });
+  it('counts unanswered questions as wrong instead of refusing the submission',async()=>{
+    const bank=await Promise.all(Array.from({length:10},(_,i)=>published('q'+(i+1))));
+    const p=plan(bank);
+    const all=bank.map(q=>({questionId:q.questionId,choiceId:'o1'}));
+    const six=await gradeExternalExam(p,bank,all.slice(0,6));
+    expect(six.sections[0]).toMatchObject({correct:6,total:10,passed:false});
+    expect(six).toMatchObject({answered:6,unanswered:4,passed:false});
+    const seven=await gradeExternalExam(p,bank,all.slice(0,7));
+    expect(seven).toMatchObject({answered:7,unanswered:3,passed:true});
+    const none=await gradeExternalExam(p,bank,[]);
+    expect(none).toMatchObject({answered:0,unanswered:10,passed:false});
+    await expect(gradeExternalExam(p,bank,[...all,all[0]]))
+      .rejects.toThrow('EXAM_ANSWER_INVALID');
+    await expect(gradeExternalExam(p,bank,[all[0],all[0]]))
+      .rejects.toThrow('EXAM_ANSWER_INVALID');
   });
   it('blocks one failing module from being hidden by another module pass',async()=>{
     const m1=await Promise.all(Array.from({length:10},(_,i)=>published('a'+i,'m1')));

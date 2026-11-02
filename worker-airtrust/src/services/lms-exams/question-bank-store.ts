@@ -1,7 +1,7 @@
 /**
  * LMS exam question administration persistence V1 — private Worker service.
- * No router is mounted and the schema is REVIEW-ONLY: no remote DB write is
- * possible from this PR. Callers MUST authenticate and resolve the tenant.
+ * Used only by the default-off admin route; the tables come from Schema V2 0571,
+ * which is not applied anywhere yet. Callers MUST authenticate and resolve the tenant.
  * Every mutation uses optimistic edit_version and tenant-scoped SQL.
  * DB triggers are responsible for append-only audit, tenant/course validation,
  * legal lifecycle and the immutable published row.

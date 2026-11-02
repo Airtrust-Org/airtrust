@@ -32,11 +32,15 @@ export type ExamPlan = Readonly<{
   schema: typeof EXAM_PLAN_SCHEMA;
   tenantId: number; courseId: number; examId: string; version: number;
   trainingSourceSha256: string; trainingEditionSha256: string;
+  // Explicit editorial attestation: question revisions authored against these
+  // source SHAs are accepted by this exam. Must include trainingSourceSha256.
+  acceptedQuestionSourceSha256: readonly string[];
   consultationAllowed: true; sections: readonly ExamSection[];
 }>;
 export type ExamAnswer = Readonly<{ questionId: string; choiceId: string }>;
 export type ExamResult = Readonly<{
   examId: string; examVersion: number; passed: boolean;
+  answered: number; unanswered: number;
   sections: readonly Readonly<{
     moduleId: string; correct: number; total: number;
     scorePct: number; passed: boolean;
@@ -183,6 +187,12 @@ export async function validateExamPlan(plan: ExamPlan,
       !SHA.test(plan.trainingSourceSha256) ||
       !SHA.test(plan.trainingEditionSha256) ||
       plan.consultationAllowed !== true ||
+      !Array.isArray(plan.acceptedQuestionSourceSha256) ||
+      plan.acceptedQuestionSourceSha256.length < 1 ||
+      plan.acceptedQuestionSourceSha256.length > 20 ||
+      plan.acceptedQuestionSourceSha256.some(x => typeof x !== 'string' || !SHA.test(x)) ||
+      new Set(plan.acceptedQuestionSourceSha256).size !== plan.acceptedQuestionSourceSha256.length ||
+      !plan.acceptedQuestionSourceSha256.includes(plan.trainingSourceSha256) ||
       !Array.isArray(plan.sections) || plan.sections.length < 1 ||
       plan.sections.length > 60 || !Array.isArray(published)) deny('INVALID_EXAM_PLAN');
   const used = new Set<string>();
@@ -213,7 +223,7 @@ export async function validateExamPlan(plan: ExamPlan,
       if (!q || q.status !== 'PUBLISHED' ||
           q.tenantId !== plan.tenantId || q.courseId !== plan.courseId ||
           q.moduleId !== section.moduleId ||
-          q.sourceSha256 !== plan.trainingSourceSha256 ||
+          !plan.acceptedQuestionSourceSha256.includes(q.sourceSha256) ||
           q.contentSha256 !== ref.contentSha256 ||
           !(await verifyPublishedQuestion(q))) deny('UNTRUSTED_EXAM_QUESTION_VERSION');
     }
@@ -225,7 +235,9 @@ export async function gradeExternalExam(plan: ExamPlan,
   published: readonly QuestionRevision[], answers: readonly ExamAnswer[]): Promise<ExamResult> {
   await validateExamPlan(plan, published);
   const total = plan.sections.reduce((n,section) => n + section.questions.length,0);
-  if (!Array.isArray(answers) || answers.length !== total) deny('EXAM_ANSWERS_INCOMPLETE');
+  // Unanswered questions are legitimate on submit and count as wrong; only
+  // more answers than questions, duplicates or unknown IDs are malformed.
+  if (!Array.isArray(answers) || answers.length > total) deny('EXAM_ANSWER_INVALID');
   const selected = new Map<string,string>();
   const bank = new Map(published.map(q => [q.questionId,q]));
   for (const a of answers) {
@@ -248,6 +260,7 @@ export async function gradeExternalExam(plan: ExamPlan,
   return {
     examId: plan.examId, examVersion: plan.version,
     passed: sections.every(section => section.passed),
+    answered: selected.size, unanswered: total - selected.size,
     sections, grantsCompletion: false, grantsCertificate: false,
   };
 }
