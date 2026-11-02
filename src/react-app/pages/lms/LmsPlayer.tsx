@@ -1411,17 +1411,6 @@ export default function LmsPlayer() {
         </div>
       )}
 
-      {!newEditionRequired && activeHandoffId != null && (() => {
-        const bookmark = (matricula as (typeof matricula & {
-          active_scorm_resume_position?: { position: number; total: number } | null;
-        }) | undefined)?.active_scorm_resume_position;
-        return bookmark ? (
-          <div className="shrink-0 border-b border-emerald-400/30 bg-emerald-950/80 px-4 py-2 text-xs text-emerald-100">
-            Histórico anterior preservado. Retomada sugerida na unidade {bookmark.position}/{bookmark.total}; o marcador serve para navegação e não concede crédito de estudo.
-          </div>
-        ) : null;
-      })()}
-
       {effectiveReviewMode && (
         <div className="flex items-center gap-3 bg-blue-950/80 border-b border-blue-500/30 px-4 py-2.5 flex-shrink-0">
           <Eye className="h-4 w-4 text-blue-400 flex-shrink-0" />
