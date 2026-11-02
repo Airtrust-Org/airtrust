@@ -13,8 +13,9 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
   // Same-cycle transition. The client can request the operation but cannot
   // supply a target package, resume plan, or operation scope.
   // The learner who owns the enrollment may request the transition for their
-  // own enrollment (everything else is derived and verified server-side);
-  // admins/managers may do it for any enrollment in their tenant.
+  // own enrollment (everything else is derived and verified server-side).
+  // Only admins may do it for someone else's enrollment: managers are bound to
+  // sector scope elsewhere, so they follow the ownership rule like any learner.
   app.post('/:id/scorm-edition-handoff', async (c) => {
     if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED !== 'true') {
       throw new ApiError('Continuidade entre edições SCORM ainda não está habilitada', 404);
@@ -25,7 +26,7 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
     if (!Number.isSafeInteger(matriculaId) || matriculaId <= 0) {
       throw new ApiError('ID de matrícula inválido', 400);
     }
-    const canManage = hasRole(c, 'admin', 'manager');
+    const canManage = hasRole(c, 'admin');
     const row = await db.prepare(`
       SELECT m.id,m.funcionario_id,m.curso_id,m.status,m.data_inicio,m.qualificacao_historico_id,
         cy.id AS ciclo_id,cy.data_inicio AS cycle_started_at,

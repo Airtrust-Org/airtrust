@@ -206,6 +206,20 @@ describe('POST /:id/scorm-edition-handoff', () => {
     expect(mocks.writeHandoff).not.toHaveBeenCalled();
   });
 
+  it('does not let a manager act on another employee\'s enrollment (sector scope is not checked here)', async () => {
+    mocks.resolveFuncionario.mockResolvedValue(999);
+    const { db } = createDb(ownRow);
+    const response = await createApp('manager').request(
+      '/74/scorm-edition-handoff',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      createEnv(db, 'true'),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.readProposal).not.toHaveBeenCalled();
+    expect(mocks.writeHandoff).not.toHaveBeenCalled();
+  });
+
   it('rejects a user with no linked employee identity', async () => {
     mocks.resolveFuncionario.mockResolvedValue(null);
     const { db } = createDb(ownRow);
