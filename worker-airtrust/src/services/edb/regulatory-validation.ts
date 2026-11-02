@@ -2,7 +2,7 @@ import type {
   EdbFlightRecord,
   EdbOperatorRegulation,
   EdbSignatureProof,
-} from './contracts';
+} from '../../lib/edb/contracts';
 
 export type EdbValidationSeverity = 'BLOCKING' | 'WARNING';
 

@@ -22,7 +22,7 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../services/employee-sector-access';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 import {
   buildTrainingComplianceReportRows,
   getComplianceReportAutomationPolicy,

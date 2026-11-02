@@ -1,4 +1,4 @@
-import { parseScormLocationPair } from './lms-progress-guardrails';
+import { parseScormLocationPair } from '../lib/lms/lms-progress-guardrails';
 /** Persisted lms_progresso_scorm evidence columns for the current enrollment cycle. */
 export type PersistedScormEvidence = Readonly<{
   lesson_status?: string|null; completion_status?: string|null; success_status?: string|null;

@@ -5,7 +5,7 @@ import {
   createEdbTechnicalDiscrepancyLedger,
   type EdbRegulatedActor,
   type EdbTechnicalDiscrepancyLedger,
-} from '../../services/edb/technical-discrepancy-ledger';
+} from '../../lib/edb/technical-discrepancy-ledger';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
