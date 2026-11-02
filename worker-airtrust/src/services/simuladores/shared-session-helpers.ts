@@ -1,12 +1,12 @@
-import type { Env } from '../types';
+import type { Env } from '../../types';
 
-import { assertEntityOwnership, assertNoExternalConflicts } from './simuladores-shared-session-validation';
-import { createSharedSessionStructureTransactional } from './simuladores-shared-session-reconciliation';
-import { cleanupFailedSharedCreate } from './simuladores-shared-session-cancellation';
-import { criarQualificacoesPlanejadas, audit } from './simuladores-shared';
-import { generateFichasForSharedSession } from './simuladores-shared-session-ficha-generator';
-import { loadSharedDetail } from './simuladores-shared-session-detail';
-import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
+import { assertEntityOwnership, assertNoExternalConflicts } from './shared-session-validation';
+import { createSharedSessionStructureTransactional } from './shared-session-reconciliation';
+import { cleanupFailedSharedCreate } from './shared-session-cancellation';
+import { criarQualificacoesPlanejadas, audit } from './shared';
+import { generateFichasForSharedSession } from './shared-session-ficha-generator';
+import { loadSharedDetail } from './shared-session-detail';
+import type { NormalizedSharedSessionRequest } from './shared-session-logic';
 
 function getErrorMessage(error: unknown, fallback: string): string { return error instanceof Error ? error.message : fallback; }
 

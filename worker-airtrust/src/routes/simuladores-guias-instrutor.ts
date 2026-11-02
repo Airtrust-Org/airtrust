@@ -27,7 +27,7 @@ import {
   GUIAS_INSTRUTOR_CAPABILITIES,
 } from '../middleware/guias-instrutor-permissions';
 import { badRequest, forbidden, notFound } from '../middleware/error-handler';
-import { getFuncId, isFullAccessRole } from './simuladores-shared';
+import { getFuncId, isFullAccessRole } from '../services/simuladores/shared';
 import { sanitizeGuiaHtml } from '../lib/guias-instrutor/html-sanitizer';
 import {
   buildGuiaR2Key,

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../routes/simuladores-shared-session-conversion', () => ({}));
+vi.mock('../../services/simuladores/shared-session-conversion', () => ({}));
 
-import { criarQualificacoesPlanejadas } from '../../routes/simuladores-shared';
+import { criarQualificacoesPlanejadas } from '../../services/simuladores/shared';
 
 function mockDb(state: {
   modelo: Record<string, unknown>;

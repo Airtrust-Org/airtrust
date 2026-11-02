@@ -3,7 +3,7 @@ import {
   calculateSharedSessionParticipantSummaries,
   createSharedCurricularSignature,
   validateAndNormalizeSharedSessionRequest,
-} from '../../routes/simuladores-shared-session-logic';
+} from '../../services/simuladores/shared-session-logic';
 
 describe('simuladores shared session logic', () => {
   it('assigns PF and PM while granting curricular credit only to the trainee, never to support', () => {

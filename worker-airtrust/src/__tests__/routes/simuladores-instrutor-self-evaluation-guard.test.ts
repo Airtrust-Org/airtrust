@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
-import { instrutorEstaEntreParticipantes } from '../../routes/simuladores-shared';
+import { instrutorEstaEntreParticipantes } from '../../services/simuladores/shared';
 
 describe('instrutorEstaEntreParticipantes (pure helper)', () => {
   it('returns true when instrutorId matches a participant funcionario_id', () => {
@@ -52,8 +52,8 @@ vi.mock('../../services/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
 }));
 
-vi.mock('../../routes/simuladores-shared', async () => {
-  const actual = await vi.importActual('../../routes/simuladores-shared');
+vi.mock('../../services/simuladores/shared', async () => {
+  const actual = await vi.importActual('../../services/simuladores/shared');
   return {
     ...actual,
     getSimuladorModeloAeronave: vi.fn(async () => 'AW139'),

@@ -4,11 +4,11 @@ import {
   normalizeModeloAeronave,
   simuladoresHasEmpresaId,
   timeToMinutes,
-} from './simuladores-shared';
-import type { NormalizedSharedSessionRequest } from './simuladores-shared-session-logic';
-import { overlaps } from './simuladores-shared-session-helpers';
-import { normalizeSpecialEventSessionCode } from '../../../src/shared/simuladores/special-event-sessions';
-import { getSchemaColumns } from '../utils/db-schema';
+} from './shared';
+import type { NormalizedSharedSessionRequest } from './shared-session-logic';
+import { overlaps } from './shared-session-helpers';
+import { normalizeSpecialEventSessionCode } from '../../../../src/shared/simuladores/special-event-sessions';
+import { getSchemaColumns } from '../../utils/db-schema';
 
 export type ModeloSessaoMapRow = {
   id: number;

@@ -17,8 +17,8 @@
  * "últimos registros da sessão" para resolver os IDs criados.
  */
 
-import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './simuladores-shared-session-fichas';
-import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './simuladores-shared';
+import { assertModeloSessaoTemManobras, loadFichaManobrasForModelo } from './shared-session-fichas';
+import { fichasSessaoManobrasHasEmpresaId, getSimuladorModeloAeronave } from './shared';
 
 export interface GenerateFichasResult {
   /** Quantas fichas novas foram criadas */

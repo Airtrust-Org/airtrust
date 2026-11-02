@@ -20,25 +20,9 @@ import { getTenantContext } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../services/employee-sector-access';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
-import { cleanupFailedSharedCreate } from './simuladores-shared-session-cancellation';
-import {
-  requireAdminForDelete,
-  timeToMinutes,
-  syncSessaoEscalaEventos,
-  findSessaoConflict,
-  audit,
-  filtrarChecksCompativeisComModelo,
-  getSimuladorModeloAeronave,
-  listarTiposCheckPorIds,
-  normalizeModeloAeronave,
-  isFullAccessRole,
-  resolveTemplateIdSessao,
-  normalizeChecksSessao,
-  getFuncId,
-  criarQualificacoesPlanejadas,
-  instrutorEstaEntreParticipantes,
-  simuladoresHasEmpresaId,
-} from './simuladores-shared';
+import { cleanupFailedSharedCreate } from '../services/simuladores/shared-session-cancellation';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { timeToMinutes, syncSessaoEscalaEventos, findSessaoConflict, audit, filtrarChecksCompativeisComModelo, getSimuladorModeloAeronave, listarTiposCheckPorIds, normalizeModeloAeronave, isFullAccessRole, resolveTemplateIdSessao, normalizeChecksSessao, getFuncId, criarQualificacoesPlanejadas, instrutorEstaEntreParticipantes, simuladoresHasEmpresaId } from '../services/simuladores/shared';
 import participantesRoutes from './simuladores-sessoes-participantes';
 import sessoesUpdateRoutes from './simuladores-sessoes-update';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';

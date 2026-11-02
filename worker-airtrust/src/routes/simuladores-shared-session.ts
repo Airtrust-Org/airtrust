@@ -8,23 +8,23 @@ import {
   audit,
   criarQualificacoesPlanejadas,
   crossTenantSafeResponseStatusAndMessage,
-} from './simuladores-shared';
-import { validateAndNormalizeSharedSessionRequest } from './simuladores-shared-session-logic';
-import { assertSharedFeature, executeSharedSessionCreation } from './simuladores-shared-session-helpers';
-import { assertEntityOwnership, assertNoExternalConflicts } from './simuladores-shared-session-validation';
-import { loadSharedDetail, type LoadedSharedDetail } from './simuladores-shared-session-detail';
+} from '../services/simuladores/shared';
+import { validateAndNormalizeSharedSessionRequest } from '../services/simuladores/shared-session-logic';
+import { assertSharedFeature, executeSharedSessionCreation } from '../services/simuladores/shared-session-helpers';
+import { assertEntityOwnership, assertNoExternalConflicts } from '../services/simuladores/shared-session-validation';
+import { loadSharedDetail, type LoadedSharedDetail } from '../services/simuladores/shared-session-detail';
 import {
   createSharedSessionStructureTransactional,
   updateSharedSessionStructureTransactional,
-} from './simuladores-shared-session-reconciliation';
-import { cancelSharedAssignment, cleanupFailedSharedCreate } from './simuladores-shared-session-cancellation';
+} from '../services/simuladores/shared-session-reconciliation';
+import { cancelSharedAssignment, cleanupFailedSharedCreate } from '../services/simuladores/shared-session-cancellation';
 import {
   assertSimpleSessionConvertible,
   cleanupFailedSharedConversion,
   convertSimpleSessionToSharedTransactional,
   loadSimpleSessionForConversion,
-} from './simuladores-shared-session-conversion';
-import { generateFichasForSharedSession } from './simuladores-shared-session-ficha-generator';
+} from '../services/simuladores/shared-session-conversion';
+import { generateFichasForSharedSession } from '../services/simuladores/shared-session-ficha-generator';
 import {
   sendSimulatorSessionEmailNotifications,
   shouldNotifySimulatorSessionUpdate,

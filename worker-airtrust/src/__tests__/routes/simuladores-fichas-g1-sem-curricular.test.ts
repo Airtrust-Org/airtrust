@@ -12,7 +12,7 @@ vi.mock('../../services/qualificacoes-historico-ficha', () => ({
 vi.mock('../../services/qualificacoes-g1-sem', () => ({
   realizarG1SemPendente: mocks.g1Sem,
 }));
-vi.mock('../../routes/simuladores-shared', () => ({ audit: mocks.audit }));
+vi.mock('../../services/simuladores/shared', () => ({ audit: mocks.audit }));
 
 import {
   gerarQualificacaoDaFicha,

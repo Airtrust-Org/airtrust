@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { audit } from './simuladores-shared';
+import { audit } from '../services/simuladores/shared';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
   gerarQualificacaoDaFicha,

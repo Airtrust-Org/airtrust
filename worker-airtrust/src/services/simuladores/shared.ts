@@ -4,8 +4,7 @@
  */
 
 import { z } from 'zod';
-import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env } from '../../types';
 import {
   CANCELLED_STATUS_VALUES,
   isCancelledStatus,
@@ -13,10 +12,10 @@ import {
   QUALIFICACAO_STATUS,
   sqlStatusEqualsAny,
   sqlStatusNotEqualsAny,
-} from '../lib/status/status-codes';
-import { replaceManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
-import { loadTrainingProgramByModel } from '../services/training-programs';
-import { getSchemaColumns } from '../utils/db-schema';
+} from '../../lib/status/status-codes';
+import { replaceManagedEscalaEvents } from '../../shared/syncEscalaEventosExternos';
+import { loadTrainingProgramByModel } from '../training-programs';
+import { getSchemaColumns } from '../../utils/db-schema';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -80,26 +79,6 @@ export interface CheckTipoRecord {
 
 // ── Helper functions ─────────────────────────────────────────────────────────
 
-export function requireAdminForDelete(c: Context<{ Bindings: Env }>): Response | null {
-  const userRole = (c as any).get('userRole');
-  const normalizedRole =
-    typeof userRole === 'string' ? userRole.toLowerCase() : String(userRole || '').toLowerCase();
-
-  const canDelete = ['admin', 'administrador', 'gestor', 'manager'].includes(normalizedRole);
-
-  if (!canDelete) {
-    return c.json(
-      {
-        success: false,
-        error:
-          'Acesso negado. Apenas gestores e administradores podem excluir registros de simuladores.',
-      },
-      403,
-    );
-  }
-
-  return null;
-}
 
 export function timeToMinutes(h: unknown): number | null {
   if (typeof h !== 'string') return null;

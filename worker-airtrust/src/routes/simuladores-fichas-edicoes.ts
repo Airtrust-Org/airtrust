@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { audit, getFuncId } from './simuladores-shared';
+import { audit, getFuncId } from '../services/simuladores/shared';
 import {
   requireOperationalAccess,
   } from '../services/operational-domain-access';
