@@ -15,7 +15,7 @@ import {
   tableHasColumn,
   type Documento,
   resolveCertificadoContext,
-} from './qualificacoes-certificados-helpers';
+} from '../services/qualificacoes/certificados-helpers';
 import certificadosWriteRoutes from './qualificacoes-certificados-write';
 import {
   listTrainingComplianceEvidenceProfilesForQualification,

@@ -51,7 +51,7 @@ vi.mock('../../services/qualificacoes-g1-sem', () => ({
   realizarG1SemPendente: vi.fn(),
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
+vi.mock('../../services/qualificacoes/historico-helpers', () => ({
   safe: <T>(handler: T) => handler,
   historicoPertenceEmpresa: historicoPertenceEmpresaMock,
   invalidateMaterializedStats: invalidateMaterializedStatsMock,
