@@ -15,7 +15,7 @@ import type {
   MatricularLoteDTO,
   MatriculaStatus,
   CursosFilters,
-} from '@/react-app/hooks/useLms';
+} from '@/react-app/types/lms';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 

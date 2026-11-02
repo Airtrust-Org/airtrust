@@ -1,14 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, XCircle, Download } from 'lucide-react';
+import type { ValidationResult } from '@/react-app/types/import-validation';
 
-export interface ValidationResult {
-  linha: number;
-  tipo: 'erro' | 'aviso' | 'sucesso';
-  campo: string;
-  mensagem: string;
-  valorOriginal: any;
-  valorSugerido?: any;
-}
+export type { ValidationResult } from '@/react-app/types/import-validation';
 
 interface ImportValidatorProps {
   dados: any[];
