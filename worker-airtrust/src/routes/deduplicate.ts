@@ -11,7 +11,7 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { AppError } from '../utils/errors';
 import { recordLegacyAndCanonicalAudit } from '../lib/audit/record-legacy-and-canonical-audit';
 import {

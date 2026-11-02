@@ -19,7 +19,7 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => 1 }));
+vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => 1 }));
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: vi.fn(),
   hasActiveMatriculaCycle: () => false,

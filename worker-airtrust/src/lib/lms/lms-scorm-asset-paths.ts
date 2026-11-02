@@ -1,4 +1,4 @@
-import { ApiError } from '../middleware/error-handler';
+import { ApiError } from '../../middleware/error-handler';
 
 export function guessMime(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';

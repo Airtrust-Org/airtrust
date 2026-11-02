@@ -41,7 +41,7 @@ vi.mock('../../middleware/rbac', () => ({
       next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: (c: any) => Number(c.req.header('x-test-empresa-id') || c.get('empresaId') || 0),
 }));
 

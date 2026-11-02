@@ -17,7 +17,7 @@ import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { hasRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { parseCompletionDiagnosticsSnapshot } from '../services/lms-completion-diagnostics-snapshot';
 import type { Env } from '../types';
 

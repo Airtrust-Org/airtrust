@@ -19,6 +19,7 @@
 - LMS/SCORM não fabrica conclusão/progresso; preservar ciclo, score, `lesson_status`, `suspend_data` e autorização de assets.
 - FRMS/EVD/Pilot App/SIGVOOS preservam origem/confiança de dados, sincronização, idempotência e integridade operacional.
 - Não registrar tokens, secrets ou PII em logs/commits/chat.
+- Camadas do Worker: `services|lib|repositories|utils|shared|middleware` não importam `routes/`; `repositories|utils|shared` não importam `services/`; `services|lib|repositories` não importam `hono`. Imposto por `npm run guard:layer-boundaries` (no `lint`); legado tolerado em `scripts/layer-boundaries-baseline.json` só pode encolher. Tenant compartilhado: `utils/tenant-resolution.ts`.
 
 ## Schema e deploy
 
