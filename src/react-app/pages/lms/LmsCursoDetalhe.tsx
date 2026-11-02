@@ -31,6 +31,7 @@ import {
   LmsSurface,
 } from './lmsUi';
 import { getAdminCoursePreviewPath, supportsAdminCoursePreview } from './lmsAdminPreview';
+import { getCourseAvailability } from './lmsCourseAvailability';
 
 export default function LmsCursoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +52,8 @@ export default function LmsCursoDetalhe() {
   const canPreview = Boolean(previewPath);
   const hasContent = supportsAdminCoursePreview(curso);
   const packageVersions = useScormPackageVersions(Number(id), canManage && curso?.tipo_conteudo === 'scorm');
+  const activePackage = packageVersions.data?.find((pkg) => pkg.status === 'ACTIVE' || pkg.active);
+  const availability = curso ? getCourseAvailability(curso, hasContent, activePackage) : null;
 
   const learningGoals = useMemo(() => {
     if (!curso) return [];
@@ -64,14 +67,12 @@ export default function LmsCursoDetalhe() {
             : curso.tipo_conteudo === 'pptx'
               ? 'Percorrer todos os slides da apresentação para concluir o treinamento e gerar a evidência operacional.'
               : 'Consumir o conteúdo publicado e registrar sua evolução na trilha de aprendizagem.',
-      curso.scorm_mastery_score
-        ? `Alcançar pelo menos ${curso.scorm_mastery_score}% na avaliação para concluir o treinamento.`
-        : 'Concluir todos os passos definidos no conteúdo para avançar.',
+      availability!.objective,
       curso.gerar_qualificacao_ao_concluir === 1
         ? 'Gerar automaticamente a qualificação vinculada ao finalizar o curso.'
         : 'Salvar o histórico de conclusão no módulo LMS para acompanhamento da empresa.',
     ];
-  }, [curso]);
+  }, [curso, availability?.objective]);
 
   function navigatePlayer(matriculaId: number, review?: boolean) {
     if (!curso) return;
@@ -181,7 +182,9 @@ export default function LmsCursoDetalhe() {
           title={curso.titulo}
           subtitle={
             canManage
-              ? 'Detalhes do curso com acesso direto ao player de teste e à gestão.'
+              ? hasContent
+                ? 'Detalhes do curso com acesso direto ao player de teste e à gestão.'
+                : 'Detalhes administrativos do curso. O player depende do envio de conteúdo válido.'
               : 'Detalhe do treinamento com progresso, objetivos e acesso direto ao player.'
           }
           actions={
@@ -230,9 +233,7 @@ export default function LmsCursoDetalhe() {
                   {curso.scorm_versao ? `SCORM ${curso.scorm_versao}` : 'Conteúdo publicado'}
                 </LmsInfoChip>
                 <LmsInfoChip icon={<Award className="h-3.5 w-3.5" />}>
-                  {curso.scorm_mastery_score
-                    ? `Meta mínima ${curso.scorm_mastery_score}%`
-                    : 'Sem nota mínima definida'}
+                  {availability?.criterion}
                 </LmsInfoChip>
                 <LmsInfoChip icon={<Sparkles className="h-3.5 w-3.5" />}>
                   {curso.gerar_qualificacao_ao_concluir === 1
@@ -348,7 +349,9 @@ export default function LmsCursoDetalhe() {
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Disponibilidade</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.publicado
-                    ? 'Publicado no catálogo atual.'
+                    ? hasContent
+                      ? 'Publicado no catálogo e disponível para execução.'
+                      : 'Publicado no catálogo, mas indisponível para execução até receber um pacote válido.'
                     : 'Ainda em rascunho; visível apenas para gestão.'}
                 </p>
               </div>
@@ -356,7 +359,9 @@ export default function LmsCursoDetalhe() {
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tipo de conteúdo</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.tipo_conteudo === 'scorm'
-                    ? 'Executado no player SCORM protegido, com persistência de progresso.'
+                    ? hasContent
+                      ? 'Executado no player SCORM protegido, com persistência de progresso.'
+                      : 'SCORM configurado, aguardando pacote executável.'
                     : curso.tipo_conteudo === 'h5p'
                       ? 'Executado via player H5P com eventos xAPI.'
                       : 'Conteúdo em formato de vídeo ou mídia linear.'}
