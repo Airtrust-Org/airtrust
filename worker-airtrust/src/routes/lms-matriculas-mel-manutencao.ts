@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { logAudit } from '../utils/db';
 import { sendEmail } from '../lib/email';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';

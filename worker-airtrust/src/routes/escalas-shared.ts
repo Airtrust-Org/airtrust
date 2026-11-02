@@ -4,47 +4,13 @@
  */
 
 import { z } from 'zod';
-import { getEmpresaId } from '../middleware/tenant';
-import { AppError } from '../utils/errors';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import type { Context } from 'hono';
 
 // ================================================================
 // HELPERS — empresa ID
 // ================================================================
-
-/**
- * Wrapper seguro para obter empresaId.
- * auth() seta c.set('empresaId', ...) diretamente, enquanto
- * getEmpresaId() busca via tenantContext (setado por middleware separado).
- * Este wrapper tenta ambos os caminhos.
- */
-export function getEmpresaIdSafe(c: Context<any>): number {
-  let empresaId: number | undefined;
-
-  try {
-    empresaId = getEmpresaId(c);
-  } catch {
-    const raw = c.get('empresaId' as never) as unknown;
-    empresaId = typeof raw === 'string' ? Number(raw) : (raw as number | undefined);
-  }
-
-  if (!Number.isFinite(empresaId) || Number(empresaId) <= 0) {
-    throw new AppError('Empresa não identificada no contexto da requisição', 401, 'TENANT_REQUIRED');
-  }
-
-  return Number(empresaId);
-}
-
-export function getEmpresaIdOptional(c: Context<any>): number | undefined {
-  try {
-    return getEmpresaId(c);
-  } catch {
-    const raw = c.get('empresaId' as never) as unknown;
-    const parsed = typeof raw === 'string' ? Number(raw) : (raw as number);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-  }
-}
+// Implementação movida para utils/tenant-resolution (compartilhada por todos
+// os domínios). Re-exportado aqui para os sub-módulos de Escalas.
+export { getEmpresaIdSafe, getEmpresaIdOptional } from '../utils/tenant-resolution';
 
 /**
  * Carrega escala verificando pertencimento ao tenant (IDOR guard).

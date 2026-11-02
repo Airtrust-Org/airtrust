@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import {
   buildIntegratedMonthlyView,
   type IntegratedMonthlyEventSeverity,

@@ -4,7 +4,7 @@
  * a full current Quality Gate PASS can restore the existing inactive candidate.
  * The ACTIVE edition and enrollment ledger are never changed here.
  */
-import { guessMime } from '../../routes/lms-scorm-asset-paths';
+import { guessMime } from './lms-scorm-asset-paths';
 import { FORMATIVE_PROFILE } from './lms-scorm-formative-profile';
 import type { ValidatedLmsPackage } from './lms-package-validator';
 import type { ScormQualityGateResult } from './lms-scorm-quality-gate';

@@ -3,7 +3,7 @@ import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
 import { getCallerUserId } from './lms-matriculas-audit';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
 import { readScormActiveResumeProposal } from '../services/lms-scorm-active-resume-readonly';
 import { writeScormEditionHandoff } from '../services/lms-scorm-edition-handoff-writer';

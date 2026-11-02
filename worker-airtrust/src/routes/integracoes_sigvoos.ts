@@ -12,7 +12,7 @@ import {
   recordMaintenanceAudit,
   requireMaintenanceCapability,
 } from '../middleware/maintenance-access';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import {
   getSigvoosConfig,
   listSigvoosPendencias,
