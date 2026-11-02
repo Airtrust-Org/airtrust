@@ -29,7 +29,7 @@ import {
   getLmsActionLabel,
   getLmsProgressBarFillClasses,
   getLmsProgressLabel,
-} from '@/react-app/pages/lms/lmsUi';
+} from '@/react-app/components/lms/lmsUi';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

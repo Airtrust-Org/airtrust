@@ -6,7 +6,7 @@ import PageHeader from '@/react-app/components/PageHeader';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import { useApi } from '@/react-app/hooks/useApi';
 import { useDebounce } from '@/react-app/hooks/useDebounce';
-import { LmsModuleTabs, LmsPageShell } from './lms/lmsUi';
+import { LmsModuleTabs, LmsPageShell } from '../components/lms/lmsUi';
 
 type EnrollmentInProgress = {
   id: number;

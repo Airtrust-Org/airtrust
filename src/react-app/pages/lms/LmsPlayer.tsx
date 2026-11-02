@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
-import { formatMinutes } from './lmsUi';
+import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {
   parseGranularDiagnostic,

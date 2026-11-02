@@ -5,7 +5,7 @@ import {
   type VigilanceSummary,
   type VigilanceTrial,
   PVTB_V2_PROTOCOL,
-} from './operationalReadiness';
+} from '../../lib/frms/operationalReadiness';
 
 type Phase = 'instructions' | 'waiting' | 'stimulus' | 'invalidated' | 'complete';
 
