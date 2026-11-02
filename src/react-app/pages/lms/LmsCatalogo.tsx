@@ -1891,7 +1891,10 @@ export default function LmsCatalogo() {
     },
     { enabled: canManage },
   );
-  // The admin catalog does not need an employee link, but all non-manager roles\n  // (including COMPLIANCE and USUARIO) still need their personal enrollments.\n  const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);\n  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(loadPersonalEnrollments);
+  // The admin catalog does not need an employee link, but all non-manager roles
+  // (including COMPLIANCE and USUARIO) still need their personal enrollments.
+  const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);
+  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(loadPersonalEnrollments);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
