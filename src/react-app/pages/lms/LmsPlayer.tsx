@@ -154,6 +154,26 @@ export function shouldShowScormClosureDetails(input: {
 
 // Only enables an authenticated attempt at the existing server-side qualification
 // and completion gate; this predicate never marks a course as passed.
+/**
+ * After an acknowledged SCORM commit the player must re-read the enrollment
+ * when it may carry new server evidence: either more slide visits were
+ * recorded, or the learner is on the final slide. The final click of a
+ * formative package adds no new slide, so without the second condition the
+ * cached matrícula stays stale and automatic closure never triggers.
+ */
+export function shouldRefetchAfterScormSave(input: {
+  serverSaved: boolean;
+  reviewMode: boolean;
+  viewedSlideCount: number | null;
+  recordedSlideCount: number;
+  location: string | null | undefined;
+}): boolean {
+  if (!input.serverSaved || input.reviewMode) return false;
+  if (input.viewedSlideCount != null && input.viewedSlideCount > input.recordedSlideCount) return true;
+  const parsed = parseSlideLocation(input.location);
+  return parsed != null && parsed.total > 0 && parsed.current >= parsed.total;
+}
+
 export function canReconcilePersistedScormCompletion(params: {
   reviewMode: boolean;
   isScormContent: boolean;
@@ -943,9 +963,14 @@ export default function LmsPlayer() {
         }
         // Only refresh server-authoritative missing slides after an acknowledged
         // commit. A local counter/probe alone is not proof that D1 saved it.
-        if (event.data.server_saved === true && !effectiveReviewMode &&
-            typeof event.data.viewed_slide_count === 'number' &&
-            event.data.viewed_slide_count > (closureReadiness?.slide_coverage?.recorded ?? 0)) {
+        if (shouldRefetchAfterScormSave({
+          serverSaved: event.data.server_saved === true,
+          reviewMode: effectiveReviewMode,
+          viewedSlideCount: typeof event.data.viewed_slide_count === 'number'
+            ? event.data.viewed_slide_count : null,
+          recordedSlideCount: closureReadiness?.slide_coverage?.recorded ?? 0,
+          location: typeof event.data.location === 'string' ? event.data.location : null,
+        })) {
           void refetchMatricula();
         }
         return;
