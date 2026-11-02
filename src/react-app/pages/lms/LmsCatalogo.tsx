@@ -798,7 +798,7 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
-    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
+    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
@@ -1268,7 +1268,9 @@ function CourseDrawer({
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
                           <p className="mt-1">{directReplacement
                             ? 'Perfil formativo sem prova identificado. O Worker revalidará os gates antes de substituir a edição. Históricos e conclusões anteriores permanecem preservados.'
-                            : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
+                            : scormProfile === 'PRIVATE'
+                              ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
+                              : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1512,9 +1514,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
