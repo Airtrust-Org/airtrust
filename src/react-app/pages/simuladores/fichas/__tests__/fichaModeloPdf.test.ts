@@ -4,7 +4,7 @@ import {
   getFichaPdfTableHeaders,
   getFichaPdfTableLayout,
 } from '@/react-app/services/pdf-ficha-client';
-import { NOTECHS_ORDEM_BASE } from '../notechs';
+import { NOTECHS_ORDEM_BASE } from '../../../../lib/simuladores/notechs';
 import {
   buildFichaModeloPdfData,
   buildFichaModeloPdfFileName,

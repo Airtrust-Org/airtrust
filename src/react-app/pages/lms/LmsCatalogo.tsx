@@ -78,7 +78,7 @@ import {
   LmsModuleTabs,
   LmsPageShell,
   LmsStatPill,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,

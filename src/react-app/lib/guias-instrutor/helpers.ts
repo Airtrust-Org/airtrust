@@ -1,4 +1,4 @@
-import { GuiaInstrutor } from './api';
+import { GuiaInstrutor } from '../../hooks/guias-instrutor/api';
 
 export function formatarNomeSessaoVisivel(nomeSessao: string): string {
   if (!nomeSessao) return '';

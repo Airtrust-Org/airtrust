@@ -15,11 +15,11 @@ import {
   NOTECHS_ITENS,
   NOTECHS_ORDEM_BASE,
   splitManobrasNotechs,
-} from '@/react-app/pages/simuladores/fichas/notechs';
+} from '@/react-app/lib/simuladores/notechs';
 import {
   FICHA_AVALIACAO_FAIXAS,
   FICHA_AVALIACAO_NOTAS,
-} from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
+} from '@/react-app/lib/simuladores/avaliacaoScale';
 
 const OUT = '/tmp/airtrust-test-output/notechs-previews-20260702';
 
