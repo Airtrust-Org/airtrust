@@ -27,6 +27,7 @@ import { timeToMinutes, syncSessaoEscalaEventos, findSessaoConflict, audit, getS
 import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import { getSchemaColumns } from '../utils/db-schema';
+import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
 import {
   requireOperationalAccess,
   } from '../services/operational-domain-access';
@@ -100,46 +101,14 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     // examinador/checador seja acidentalmente designado como instrutor da
     // ficha pedagógica do tripulante.
     if (b.instrutor_id !== undefined) {
-      const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
-      const hasIsInstrutor = funcionarioColumns.has('is_instrutor');
-      const instrutorFlagExpr = hasIsInstrutor ? 'COALESCE(is_instrutor, 0)' : '1';
-      const instrutorRow = await c.env.DB.prepare(
-        `SELECT ${instrutorFlagExpr} as is_instrutor
-         FROM funcionarios
-         WHERE id = ?
-           AND empresa_id = ?
-           AND deleted_at IS NULL`,
-      )
-        .bind(b.instrutor_id, empresaId)
-        .first<{ is_instrutor: number }>();
-
-      if (!instrutorRow || (hasIsInstrutor && Number(instrutorRow.is_instrutor) !== 1)) {
-        return c.json(
-          { success: false, error: 'Instrutor inválido para esta empresa.' },
-          400,
-        );
-      }
-
-      // ── Bloqueio de autoavaliação: novo instrutor não pode já ser
-      // participante ativo da sessão (evita autoavaliação por reatribuição
-      // de instrutor quando participantes não são reenviados neste PUT). ──
-      if (b.participantes === undefined) {
-        const participantesAtuais = await c.env.DB.prepare(
-          'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id = ? AND deleted_at IS NULL',
-        )
-          .bind(id)
-          .all();
-        if (
-          instrutorEstaEntreParticipantes(b.instrutor_id, participantesAtuais.results || [])
-        ) {
-          return c.json(
-            {
-              success: false,
-              error: 'O instrutor da sessão não pode constar como participante avaliado',
-            },
-            400,
-          );
-        }
+      const instrutorCheck = await validateInstrutorAssignment(c.env.DB, {
+        empresaId,
+        sessaoId: id,
+        instrutorId: b.instrutor_id,
+        participantesReenviados: b.participantes !== undefined,
+      });
+      if (!instrutorCheck.ok) {
+        return c.json({ success: false, error: instrutorCheck.error }, instrutorCheck.status);
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
