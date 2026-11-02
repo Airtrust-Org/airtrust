@@ -158,6 +158,8 @@ export function canReconcilePersistedScormCompletion(params: {
   reviewMode: boolean;
   isScormContent: boolean;
   matriculaStatus: string | null | undefined;
+  /** Course policy. Only an explicit FORMATIVE course is exempt from the score rule. */
+  assessmentPolicy?: 'SCORED' | 'FORMATIVE' | null;
   diagnostic: {
     status?: string | null;
     explicit_completion?: boolean | null;
@@ -174,6 +176,11 @@ export function canReconcilePersistedScormCompletion(params: {
     diagnostic.explicit_completion !== true ||
     diagnostic.reached_final_location !== true
   ) return false;
+  // A FORMATIVE package has no internal exam, so there is no score to compare:
+  // a null score used to be read as 0 and blocked every such course whenever a
+  // leftover mastery score (e.g. 70) remained on the course. The server stays
+  // the authority (closure_readiness + /finalizar), exactly as for SCORED.
+  if (params.assessmentPolicy === 'FORMATIVE') return true;
   const mastery = Number(diagnostic.mastery_score ?? 0);
   const score = Number(diagnostic.score_pct);
   return Number.isFinite(score) && score >= Math.max(0, mastery);
@@ -322,6 +329,7 @@ export default function LmsPlayer() {
     reviewMode: effectiveReviewMode,
     isScormContent,
     matriculaStatus: matricula?.status,
+    assessmentPolicy: curso?.scorm_assessment_policy ?? null,
     diagnostic: completionDiagnostic,
   }) && closureReadiness?.eligible_for_server_verification !== false;
   const canFinalize =
@@ -371,10 +379,15 @@ export default function LmsPlayer() {
     isScormContent && !newEditionRequired && !effectiveReviewMode && !isCompletedState && !isFinalizing &&
     (isScoredScorm
       ? closureReadiness?.eligible_for_server_verification === true
-      : allSlidesVisited && (granularDiagnostic
-        ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
-          granularDiagnostic.assessment.passed !== false)
-        : Boolean(legacyFinalSlide && legacyAssessmentEvidence)));
+      // The persisted server verdict also unlocks FORMATIVE: package diagnostics
+      // live only in memory and vanish on reload, which stranded the learner at
+      // 25/25. A package-reported failed assessment still blocks.
+      : (closureReadiness?.eligible_for_server_verification === true &&
+          granularDiagnostic?.assessment.passed !== false) ||
+        (allSlidesVisited && (granularDiagnostic
+          ? Boolean(diagnosticSlidesDone && diagnosticAssessmentDone &&
+            granularDiagnostic.assessment.passed !== false)
+          : Boolean(legacyFinalSlide && legacyAssessmentEvidence))));
   const canRequestCompletion = !newEditionRequired &&
     (canFinalize || Boolean(canRequestScormCompletion) || shouldReconcilePassedScorm);
 
@@ -1504,6 +1517,7 @@ export default function LmsPlayer() {
                             SCORE_BELOW_MASTERY: 'nota abaixo do mínimo exigido',
                             MASTERY_SCORE_MISSING: 'curso sem nota mínima válida configurada',
                             COMPLETION_EVIDENCE_INSUFFICIENT: 'o conteúdo ainda não informou conclusão válida',
+                            EXTERNAL_ASSESSMENT_PENDING: 'estudo concluído; falta a avaliação externa para certificar',
                             EXPLICIT_FAILURE: 'avaliação não aprovada',
                             SCORM_ASSESSMENT_POLICY_INVALID: 'política de avaliação inválida',
                           } as Record<string, string>)[closureReadiness.code] ??
