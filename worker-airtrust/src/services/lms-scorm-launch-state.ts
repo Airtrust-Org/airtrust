@@ -85,15 +85,15 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
-  // A verified handoff bookmark changes navigation only; no old learner evidence is restored.
-  if(!completedReview&&navigationBookmark&&
-    Number.isSafeInteger(navigationBookmark.position)&&
-    Number.isSafeInteger(navigationBookmark.total)&&navigationBookmark.position>=1&&
-    navigationBookmark.position<=navigationBookmark.total&&
-    !cmi['cmi.location']&&!cmi['cmi.core.lesson_location']){
-    const location=`${navigationBookmark.position}/${navigationBookmark.total}`;
-    if(isScorm2004)cmi['cmi.location']=location;
-    else cmi['cmi.core.lesson_location']=location;
+  // A verified handoff bookmark is only a UI hint (the player shows it). It is never
+  // injected as `lesson_location`: F5 packages treat a location without matching
+  // suspend_data as an incompatible edition and lock themselves into preview. A
+  // location left bare by an earlier launch is dropped for the same reason.
+  if(!completedReview&&navigationBookmark&&!cmi['cmi.suspend_data']){
+    delete cmi['cmi.location'];
+    delete cmi['cmi.core.lesson_location'];
+    delete cmi['cmi.entry'];
+    delete cmi['cmi.core.entry'];
   }
   if(completedReview){
     // Review resumes the terminal snapshot when it is consistent; otherwise
