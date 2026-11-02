@@ -10,38 +10,10 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getEmpresaIdSafe,
-  getActorId,
-  getFlightOrThrow,
-  getActiveRdvByFlight,
-  getRdvOrThrow,
-  buildMergedRdv,
-  getFuncionarioIdForUser,
-  recordFlightEvent,
-  buildFlightEventStatement,
-  buildRdvVersionGuardedInsert,
-  buildRdvVersionGuardedUpdate,
-  buildRdvVersionBumpGatedOnPriorChanges,
-  maybeRecordSystemAudit,
-  allowedRdvFields,
-  type RdvInput,
-} from '../repositories/controle-voos/rdv-repository';
-import {
-  RDV_CAPABILITIES,
-  requireRdvCapability,
-  requireAnyRdvAccess,
-  hasRdvCapability,
-  assertRdvSelfScope,
-  assertNotSelfApproval,
-  assertFuncionarioBelongsToEmpresa,
-  assertRdvWorkflowTransition,
-  assertRdvVersion,
-  requireExpectedRdvVersion,
-  assertCasApplied,
-  requireNonEmptyText,
-  buildRdvFieldRevisionStatements,
-} from '../services/controle-voos/rdv-workflow';
+import { getFlightOrThrow, getActiveRdvByFlight, getRdvOrThrow, buildMergedRdv, getFuncionarioIdForUser, recordFlightEvent, buildFlightEventStatement, buildRdvVersionGuardedInsert, buildRdvVersionGuardedUpdate, buildRdvVersionBumpGatedOnPriorChanges, allowedRdvFields, type RdvInput } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe, getActorId, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES, assertFuncionarioBelongsToEmpresa, assertRdvWorkflowTransition, assertRdvVersion, requireExpectedRdvVersion, assertCasApplied, requireNonEmptyText, buildRdvFieldRevisionStatements } from '../services/controle-voos/rdv-workflow';
+import { requireRdvCapability, requireAnyRdvAccess, hasRdvCapability, assertRdvSelfScope, assertNotSelfApproval } from '../middleware/controle-voos-rdv-access';
 import { syncRdvAlerts } from '../services/controle-voos/rdv-alertas';
 import { getPilotLogbook } from '../services/controle-voos/pilot-logbook';
 import { enrichFlightsWithPresentation, getFlightPresentationMap } from '../services/controle-voos/flight-presentation';

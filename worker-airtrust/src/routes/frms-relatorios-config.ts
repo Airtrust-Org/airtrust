@@ -20,7 +20,7 @@ import type { Env } from '../types';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import {
   relatorioIndividual,

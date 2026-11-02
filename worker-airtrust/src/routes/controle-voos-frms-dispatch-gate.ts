@@ -8,8 +8,9 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { getEmpresaIdSafe } from '../repositories/controle-voos/rdv-repository';
-import { RDV_CAPABILITIES, requireRdvCapability } from '../services/controle-voos/rdv-workflow';
+import { getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES } from '../services/controle-voos/rdv-workflow';
+import { requireRdvCapability } from '../middleware/controle-voos-rdv-access';
 import {
   assessFlightDispatchGate,
   loadDispatchGateSnapshotIndex,

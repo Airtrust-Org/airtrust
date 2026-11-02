@@ -8,7 +8,7 @@ import {
   assertFuncionarioInScope,
   buildFuncionarioScopeWhere,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { resolveGlobalSimulatorForEquipment } from '../services/cae-planning-resource-assignment';
 import { materializeSimulatorPlanningV3Draft } from '../services/simulator-planning-v3-materialization';

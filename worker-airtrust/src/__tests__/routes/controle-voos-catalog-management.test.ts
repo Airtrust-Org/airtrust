@@ -40,8 +40,8 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
 });
 
-vi.mock('../../repositories/controle-voos/rdv-repository', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../repositories/controle-voos/rdv-repository')>();
+vi.mock('../../middleware/controle-voos-rdv-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/controle-voos-rdv-context')>();
   return {
     ...actual,
     maybeRecordSystemAudit: vi.fn(async () => undefined),

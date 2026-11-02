@@ -47,7 +47,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: vi.fn(),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: vi.fn(),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),

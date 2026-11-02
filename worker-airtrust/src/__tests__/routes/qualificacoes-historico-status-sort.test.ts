@@ -51,7 +51,7 @@ vi.mock('../../routes/qualificacoes/historico-write', () => ({
   default: new Hono(),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: employeeSectorAccessMock,
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));

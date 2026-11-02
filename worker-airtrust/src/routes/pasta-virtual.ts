@@ -23,7 +23,7 @@ import {
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
-import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import pastaVirtualExtraRoutes from './pasta-virtual-extra';
 
 // Cross-tenant and out-of-scope funcionario lookups must both fold into the

@@ -20,7 +20,7 @@ import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import { buildOperationalFichaManobras, FICHA_TECNICAS_PADRAO_LIMITE } from '../constants/notechs';
 import {
   requireOperationalAccess,
-  } from '../services/operational-domain-access';
+  } from '../middleware/operational-domain-access';
 
 // Fichas de sessão de simulador são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md.

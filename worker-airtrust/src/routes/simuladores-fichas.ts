@@ -23,7 +23,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { normalizeFichaRole, resolveFichaScope } from '../utils/ficha-role-scope';
 import { requireAdminForDelete } from './simuladores-admin-guard';
 import { audit } from '../services/simuladores/shared';
@@ -51,7 +51,7 @@ import {
   requireOperationalAccess,
   resolveOperationalReadScope,
   normalizeTenantRole,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 import {
   fichaInstructorMetaJoin,
   fichaInstructorMetaSelect,

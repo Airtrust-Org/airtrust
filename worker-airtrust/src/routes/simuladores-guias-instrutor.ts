@@ -37,7 +37,7 @@ import {
   looksLikePdf,
   sha256Hex,
 } from '../lib/guias-instrutor/storage';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 
 // Guias de instrutor são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. Additive to the existing

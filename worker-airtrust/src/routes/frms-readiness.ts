@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,

@@ -42,7 +42,7 @@ import {
   assertFuncionarioInScope,
   employeeSectorSql,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';
