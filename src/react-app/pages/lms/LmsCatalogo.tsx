@@ -1880,7 +1880,8 @@ export default function LmsCatalogo() {
     },
     { enabled: canManage },
   );
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas();
+  // Only the learner view needs personal enrollments; admin catalog never requires an employee link.
+  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(studentMode);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
