@@ -7,7 +7,7 @@
  * Não inventar etapas "programadas"; o GET de listagem devolve `meta.programado`
  * a partir do voo e `data` com as etapas realizadas.
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import type { RdvRow } from '../../repositories/controle-voos/rdv-repository';
 import { assertRdvVersion } from './rdv-workflow';
 
