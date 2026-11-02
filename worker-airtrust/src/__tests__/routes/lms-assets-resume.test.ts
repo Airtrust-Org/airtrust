@@ -149,6 +149,15 @@ describe('completed enrollment review virtual CMI', () => {
     expect(cmi['cmi.core.entry']).toBeUndefined();
   });
 
+  it('preserves a package-authored location after a handoff (only the synthetic anchor is dropped)', () => {
+    const saved = JSON.stringify({ 'cmi.core.lesson_location': '20/59', 'cmi.core.entry': 'resume' });
+    const result = buildScormLaunchState(saved, null, false, false, { position: 2, total: 59 });
+    const cmi = JSON.parse(result.initialCmiJson);
+    expect(result.hasResumeState).toBe(true);
+    expect(cmi['cmi.core.lesson_location']).toBe('20/59');
+    expect(cmi['cmi.core.entry']).toBe('resume');
+  });
+
   it('rejects malformed, completion-capable, or out-of-range handoff bookmarks', () => {
     expect(readScormNavigationBookmark(JSON.stringify({
       status: 'MATCHED_ANCHOR', targetPosition: 33, activeTotal: 43,
