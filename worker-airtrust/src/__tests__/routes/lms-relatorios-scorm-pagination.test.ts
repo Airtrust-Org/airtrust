@@ -31,7 +31,7 @@ vi.mock('../../utils/tenant-resolution', () => ({
     Number(c.req.header('x-test-empresa-id') || c.get('empresaId') || 0),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'restricted', setorIds: [4, 9] })),
 }));
 

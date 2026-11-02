@@ -41,7 +41,7 @@ vi.mock('../../services/dashboardService', () => ({
   getSystemHealth: vi.fn(async () => ({})),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
   buildFuncionarioScopeWhere: vi.fn(() => ({ clause: '1 = 1', bindings: [] })),
 }));

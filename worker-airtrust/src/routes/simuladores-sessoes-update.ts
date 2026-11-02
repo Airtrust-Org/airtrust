@@ -30,7 +30,7 @@ import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
 import {
   requireOperationalAccess,
-  } from '../services/operational-domain-access';
+  } from '../middleware/operational-domain-access';
 
 // Sessões de simulador são fixed-domain OPERACOES — see docs/rbac/gestor-operational-autonomy.md.
 const requireOperacoesSessao = (action: 'update' | 'delete') =>

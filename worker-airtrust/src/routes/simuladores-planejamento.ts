@@ -14,7 +14,7 @@ import {
   assertFuncionarioInScope,
   buildFuncionarioScopeWhere,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { syncTreinamentoPlanejadoIntegration } from '../services/treinamentos-planejados-integration';
 import { validateAndNormalizeCaeAvailability } from '../services/cae-availability';
 import { matchCaeAvailabilityBatch, type CaeBatchPlanningNeed } from '../services/cae-planning-batch';

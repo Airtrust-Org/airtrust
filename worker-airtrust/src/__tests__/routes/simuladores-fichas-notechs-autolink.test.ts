@@ -15,7 +15,7 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
 }));
 

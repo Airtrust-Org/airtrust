@@ -2,14 +2,8 @@ import type { Context } from 'hono';
 import { assertControleVoosCoordination } from '../middleware/controle-voos-access';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  FLIGHT_SELECT,
-  type FlightRow,
-  getActorId,
-  getEmpresaIdSafe,
-  getFlightOrThrow,
-  recordFlightEvent,
-} from '../repositories/controle-voos/rdv-repository';
+import { FLIGHT_SELECT, type FlightRow, getFlightOrThrow, recordFlightEvent } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
 import { sendEmailDetailed } from '../lib/email';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import {

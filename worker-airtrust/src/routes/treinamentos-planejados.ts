@@ -12,7 +12,7 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   buildConvocacaoPreview,
   getEmailConvocacaoConfig,

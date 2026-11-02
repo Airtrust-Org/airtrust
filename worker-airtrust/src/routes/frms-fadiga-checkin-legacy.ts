@@ -15,11 +15,11 @@ import {
 import { FrmsParameterResolutionError, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
 import { persistReadinessAndSyncFrms } from './frms-fadiga-checkin-readiness-sync';
 import { buildFratSuggestion } from '../lib/frms/fadiga-frat-bridge';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import {
   getEmployeeSectorAccess,
   buildFuncionarioScopeWhere,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   CheckinCreateSchema,
   GestorRespostaSchema,

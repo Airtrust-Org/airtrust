@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
 import { cleanupFailedSharedCreate } from '../services/simuladores/shared-session-cancellation';
@@ -33,7 +33,7 @@ import { buildOperationalFichaManobras, type FichaManobraBase } from '../constan
 import {
   assertFuncionarioIdsWithinOperationalScope,
   normalizeTenantRole,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 import {
   requireOperacoesSessao,
   buildOperationalSessaoReadFilter,

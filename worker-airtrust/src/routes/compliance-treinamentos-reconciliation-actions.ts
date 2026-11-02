@@ -4,7 +4,7 @@ import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
-import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';

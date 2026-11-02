@@ -12,7 +12,7 @@ import { syncSessaoEscalaEventos, filtrarChecksCompativeisComModelo, getSimulado
 import {
   requireOperationalAccess,
   assertFuncionarioIdsWithinOperationalScope,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 
 // Participantes/checks de sessão de simulador são fixed-domain OPERACOES —
 // see docs/rbac/gestor-operational-autonomy.md.

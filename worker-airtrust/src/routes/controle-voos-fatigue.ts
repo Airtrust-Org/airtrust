@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe, getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from '../lib/frms/operational-snapshot';
 
 type CrewRow = { funcionario_id: number; nome: string; funcao: string };

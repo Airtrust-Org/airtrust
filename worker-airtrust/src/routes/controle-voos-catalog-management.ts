@@ -6,11 +6,7 @@ import { checkPermission } from '../middleware/tenant';
 import { isControleVoosCoordinationRole } from '../middleware/controle-voos-access';
 import { getUserPermissionOverride } from '../middleware/rbac';
 import type { Env } from '../types';
-import {
-  getActorId,
-  getEmpresaIdSafe,
-  maybeRecordSystemAudit,
-} from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
 
 type CatalogKey = 'aeroportos' | 'tipos' | 'naturezas' | 'motivos' | 'empresas-abastecimento' | 'contratos' | 'funcoes-bordo' | 'justificativas';
 

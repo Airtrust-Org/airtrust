@@ -37,7 +37,7 @@ vi.mock('../../utils/auditoria', () => ({
   extrairUsuarioAuditoria: () => ({ usuario_id: 1, usuario_nome: 'teste' }),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn().mockResolvedValue({ mode: 'all', setorIds: [] }),
 }));
 
@@ -248,7 +248,7 @@ describe('setores centro_custo', () => {
   });
 
   it('centro_custo não é usado para calcular acesso/role (RBAC segue via getEmployeeSectorAccess, não por centro_custo)', async () => {
-    const { getEmployeeSectorAccess } = await import('../../services/employee-sector-access');
+    const { getEmployeeSectorAccess } = await import('../../middleware/employee-sector-access');
     const { app, db } = buildApp(setores);
     await app.request('/api/setores', { headers: baseHeaders }, { DB: db } as unknown as Env);
     const call = (getEmployeeSectorAccess as any).mock.calls[0];

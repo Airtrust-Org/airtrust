@@ -2,7 +2,7 @@ import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModal
 import { CANCELLED_STATUS_VALUES, PLANNED_QUALIFICATION_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
-import { type EmployeeSectorAccess } from './employee-sector-access';
+import { type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { normalizeAircraftModel, parseLegacyAircraftModels, resolveEmployeeAircraftModels } from './training-compliance-aircraft';
 import {
   TRAINING_COMPLIANCE_SCOPES,

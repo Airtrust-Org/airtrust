@@ -81,8 +81,8 @@ vi.mock('../../services/qualificacoes/historico-helpers', () => ({
   categoriaCandidatosAtivosExpr: () => '1',
 }));
 
-vi.mock('../../services/employee-sector-access', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../services/employee-sector-access')>();
+vi.mock('../../middleware/employee-sector-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/employee-sector-access')>();
   return {
     ...actual,
     getEmployeeSectorAccess: accessMock,
