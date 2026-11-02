@@ -148,11 +148,11 @@ export function ImportValidator({ dados, onValidationComplete, validationRules, 
                     <td className="px-4 py-2 text-gray-600">{v.mensagem}</td>
                     <td className="px-4 py-2">
                       <span className="text-sm text-gray-700">{String(v.valorOriginal || '-')}</span>
-                      {v.valorSugerido && (
+                      {v.valorSugerido ? (
                         <span className="block text-sm text-green-600 mt-1">
                           → Sugestão: {String(v.valorSugerido)}
                         </span>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 ))}

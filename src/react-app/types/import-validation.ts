@@ -5,6 +5,6 @@ export interface ValidationResult {
   tipo: 'erro' | 'aviso' | 'sucesso';
   campo: string;
   mensagem: string;
-  valorOriginal: any;
-  valorSugerido?: any;
+  valorOriginal: unknown;
+  valorSugerido?: unknown;
 }
