@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Button from '@/react-app/components/Button';
 import {
@@ -10,7 +11,9 @@ import {
   useReplaceValidatedScormDirect,
   useScormActivationPreflight,
 } from '@/react-app/hooks/useLms';
-import type { ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { lmsKeys, type ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { uploadScormInactiveProductionCandidate } from './lmsContentUpload';
+import { allowDirectScormUpload } from './lmsScormDirectUploadPolicy';
 
 const FORMATIVE = 'FORMATIVE_NO_EXAM_V1';
 const MAX_ATTESTATION_BYTES = 24_576;
@@ -135,14 +138,13 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
       ) : null}
       {validated && formative && data ? (
         <div className="mt-3 space-y-2 rounded border border-emerald-300 bg-emerald-50 p-3 text-emerald-950">
-          <p className="font-semibold">Pronto para solicitar substituição com validação automática</p>
+          <p className="font-semibold">Edição validada — substituição direta disponível</p>
           <p className="text-xs">A validação do servidor confere estrutura, manifesto, atividades, SHA e arquivos no armazenamento antes de trocar o conteúdo. Não é necessário importar JSON ou obter homologação manual.</p>
           {data.incomingPolicy === 'FORMATIVE' ? (
             <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>
           ) : null}
           <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending}
             onClick={() => {
-              if (!window.confirm(`Substituir o conteúdo do curso #${cursoId} pelo ZIP SHA ${sha12(sha)}? Conclusões anteriores serão preservadas; ${inProgress} matrícula(s) em andamento usarão a nova edição.`)) return;
               void directReplace.mutateAsync({
                 packageId: pkg.packageId,
                 confirm: { cursoId, packageSha256: sha,
@@ -150,13 +152,13 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               }).then(() => toast.success('Conteúdo substituído. Histórico preservado.'))
                 .catch((error: unknown) => toast.error(errorText(error)));
             }}>
-            Substituir agora — validação automática
+Substituir esta edição já enviada
           </Button>
           {!isAdmin ? <p className="text-xs">Somente administradores podem substituir o curso.</p> : null}
         </div>
       ) : null}
 
-      {validated && data ? (
+      {validated && data && !formative ? (
         <details open={!formative} className="mt-3 rounded border p-2">
           <summary className="cursor-pointer text-xs font-medium">{formative ? 'Detalhes técnicos (opcional)' : 'Detalhes de ativação'}</summary>
         <div className="mt-3 space-y-3">
@@ -316,9 +318,56 @@ export default function ScormEditionPanel({ cursoId, versions, isAdmin }: {
   versions: ScormPackageVersionRow[];
   isAdmin: boolean;
 }) {
-  if (versions.length === 0) return <p className="text-sm opacity-70">Nenhuma edição enviada ainda.</p>;
+  const qc = useQueryClient();
+  const [uploading, setUploading] = useState(false);
+  const uploadLock = useRef(false);
+  const productionUpload = typeof window !== 'undefined' && allowDirectScormUpload(isAdmin, window.location.hostname);
+
+  async function onSelectZip(file: File | undefined) {
+    if (!file || !productionUpload || uploadLock.current) return;
+    uploadLock.current = true;
+    setUploading(true);
+    try {
+      const receipt = await uploadScormInactiveProductionCandidate({
+        cursoId, file, replaceImmediately: true,
+      });
+      if (receipt.status !== 'ACTIVE') throw new Error('O Worker não confirmou a substituição da edição.');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) }),
+        qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false }),
+      ]);
+      toast.success('ZIP validado e conteúdo substituído. Histórico preservado.');
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      uploadLock.current = false;
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-2">
+      {productionUpload ? (
+        <div className="rounded-lg border p-3 text-sm">
+          <label htmlFor={`scorm-direct-upload-${cursoId}`} className="block font-medium">
+            Enviar ZIP formativo e substituir imediatamente
+          </label>
+          <p className="mt-1 mb-2 text-xs opacity-70">
+            Ao selecionar o arquivo, o Worker valida o pacote e substitui a edição ativa automaticamente.
+            Em caso de falha, a edição anterior permanece ativa. Histórico concluído é preservado.
+          </p>
+          <input id={`scorm-direct-upload-${cursoId}`} type="file" accept=".zip,application/zip"
+            aria-label="Selecionar ZIP formativo e substituir"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              void onSelectZip(file);
+            }} />
+          {uploading ? <p role="status" className="mt-2">Validando ZIP e substituindo conteúdo…</p> : null}
+        </div>
+      ) : null}
+      {versions.length === 0 ? <p className="text-sm opacity-70">Nenhuma edição enviada ainda.</p> : null}
       {versions.map((pkg) => (
         <EditionCard key={pkg.packageId} cursoId={cursoId} pkg={pkg} versions={versions} isAdmin={isAdmin} />
       ))}
