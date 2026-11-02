@@ -210,6 +210,38 @@ describe('completed enrollment review virtual CMI', () => {
     });
   });
 
+  describe('orphan location in a FORMATIVE course (no suspend_data)', () => {
+    const launchOrphan = (cmiExtra: Record<string, unknown>, opts: { formativeCourse?: boolean } = {}) =>
+      JSON.parse(buildScormLaunchState(JSON.stringify({ 'airtrust.total_slides': 84, ...cmiExtra }), null, false, false, null, opts).initialCmiJson);
+
+    it('drops a bare N/M location so the package restarts instead of locking in preview', () => {
+      const cmi = launchOrphan({ 'cmi.core.lesson_location': '14/84', 'cmi.core.entry': 'resume' }, { formativeCourse: true });
+      expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+      expect(cmi['cmi.core.entry']).toBeUndefined();
+      const result = buildScormLaunchState(JSON.stringify({ 'cmi.core.lesson_location': '14/84' }), null, false, false, null, { formativeCourse: true });
+      expect(result.hasResumeState).toBe(false);
+    });
+
+    it('also clears the cmi.location alias and never credits anything', () => {
+      const cmi = launchOrphan({ 'cmi.location': '14/84', 'cmi.core.lesson_location': '14/84', 'cmi.core.lesson_status': 'incomplete' }, { formativeCourse: true });
+      expect(cmi['cmi.location']).toBeUndefined();
+      expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+      expect(cmi['cmi.core.lesson_status']).toBe('incomplete');
+    });
+
+    it('keeps a location when the package also authored suspend_data', () => {
+      const sd = JSON.stringify({ v: 4, p: 'PKG', a: 13, d: Array.from({ length: 13 }, (_, i) => i), c: false });
+      const cmi = launchOrphan({ 'cmi.core.lesson_location': '14/84', 'cmi.suspend_data': sd }, { formativeCourse: true });
+      expect(cmi['cmi.core.lesson_location']).toBe('14/84');
+    });
+
+    it('keeps a location on a non-formative course, on the first screen, or with terminal evidence', () => {
+      expect(launchOrphan({ 'cmi.core.lesson_location': '14/84' })['cmi.core.lesson_location']).toBe('14/84');
+      expect(launchOrphan({ 'cmi.core.lesson_location': '1/84' }, { formativeCourse: true })['cmi.core.lesson_location']).toBe('1/84');
+      expect(launchOrphan({ 'cmi.core.lesson_location': '84/84', 'cmi.core.lesson_status': 'passed' }, { formativeCourse: true })['cmi.core.lesson_location']).toBe('84/84');
+    });
+  });
+
   it('rejects malformed, completion-capable, or out-of-range handoff bookmarks', () => {
     expect(readScormNavigationBookmark(JSON.stringify({
       status: 'MATCHED_ANCHOR', targetPosition: 33, activeTotal: 43,
