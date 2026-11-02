@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScormPlayerSessionKey,
   canReconcilePersistedScormCompletion,
+  shouldRefetchAfterScormSave,
   resolveLmsDisplayProgress,
   shouldRefreshMatriculaAfterScormSaveError,
   shouldShowScormClosureDetails,
@@ -150,5 +151,28 @@ describe('SCORM closure panel shows evidence only at the appropriate stage', () 
       { completed: true, atFinalSlide: false, finalizationFailed: false, readyToVerify: false },
       { completed: false, atFinalSlide: false, finalizationFailed: false, readyToVerify: false, lastStepReached: true },
     ]) expect(shouldShowScormClosureDetails(state)).toBe(true);
+  });
+});
+
+describe('refetch after an acknowledged SCORM save', () => {
+  const base = {
+    serverSaved: true, reviewMode: false,
+    viewedSlideCount: 16, recordedSlideCount: 16, location: '16/16',
+  };
+  it('refetches on the final slide even when no new slide was visited (final click)', () => {
+    expect(shouldRefetchAfterScormSave(base)).toBe(true);
+  });
+  it('still refetches when new slide visits were recorded', () => {
+    expect(shouldRefetchAfterScormSave({
+      ...base, location: '7/16', viewedSlideCount: 7, recordedSlideCount: 6,
+    })).toBe(true);
+  });
+  it('does not refetch on ordinary autosaves mid-course, unsaved events or review mode', () => {
+    expect(shouldRefetchAfterScormSave({
+      ...base, location: '7/16', viewedSlideCount: 6, recordedSlideCount: 6,
+    })).toBe(false);
+    expect(shouldRefetchAfterScormSave({ ...base, serverSaved: false })).toBe(false);
+    expect(shouldRefetchAfterScormSave({ ...base, reviewMode: true })).toBe(false);
+    expect(shouldRefetchAfterScormSave({ ...base, location: null, viewedSlideCount: null })).toBe(false);
   });
 });
