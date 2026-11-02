@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   tokenFuncionarioId: 999,
   dbFuncionarioId: 77 as number | null,
   empresaId: 6,
+  userRole: 'student' as 'student' | 'admin' | 'manager',
   queries: [] as Array<{ sql: string; binds: unknown[] }>,
 }));
 
@@ -19,14 +20,14 @@ vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
     c.set('userId', 42);
     c.set('funcionarioId', state.tokenFuncionarioId);
-    c.set('userRole', 'student');
+    c.set('userRole', state.userRole);
     c.set('empresaId', state.empresaId);
     await next();
   },
 }));
 vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
-  hasRole: () => false,
+  hasRole: (_c: unknown, ...roles: string[]) => roles.includes(state.userRole),
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => state.empresaId }));
@@ -77,6 +78,7 @@ describe('LMS learner enrollment visibility', () => {
     state.dbFuncionarioId = 77;
     state.tokenFuncionarioId = 999;
     state.empresaId = 6;
+    state.userRole = 'student';
     state.queries = [];
     vi.clearAllMocks();
   });
@@ -113,6 +115,31 @@ describe('LMS learner enrollment visibility', () => {
     const body = await response.json() as { success: boolean; error: string };
     expect(body.success).toBe(false);
     expect(body.error).toContain('vínculo');
+    expect(state.queries.some(q => q.sql.includes('FROM lms_matriculas m'))).toBe(false);
+  });
+
+  it.each(['admin', 'manager'] as const)('returns an empty personal list for %s without an employee link, without reading others\' enrollments', async (role) => {
+    state.userRole = role;
+    state.dbFuncionarioId = null;
+    const { app, db } = makeApp();
+
+    const eadResponse = await get(app, '/minhas-ead', db);
+    expect(eadResponse.status).toBe(200);
+    expect(await eadResponse.json()).toEqual({ success: true, data: [] });
+
+    const minhasResponse = await get(app, '/minhas?page=2&limit=5', db);
+    expect(minhasResponse.status).toBe(200);
+    expect(await minhasResponse.json()).toEqual({
+      success: true,
+      data: [],
+      pagination: { page: 2, limit: 5, total: 0 },
+    });
+
+    // Ambos os endpoints validam a identidade no banco/tenant.
+    // Nenhum fallback por JWT, leitura administrativa ou vazamento cross-tenant.
+    expect(state.queries).toHaveLength(2);
+    expect(state.queries.every(q => q.sql.includes('f.empresa_id = ?'))).toBe(true);
+    expect(state.queries.every(q => q.binds[0] === 6 && q.binds[1] === 42)).toBe(true);
     expect(state.queries.some(q => q.sql.includes('FROM lms_matriculas m'))).toBe(false);
   });
 
