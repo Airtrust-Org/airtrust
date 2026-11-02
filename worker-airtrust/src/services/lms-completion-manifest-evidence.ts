@@ -111,6 +111,13 @@ function parseObject(value: unknown): Record<string, unknown> | null {
   }
 }
 
+/** Package build tools disagree on separators (`A B 2026-11-02` vs `A_B_2026-11-02`). */
+function normalizePackageVersion(value: unknown): string | null {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().replace(/[\s_]+/g, '_')
+    : null;
+}
+
 function distinctIntegers(value: unknown, min: number, maxExclusive: number): Set<number> | null {
   if (!Array.isArray(value)) return null;
   if (!value.every((n) => typeof n === 'number' && Number.isSafeInteger(n) &&
@@ -122,8 +129,9 @@ function distinctIntegers(value: unknown, min: number, maxExclusive: number): Se
 /**
  * Proves coverage of every manifest-declared required unit from EITHER:
  *  - the wrapper ledger (`airtrust.viewed_slides`, 1-based) for the same total; or
- *  - the package's own persisted state (suspend_data `{p, d, ids?}`, 0-based
- *    indexes) pinned to the active `packageVersion`.
+ *  - the package's own persisted state pinned to the active `packageVersion`:
+ *    suspend_data `{p, d, ids?}` (0-based indexes) or the v1 core's `{p, c}`
+ *    (`c` = one '0'/'1' flag per required unit, in manifest order).
  * A location/bookmark (N/N) alone never proves earlier units.
  */
 export function evaluateManifestStudyCoverage(params: {
@@ -159,9 +167,10 @@ export function evaluateManifestStudyCoverage(params: {
   const inline = cmi?.['cmi.suspend_data'];
   const state = parseObject(typeof inline === 'string' && inline.trim() ? inline : params.suspendData);
   if (state) {
-    const versionMatches = manifest.packageVersion === null
+    const declaredVersion = normalizePackageVersion(manifest.packageVersion);
+    const versionMatches = declaredVersion === null
       ? false // without a declared identity, package state cannot be pinned to the active edition
-      : state.p === manifest.packageVersion;
+      : normalizePackageVersion(state.p) === declaredVersion;
     const ids = state.ids;
     const idsCompatible = ids === undefined || (Array.isArray(ids) && ids.length === total &&
       ids.every((id, index) => id === manifest.requiredSlideIds[index]));
@@ -169,6 +178,13 @@ export function evaluateManifestStudyCoverage(params: {
     if (visited) {
       if (visited.size === total) return result(total, 'PACKAGE_STATE');
       best = Math.max(best, visited.size);
+    }
+    const flags = state.c;
+    if (versionMatches && idsCompatible && typeof flags === 'string' &&
+        flags.length === total && /^[01]+$/.test(flags)) {
+      const done = flags.split('1').length - 1;
+      if (done === total) return result(total, 'PACKAGE_STATE');
+      best = Math.max(best, done);
     }
   }
   return result(best, null);
