@@ -131,6 +131,10 @@ ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"
 PILOT_OFFLINE_LEASE_KEY_ID = "pilot-staging-20260910-01"
 PILOT_OFFLINE_LEASE_TTL_MINUTES = "720"
 PILOT_OFFLINE_SYNC_ENABLED = "true"
+# Independent exam module (schema V2 0571/0572 applied to staging). The routes
+# also require ENVIRONMENT == "staging"; production keeps both gates unset (503).
+LMS_EXAM_QUESTION_ADMIN_STAGING = "REVIEWED_SCHEMA_ONLY"
+LMS_EXAM_LEARNER_STAGING = "REVIEWED_SCHEMA_ONLY"
 # JWT_SECRET deve ser configurado via: wrangler secret put JWT_SECRET --env staging
 # CF_ACCOUNT_ID deve ser configurado via: wrangler secret put CF_ACCOUNT_ID --env staging
 # CF_BROWSER_API_TOKEN deve ser configurado via: wrangler secret put CF_BROWSER_API_TOKEN --env staging
