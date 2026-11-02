@@ -11,7 +11,7 @@
  * upload) ao criar o abastecimento; essa referencia e revalidada contra o
  * escopo tenant+voo antes de ser persistida.
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 
 export const ABASTECIMENTO_ANEXO_MAX_BYTES = 10 * 1024 * 1024;
 

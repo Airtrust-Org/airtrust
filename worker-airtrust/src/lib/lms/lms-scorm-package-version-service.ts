@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import { guessMime } from './lms-scorm-asset-paths';
 import { extractAndValidateLmsPackage, extractScormStaticGateMetadata, normalizeLmsArchivePath, validateStructuredScormMetadata } from './lms-package-validator';
 import { canActivateCertifiedScormPackage, validateScormPackageQuality, type ScormQualityGateResult } from './lms-scorm-quality-gate';

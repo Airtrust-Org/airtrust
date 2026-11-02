@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 
 const MiB = 1024 * 1024;
 export const F5_STREAMED_ZIP_LIMITS = Object.freeze({

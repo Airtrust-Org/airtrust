@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import { mergeScormRuntimeState } from './lms-progress-guardrails';
 import { ScormCommitSchema } from '../../services/lms-scorm-commit-schema';
 
