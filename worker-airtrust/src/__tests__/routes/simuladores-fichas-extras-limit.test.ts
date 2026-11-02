@@ -10,7 +10,7 @@ vi.mock('../../middleware/tenant', () => ({
   getTenantContext: () => ({ empresaId: 6, userId: 101, role: 'admin' }),
 }));
 
-vi.mock('../../routes/simuladores-shared', () => ({
+vi.mock('../../services/simuladores/shared', () => ({
   audit: vi.fn(async () => undefined),
 }));
 

@@ -25,11 +25,11 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
 }));

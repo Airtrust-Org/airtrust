@@ -17,7 +17,7 @@ import {
   appendEmployeeSectorFilter,
   assertFuncionarioInScope,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,

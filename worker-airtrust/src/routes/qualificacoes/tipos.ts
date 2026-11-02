@@ -34,7 +34,7 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 import {
   requireOperationalAccess,
   resolveOperationalAccess,
@@ -43,7 +43,7 @@ import {
   appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
-} from '../../services/operational-domain-access';
+} from '../../middleware/operational-domain-access';
 
 // Tipo de qualificação domain varies per row (via categoria.dominio_codigo).
 // update/delete resolve the domain dynamically from the existing row via

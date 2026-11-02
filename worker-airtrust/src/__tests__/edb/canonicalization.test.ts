@@ -4,11 +4,11 @@ import {
   canonicalJson,
   hashSignableEdbPayload,
   sha256Hex,
-} from '../../services/edb/canonicalization';
+} from '../../lib/edb/canonicalization';
 import {
   createEmptyEdbFlightRecord,
   type EdbSignatureProof,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 
 function makeRecord() {
   return createEmptyEdbFlightRecord({

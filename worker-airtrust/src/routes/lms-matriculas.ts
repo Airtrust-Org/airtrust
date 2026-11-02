@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { auth } from '../middleware/auth';
 import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
@@ -35,14 +35,14 @@ import {
   preferScormValue,
   resolveLmsEffectiveProgress,
   shouldPreferIncomingScormState,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { getCallerUserId, logLmsMatriculaAudit } from './lms-matriculas-audit';
 import type { Env } from '../types';
 import {
   assertFuncionarioInScope,
   employeeSectorSql,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { buildAuditMetadata } from '../lib/audit/context';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { collectByBindChunks } from '../utils/d1-bind-chunks';

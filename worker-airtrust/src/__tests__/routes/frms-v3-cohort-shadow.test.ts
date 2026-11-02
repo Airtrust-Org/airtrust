@@ -22,7 +22,7 @@ vi.mock('../../middleware/tenant', () => ({
     Number((ctx as { req: { header: (key: string) => string | undefined } })
       .req.header('x-empresa-id') || 0),
 }));
-vi.mock('../../lib/frms/access', () => ({
+vi.mock('../../middleware/frms-access', () => ({
   canSeeFrmsTeamScopeForContext: async (ctx: unknown) =>
     (ctx as { req: { header: (key: string) => string | undefined } })
       .req.header('x-role') === 'manager',

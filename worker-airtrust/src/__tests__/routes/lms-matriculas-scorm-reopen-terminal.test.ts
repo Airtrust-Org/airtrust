@@ -20,12 +20,12 @@ vi.mock('../../middleware/rbac', () => ({
   hasRole: () => true,
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => 1 }));
+vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => 1 }));
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: vi.fn(), hasActiveMatriculaCycle: () => false,
   syncMatriculaCycleFromMatricula: vi.fn(),
 }));
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: vi.fn(),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),

@@ -27,7 +27,7 @@ import {
   GUIAS_INSTRUTOR_CAPABILITIES,
 } from '../middleware/guias-instrutor-permissions';
 import { badRequest, forbidden, notFound } from '../middleware/error-handler';
-import { getFuncId, isFullAccessRole } from './simuladores-shared';
+import { getFuncId, isFullAccessRole } from '../services/simuladores/shared';
 import { sanitizeGuiaHtml } from '../lib/guias-instrutor/html-sanitizer';
 import {
   buildGuiaR2Key,
@@ -37,7 +37,7 @@ import {
   looksLikePdf,
   sha256Hex,
 } from '../lib/guias-instrutor/storage';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 
 // Guias de instrutor são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. Additive to the existing

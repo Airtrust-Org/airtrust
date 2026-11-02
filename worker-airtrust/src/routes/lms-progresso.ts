@@ -11,7 +11,7 @@ import { auth } from '../middleware/auth';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { hasRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
@@ -20,7 +20,7 @@ import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   resolveLmsEffectiveProgress,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import { createLogger } from '../utils/logger';
 import type { Env } from '../types';

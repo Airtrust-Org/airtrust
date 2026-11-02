@@ -21,7 +21,7 @@ import {
   OPERATIONAL_DOMAINS,
   activeDomainCodes,
   type OperationalDomain,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 
 const router = new Hono<{ Bindings: Env }>();
 

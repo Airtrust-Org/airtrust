@@ -10,18 +10,8 @@ import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
-import {
-  safe,
-  historicoPertenceEmpresa,
-  invalidateMaterializedStats,
-  ensureHistoricoSchema,
-  ensureQualificacoesTiposTrainingSchema,
-  normalizeTipoTreinamento,
-  resolveCargaHorariaByTipo,
-  calcularDataVencimento,
-  resolveParametrosRenovacaoQualificacao,
-  publishQualificacaoEvent,
-} from './historico-helpers';
+import { safe } from './safe-handler';
+import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
 import {
   COMPLETED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -39,7 +29,7 @@ import {
   isG1SemQualificacaoCode,
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
-import { requireOperationalAccess } from '../../services/operational-domain-access';
+import { requireOperationalAccess } from '../../middleware/operational-domain-access';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo

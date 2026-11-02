@@ -17,11 +17,11 @@ import {
   normalizeLmsArchivePath,
   type LmsStructuredContentType,
 } from '../lib/lms/lms-package-validator';
-import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
+import { getLmsSchemaSnapshot } from '../middleware/lms-schema-snapshot';
 import { ApiError } from '../middleware/error-handler';
 import { requirePermission, requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { requireOperacoesCurso } from './lms-cursos-rbac';
 import {
   activateScormPackageVersion,

@@ -15,7 +15,7 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
 }));
 
@@ -23,8 +23,8 @@ vi.mock('../../utils/ficha-role-scope', () => ({
   resolveFichaScope: () => 'FULL_ACCESS',
 }));
 
-vi.mock('../../routes/simuladores-shared', async () => {
-  const actual = await vi.importActual('../../routes/simuladores-shared');
+vi.mock('../../services/simuladores/shared', async () => {
+  const actual = await vi.importActual('../../services/simuladores/shared');
   return {
     ...actual,
     audit: vi.fn(async () => undefined),

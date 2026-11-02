@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { getUserPermissionOverride } = vi.hoisted(() => ({ getUserPermissionOverride: vi.fn() }));
 vi.mock('../../middleware/rbac', () => ({ getUserPermissionOverride }));
 
-import { hasRdvCapability, RDV_CAPABILITIES } from '../../services/controle-voos/rdv-workflow';
+import { RDV_CAPABILITIES } from '../../services/controle-voos/rdv-workflow';
+import { hasRdvCapability } from '../../middleware/controle-voos-rdv-access';
 
 function context(role = 'viewer', profile: string | null = null) {
   const values: Record<string, unknown> = {

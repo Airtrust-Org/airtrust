@@ -7,7 +7,7 @@ import {
 import {
   buildFuncionarioScopeWhere,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../lib/rbac/employee-sector-access';
 
 export type DashboardTaxaConclusaoMensalMetricRow = {
   mes: string;

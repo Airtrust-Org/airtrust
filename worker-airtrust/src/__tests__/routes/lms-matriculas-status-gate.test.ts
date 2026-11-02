@@ -37,7 +37,7 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
@@ -58,7 +58,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: vi.fn(),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),

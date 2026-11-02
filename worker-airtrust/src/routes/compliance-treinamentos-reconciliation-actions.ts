@@ -4,14 +4,14 @@ import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
-import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { createComplianceEnrollmentAtomic } from '../services/training-compliance-create-enrollment';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 
 export type LmsEnrollment = {
   id: number;

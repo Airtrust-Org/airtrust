@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { getEmpresaIdSafe, maybeRecordSystemAudit } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
 import {
   buildDailyPetrobrasRveXml,
   type PetrobrasRveFlightRow,

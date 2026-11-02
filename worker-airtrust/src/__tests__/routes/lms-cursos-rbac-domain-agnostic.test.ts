@@ -8,7 +8,7 @@ import {
   requireOperacoesCurso,
   resolveAndValidateCursoDominioCodigo,
 } from '../../routes/lms-cursos-rbac';
-import { assertOperationalAccess } from '../../services/operational-domain-access';
+import { assertOperationalAccess } from '../../middleware/operational-domain-access';
 import type { Env } from '../../types';
 import { createFixtureDb, type Fixtures, type TestD1 } from '../helpers/fixture-d1';
 

@@ -3,7 +3,6 @@
  * Extracted from historico.ts
  */
 
-import type { Context } from 'hono';
 import type { Env } from '../../types';
 import { publishDomainEvent, type DomainEventTipo } from '../../shared/domainEvents';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
@@ -487,18 +486,6 @@ export function categoriaCandidatosAtivosExpr(hasCategoriaEmpresaId: boolean): s
       AND candidate_count.ativo = 1
       AND ${tenant}
       AND UPPER(TRIM(candidate_count.nome)) = UPPER(TRIM(COALESCE(NULLIF(qh.categoria, ''), NULLIF(qt.categoria, '')))))`;
-}
-
-export function safe(fn: (c: Context<{ Bindings: Env }>) => Promise<Response> | Response) {
-  return async (c: Context<{ Bindings: Env }>) => {
-    try {
-      return await fn(c);
-    } catch (e) {
-      const errorMessage = (e as Error).message || String(e);
-      console.error('[HISTORICO_ERROR]', errorMessage, (e as Error).stack);
-      return c.json({ success: false, error: errorMessage }, 500);
-    }
-  };
 }
 
 export async function historicoPertenceEmpresa(
