@@ -1,4 +1,4 @@
-import { ApiError } from '../middleware/error-handler';
+import { ApiError } from '../lib/errors/api-error';
 
 export function isGovernedTrainingComplianceRequirement(row: Record<string, unknown>): boolean {
   const conditionId = Number(row.condicao_id);

@@ -5,11 +5,7 @@
  * da Coordenação) — nenhum dos dois define este acesso a dados
  * independentemente.
  */
-import type { Context } from 'hono';
-import { ApiError } from '../../middleware/error-handler';
-import { getEmpresaId } from '../../middleware/tenant';
-import type { Env } from '../../types';
-import { extrairUsuarioAuditoria, registrarAuditoria } from '../../utils/auditoria';
+import { ApiError } from '../../lib/errors/api-error';
 
 export type FlightStatus =
   | 'planejado'
@@ -188,22 +184,6 @@ export const allowedRdvFields = new Set([
   'ocorrencias',
   'divergencias',
 ]);
-
-export function getEmpresaIdSafe(c: Context<{ Bindings: Env }>): number {
-  try {
-    return getEmpresaId(c);
-  } catch {
-    const raw = (c.get as (key: string) => unknown)('empresaId');
-    const parsed = typeof raw === 'string' ? Number(raw) : Number(raw || 0);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-}
-
-export function getActorId(c: Context<{ Bindings: Env }>): string | number | null {
-  const raw = (c.get as (key: string) => unknown)('userId');
-  if (typeof raw === 'string' || typeof raw === 'number') return raw;
-  return null;
-}
 
 export async function getFlightOrThrow(
   db: D1Database,
@@ -646,21 +626,3 @@ export function buildRdvVersionBumpGatedOnPriorChanges(
     );
 }
 
-export async function maybeRecordSystemAudit(
-  c: Context<{ Bindings: Env }>,
-  table: string,
-  action: 'INSERT' | 'UPDATE',
-  recordId: string | number,
-  beforeData: unknown,
-  afterData: unknown,
-): Promise<void> {
-  await registrarAuditoria({
-    db: c.env.DB,
-    tabela: table,
-    acao: action,
-    registro_id: recordId,
-    dados_anteriores: beforeData,
-    dados_novos: afterData,
-    ...extrairUsuarioAuditoria(c),
-  });
-}

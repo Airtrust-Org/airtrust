@@ -1,4 +1,4 @@
-import { parseScormLocationPair } from './lms-progress-guardrails';
+import { parseScormLocationPair } from '../lib/lms/lms-progress-guardrails';
 
 /**
  * A previous SCORM completion belongs to a different edition if its persisted

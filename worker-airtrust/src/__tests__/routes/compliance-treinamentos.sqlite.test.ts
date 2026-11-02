@@ -32,7 +32,7 @@ const sectorAccessMock = vi.hoisted(() => ({
     | { mode: 'restricted'; setorIds: number[]; funcionarioId: null },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => sectorAccessMock.access),
   filterRequestedSetorIdsByAccess: vi.fn(
     (ids: number[], access: { mode: string; setorIds: number[] }) =>

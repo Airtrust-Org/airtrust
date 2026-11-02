@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 
-import { installLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
+import { installLmsSchemaSnapshot } from '../middleware/lms-schema-snapshot';
 import { auth } from '../middleware/auth';
 import type { Env } from '../types';
 import canonicalLmsCursosRoutes from './lms-cursos-canonical-boundary';

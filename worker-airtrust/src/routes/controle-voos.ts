@@ -17,28 +17,10 @@ import {
   SigvoosShadowCompareError,
 } from '../services/controle-voos/sigvoos-shadow-compare';
 import { listControleVoosJornadas } from '../services/controle-voos/controle-voos-jornadas';
-import {
-  type FlightStatus,
-  type FlightRow,
-  type RdvStatus,
-  type RdvRow,
-  type FlightInput,
-  type RdvInput,
-  FLIGHT_SELECT,
-  RDV_SELECT,
-  allowedRdvFields,
-  getEmpresaIdSafe,
-  getActorId,
-  getFlightOrThrow,
-  getActiveRdvByFlight,
-  getRdvOrThrow,
-  buildMergedRdv,
-  recordFlightEvent,
-  maybeRecordSystemAudit,
-  buildRdvVersionGuardedUpdate,
-  mapRdvOperacionalUniqueConstraintError,
-} from '../repositories/controle-voos/rdv-repository';
-import { RDV_CAPABILITIES, assertRdvSelfScope, requireExpectedRdvVersion, assertCasApplied } from '../services/controle-voos/rdv-workflow';
+import { type FlightStatus, type FlightRow, type RdvStatus, type RdvRow, type FlightInput, type RdvInput, FLIGHT_SELECT, RDV_SELECT, allowedRdvFields, getFlightOrThrow, getActiveRdvByFlight, getRdvOrThrow, buildMergedRdv, recordFlightEvent, buildRdvVersionGuardedUpdate, mapRdvOperacionalUniqueConstraintError } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe, getActorId, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES, requireExpectedRdvVersion, assertCasApplied } from '../services/controle-voos/rdv-workflow';
+import { assertRdvSelfScope } from '../middleware/controle-voos-rdv-access';
 import { assertRdvRules, normalizeRdvInput } from '../services/controle-voos/rdv-validation';
 import { finalizeRdvPreenchimentoHandler } from './controle-voos-rdv-finalization';
 import { assertFlightCrewAssignment, listEligibleFlightCrew } from '../services/controle-voos/crew-eligibility';

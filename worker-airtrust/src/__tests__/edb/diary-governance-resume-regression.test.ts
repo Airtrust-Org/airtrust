@@ -10,7 +10,7 @@ import {
   recordSuccessfulReconstitution,
   type EdbDiaryVolume,
   type EdbInformationLossIncident,
-} from '../../services/edb/diary-governance';
+} from '../../lib/edb/diary-governance';
 
 const actor = {
   actorRef: 'employee:10',

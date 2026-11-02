@@ -59,7 +59,7 @@ vi.mock('../../utils/auditoria', () => ({
   registrarAuditoria: registrarAuditoriaMock,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: assertFuncionarioInScopeMock,
   getEmployeeSectorAccess: getEmployeeSectorAccessMock,
 }));

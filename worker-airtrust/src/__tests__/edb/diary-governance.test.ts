@@ -10,7 +10,7 @@ import {
   recordImpossibleReconstitution,
   recordPoliceOccurrence,
   recordSuccessfulReconstitution,
-} from '../../services/edb/diary-governance';
+} from '../../lib/edb/diary-governance';
 
 const actor = {
   actorRef: 'employee:10',

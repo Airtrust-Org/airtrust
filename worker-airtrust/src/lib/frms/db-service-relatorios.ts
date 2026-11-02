@@ -7,7 +7,7 @@ import { buscarJornadas } from './db-service-jornadas';
 import { buscarAcumuloFrota } from './db-service-acumulo';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from './operational-snapshot';
 import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
-import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 export async function relatorioIndividual(
   db: D1Database,

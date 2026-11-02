@@ -7,7 +7,7 @@ import {
   exportQualificationHistoryPdf,
   fetchQualificationHistoryForType,
   buildQualificationHistoryReportRows,
-} from '@/react-app/pages/relatorios/qualificationHistoryReport';
+} from '@/react-app/components/relatorios/qualificationHistoryReport';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import {

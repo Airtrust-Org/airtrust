@@ -1,4 +1,4 @@
-import { parseScormLocationPair } from './lms-progress-guardrails';
+import { parseScormLocationPair } from '../lib/lms/lms-progress-guardrails';
 /** Persisted lms_progresso_scorm evidence columns for the current enrollment cycle. */
 export type PersistedScormEvidence = Readonly<{
   lesson_status?: string|null; completion_status?: string|null; success_status?: string|null;
@@ -10,6 +10,12 @@ export type ScormLaunchStateOptions = Readonly<{
   persisted?: PersistedScormEvidence|null;
   /** Completed review of a structurally different active edition: never replay old cursor. */
   reviewEditionMismatch?: boolean;
+  /**
+   * FORMATIVE courses run on the F5 core, which never writes a location without its
+   * suspend_data. A bare location is therefore not resumable state (see
+   * `dropOrphanLocation`).
+   */
+  formativeCourse?: boolean;
 }>;
 
 const STATUS_RANK: Readonly<Record<string,Readonly<Record<string,number>>>> = {
@@ -103,6 +109,25 @@ function repairStrandedCursor(cmi:Record<string,unknown>):void{
   });
 }
 
+/**
+ * An F5 package handed a location (`N/M`, N>1) with no suspend_data cannot restore:
+ * it opens every screen as a preview ("edição incompatível") and the learner can
+ * never complete it. Such a location is never real progress (the package writes
+ * both together), so it is dropped and the course restarts from the first screen.
+ * Nothing is credited; terminal evidence and scores are untouched.
+ */
+function dropOrphanLocation(cmi:Record<string,unknown>):boolean{
+  if(typeof cmi['cmi.suspend_data']==='string'&&(cmi['cmi.suspend_data'] as string).trim())return false;
+  const locationKeys=['cmi.core.lesson_location','cmi.location'];
+  const orphan=locationKeys.some(key=>{
+    const pair=parseScormLocationPair(String(cmi[key]??''));
+    return Boolean(pair&&pair.current>1);
+  });
+  if(!orphan)return false;
+  for(const key of [...locationKeys,'cmi.entry','cmi.core.entry'])delete cmi[key];
+  return true;
+}
+
 /** Build a fresh or resumed virtual CMI snapshot for the Player 2 wrapper. */
 export function buildScormLaunchState(
   rawCmiJson:string|null,
@@ -124,7 +149,10 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
-  if(!completedReview)repairStrandedCursor(cmi);
+  if(!completedReview){
+    repairStrandedCursor(cmi);
+    if(options.formativeCourse&&!isTerminalCmi(cmi,isScorm2004))dropOrphanLocation(cmi);
+  }
   // A verified handoff bookmark is only a UI hint (the player shows it). It is never
   // injected as `lesson_location`: F5 packages treat a location without matching
   // suspend_data as an incompatible edition and lock themselves into preview. Only the

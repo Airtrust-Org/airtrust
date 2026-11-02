@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { buildSnapshot } from '../routes/compliance-treinamentos';
-import type { EmployeeSectorAccess } from '../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { persistTrainingComplianceDailySnapshots } from '../services/training-compliance-snapshots';
 
 const ALL_ACCESS: EmployeeSectorAccess = { mode: 'all', setorIds: [], funcionarioId: null };

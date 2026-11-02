@@ -25,7 +25,7 @@ vi.mock('../../middleware/rbac', () => ({
   },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: getEmployeeSectorAccessMock,
   employeeSectorSql: employeeSectorSqlMock,
 }));

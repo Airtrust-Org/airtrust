@@ -29,7 +29,7 @@ vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
 }));

@@ -7,9 +7,9 @@ vi.mock('../../middleware/auth', () => ({
   auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../services/operational-domain-access', async () => {
-  const actual = await vi.importActual<typeof import('../../services/operational-domain-access')>(
-    '../../services/operational-domain-access',
+vi.mock('../../middleware/operational-domain-access', async () => {
+  const actual = await vi.importActual<typeof import('../../middleware/operational-domain-access')>(
+    '../../middleware/operational-domain-access',
   );
   return {
     ...actual,

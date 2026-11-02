@@ -7,11 +7,9 @@
  * Não inventar etapas "programadas"; o GET de listagem devolve `meta.programado`
  * a partir do voo e `data` com as etapas realizadas.
  */
-import { ApiError } from '../../middleware/error-handler';
-import type { RdvRow, RdvWorkflowStatus } from '../../repositories/controle-voos/rdv-repository';
-import { assertRdvVersion, hasRdvCapability, RDV_CAPABILITIES } from './rdv-workflow';
-import type { Context } from 'hono';
-import type { Env } from '../../types';
+import { ApiError } from '../../lib/errors/api-error';
+import type { RdvRow } from '../../repositories/controle-voos/rdv-repository';
+import { assertRdvVersion } from './rdv-workflow';
 
 export type EtapaOrigemDados = 'MANUAL' | 'SIGVOOS';
 
@@ -274,7 +272,6 @@ export function computeEtapaPesoTotal(input: EtapaInput): number | null {
 
   return Number(total.toFixed(3));
 }
-
 
 function assertTimeOrder(
   earlier: string | null | undefined,
@@ -686,66 +683,6 @@ export async function getEtapaOrThrow(
 }
 
 export type EtapaEditMode = 'pilot' | 'coordenacao';
-
-export async function assertEtapaEditable(
-  c: Context<{ Bindings: Env }>,
-  rdv: RdvRow,
-  mode: EtapaEditMode,
-  justificativa?: unknown,
-): Promise<string | null> {
-  if (mode === 'pilot') {
-    const allowed: RdvWorkflowStatus[] = ['rascunho', 'devolvido'];
-    if (!allowed.includes(rdv.workflow_status)) {
-      throw new ApiError(
-        `Etapas so podem ser editadas pelo piloto em rascunho/devolvido (atual: ${rdv.workflow_status})`,
-        409,
-        'CONTROLE_VOOS_ETAPA_WORKFLOW_BLOQUEADO',
-      );
-    }
-    return null;
-  }
-
-  if (rdv.workflow_status !== 'em_revisao') {
-    throw new ApiError(
-      `Correcao de etapas pela Coordenacao so e permitida em em_revisao (atual: ${rdv.workflow_status})`,
-      409,
-      'CONTROLE_VOOS_ETAPA_WORKFLOW_BLOQUEADO',
-    );
-  }
-  if (!(await hasRdvCapability(c, RDV_CAPABILITIES.corrigir))) {
-    throw new ApiError(
-      `Permissao insuficiente (${RDV_CAPABILITIES.corrigir})`,
-      403,
-      'CONTROLE_VOOS_RDV_RBAC_FORBIDDEN',
-    );
-  }
-  const text = typeof justificativa === 'string' ? justificativa.trim() : '';
-  if (!text) {
-    throw new ApiError(
-      'justificativa e obrigatoria para correcao de etapa pela Coordenacao',
-      400,
-      'CONTROLE_VOOS_RDV_JUSTIFICATIVA_OBRIGATORIA',
-    );
-  }
-  return text;
-}
-
-export async function resolveEtapaEditMode(
-  c: Context<{ Bindings: Env }>,
-  rdv: RdvRow,
-  explicitMode?: unknown,
-): Promise<EtapaEditMode> {
-  if (explicitMode === 'coordenacao' || explicitMode === 'pilot') {
-    return explicitMode;
-  }
-  if (
-    rdv.workflow_status === 'em_revisao' &&
-    (await hasRdvCapability(c, RDV_CAPABILITIES.corrigir))
-  ) {
-    return 'coordenacao';
-  }
-  return 'pilot';
-}
 
 /** Optimistic lock: valida `versao` esperada e incrementa atomicamente. */
 export async function bumpRdvVersion(

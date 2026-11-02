@@ -18,7 +18,7 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   };
 });
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
 }));
 

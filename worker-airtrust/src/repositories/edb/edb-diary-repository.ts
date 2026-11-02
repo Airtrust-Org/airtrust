@@ -1,4 +1,4 @@
-import { canonicalJson } from '../../services/edb/canonical-json';
+import { canonicalJson } from '../../lib/edb/canonical-json';
 import {
   closeEdbDiaryVolume,
   createEdbInformationLossIncident,
@@ -11,8 +11,8 @@ import {
   type EdbInformationLossIncident,
   type EdbInformationLossKind,
   type EdbVolumeBoundaryAct,
-} from '../../services/edb/diary-governance';
-import type { EdbRegulatedActor } from '../../services/edb/technical-discrepancy-ledger';
+} from '../../lib/edb/diary-governance';
+import type { EdbRegulatedActor } from '../../lib/edb/technical-discrepancy-ledger';
 
 export interface EdbDiaryRecord {
   diaryId: number;

@@ -20,7 +20,7 @@ import {
   publishQualificacaoEvent,
   resolveCargaHorariaByTipo,
 } from '../../services/qualificacoes/historico-helpers';
-import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../middleware/operational-domain-access';
 import {
   calculateQualificationExpiry,
   createQualificationHistoryAtomic,

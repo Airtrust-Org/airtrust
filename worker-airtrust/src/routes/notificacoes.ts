@@ -13,7 +13,7 @@ import {
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   listLocalWhatsAppTemplates,
   seedLocalWhatsAppTemplateCatalog,
