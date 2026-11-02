@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import type { Env } from '../../types';
 
 const PLANNING_DOCUMENT_ACTION = 'flight_attachment';

@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 
 export const FLIGHT_PLAN_SCHEMA_CHANGE_ID = 'controle-voos-flight-plan-0509';
 export const FLIGHT_PLAN_PAYLOAD_SCHEMA_VERSION = 1 as const;

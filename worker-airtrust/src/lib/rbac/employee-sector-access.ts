@@ -2,7 +2,7 @@
  * Regras puras de escopo setorial de funcionários (sem dependência do Hono).
  * O adaptador que lê o Context da requisição fica em services/employee-sector-access.
  */
-import { forbidden } from '../../middleware/error-handler';
+import { forbidden } from '../errors/api-error';
 
 export type EmployeeSectorAccess =
   | { mode: 'all'; setorIds: []; funcionarioId: null }
