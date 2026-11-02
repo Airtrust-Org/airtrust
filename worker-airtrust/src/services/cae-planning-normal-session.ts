@@ -4,7 +4,7 @@ import {
   criarQualificacoesPlanejadas,
   findSessaoConflict,
   timeToMinutes,
-} from '../routes/simuladores-shared';
+} from './simuladores/shared';
 
 export type NormalSimulatorSessionInput = {
   date: string;

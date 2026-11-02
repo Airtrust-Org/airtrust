@@ -4,7 +4,7 @@ import {
   ensureModelosAeronaveModeloColumn,
   generateETag,
   SORTABLE_COLUMNS,
-} from '../../routes/qualificacoes/historico-helpers';
+} from '../../services/qualificacoes/historico-helpers';
 
 describe('qualificacoes historico helper memoization', () => {
   it('memoiza o PRAGMA de modelos_aeronave e nao executa DML em runtime', async () => {

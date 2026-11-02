@@ -5,9 +5,9 @@ const cryptoApi = globalThis as typeof globalThis & {
   crypto: Crypto & { randomUUID: () => string };
 };
 
-vi.mock('../../routes/simuladores-shared-session-fichas', async () => {
-  const actual = await vi.importActual<typeof import('../../routes/simuladores-shared-session-fichas')>(
-    '../../routes/simuladores-shared-session-fichas',
+vi.mock('../../services/simuladores/shared-session-fichas', async () => {
+  const actual = await vi.importActual<typeof import('../../services/simuladores/shared-session-fichas')>(
+    '../../services/simuladores/shared-session-fichas',
   );
   return {
     ...actual,
@@ -37,7 +37,7 @@ vi.mock('../../routes/simuladores-shared-session-fichas', async () => {
   };
 });
 
-import { generateFichasForSharedSession } from '../../routes/simuladores-shared-session-ficha-generator';
+import { generateFichasForSharedSession } from '../../services/simuladores/shared-session-ficha-generator';
 
 interface AgendamentoRow {
   id: number;

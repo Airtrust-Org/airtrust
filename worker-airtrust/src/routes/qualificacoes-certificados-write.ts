@@ -19,7 +19,7 @@ import {
   insertCertificadoNaPastaVirtual,
   backfillCertificadoAtualNaPastaVirtual,
   resolveCertificadoContext,
-} from './qualificacoes-certificados-helpers';
+} from '../services/qualificacoes/certificados-helpers';
 import {
   generateCertificateForHistorico,
   buildCertificadoR2Key,

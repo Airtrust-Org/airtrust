@@ -6,7 +6,7 @@ const { invalidateMaterializedStatsMock, publishQualificacaoEventMock } = vi.hoi
   publishQualificacaoEventMock: vi.fn(),
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
+vi.mock('../../services/qualificacoes/historico-helpers', () => ({
   invalidateMaterializedStats: invalidateMaterializedStatsMock,
   normalizeTipoTreinamento: (value: string | null | undefined) => value || 'RECORRENTE',
   publishQualificacaoEvent: publishQualificacaoEventMock,

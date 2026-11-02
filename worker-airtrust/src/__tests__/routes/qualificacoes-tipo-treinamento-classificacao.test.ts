@@ -3,7 +3,7 @@ import {
   normalizeTipoTreinamento,
   resolveCargaHorariaByTipo,
   resolveParametrosRenovacaoQualificacao,
-} from '../../routes/qualificacoes/historico-helpers';
+} from '../../services/qualificacoes/historico-helpers';
 
 /**
  * Golden regression pack: Inicial x Periódico não pode ser confundido.
