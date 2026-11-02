@@ -1043,7 +1043,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       `
       SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
         c.id AS curso_id, c.titulo, c.scorm_versao,
-        c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
+        c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
+        c.scorm_assessment_policy
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id
       WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
@@ -1063,6 +1064,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       scorm_launch_file: string | null;
       ativo: number;
       publicado: number;
+      scorm_assessment_policy: string | null;
     }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -1150,13 +1152,15 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     enrollmentStartedAt: matricula.data_inicio,
   });
   if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
+  // FORMATIVE (F5) packages own their cursor: orphan locations and browser backups never override it.
+  const formativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
   const { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
     matricula.status === 'CONCLUIDO',
     navigationBookmark,
-    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch) },
+    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
 
   const html = buildLaunchPage({
@@ -1170,6 +1174,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     isScorm2004,
     initialCmiJson,
     hasResumeState,
+    strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
     reviewMode: matricula.status === 'CONCLUIDO',
   });
@@ -1264,6 +1269,7 @@ interface LaunchPageConfig {
   isScorm2004: boolean;
   initialCmiJson?: string;
   hasResumeState?: boolean;
+  strictCursor?: boolean;
   previewMode?: boolean;
   assetCacheBuster?: string;
   reviewMode?: boolean;
@@ -1280,6 +1286,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     isScorm2004,
     initialCmiJson = '{}',
     hasResumeState = false,
+    strictCursor = false,
     previewMode,
     assetCacheBuster,
     reviewMode,
@@ -1433,6 +1440,7 @@ ${buildScormLocationHelpersScript()}
     matriculaId,
     cicloId,
     numeroCiclo,
+    strictCursor,
   })}
 
   var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();
