@@ -29,7 +29,7 @@ vi.mock('../../middleware/rbac', () => ({
   hasRole: () => false,
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => state.empresaId }));
+vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => state.empresaId }));
 
 import lmsMatriculasRoutes from '../../routes/lms-matriculas';
 

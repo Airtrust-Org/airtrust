@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import legacyRoutes from './lms-cursos-legacy';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { requireActiveQualificationCategoryById } from '../services/qualification-category-contract';
 
 const router = new Hono<{ Bindings: Env }>();

@@ -56,7 +56,7 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 

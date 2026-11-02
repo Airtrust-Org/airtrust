@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { logAudit } from '../utils/db';
 import { createLogger, toError } from '../utils/logger';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 
 // Shared audit helper extracted from the protected enrollment router.
 export function getCallerUserId(c: Context): number | undefined {
