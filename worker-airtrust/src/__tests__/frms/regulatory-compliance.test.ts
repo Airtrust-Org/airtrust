@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateRegulatoryCompliance } from '../../lib/frms/regulatory-compliance';
+import { evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
 
 const limites = {
   FDP_MAXIMO_HORAS: 11,
@@ -209,5 +210,32 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     expect(result.unknownReasons).toEqual(expect.arrayContaining([
       'ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE', 'ACTIVITY_INTERVAL_MISSING',
     ]));
+  });
+
+  describe('Lei 13.475 art. 42 (madrugadas)', () => {
+    const thirdEarlyStart = evaluateLawArt42Madrugadas('2026-09-26', [
+      { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      { data: '2026-09-25', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+    ]);
+    const base = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 8 * 60, rolling, work, limites,
+    };
+
+    it('sem ativação no perfil, expõe o achado como pendente de validação sem mudar o status', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, art42: thirdEarlyStart });
+      expect(result.status).toBe('COMPLIANT');
+      expect(result.pendingValidation).toEqual([
+        expect.objectContaining({ code: 'LAW_ART42_CONSECUTIVE', actual: 3, limit: 2, source: 'LAW' }),
+      ]);
+    });
+
+    it('com ativação validada no perfil, a terceira madrugada consecutiva é violação legal', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, art42: thirdEarlyStart, art42Enforced: true });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('LAW_ART42_CONSECUTIVE');
+      expect(result.pendingValidation).toBeUndefined();
+    });
   });
 });

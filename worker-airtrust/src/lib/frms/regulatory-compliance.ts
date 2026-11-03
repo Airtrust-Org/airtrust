@@ -1,4 +1,5 @@
 import type { LimitesMap } from './types';
+import type { Art42Evaluation } from './law-art42-madrugadas';
 
 export interface RollingRegulatoryEvidence {
   data_referencia: string;
@@ -54,12 +55,49 @@ export interface RegulatoryComplianceInput {
     LimitesMap,
     'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS' | 'HV_MES_HORAS' | 'HV_28_DIAS_HORAS' | 'HV_365_DIAS_HORAS'
   >;
+  /** Lei 13.475 art. 42 calculado sobre as jornadas com horário da base. */
+  art42?: Art42Evaluation | null;
+  /**
+   * Só o perfil regulatório validado ativa o art. 42 como violação. Sem isso o
+   * achado é exibido como pendente de validação, sem alterar o status.
+   */
+  art42Enforced?: boolean;
+}
+
+/** Regra legal calculada, ainda sem validação jurídica para bloquear o status. */
+export interface RegulatoryPendingFinding {
+  code: string;
+  source: 'LAW';
+  reference: string;
+  actual: number;
+  limit: number;
+  message: string;
 }
 
 export interface RegulatoryComplianceResult {
   status: 'COMPLIANT' | 'VIOLATION' | 'UNKNOWN';
   violations: RegulatoryViolation[];
   unknownReasons: string[];
+  pendingValidation?: RegulatoryPendingFinding[];
+}
+
+function art42Findings(art42: Art42Evaluation): RegulatoryPendingFinding[] {
+  const out: RegulatoryPendingFinding[] = [];
+  if (art42.violations.includes('LAW_ART42_CONSECUTIVE')) {
+    out.push({
+      code: 'LAW_ART42_CONSECUTIVE', source: 'LAW', reference: 'Lei 13.475/2017 art. 42 caput e §4º',
+      actual: art42.consecutiveMadrugadas, limit: 2,
+      message: `${art42.consecutiveMadrugadas} madrugadas consecutivas de trabalho > limite de 2`,
+    });
+  }
+  if (art42.violations.includes('LAW_ART42_168H')) {
+    out.push({
+      code: 'LAW_ART42_168H', source: 'LAW', reference: 'Lei 13.475/2017 art. 42 caput, §§2º e 4º',
+      actual: art42.madrugadasIn168h, limit: 4,
+      message: `${art42.madrugadasIn168h} madrugadas em 168 h > limite de 4`,
+    });
+  }
+  return out;
 }
 
 function pushMaxViolation(
@@ -252,11 +290,26 @@ export function evaluateRegulatoryCompliance(
     });
   }
 
+  const pendingValidation: RegulatoryPendingFinding[] = [];
+  if (isHelicopter && input.art42) {
+    for (const finding of art42Findings(input.art42)) {
+      if (input.art42Enforced) {
+        violations.push({
+          code: finding.code, source: 'LAW', reference: finding.reference,
+          actualMin: finding.actual, limitMin: finding.limit, message: finding.message,
+        });
+      } else {
+        pendingValidation.push(finding);
+      }
+    }
+  }
+  const pending = pendingValidation.length > 0 ? { pendingValidation } : {};
+
   if (violations.length > 0) {
-    return { status: 'VIOLATION', violations, unknownReasons: [...unknownReasons] };
+    return { status: 'VIOLATION', violations, unknownReasons: [...unknownReasons], ...pending };
   }
   if (unknownReasons.size > 0) {
-    return { status: 'UNKNOWN', violations: [], unknownReasons: [...unknownReasons] };
+    return { status: 'UNKNOWN', violations: [], unknownReasons: [...unknownReasons], ...pending };
   }
-  return { status: 'COMPLIANT', violations: [], unknownReasons: [] };
+  return { status: 'COMPLIANT', violations: [], unknownReasons: [], ...pending };
 }

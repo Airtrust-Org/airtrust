@@ -671,3 +671,20 @@ export function regulatoryProfileIsReady(state: RegulatoryProfileState): boolean
     /^[a-f0-9]{64}$/i.test(hash)
   );
 }
+
+/**
+ * Lei 13.475 art. 42 (madrugadas) só bloqueia o status quando o perfil
+ * regulatório documentado declara `law_art42_enforced: true`. A ativação exige
+ * validação jurídica da aplicação a apresentações offshore antes das 06:00 e
+ * das exceções do instrumento coletivo (ACT Costa do Sol cl. 8ª §2º).
+ */
+export function lawArt42EnforcementEnabled(state: Pick<RegulatoryProfileState, 'limitsJson'>): boolean {
+  const raw = state.limitsJson?.trim();
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parsed.law_art42_enforced === true || parsed.lawArt42Enforced === true;
+  } catch {
+    return false;
+  }
+}

@@ -13,13 +13,15 @@ import {
   type FrmsActivitySnapshotRow,
 } from './activity-context';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
-import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
+import { costaDoSolAct2025_2027Applies, lawArt42EnforcementEnabled, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
+import { evaluateLawArt42Madrugadas, type Art42DutyInput } from './law-art42-madrugadas';
 import { loadLegalWorkMonth, type LegalWorkMonthlyCrewSummary } from './legal-work-service';
 import { sumLegalWorkRollingDays } from './legal-work-time';
 import {
   evaluateRegulatoryCompliance,
   type CostaDoSolMissionEvidence,
   type RegulatoryComplianceResult,
+  type RegulatoryPendingFinding,
   type RollingRegulatoryEvidence,
   type WorkRegulatoryEvidence,
 } from './regulatory-compliance';
@@ -146,6 +148,8 @@ export interface FrmsOperationalSnapshotItem {
     message: string;
   }>;
   compliance_unknown_reasons?: string[];
+  /** Regras legais calculadas e ainda não ativadas como bloqueio (ex.: Lei 13.475 art. 42). */
+  compliance_pending_validation?: RegulatoryPendingFinding[];
 }
 
 export interface FrmsOperationalSnapshotSummary {
@@ -999,6 +1003,7 @@ export function buildFrmsOperationalSnapshot(
       compliance_status: compliance?.status,
       violacoes_normativas: compliance?.violations ?? [],
       compliance_unknown_reasons: compliance?.unknownReasons ?? [],
+      compliance_pending_validation: compliance?.pendingValidation ?? [],
     };
 
     items.push(item);
@@ -1534,6 +1539,38 @@ export function deriveCostaDoSolMissionEvidenceForDate(
   };
 }
 
+/**
+ * Jornadas por tripulante para o art. 42: a jornada realizada com dado
+ * operacional prevalece; sem ela, a escala programada permite antecipar a
+ * madrugada antes da operação.
+ */
+function buildArt42DutiesByCrew(rows: OperationalSnapshotRows): Map<number, Art42DutyInput[]> {
+  const realized = new Map<string, Art42DutyInput[]>();
+  for (const row of rows.jornadas) {
+    if (asNumber(row.has_operational_data) !== 1) continue;
+    const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
+    const list = realized.get(key) ?? [];
+    list.push({ data: row.data_operacional, hora_apresentacao: row.hora_apresentacao, hora_termino: row.hora_termino });
+    realized.set(key, list);
+  }
+  const byCrew = new Map<number, Art42DutyInput[]>();
+  const push = (funcionarioId: number, duty: Art42DutyInput) => {
+    const list = byCrew.get(funcionarioId) ?? [];
+    list.push(duty);
+    byCrew.set(funcionarioId, list);
+  };
+  for (const [key, duties] of realized) {
+    const funcionarioId = Number(key.split('::')[1]);
+    for (const duty of duties) push(funcionarioId, duty);
+  }
+  for (const row of rows.escalas) {
+    const funcionarioId = asNumber(row.funcionario_id);
+    if (realized.has(`${row.data_operacional}::${funcionarioId}`)) continue;
+    push(funcionarioId, { data: row.data_operacional, hora_apresentacao: row.hora_apresentacao, hora_termino: row.hora_termino });
+  }
+  return byCrew;
+}
+
 function collectOperationalKeys(
   rows: OperationalSnapshotRows,
   start?: string,
@@ -1712,6 +1749,8 @@ export async function listFrmsOperationalSnapshot(
       row,
     ]),
   );
+  const art42Enforced = lawArt42EnforcementEnabled({ limitsJson: operationalContext.regulatoryLimitsJson });
+  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows);
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
   const complianceKeys = new Set(collectOperationalKeys(contextRows));
   for (const key of complianceKeys) {
@@ -1747,6 +1786,8 @@ export async function listFrmsOperationalSnapshot(
       rolling: rollingByKey.get(key) ?? null,
       work: workEvidence,
       limites,
+      art42: evaluateLawArt42Madrugadas(date, art42DutiesByCrew.get(funcionarioId) ?? []),
+      art42Enforced,
     });
   }
 
