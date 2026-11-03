@@ -34,7 +34,7 @@ export async function loadDailyFatigueTeamRoster(params: {
           fj.id AS jornada_id,
           ch.id AS checkin_id,
           ch.jornada_inicio_prevista AS checkin_apresentacao,
-          ch.hora_checkin, ch.kss_score,
+          ch.hora_checkin, ch.kss_score, ch.kss_provenance,
           ch.horas_sono,
           ch.horas_sono_48h,
           ch.wake_time,
