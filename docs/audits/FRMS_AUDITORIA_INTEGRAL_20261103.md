@@ -270,3 +270,65 @@ Referências bibliográficas citadas são as publicações clássicas e de domí
 
 ### FRMS-AUD-027 — Observabilidade da qualidade do dado para o usuário
 - **P2 · média · observado** — já registrado em #1426 item 4: a UI não mostra última sincronização por fonte nem o impacto de atraso na avaliação atual. Com AUD-025 isso passa a ser crítico: a coordenação não sabe se o dia está provisório. Correção: exibir no cabeçalho da Operação "SIGVOOS sincronizado até DD/MM HH:MM (dias consolidados até DD/MM)" e marcar itens de dias provisórios.
+
+## 12. Produto, navegação, relatórios e testes
+
+### 12.1 Mapa de navegação atual (código)
+- **Operação** `/frms` → `FrmsDashboard`/`FrmsFlightDashboard` (fila Bloqueio/Decisão/Confirmar/Normal, detalhe lateral com síntese, conformidade legal [novo], explicação do score, evidências).
+- **Casos** `/frms/alertas` → `FrmsAlertasPainel` (ciência, tratamento, encerramento com eficácia).
+- **Administração** (`FrmsWorkspaceNav`): Configuração (Parâmetros `/frms/configuracoes`, SIGVOOS `/frms/sigvoos`), Dados de entrada (Importar FIRA, Histórico FIRA, Escalas), Consulta (Relatórios `/frms/relatorios`).
+- **Fora das três áreas:** `/frms/tripulante/:id` (ficha), `/frms/fadiga-acumulada`, `/frms/checkin`, `/frms/fadiga-painel`, `/frms/fadiga-historico`, `/frms/conceitos` (`/frms/metodologia` redireciona), `/frms/controle-operacional` e `/frms/*` redirecionam para `/frms`; consultas legadas são canonicalizadas (`frmsLegacyOperationalQuery`).
+- Todas as rotas do frontend usam apenas `ProtectedRoute` (autenticado). O backend é a autoridade, então isso é aceitável, mas, somado a AUD-015/018, qualquer usuário autenticado abre a ficha de qualquer tripulante.
+
+### 12.2 Achados de produto
+- **FRMS-AUD-028 (P2) — Dois sistemas de check-in.** `frms-fadiga-checkin-legacy.ts` (1 991 linhas, score/KSS/FRAT, painel do gestor, export) e `frms-fadiga-checkin.ts` + `FrmsFlightCheckinFadiga.tsx` (1 355 linhas) coexistem. Risco de regras divergentes e manutenção dupla. Recomendação: CONSOLIDAR num único contrato (o legado ainda é o que grava `frms_fadiga_checkin`); só após inventário de chamadas no frontend e no Pilot App.
+- **FRMS-AUD-029 (P2) — Páginas grandes demais para manutenção e teste.** `FrmsImportacaoFira.tsx` 1 661, `FrmsFlightCheckinFadiga.tsx` 1 355, `FrmsFichaTripulante.tsx` 1 098 linhas. SIMPLIFICAR por extração de lógica pura testável, sem redesign.
+- **FRMS-AUD-030 (P3) — Relatório de conformidade não conta pendências de validação.** `db-service-relatorios.ts` agrega `compliance_status` corretamente (UNKNOWN → "não avaliados", sem virar conforme — positivo), mas não soma `compliance_pending_validation` (art. 42). Correção: coluna "dias com possível desconformidade a validar".
+- **Positivo verificado:** relatórios aplicam escopo por setor (`getEmployeeSectorAccess` + `loadFrmsReportCrewScope`) e cabeçalhos `no-store`; o detalhe da Operação declara que indicadores favoráveis com confiança baixa "não comprovam aptidão" e que responsável/prazo não são atribuídos automaticamente.
+- **Não verificado (NOT RUN):** renderização real, responsividade (1920→390 px), WCAG 2.2 AA, teclado/leitor de tela, gráficos e exportações dos Relatórios — exige staging com dados (#1426 item 7).
+
+### 12.3 Testes
+- Worker: 101 arquivos FRMS (925 testes) + rotas de tenant/guards (`frms-tenant-scope-guard`, `frms-guards-fail-closed`, `frms-escalas-tenant`, `frms-fira-tenant`, `frms-alerts-tenant-read`, `frms-relatorios-config-rbac`). Frontend: 67 arquivos (480 testes).
+- **Lacuna (AUD-031, P2):** os testes de autorização cobrem isolamento **entre empresas**, não **entre papéis dentro da mesma empresa** — por isso AUD-015/017/018 passaram despercebidos. Criar matriz de testes negativos `piloto × gestor × admin` para cada endpoint de escrita e de leitura individual.
+- Lacuna: nenhum teste garante que um caso em tratamento sobrevive ao recálculo (AUD-019).
+
+## 13. Notas por dimensão (0–10, só com evidência desta auditoria)
+
+| Dimensão | Nota | Base |
+|---|---|---|
+| Precisão do motor regulatório | 7 | Limites corretos e fail-closed; faltavam art. 42/37 e cobertura dos acumulados |
+| Fundamentação científica dos scores | 3 | Pesos não calibrados (declarado no código e em #1476), rótulo de aptidão, mistura com qualidade de dado |
+| Integridade dos dados / integrações | 5 | Job robusto e proveniência rica, mas sem retroação (AUD-025) e acumulados sem cobertura (AUD-005) |
+| Segurança multi-tenant (entre empresas) | 8 | Escopo por empresa consistente e testado |
+| RBAC dentro da empresa / LGPD | 3 | AUD-015/017/018 |
+| Gestão de casos | 6 | Fluxo exige responsável/prazo/eficácia; recálculo apaga casos (AUD-019); sem prazo vencido/SGSO |
+| Auditabilidade | 6 | `logAuditoria` com valor anterior; parâmetros governados com histórico |
+| Testes | 6 | Volume alto, sem matriz de papéis |
+| Layout, UX, acessibilidade, desempenho | não avaliável | NOT RUN |
+
+Avaliação global: **não confiável para decisão autônoma; utilizável como apoio à coordenação** após corrigir AUD-015/017/018/019 (P1 de integridade e privacidade) e com a comunicação explícita de AUD-005/025.
+
+## 14. Plano mestre consolidado (ordem recomendada)
+
+| # | Achado | P | Tipo | Precisa de | Pode corrigir já? |
+|---|---|---|---|---|---|
+| 1 | AUD-019 recálculo apaga casos | P1 | código | — | Sim |
+| 2 | AUD-017 ack de evento alheio | P1 | código | — | Sim |
+| 3 | AUD-018 leitura individual sem escopo | P1 | código | regra de escopo por setor (já existe) | Sim |
+| 4 | AUD-015 escrita de jornada/escala sem papel | P1 | código | decisão: tripulante lança a própria jornada? | Sim, com o padrão "gestor ou o próprio" |
+| 5 | AUD-016 upload/exclusão FIRA | P2 | código | — | Sim |
+| 6 | AUD-020 dedupe suprime escalada | P2 | código | — | Sim |
+| 7 | AUD-025 ingestão sem retroação | P1 | código + operação | janela e custo de API SIGVOOS | Sim (janela D−3..D−1) após validar idempotência |
+| 8 | AUD-005 cobertura dos acumulados | P1 | Schema V2 | workflow governado | Não nesta PR |
+| 9 | AUD-001 ativar art. 42 | P1 | regulatório | parecer jurídico | Já implementado, ativação pendente |
+| 10 | AUD-022/023/024 scores e rótulos | P1/P2 | científico/UX | Coordenação/SGSO + #1476 | Não sem decisão |
+| 11 | AUD-021 prazo vencido, reabertura, SGSO, métricas | P2 | produto | definição do fluxo SGSO | Parcial |
+| 12 | AUD-027/030 frescor e pendências no relatório | P2/P3 | UX | — | Sim |
+| 13 | AUD-011/012/013 regras dependentes de interpretação | P2 | regulatório | parecer | Não |
+| 14 | AUD-028/029 consolidação e simplificação | P2 | refatoração | inventário de consumidores | Depois |
+| 15 | AUD-031 matriz de testes por papel | P2 | testes | — | Junto com 2–5 |
+| 16 | Aceite visual, responsividade, WCAG | — | QA | staging populado (#1426) | Bloqueado |
+
+## 15. Resposta à pergunta final (revisada com a Parte II)
+
+O FRMS acrescenta mecanismos reais além das obrigações legais — check-in com KSS, apuração legal completa do trabalho, folga pós-missão, projeção pela escala e um fluxo de casos que exige responsável, prazo e eficácia. Mas hoje **não pode ser considerado um mecanismo efetivo e confiável de gerenciamento do risco de fadiga** porque: (1) qualquer usuário da empresa pode alterar jornadas e dar ciência a eventos de terceiros (AUD-015/017), o que compromete a integridade da evidência; (2) o recálculo apaga as decisões registradas (AUD-019), quebrando a cadeia decisão → ação → eficácia; (3) dias não importados contam como zero (AUD-005/025); (4) os scores não são validados e ainda emitem rótulo de aptidão (AUD-022). Corrigidos os itens 1–7 do plano, o FRMS passa a ser um apoio confiável à coordenação; a validação científica (#1476) define se os scores podem ir além de triagem.
