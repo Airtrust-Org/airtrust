@@ -1516,7 +1516,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
           totalPages: Math.max(1, Math.ceil((total?.total ?? 0) / limit)),
         },
         resumo: {
-          media_kss: resumo?.media_kss ?? 0,
+          media_kss: resumo?.media_kss ?? null,
           media_sono_horas: resumo?.media_sono_horas ?? 0,
           media_score_fadiga: resumo?.media_score_fadiga ?? 0,
           distribuicao_niveis: {
@@ -1552,7 +1552,7 @@ router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualiza
            COALESCE(f.cargo, f.funcao) AS cargo,
            fj.id IS NOT NULL AS tem_jornada_hoje,
            ch.id AS checkin_id,
-           ch.kss_score,
+           CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END AS kss_score, ch.kss_provenance,
            ch.horas_sono,
            ch.score_fadiga,
            ch.nivel_fadiga,
@@ -1722,6 +1722,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
+            AND ch.kss_provenance = 'CREW_REPORTED'
            AND ${analyticsSectorScope.clause}`,
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
@@ -1850,7 +1851,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
       `SELECT
            ch.data_checkin,
            f.nome AS funcionario_nome,
-           ch.kss_score,
+           CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END AS kss_score, ch.kss_provenance,
            ch.horas_sono,
            ch.qualidade_sono,
            ch.score_fadiga,
@@ -1874,7 +1875,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
     const header = [
       'data_checkin',
       'funcionario_nome',
-      'kss_score',
+      'kss_score', 'kss_provenance',
       'horas_sono',
       'qualidade_sono',
       'score_fadiga',
@@ -1892,7 +1893,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
         [
           row.data_checkin,
           row.funcionario_nome,
-          row.kss_score,
+          row.kss_score, row.kss_provenance,
           row.horas_sono,
           row.qualidade_sono,
           row.score_fadiga,
