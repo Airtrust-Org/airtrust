@@ -66,7 +66,7 @@ export const CheckinCreateSchema = z
     oportunidade_sono_horas_24h: z.number().min(0).max(24).optional(),
     horas_sono_48h: z.number().min(0).max(48).optional(),
     qualidade_sono: z.number().int().min(1).max(5).optional(),
-    kss_score: z.number().int().min(1).max(9).optional(),
+    kss_score: z.number().int().min(1).max(9),
     subjective_fatigue_level: z.number().int().min(0).max(10).optional(),
     sleepiness_level: z.number().int().min(0).max(10).optional(),
     sintomas: SintomasSchema,
