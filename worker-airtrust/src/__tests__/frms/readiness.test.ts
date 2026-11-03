@@ -183,6 +183,30 @@ describe('FRMS operational readiness', () => {
     expect(assessment.criticalSignals).toEqual(expect.arrayContaining(['kss_high', 'sleep_short']));
   });
 
+  it('KSS 7 alone triggers attention with a normal 60-second test and no baseline', () => {
+    const assessment = deriveReadinessAssessment({
+      kssScore: 7,
+      sleepHours: 8,
+      baselineSessions: 0,
+      summary: summarizeReadinessTrials([trial(1, 250, 'response'), trial(2, 285, 'response')], 60_000),
+    });
+    expect(assessment.classification).toBe('attention');
+    expect(assessment.warningSignals).toContain('kss_elevated');
+    expect(assessment.baselineReady).toBe(false);
+  });
+
+  it('sleep under 6h independently triggers attention without inventing an objective deficit', () => {
+    const assessment = deriveReadinessAssessment({
+      kssScore: 4,
+      sleepHours: 5.5,
+      baselineSessions: 0,
+      summary: summarizeReadinessTrials([trial(1, 250, 'response'), trial(2, 285, 'response')], 60_000),
+    });
+    expect(assessment.classification).toBe('attention');
+    expect(assessment.warningSignals).toEqual(['sleep_reduced']);
+    expect(assessment.criticalSignals).toEqual([]);
+  });
+
   it('raises attention on a high lapse rate even without a baseline', () => {
     const assessment = deriveReadinessAssessment({
       kssScore: 7,
