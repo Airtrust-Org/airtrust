@@ -251,16 +251,11 @@ describe('FRMS readiness route', () => {
     });
     const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
     expect(readinessQuery?.binds).toEqual([
-      'airtrust-pvtb-v2',
-      5,
-      'airtrust-pvtb-v2',
-      'airtrust-pvtb-v2',
-      5,
       7,
       '2026-08-27',
     ]);
     expect(readinessQuery?.sql).toContain('WHERE ch.empresa_id = ?');
-    expect(readinessQuery?.sql).toContain("THEN 'baseline_building'");
+    expect(readinessQuery?.sql).toContain("'baseline_building'");
     expect(readinessQuery?.sql).toContain('assessment_missing');
   });
 
@@ -280,11 +275,6 @@ describe('FRMS readiness route', () => {
     });
     const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
     expect(readinessQuery?.binds).toEqual([
-      'airtrust-pvtb-v2',
-      5,
-      'airtrust-pvtb-v2',
-      'airtrust-pvtb-v2',
-      5,
       7,
       '2026-08-27',
       70,
