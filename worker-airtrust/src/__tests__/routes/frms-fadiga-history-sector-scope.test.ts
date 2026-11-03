@@ -37,7 +37,7 @@ import frmsRoutes from '../../routes/frms-fadiga-checkin';
 
 type RecordedSql = { sql: string; binds: unknown[] };
 
-function createDb() {
+function createDb(options: { sectorAllowsMember?: boolean } = {}) {
   const statements: RecordedSql[] = [];
   const db = {
     prepare: vi.fn((sql: string) => {
@@ -50,7 +50,9 @@ function createDb() {
         },
         async first() {
           statements.push({ sql: normalized, binds });
-          if (normalized.includes('SELECT f.id FROM funcionarios f')) return null;
+          if (normalized.includes('SELECT f.id FROM funcionarios f')) {
+            return options.sectorAllowsMember ? { id: 99 } : null;
+          }
           if (normalized.includes('FROM frms_fadiga_checkin') && normalized.includes('WHERE id = ?')) {
             return { id: 'checkin-other-sector', funcionario_id: 99 };
           }
@@ -65,6 +67,14 @@ function createDb() {
           statements.push({ sql: normalized, binds });
           if (normalized.includes('SELECT ch.*')) return { results: [] };
           throw new Error('Unexpected all SQL: ' + normalized);
+        },
+        async run() {
+          statements.push({ sql: normalized, binds });
+          if (normalized.includes('INSERT INTO frms_fadiga_evento') ||
+              normalized.includes('INSERT INTO notificacoes_sistema')) {
+            return { success: true, meta: { changes: 1 } };
+          }
+          throw new Error('Unexpected write SQL: ' + normalized);
         },
       };
       return stmt;
@@ -147,6 +157,24 @@ describe('FRMS — histórico de fadiga com RBAC setorial', () => {
     expect(scopeQueries.every((q) => q.sql.includes('f.setor_id IN (?)'))).toBe(true);
     expect(scopeQueries.every((q) => q.binds.join(',') === '99,7,3')).toBe(true);
     expect(statements.every((q) => !q.sql.includes('INSERT INTO frms_fadiga_evento'))).toBe(true);
+  });
+
+  it('gestor do setor pode registrar resposta sem ampliar o escopo', async () => {
+    const { db, statements } = createDb({ sectorAllowsMember: true });
+    const response = await frmsRoutes.fetch(
+      new Request('http://localhost/fadiga-checkin/checkin-other-sector/resposta-gestor', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resposta: 'Revisar condições operacionais' }),
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: { checkin_id: 'checkin-other-sector' },
+    });
+    const scopeQuery = statements.find((q) => q.sql.includes('SELECT f.id FROM funcionarios f'));
+    expect(scopeQuery?.binds).toEqual([99, 7, 3]);
+    expect(statements.filter((q) => q.sql.includes('INSERT INTO frms_fadiga_evento'))).toHaveLength(1);
   });
 
   it('administrador tem acesso à empresa inteira sem escopo setorial', async () => {
