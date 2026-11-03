@@ -84,6 +84,7 @@ function seedModelos() {
       (103, 1, 'GERA-B', 'Outro nome', 1, 'AW139', 1),
       (104, 1, 'OUTRA-AERONAVE', 'Treino A', 1, 'SK76', 1),
       (105, 1, 'OUTRO-TIPO', 'Treino A', 2, 'AW139', 1),
+      (106, 1, 'SEM-GERA-NOVO', 'Zeta', 1, 'AW139', 0),
       (201, 2, 'OUTRO-TENANT', 'Treino A', 3, 'AW139', 1);
   `);
 }
@@ -246,7 +247,7 @@ describe('PUT /sessoes/:id — qualificações planejadas', () => {
     it('prioridade 1: gera qualificação, mesmo tipo e aeronave, do tenant; maior id sem nome igual', async () => {
       const r = await put(10, { observacoes: 'x' });
       expect(r.status).toBe(200);
-      // 101 não gera; 104 é de outra aeronave; 105 de outro tipo; 201 de outro tenant
+      // 101 e 106 não geram (106 tem id maior); 104 é de outra aeronave; 105 de outro tipo; 201 de outro tenant
       expect(diagOf(r.json)).toMatchObject({ modeloIdInicial: null, fallbackModelo: 103, modeloIdFinal: 103 });
       expect(criarMock.mock.calls[0][1].modeloId).toBe(103);
     });
@@ -259,7 +260,7 @@ describe('PUT /sessoes/:id — qualificações planejadas', () => {
     it('prioridade 2: sem modelo que gere, aceita qualquer do tipo/aeronave (maior id)', async () => {
       sqlite.database.exec(`UPDATE modelos_sessao SET gera_qualificacao = 0`);
       const r = await put(10, { observacoes: 'x' });
-      expect(diagOf(r.json).fallbackModelo).toBe(103);
+      expect(diagOf(r.json).fallbackModelo).toBe(106);
     });
 
     it('o tipo de sessão do corpo troca o tipo usado no fallback', async () => {

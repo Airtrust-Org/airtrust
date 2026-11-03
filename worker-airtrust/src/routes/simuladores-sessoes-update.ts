@@ -34,6 +34,7 @@ import {
   findConflitoDeAgendamento,
   planSessaoSchedule,
 } from '../services/simuladores/session-schedule-update';
+import { ensureQualificacoesPlanejadas } from '../services/simuladores/session-planejadas';
 import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
@@ -180,104 +181,15 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     });
 
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
-    const diag: Record<string, unknown> = {};
     let scaleIntegrationError: string | null = null;
-    const hasPlanejadas = await c.env.DB.prepare(
-      `SELECT 1 FROM qualificacoes_historico
-       WHERE sessao_id=?
-         AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
-         AND deleted_at IS NULL
-       LIMIT 1`,
-    )
-      .bind(id)
-      .first();
-    diag.hasPlanejadas = !!hasPlanejadas;
-    if (!hasPlanejadas) {
-      const tipoSessaoPut = (b.tipo_sessao || (a as any).tipo_sessao || '').toString();
-      let modeloIdPut = Number(templateIdFinal || (a as any).template_id || 0) || null;
-      diag.tipoSessao = tipoSessaoPut;
-      diag.modeloIdInicial = modeloIdPut;
-      diag.templateIdFinal = templateIdFinal;
-
-      // Robust model fallback: prioritize gera_qualificacao=1, then name match
-      if (!modeloIdPut && tipoSessaoPut) {
-        const upperNome = String(b.tema_sessao || (a as any).nome || '').trim().toUpperCase();
-
-        // Priority 1: model with gera_qualificacao=1 matching tipo_sessao + modelo_aeronave
-        let fallbackModelo = await c.env.DB.prepare(
-          `SELECT ms.id, ms.nome
-           FROM modelos_sessao ms
-           INNER JOIN tipos_sessao ts
-             ON ms.tipo_sessao_id = ts.id
-            AND ts.empresa_id = ?
-            AND ts.deleted_at IS NULL
-           WHERE ts.codigo = ?
-             AND ms.modelo_aeronave = ?
-             AND ms.deleted_at IS NULL
-             AND ms.empresa_id = ?
-             AND ms.gera_qualificacao = 1
-           ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
-           LIMIT 1`,
-        )
-          .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
-          .first<{ id: number; nome: string }>();
-
-        // Priority 2: any model matching tipo_sessao + modelo_aeronave (prefer name match)
-        if (!fallbackModelo) {
-          fallbackModelo = await c.env.DB.prepare(
-            `SELECT ms.id, ms.nome
-             FROM modelos_sessao ms
-             INNER JOIN tipos_sessao ts
-               ON ms.tipo_sessao_id = ts.id
-              AND ts.empresa_id = ?
-              AND ts.deleted_at IS NULL
-             WHERE ts.codigo = ?
-               AND ms.modelo_aeronave = ?
-               AND ms.deleted_at IS NULL
-               AND ms.empresa_id = ?
-             ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
-             LIMIT 1`,
-          )
-            .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
-            .first<{ id: number; nome: string }>();
-        }
-
-        diag.fallbackModelo = fallbackModelo?.id ?? null;
-        if (fallbackModelo) modeloIdPut = fallbackModelo.id;
-      }
-      diag.modeloIdFinal = modeloIdPut;
-
-      if (modeloIdPut) {
-        const participantesRows = await listarParticipantesDaSessaoParaQualificacao(c.env.DB, id);
-        diag.numParticipantes = participantesRows.length;
-        if (participantesRows.length > 0) {
-          try {
-            const res = await criarQualificacoesPlanejadas(c.env.DB, {
-              sessaoId: Number(id),
-              modeloId: modeloIdPut,
-              tipoSessao: tipoSessaoPut,
-              data: b.data || (a as any).data,
-              participantes: participantesRows,
-              empresaId,
-            });
-            diag.resultado = res.criadas > 0 ? 'criadas' : 'sem_novas';
-            diag.criadas = res.criadas;
-            diag.puladas = res.puladas;
-            diag.conflitosUniques = res.conflitosUniques;
-            diag.bloqueadasDataPassada = res.bloqueadasDataPassada;
-          } catch (err: any) {
-            diag.resultado = 'erro';
-            diag.erro = err?.message || String(err);
-          }
-        } else {
-          diag.resultado = 'sem_participantes';
-        }
-      } else {
-        diag.resultado = 'sem_modelo';
-      }
-    } else {
-      diag.resultado = 'ja_tem_planejadas';
-    }
+    const diag = await ensureQualificacoesPlanejadas(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      templateIdFinal,
+      modeloAeronaveSessao,
+    });
 
     // ──────────────────────────────────────────────────────────────────────────
     // SINCRONIZAR instrutor_id nas fichas quando o instrutor da sessão muda.
