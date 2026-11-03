@@ -45,6 +45,13 @@ const functionName = `${code} Cargo`;
 const invalidFunctionName = `${code} Cargo não vinculado`;
 const employee1Name = `${code} Pessoa 1`;
 const employee2Name = `${code} Pessoa 2`;
+// Run-scoped non-person CPF placeholders, used ONLY in the canonical staging
+// QA tenant. The certificate validation hash deliberately requires CPF digits;
+// leaving this field null makes PDF rendering succeed but linking fail with
+// CERTIFICATE_VALIDATION_HASH_INPUT_INCOMPLETE. Never use real employee PII.
+const runDigits = code.slice('QA-COMP-LIFE-'.length);
+const syntheticCpfE1 = `000${runDigits.slice(-7).padStart(7, '0')}1`;
+const syntheticCpfE2 = `000${runDigits.slice(-7).padStart(7, '0')}2`;
 const requiredTypeName = `${code} Treinamento obrigatório`;
 const orphanTypeName = `${code} Treinamento legado`;
 const requiredCourseTitle = `${code} EAD obrigatório`;
@@ -109,10 +116,10 @@ VALUES (${tenantId},${sectorId},${functionId},1,datetime('now'),datetime('now'),
 INSERT INTO setores_funcoes(empresa_id,setor_id,funcao_id,ativo,created_at,updated_at,deleted_at)
 VALUES (${tenantId},${invalidSectorId},(SELECT id FROM funcoes WHERE empresa_id=${tenantId} AND codigo=${esc(invalidFunctionCode)} AND deleted_at IS NULL LIMIT 1),1,datetime('now'),datetime('now'),NULL);
 
-INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(employee1Name)},${esc(employee1Code)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
-INSERT INTO funcionarios(nome,matricula,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
-VALUES (${esc(employee2Name)},${esc(employee2Code)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
+INSERT INTO funcionarios(nome,matricula,cpf,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(employee1Name)},${esc(employee1Code)},${esc(syntheticCpfE1)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
+INSERT INTO funcionarios(nome,matricula,cpf,cargo,funcao,setor,setor_id,funcao_id,status,is_instrutor,is_examinador,ativo,empresa_id,observacoes,created_at,updated_at,deleted_at)
+VALUES (${esc(employee2Name)},${esc(employee2Code)},${esc(syntheticCpfE2)},${esc(functionName)},${esc(functionName)},${esc(sectorName)},${sectorId},${functionId},'ATIVO',0,0,1,${tenantId},${esc(marker)},datetime('now'),datetime('now'),NULL);
 
 INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categoria,carga_horaria,validade,vencimento_fim_mes,observacoes,ativo,empresa_id,created_at,updated_at,deleted_at)
 SELECT 'TREINAMENTO',${esc(requiredTypeCode)},${esc(requiredTypeName)},${esc(marker)},qc.id,'EAD',1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
@@ -145,6 +152,7 @@ CREATE TABLE IF NOT EXISTS _qa_compliance_lifecycle_post(
   pair_count INTEGER NOT NULL CHECK(pair_count=1),
   manager_grants_count INTEGER NOT NULL CHECK(manager_grants_count=2),
   employee_count INTEGER NOT NULL CHECK(employee_count=2),
+  employee_cpf_count INTEGER NOT NULL CHECK(employee_cpf_count=2),
   type_count INTEGER NOT NULL CHECK(type_count=2),
   course_count INTEGER NOT NULL CHECK(course_count=2),
   course_sector_count INTEGER NOT NULL CHECK(course_sector_count=2),
@@ -162,6 +170,9 @@ SELECT
      AND s.codigo IN (${esc(sectorCode)},${esc(invalidSectorCode)})
      AND s.descricao=${esc(marker)} AND sg.ativo=1 AND sg.deleted_at IS NULL),
  (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND matricula IN (${esc(employee1Code)},${esc(employee2Code)}) AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=${tenantId} AND deleted_at IS NULL
+   AND ((matricula=${esc(employee1Code)} AND cpf=${esc(syntheticCpfE1)})
+     OR (matricula=${esc(employee2Code)} AND cpf=${esc(syntheticCpfE2)}))),
  (SELECT COUNT(*) FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND codigo IN (${esc(requiredTypeCode)},${esc(orphanTypeCode)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_cursos WHERE empresa_id=${tenantId} AND titulo IN (${esc(requiredCourseTitle)},${esc(orphanCourseTitle)}) AND deleted_at IS NULL),
  (SELECT COUNT(*) FROM lms_cursos_setores lcs JOIN lms_cursos c ON c.id=lcs.curso_id AND c.empresa_id=lcs.empresa_id
