@@ -11,9 +11,9 @@ describe('FIRA record operations cannot use importer identity to bypass crew ten
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const sqlite = new DatabaseSync(':memory:');
     try {
-      sqlite.exec('CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT)');
+      sqlite.exec('CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, deleted_at TEXT)');
       sqlite.exec('CREATE TABLE frms_importacao_fira (id TEXT PRIMARY KEY, tripulante_id TEXT, importado_por TEXT, preview_json TEXT, status TEXT, total_dias_importados INTEGER, deleted_at TEXT, updated_at TEXT)');
-      sqlite.exec("INSERT INTO funcionarios VALUES (70,7,'CREW-7'),(80,8,'CREW-8'),(90,7,'IMPORTER-7')");
+      sqlite.exec("INSERT INTO funcionarios (id, empresa_id, nome) VALUES (70,7,'CREW-7'),(80,8,'CREW-8'),(90,7,'IMPORTER-7')");
       sqlite.exec("INSERT INTO frms_importacao_fira VALUES ('foreign','80','90','{\"empresa_id\":7}','REVISAO',0,NULL,NULL),('mismatch','70','90','{\"empresa_id\":8}','REVISAO',0,NULL,NULL),('own','70','90','{\"empresa_id\":7}','REVISAO',0,NULL,NULL),('unlinked',NULL,'90','{\"empresa_id\":7}','REVISAO',0,NULL,NULL)");
       const db = {
         prepare(sql: string) {
