@@ -98,7 +98,9 @@ describe('Lei 13.475 art. 42 — madrugadas', () => {
       '01', '02', '05', '06', '07',
     ].map((day) => ({
       data_operacional: `2026-11-${day}`, funcionario_id: 7,
-      hora_apresentacao: '05:30', hora_termino: '13:00', has_operational_data: 1,
+      hora_apresentacao: day === '07' ? '22:00' : '05:30',
+      hora_termino: day === '07' ? '04:00' : '13:00',
+      has_operational_data: 1,
     }));
     const before = evaluateLawArt42Madrugadas(
       '2026-11-07', buildArt42DutiesByCrew(flights, []).get(7) ?? [],
