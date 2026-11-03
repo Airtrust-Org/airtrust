@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { classifyQAD1CliError } from '../staging/qa-d1-cli-error.mjs';
 
 const code = 'QA-COMP-LIFE-39349812345';
 const marker = 'QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_39349812345';
@@ -61,4 +62,16 @@ test('controlled expiry selects and updates only the completed E1 qualification 
   } finally {
     db.close();
   }
+});
+
+
+test('D1 error classifier emits only safe finite codes, never SQL or credentials', () => {
+  assert.equal(classifyQAD1CliError({
+    stderr: 'Error: D1_ERROR: FOREIGN KEY constraint failed; hidden e-mail test@example.com and SELECT secret',
+  }), 'SQLITE_FOREIGN_KEY');
+  assert.equal(classifyQAD1CliError({ stderr: 'fetch failed: ECONNRESET' }), 'NETWORK');
+  assert.equal(classifyQAD1CliError({ stderr: 'HTTP 403: token my-secret-token' }), 'AUTH_DENIED');
+  assert.equal(classifyQAD1CliError({ stderr: 'Error 429: too many requests' }), 'RATE_LIMIT');
+  assert.equal(classifyQAD1CliError({ stderr: 'no such column: fa.empresa_id' }), 'SQLITE_NO_SUCH_COLUMN');
+  assert.equal(classifyQAD1CliError({ stderr: 'something unexpected with secret=abc' }), 'UNCLASSIFIED');
 });

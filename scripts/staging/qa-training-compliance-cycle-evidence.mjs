@@ -4,6 +4,7 @@
 // dry_run_required: --expire without --apply is read-only; --verify is always read-only.
 // rollback_plan_required: the enclosing lifecycle workflow soft-deletes the run-owned D1 fixture.
 import { spawnSync } from 'node:child_process';
+import { classifyQAD1CliError } from './qa-d1-cli-error.mjs';
 
 const DB = 'airtrust-db-staging-baseline-20260701';
 const TENANT = 'qa_examiner_training';
@@ -49,12 +50,16 @@ const expiryUpdateSql = (id) => `UPDATE qualificacoes_historico AS qh SET data_v
       AND UPPER(COALESCE(m.status,''))='CONCLUIDO' AND qh.origem_tipo='LMS'
       AND qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>date('now'))`;
 
-function query(sql) {
+function query(sql, phase = 'QUERY') {
   const result = spawnSync('npx', ['wrangler', 'd1', 'execute', DB, '--remote', '--json', `--command=${sql}`], {
     cwd: new URL('../../worker-airtrust/', import.meta.url),
     encoding: 'utf8', env: process.env, maxBuffer: 2 * 1024 * 1024,
   });
-  if (result.status !== 0) throw new Error('QA_D1_QUERY_FAILED');
+  if (result.status !== 0 || result.error) {
+    // Fail closed: no raw stderr, SQL, tenant data or secrets leave this process.
+    // Distinguish a D1 constraint from a network/auth failure before retrying.
+    throw new Error(`QA_D1_QUERY_FAILED_${phase}_${classifyQAD1CliError(result)}`);
+  }
   let payload;
   try { payload = JSON.parse(result.stdout); } catch { throw new Error('QA_D1_JSON_INVALID'); }
   const rows = Array.isArray(payload) ? payload[0]?.results : payload?.results;
@@ -68,19 +73,19 @@ if (process.env.NODE_ENV === 'test' && process.argv.includes('--print-expiry-sql
 }
 
 if (mode === 'expire') {
-  const candidates = query(expirySelectSql);
+  const candidates = query(expirySelectSql, 'EXPIRY_SELECT');
   if (candidates.length !== 1) throw new Error(`QA_SYNTHETIC_EXPIRY_CANDIDATE_COUNT:${candidates.length}`);
   if (!apply) {
     console.log(JSON.stringify({ mode: 'DRY_RUN', target: DB, synthetic_candidate_count: 1, due_date_change: 'previous UTC day' }));
     process.exit(0);
   }
-  query(expiryUpdateSql(candidates[0].id));
+  query(expiryUpdateSql(candidates[0].id), 'EXPIRY_APPLY');
   const readback = query(`SELECT COUNT(*) AS expired_count FROM qualificacoes_historico qh
     JOIN funcionarios f ON f.id=qh.funcionario_id AND f.empresa_id=qh.empresa_id
     JOIN empresas e ON e.id=f.empresa_id JOIN lms_matriculas m ON m.id=qh.lms_matricula_id
     JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
     WHERE ${identity} AND qh.observacoes LIKE '%' || ${q(`QA synthetic due date ${marker}`)}
-      AND date(qh.data_vencimento)<date('now')`);
+      AND date(qh.data_vencimento)<date('now')`, 'EXPIRY_READBACK');
   if (Number(readback[0]?.expired_count) !== 1) throw new Error('QA_SYNTHETIC_EXPIRY_READBACK_FAILED');
   console.log(JSON.stringify({ mode: 'APPLY', target: DB, synthetic_expirations: 1, status: 'PASS' }));
   process.exit(0);

@@ -80,7 +80,7 @@ test('EAD lifecycle explicitly opts in after proving defaults and NULL modality 
   assert.match(spec, /mandatory alone cannot auto-enroll/);
   assert.match(spec, /NULL modality must fail closed/);
   assert.match(spec, /opt-in=0 must fail closed/);
-  assert.match(spec, /setExplicitEadEnrollment\(page, sectorRuleId, true, 'EAD'\)/);
+  assert.match(spec, /setExplicitEadEnrollment\(page, sectorRuleId, true, 'EAD',/);
   assert.match(spec, /repeated eligible rule must not duplicate/);
   assert.match(spec, /orphanOptIn\.json\.data\.auto_enrollment\.created\)\.toBe\(1\)/);
   assert.match(spec, /evidencia_modalidade\)\.toBe\('EAD'\)/);
