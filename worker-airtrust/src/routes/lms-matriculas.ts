@@ -528,7 +528,8 @@ app.get('/:id', async (c) => {
     ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null))
     : null;
   const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
-    handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
+    handoffBookmark:activeHandoffBookmark,handoffPriorProgressPct:activeHandoffPriorPct,
+    handoffAvailable}=await readLmsScormEditionState({
       db,bucket:c.env.BUCKET,empresaId,matriculaId,matricula,progressoScorm,
       handoffEnabled:c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED==='true',
     });
@@ -552,6 +553,7 @@ app.get('/:id', async (c) => {
       active_resume_proposal: activeResumeProposal,
       active_scorm_handoff_id: activeHandoffId,
       active_scorm_resume_position: activeHandoffBookmark,
+      active_scorm_prior_progress_pct: activeHandoffPriorPct,
       scorm_handoff_available: handoffAvailable,
     },
   });
