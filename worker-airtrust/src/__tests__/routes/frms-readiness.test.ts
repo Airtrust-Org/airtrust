@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
 import type { Env } from '../../types';
 
 const { authState, persistReadinessAssessmentMock, countReadinessBaselineSessionsMock, sectorAccessMock } = vi.hoisted(() => ({
@@ -395,5 +396,48 @@ describe('FRMS readiness route', () => {
 
     expect(response.status).toBe(400);
     expect((db.prepare as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it('executes the real team SQL without exposing another sector or company', async () => {
+    authState.role = 'manager';
+    sectorAccessMock.mockResolvedValue({ mode: 'restricted', setorIds: [3], funcionarioId: null });
+    const { db, statements } = createDb(null);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const query = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(query).toBeDefined();
+
+    const sqlite = new DatabaseSync(':memory:');
+    try {
+      sqlite.exec(`
+        CREATE TABLE funcionarios (
+          id INTEGER, empresa_id INTEGER, setor_id INTEGER, deleted_at TEXT
+        );
+        CREATE TABLE frms_fadiga_checkin (
+          funcionario_id INTEGER, empresa_id INTEGER, data_checkin TEXT,
+          deleted_at TEXT, created_at TEXT
+        );
+        CREATE TABLE frms_readiness_assessment (
+          id TEXT, funcionario_id INTEGER, empresa_id INTEGER, reference_date TEXT,
+          deleted_at TEXT, classification TEXT, baseline_sessions INTEGER,
+          baseline_ready INTEGER, median_rt_delta_pct REAL, lapse_rate_delta REAL,
+          warning_signals_json TEXT, critical_signals_json TEXT, created_at TEXT
+        );
+        INSERT INTO funcionarios VALUES
+          (70, 7, 3, NULL), (71, 7, 4, NULL), (80, 8, 3, NULL);
+        INSERT INTO frms_fadiga_checkin VALUES
+          (70, 7, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (71, 7, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (80, 8, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (80, 7, '2026-08-27', NULL, '2026-08-27 09:00:00');
+      `);
+      const rows = sqlite.prepare(query!.sql).all(...query!.binds);
+      expect(rows.map((row) => row.funcionario_id)).toEqual([70]);
+    } finally {
+      sqlite.close();
+    }
   });
 });
