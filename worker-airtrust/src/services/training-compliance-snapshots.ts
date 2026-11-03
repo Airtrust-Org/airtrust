@@ -1,3 +1,5 @@
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+
 type SnapshotPerson = {
   setor_id: number | null;
   funcao_id: number | null;
@@ -62,7 +64,7 @@ function aggregate(
 
 export function buildDailyComplianceSnapshots(
   people: SnapshotPerson[],
-  date = new Date().toISOString().slice(0, 10),
+  date = getTodayIsoSaoPaulo(),
 ): ComplianceDailySnapshot[] {
   const snapshots = [aggregate(people, 0, 0, date)];
   const groups = new Map<string, { setor_id: number; funcao_id: number; people: SnapshotPerson[] }>();
@@ -90,7 +92,7 @@ export async function persistTrainingComplianceDailySnapshots(
   db: D1Database,
   empresaId: number,
   people: SnapshotPerson[],
-  date = new Date().toISOString().slice(0, 10),
+  date = getTodayIsoSaoPaulo(),
 ): Promise<{ ready: boolean; written: number }> {
   if (!(await snapshotTableExists(db))) return { ready: false, written: 0 };
   const snapshots = buildDailyComplianceSnapshots(people, date);
