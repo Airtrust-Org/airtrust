@@ -123,6 +123,36 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
     });
   });
 
+  it('escalona KSS 9 e não apresenta APTO/VERDE de classificação legada', async () => {
+    const response = await router.request(
+      'http://localhost/daily-fatigue?date=2026-09-27&scope=team',
+      { headers: { authorization: 'Bearer synthetic' } },
+      env([{
+        funcionario_id: 450,
+        funcionario_nome: 'Tripulante Dado Legado',
+        cargo: 'Piloto',
+        quinzena_numero: 2,
+        jornada_id: 'j-450',
+        checkin_id: 'c-450',
+        checkin_apresentacao: '07:00',
+        wake_time: '05:00',
+        horas_sono: 8,
+        kss_score: 9,
+        fit_for_duty: 1,
+        computed_risk_level: 'normal',
+        score_fadiga: 35,
+        nivel_fadiga: 'VERDE',
+        status_operacional: 'APTO',
+      }]),
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { data: { items: Array<Record<string, unknown>> } };
+    expect(payload.data.items.find((row) => row.funcionario_id === 450)).toMatchObject({
+      status: 'critical', status_label: 'Crítica', requires_operational_review: 1,
+      risk_reconciled_from_evidence: true, nivel_fadiga: null, status_operacional: null,
+    });
+  });
+
   it('não converte classificação ausente ou inválida em risco normal', async () => {
     const base = {
       cargo: 'Piloto',
