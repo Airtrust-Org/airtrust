@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import type { Env } from '../../types';
 
 const { authState, persistReadinessAssessmentMock, countReadinessBaselineSessionsMock, sectorAccessMock } = vi.hoisted(() => ({
@@ -410,6 +410,8 @@ describe('FRMS readiness route', () => {
     const query = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
     expect(query).toBeDefined();
 
+    // Vite cannot statically resolve node:sqlite; use the existing test-suite pattern.
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const sqlite = new DatabaseSync(':memory:');
     try {
       sqlite.exec(`
