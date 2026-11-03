@@ -265,8 +265,13 @@ router.post('/', async (c) => {
     );
   }
 
-  if (!isValidPastOrTodayCheckinDate(parsed.data.reference_date, frmsOperationalTodayIso())) {
+  const operationalToday = frmsOperationalTodayIso();
+  if (!isValidPastOrTodayCheckinDate(parsed.data.reference_date, operationalToday)) {
     return c.json({ success: false, error: 'invalid_reference_date' }, 400);
+  }
+  // Objective tests performed now cannot be certified as historical pre-flight evidence.
+  if (parsed.data.reference_date !== operationalToday) {
+    return c.json({ success: false, error: 'retrospective_readiness_not_allowed' }, 409);
   }
 
   // Subjective signals are authoritative from the already-saved tenant-scoped
