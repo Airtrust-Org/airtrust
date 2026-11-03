@@ -247,8 +247,9 @@ export function deriveReadinessAssessment(input: {
 
   if (!baselineReady) classification = 'baseline_building';
   if (criticalSignals.length > 0) classification = 'operational_review';
-  else if (input.summary.lapseRate >= 0.2 || input.summary.falseStartCount > 2 ||
-    (baselineReady && warningSignals.length >= 2)) classification = 'attention';
+  // KSS 7 and sleep < 6h are independent operational-attention triggers,
+  // even without a validated baseline or an abnormal brief-test metric.
+  else if (warningSignals.length > 0) classification = 'attention';
 
   return {
     classification,
