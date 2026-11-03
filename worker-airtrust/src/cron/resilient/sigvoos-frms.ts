@@ -129,6 +129,24 @@ export function resolveNextSigvoosDay(
   return candidate;
 }
 
+/**
+ * Never stamp the in-progress operational date as a completed SIGVOOS day.
+ * Durable and legacy markers only attest to an already synchronized closed day.
+ */
+export function resolveSigvoosNoopWatermark(
+  durableLastTo: string | null | undefined,
+  legacyLastTo: string | null | undefined,
+  operationalDate: string,
+): string | null {
+  const verified = durableLastTo || legacyLastTo || null;
+  if (!verified) return null;
+  const lastClosedDay = addIsoDay(operationalDate, -1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(verified) || verified > lastClosedDay) {
+    throw new Error('SIGVOOS_WATERMARK_NOT_CLOSED');
+  }
+  return verified;
+}
+
 export function shouldRunSigvoosAtCurrentHour(
   configuredHour: string | null | undefined,
   now: Date,
@@ -294,7 +312,11 @@ async function runTenantIngestion(
             processedCount: 0,
             cursorAfter: null,
             watermarkFrom: context.state?.watermark_from ?? null,
-            watermarkTo: context.state?.watermark_to ?? operationalDate,
+            watermarkTo: resolveSigvoosNoopWatermark(
+              context.state?.watermark_to,
+              config.last_sync_to,
+              operationalDate,
+            ),
             metadata: { stage: 'COMPLETE', operationalDate },
           };
         }
