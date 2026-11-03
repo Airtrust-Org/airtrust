@@ -40,8 +40,12 @@ ALLOWED_ACTIONS = {
     'FIX_COMPLETION_STATUS': 3,
 }
 NEW_CODES = {'EAD_AGENTE_RAMPA', 'EAD_COORDENADOR_VOO', 'EAD_DOV'}
-NAME_ONLY = {'MUZA IWANOW': 'MUZA FORNAZIERI IWANOW',
-             'SANDRINA APARECIDA SILVA': 'SANDRINA APARECIDA SILVA'}
+NAME_ONLY_HASHES = {
+    '901401494703ba70adb5146488e1fc0ff84f175c949d58d0593cf68f6f12af7d':
+    '2ea2c4ba58b1baabf8ef0bb9148c9f018f18d1b44d97ec5366d9d5436f4eb782',
+    'be8b50a1c6fdda7262047729ba9bd0cf487057968004f7330425e591592fcab4':
+    'be8b50a1c6fdda7262047729ba9bd0cf487057968004f7330425e591592fcab4',
+}
 
 
 def canonical(obj: object) -> bytes:
@@ -78,6 +82,10 @@ def date_only(value: object) -> str:
 def normalize_name(value: str) -> str:
     normalized = unicodedata.normalize('NFKD', str(value))
     return ' '.join(''.join(ch for ch in normalized if not unicodedata.combining(ch)).upper().split())
+
+
+def name_fingerprint(value: str) -> str:
+    return hashlib.sha256(normalize_name(value).encode('utf-8')).hexdigest()
 
 
 def load_plan(path: Path) -> tuple[list[dict], list[dict]]:
@@ -145,7 +153,7 @@ def load_plan(path: Path) -> tuple[list[dict], list[dict]]:
         if op['employee_match']['method'] not in ('EMAIL_EXACT_UNIQUE', 'EXACT_NAME_UNIQUE'):
             raise ValueError('UNKNOWN_EMPLOYEE_MATCH_METHOD')
         if op['employee_match']['method'] == 'EXACT_NAME_UNIQUE':
-            if normalize_name(op['employee_match']['source_name']) not in NAME_ONLY:
+            if name_fingerprint(op['employee_match']['source_name']) not in NAME_ONLY_HASHES:
                 raise ValueError('UNAUTHORIZED_NAME_ONLY_MATCH')
         hours = op.get('source_workload_minutes')
         if not isinstance(hours, int) or hours <= 0 or hours % 60:
@@ -181,7 +189,7 @@ def get_live(ops: list[dict], models: list[dict]) -> tuple[list[dict], dict, lis
         if t['deleted_at'] is None:by_type_code[t['codigo'].upper()].append(t)
     for p in people:
         if p['email']:by_email[p['email']].append(p)
-        by_name[normalize_name(p['nome'])].append(p)
+        by_name[name_fingerprint(p['nome'])].append(p)
     for h in hist:by_history[int(h['funcionario_id'])].append(h)
     by_hid = {int(h['id']):h for h in hist}
     if audit_count:
@@ -197,7 +205,7 @@ def get_live(ops: list[dict], models: list[dict]) -> tuple[list[dict], dict, lis
         if match == 'EMAIL_EXACT_UNIQUE':
             options = by_email[str(emp_spec.get('email') or '').lower().strip()]
         else:
-            options = by_name[normalize_name(NAME_ONLY[normalize_name(emp_spec['source_name'])])]
+            options = by_name[NAME_ONLY_HASHES[name_fingerprint(emp_spec['source_name'])]]
         if len(options) != 1:
             raise ValueError('EMPLOYEE_IDENTITY_NO_LONGER_UNIQUE')
         emp = options[0]
