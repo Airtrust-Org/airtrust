@@ -12,6 +12,11 @@ vi.mock('../../middleware/auth', () => ({
     await next();
   },
 }));
+vi.mock('../../lib/frms/operational-date', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/frms/operational-date')>()),
+  frmsOperationalTodayIso: () => '2026-10-16',
+}));
+
 vi.mock('../../middleware/tenant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../middleware/tenant')>()),
   getEmpresaId: (c: { get: (name: string) => unknown }) => Number(c.get('empresaId') || 0),
@@ -149,6 +154,59 @@ describe('daily check-in atomic commit', () => {
       expect(syncMock).not.toHaveBeenCalled();
     },
   );
+
+
+  it('rejects check-in older than D-1, even with an alleged justification', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-14', late_submission_reason: 'SYSTEM_UNAVAILABLE' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'historical_checkin_out_of_window' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('requires a reason before accepting late D-1 crew declaration', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-15' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'late_submission_reason_required' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('records justified D-1 as non-preflight evidence and requires human review', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-15', late_submission_reason: 'SYSTEM_UNAVAILABLE' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('RESTRITO');
+    const event = writes.find((write) => write.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      requires_operational_review: 1,
+      submission_context: { timing: 'RETROSPECTIVE_D1', reason: 'SYSTEM_UNAVAILABLE', preflight_evidence: false },
+    });
+  });
+
+  it('rejects contradictory check-in dates before D1 mutations', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, data_checkin: '2026-10-15' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    expect(batch).not.toHaveBeenCalled();
+  });
 
   it('commits check-in, readiness and ten trials, then KSS event in ONE D1 batch', async () => {
     const { db, batch } = fakeDb();
