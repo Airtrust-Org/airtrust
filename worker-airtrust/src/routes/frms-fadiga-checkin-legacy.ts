@@ -493,8 +493,7 @@ async function buildDailyFatigueStatus(params: {
   const wakeTime = String(checkin.wake_time || '').trim();
   const sleepHours = checkin.horas_sono == null ? Number.NaN : Number(checkin.horas_sono);
   const evidence = resolveDailyCheckinEvidence({
-    hasCheckin: true,
-    presentationTime, wakeTime, sleepHours: checkin.horas_sono,
+    hasCheckin: true, presentationTime, wakeTime, sleepHours: checkin.horas_sono,
     kssScore: checkin.kss_score, fitForDuty: checkin.fit_for_duty,
     storedRiskLevel: checkin.computed_risk_level,
   });
@@ -548,9 +547,8 @@ async function buildDailyFatigueStatus(params: {
     fit_for_duty:
       checkin.fit_for_duty == null ? null : Number(checkin.fit_for_duty || 0) === 1,
     score_fadiga: checkin.score_fadiga == null ? null : Number(checkin.score_fadiga),
-    nivel_fadiga:
-      evidence.riskReconciledFromEvidence || checkin.nivel_fadiga == null
-        ? null : String(checkin.nivel_fadiga),
+    nivel_fadiga: evidence.riskReconciledFromEvidence || checkin.nivel_fadiga == null
+      ? null : String(checkin.nivel_fadiga),
     status_operacional:
       evidence.riskReconciledFromEvidence || checkin.status_operacional == null
         ? null : String(checkin.status_operacional),
