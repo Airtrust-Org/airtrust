@@ -35,7 +35,7 @@ import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persiste
 import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
 import { resolveDailyCheckinEvidence } from '../lib/frms/daily-checkin-evidence';
 import { buildDailyCheckinDeclarationEvidence } from '../lib/frms/daily-checkin-declaration';
-import { isValidPastOrTodayCheckinDate } from '../lib/frms/checkin-date-guard';
+import { evaluateCrewCheckinDate } from '../lib/frms/checkin-date-guard';
 import { assertFuncionarioNoEscopoFrms } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
@@ -937,9 +937,8 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
 
     const input = normalizeCheckinInput(parsed.data, fitNorm.apto);
     const dataCheckin = input.dataCheckin;
-    if (!isValidPastOrTodayCheckinDate(dataCheckin, todayIso())) {
-      return c.json({ success: false, error: 'invalid_reference_date' }, 400);
-    }
+    const datePolicy = evaluateCrewCheckinDate(dataCheckin, todayIso(), parsed.data.late_submission_reason);
+    if (!datePolicy.valid) return c.json({ success: false, error: datePolicy.error }, 400);
 
     const config = await getConfig(c.env.DB, empresaId);
     if (!config.ativo) {
@@ -976,7 +975,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         : dailyRiskLevel === 'attention' && scoreBase.nivel_fadiga === 'VERDE'
           ? 'AMARELO'
           : scoreBase.nivel_fadiga;
-    const finalStatusOperacional =
+    const finalStatusOperacional = datePolicy.retrospective ? 'RESTRITO' :
       dailyRiskLevel === 'unfit_for_duty'
         ? 'NAO_APTO'
         : dailyRiskLevel === 'critical'
@@ -987,10 +986,11 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
               ? 'APTO_COM_RESSALVA'
               : 'RESTRITO';
     const requiresOperationalReview =
-      dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
+      datePolicy.retrospective || dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
     const wakeTime = input.horaAcordou;
-    const recomendacaoFinal =
-      dailyRiskLevel === 'unfit_for_duty'
+    const recomendacaoFinal = datePolicy.retrospective
+      ? 'Registro retrospectivo: não comprova avaliação pré-voo. Revisão operacional obrigatória.'
+      : dailyRiskLevel === 'unfit_for_duty'
         ? 'Revisão operacional imediata: tripulante reportou condição não segura para jornada.'
         : dailyRiskLevel === 'critical'
           ? 'Risco crítico em fadiga diária: revisão operacional imediata recomendada.'
@@ -1193,6 +1193,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
+          submission_context: datePolicy.retrospective ? { timing: 'RETROSPECTIVE_D1', reason: datePolicy.reason, preflight_evidence: false } : { timing: 'SAME_DAY', reason: null, preflight_evidence: null },
           componentes: scoreBase.componentes,
           ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, new Date().toISOString()),
         }),
