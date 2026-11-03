@@ -15,6 +15,7 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
@@ -1484,10 +1485,10 @@ app.post('/scorm/commit', async (c) => {
   let dataConclusao: string | null = null;
   if (sucesso) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'CONCLUIDO');
-    dataConclusao = new Date().toISOString().slice(0, 10);
+    dataConclusao = getTodayIsoSaoPaulo();
   } else if (falha) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'REPROVADO');
-    dataConclusao = new Date().toISOString().slice(0, 10);
+    dataConclusao = getTodayIsoSaoPaulo();
   }
 
   // Evita reemitir qualificação e certificado.
@@ -1869,7 +1870,7 @@ app.post('/:id/finalizar', async (c) => {
     );
   }
 
-  const dataConclusao = new Date().toISOString().slice(0, 10);
+  const dataConclusao = getTodayIsoSaoPaulo();
 
   // O serviço canônico garante a conclusão/qualificação de forma atômica.
   let qualificacaoGerada: Record<string, unknown> | null = null;
@@ -2050,7 +2051,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
   }
 
   const { status, observacoes } = parsed.data;
-  const now = new Date().toISOString().slice(0, 10);
+  const now = getTodayIsoSaoPaulo();
 
   // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
   if (status === 'CONCLUIDO') {
