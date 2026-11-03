@@ -93,6 +93,34 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
     expect(query!.sql).toContain('LEFT JOIN frms_fadiga_checkin ch');
     expect(query!.bindings.slice(0, 5)).toEqual([6, '2026-09-27', '2026-09-27', '2026-09-27', 6]);
   });
+  it('mantém 0 h de sono reportado como risco crítico, sem converter ausência em 0 h', async () => {
+    const common = {
+      cargo: 'Piloto',
+      quinzena_numero: 2,
+      jornada_id: 'j-test',
+      checkin_id: 'c-test',
+      checkin_apresentacao: '07:00',
+      wake_time: '05:00',
+      computed_risk_level: 'critical',
+    };
+    const response = await router.request(
+      'http://localhost/daily-fatigue?date=2026-09-27&scope=team',
+      { headers: { authorization: 'Bearer synthetic' } },
+      env([
+        { ...common, funcionario_id: 401, horas_sono: 0 },
+        { ...common, funcionario_id: 402, horas_sono: null },
+      ]),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: { items: Array<Record<string, unknown>> } };
+    expect(body.data.items.find((row) => row.funcionario_id === 401)).toMatchObject({
+      status: 'critical', calculation_available: true, sleep_hours_24h: 0,
+    });
+    expect(body.data.items.find((row) => row.funcionario_id === 402)).toMatchObject({
+      status: 'incomplete_checkin', calculation_available: false, sleep_hours_24h: null,
+    });
+  });
+
   it('não converte classificação ausente ou inválida em risco normal', async () => {
     const base = {
       cargo: 'Piloto',
