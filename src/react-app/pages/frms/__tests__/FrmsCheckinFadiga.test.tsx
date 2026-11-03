@@ -1319,7 +1319,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const interruptedWarning = screen.getByText(/A página foi interrompida durante o teste objetivo/i);
     expect(interruptedWarning).toHaveTextContent(/respostas do check-in foram preservadas/i);
-    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o PVT-B/i);
+    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o teste breve de atenção/i);
     expect(screen.getByRole('radio', { name: '7 horas' })).toBeChecked();
     expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('07:00');
     expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:45');
