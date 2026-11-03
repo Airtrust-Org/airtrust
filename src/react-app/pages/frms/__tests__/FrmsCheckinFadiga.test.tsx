@@ -695,8 +695,9 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.fit_for_duty).toBe(true);
     expect(payload.meds_ult_12h).toBeNull();
     expect(payload.alcool_ult_12h).toBeNull();
-    expect(payload.subjective_fatigue_level).toBe(3);
-    expect(payload.sleepiness_level).toBe(3);
+    // KSS is its own validated scale, not a synthetic independent fatigue report.
+    expect(payload).not.toHaveProperty('subjective_fatigue_level');
+    expect(payload).not.toHaveProperty('sleepiness_level');
     expect(payload).not.toHaveProperty('sintomas');
     expect(payload).not.toHaveProperty('horas_sono_48h');
     expect(payload.motivo_inaptidao).toBeUndefined();
