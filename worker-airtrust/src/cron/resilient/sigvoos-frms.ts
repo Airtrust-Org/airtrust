@@ -50,7 +50,7 @@ interface IngestMetadata {
   lastReviewedOperationalDate?: string;
 }
 
-function parseMetadata(value: string | null | undefined): IngestMetadata {
+export function parseMetadata(value: string | null | undefined): IngestMetadata {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
