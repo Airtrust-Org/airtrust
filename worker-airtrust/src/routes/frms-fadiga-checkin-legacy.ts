@@ -36,6 +36,7 @@ import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checki
 import { resolveDailyCheckinEvidence } from '../lib/frms/daily-checkin-evidence';
 import { buildDailyCheckinDeclarationEvidence } from '../lib/frms/daily-checkin-declaration';
 import { evaluateCrewCheckinDate } from '../lib/frms/checkin-date-guard';
+import { isAtOrAfterFrmsPresentation } from '../lib/frms/checkin-submission-timing';
 import { assertFuncionarioNoEscopoFrms } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
@@ -198,8 +199,9 @@ function mapNivelToLegacy(
 function normalizeCheckinInput(
   input: CheckinCreateInput,
   aptoNormalizado: 0 | 1,
+  operationalToday: string,
 ): NormalizedCheckinInput {
-  const dataCheckin = input.reference_date || input.data_checkin || todayIso();
+  const dataCheckin = input.reference_date || input.data_checkin || operationalToday;
   const horaAcordou = input.wake_time || input.hora_acordou || '';
   const horaDormiu = input.hora_dormiu || null;
   const horasSono24h =
@@ -901,13 +903,11 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         404,
       );
     }
-
     const body = await c.req.json();
     const parsed = CheckinCreateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ success: false, error: parsed.error.flatten() }, 400);
     }
-
     const fitNorm = normalizeFitForDutyPayload(parsed.data);
     if ('conflict' in fitNorm) {
       return c.json(
@@ -921,7 +921,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         400,
       );
     }
-
     const completeness = validateCheckinPayloadCompleteness(parsed.data);
     if (!completeness.ok) {
       return c.json(
@@ -934,17 +933,20 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         400,
       );
     }
-
-    const input = normalizeCheckinInput(parsed.data, fitNorm.apto);
+    const submittedAt = new Date();
+    const operationalToday = frmsOperationalTodayIso(submittedAt);
+    const input = normalizeCheckinInput(parsed.data, fitNorm.apto, operationalToday);
     const dataCheckin = input.dataCheckin;
-    const datePolicy = evaluateCrewCheckinDate(dataCheckin, todayIso(), parsed.data.late_submission_reason);
+    const datePolicy = evaluateCrewCheckinDate(dataCheckin, operationalToday, parsed.data.late_submission_reason);
     if (!datePolicy.valid) return c.json({ success: false, error: datePolicy.error }, 400);
-    if (datePolicy.retrospective && parsed.data.readiness) return c.json({ success: false, error: 'retrospective_readiness_not_allowed' }, 409);
+    const afterPresentation = !datePolicy.retrospective && isAtOrAfterFrmsPresentation(submittedAt, input.jornadaInicioPrevista);
+    if ((datePolicy.retrospective || afterPresentation) && parsed.data.readiness) {
+      return c.json({ success: false, error: datePolicy.retrospective ? 'retrospective_readiness_not_allowed' : 'post_presentation_readiness_not_allowed' }, 409);
+    }
     const config = await getConfig(c.env.DB, empresaId);
     if (!config.ativo) {
       return c.json({ success: false, error: 'Check-in diário desativado para esta empresa' }, 400);
     }
-
     const scoreConfig: FadigaScoreConfig = {
       threshold_amarelo: config.threshold_amarelo,
       threshold_vermelho: config.threshold_vermelho,
@@ -953,7 +955,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       peso_sono_qualidade: config.peso_sono_qualidade,
       peso_sintomas: config.peso_sintomas,
     };
-
     let operationalContext;
     try {
       operationalContext = await resolveFrmsOperationalContext(c.env.DB, {
@@ -976,7 +977,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           ? 'AMARELO'
           : scoreBase.nivel_fadiga;
     const finalStatusOperacional = dailyRiskLevel === 'unfit_for_duty' ? 'NAO_APTO' :
-      datePolicy.retrospective || dailyRiskLevel === 'critical'
+      datePolicy.retrospective || afterPresentation || dailyRiskLevel === 'critical'
         ? 'RESTRITO'
           : finalNivel === 'VERDE'
             ? 'APTO'
@@ -984,19 +985,20 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
               ? 'APTO_COM_RESSALVA'
               : 'RESTRITO';
     const requiresOperationalReview =
-      datePolicy.retrospective || dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
+      datePolicy.retrospective || afterPresentation || dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
     const wakeTime = input.horaAcordou;
     const recomendacaoFinal = dailyRiskLevel === 'unfit_for_duty'
       ? 'Revisão operacional imediata: tripulante declarou NÃO APTO, inclusive se o registro for retrospectivo.'
       : datePolicy.retrospective
         ? 'Registro retrospectivo: não comprova avaliação pré-voo. Revisão operacional obrigatória.'
+        : afterPresentation
+          ? 'Check-in após apresentação declarada: não comprova aptidão pré-voo. Revisão operacional obrigatória.'
         : dailyRiskLevel === 'critical'
           ? 'Risco crítico em fadiga diária: revisão operacional imediata recomendada.'
           : dailyRiskLevel === 'attention'
             ? 'Sinalização de atenção em fadiga diária: revisar jornada com coordenação.'
             : scoreBase.recomendacao;
-
-    const now = nowSql();
+    const now = submittedAt.toISOString().replace('T', ' ').slice(0, 19);
     const existing = await c.env.DB.prepare(
       `SELECT id
          FROM frms_fadiga_checkin
@@ -1005,7 +1007,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     )
       .bind(empresaId, funcionarioId, dataCheckin)
       .first<{ id: string }>();
-
     const checkinId = existing?.id || crypto.randomUUID();
     const horaCheckin = now.slice(11, 16);
     const sintomasJson = input.sintomas ? JSON.stringify(input.sintomas) : null;
@@ -1013,7 +1014,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     // mas persistido como 0 até existir source flag/migration para "não informado".
     const medsUlt12hDb = input.medsUlt12h ?? 0;
     const alcoolUlt12hDb = input.alcoolUlt12h ?? 0;
-
     // Validate optional readiness before mutation; standalone readiness uses its own endpoint.
     let readinessStatements: D1PreparedStatement[] = [];
     if (parsed.data.readiness) {
@@ -1035,7 +1035,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         throw error;
       }
     }
-
     const checkinWrite = existing?.id
       ? c.env.DB.prepare(
         `UPDATE frms_fadiga_checkin
@@ -1171,7 +1170,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           now,
           now,
         );
-
     const eventType = existing?.id ? 'CHECKIN_ATUALIZADO' : 'CHECKIN_CRIADO';
     const provenanceEvent = c.env.DB.prepare(
       `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
@@ -1191,13 +1189,12 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
-          submission_context: datePolicy.retrospective ? { timing: 'RETROSPECTIVE_D1', reason: datePolicy.reason, preflight_evidence: false } : { timing: 'SAME_DAY', reason: null, preflight_evidence: null },
+          submission_context: datePolicy.retrospective ? { timing: 'RETROSPECTIVE_D1', reason: datePolicy.reason, preflight_evidence: false } : afterPresentation ? { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false } : { timing: 'SAME_DAY', reason: null, preflight_evidence: null },
           componentes: scoreBase.componentes,
-          ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, new Date().toISOString()),
+          ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, submittedAt.toISOString()),
         }),
         now,
       );
-
     // Atomic D1 batch: check-in, optional trials and immutable event commit together.
     try {
       await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent]);
@@ -1237,16 +1234,15 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       wakeTime,
       checkinId,
     });
-
-    if (datePolicy.retrospective || dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
+    if (datePolicy.retrospective || afterPresentation || dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
       await c.env.DB.prepare(
         `INSERT INTO notificacoes_sistema
            (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
            VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', ?, ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
         .bind(
-          datePolicy.retrospective && dailyRiskLevel !== 'unfit_for_duty' ? 'Check-in retrospectivo aguardando revisão' : 'Check-in de fadiga em atenção',
-          datePolicy.retrospective && dailyRiskLevel === 'unfit_for_duty' ? `Tripulante #${funcionarioId} declarou NÃO APTO em registro retrospectivo de ${dataCheckin}; não comprova avaliação pré-voo. Revisão imediata necessária.` : datePolicy.retrospective ? `Tripulante #${funcionarioId} registrou check-in retrospectivo de ${dataCheckin}; não é avaliação pré-voo. Revisão operacional necessária.` : `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
+          datePolicy.retrospective && dailyRiskLevel !== 'unfit_for_duty' ? 'Check-in retrospectivo aguardando revisão' : afterPresentation && dailyRiskLevel !== 'unfit_for_duty' ? 'Check-in após apresentação aguardando revisão' : 'Check-in de fadiga em atenção',
+          datePolicy.retrospective && dailyRiskLevel === 'unfit_for_duty' ? `Tripulante #${funcionarioId} declarou NÃO APTO em registro retrospectivo de ${dataCheckin}; não comprova avaliação pré-voo. Revisão imediata necessária.` : datePolicy.retrospective ? `Tripulante #${funcionarioId} registrou check-in retrospectivo de ${dataCheckin}; não é avaliação pré-voo. Revisão operacional necessária.` : afterPresentation ? `Tripulante #${funcionarioId} registrou check-in após apresentação de ${dataCheckin}; não comprova avaliação pré-voo. ${dailyRiskLevel === 'unfit_for_duty' ? 'NÃO APTO. Revisão imediata' : 'Revisão operacional'} necessária.` : `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
           JSON.stringify({
             empresa_id: empresaId,
             funcionario_id: funcionarioId,
@@ -1254,12 +1250,11 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
             score_fadiga: scoreBase.score_fadiga,
             nivel_fadiga: finalNivel,
             computed_risk_level: dailyRiskLevel, requires_operational_review: requiresOperationalReview,
-            retrospective_submission: datePolicy.retrospective, late_submission_reason: datePolicy.reason,
+            retrospective_submission: datePolicy.retrospective, post_presentation_submission: afterPresentation, late_submission_reason: datePolicy.reason,
           }),
           empresaId,
         )
         .run();
-
       await c.env.DB.prepare(
         `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
            VALUES (?, ?, ?, 'GESTOR_NOTIFICADO', ?, ?)`,
@@ -1297,7 +1292,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       user_agent: c.req.header('user-agent'),
     });
-
     await registrarAcaoAdmin(c.env.DB, {
       userId,
       action: existing?.id ? 'FRMS_FADIGA_CHECKIN_UPDATE' : 'FRMS_FADIGA_CHECKIN_CREATE',
@@ -1313,13 +1307,11 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || undefined,
       userAgent: c.req.header('user-agent') || undefined,
     });
-
     const contextoPiloto = await computeContextoPiloto(
       c.env.DB,
       funcionarioId,
       operationalContext.parameters,
     );
-
     return c.json({
       success: true,
       data: {
@@ -1384,11 +1376,9 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
   }
 });
-
 router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {
   return router.fetch(new Request(c.req.url.replace('/me', ''), c.req.raw), c.env, c.executionCtx);
 });
-
 router.get('/fadiga-checkin/historico', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
@@ -1399,13 +1389,11 @@ router.get('/fadiga-checkin/historico', async (c) => {
         404,
       );
     }
-
     const page = Math.max(Number(c.req.query('page') || 1), 1);
     const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100);
     const offset = (page - 1) * limit;
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
-
     const requestedFuncionario = (c.req.query('funcionario_id') || '').trim();
     const search = (c.req.query('search') || c.req.query('q') || '').trim().slice(0, 120);
     const canSeeAll = await isManagerPlus(c);
@@ -1415,7 +1403,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
       'ch.data_checkin BETWEEN ? AND ?',
     ];
     const whereValues: Array<string | number> = [empresaId, dataInicio, dataFim];
-
     if (!canSeeAll) {
       whereClauses.push('ch.funcionario_id = ?');
       whereValues.push(funcionarioId);
@@ -1426,7 +1413,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
       const scope = buildFuncionarioScopeWhere(access, 'f');
       whereClauses.push(scope.clause);
       whereValues.push(...scope.bindings);
-
       if (requestedFuncionario) {
         const requestedFuncionarioId = Number(requestedFuncionario);
         if (!Number.isInteger(requestedFuncionarioId) || requestedFuncionarioId <= 0) {
@@ -1435,7 +1421,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
         whereClauses.push('ch.funcionario_id = ?');
         whereValues.push(requestedFuncionarioId);
       }
-
       if (search) {
         const searchLower = `%${search.toLowerCase()}%`;
         const searchAsFuncionarioId = Number(search);
@@ -1448,9 +1433,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
         }
       }
     }
-
     const whereSql = whereClauses.join('\n           AND ');
-
     const total = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total
          FROM frms_fadiga_checkin ch
@@ -1464,7 +1447,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
     )
       .bind(...whereValues)
       .first<{ total: number }>();
-
     const rows = await c.env.DB.prepare(
       `SELECT ch.*, f.nome AS funcionario_nome
          FROM frms_fadiga_checkin ch
@@ -1480,7 +1462,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
     )
       .bind(...whereValues, limit, offset)
       .all<Record<string, unknown>>();
-
     const resumo = await c.env.DB.prepare(
       `SELECT
            AVG(CASE WHEN kss_provenance = 'CREW_REPORTED' THEN kss_score END) AS media_kss,
@@ -1502,7 +1483,6 @@ router.get('/fadiga-checkin/historico', async (c) => {
     )
       .bind(...whereValues)
       .first<Record<string, number>>();
-
     return c.json({
       success: true,
       data: {
@@ -1531,18 +1511,15 @@ router.get('/fadiga-checkin/historico', async (c) => {
     return c.json({ success: false, error: 'Erro ao consultar histórico de check-ins' }, 500);
   }
 });
-
 router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const data = c.req.query('data') || todayIso();
-
     const painelSectorAccess = await getEmployeeSectorAccess(
       c,
       empresaId,
     );
     const painelSectorScope = buildFuncionarioScopeWhere(painelSectorAccess, 'f');
-
     const rows = await c.env.DB.prepare(
       `SELECT
            f.id AS funcionario_id,
@@ -1595,13 +1572,11 @@ router.get('/fadiga-checkin/painel-gestor', requirePermission('frms', 'visualiza
     )
       .bind(data, data, data, empresaId, ...painelSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     return c.json({ success: true, data: rows.results || [] });
   } catch {
     return c.json({ success: false, error: 'Erro ao carregar painel do gestor' }, 500);
   }
 });
-
 router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const date = c.req.query('data') || todayIso();
@@ -1624,7 +1599,6 @@ router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'ma
     const mediaScoreRaw = items
       .map((item) => Number(item.score_fadiga || 0))
       .filter((value) => Number.isFinite(value) && value > 0);
-
     return c.json({
       success: true,
       data: {
@@ -1645,20 +1619,17 @@ router.get('/fadiga-checkin/painel', requirePermission('frms', 'visualizar', 'ma
     return c.json({ success: false, error: 'Erro ao carregar painel diário de fadiga' }, 500);
   }
 });
-
 router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const dataInicio =
       c.req.query('data_inicio') || new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const dataFim = c.req.query('data_fim') || todayIso();
-
     const analyticsSectorAccess = await getEmployeeSectorAccess(
       c,
       empresaId,
     );
     const analyticsSectorScope = buildFuncionarioScopeWhere(analyticsSectorAccess, 'f');
-
     const evolucaoDiaria = await c.env.DB.prepare(
       `SELECT
            ch.data_checkin AS data,
@@ -1677,7 +1648,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     const distribuicao = await c.env.DB.prepare(
       `SELECT
            SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
@@ -1693,7 +1663,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .first<Record<string, number>>();
-
     const rankingAtencao = await c.env.DB.prepare(
       `SELECT
            f.nome,
@@ -1712,7 +1681,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     const correlacaoSonoKss = await c.env.DB.prepare(
       `SELECT ch.horas_sono, ch.kss_score
          FROM frms_fadiga_checkin ch
@@ -1725,7 +1693,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     const correlacaoScoreEffectiveness = await c.env.DB.prepare(
       `SELECT
            ch.data_checkin AS data,
@@ -1746,7 +1713,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     return c.json({
       success: true,
       data: {
@@ -1766,7 +1732,6 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     return c.json({ success: false, error: 'Erro ao carregar analytics de fadiga' }, 500);
   }
 });
-
 router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'editar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
@@ -1777,7 +1742,6 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
     if (!parsed.success) {
       return c.json({ success: false, error: parsed.error.flatten() }, 400);
     }
-
     const checkin = await c.env.DB.prepare(
       `SELECT id, funcionario_id
          FROM frms_fadiga_checkin
@@ -1786,14 +1750,12 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
     )
       .bind(id, empresaId)
       .first<{ id: string; funcionario_id: number }>();
-
     if (!checkin) {
       return c.json({ success: false, error: 'Check-in não encontrado' }, 404);
     }
     // Validate sector scope before any manager response is recorded.
     const scopeDenied = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(checkin.funcionario_id));
     if (scopeDenied) return scopeDenied;
-
     await c.env.DB.prepare(
       `INSERT INTO frms_fadiga_evento (id, empresa_id, checkin_id, tipo, payload_json, created_at)
          VALUES (?, ?, ?, 'RESPOSTA_GESTOR', ?, ?)`,
@@ -1806,7 +1768,6 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
         nowSql(),
       )
       .run();
-
     await c.env.DB.prepare(
       `INSERT INTO notificacoes_sistema
          (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
@@ -1823,7 +1784,6 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
         empresaId,
       )
       .run();
-
     return c.json({
       success: true,
       data: { checkin_id: checkin.id, resposta: parsed.data.resposta },
@@ -1832,19 +1792,16 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
     return c.json({ success: false, error: 'Erro ao registrar resposta do gestor' }, 500);
   }
 });
-
 router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c);
     const dataInicio = c.req.query('data_inicio') || todayIso().slice(0, 8) + '01';
     const dataFim = c.req.query('data_fim') || todayIso();
-
     const exportSectorAccess = await getEmployeeSectorAccess(
       c,
       empresaId,
     );
     const exportSectorScope = buildFuncionarioScopeWhere(exportSectorAccess, 'f');
-
     const rows = await c.env.DB.prepare(
       `SELECT
            ch.data_checkin,
@@ -1869,7 +1826,6 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
     )
       .bind(empresaId, dataInicio, dataFim, ...exportSectorScope.bindings)
       .all<Record<string, unknown>>();
-
     const header = [
       'data_checkin',
       'funcionario_nome',
@@ -1884,7 +1840,6 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
       'associado_frat_avaliacao_id',
       'observacoes',
     ];
-
     const lines = [header.map(csvEscape).join(',')];
     for (const row of rows.results || []) {
       lines.push(
@@ -1906,7 +1861,6 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
           .join(','),
       );
     }
-
     c.header('Content-Type', 'text/csv; charset=utf-8');
     c.header(
       'Content-Disposition',
@@ -1917,7 +1871,6 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
     return c.json({ success: false, error: 'Erro ao exportar check-ins de fadiga' }, 500);
   }
 });
-
 router.get('/fadiga-checkin/frat-prefill', async (c) => {
   try {
     const empresaId = getEmpresaId(c);
@@ -1926,14 +1879,12 @@ router.get('/fadiga-checkin/frat-prefill', async (c) => {
     const funcionarioId = funcionarioIdQuery
       ? Number(funcionarioIdQuery)
       : await resolveFuncionarioId(c);
-
     if (!funcionarioId) {
       return c.json({ success: false, error: 'funcionario_id não encontrado' }, 400);
     }
     // A prefill request cannot read an arbitrary crew member's fatigue data.
     const scopeDenied = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(funcionarioId));
     if (scopeDenied) return scopeDenied;
-
     const row = await c.env.DB.prepare(
       `SELECT *
          FROM frms_fadiga_checkin
@@ -1954,11 +1905,9 @@ router.get('/fadiga-checkin/frat-prefill', async (c) => {
         qualidade_sono: number;
         sintomas_json: string | null;
       }>();
-
     if (!row) {
       return c.json({ success: true, data: null });
     }
-
     const suggestion = buildFratSuggestion({
       score: {
         scoreFadiga: row.score_fadiga,
@@ -1979,7 +1928,6 @@ router.get('/fadiga-checkin/frat-prefill', async (c) => {
         ? Object.keys(JSON.parse(row.sintomas_json) as Record<string, unknown>)
         : [],
     });
-
     return c.json({
       success: true,
       data: {
@@ -1993,5 +1941,4 @@ router.get('/fadiga-checkin/frat-prefill', async (c) => {
     return c.json({ success: false, error: 'Erro ao gerar prefill FRAT' }, 500);
   }
 });
-
 export default router;

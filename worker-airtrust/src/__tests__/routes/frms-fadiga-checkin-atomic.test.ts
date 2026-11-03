@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
 const { syncMock } = vi.hoisted(() => ({ syncMock: vi.fn() }));
@@ -130,9 +130,13 @@ function request(readiness?: object) {
 
 describe('daily check-in atomic commit', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-16T09:30:00Z'));
     vi.clearAllMocks();
     syncMock.mockResolvedValue({ sync: { sincronizado: false, jornada_id: null } });
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it.each(['2099-01-01', '2026-02-30'])(
     'rejects impossible or future reference day %s before D1 writes',
@@ -260,6 +264,38 @@ describe('daily check-in atomic commit', () => {
     }), { DB: db } as Env, {} as ExecutionContext);
     expect(response.status).toBe(400);
     expect(batch).not.toHaveBeenCalled();
+  });
+
+
+  it('flags same-day post-presentation submission without making a pre-flight claim', async () => {
+    vi.setSystemTime(new Date('2026-10-16T10:15:00Z')); // 07:15 at the flight base.
+    const { db, batch, statements } = fakeDb();
+    const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('RESTRITO');
+    const event = writes.find((stmt) => stmt.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      status_operacional: 'RESTRITO', requires_operational_review: 1,
+      submission_context: { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false },
+    });
+    const notification = statements.find((stmt) => stmt.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in após apresentação aguardando revisão');
+    expect(JSON.parse(String(notification?.binds[2]))).toMatchObject({
+      post_presentation_submission: true, retrospective_submission: false,
+    });
+  });
+
+  it('rejects embedded objective readiness after presentation before any D1 write', async () => {
+    vi.setSystemTime(new Date('2026-10-16T10:01:00Z'));
+    const { db, batch } = fakeDb();
+    const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }), {
+      DB: db,
+    } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'post_presentation_readiness_not_allowed' });
+    expect(batch).not.toHaveBeenCalled();
+    expect(syncMock).not.toHaveBeenCalled();
   });
 
   it('commits check-in, readiness and ten trials, then KSS event in ONE D1 batch', async () => {

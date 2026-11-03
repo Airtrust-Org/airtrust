@@ -19,6 +19,7 @@ import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms
 import { createLogger } from '../utils/logger';
 import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { isValidPastOrTodayCheckinDate } from '../lib/frms/checkin-date-guard';
+import { isAtOrAfterFrmsPresentation } from '../lib/frms/checkin-submission-timing';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -277,7 +278,7 @@ router.post('/', async (c) => {
   // Subjective signals are authoritative from the already-saved tenant-scoped
   // daily fatigue check-in. The browser cannot override KSS or sleep values here.
   const checkin = await c.env.DB.prepare(
-    `SELECT id, kss_score, kss_provenance, horas_sono
+    `SELECT id, kss_score, kss_provenance, horas_sono, jornada_inicio_prevista
        FROM frms_fadiga_checkin
       WHERE empresa_id = ?
         AND funcionario_id = ?
@@ -286,7 +287,7 @@ router.post('/', async (c) => {
       LIMIT 1`,
   )
     .bind(empresaId, funcionarioId, parsed.data.reference_date)
-    .first<{ id: string; kss_score: number; kss_provenance: string | null; horas_sono: number | null }>();
+    .first<{ id: string; kss_score: number; kss_provenance: string | null; horas_sono: number | null; jornada_inicio_prevista: string | null }>();
 
   if (!checkin?.id) {
     return c.json(
@@ -297,6 +298,10 @@ router.post('/', async (c) => {
       },
       409,
     );
+  }
+
+  if (isAtOrAfterFrmsPresentation(new Date(), checkin.jornada_inicio_prevista)) {
+    return c.json({ success: false, error: 'post_presentation_readiness_not_allowed' }, 409);
   }
 
   // Legacy numeric KSS without provenance is not evidence of a crew response.

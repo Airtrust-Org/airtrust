@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import type { Env } from '../../types';
 
@@ -51,7 +51,7 @@ type MockStatement = {
 };
 
 function createDb(
-  checkin: { id: string; kss_score: number; kss_provenance?: string | null; horas_sono: number | null } | null = null,
+  checkin: { id: string; kss_score: number; kss_provenance?: string | null; horas_sono: number | null; jornada_inicio_prevista?: string | null } | null = null,
   readinessRows: Array<Record<string, unknown>> = [],
   recoveryReadError?: Error,
 ) {
@@ -72,7 +72,7 @@ function createDb(
           if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ?')) {
             return { id: 70 } as T;
           }
-          if (normalized.includes('FROM frms_fadiga_checkin')) return checkin as T | null;
+          if (normalized.includes('FROM frms_fadiga_checkin')) return checkin ? { jornada_inicio_prevista: '23:59', ...checkin } as T : null;
           // No prior recovery activity is normal. Do not simulate an unexpected
           // SQL failure just because the readiness route rechecks that date.
           if (normalized.includes('FROM frms_recovery_activity_day')) {
@@ -136,6 +136,8 @@ const readinessRow = {
 
 describe('FRMS readiness route', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-27T12:00:00Z'));
     vi.clearAllMocks();
     authState.role = 'tripulante';
     countReadinessBaselineSessionsMock.mockResolvedValue(0);
@@ -153,6 +155,8 @@ describe('FRMS readiness route', () => {
       criticalSignals: [],
     });
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it('never exposes an unverified historical baseline as ready, regardless of count', async () => {
     countReadinessBaselineSessionsMock.mockResolvedValue(30);
@@ -183,6 +187,24 @@ describe('FRMS readiness route', () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ error: 'retrospective_readiness_not_allowed' });
     expect(statements.some((query) => query.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects a standalone objective test after the crew presentation without persistence', async () => {
+    const { db } = createDb({
+      id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8,
+      jornada_inicio_prevista: '08:00',
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'post_presentation_readiness_not_allowed' });
     expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
   });
 
