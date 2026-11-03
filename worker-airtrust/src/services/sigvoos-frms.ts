@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { fetchCompleteSigvoosWindowGuard } from './sigvoos-pagination-guard';
 import { calcDuracaoMinutos } from '../lib/frms/calculos';
+import { shouldAdvanceSigvoosSyncProgress } from '../lib/frms/sigvoos-sync-progress';
+export { shouldAdvanceSigvoosSyncProgress } from '../lib/frms/sigvoos-sync-progress';
 import { LIMITES_DEFAULT } from '../lib/frms/types';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
@@ -2359,21 +2361,6 @@ async function insertPreviewImportacao(
       timestamp,
     )
     .run();
-}
-
-/** A historical recheck must never roll the last completed import date backwards. */
-export function shouldAdvanceSigvoosSyncProgress(
-  currentTo: string | null | undefined,
-  candidateTo: string,
-): boolean {
-  const valid = (date: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
-    !Number.isNaN(new Date(`${date}T00:00:00Z`).getTime()) &&
-    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
-  if (!valid(candidateTo) || (currentTo && !valid(currentTo))) {
-    throw new Error('SIGVOOS_INVALID_PROGRESS_DATE');
-  }
-  return !currentTo || candidateTo >= currentTo;
 }
 
 export async function persistSigvoosSyncMetadata(
