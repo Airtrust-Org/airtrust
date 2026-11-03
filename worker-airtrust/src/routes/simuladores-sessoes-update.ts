@@ -30,6 +30,11 @@ import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
 import { syncExaminadorChecks, syncFichasEspeciais } from '../services/simuladores/session-examiner-checks';
 import {
+  applySessaoScheduleUpdate,
+  findConflitoDeAgendamento,
+  planSessaoSchedule,
+} from '../services/simuladores/session-schedule-update';
+import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
 
@@ -148,57 +153,13 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       examinadorIdBodyRaw: checksSync.examinadorIdBodyRaw,
     });
 
-    // Determinar tipo_dispositivo final
-    const tipoDispositivoFinal: 'SIMULADOR' | 'AERONAVE' =
-      b.tipo_dispositivo === 'AERONAVE'
-        ? 'AERONAVE'
-        : (a as any).tipo_dispositivo === 'AERONAVE'
-          ? 'AERONAVE'
-          : 'SIMULADOR';
-
-    // Validação de horário + conflito (apenas para simuladores)
-    const simuladorIdFinal = Number(b.simulador_id ?? a.simulador_id);
-    const dataFinal = String(b.data ?? a.data);
-    const inicioStr = b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio;
-    const fimStr = b.horario_fim !== undefined ? b.horario_fim : a.hora_fim;
-
-    if (!inicioStr || !fimStr) {
-      return c.json({ success: false, error: 'Horário de início e fim são obrigatórios' }, 400);
+    const schedule = planSessaoSchedule(b, a);
+    if (!schedule.ok) {
+      return c.json({ success: false, error: schedule.error }, schedule.status);
     }
-
-    const inicioMin = timeToMinutes(inicioStr);
-    const fimMin = timeToMinutes(fimStr);
-    if (inicioMin === null || fimMin === null) {
-      return c.json({ success: false, error: 'Horários inválidos (use HH:MM)' }, 400);
-    }
-    if (fimMin === inicioMin) {
-      return c.json(
-        { success: false, error: 'Horário final deve ser diferente do horário inicial' },
-        400,
-      );
-    }
-
-    if (tipoDispositivoFinal === 'SIMULADOR' && simuladorIdFinal) {
-      const conflito = await findSessaoConflict(c.env.DB, {
-        simuladorId: simuladorIdFinal,
-        data: dataFinal,
-        inicioMin,
-        fimMin,
-        excludeId: id,
-      });
-      if (conflito) {
-        const hi =
-          typeof conflito.hora_inicio === 'string' ? conflito.hora_inicio.substring(0, 5) : '';
-        const hf = typeof conflito.hora_fim === 'string' ? conflito.hora_fim.substring(0, 5) : '';
-        return c.json(
-          {
-            success: false,
-            code: 'SCHEDULE_CONFLICT',
-            error: `Conflito de agendamento: já existe uma sessão neste simulador de ${hi} a ${hf}. Escolha outro horário.`,
-          },
-          409,
-        );
-      }
+    const conflito = await findConflitoDeAgendamento(c.env.DB, schedule.plan, id);
+    if (conflito) {
+      return c.json({ success: false, code: 'SCHEDULE_CONFLICT', error: conflito }, 409);
     }
 
     console.log('[PUT /sessoes] ANTES:', { id, tipo_sessao: a.tipo_sessao, nome: a.nome });
@@ -207,74 +168,16 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       tema_sessao: b.tema_sessao,
     });
 
-    const templateIdFinal = await resolveTemplateIdSessao(c.env.DB, {
+    const { simuladorIdFinal, dataFinal } = schedule.plan;
+    const { templateIdFinal } = await applySessaoScheduleUpdate(c.env.DB, {
       empresaId,
-      templateId: templateIdBody !== undefined ? templateIdBody : (a as any).template_id,
-      temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-      tipoSessaoCodigo: b.tipo_sessao !== undefined ? b.tipo_sessao : a.tipo_sessao,
-      modeloAeronave: modeloAeronaveSessao,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      templateIdBody,
+      modeloAeronaveSessao,
+      tipoDispositivoFinal: schedule.plan.tipoDispositivoFinal,
     });
-
-    // Verificar se as colunas tipo_dispositivo e aeronave_id existem (migration 0364)
-    const agendamentoColumns = await getSchemaColumns(c.env.DB, 'simulador_agendamentos');
-    const hasTipoDispositivoUpd = agendamentoColumns.has('tipo_dispositivo');
-    const hasAeronaveIdUpd = agendamentoColumns.has('aeronave_id');
-
-    const updateFields = hasTipoDispositivoUpd && hasAeronaveIdUpd
-      ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?"
-      : "UPDATE simulador_agendamentos SET simulador_id=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?";
-
-    const updateBinds = hasTipoDispositivoUpd && hasAeronaveIdUpd
-      ? [
-          b.simulador_id !== undefined ? b.simulador_id : a.simulador_id,
-          b.aeronave_id !== undefined ? b.aeronave_id : (a as any).aeronave_id,
-          tipoDispositivoFinal,
-          b.data || a.data,
-          b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio,
-          b.horario_fim !== undefined ? b.horario_fim : a.hora_fim,
-          b.duracao_minutos !== undefined ? b.duracao_minutos : a.duracao_minutos,
-          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
-          b.tipo_sessao || a.tipo_sessao,
-          templateIdFinal,
-          b.status || a.status,
-          b.observacoes !== undefined ? b.observacoes : a.observacoes,
-          b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-          id,
-          empresaId,
-        ]
-      : [
-          b.simulador_id || a.simulador_id,
-          b.data || a.data,
-          b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio,
-          b.horario_fim !== undefined ? b.horario_fim : a.hora_fim,
-          b.duracao_minutos !== undefined ? b.duracao_minutos : a.duracao_minutos,
-          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
-          b.tipo_sessao || a.tipo_sessao,
-          templateIdFinal,
-          b.status || a.status,
-          b.observacoes !== undefined ? b.observacoes : a.observacoes,
-          b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-          id,
-          empresaId,
-        ];
-
-    // UPDATE: incluindo hora_inicio, hora_fim, nome (tema_sessao), tipo_dispositivo, aeronave_id
-    await c.env.DB.prepare(updateFields)
-      .bind(...updateBinds)
-      .run();
-
-    // Sincronizar data_conclusao nas qualificações PLANEJADAS vinculadas (se a data mudou)
-    if (b.data && b.data !== (a as any).data) {
-      await c.env.DB.prepare(
-        `UPDATE qualificacoes_historico
-         SET data_conclusao=?, updated_at=datetime('now')
-         WHERE sessao_id=?
-           AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
-           AND deleted_at IS NULL`,
-      )
-        .bind(b.data, id)
-        .run();
-    }
 
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
     const diag: Record<string, unknown> = {};

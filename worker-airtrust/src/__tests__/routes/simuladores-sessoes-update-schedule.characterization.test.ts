@@ -279,5 +279,9 @@ describe('PUT /sessoes/:id — data das qualificações planejadas', () => {
     await put(10, { data: '2026-05-10' });
     await put(10, { observacoes: 'x' });
     expect(data(1)).toBe('2026-05-10');
+    // nem sequer reescreve a linha (updated_at continua nulo)
+    expect(
+      rows<{ updated_at: string | null }>('SELECT updated_at FROM qualificacoes_historico WHERE id = 1')[0].updated_at,
+    ).toBeNull();
   });
 });
