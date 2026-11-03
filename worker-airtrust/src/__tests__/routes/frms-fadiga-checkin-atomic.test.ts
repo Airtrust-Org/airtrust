@@ -145,6 +145,11 @@ describe('daily check-in atomic commit', () => {
     expect(writes[12].sql).toContain('INSERT INTO frms_fadiga_evento');
     expect(writes[12].binds[1]).toBe(7);
     expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ kss_field_provenance: 'CREW_REPORTED', kss_field_provenance_version: 'CHECKIN_SERVER_V1' });
+    expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ declared_evidence: {
+      contract: 'FRMS_CREW_DECLARATION_V1', reference_date: '2026-10-16',
+      wake_time: '06:15', kss_score: 3, kss_provenance: 'CREW_REPORTED',
+      horas_sono_24h: 7, fit_for_duty: 1, hora_apresentacao: '07:00',
+    } });
     expect(syncMock).toHaveBeenCalledWith(expect.objectContaining({ readinessAlreadyPersisted: true }));
   });
 
@@ -163,6 +168,9 @@ describe('daily check-in atomic commit', () => {
     expect(statements[0].binds.slice(-4)).toEqual(['checkin-present', 7, 70, '2026-10-16']);
     expect(statements[1].sql).toContain('INSERT INTO frms_fadiga_evento');
     expect(statements[1].binds[3]).toBe('CHECKIN_ATUALIZADO');
+    expect(JSON.parse(String(statements[1].binds[4]))).toMatchObject({
+      declared_evidence: { contract: 'FRMS_CREW_DECLARATION_V1', kss_score: 3, horas_sono_24h: 7 },
+    });
   });
 
   it('prevalidates malformed trial timing without mutating an existing check-in', async () => {
