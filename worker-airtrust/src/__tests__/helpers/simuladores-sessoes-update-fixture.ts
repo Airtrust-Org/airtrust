@@ -12,7 +12,7 @@ export function createSessoesUpdateSchema(sqlite: SqliteD1Database): void {
 
     CREATE TABLE simuladores (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, aeronave_codigo TEXT, codigo_aeronave TEXT,
-      tipo TEXT, modelo TEXT, deleted_at TEXT
+      tipo TEXT, modelo TEXT, nome TEXT, deleted_at TEXT
     );
     INSERT INTO simuladores (id, empresa_id, aeronave_codigo) VALUES (1, 1, 'AW139');
 
@@ -35,6 +35,7 @@ export function createSessoesUpdateSchema(sqlite: SqliteD1Database): void {
     ALTER TABLE funcionarios ADD COLUMN is_instrutor INTEGER DEFAULT 0;
     ALTER TABLE funcionarios ADD COLUMN is_examinador INTEGER DEFAULT 0;
     ALTER TABLE funcionarios ADD COLUMN is_checador INTEGER DEFAULT 0;
+    ALTER TABLE funcionarios ADD COLUMN email TEXT;
     INSERT INTO funcionarios (id, empresa_id, nome, is_instrutor, is_examinador, is_checador) VALUES
       (100, 1, 'Instrutor', 1, 0, 0),
       (200, 1, 'Examinador', 0, 1, 0),
@@ -68,7 +69,7 @@ export function createSessoesUpdateSchema(sqlite: SqliteD1Database): void {
     CREATE TABLE tipos_sessao (id INTEGER PRIMARY KEY, empresa_id INTEGER, codigo TEXT, deleted_at TEXT);
     CREATE TABLE modelos_sessao (
       id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, codigo TEXT, nome TEXT, tipo_sessao_id INTEGER,
-      modelo_aeronave TEXT, deleted_at TEXT
+      modelo_aeronave TEXT, gera_qualificacao INTEGER DEFAULT 0, deleted_at TEXT
     );
     INSERT INTO modelos_sessao (id, empresa_id, codigo) VALUES (77, 1, 'CRED-EXA'), (88, 2, 'CRED-EXA');
     CREATE TABLE fichas_sessao (
@@ -76,10 +77,18 @@ export function createSessoesUpdateSchema(sqlite: SqliteD1Database): void {
       instrutor_id INTEGER, tipo_sessao TEXT, tipo_aeronave TEXT, data_sessao TEXT, status TEXT,
       template_id INTEGER, empresa_id INTEGER NOT NULL, assinatura_aluno_timestamp TEXT,
       assinatura_instrutor_timestamp TEXT, assinatura_aluno_imagem TEXT, assinatura_instrutor_imagem TEXT,
-      data_conclusao TEXT, deleted_at TEXT
+      data_conclusao TEXT, resultado_final TEXT, aprovado INTEGER, observacoes TEXT, observacoes_gerais TEXT,
+      assinatura_aluno_ip TEXT, assinatura_instrutor_ip TEXT, assinatura_tripulante INTEGER DEFAULT 0,
+      assinatura_instrutor INTEGER DEFAULT 0, assinatura_aluno_completa INTEGER DEFAULT 0,
+      assinatura_instrutor_completa INTEGER DEFAULT 0, updated_at TEXT, deleted_at TEXT
     );
     CREATE TABLE fichas_sessao_manobras (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, ficha_id INTEGER NOT NULL, deleted_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ficha_id INTEGER NOT NULL, resultado TEXT, observacoes TEXT,
+      updated_at TEXT, deleted_at TEXT
+    );
+    CREATE TABLE sessoes_participantes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT, sessao_id INTEGER NOT NULL, funcionario_id INTEGER NOT NULL,
+      funcao TEXT, status TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT
     );
     CREATE TABLE auditoria_avancada_v2 (
       id INTEGER PRIMARY KEY AUTOINCREMENT, tabela TEXT, acao TEXT, registro_id TEXT,
