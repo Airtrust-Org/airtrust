@@ -115,10 +115,13 @@ export function resolveNextSigvoosDay(
   legacyLastTo: string | null | undefined,
   operationalDate: string,
 ): string | null {
+  // A day is eligible only after it has ended in the operational IANA timezone.
+  // The current day may still have flights or reports arriving after the cron.
+  const lastClosedDay = addIsoDay(operationalDate, -1);
   const lastTo = durableLastTo || legacyLastTo || null;
-  if (!lastTo) return operationalDate;
+  if (!lastTo) return lastClosedDay;
   const candidate = addIsoDay(lastTo, 1);
-  if (candidate > operationalDate) return null;
+  if (candidate > lastClosedDay) return null;
   // The job already processes a single operational day per invocation. Never
   // jump the watermark forward to enforce a catch-up horizon: doing so silently
   // discards every missed day before that horizon. Resume from the exact next
