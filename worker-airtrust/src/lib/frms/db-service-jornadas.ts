@@ -558,6 +558,9 @@ export async function recalcularPipeline(
       hora_termino: jornada.hora_termino,
       hora_dormiu: canUseEffectiveness ? jornada.hora_dormiu ?? null : null,
       hora_acordou: canUseEffectiveness ? checkinEvidence?.wakeTime ?? null : null,
+      sono_efetivo_min: canUseEffectiveness && checkinEvidence?.sleepHours24h != null
+        ? Math.round(checkinEvidence.sleepHours24h * 60)
+        : null,
       dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
