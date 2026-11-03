@@ -1669,7 +1669,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.score_fadiga END) AS media_score,
            COUNT(*) AS total_checkins, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
@@ -1687,7 +1687,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
            SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
@@ -1703,7 +1703,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga IN ('LARANJA', 'VERMELHO') THEN 1 ELSE 0 END) AS ocorrencias_laranja_vermelho,
            AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END) AS media_kss
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
@@ -1718,11 +1718,11 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     const correlacaoSonoKss = await c.env.DB.prepare(
       `SELECT ch.horas_sono, ch.kss_score
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
-            AND ch.kss_provenance = 'CREW_REPORTED'
+           AND ch.kss_provenance = 'CREW_REPORTED'
            AND ${analyticsSectorScope.clause}`,
     )
       .bind(empresaId, dataInicio, dataFim, ...analyticsSectorScope.bindings)
@@ -1735,9 +1735,9 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            ffj.effectiveness_pct,
            f.nome AS tripulante_nome
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          JOIN frms_jornada fj
-           ON fj.tripulante_id = ch.funcionario_id
+           ON fj.tripulante_id = ch.funcionario_id AND fj.empresa_id = ch.empresa_id
           AND fj.data = ch.data_checkin
           AND fj.deleted_at IS NULL
          JOIN frms_fatorizacao_jornada ffj ON ffj.jornada_id = fj.id AND ffj.deleted_at IS NULL
@@ -1862,7 +1862,7 @@ router.get('/fadiga-checkin/export', requirePermission('frms', 'visualizar', 'ma
            ch.associado_frat_avaliacao_id,
            ch.observacoes
          FROM frms_fadiga_checkin ch
-         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
+         JOIN funcionarios f ON f.id = ch.funcionario_id AND f.empresa_id = ch.empresa_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
            AND ch.deleted_at IS NULL
            AND ch.data_checkin BETWEEN ? AND ?
