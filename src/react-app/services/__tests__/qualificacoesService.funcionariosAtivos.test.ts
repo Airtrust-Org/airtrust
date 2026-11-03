@@ -27,7 +27,14 @@ function mockPaginatedEmployees(total: number) {
     expect(params.get('order')).toBe('ASC');
     expect(Number(params.get('limit'))).toBe(100);
     const page = Number(params.get('page'));
-    return { success: true, data: all.slice((page - 1) * 100, page * 100) };
+    return {
+      success: true,
+      data: {
+        success: true,
+        data: all.slice((page - 1) * 100, page * 100),
+        pagination: { page, totalPages: Math.ceil(total / 100), total },
+      },
+    };
   });
 }
 
@@ -66,7 +73,10 @@ describe('qualificacoesService.lookups.funcionariosAtivos', () => {
     getMock
       .mockResolvedValueOnce({
         success: true,
-        data: Array.from({ length: 100 }, (_, index) => funcionario(index + 1)),
+        data: {
+          success: true,
+          data: Array.from({ length: 100 }, (_, index) => funcionario(index + 1)),
+        },
       })
       .mockResolvedValueOnce({ success: false, error: 'Falha de rede' });
     const result = await qualificacoesService.lookups.funcionariosAtivos();
@@ -77,10 +87,21 @@ describe('qualificacoesService.lookups.funcionariosAtivos', () => {
   it('stops safely if an API repeats the same full page', async () => {
     getMock.mockResolvedValue({
       success: true,
-      data: Array.from({ length: 100 }, (_, index) => funcionario(index + 1)),
+      data: {
+        success: true,
+        data: Array.from({ length: 100 }, (_, index) => funcionario(index + 1)),
+      },
     });
     const result = await qualificacoesService.lookups.funcionariosAtivos();
     expect(result.data).toHaveLength(100);
     expect(getMock).toHaveBeenCalledTimes(2);
   });
+  it('rejects HTTP success with an invalid employee API envelope', async () => {
+    getMock.mockResolvedValue({ success: true, data: { success: false, data: null } });
+    const result = await qualificacoesService.lookups.funcionariosAtivos();
+    expect(result.success).toBe(false);
+    expect(result.data).toBeUndefined();
+    expect(getMock).toHaveBeenCalledTimes(1);
+  });
+
 });
