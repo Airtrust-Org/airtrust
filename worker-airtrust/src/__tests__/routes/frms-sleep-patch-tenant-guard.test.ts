@@ -28,7 +28,7 @@ vi.mock('../../lib/frms/db-service-jornadas', async (importOriginal) => ({
 
 import frmsRoutes from '../../routes/frms';
 
-function database() {
+function database(changes = 1) {
   const calls: Array<{ sql: string; binds: unknown[]; action: string }> = [];
   const db = {
     prepare: (sql: string) => {
@@ -48,7 +48,7 @@ function database() {
         },
         run: async () => {
           calls.push({ sql, binds, action: 'run' });
-          return { success: true, meta: { changes: 1 } };
+          return { success: true, meta: { changes } };
         },
       };
       return stmt;
@@ -82,6 +82,14 @@ describe('AUD-014 sleep PATCH tenant and sector defense', () => {
     expect(update!.sql).toContain('f.id = CAST(frms_jornada.tripulante_id AS INTEGER)');
     expect(update!.binds).toEqual(['23:00', 'j-1', 42]);
     expect(recalcularPipeline).toHaveBeenCalledOnce();
+  });
+
+  it('does not recompute a journey when the scoped UPDATE affects zero rows', async () => {
+    const { db } = database(0);
+    const response = await frmsRoutes.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'SLEEP_PATCH_SCOPE_OR_VERSION_CONFLICT' });
+    expect(recalcularPipeline).not.toHaveBeenCalled();
   });
 
   it('denies other-sector access before reading or updating any journey', async () => {
