@@ -1113,7 +1113,7 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="PVT diário (60 segundos): avalia atenção e reação. Complementa KSS e sono; não determina aptidão isoladamente."
+                hint="Teste breve de atenção AirTrust (60 segundos, não validado como PVT-B): avalia atenção e reação. Não determina aptidão nem libera voo."
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
