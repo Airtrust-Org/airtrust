@@ -923,30 +923,24 @@ async function runSigvoosFrmsDailySync(
       }
 
       const operationalDate = fmtSaoPauloDate(now);
-
-      // Já sincronizou o dia atual — nada a fazer.
-      if (config.last_sync_to === operationalDate) {
-        continue;
-      }
-
-      // Se houve dias sem sincronização (ex: falha de rede, cron miss), preenche o gap
-      // começando do dia seguinte ao último sync bem-sucedido, limitado a 7 dias atrás.
       const addIsoDay = (iso: string, days: number): string => {
         const d = new Date(`${iso}T00:00:00Z`);
         d.setUTCDate(d.getUTCDate() + days);
         return d.toISOString().slice(0, 10);
       };
-
-      let fromDate = operationalDate;
-      if (config.last_sync_to) {
-        const candidate = addIsoDay(config.last_sync_to, 1);
-        const maxLookback = addIsoDay(operationalDate, -7);
-        if (candidate < operationalDate && candidate >= maxLookback) {
-          fromDate = candidate;
-        }
+      // Cron legada também não pode certificar D em pleno andamento.
+      const lastClosedDay = addIsoDay(operationalDate, -1);
+      if (config.last_sync_to && config.last_sync_to >= lastClosedDay) {
+        continue;
       }
 
-      const window = { from: fromDate, to: operationalDate };
+      // Handoff em fallback legado: avançar somente um dia encerrado por vez,
+      // sem descartar lacunas acima de sete dias e sem presumir D consolidado.
+      const nextDay = config.last_sync_to
+        ? addIsoDay(config.last_sync_to, 1)
+        : lastClosedDay;
+      if (nextDay > lastClosedDay) continue;
+      const window = { from: nextDay, to: nextDay };
 
       console.log(
         `[SIGVOOS_CRON] Empresa ${empresaId ?? 'global'}: sincronizando ${window.from} → ${window.to}`,
