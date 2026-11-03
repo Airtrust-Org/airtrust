@@ -19,6 +19,12 @@ vi.mock('../../lib/frms/controle-voos-shadow-flag', () => ({
 
 import { runTenantIngestion } from '../../cron/resilient/sigvoos-frms';
 
+// The isolated lease mock intentionally returns execute() detail rather than the
+// scheduler wrapper's public CronJobRunSummary.
+function executionDetail(value: unknown): { outcome: string; watermarkTo?: string; metadata?: Record<string, unknown> } {
+  return value as { outcome: string; watermarkTo?: string; metadata?: Record<string, unknown> };
+}
+
 describe('SIGVOOS resilient daily retrospective flow', () => {
   const now = new Date('2026-11-03T19:00:00.000Z');
   const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -55,7 +61,7 @@ describe('SIGVOOS resilient daily retrospective flow', () => {
       watermark_to: '2026-11-02',
       metadata_json: JSON.stringify({ stage: 'COMPLETE', lastReviewedOperationalDate: '2026-11-02' }),
     };
-    const first = await runTenantIngestion(db, 7, env, logger, now);
+    const first = executionDetail(await runTenantIngestion(db, 7, env, logger, now));
     expect(mocks.sync).toHaveBeenCalledTimes(1);
     expect(mocks.sync.mock.calls[0]?.[3]).toMatchObject({
       from: '2026-10-31', to: '2026-11-02', clearExisting: false,
@@ -70,7 +76,7 @@ describe('SIGVOOS resilient daily retrospective flow', () => {
       watermark_from: '2026-10-31',
       metadata_json: JSON.stringify(first.metadata),
     };
-    const second = await runTenantIngestion(db, 7, env, logger, now);
+    const second = executionDetail(await runTenantIngestion(db, 7, env, logger, now));
     expect(mocks.sync).toHaveBeenCalledTimes(1);
     expect(second.outcome).toBe('SUCCEEDED');
     expect(second.metadata).toMatchObject({ lastReviewedOperationalDate: '2026-11-03' });
@@ -82,7 +88,7 @@ describe('SIGVOOS resilient daily retrospective flow', () => {
       username: 'qa', password: 'secret', auto_sync_enabled: 'true',
       auto_sync_hora_utc: '19', last_sync_to: '2026-10-29',
     });
-    const result = await runTenantIngestion(db, 7, env, logger, now);
+    const result = executionDetail(await runTenantIngestion(db, 7, env, logger, now));
     expect(mocks.sync.mock.calls[0]?.[3]).toMatchObject({
       from: '2026-10-30', to: '2026-10-30',
     });
