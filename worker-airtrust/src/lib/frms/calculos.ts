@@ -386,6 +386,8 @@ export function calcEffectiveness(
     hora_termino?: string | null;
     hora_dormiu?: string | null;
     hora_acordou?: string | null;
+    /** Duração real declarada no check-in, em minutos. */
+    sono_efetivo_min?: number | null;
     dia_periodo_embarcado?: number | null;
     total_dias_periodo?: number | null;
   },
@@ -426,10 +428,11 @@ export function calcEffectiveness(
       horasSonoPadrao: cfgSono.horasSonoPadrao,
       horaDormiu: dormiuMin,
       horaAcordou: acordouMin,
+      duracaoInformadaMin: jornada.sono_efetivo_min,
     });
     duracaoSono = sono.sonoEfetivoMin;
     horaDespertar = minutesToHhmm(sono.tAcordouMin);
-    horaInicioSono = minutesToHhmm(sono.tDormiuMin);
+    horaInicioSono = sono.tDormiuMin == null ? null : minutesToHhmm(sono.tDormiuMin);
     fonteSono = sono.fonteSono;
     despertarEstimado = sono.despertarEstimado;
     acordouNaWocl = isWithinWOCL(sono.tAcordouMin, v2?.fadigaPolicy);
