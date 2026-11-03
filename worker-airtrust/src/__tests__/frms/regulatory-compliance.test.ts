@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateRegulatoryCompliance, sanitizeRollingRegulatoryEvidence } from '../../lib/frms/regulatory-compliance';
+import { evaluateRegulatoryCompliance, hasCompleteRollingFlightCoverage, sanitizeRollingRegulatoryEvidence, type RollingFlightCoverageEvidence } from '../../lib/frms/regulatory-compliance';
 import { evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
 
 const limites = {
@@ -29,7 +29,46 @@ const work = {
   completeThroughDate: true,
   incompleteReasons: [],
 };
+const completeCoverage: RollingFlightCoverageEvidence = {
+  sourceVerified: true,
+  windows: {
+    month: { expectedDays: 8, confirmedDays: 8 },
+    year: { expectedDays: 70, confirmedDays: 70 },
+    days28: { expectedDays: 8, confirmedDays: 8 },
+    days365: { expectedDays: 70, confirmedDays: 70 },
+  },
+};
+
 describe('FRMS regulatory compliance evaluator', () => {
+  it('does not mistake numeric flight totals without source-backed day coverage for compliance', () => {
+    const input = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 0, rolling, work, limites,
+    };
+    const unverified = evaluateRegulatoryCompliance(input);
+    expect(unverified.status).toBe('UNKNOWN');
+    expect(unverified.unknownReasons).toContain('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+    expect(unverified.violations).toEqual([]);
+
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, sourceVerified: false })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days28: { expectedDays: 8, confirmedDays: 7 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 8, confirmedDays: 9 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 1.5, confirmedDays: 1.5 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage(completeCoverage)).toBe(true);
+    const complete = evaluateRegulatoryCompliance({ ...input, rollingCoverage: completeCoverage });
+    expect(complete.status).toBe('COMPLIANT');
+  });
+
+  it('keeps proven flight-hour limit violations even when import coverage is unknown', () => {
+    const result = evaluateRegulatoryCompliance({
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 0, rolling: { ...rolling, hv_dia_min: 481 }, work, limites,
+    });
+    expect(result.status).toBe('VIOLATION');
+    expect(result.violations.map((v) => v.code)).toContain('LAW_HELI_FLIGHT_DAY_8H');
+    expect(result.unknownReasons).toContain('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+  });
+
   it('does not flag values exactly at the legal limit', () => {
     const result = evaluateRegulatoryCompliance({
       empresaId: 6,
@@ -43,6 +82,7 @@ describe('FRMS regulatory compliance evaluator', () => {
         hv_ano_calendario_min: 930 * 60,
       },
       work: { ...work, monthWorkToDateMin: 176 * 60 },
+      rollingCoverage: completeCoverage,
       limites,
     });
     expect(result.status).toBe('COMPLIANT');
@@ -220,7 +260,7 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     ]);
     const base = {
       empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
-      journeyDurationMin: 8 * 60, rolling, work, limites,
+      journeyDurationMin: 8 * 60, rolling, rollingCoverage: completeCoverage, work, limites,
     };
 
     it('sem ativação no perfil, expõe o achado como pendente de validação sem mudar o status', () => {
@@ -272,7 +312,7 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     };
     const base = {
       empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
-      costaDoSolActApplicable: true, journeyDurationMin: 8 * 60, rolling, work, limites,
+      costaDoSolActApplicable: true, journeyDurationMin: 8 * 60, rolling, rollingCoverage: completeCoverage, work, limites,
     };
 
     it('art. 41 §§2º–3º são LAW e citam o ACT dentro da vigência', () => {
