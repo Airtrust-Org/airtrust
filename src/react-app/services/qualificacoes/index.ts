@@ -277,30 +277,44 @@ export const qualificacoesService = {
   // ─────────────────────────────────────────────────────────────
 
   lookups: {
-    async funcionariosAtivos(limit = 1000): Promise<ApiResponse<FuncionarioResumo[]>> {
-      // GET /funcionarios enforces a 100-row maximum regardless of the requested limit.
-      // Fetch every authorized page so employees after the first 100 remain selectable.
+    async funcionariosAtivos(limit?: number): Promise<ApiResponse<FuncionarioResumo[]>> {
+      // The employee endpoint caps each response at 100. Load every authorized
+      // page; instructors are eligible employees too and must not be filtered.
       const pageSize = 100;
+      const maxItems =
+        typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+          ? Math.floor(limit)
+          : Number.POSITIVE_INFINITY;
       const funcionarios: FuncionarioResumo[] = [];
       const seen = new Set<number>();
-      const maxItems = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 1000;
-      for (let page = 1; funcionarios.length < maxItems; page++) {
+
+      for (let page = 1; ; page++) {
+        // Use the unique ID for stable pagination; the modal sorts names locally.
         const response = await httpClient.get<FuncionarioResumo[]>(
-          `/funcionarios?status=ativos&orderBy=nome&order=ASC&limit=${pageSize}&page=${page}`,
+          `/funcionarios?status=ativos&orderBy=id&order=ASC&limit=${pageSize}&page=${page}`,
         );
         if (!response.success) return response;
-        const items = response.data || [];
-        for (const funcionario of items) {
+        if (!Array.isArray(response.data)) {
+          return { success: false, error: 'Resposta inválida na listagem de funcionários.' };
+        }
+
+        let addedOnPage = 0;
+        for (const funcionario of response.data) {
           if (!seen.has(funcionario.id)) {
             seen.add(funcionario.id);
             funcionarios.push(funcionario);
+            addedOnPage++;
+            if (funcionarios.length >= maxItems) break;
           }
         }
-        if (items.length < pageSize || items.length === 0) break;
-        // Stop on repeated pages rather than looping forever on a broken API.
-        if (page > 1 && seen.size < (page - 1) * pageSize) break;
+
+        // Protect against empty, partial or repeating pages.
+        if (response.data.length < pageSize || addedOnPage === 0 || funcionarios.length >= maxItems) {
+          break;
+        }
       }
-      return { success: true, data: funcionarios.slice(0, maxItems) };
+
+      return { success: true, data: funcionarios };
     },
 
     async tiposQualificacao(
