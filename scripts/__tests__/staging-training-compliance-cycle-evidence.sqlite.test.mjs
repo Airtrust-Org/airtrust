@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
+import { classifyQAD1CliError } from '../staging/qa-d1-cli-error.mjs';
 
 const code = 'QA-COMP-LIFE-39349812345';
 const marker = 'QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_39349812345';
@@ -24,21 +25,21 @@ function createDb() {
     CREATE TABLE empresas(id INTEGER PRIMARY KEY,codigo TEXT);
     CREATE TABLE funcionarios(id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula TEXT);
     CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY,empresa_id INTEGER,titulo TEXT,observacoes TEXT,qualificacao_tipo_id INTEGER,deleted_at TEXT);
-    CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER,curso_id INTEGER,funcionario_id INTEGER,status TEXT,deleted_at TEXT);
-    CREATE TABLE qualificacoes_historico(id INTEGER PRIMARY KEY,empresa_id INTEGER,funcionario_id INTEGER,qualificacao_id INTEGER,lms_matricula_id INTEGER,status TEXT,origem_tipo TEXT,data_vencimento TEXT,updated_at TEXT,observacoes TEXT,deleted_at TEXT);
+    CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER,curso_id INTEGER,funcionario_id INTEGER,status TEXT,data_conclusao TEXT,updated_at TEXT,deleted_at TEXT);
+    CREATE TABLE qualificacoes_historico(id INTEGER PRIMARY KEY,empresa_id INTEGER,funcionario_id INTEGER,qualificacao_id INTEGER,lms_matricula_id INTEGER,status TEXT,origem_tipo TEXT,data_conclusao TEXT,data_vencimento TEXT,updated_at TEXT,observacoes TEXT,deleted_at TEXT);
     INSERT INTO empresas VALUES (1,'qa_examiner_training'),(2,'other_tenant');
     INSERT INTO funcionarios VALUES (11,1,'${code}-E1'),(12,1,'${code}-E2'),(21,2,'${code}-E1');
     INSERT INTO lms_cursos VALUES (31,1,'${code} EAD obrigatório','${marker}',41,NULL);
     INSERT INTO lms_matriculas VALUES
-      (51,1,31,11,'CONCLUIDO',NULL),(52,1,31,12,'CONCLUIDO',NULL),
-      (53,1,31,11,'EM_ANDAMENTO',NULL),(54,1,31,11,'CONCLUIDO',NULL),
-      (55,2,31,21,'CONCLUIDO',NULL);
+      (51,1,31,11,'CONCLUIDO',date('now'),NULL,NULL),(52,1,31,12,'CONCLUIDO',date('now'),NULL,NULL),
+      (53,1,31,11,'EM_ANDAMENTO',NULL,NULL,NULL),(54,1,31,11,'CONCLUIDO',date('now'),NULL,NULL),
+      (55,2,31,21,'CONCLUIDO',date('now'),NULL,NULL);
     INSERT INTO qualificacoes_historico VALUES
-      (101,1,11,41,51,'CONCLUIDA','LMS','2099-01-01',NULL,'initial completion',NULL),
-      (102,1,12,41,52,'CONCLUIDA','LMS','2099-01-01',NULL,'employee 2',NULL),
-      (103,1,11,41,53,'CONCLUIDA','LMS','2099-01-01',NULL,'active enrollment',NULL),
-      (104,1,11,41,54,'CANCELADA','LMS','2099-01-01',NULL,'cancelled evidence',NULL),
-      (105,2,21,41,55,'CONCLUIDA','LMS','2099-01-01',NULL,'other tenant',NULL);
+      (101,1,11,41,51,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'initial completion',NULL),
+      (102,1,12,41,52,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'employee 2',NULL),
+      (103,1,11,41,53,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'active enrollment',NULL),
+      (104,1,11,41,54,'CANCELADA','LMS',date('now'),'2099-01-01',NULL,'cancelled evidence',NULL),
+      (105,2,21,41,55,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'other tenant',NULL);
   `);
   return db;
 }
@@ -51,14 +52,49 @@ test('controlled expiry selects and updates only the completed E1 qualification 
     assert.deepEqual(candidates.map((row) => row.id), [101]);
     const update = sql.update.replace('WHERE qh.id=1 ', 'WHERE qh.id=101 ');
     db.exec(update);
-    const target = db.prepare('SELECT data_vencimento,observacoes FROM qualificacoes_historico WHERE id=101').get();
+    // Regression: an unchanged completed LMS enrollment would still look
+    // CONFORME even though the linked history has expired.
+    assert.equal(db.prepare(sql.readback).get().expired_count, 0);
+    const enrollmentUpdate = sql.enrollmentUpdate.replace('WHERE qh.id=1 AND ', 'WHERE qh.id=101 AND ');
+    db.exec(enrollmentUpdate);
+    // Verify both evidence sources in the exact staging readback SELECT.
+    // The deployed D1 rejects long LIKE patterns even though local SQLite accepts them.
+    const readback = db.prepare(sql.readback).get();
+    assert.equal(readback.expired_count, 1);
+    assert.doesNotMatch(sql.readback, /\bLIKE\b/i);
+    const target = db.prepare('SELECT data_conclusao,data_vencimento,observacoes FROM qualificacoes_historico WHERE id=101').get();
+    assert.equal(target.data_conclusao, db.prepare("SELECT date('now','-13 months') AS dt").get().dt);
     assert.ok(target.data_vencimento < new Date().toISOString().slice(0, 10));
+    // Two distinct civil completion dates are needed to prove a genuine renewed
+    // qualification instead of same-day idempotent reuse of expired evidence.
+    assert.notEqual(target.data_conclusao, db.prepare("SELECT date('now') AS dt").get().dt);
+    const enrollment = db.prepare('SELECT data_conclusao FROM lms_matriculas WHERE id=51').get();
+    assert.equal(enrollment.data_conclusao, target.data_conclusao);
     assert.match(target.observacoes, new RegExp(`QA synthetic due date ${marker}`));
     for (const id of [102, 103, 104, 105]) {
-      assert.equal(db.prepare('SELECT data_vencimento FROM qualificacoes_historico WHERE id=?').get(id).data_vencimento, '2099-01-01');
+      const untouched = db.prepare('SELECT data_conclusao,data_vencimento FROM qualificacoes_historico WHERE id=?').get(id);
+      assert.equal(untouched.data_vencimento, '2099-01-01');
+      assert.equal(untouched.data_conclusao, db.prepare("SELECT date('now') AS dt").get().dt);
     }
+    for (const id of [52, 54, 55]) {
+      const untouched = db.prepare('SELECT data_conclusao FROM lms_matriculas WHERE id=?').get(id);
+      assert.equal(untouched.data_conclusao, db.prepare("SELECT date('now') AS dt").get().dt);
+    }
+    assert.equal(db.prepare('SELECT data_conclusao FROM lms_matriculas WHERE id=53').get().data_conclusao, null);
     assert.deepEqual(db.prepare(sql.select).all(), []);
   } finally {
     db.close();
   }
+});
+
+
+test('D1 error classifier emits only safe finite codes, never SQL or credentials', () => {
+  assert.equal(classifyQAD1CliError({
+    stderr: 'Error: D1_ERROR: FOREIGN KEY constraint failed; hidden e-mail test@example.com and SELECT secret',
+  }), 'SQLITE_FOREIGN_KEY');
+  assert.equal(classifyQAD1CliError({ stderr: 'fetch failed: ECONNRESET' }), 'NETWORK');
+  assert.equal(classifyQAD1CliError({ stderr: 'HTTP 403: token my-secret-token' }), 'AUTH_DENIED');
+  assert.equal(classifyQAD1CliError({ stderr: 'Error 429: too many requests' }), 'RATE_LIMIT');
+  assert.equal(classifyQAD1CliError({ stderr: 'no such column: fa.empresa_id' }), 'SQLITE_NO_SUCH_COLUMN');
+  assert.equal(classifyQAD1CliError({ stderr: 'something unexpected with secret=abc' }), 'UNCLASSIFIED');
 });

@@ -152,7 +152,7 @@ describe('AppLayout module gating', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'LMS' })).toHaveAttribute('href', '/lms/cursos');
+    expect(screen.getByRole('link', { name: 'LMS' })).toHaveAttribute('href', '/lms');
   });
 
   it('exibe Controle de Voos para usuário comum com GRANT explícito configurado', () => {

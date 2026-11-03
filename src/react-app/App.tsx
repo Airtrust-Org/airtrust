@@ -359,6 +359,16 @@ function LmsEntryRouter() {
   return <LmsDashboard />;
 }
 
+function LmsCourseEntryRouter() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  const role = user?.role?.toUpperCase() ?? '';
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') {
+    return <Navigate to="/lms" replace />;
+  }
+  return <LmsCatalogo />;
+}
+
 function TreinamentosEntryRouter() {
   const { isLoading, empresas, empresaAtualId } = useAuth();
   const { can, isAluno, isInstrutor } = usePermissions();
@@ -1126,7 +1136,7 @@ export default function App() {
                       path="/lms/cursos"
                       element={
                         <ProtectedRoute>
-                          <LmsCatalogo />
+                          <LmsCourseEntryRouter />
                         </ProtectedRoute>
                       }
                     />

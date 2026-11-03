@@ -177,6 +177,8 @@ export function trainingComplianceRuleApplicabilitySql(
   employeeAlias = 'f',
 ): string {
   const legacyAircraft = sqlNormalizedLegacyAircraft(employeeAlias);
+  // Legacy funcionarios_aeronaves has no empresa_id: the globally unique
+  // employee ID and tenant-scoped aircraft JOIN jointly enforce isolation.
   return `(
     (${ruleAlias}.escopo='EMPRESA'
       OR (${ruleAlias}.escopo='SETOR' AND ${ruleAlias}.setor_id=${employeeAlias}.setor_id)
@@ -195,13 +197,17 @@ export function trainingComplianceRuleApplicabilitySql(
     AND (${ruleAlias}.aeronave_modelo IS NULL OR TRIM(${ruleAlias}.aeronave_modelo)='' OR EXISTS (
       SELECT 1 FROM funcionarios_aeronaves fa JOIN aeronaves a
         ON a.id=fa.aeronave_id AND a.empresa_id=${ruleAlias}.empresa_id AND a.deleted_at IS NULL
-       WHERE fa.funcionario_id=${employeeAlias}.id AND fa.empresa_id=${ruleAlias}.empresa_id
+       WHERE fa.funcionario_id=${employeeAlias}.id
          AND fa.deleted_at IS NULL AND COALESCE(fa.ativo,1)=1
          AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
          AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))
          AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=UPPER(REPLACE(TRIM(${ruleAlias}.aeronave_modelo),' ',''))
     ) OR (NOT EXISTS (
-      SELECT 1 FROM funcionarios_aeronaves fax WHERE fax.funcionario_id=${employeeAlias}.id AND fax.empresa_id=${ruleAlias}.empresa_id AND fax.deleted_at IS NULL AND COALESCE(fax.ativo,1)=1
+      SELECT 1 FROM funcionarios_aeronaves fax
+      JOIN aeronaves ax ON ax.id=fax.aeronave_id
+        AND ax.empresa_id=${ruleAlias}.empresa_id AND ax.deleted_at IS NULL
+      WHERE fax.funcionario_id=${employeeAlias}.id
+        AND fax.deleted_at IS NULL AND COALESCE(fax.ativo,1)=1
     ) AND ('|' || ${legacyAircraft} || '|') LIKE '%|' || UPPER(REPLACE(TRIM(${ruleAlias}.aeronave_modelo),' ','')) || '|%'))
   )`;
 }

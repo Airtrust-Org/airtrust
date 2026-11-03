@@ -436,7 +436,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               {/* LMS standalone — visível somente para alunos/instrutores (não entram no grupo Treinamentos) */}
               {!hideTrainingArea && (isAluno || isInstrutor) && showLms && (
                 <Link
-                  to="/lms/cursos"
+                  to="/lms"
                   className={`flex h-9 items-center rounded-md px-3 text-sm font-medium ${isActivePath('/lms') ? NAV_ACTIVE : NAV_INACTIVE}`}
                 >
                   LMS
@@ -743,7 +743,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               {!hideTrainingArea && (isAluno || isInstrutor) && showLms && (
                 <>
                   <Link
-                    to="/lms/cursos"
+                    to="/lms"
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${isActivePath('/lms') ? 'bg-primary/10 text-primary font-semibold dark:bg-blue-500/15 dark:text-blue-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
                   >
