@@ -9,21 +9,14 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import {
-  isCompletedStatus,
   PLANNED_QUALIFICATION_STATUS_VALUES,
   QUALIFICACAO_STATUS,
   sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
-import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
-import { enviarEmailFichaSessao } from '../lib/fichaEmails';
-import {
-  loadSimulatorSessionNotificationData,
-  sendSimulatorSessionEmailNotifications,
-  shouldNotifySimulatorSessionUpdate,
-} from '../services/simuladores-session-notifications';
+import { loadSimulatorSessionNotificationData, sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 import { requireAdminForDelete } from './simuladores-admin-guard';
-import { syncSessaoEscalaEventos, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, normalizeChecksSessao, listarParticipantesDaSessaoParaQualificacao, sincronizarQualificacoesDaSessaoConcluida } from '../services/simuladores/shared';
+import { syncSessaoEscalaEventos, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, normalizeChecksSessao } from '../services/simuladores/shared';
 import { getTenantContext } from '../middleware/tenant';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
 import { syncExaminadorChecks, syncFichasEspeciais } from '../services/simuladores/session-examiner-checks';
@@ -33,6 +26,13 @@ import {
   planSessaoSchedule,
 } from '../services/simuladores/session-schedule-update';
 import { ensureQualificacoesPlanejadas } from '../services/simuladores/session-planejadas';
+import {
+  avisarInstrutorFichasPendentes,
+  enfileirarEmailDeAtualizacao,
+  publicarEventosDaSessao,
+  sessaoVirouConcluida,
+  sincronizarQualificacoesAoConcluir,
+} from '../services/simuladores/session-completion';
 import {
   applyParticipantes,
   planParticipantes,
@@ -370,18 +370,17 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       .bind(id, empresaId)
       .first<SimuladorAgendamentoRow>();
 
-    const statusAnterior = String((a as any)?.status || '').toUpperCase();
-    const statusNovo = String((u as any)?.status || '').toUpperCase();
-    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
-      try {
-        const syncQualResult = await sincronizarQualificacoesDaSessaoConcluida(c.env.DB, {
-          sessaoId: Number(id),
-          empresaId,
-        });
-        diag.qualificacoesConcluidas = syncQualResult.atualizadas;
-      } catch (error: any) {
-        diag.qualificacoesConcluidasErro = error?.message || String(error);
-      }
+    const virouConcluida = sessaoVirouConcluida(
+      (a as { status?: unknown } | null)?.status,
+      u?.status,
+    );
+    if (virouConcluida) {
+      const syncQual = await sincronizarQualificacoesAoConcluir(c.env.DB, {
+        sessaoId: Number(id),
+        empresaId,
+      });
+      if ('erro' in syncQual) diag.qualificacoesConcluidasErro = syncQual.erro;
+      else diag.qualificacoesConcluidas = syncQual.atualizadas;
     }
 
     console.log('[PUT /sessoes] DEPOIS:', { tipo_sessao: u?.tipo_sessao, nome: u?.nome });
@@ -427,86 +426,27 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       }
     }
 
-    try {
-      const eventEmpresaId = Number((u as any)?.empresa_id || empresaId);
-      const partRows = await c.env.DB.prepare(
-        'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id = ? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .all<{ funcionario_id: string | number }>();
-      if (eventEmpresaId > 0) {
-        await Promise.allSettled(
-          (partRows.results || []).map((participante) =>
-            publishDomainEvent(
-              c.env.DB,
-              'simuladores',
-              isCompletedStatus((u as any)?.status)
-                ? 'SIMULADOR_REALIZADO'
-                : 'SIMULADOR_AGENDADO',
-              {
-                funcionario_id: String(participante.funcionario_id),
-                empresa_id: eventEmpresaId,
-                origem_modulo: 'simuladores',
-                sessao_id: String(id),
-                data_sessao: (u as any)?.data || null,
-                tipo_sessao: (u as any)?.tipo_sessao || null,
-              },
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      console.error('domain_event_error', error);
-    }
+    await publicarEventosDaSessao(c.env.DB, {
+      sessaoId: id,
+      empresaIdPadrao: empresaId,
+      sessao: u,
+    });
 
-    if (shouldNotifySimulatorSessionUpdate(a as any, u as any, participantesParaNotificacaoAlterados)) {
-      const notificationEmpresaId = Number((u as any)?.empresa_id || empresaId);
-      c.executionCtx?.waitUntil(
-        sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(id), {
-          reason: 'updated',
-          empresaId: notificationEmpresaId || undefined,
-        })
-          .then((results) => {
-            const sent = results.filter((item) => item.status === 'sent').length;
-            const skipped = results.filter((item) => item.status === 'skipped').length;
-            const failed = results.filter((item) => item.status === 'failed').length;
-            console.log('[simuladores] session update email notification queued', {
-              sessao_id: id,
-              sent,
-              skipped,
-              failed,
-            });
-          })
-          .catch((error) => {
-            console.error('[simuladores] session update email notification failed', error);
-          }),
-      );
-    }
+    enfileirarEmailDeAtualizacao({
+      env: c.env,
+      db: c.env.DB,
+      getExecutionCtx: () => c.executionCtx,
+      sessaoId: id,
+      empresaIdPadrao: empresaId,
+      antes: a,
+      depois: u as Record<string, unknown> | null,
+      participantesAlterados: participantesParaNotificacaoAlterados,
+    });
 
     // Email: when session transitions to CONCLUIDA and fichas are in AVALIACAO_PENDENTE,
     // notify instrutor to fill the evaluation.
-    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
-      try {
-        const fichasRows = await c.env.DB.prepare(
-          `SELECT id FROM fichas_sessao
-           WHERE agendamento_slot_id = ?
-             AND status = 'AVALIACAO_PENDENTE'
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .all<{ id: number }>();
-
-        for (const ficha of fichasRows.results || []) {
-          enviarEmailFichaSessao(
-            c.env,
-            c.env.DB,
-            Number(ficha.id),
-            'instrutor_avaliacao_pendente',
-          ).catch((err) => console.error('[fichaEmails] fire-and-forget error:', err));
-        }
-      } catch (err) {
-        console.error('[fichaEmails] Erro ao buscar fichas para notificação:', err);
-      }
+    if (virouConcluida) {
+      await avisarInstrutorFichasPendentes(c.env, c.env.DB, id);
     }
 
     const qualificationIntegrationFailed =
