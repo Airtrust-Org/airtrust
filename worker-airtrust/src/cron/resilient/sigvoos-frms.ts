@@ -147,6 +147,27 @@ export function resolveSigvoosNoopWatermark(
   return verified;
 }
 
+/**
+ * Closed-day reconciliation: recheck D-3..D-1 once per operational day after
+ * catching up, but never jump over older unsynchronized days.
+ * Absence from SIGVOOS is not proof of cancellation (separate acceptance).
+ */
+export function resolveSigvoosIngestionWindow(
+  durableLastTo: string | null | undefined,
+  legacyLastTo: string | null | undefined,
+  operationalDate: string,
+  lastReviewedOperationalDate?: string | null,
+): { from: string; to: string; retrospective: boolean } | null {
+  const lastClosedDay = addIsoDay(operationalDate, -1);
+  resolveSigvoosNoopWatermark(durableLastTo, legacyLastTo, operationalDate);
+  const nextDay = resolveNextSigvoosDay(durableLastTo, legacyLastTo, operationalDate);
+  if (nextDay && nextDay < lastClosedDay) {
+    return { from: nextDay, to: nextDay, retrospective: false };
+  }
+  if (!nextDay && lastReviewedOperationalDate === operationalDate) return null;
+  return { from: addIsoDay(lastClosedDay, -2), to: lastClosedDay, retrospective: true };
+}
+
 export function shouldRunSigvoosAtCurrentHour(
   configuredHour: string | null | undefined,
   now: Date,
