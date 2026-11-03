@@ -13,7 +13,7 @@ export type CheckinDeclarationFields = {
   horasSono48h: number | null;
   qualidadeSono: number | null;
   kssScore: number;
-  kssProvenance: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED';
+  kssProvenance: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | 'UNKNOWN';
   apto: 0 | 1;
   jornadaInicioPrevista: string | null;
   oportunidadeSonoHoras24h: number | null;
