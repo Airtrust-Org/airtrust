@@ -298,7 +298,10 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       const plan = planParticipantes({
         atuais: partAntigos,
         enviados: b.participantes as ParticipanteInput[],
-        instrutorEfetivo: b.instrutor_id !== undefined ? b.instrutor_id : (a as any)?.instrutor_id,
+        instrutorEfetivo:
+          b.instrutor_id !== undefined
+            ? b.instrutor_id
+            : (a as { instrutor_id?: unknown } | null)?.instrutor_id,
       });
       if (plan.instrutorEntreParticipantes) {
         return c.json(
