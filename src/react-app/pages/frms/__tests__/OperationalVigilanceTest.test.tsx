@@ -41,7 +41,7 @@ describe('OperationalVigilanceTest — AirTrust brief protocol', () => {
     expect(box).toHaveAttribute('data-phase', 'waiting');
     expect(box).toHaveAttribute('aria-disabled', 'false');
     expect(box.className).toMatch(/h-72/);
-    expect(screen.getByRole('heading', { name: /vigilância psicomotora/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /teste breve de atenção/i })).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(BRIEF_ATTENTION_V1_PROTOCOL.feedbackHoldMs + 20);
