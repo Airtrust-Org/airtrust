@@ -301,7 +301,8 @@ async function runTenantIngestion(
           cursorAfter: context.state?.cursor_value ?? null,
           watermarkFrom: context.state?.watermark_from ?? null,
           watermarkTo: context.state?.watermark_to ?? null,
-          metadata: { stage: 'COMPLETE', skipped: 'CONFIG_DISABLED_OR_INCOMPLETE' },
+          metadata: { ...parseMetadata(context.state?.metadata_json), skipped: 'CONFIG_DISABLED_OR_INCOMPLETE' },
+          markStateSuccess: false,
         };
       }
       if (!shouldRunSigvoosAtCurrentHour(config.auto_sync_hora_utc, now)) {
@@ -311,7 +312,7 @@ async function runTenantIngestion(
           cursorAfter: context.state?.cursor_value ?? null,
           watermarkFrom: context.state?.watermark_from ?? null,
           watermarkTo: context.state?.watermark_to ?? null,
-          metadata: { stage: 'COMPLETE', skipped: 'OUTSIDE_CONFIGURED_HOUR' },
+          metadata: { ...parseMetadata(context.state?.metadata_json), skipped: 'OUTSIDE_CONFIGURED_HOUR' },
           markStateSuccess: false,
         };
       }
