@@ -791,9 +791,10 @@ export async function confirmarImportacaoFira(
            FROM frms_jornada
           WHERE deleted_at IS NULL
             AND tripulante_id = ?
+            AND empresa_id = ?
             AND data IN (${placeholders})`,
       )
-      .bind(importacao.tripulante_id, ...datasSemJornadaExistente)
+      .bind(importacao.tripulante_id, tenantEmpresaId, ...datasSemJornadaExistente)
       .all<{ id: string; data: string }>();
 
     for (const row of existentes.results || []) {
@@ -834,10 +835,11 @@ export async function confirmarImportacaoFira(
                 observacao
            FROM frms_jornada
           WHERE tripulante_id = ?
+            AND empresa_id = ?
             AND data IN (${placeholders})
             AND deleted_at IS NULL`,
       )
-      .bind(importacao.tripulante_id, ...datasLinhasPreparadas)
+      .bind(importacao.tripulante_id, tenantEmpresaId, ...datasLinhasPreparadas)
       .all<JornadaExistenteParaMerge>();
 
     for (const row of rowsByDate.results || []) {
@@ -864,9 +866,10 @@ export async function confirmarImportacaoFira(
                 observacao
            FROM frms_jornada
           WHERE id IN (${placeholders})
+            AND empresa_id = ?
             AND deleted_at IS NULL`,
       )
-      .bind(...jornadaExistenteIds)
+      .bind(...jornadaExistenteIds, tenantEmpresaId)
       .all<JornadaExistenteParaMerge>();
 
     for (const row of rows.results || []) {
