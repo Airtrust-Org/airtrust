@@ -18,6 +18,7 @@ export interface FrmsRegulatoryView {
 
 const UNKNOWN_REASON_LABELS: Record<string, string> = {
   ROLLING_REGULATORY_EVIDENCE_MISSING: 'Acumulados de horas de voo (dia, mês, 28/365 dias) não calculados para a data',
+  ROLLING_FLIGHT_COVERAGE_INCOMPLETE: 'Cobertura de importação dos dias esperados não confirmada: acumulados podem estar subestimados',
   CALENDAR_YEAR_FLIGHT_EVIDENCE_MISSING: 'Horas de voo do ano calendário não disponíveis',
   REST_EVIDENCE_UNKNOWN: 'Repouso anterior não observável (jornada anterior sem horário ou sobreposta)',
   WORK_TIME_EVIDENCE_MISSING: 'Tempo de trabalho do mês (jornada, reserva, sobreaviso, treinamento) não apurado',
