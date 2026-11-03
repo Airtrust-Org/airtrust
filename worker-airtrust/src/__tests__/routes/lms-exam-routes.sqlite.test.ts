@@ -111,3 +111,39 @@ describe('rotas admin — publicar prova e vincular à edição', () => {
     expect(await r.json()).toMatchObject({ code: 'RBAC_FORBIDDEN' });
   });
 });
+
+
+describe('catálogo administrativo de edições e questões publicadas', () => {
+  const asAdmin = { __mockRole: 'admin', __mockUserId: 1 };
+  it('retorna apenas referências verificadas e metadados, nunca gabarito ou explicação', async () => {
+    const db = lmsExamDb(); await publishExam(db);
+    const response = await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas?offset=0', {}, asAdmin);
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.data.items).toHaveLength(10);
+    expect(body.data.nextOffset).toBeNull();
+    expect(body.data.items[0]).toHaveProperty('contentSha256');
+    expect(JSON.stringify(body)).not.toMatch(/correctChoiceId|explanation|SEGREDO|content_json/);
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas?offset=x', {}, asAdmin)).status).toBe(422);
+    expect((await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas', {}, { __mockRole: 'student' })).status).toBe(403);
+    const other = await call(db, '/api/lms/exams/admin/cursos/26/questoes-publicadas', {}, {
+      ...asAdmin, __mockEmpresaId: 7,
+    });
+    expect((await other.json() as any).data.items).toHaveLength(0);
+  });
+  it('lista os pacotes registrados do tenant e o vínculo imutável da edição', async () => {
+    const db = lmsExamDb(); await publishExam(db);
+    db.exec("ALTER TABLE lms_scorm_package_versions ADD COLUMN package_version TEXT");
+    db.exec("ALTER TABLE lms_scorm_package_versions ADD COLUMN uploaded_at TEXT");
+    db.exec("UPDATE lms_scorm_package_versions SET package_version='1.0',uploaded_at='2026-11-02'");
+    const response = await call(db, '/api/lms/exams/admin/cursos/26/edicoes', {}, asAdmin);
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).data.editions[0]).toMatchObject({
+      packageSha256: PKG, packageVersion: '1.0', boundExamId: 'exam1', boundExamVersion: 1,
+    });
+    const other = await call(db, '/api/lms/exams/admin/cursos/26/edicoes', {}, {
+      ...asAdmin, __mockEmpresaId: 7,
+    });
+    expect((await other.json() as any).data.editions).toHaveLength(0);
+  });
+});

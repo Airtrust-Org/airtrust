@@ -133,7 +133,7 @@ export default function LmsExamAdmin():React.ReactElement {
       const result=await api<{planSha256:string;plan:{trainingSourceSha256:string;trainingEditionSha256:string}}>(
         `${base}/provas/${encodeURIComponent(examId)}/versoes/${version}`);
       if(result.plan.trainingSourceSha256!==packageSha)throw Error('PROVA_PUBLICADA_PARA_OUTRA_EDIÇÃO');
-      setPublished({examId,version:Number(version),packageSha256,planSha256:result.planSha256});
+      setPublished({examId,version:Number(version),packageSha256:packageSha,planSha256:result.planSha256});
       setEditionSha(result.plan.trainingEditionSha256);
       setMessage('Plano publicado recuperado. Confira a classificação normativa e vincule-o à edição.');
     }catch(err){setError('Não foi possível recuperar: '+(err as Error).message);}
