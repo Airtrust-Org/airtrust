@@ -2,31 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { API_BASE_URL } from '@/react-app/config/api';
 import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
+import type { GuiaInstrutor } from '@/react-app/types/guias-instrutor';
 
-export interface GuiaInstrutor {
-  id: number;
-  modelo_aeronave_id: number;
-  aeronave_nome: string;
-  aeronave_codigo: string;
-  programa: 'INICIAL' | 'PERIODICO' | 'SEMESTRAL' | 'CHECK';
-  ciclo: number | null;
-  sessao_numero: number | null;
-  sessao_total: number | null;
-  codigo: string;
-  titulo: string;
-  descricao: string | null;
-  versao: string;
-  status: string;
-  html_disponivel: boolean;
-  html_status_validacao: string;
-  pdf_disponivel: boolean;
-  pdf_tamanho_bytes: number | null;
-  publicado_em: string | null;
-  updated_at: string;
-  modelo_sessao_id: number | null;
-  nome_sessao: string | null;
-  descricao_sessao: string | null;
-}
+export type { GuiaInstrutor } from '@/react-app/types/guias-instrutor';
 
 export interface ProximaSessaoGuia {
   sessao_id: number;

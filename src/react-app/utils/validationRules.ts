@@ -1,4 +1,4 @@
-import { ValidationResult } from '../components/shared/ImportValidator';
+import type { ValidationResult } from '../types/import-validation';
 
 export function validarFuncionario(func: any, linha: number): ValidationResult[] {
   const erros: ValidationResult[] = [];

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import DashboardPrincipal from '../pages/DashboardPrincipal';
-import HomePerfil from '../pages/HomePerfil';
+import DashboardPrincipal from './DashboardPrincipal';
+import HomePerfil from './HomePerfil';
 import { funcionariosService } from '../services/funcionarios.service';
 import type { Funcionario } from '../types';
 import {
