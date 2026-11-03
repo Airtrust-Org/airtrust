@@ -36,7 +36,9 @@ export async function listarFuncionariosAtivos(limit?: number) {
   if (!response.success) {
     failWithSafeMessage(response.error, 'Não foi possível carregar os funcionários.');
   }
-  return response.data;
+  // The lookup already consolidates all pages into an ApiResponse.
+  // Preserve the { success, data } contract consumed by useFuncionariosAtivos.
+  return response;
 }
 
 export async function listarTiposQualificacao(limit = 1000, categoriaId?: number | null) {
