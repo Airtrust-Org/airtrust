@@ -40,12 +40,15 @@ const expirySelectSql = `SELECT qh.id, qh.data_conclusao, qh.data_vencimento FRO
     AND UPPER(COALESCE(m.status,''))='CONCLUIDO'
     AND qh.origem_tipo='LMS' AND qh.data_vencimento IS NOT NULL
     AND date(qh.data_conclusao)=date('now')
+    AND date(m.data_conclusao)=date('now')
     AND date(qh.data_vencimento)>date('now') ORDER BY qh.id DESC LIMIT 2`;
 // The first completion genuinely occurs earlier than the renewal in real operations.
 // An expiry-only time warp leaves both completions on the same civil date, causing
 // the LMS history writer to reuse the first row (its natural date key). Shift
-// ONLY this synthetic first qualification's completion date too; never weaken
-// the assertion that cycle two creates a distinct, current qualification.
+// ONLY this run-owned synthetic first qualification AND its completed LMS
+// enrollment date; otherwise the compliance snapshot treats today's LMS row as
+// newer evidence and incorrectly reports CONFORME. Never weaken assertions
+// that cycle two creates distinct current evidence.
 const expiryUpdateSql = (id) => `UPDATE qualificacoes_historico AS qh SET
     data_conclusao=date('now','-13 months'), data_vencimento=date('now','-1 day'),
     updated_at=datetime('now'), observacoes=COALESCE(observacoes,'') || ' | QA synthetic due date ${marker}'
@@ -56,11 +59,28 @@ const expiryUpdateSql = (id) => `UPDATE qualificacoes_historico AS qh SET
     WHERE ${identity} AND UPPER(COALESCE(qh.status,''))='CONCLUIDA'
       AND UPPER(COALESCE(m.status,''))='CONCLUIDO' AND qh.origem_tipo='LMS'
       AND date(qh.data_conclusao)=date('now')
+      AND date(m.data_conclusao)=date('now')
       AND qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>date('now'))`;
 
 // D1 rejects the old long LIKE suffix with SQLITE_ERROR (pattern too complex).
 // The marker is run-unique and written as a literal suffix by expiryUpdateSql.
 const expiryReadbackSuffix = ` | QA synthetic due date ${marker}`;
+// Qualificação e matrícula são duas fontes de evidência do snapshot. Backdate
+// somente a matrícula do histórico synthetic E1 já vencido e marcado por este
+// run. Nenhuma matrícula de outro funcionário, curso ou tenant pode ser tocada.
+const enrollmentUpdateSql = (id) => `UPDATE lms_matriculas AS m SET
+    data_conclusao=date('now','-13 months'), updated_at=datetime('now')
+  WHERE UPPER(COALESCE(m.status,''))='CONCLUIDO' AND date(m.data_conclusao)=date('now')
+    AND EXISTS (
+      SELECT 1 FROM qualificacoes_historico qh
+      JOIN funcionarios f ON f.id=qh.funcionario_id AND f.empresa_id=qh.empresa_id
+      JOIN empresas e ON e.id=f.empresa_id
+      JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+      WHERE qh.id=${Number(id)} AND ${identity} AND qh.origem_tipo='LMS'
+        AND substr(COALESCE(qh.observacoes,''), -length(${q(expiryReadbackSuffix)})) = ${q(expiryReadbackSuffix)}
+        AND date(qh.data_conclusao)=date('now','-13 months')
+        AND date(qh.data_vencimento)<date('now')
+    )`;
 const expiryReadbackSql = `SELECT COUNT(*) AS expired_count FROM qualificacoes_historico qh
   JOIN funcionarios f ON f.id=qh.funcionario_id AND f.empresa_id=qh.empresa_id
   JOIN empresas e ON e.id=f.empresa_id JOIN lms_matriculas m ON m.id=qh.lms_matricula_id
@@ -68,6 +88,7 @@ const expiryReadbackSql = `SELECT COUNT(*) AS expired_count FROM qualificacoes_h
   WHERE ${identity}
     AND substr(COALESCE(qh.observacoes,''), -length(${q(expiryReadbackSuffix)})) = ${q(expiryReadbackSuffix)}
     AND date(qh.data_conclusao)=date('now','-13 months')
+    AND date(m.data_conclusao)=date('now','-13 months')
     AND date(qh.data_vencimento)<date('now')`;
 
 function query(sql, phase = 'QUERY') {
@@ -88,7 +109,7 @@ function query(sql, phase = 'QUERY') {
 }
 
 if (process.env.NODE_ENV === 'test' && process.argv.includes('--print-expiry-sql-for-qa-test')) {
-  process.stdout.write(JSON.stringify({ select: expirySelectSql, update: expiryUpdateSql(1), readback: expiryReadbackSql }));
+  process.stdout.write(JSON.stringify({ select: expirySelectSql, update: expiryUpdateSql(1), enrollmentUpdate: enrollmentUpdateSql(1), readback: expiryReadbackSql }));
   process.exit(0);
 }
 
@@ -100,6 +121,7 @@ if (mode === 'expire') {
     process.exit(0);
   }
   query(expiryUpdateSql(candidates[0].id), 'EXPIRY_APPLY');
+  query(enrollmentUpdateSql(candidates[0].id), 'ENROLLMENT_FIRST_CYCLE_DATE_APPLY');
   const readback = query(expiryReadbackSql, 'EXPIRY_READBACK');
   if (Number(readback[0]?.expired_count) !== 1) throw new Error('QA_SYNTHETIC_EXPIRY_READBACK_FAILED');
   console.log(JSON.stringify({ mode: 'APPLY', target: DB, synthetic_expirations: 1, status: 'PASS' }));
