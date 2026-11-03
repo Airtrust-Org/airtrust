@@ -58,20 +58,16 @@ export async function softDeleteFichasDoAluno(
 ): Promise<void> {
   await db
     .prepare(
-      `UPDATE fichas_sessao
-          SET deleted_at=datetime('now')
-        WHERE agendamento_slot_id=?
+      `UPDATE fichas_sessao SET deleted_at=datetime('now')
+        WHERE EXISTS (
+            SELECT 1 FROM simulador_agendamentos sa
+             WHERE sa.empresa_id = ? AND sa.id = fichas_sessao.agendamento_slot_id AND sa.deleted_at IS NULL
+          )
+          AND agendamento_slot_id=?
           AND colaborador_id_aluno=?
-          AND deleted_at IS NULL
-          AND EXISTS (
-            SELECT 1
-              FROM simulador_agendamentos sa
-             WHERE sa.id = fichas_sessao.agendamento_slot_id
-               AND sa.empresa_id = ?
-               AND sa.deleted_at IS NULL
-          )`,
+          AND deleted_at IS NULL`,
     )
-    .bind(sessaoId, alunoId, empresaId)
+    .bind(empresaId, sessaoId, alunoId)
     .run();
 }
 
