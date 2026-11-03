@@ -1166,6 +1166,20 @@ function requireFiraEmpresaId(empresaId: number | undefined): number {
   return Number(empresaId);
 }
 
+function firaOwnerTenantPredicate(alias: 'f' | 'frms_importacao_fira'): string {
+  const previewTenant = `CAST(json_extract(${alias}.preview_json, '$.empresa_id') AS INTEGER)`;
+  return `(
+    (
+      ${alias}.tripulante_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM funcionarios own
+                    WHERE own.id = CAST(${alias}.tripulante_id AS INTEGER)
+                      AND own.empresa_id = ?)
+      AND (json_extract(${alias}.preview_json, '$.empresa_id') IS NULL OR ${previewTenant} = ?)
+    )
+    OR (${alias}.tripulante_id IS NULL AND ${previewTenant} = ?)
+  )`;
+}
+
 export async function buscarImportacaoFiraById(
   db: D1Database,
   importacaoId: string,
@@ -1180,11 +1194,7 @@ export async function buscarImportacaoFiraById(
        LEFT JOIN funcionarios op ON op.id = CAST(f.importado_por AS INTEGER)
       WHERE f.id = ?
         AND f.deleted_at IS NULL
-        AND (
-          CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
-          OR p.empresa_id = ?
-          OR op.empresa_id = ?
-        )`,
+        AND ${firaOwnerTenantPredicate('f')}`,
     )
     .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .first();
@@ -1209,17 +1219,7 @@ export async function deletarImportacaoFira(
          FROM frms_importacao_fira f
         WHERE f.id = ?
           AND f.deleted_at IS NULL
-          AND (
-            CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
-            OR EXISTS (
-              SELECT 1 FROM funcionarios p
-               WHERE p.id = CAST(f.tripulante_id AS INTEGER) AND p.empresa_id = ?
-            )
-            OR EXISTS (
-              SELECT 1 FROM funcionarios op
-               WHERE op.id = CAST(f.importado_por AS INTEGER) AND op.empresa_id = ?
-            )
-          )`,
+          AND ${firaOwnerTenantPredicate('f')}`,
     )
     .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .first<{ status: string; total_dias_importados: number }>();
@@ -1238,19 +1238,7 @@ export async function deletarImportacaoFira(
           SET deleted_at = ?, updated_at = ?
         WHERE id = ?
           AND deleted_at IS NULL
-          AND (
-            CAST(json_extract(frms_importacao_fira.preview_json, '$.empresa_id') AS INTEGER) = ?
-            OR EXISTS (
-              SELECT 1 FROM funcionarios p
-               WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
-                 AND p.empresa_id = ?
-            )
-            OR EXISTS (
-              SELECT 1 FROM funcionarios op
-               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
-                 AND op.empresa_id = ?
-            )
-          )`,
+          AND ${firaOwnerTenantPredicate('frms_importacao_fira')}`,
     )
     .bind(timestamp, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .run();
@@ -1303,19 +1291,7 @@ export async function vincularTripulanteFira(
           SET tripulante_id = ?, updated_at = ?
         WHERE id = ?
           AND deleted_at IS NULL
-          AND (
-            CAST(json_extract(frms_importacao_fira.preview_json, '$.empresa_id') AS INTEGER) = ?
-            OR EXISTS (
-              SELECT 1 FROM funcionarios p
-               WHERE p.id = CAST(frms_importacao_fira.tripulante_id AS INTEGER)
-                 AND p.empresa_id = ?
-            )
-            OR EXISTS (
-              SELECT 1 FROM funcionarios op
-               WHERE op.id = CAST(frms_importacao_fira.importado_por AS INTEGER)
-                 AND op.empresa_id = ?
-            )
-          )`,
+          AND ${firaOwnerTenantPredicate('frms_importacao_fira')}`,
     )
     .bind(tripulanteId, timestamp, importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
     .run();
