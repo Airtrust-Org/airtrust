@@ -210,12 +210,8 @@ function normalizeCheckinInput(
       : calcularHorasSono(horaDormiu || horaAcordou, horaAcordou);
   const sleepinessLevel =
     typeof input.sleepiness_level === 'number' ? clamp(input.sleepiness_level, 0, 10) : null;
-  const kssScore =
-    typeof input.kss_score === 'number'
-      ? clamp(input.kss_score, 1, 9)
-      : sleepinessLevel == null
-        ? 5
-        : clamp(Math.round((sleepinessLevel / 10) * 8) + 1, 1, 9);
+  // KSS é autorrelato obrigatório; nunca fabricar KSS=5 nem converter outra escala.
+  const kssScore = input.kss_score;
   const subjectiveFatigueLevel =
     typeof input.subjective_fatigue_level === 'number'
       ? clamp(input.subjective_fatigue_level, 0, 10)
@@ -276,9 +272,12 @@ function buildScoreInput(input: NormalizedCheckinInput): FadigaScoreInput {
 
 function evaluateDailyRisk(input: NormalizedCheckinInput): DailyRiskLevel {
   if (input.apto === 0) return 'unfit_for_duty';
+  // Gatilhos operacionais explícitos: valores de triagem, não diagnóstico ou liberação de voo.
+  if (input.kssScore >= 8) return 'critical';
   if (input.horasSono24h < 4) return 'critical';
   if ((input.subjectiveFatigueLevel ?? 0) >= 8) return 'critical';
   if ((input.sleepinessLevel ?? 0) >= 8) return 'critical';
+  if (input.kssScore >= 7) return 'attention';
   if (input.horasSono24h < 5) return 'attention';
   if ((input.subjectiveFatigueLevel ?? 0) >= 6) return 'attention';
   if ((input.sleepinessLevel ?? 0) >= 6) return 'attention';
@@ -991,7 +990,11 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         ? 'NAO_APTO'
         : dailyRiskLevel === 'critical'
           ? 'RESTRITO'
-          : scoreBase.status_operacional;
+          : finalNivel === 'VERDE'
+            ? 'APTO'
+            : finalNivel === 'AMARELO'
+              ? 'APTO_COM_RESSALVA'
+              : 'RESTRITO';
     const requiresOperationalReview =
       dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
     const wakeTime = input.horaAcordou;
