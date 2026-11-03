@@ -245,20 +245,26 @@ export function mergeFadigaPainelHistory(
   return items.map((item) => {
     if (item.kss_score != null && item.kss_provenance === 'CREW_REPORTED') return item;
     const row = canonical.get(`${item.funcionario_id}:${item.data}`);
-    if (!row || row.kss_provenance !== 'CREW_REPORTED' ||
-        !Number.isInteger(Number(row.kss_score)) || Number(row.kss_score) < 1 || Number(row.kss_score) > 9) {
-      return { ...item, kss_score: null, kss_provenance: null };
-    }
+    const historicalKssValid = row?.kss_provenance === 'CREW_REPORTED' &&
+      Number.isInteger(row.kss_score) && row.kss_score >= 1 && row.kss_score <= 9;
+    const safeStatus = item.status === 'normal' ? 'incomplete_checkin' : item.status;
 
+    // Historical KSS may enrich what was entered, but the history endpoint
+    // must never reintroduce APTO, VERDE or a computed score that the daily
+    // canonical snapshot withheld for incomplete/unverified evidence.
     return {
       ...item,
-      kss_score: Number(row.kss_score),
-      kss_provenance: 'CREW_REPORTED',
-      score_fadiga: item.score_fadiga ?? Number(row.score_fadiga),
-      nivel_fadiga: item.nivel_fadiga ?? row.nivel_fadiga,
-      status_operacional: item.status_operacional ?? row.status_operacional,
-      hora_checkin: item.hora_checkin ?? row.hora_checkin,
-      horas_sono: item.horas_sono ?? Number(row.horas_sono),
+      status: safeStatus,
+      requires_operational_review: safeStatus !== item.status ? 1 : item.requires_operational_review,
+      risk_reconciled_from_evidence: safeStatus !== item.status ||
+        item.risk_reconciled_from_evidence === true,
+      kss_score: historicalKssValid ? row!.kss_score : null,
+      kss_provenance: historicalKssValid ? 'CREW_REPORTED' : null,
+      score_fadiga: safeStatus !== item.status ? null : item.score_fadiga,
+      nivel_fadiga: safeStatus !== item.status ? null : item.nivel_fadiga,
+      status_operacional: safeStatus !== item.status ? null : item.status_operacional,
+      hora_checkin: item.hora_checkin ?? row?.hora_checkin ?? null,
+      horas_sono: item.horas_sono ?? row?.horas_sono ?? null,
     };
   });
 }
