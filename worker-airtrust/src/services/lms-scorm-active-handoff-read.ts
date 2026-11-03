@@ -1,6 +1,7 @@
 export type ActiveScormHandoffRead = Readonly<{
   id:number;
   bookmark:{position:number;total:number}|null;
+  previousProgressPct:number|null;
 }>;
 
 export async function readActiveScormHandoff(params:{
@@ -10,14 +11,14 @@ export async function readActiveScormHandoff(params:{
   const {db,enabled,empresaId,matriculaId,cycleId,activePrefix}=params;
   if(!enabled||!cycleId||!activePrefix)return null;
   const receipt=await db.prepare(`
-    SELECT h.id,h.resume_plan_json FROM lms_scorm_edition_handoffs h
+    SELECT h.id,h.resume_plan_json,h.previous_enrollment_json FROM lms_scorm_edition_handoffs h
     JOIN lms_scorm_package_versions p ON p.empresa_id=h.empresa_id
       AND p.curso_id=h.curso_id AND p.package_sha256=h.target_package_sha256
       AND p.r2_prefix=h.target_package_prefix AND p.status='ACTIVE'
     WHERE h.empresa_id=? AND h.matricula_id=? AND h.ciclo_id=?
       AND h.target_package_prefix=? ORDER BY h.id DESC LIMIT 1`)
     .bind(empresaId,matriculaId,cycleId,activePrefix)
-    .first<{id:number;resume_plan_json:string}>();
+    .first<{id:number;resume_plan_json:string;previous_enrollment_json:string}>();
   if(!receipt)return null;
   let bookmark:{position:number;total:number}|null=null;
   try{
@@ -27,5 +28,15 @@ export async function readActiveScormHandoff(params:{
       Number.isSafeInteger(position)&&Number.isSafeInteger(total)&&
       position>=1&&total>=position&&total<=1000)bookmark={position,total};
   }catch{bookmark=null;}
-  return {id:receipt.id,bookmark};
+  let previousProgressPct:number|null=null;
+  try{
+    const evidence=JSON.parse(receipt.previous_enrollment_json) as {
+      enrollment?:{progresso_pct?:number};
+    };
+    const pct=Number(evidence.enrollment?.progresso_pct);
+    if(Number.isSafeInteger(pct)&&pct>=0&&pct<=100){
+      previousProgressPct=pct;
+    }
+  }catch{previousProgressPct=null;}
+  return {id:receipt.id,bookmark,previousProgressPct};
 }
