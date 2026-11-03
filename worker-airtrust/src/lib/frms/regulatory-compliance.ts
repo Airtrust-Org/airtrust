@@ -52,6 +52,32 @@ export function sanitizeRollingRegulatoryEvidence(
   };
 }
 
+/** Source-confirmed operational coverage for each rolling flight-hour window.
+ * Counts alone never certify completeness unless a tenant-scoped source ledger
+ * verified every expected operational day; unavailable is UNKNOWN, not zero.
+ */
+export interface RollingFlightCoverageEvidence {
+  sourceVerified: boolean;
+  windows: {
+    month: { expectedDays: number; confirmedDays: number };
+    year: { expectedDays: number; confirmedDays: number };
+    days28: { expectedDays: number; confirmedDays: number };
+    days365: { expectedDays: number; confirmedDays: number };
+  };
+}
+
+export function hasCompleteRollingFlightCoverage(
+  coverage: RollingFlightCoverageEvidence | null | undefined,
+): boolean {
+  if (!coverage?.sourceVerified) return false;
+  return Object.values(coverage.windows).every(({ expectedDays, confirmedDays }) =>
+    Number.isSafeInteger(expectedDays) &&
+    Number.isSafeInteger(confirmedDays) &&
+    expectedDays >= 0 &&
+    confirmedDays === expectedDays,
+  );
+}
+
 export interface WorkRegulatoryEvidence {
   monthWorkToDateMin: number;
   rolling7dWorkMin: number;
@@ -91,6 +117,8 @@ export interface RegulatoryComplianceInput {
   mission?: CostaDoSolMissionEvidence | null;
   journeyDurationMin: number;
   rolling: RollingRegulatoryEvidence | null;
+  /** Must come from a verified tenant/day status ledger, never inferred from totals. */
+  rollingCoverage?: RollingFlightCoverageEvidence | null;
   work: WorkRegulatoryEvidence | null;
   limites: Pick<
     LimitesMap,
@@ -163,6 +191,9 @@ export function evaluateRegulatoryCompliance(
   } else if (!input.rolling) {
     unknownReasons.add('ROLLING_REGULATORY_EVIDENCE_MISSING');
   } else {
+    if (!hasCompleteRollingFlightCoverage(input.rollingCoverage)) {
+      unknownReasons.add('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+    }
     pushMaxViolation(violations, {
       code: 'LAW_HELI_FLIGHT_DAY_8H',
       source: 'LAW',
