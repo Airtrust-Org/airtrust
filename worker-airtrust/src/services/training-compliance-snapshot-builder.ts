@@ -14,6 +14,7 @@ import {
   type TrainingComplianceScope,
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { trainingComplianceEvidenceIsRealizedBy } from './training-compliance-enrollment-policy';
 
 export const SCOPES = TRAINING_COMPLIANCE_SCOPES;
@@ -510,22 +511,35 @@ function newestEvidence(items: Evidence[]): Evidence | undefined {
   return items[0];
 }
 
+/** Corte "evidência não é futura": nunca atrás da data operacional, aceita a data UTC dos gravadores. */
+function resolveRealizedCutoff(today: string): string {
+  const utcToday = new Date().toISOString().slice(0, 10);
+  return utcToday > today ? utcToday : today;
+}
+
 export function computeRequirement(
   rule: Rule,
   historyItems: Evidence[] | undefined,
   lmsItems: Evidence[] | undefined,
+  options?: { today?: string; realizedCutoff?: string },
 ) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Vencimento é classificado pela data operacional (America/Sao_Paulo): a data UTC adianta o
+  // "hoje" entre 21h e 24h BRT e marcava VENCIDO, nessas horas, um item que ainda vence hoje.
+  const today = options?.today ?? getTodayIsoSaoPaulo();
+  // As conclusões (LMS/Histórico) são gravadas com a data UTC. O corte "evidência não é futura"
+  // precisa aceitá-las no mesmo dia civil UTC, senão uma conclusão de 21h–24h BRT sumiria até a
+  // meia-noite. O corte nunca fica atrás da data operacional.
+  const realizedCutoff = options?.realizedCutoff ?? options?.today ?? resolveRealizedCutoff(today);
   const allHistory = historyItems || [];
   const allLms = lmsItems || [];
   const historyForProfile = allHistory.filter(
-    (item) => evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today),
+    (item) => evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff),
   );
   const lmsForProfile = allLms.filter((item) =>
     evidenceMatchesCompetencyProfile(rule.perfil_competencia, item),
   );
   const completedLmsForProfile = lmsForProfile.filter(
-    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today),
+    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff),
   );
   const compatibleHistory = historyForProfile.filter((item) =>
     trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade),
@@ -589,7 +603,7 @@ export function computeRequirement(
   const evidenceReviewReason =
     status_compliance !== 'NAO_REALIZADO' ? null :
     modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
-    profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, today)) ? 'PERFIL' : null;
+    profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff)) ? 'PERFIL' : null;
 
   const status_legacy =
     status_compliance === 'VENCIDO'
@@ -672,6 +686,9 @@ export async function buildSnapshot(
     loadLmsEvidence(db, empresaId),
   ]);
   const employees = filterEmployeesByAccess(allEmployees, access);
+  // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
+  const today = getTodayIsoSaoPaulo();
+  const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today) };
 
   const people = employees.map((employee) => {
     const resolved = resolvedRules(rules, employee);
@@ -682,6 +699,7 @@ export async function buildSnapshot(
           rule,
           historyMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
           lmsMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
+          dateOptions,
         ),
       );
     const mandatory = requirements.filter((r) => r.obrigatoriedade === 'OBRIGATORIA');
