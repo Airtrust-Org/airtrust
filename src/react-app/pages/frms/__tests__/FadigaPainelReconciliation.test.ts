@@ -148,6 +148,34 @@ describe('team fatigue classification provenance fail-closed', () => {
     expect(row.requires_operational_review).toBe(0);
   });
 
+  it('never displays green when a stale NORMAL is missing KSS provenance', () => {
+    const [result] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, kss_score: 5, kss_provenance: null,
+        score_fadiga: 10, nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+        requires_operational_review: 0 }],
+    });
+    expect(result).toMatchObject({
+      status: 'incomplete_checkin', requires_operational_review: 1,
+      risk_reconciled_from_evidence: true,
+      kss_score: null, nivel_fadiga: null, status_operacional: null, score_fadiga: null,
+    });
+  });
+
+  it('escalates stale normal KSS 9 without accepting a persisted APTO flag', () => {
+    const [result] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, kss_score: 9, kss_provenance: 'CREW_REPORTED',
+        score_fadiga: 35, nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+        requires_operational_review: 0 }],
+    });
+    expect(result).toMatchObject({
+      status: 'critical', requires_operational_review: 1,
+      risk_reconciled_from_evidence: true, kss_score: 9,
+      nivel_fadiga: null, status_operacional: null,
+    });
+  });
+
   it('keeps operational review required when a risky row omits the review flag', () => {
     const [row] = normalizeFadigaPainelPayload({
       date: '2026-10-27',
