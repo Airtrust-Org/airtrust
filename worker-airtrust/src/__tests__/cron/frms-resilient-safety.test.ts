@@ -19,6 +19,9 @@ describe('FRMS resilient safety', () => {
     expect(resolveNextSigvoosDay('2026-07-30', null, '2026-08-02')).toBe('2026-07-31');
     expect(resolveNextSigvoosDay('2026-06-01', null, '2026-08-02')).toBe('2026-06-02');
     expect(resolveNextSigvoosDay('2026-08-02', null, '2026-08-02')).toBeNull();
+    expect(resolveNextSigvoosDay('2026-08-01', null, '2026-08-02')).toBeNull();
+    expect(resolveNextSigvoosDay(null, null, '2026-08-02')).toBe('2026-08-01');
+    expect(resolveNextSigvoosDay(null, null, '2027-01-01')).toBe('2026-12-31');
   });
 
   it('executa SIGVOOS somente na hora operacional configurada', () => {
