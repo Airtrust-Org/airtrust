@@ -30,7 +30,7 @@ describe('operational readiness', () => {
         vigilance: summary,
         baselineSessions: 2,
       }).classification,
-    ).toBe('baseline_building');
+    ).toBe('attention'); // A high objective lapse proportion alone raises attention.
   });
 
   it('does not let baseline-building hide strong subjective fatigue signals', () => {
