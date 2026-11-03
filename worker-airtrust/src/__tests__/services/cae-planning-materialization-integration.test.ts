@@ -9,7 +9,7 @@ const {
   executeNormalSessionCreation: vi.fn(),
 }));
 
-vi.mock('../../services/simuladores/shared-session-helpers', () => ({
+vi.mock('../../services/simuladores/shared-session-creation', () => ({
   executeSharedSessionCreation,
 }));
 

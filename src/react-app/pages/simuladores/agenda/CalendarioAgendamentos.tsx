@@ -300,7 +300,7 @@ export default function CalendarioAgendamentos() {
     const carregarDadosIniciais = async () => {
       try {
         const _token = getAccessToken();
-        const _authH = _token ? { Authorization: `Bearer ${_token}` } : {};
+        const _authH: HeadersInit = _token ? { Authorization: `Bearer ${_token}` } : {};
         const instRes = await fetch(`${API_BASE_URL}/simuladores/instrutores`, { headers: _authH });
 
         if (instRes.ok) {
