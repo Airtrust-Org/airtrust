@@ -301,4 +301,25 @@ describe('SCORM edition handoff — D1 batch rollback with SQLite',()=>{
       .toEqual({n:0});
   });
 
+
+  it('never awards matrícula progress if the persisted SCORM row is absent',async()=>{
+    const {db,activeSha}=fixture();
+    db.database.prepare('DELETE FROM lms_progresso_scorm WHERE matricula_id=100').run();
+    const credit=buildScormAdministrativeCredit({
+      manifest:{packageVersion:'QA_ACTIVE_2026',
+        requiredSlideIds:activeManifest().content.requiredSlides,
+        assessmentMode:'NONE',workerApprovalRequired:true},
+      packageSha256:activeSha,targetPosition:30,previousProgressPct:75,
+    });
+    await expect(writeScormEditionHandoff(db.asD1(),{
+      ...input(activeSha),administrativeCredit:{
+        progressPct:75,position:30,total:43,creditedUnits:29,
+        suspendData:credit.suspendData,cmiJson:credit.cmiJson,
+      },
+    })).rejects.toThrow('SCORM_ADMIN_CREDIT_SOURCE_ROW_MISSING');
+    expect(row(db,'SELECT status,progresso_pct FROM lms_matriculas WHERE id=100'))
+      .toEqual({status:'EM_ANDAMENTO',progresso_pct:75});
+    expect(row(db,'SELECT COUNT(*) AS n FROM lms_scorm_edition_handoffs')).toEqual({n:0});
+  });
+
 });

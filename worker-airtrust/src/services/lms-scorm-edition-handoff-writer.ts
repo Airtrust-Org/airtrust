@@ -57,6 +57,12 @@ export async function writeScormEditionHandoff(
   if(!scope?.ciclo_id||!scope.target_prefix)throw new Error('SCORM_HANDOFF_TARGET_OR_CYCLE_NOT_VERIFIED');
   const credit=input.administrativeCredit??null;
   if(credit){
+    // A source record is required for an atomic CMI replacement. Without it,
+    // crediting the enrollment alone would show 84% yet launch slide one.
+    const originalScorm=await db.prepare(
+      'SELECT id FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?'
+    ).bind(input.matriculaId,input.empresaId).first<{id:number}>();
+    if(!originalScorm?.id)throw new Error('SCORM_ADMIN_CREDIT_SOURCE_ROW_MISSING');
     let plan:Record<string,unknown>,cmi:Record<string,unknown>,state:Record<string,unknown>;
     try{
       plan=JSON.parse(input.resumePlanJson) as Record<string,unknown>;
