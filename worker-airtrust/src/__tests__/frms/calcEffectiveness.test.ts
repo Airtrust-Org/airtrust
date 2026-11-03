@@ -273,6 +273,7 @@ describe('calcEffectiveness — offshore sleep model', () => {
     const r = calcEffectiveness(makeFat(-0.1, { fator_repouso_pct: -0.05 }), L, {
       hora_apresentacao: '08:00',
       hora_dormiu: '23:00',
+      hora_acordou: '06:30',
     });
     expect(r.duracao_sono_efetiva_min).toBe(450);
     expect(r.hora_despertar).toBe('06:30');
@@ -280,12 +281,21 @@ describe('calcEffectiveness — offshore sleep model', () => {
     expect(r.fonte_sono).toBe('INFORMADO');
   });
 
-  it('sem horaDormiu informada → usa padrão de 8h', () => {
+  it('sem horaDormiu ou duração informada não inventa 8h', () => {
     const r = calcEffectiveness(makeFat(-0.1), L, {
       hora_apresentacao: '08:00',
     });
-    expect(r.duracao_sono_efetiva_min).toBe(480);
+    expect(r.duracao_sono_efetiva_min).toBeNull();
     expect(r.fonte_sono).toBe('PADRAO');
+  });
+
+  it('sono de 4h do check-in afeta o fator de repouso e mantém sua proveniência', () => {
+    const r = calcEffectiveness(makeFat(-0.1), L, {
+      hora_apresentacao: '05:30', hora_acordou: '04:00', sono_efetivo_min: 240,
+    });
+    expect(r.duracao_sono_efetiva_min).toBe(240);
+    expect(r.fator_repouso_calibrado_pct).toBe(-0.25);
+    expect(r.fonte_sono).toBe('INFORMADO');
   });
 
   it('acordou na WOCL marca flag', () => {
