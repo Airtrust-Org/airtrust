@@ -306,7 +306,7 @@ async function runTenantIngestion(
             from: periodFrom,
             to: periodTo,
             pageSize: 100,
-            maxPages: 1,
+            maxPages: 10,
             clearExisting: false,
           },
           env,
