@@ -23,9 +23,11 @@ describe('FRMS fatigue analytics: tenant isolation', () => {
 
   it('CSV exported rows never represent unverified KSS or KSS 9 as green/APTO', () => {
     const exported = source.slice(source.indexOf("router.get('/fadiga-checkin/export'"));
-    const match = exported.match(/const rows = await c\\.env\\.DB\\.prepare\\(\\s*`([\\s\\S]*?)`/);
-    if (!match) throw new Error('Cannot locate production export SQL');
-    const sql = match[1].replace('${exportSectorScope.clause}', '1 = 1');
+    const statementStart = exported.indexOf('const rows = await c.env.DB.prepare(');
+    const queryStart = exported.indexOf('`SELECT', statementStart);
+    const queryEnd = exported.indexOf('`', queryStart + 1);
+    if (statementStart < 0 || queryStart < 0 || queryEnd < 0) throw new Error('Cannot locate production export SQL');
+    const sql = exported.slice(queryStart + 1, queryEnd).replace('${exportSectorScope.clause}', '1 = 1');
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const db = new DatabaseSync(':memory:');
     try {
