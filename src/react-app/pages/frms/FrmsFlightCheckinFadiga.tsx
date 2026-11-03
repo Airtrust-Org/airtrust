@@ -545,7 +545,8 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceitePrivacidade, setAceitePrivacidade] = useState(restoredDraft?.aceitePrivacidade ?? false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(
-    restoredDraft?.vigilanceResult ?? null,
+    restoredDraft?.vigilanceResult?.summary.protocolVersion === 'airtrust-brief-v1'
+      ? restoredDraft.vigilanceResult : null,
   );
   const [vigilanceRunning, setVigilanceRunning] = useState(false);
   const [interruptedPvtRecovered, setInterruptedPvtRecovered] = useState(
@@ -1123,7 +1124,7 @@ export default function FrmsFlightCheckinFadiga() {
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   {readinessBaseline?.ready
                     ? `Baseline individual disponível (${readinessBaseline.sessions} sessões anteriores).`
-                    : `Baseline individual em formação (${readinessBaseline?.sessions ?? 0}/${readinessBaseline?.minimum_sessions ?? 5} sessões anteriores).`}
+                    : 'Linha de base por aparelho e sessões descansadas pendente; não interpretar como prontidão preservada.'}
                   {readinessToday ? ' Já existe uma avaliação salva hoje; um novo teste substituirá a avaliação ativa de hoje sem contar duas vezes no baseline.' : ''}
                 </div>
                 {vigilanceResult ? (
