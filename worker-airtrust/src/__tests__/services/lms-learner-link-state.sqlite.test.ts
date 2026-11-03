@@ -9,6 +9,7 @@ import { resolveLmsFuncionarioId } from '../../services/lms-learner-identity';
 import {
   listFuncionariosComContaVinculada,
   withAlunoVinculado,
+  withAlunoVinculadoBestEffort,
 } from '../../services/lms-learner-link-state';
 import { resetSchemaCache } from '../../utils/db-schema';
 
@@ -160,5 +161,16 @@ describe('listFuncionariosComContaVinculada (SQLite real)', () => {
     expect((await listFuncionariosComContaVinculada(db, EMPRESA, [])).size).toBe(0);
     expect((await listFuncionariosComContaVinculada(db, 'x', [1])).size).toBe(0);
     expect(executed).toHaveLength(0);
+  });
+
+  it('best-effort devolve as linhas intactas e reporta o erro quando o diagnóstico falha', async () => {
+    const quebrado = { prepare: () => { throw new Error('d1 indisponível'); } } as unknown as D1Database;
+    const erros: unknown[] = [];
+    const rows = [{ id: 900, funcionario_id: 1 }];
+
+    const result = await withAlunoVinculadoBestEffort(quebrado, EMPRESA, rows, (error) => erros.push(error));
+
+    expect(result).toEqual(rows);
+    expect(erros).toHaveLength(1);
   });
 });

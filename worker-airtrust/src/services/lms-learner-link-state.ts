@@ -74,3 +74,18 @@ export async function withAlunoVinculado<T extends { funcionario_id?: unknown }>
     aluno_vinculado: linked.has(Number(row.funcionario_id)) ? 1 : 0,
   }));
 }
+
+/** Igual a `withAlunoVinculado`, mas em falha devolve as linhas intactas e reporta o erro. */
+export async function withAlunoVinculadoBestEffort<T extends { funcionario_id?: unknown }>(
+  db: D1Database,
+  empresaId: unknown,
+  rows: readonly T[],
+  onError: (error: unknown) => void,
+): Promise<Array<T & { aluno_vinculado?: 0 | 1 }>> {
+  try {
+    return await withAlunoVinculado(db, empresaId, rows);
+  } catch (error) {
+    onError(error);
+    return [...rows];
+  }
+}

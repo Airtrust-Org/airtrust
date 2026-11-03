@@ -82,7 +82,7 @@ import {
   readMatriculaForCourseList,
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
-import { withAlunoVinculado } from '../services/lms-learner-link-state';
+import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
@@ -1101,12 +1101,9 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     }
   }
 
-  // Diagnóstico informativo: não bloqueia a matrícula nem altera vínculos.
-  // Falha aqui não pode mascarar matrículas já gravadas: devolve sem o indicador.
-  const matriculasComVinculo = await withAlunoVinculado(db, empresaId, matriculasCriadas).catch((error) => {
-    createLogger(c, 'LmsMatriculas.lote').warn('lms_matricula_lote_link_state_failed', { cursoId: curso_id, error: toError(error).message });
-    return matriculasCriadas;
-  });
+  // Informativo: falha do diagnóstico não mascara matrículas já gravadas.
+  const matriculasComVinculo = await withAlunoVinculadoBestEffort(db, empresaId, matriculasCriadas, (error) =>
+    createLogger(c, 'LmsMatriculas.lote').warn('lms_matricula_lote_link_state_failed', { cursoId: curso_id, error: toError(error).message }));
   return c.json({ success: true, data: { ...results, matriculas: matriculasComVinculo, detalhes_erros: detalhesErros } });
 });
 
