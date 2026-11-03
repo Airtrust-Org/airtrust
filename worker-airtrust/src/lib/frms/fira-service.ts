@@ -1067,7 +1067,7 @@ export async function confirmarImportacaoFira(
 // ──────────────────────────────────────────────────────────────
 
 export interface FiraImportacaoHistoricoQuery {
-  empresa_id?: number;
+  empresa_id: number;
   tripulante_id?: string;
   status?: string;
   ano?: number;
@@ -1084,15 +1084,18 @@ export async function buscarHistoricoFira(
   const perPage = query.per_page ?? 20;
   const offset = (page - 1) * perPage;
 
-  const conds: string[] = ['f.deleted_at IS NULL'];
-  const bindings: unknown[] = [];
-
-  if (query.empresa_id !== undefined) {
-    conds.push(
-      `(CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ? OR p.empresa_id = ? OR op.empresa_id = ?)`,
-    );
-    bindings.push(query.empresa_id, query.empresa_id, query.empresa_id);
-  }
+  const empresaId = requireFiraEmpresaId(query.empresa_id);
+  const conds: string[] = [
+    'f.deleted_at IS NULL',
+    `((p.empresa_id = ? AND (
+         json_extract(f.preview_json, '$.empresa_id') IS NULL
+         OR CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
+       )) OR (
+         f.tripulante_id IS NULL
+         AND CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
+       ))`,
+  ];
+  const bindings: unknown[] = [empresaId, empresaId, empresaId];
 
   if (query.tripulante_id) {
     conds.push('f.tripulante_id = ?');
