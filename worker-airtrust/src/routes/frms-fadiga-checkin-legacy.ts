@@ -975,11 +975,9 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         : dailyRiskLevel === 'attention' && scoreBase.nivel_fadiga === 'VERDE'
           ? 'AMARELO'
           : scoreBase.nivel_fadiga;
-    const finalStatusOperacional = datePolicy.retrospective ? 'RESTRITO' :
-      dailyRiskLevel === 'unfit_for_duty'
-        ? 'NAO_APTO'
-        : dailyRiskLevel === 'critical'
-          ? 'RESTRITO'
+    const finalStatusOperacional = dailyRiskLevel === 'unfit_for_duty' ? 'NAO_APTO' :
+      datePolicy.retrospective || dailyRiskLevel === 'critical'
+        ? 'RESTRITO'
           : finalNivel === 'VERDE'
             ? 'APTO'
             : finalNivel === 'AMARELO'
@@ -988,10 +986,10 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const requiresOperationalReview =
       datePolicy.retrospective || dailyRiskLevel !== 'normal' || scoreBase.requires_frat_review === 1 ? 1 : 0;
     const wakeTime = input.horaAcordou;
-    const recomendacaoFinal = datePolicy.retrospective
-      ? 'Registro retrospectivo: não comprova avaliação pré-voo. Revisão operacional obrigatória.'
-      : dailyRiskLevel === 'unfit_for_duty'
-        ? 'Revisão operacional imediata: tripulante reportou condição não segura para jornada.'
+    const recomendacaoFinal = dailyRiskLevel === 'unfit_for_duty'
+      ? 'Revisão operacional imediata: tripulante declarou NÃO APTO, inclusive se o registro for retrospectivo.'
+      : datePolicy.retrospective
+        ? 'Registro retrospectivo: não comprova avaliação pré-voo. Revisão operacional obrigatória.'
         : dailyRiskLevel === 'critical'
           ? 'Risco crítico em fadiga diária: revisão operacional imediata recomendada.'
           : dailyRiskLevel === 'attention'
@@ -1247,8 +1245,8 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
            VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', ?, ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
         .bind(
-          datePolicy.retrospective ? 'Check-in retrospectivo aguardando revisão' : 'Check-in de fadiga em atenção',
-          datePolicy.retrospective ? `Tripulante #${funcionarioId} registrou check-in retrospectivo de ${dataCheckin}; não é avaliação pré-voo. Revisão operacional necessária.` : `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
+          datePolicy.retrospective && dailyRiskLevel !== 'unfit_for_duty' ? 'Check-in retrospectivo aguardando revisão' : 'Check-in de fadiga em atenção',
+          datePolicy.retrospective && dailyRiskLevel === 'unfit_for_duty' ? `Tripulante #${funcionarioId} declarou NÃO APTO em registro retrospectivo de ${dataCheckin}; não comprova avaliação pré-voo. Revisão imediata necessária.` : datePolicy.retrospective ? `Tripulante #${funcionarioId} registrou check-in retrospectivo de ${dataCheckin}; não é avaliação pré-voo. Revisão operacional necessária.` : `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
           JSON.stringify({
             empresa_id: empresaId,
             funcionario_id: funcionarioId,

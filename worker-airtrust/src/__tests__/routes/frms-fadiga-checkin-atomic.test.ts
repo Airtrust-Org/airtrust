@@ -219,6 +219,38 @@ describe('daily check-in atomic commit', () => {
     });
   });
 
+
+  it('preserves crew-reported NÃO APTO over the retrospective RESTRITO fallback', async () => {
+    const { db, batch, statements } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...body,
+        reference_date: '2026-10-15',
+        late_submission_reason: 'SYSTEM_UNAVAILABLE',
+        fit_for_duty: false,
+        motivo_inaptidao: 'Condição não segura declarada pelo tripulante',
+      }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('NAO_APTO');
+    expect(writes[0].binds).toContain('VERMELHO');
+    expect(writes[0].binds).toContain(1);
+    const event = writes.find((write) => write.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      status_operacional: 'NAO_APTO',
+      computed_risk_level: 'unfit_for_duty',
+      requires_operational_review: 1,
+      submission_context: { timing: 'RETROSPECTIVE_D1', preflight_evidence: false },
+    });
+    const notification = statements.find((stmt) => stmt.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in de fadiga em atenção');
+    expect(String(notification?.binds[1])).toContain('NÃO APTO');
+    expect(String(notification?.binds[1])).toContain('não comprova avaliação pré-voo');
+  });
+
   it('rejects contradictory check-in dates before D1 mutations', async () => {
     const { db, batch } = fakeDb();
     const body = (await request().json()) as Record<string, unknown>;
