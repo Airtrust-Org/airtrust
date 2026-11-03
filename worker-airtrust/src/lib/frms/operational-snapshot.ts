@@ -390,15 +390,6 @@ function appendMorningEffectivenessProjections(
     current.push(activity);
     activitiesByKey.set(activityKey, current);
   }
-  const realHvByKey = new Map<string, number>();
-  for (const jornada of rows.jornadas) {
-    const jornadaKey = `${jornada.data_operacional}::${Number(jornada.funcionario_id)}`;
-    realHvByKey.set(
-      jornadaKey,
-      (realHvByKey.get(jornadaKey) ?? 0) + Math.max(0, Number(jornada.horas_voo_minutos ?? 0)),
-    );
-  }
-
   for (const checkin of rows.checkins) {
     const key = `${checkin.data_operacional}::${Number(checkin.funcionario_id)}`;
     if (existing.has(key)) continue;
@@ -408,28 +399,13 @@ function appendMorningEffectivenessProjections(
     if (options?.v2Policy) {
       const previousDate = addDaysIso(checkin.data_operacional, -1);
       const previousKey = `${previousDate}::${Number(checkin.funcionario_id)}`;
-      const previousActivities = summarizeFrmsActivities(activitiesByKey.get(previousKey) ?? [], false);
-      const previousFrmsFlightMinutes =
-        (realHvByKey.get(previousKey) ?? 0) + previousActivities.simulator_minutes;
-      // Crédito de baixa HV é um modificador de carga de voo, não um sinônimo de
-      // descanso. Um dia com 0 h de voo pode ter 9 h de treinamento, standby ou
-      // outra atividade. Nesses casos a recuperação vem exclusivamente da
-      // evidência de recuperação governada, nunca de "HV zero".
-      const generatedCredit =
-        previousFrmsFlightMinutes > 0
-          ? computeFlightHoursDelta(
-              previousFrmsFlightMinutes,
-              0,
-              options.v2Policy,
-            ).generatedCreditForNextDayPoints
-          : 0;
       v2Adjustments = {
         policy: options.v2Policy,
         fadigaPolicy: options.fadigaPolicy,
         recoveryCreditPoints: options.recoveryCreditByKey.get(previousKey)?.points ?? 0,
         flightHours: computeFlightHoursDelta(
           activitySummary.simulator_minutes,
-          generatedCredit,
+          0,
           options.v2Policy,
         ),
       };
