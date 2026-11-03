@@ -212,3 +212,4 @@ Para cada um:
 ## 8. Próximo passo recomendado
 
 Executar a **Fase 0** (guard em modo baseline) e a **Fase 1 / item A4** (`escalas-shared`) em um único PR pequeno. Isso trava a regressão e remove o acoplamento LMS↔Escalas sem alterar nenhum contrato HTTP.
+- ✅ **A2/A4 — Escalas: alocações fora de `routes/`:** `escalas-alocacoes-{engine,helpers-internal,schemas}.ts` não são rotas; passaram para `services/escalas/alocacao-{engine,helpers,schemas}.ts` (move puro: imports, listas dos testes estáticos e a chave do baseline de tenant seguem os novos caminhos). Habilita extrair os handlers PUT/DELETE de alocação (próxima fatia) sem que service importe `routes/`. Suíte completa do worker: 1009 arquivos / 7213 testes verdes.
