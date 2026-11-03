@@ -290,16 +290,24 @@ export const qualificacoesService = {
 
       for (let page = 1; ; page++) {
         // Use the unique ID for stable pagination; the modal sorts names locally.
-        const response = await httpClient.get<FuncionarioResumo[]>(
+        // httpClient wraps the complete API body in response.data.
+        const response = await httpClient.get<{
+          success: boolean;
+          data?: FuncionarioResumo[];
+        }>(
           `/funcionarios?status=ativos&orderBy=id&order=ASC&limit=${pageSize}&page=${page}`,
         );
-        if (!response.success) return response;
-        if (!Array.isArray(response.data)) {
+        if (!response.success) {
+          return { success: false, error: response.error || 'Falha ao carregar funcionários.' };
+        }
+        const pageBody = response.data;
+        if (!pageBody?.success || !Array.isArray(pageBody.data)) {
           return { success: false, error: 'Resposta inválida na listagem de funcionários.' };
         }
+        const items = pageBody.data;
 
         let addedOnPage = 0;
-        for (const funcionario of response.data) {
+        for (const funcionario of items) {
           if (!seen.has(funcionario.id)) {
             seen.add(funcionario.id);
             funcionarios.push(funcionario);
@@ -309,7 +317,7 @@ export const qualificacoesService = {
         }
 
         // Protect against empty, partial or repeating pages.
-        if (response.data.length < pageSize || addedOnPage === 0 || funcionarios.length >= maxItems) {
+        if (items.length < pageSize || addedOnPage === 0 || funcionarios.length >= maxItems) {
           break;
         }
       }
