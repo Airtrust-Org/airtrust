@@ -12,15 +12,22 @@ describe('simuladores session update tenant model boundary', () => {
     expect(source).toContain(
       '(a as { simulador_id?: string | number | null }).simulador_id',
     );
-    expect(source).toContain(
+    // As consultas de ficha/modelo/manobras vivem no repository (fase participantes + fichas).
+    const repository = readFileSync(
+      resolve(process.cwd(), 'src/repositories/simuladores/session-participants-repository.ts'),
+      'utf8',
+    );
+    expect(repository).toContain(
       'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND empresa_id=?',
     );
-    expect(source).toContain('AND empresa_id = ?\n                  AND deleted_at IS NULL');
-    expect(source).toContain('AND ts.empresa_id = ?');
-    expect(source).toContain('AND ms.empresa_id = ?');
-    expect(source).toContain('AND m.empresa_id = ?');
-    expect(source).toContain('.bind(modeloIdCandidate, empresaId)');
-    expect(source).toContain('.bind(empresaId, tipoSessao, tipoAeronave, empresaId)');
-    expect(source).toContain('.bind(empresaId, modeloIdFinal)');
+    expect(repository).toContain('AND empresa_id = ?\n                  AND deleted_at IS NULL');
+    expect(repository).toContain('AND ts.empresa_id = ?');
+    expect(repository).toContain('AND ms.empresa_id = ?');
+    expect(repository).toContain('AND m.empresa_id = ?');
+    expect(repository).toContain('.bind(modeloId, empresaId)');
+    expect(repository).toContain(
+      '.bind(input.empresaId, input.tipoSessaoCodigo, input.tipoAeronave, input.empresaId)',
+    );
+    expect(repository).toContain('.bind(empresaId, modeloId)');
   });
 });

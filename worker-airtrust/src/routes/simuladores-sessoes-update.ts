@@ -23,10 +23,8 @@ import {
   shouldNotifySimulatorSessionUpdate,
 } from '../services/simuladores-session-notifications';
 import { requireAdminForDelete } from './simuladores-admin-guard';
-import { timeToMinutes, syncSessaoEscalaEventos, findSessaoConflict, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, resolveTemplateIdSessao, normalizeChecksSessao, criarQualificacoesPlanejadas, listarParticipantesDaSessaoParaQualificacao, sincronizarQualificacoesDaSessaoConcluida, instrutorEstaEntreParticipantes } from '../services/simuladores/shared';
+import { syncSessaoEscalaEventos, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, normalizeChecksSessao, listarParticipantesDaSessaoParaQualificacao, sincronizarQualificacoesDaSessaoConcluida } from '../services/simuladores/shared';
 import { getTenantContext } from '../middleware/tenant';
-import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
-import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
 import { syncExaminadorChecks, syncFichasEspeciais } from '../services/simuladores/session-examiner-checks';
 import {
@@ -35,6 +33,15 @@ import {
   planSessaoSchedule,
 } from '../services/simuladores/session-schedule-update';
 import { ensureQualificacoesPlanejadas } from '../services/simuladores/session-planejadas';
+import {
+  applyParticipantes,
+  planParticipantes,
+  type ParticipanteInput,
+} from '../services/simuladores/session-participants';
+import {
+  findSessaoAtual,
+  listParticipantesAtivos,
+} from '../repositories/simuladores/session-participants-repository';
 import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
@@ -118,12 +125,6 @@ async function resetFluxoFichasEmAndamento(db: D1Database, sessaoId: number | st
     )
     .bind(sessaoId)
     .run();
-}
-
-/** Shape of a participante item as received in the PUT /sessoes/:id request body. */
-interface SessaoParticipanteInput {
-  funcionario_id?: string | number;
-  funcao?: string;
 }
 
 /** Columns of simulador_agendamentos actually read after the UPDATE (select-all query below). */
@@ -290,32 +291,16 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
 
     // ATUALIZAR PARTICIPANTES + SINCRONIZAR FICHAS
     if (b.participantes && Array.isArray(b.participantes)) {
-      const sessaoAtual = await c.env.DB.prepare(
-        'SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .first();
-
-      // IDs dos participantes que estão na sessão atualmente
-      const partAntigosRows = await c.env.DB.prepare(
-        'SELECT funcionario_id, funcao FROM sessoes_participantes WHERE sessao_id=? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .all();
-      const idsAntigos = new Set(
-        (partAntigosRows.results || []).map((r: any) => Number(r.funcionario_id)),
-      );
-
-      // IDs novos enviados pelo frontend
-      const novosValidos = (b.participantes as SessaoParticipanteInput[]).filter(
-        (p): p is SessaoParticipanteInput & { funcionario_id: string | number } =>
-          Boolean(p.funcionario_id),
-      );
+      const sessaoAtual = await findSessaoAtual(c.env.DB, id);
+      const partAntigos = await listParticipantesAtivos(c.env.DB, id);
 
       // ── Bloqueio de autoavaliação: instrutor não pode ser participante ────
-      const instrutorEfetivo =
-        b.instrutor_id !== undefined ? b.instrutor_id : (a as any)?.instrutor_id;
-      if (instrutorEstaEntreParticipantes(instrutorEfetivo, novosValidos)) {
+      const plan = planParticipantes({
+        atuais: partAntigos,
+        enviados: b.participantes as ParticipanteInput[],
+        instrutorEfetivo: b.instrutor_id !== undefined ? b.instrutor_id : (a as any)?.instrutor_id,
+      });
+      if (plan.instrutorEntreParticipantes) {
         return c.json(
           {
             success: false,
@@ -326,202 +311,16 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       }
       // ───────────────────────────────────────────────────────────────────────
 
-      const idsNovos = new Set(novosValidos.map((p: any) => Number(p.funcionario_id)));
-      const assinaturaAntiga = (partAntigosRows.results || [])
-        .map((p: any) => `${Number(p.funcionario_id)}:${String(p.funcao || '').toUpperCase()}`)
-        .sort()
-        .join('|');
-      const assinaturaNova = novosValidos
-        .map((p: any, index: number) => {
-          const funcao = p.funcao || (index === 0 ? 'PIC' : 'SIC');
-          return `${Number(p.funcionario_id)}:${String(funcao || '').toUpperCase()}`;
-        })
-        .sort()
-        .join('|');
-      participantesParaNotificacaoAlterados = assinaturaAntiga !== assinaturaNova;
+      participantesParaNotificacaoAlterados = plan.alterados;
+      const { novosValidos, removidos } = plan;
 
-      // Participantes removidos = estavam antes, não estão mais
-      const removidos = [...idsAntigos].filter((fid) => !idsNovos.has(fid));
-
-      // Soft-delete fichas de participantes removidos
-      for (const fid of removidos) {
-        await c.env.DB.prepare(
-          "UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE agendamento_slot_id=? AND colaborador_id_aluno=? AND deleted_at IS NULL",
-        )
-          .bind(id, fid)
-          .run();
-      }
-
-      // Soft-delete todos os participantes antigos
-      await c.env.DB.prepare(
-        `UPDATE sessoes_participantes AS sp
-            SET deleted_at=datetime('now')
-          WHERE sp.sessao_id=?
-            AND sp.deleted_at IS NULL
-            AND EXISTS (
-              SELECT 1
-                FROM simulador_agendamentos sa
-               WHERE sa.id = sp.sessao_id
-                 AND sa.empresa_id = ?
-                 AND sa.deleted_at IS NULL
-            )`,
-      )
-        .bind(id, empresaId)
-        .run();
-
-      // Inserir participantes novos + criar fichas para os que entraram agora
-      for (const [index, part] of novosValidos.entries()) {
-        const funcao = part.funcao || (index === 0 ? 'PIC' : 'SIC');
-        const partUuid = crypto.randomUUID();
-        await c.env.DB.prepare(
-          `INSERT INTO sessoes_participantes (uuid, sessao_id, funcionario_id, funcao, status)
-           VALUES (?, ?, ?, ?, 'CONFIRMADO')`,
-        )
-          .bind(partUuid, id, part.funcionario_id, funcao)
-          .run();
-
-        // Criar ficha para qualquer participante que ainda não a tenha (cobre retroativos)
-        const fichaExistente = await c.env.DB.prepare(
-          'SELECT id FROM fichas_sessao WHERE agendamento_slot_id=? AND colaborador_id_aluno=? AND deleted_at IS NULL',
-        )
-          .bind(id, part.funcionario_id)
-          .first();
-
-        if (!fichaExistente) {
-          const fichaUuid = crypto.randomUUID();
-          const tipoSessao = (sessaoAtual as any)?.tipo_sessao || b.tipo_sessao || 'TREINAMENTO';
-          const instrutorIdFinal =
-            b.instrutor_id !== undefined
-              ? b.instrutor_id
-              : (sessaoAtual as any)?.instrutor_id || null;
-          const dataFichaFinal =
-            b.data || (sessaoAtual as any)?.data || new Date().toISOString().split('T')[0];
-
-          // Inferir tipo_aeronave: preferir payload, senão simulador da sessão, senão ficha existente
-          let tipoAeronave: string | null = b.tipo_aeronave || null;
-          if (!tipoAeronave) {
-            const fichaRef = await c.env.DB.prepare(
-              'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND empresa_id=? AND deleted_at IS NULL LIMIT 1',
-            )
-              .bind(id, empresaId)
-              .first();
-            tipoAeronave = (fichaRef as any)?.tipo_aeronave || null;
-          }
-          if (!tipoAeronave) {
-            tipoAeronave =
-              (await getSimuladorModeloAeronave(
-                c.env.DB,
-                (sessaoAtual as { simulador_id?: string | number | null } | null)?.simulador_id,
-                empresaId,
-              )) || null;
-          }
-
-          const resultFicha = await c.env.DB.prepare(
-            `INSERT INTO fichas_sessao (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, empresa_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
-          )
-            .bind(
-              fichaUuid,
-              id,
-              part.funcionario_id,
-              instrutorIdFinal,
-              tipoSessao,
-              tipoAeronave,
-              dataFichaFinal,
-              empresaId,
-            )
-            .run();
-
-          const fichaId = resultFicha.meta.last_row_id;
-
-          // Popular manobras automaticamente
-          const modeloIdCandidate =
-            b.modelo_sessao_id || b.template_id || (sessaoAtual as any)?.template_id || null;
-          let modeloIdFinal: number | null = null;
-
-          if (modeloIdCandidate) {
-            const modeloTenant = await c.env.DB.prepare(
-              `SELECT id
-                 FROM modelos_sessao
-                WHERE id = ?
-                  AND empresa_id = ?
-                  AND deleted_at IS NULL
-                LIMIT 1`,
-            )
-              .bind(modeloIdCandidate, empresaId)
-              .first<{ id: number }>();
-            if (modeloTenant) modeloIdFinal = Number(modeloTenant.id);
-          }
-
-          if (!modeloIdFinal) {
-            const modeloEncontrado = await c.env.DB.prepare(
-              `SELECT ms.id FROM modelos_sessao ms
-                 INNER JOIN tipos_sessao ts
-                   ON ms.tipo_sessao_id = ts.id
-                  AND ts.empresa_id = ?
-                  AND ts.deleted_at IS NULL
-                 WHERE ts.codigo = ?
-                   AND ms.modelo_aeronave = ?
-                   AND ms.empresa_id = ?
-                   AND ms.deleted_at IS NULL
-                 LIMIT 1`,
-            )
-              .bind(empresaId, tipoSessao, tipoAeronave, empresaId)
-              .first<{ id: number }>();
-            if (modeloEncontrado) modeloIdFinal = Number(modeloEncontrado.id);
-          }
-
-          if (modeloIdFinal) {
-            const manobrasModelo = await c.env.DB.prepare(
-              `SELECT m.codigo, m.nome, COALESCE(m.nome, m.descricao) AS descricao, m.categoria,
-                      msm.ordem, msm.observacoes, COALESCE(msm.tripulante, 'AB') as tripulante
-                 FROM modelos_sessao_manobras msm
-                 INNER JOIN manobras m
-                   ON m.id = msm.manobra_id
-                  AND m.empresa_id = ?
-                  AND m.deleted_at IS NULL
-                 WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
-                 ORDER BY msm.ordem ASC`,
-            )
-              .bind(empresaId, modeloIdFinal)
-              .all();
-
-            const manobras = buildOperationalFichaManobras(
-              ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
-            );
-            if (manobras.length > 0) {
-              const insertManobrasStmt = c.env.DB.prepare(
-                `INSERT INTO fichas_sessao_manobras (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
-              );
-              const statements = manobras.map((man) => {
-                const m = man as {
-                  codigo: string;
-                  nome: string;
-                  descricao: string;
-                  categoria: string;
-                  ordem: number;
-                  tripulante: string;
-                };
-                return insertManobrasStmt.bind(
-                  fichaId,
-                  m.codigo,
-                  m.nome || m.descricao || '',
-                  m.descricao || '',
-                  m.categoria || 'GERAL',
-                  m.ordem,
-                  m.tripulante || 'AB',
-                );
-              });
-              
-              // Executar em lotes de 100 para respeitar limites do D1
-              for (let i = 0; i < statements.length; i += 100) {
-                await c.env.DB.batch(statements.slice(i, i + 100));
-              }
-            }
-          }
-        }
-      }
+      await applyParticipantes(c.env.DB, {
+        empresaId,
+        sessaoId: id,
+        body: b,
+        sessaoAtual,
+        plan,
+      });
 
       if (resetarFluxoFichas) {
         await resetFluxoFichasEmAndamento(c.env.DB, id);
