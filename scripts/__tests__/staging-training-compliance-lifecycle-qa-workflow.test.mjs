@@ -11,6 +11,9 @@ const workflow = readFileSync('.github/workflows/staging-training-compliance-lif
 const seed = readFileSync('scripts/staging/seed-qa-training-compliance-lifecycle.mjs', 'utf8');
 const spec = readFileSync('e2e/frontend-pr-ui-qa/training-compliance-lifecycle.spec.ts', 'utf8');
 const cycleEvidence = readFileSync('scripts/staging/qa-training-compliance-cycle-evidence.mjs', 'utf8');
+const certificateWriteRoutes = readFileSync('worker-airtrust/src/routes/qualificacoes-certificados-write.ts', 'utf8');
+const workerIndex = readFileSync('worker-airtrust/src/index.ts', 'utf8');
+const certificateFrontendHook = readFileSync('src/react-app/hooks/useCertificados.ts', 'utf8');
 
 test('lifecycle workflow is main-only, staging-only, exact-SHA guarded and always cleans up', () => {
   assert.match(workflow, /refs\/heads\/main/);
@@ -114,4 +117,20 @@ test('browser simulation covers organization, enrollment, progress, completion a
   assert.match(spec, /application\/pdf/);
   assert.match(spec, /SHA-256/);
   assert.match(spec, /renewal-cycle-2/);
+});
+
+test('renewal PDF QA targets the canonical Worker certificate routes, not the qualifications namespace', () => {
+  // The Worker mounts its historical certificate router under /api/certificados.
+  // Keeping a source-contract guard prevents test-only 404s that hide whether
+  // genuine R2 PDF generation, tenant-scoped listing and streaming still work.
+  assert.match(workerIndex, /app\.route\('\/api\/certificados', qualificacoesCertificadosRoutes\)/);
+  assert.match(certificateWriteRoutes, /app\.post\(\s*'\/historico\/:id\/certificados\/gerar'/);
+  assert.match(certificateFrontendHook, /\/certificados\/historico\/\$\{qualificacao_id\}\/certificados\/gerar/);
+  assert.match(spec, /\/api\/certificados\/historico\/\$\{secondHistoryId\}\/certificados\/gerar/);
+  assert.match(spec, /\/api\/certificados\/historico\/\$\{secondHistoryId\}\/certificados\x60/);
+  assert.doesNotMatch(spec, /\/api\/qualificacoes\/historico\/\$\{secondHistoryId\}\/certificados/);
+  assert.match(spec, /\/api\/pasta-virtual\/stream\/\$\{documentId\}/);
+  assert.match(spec, /application\/pdf/);
+  assert.match(spec, /%PDF-/);
+  assert.match(spec, /SHA-256/);
 });
