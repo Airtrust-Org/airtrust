@@ -21,6 +21,46 @@ describe('FRMS fatigue analytics: tenant isolation', () => {
     expect(correlatedQuery()).toContain('fj.empresa_id = ch.empresa_id');
   });
 
+  it('CSV exported rows never represent unverified KSS or KSS 9 as green/APTO', () => {
+    const exported = source.slice(source.indexOf("router.get('/fadiga-checkin/export'"));
+    const match = exported.match(/const rows = await c\\.env\\.DB\\.prepare\\(\\s*`([\\s\\S]*?)`/);
+    if (!match) throw new Error('Cannot locate production export SQL');
+    const sql = match[1].replace('${exportSectorScope.clause}', '1 = 1');
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(`
+        CREATE TABLE funcionarios (id INTEGER, empresa_id INTEGER, nome TEXT, deleted_at TEXT);
+        CREATE TABLE frms_fadiga_checkin (
+          empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT,
+          kss_score INTEGER, kss_provenance TEXT, horas_sono REAL,
+          qualidade_sono INTEGER, score_fadiga REAL, nivel_fadiga TEXT,
+          status_operacional TEXT, computed_risk_level TEXT, fit_for_duty INTEGER,
+          requires_frat_review INTEGER, frat_sugerido_nivel TEXT,
+          associado_frat_avaliacao_id TEXT, observacoes TEXT, deleted_at TEXT
+        );
+        INSERT INTO funcionarios VALUES (10,7,'High KSS',NULL);
+        INSERT INTO funcionarios VALUES (11,7,'Legacy',NULL);
+        INSERT INTO funcionarios VALUES (12,7,'Valid',NULL);
+        INSERT INTO funcionarios VALUES (10,8,'Another Company',NULL);
+        INSERT INTO frms_fadiga_checkin VALUES
+          (7,10,'2026-11-03',9,'CREW_REPORTED',8,4,8,'VERDE','APTO','normal',1,0,NULL,NULL,NULL,NULL),
+          (7,11,'2026-11-03',5,NULL,8,4,8,'VERDE','APTO','normal',1,0,NULL,NULL,NULL,NULL),
+          (7,12,'2026-11-03',3,'CREW_REPORTED',8,4,8,'VERDE','APTO','normal',1,0,NULL,NULL,NULL,NULL);
+      `);
+      const rows = db.prepare(sql).all(7,'2026-11-03','2026-11-03');
+      expect(rows).toHaveLength(3);
+      const byName = (name: string) => rows.find((row: { funcionario_nome?: string }) => row.funcionario_nome === name);
+      expect(byName('Legacy')).toMatchObject({
+        kss_score: null, score_fadiga: null, nivel_fadiga: null, status_operacional: null,
+      });
+      expect(byName('High KSS')).toMatchObject({ kss_score: 9, nivel_fadiga: null, status_operacional: null });
+      expect(byName('Valid')).toMatchObject({ kss_score: 3, nivel_fadiga: 'VERDE', status_operacional: 'APTO' });
+    } finally {
+      db.close();
+    }
+  });
+
   it('actual SQLite correlation cannot join another company employee or duty', () => {
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
     const db = new DatabaseSync(':memory:');
