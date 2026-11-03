@@ -2249,7 +2249,7 @@ async function relabelImportedJornadasAsSigvoos(
   }
 }
 
-async function buildSelectedDaysForSigvoosImport(
+export async function buildSelectedDaysForSigvoosImport(
   db: D1Database,
   previewLines: FiraLinhPreview[],
   empresaId?: number | null,
@@ -2264,6 +2264,9 @@ async function buildSelectedDaysForSigvoosImport(
   const shouldReplaceByJornadaId = new Map<string, boolean>();
   const existingByJornadaId = new Map<string, JornadaDuplicataCandidate>();
   if (duplicateIds.length > 0) {
+    if (empresaId == null || !Number.isSafeInteger(empresaId) || empresaId <= 0) {
+      throw new Error('SIGVOOS_REPLACEMENT_REQUIRES_EMPRESA_ID');
+    }
     const placeholders = duplicateIds.map(() => '?').join(', ');
     const rows = await db
       .prepare(
@@ -2277,9 +2280,9 @@ async function buildSelectedDaysForSigvoosImport(
                 registrado_por,
                 observacao
            FROM frms_jornada
-          WHERE id IN (${placeholders})`,
+          WHERE id IN (${placeholders}) AND empresa_id = ?`,
       )
-      .bind(...duplicateIds)
+      .bind(...duplicateIds, empresaId)
       .all<JornadaDuplicataCandidate>();
 
     for (const row of rows.results || []) {
