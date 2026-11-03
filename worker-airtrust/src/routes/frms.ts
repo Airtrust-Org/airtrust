@@ -114,6 +114,7 @@ import {
   auditFrms,
   assertTripulanteEmpresa,
   assertJornadaEmpresa,
+  assertFuncionarioNoEscopoFrms,
   resolveFuncionarioId,
 } from './frms-shared';
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -948,6 +949,8 @@ frmsRoutes.get(
           403,
         );
       }
+      const outOfScope = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(func.id));
+      if (outOfScope) return outOfScope;
     }
 
     // Triagem operacional usa apenas fonte canônica (SIGVOOS); FIRA/MANUAL não inflam o score.
@@ -1415,31 +1418,39 @@ frmsRoutes.patch(
       return c.json({ success: false, error: 'Jornada não encontrada', code: 'NOT_FOUND' }, 404);
     }
 
-    const role = String(c.get('userRole') || '').toUpperCase();
-    const isPrivileged = role === 'ADMIN' || role === 'MANAGER' || role === 'GESTOR';
-    const funcionarioIdSessao = await resolveFuncionarioId(c);
-    const tripulanteIdJornada = String(jornada.tripulante_id || '');
-    if (!isPrivileged && funcionarioIdSessao !== tripulanteIdJornada) {
-      return c.json(
-        {
-          success: false,
-          error: 'Sem permissão para editar sono desta jornada.',
-          code: 'FORBIDDEN',
-        },
-        403,
-      );
+    // assertJornadaEmpresa já aplica tenant + escopo próprio/setorial do RBAC.
+    // Não repetir uma whitelist de papéis que liberaria gestor fora do setor.
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) {
+      return c.json({ success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED' }, 403);
     }
 
-    await c.env.DB.prepare(
+    const writeResult = await c.env.DB.prepare(
       `UPDATE frms_jornada
           SET hora_dormiu = ?,
               fonte_sono = 'INFORMADO',
               updated_at = datetime('now')
         WHERE id = ?
-          AND deleted_at IS NULL`,
+          AND deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM funcionarios f
+             WHERE f.id = CAST(frms_jornada.tripulante_id AS INTEGER)
+               AND f.empresa_id = ?
+               AND f.deleted_at IS NULL
+               AND COALESCE(f.ativo, 1) = 1
+          )`,
     )
-      .bind(parsed.data.horaDormiu, jornadaId)
+      .bind(parsed.data.horaDormiu, jornadaId, empresaId)
       .run();
+    // A leitura prévia não basta: se o vínculo setorial/tenant mudou durante a
+    // requisição, nenhuma recomputação pode seguir após UPDATE sem linha gravada.
+    if (Number(writeResult.meta?.changes ?? 0) !== 1) {
+      return c.json({
+        success: false,
+        error: 'Jornada indisponível para atualização no escopo atual.',
+        code: 'SLEEP_PATCH_SCOPE_OR_VERSION_CONFLICT',
+      }, 409);
+    }
 
     // recalcularPipeline's limites parameter is inert (self-resolves governed context).
     const jornadaAtualizada = {

@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../middleware/employee-sector-access';
 import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
@@ -17,6 +18,8 @@ import {
 import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 import { createLogger } from '../utils/logger';
 import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
+import { isValidPastOrTodayCheckinDate } from '../lib/frms/checkin-date-guard';
+import { isAtOrAfterFrmsPresentation } from '../lib/frms/checkin-submission-timing';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -41,7 +44,8 @@ const submitSchema = z.object({
     .min(READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs)
     .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
   trials: z.array(trialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
-  protocol_version: z.enum(READINESS_PROTOCOL_VERSIONS).optional(),
+  // Historical protocol versions are read-only: a 60 s upload cannot masquerade as PVT-B.
+  protocol_version: z.literal(READINESS_PROTOCOL.version).optional(),
 });
 
 function previousDate(value: string): string {
@@ -114,19 +118,23 @@ router.get('/baseline', async (c) => {
   const protocolVersion = isReadinessProtocolVersion(protocolParam)
     ? protocolParam
     : READINESS_PROTOCOL.version;
-  const sessions = await countReadinessBaselineSessions(
-    c.env.DB,
-    empresaId,
-    funcionarioId,
-    protocolVersion,
-    beforeDate || undefined,
-  );
+  const sessions = protocolVersion === READINESS_PROTOCOL.version
+    ? 0 // Sem aparelho e critério descansado não há baseline válido.
+    : await countReadinessBaselineSessions(
+      c.env.DB,
+      empresaId,
+      funcionarioId,
+      protocolVersion,
+      beforeDate || undefined,
+    );
   return c.json({
     success: true,
     data: {
       sessions,
       minimum_sessions: READINESS_PROTOCOL.minimumBaselineSessions,
-      ready: sessions >= READINESS_PROTOCOL.minimumBaselineSessions,
+      // No persisted device/rested qualification exists in Schema V2 yet.
+      // A historical session count does not establish a valid baseline.
+      ready: false,
       protocol_version: protocolVersion,
     },
   });
@@ -182,47 +190,23 @@ router.get('/team', async (c) => {
     forcedFuncionarioId = funcionarioId;
   }
 
+  // A team-view role does not grant access to all sectors in the tenant.
+  // Apply the same employee-sector policy used by other FRMS team reports.
+  const teamSectorAccess = hasTeamScope ? await getEmployeeSectorAccess(c, empresaId) : null;
+  const teamScope = teamSectorAccess ? buildFuncionarioScopeWhere(teamSectorAccess, 'f') : null;
+
   // Anchor the team view in the authoritative daily check-in instead of the
   // readiness table alone. Historical builds persisted these in two requests;
   // if the second request failed, the operator saw "check-in realizado" beside
   // a readiness gap without knowing whether the test write had been lost.
+  // Brief protocol has no validated same-device/rested baseline in this schema.
+  // Never count different-device sessions as evidence of normal readiness.
   const fields = `
     CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
     ch.data_checkin AS reference_date,
-    CASE
-      WHEN ra.id IS NOT NULL THEN ra.classification
-      WHEN (
-        SELECT COUNT(*)
-          FROM frms_readiness_assessment prior
-         WHERE prior.empresa_id = ch.empresa_id
-           AND prior.funcionario_id = ch.funcionario_id
-           AND prior.protocol_version = ?
-           AND prior.reference_date < ch.data_checkin
-           AND prior.deleted_at IS NULL
-      ) < ? THEN 'baseline_building'
-      ELSE NULL
-    END AS classification,
-    COALESCE(
-      ra.baseline_sessions,
-      (
-        SELECT COUNT(*)
-          FROM frms_readiness_assessment prior
-         WHERE prior.empresa_id = ch.empresa_id
-           AND prior.funcionario_id = ch.funcionario_id
-           AND prior.protocol_version = ?
-           AND prior.reference_date < ch.data_checkin
-           AND prior.deleted_at IS NULL
-      )
-    ) AS baseline_sessions,
-    COALESCE(ra.baseline_ready, CASE WHEN (
-      SELECT COUNT(*)
-        FROM frms_readiness_assessment prior
-       WHERE prior.empresa_id = ch.empresa_id
-         AND prior.funcionario_id = ch.funcionario_id
-         AND prior.protocol_version = ?
-         AND prior.reference_date < ch.data_checkin
-         AND prior.deleted_at IS NULL
-    ) >= ? THEN 1 ELSE 0 END) AS baseline_ready,
+    COALESCE(ra.classification, 'baseline_building') AS classification,
+    COALESCE(ra.baseline_sessions, 0) AS baseline_sessions,
+    COALESCE(ra.baseline_ready, 0) AS baseline_ready,
     ra.median_rt_delta_pct,
     ra.lapse_rate_delta,
     ra.warning_signals_json,
@@ -231,6 +215,10 @@ router.get('/team', async (c) => {
     CASE WHEN ra.id IS NULL THEN 1 ELSE 0 END AS assessment_missing`;
   const baseSql = `SELECT ${fields}
        FROM frms_fadiga_checkin ch
+       INNER JOIN funcionarios f
+         ON f.id = CAST(ch.funcionario_id AS INTEGER)
+        AND f.empresa_id = ch.empresa_id
+        AND f.deleted_at IS NULL
        LEFT JOIN frms_readiness_assessment ra
          ON ra.empresa_id = ch.empresa_id
         AND ra.funcionario_id = ch.funcionario_id
@@ -238,16 +226,9 @@ router.get('/team', async (c) => {
         AND ra.deleted_at IS NULL
       WHERE ch.empresa_id = ?
         AND ch.data_checkin = ?
-        AND ch.deleted_at IS NULL`;
-  const commonBinds = [
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.minimumBaselineSessions,
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.minimumBaselineSessions,
-    empresaId,
-    referenceDate,
-  ] as const;
+        AND ch.deleted_at IS NULL
+        AND ${teamScope?.clause ?? '1 = 1'}`;
+  const commonBinds = [empresaId, referenceDate, ...(teamScope?.bindings ?? [])] as const;
   const statement = forcedFuncionarioId
     ? c.env.DB.prepare(`${baseSql} AND ch.funcionario_id = ? ORDER BY ch.funcionario_id ASC`).bind(
         ...commonBinds,
@@ -285,10 +266,19 @@ router.post('/', async (c) => {
     );
   }
 
+  const operationalToday = frmsOperationalTodayIso();
+  if (!isValidPastOrTodayCheckinDate(parsed.data.reference_date, operationalToday)) {
+    return c.json({ success: false, error: 'invalid_reference_date' }, 400);
+  }
+  // Objective tests performed now cannot be certified as historical pre-flight evidence.
+  if (parsed.data.reference_date !== operationalToday) {
+    return c.json({ success: false, error: 'retrospective_readiness_not_allowed' }, 409);
+  }
+
   // Subjective signals are authoritative from the already-saved tenant-scoped
   // daily fatigue check-in. The browser cannot override KSS or sleep values here.
   const checkin = await c.env.DB.prepare(
-    `SELECT id, kss_score, horas_sono
+    `SELECT id, kss_score, kss_provenance, horas_sono, jornada_inicio_prevista
        FROM frms_fadiga_checkin
       WHERE empresa_id = ?
         AND funcionario_id = ?
@@ -297,7 +287,7 @@ router.post('/', async (c) => {
       LIMIT 1`,
   )
     .bind(empresaId, funcionarioId, parsed.data.reference_date)
-    .first<{ id: string; kss_score: number; horas_sono: number }>();
+    .first<{ id: string; kss_score: number; kss_provenance: string | null; horas_sono: number | null; jornada_inicio_prevista: string | null }>();
 
   if (!checkin?.id) {
     return c.json(
@@ -308,6 +298,32 @@ router.post('/', async (c) => {
       },
       409,
     );
+  }
+
+  if (isAtOrAfterFrmsPresentation(new Date(), checkin.jornada_inicio_prevista)) {
+    return c.json({ success: false, error: 'post_presentation_readiness_not_allowed' }, 409);
+  }
+
+  // Legacy numeric KSS without provenance is not evidence of a crew response.
+  // Never compute objective-readiness conclusions from a defaulted/derived KSS.
+  if (checkin.kss_provenance !== 'CREW_REPORTED' ||
+      !Number.isInteger(checkin.kss_score) ||
+      checkin.kss_score < 1 || checkin.kss_score > 9) {
+    return c.json({
+      success: false,
+      error: 'KSS_PROVENANCE_UNVERIFIED',
+      message: 'É necessário KSS explicitamente informado pelo tripulante para registrar o teste.',
+    }, 409);
+  }
+
+  // SQL NULL must not be coerced to 0 hours of sleep: absence is not a
+  // crew-declared sleepless night, and readiness cannot infer the difference.
+  if (checkin.horas_sono == null || !Number.isFinite(Number(checkin.horas_sono))) {
+    return c.json({
+      success: false,
+      error: 'SLEEP_EVIDENCE_MISSING',
+      message: 'Informe as horas de sono no check-in antes de registrar o teste.',
+    }, 409);
   }
 
   try {

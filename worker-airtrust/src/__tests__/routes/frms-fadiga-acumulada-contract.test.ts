@@ -219,6 +219,12 @@ describe('frms fadiga acumulada contract', () => {
     expect(
       statements.some((item) => item.sql.includes("UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'")),
     ).toBe(true);
+    const firaCount = statements.find((item) => item.sql.includes('FROM frms_importacao_fira fira'));
+    expect(firaCount?.sql).toContain('p.empresa_id = ?');
+    expect(firaCount?.sql).not.toContain('op.empresa_id');
+    expect(firaCount?.binds).toEqual([42, 2026, 6, '7', 42]);
+    const sourceCount = statements.find((item) => item.sql.includes('GROUP BY UPPER(COALESCE'));
+    expect(sourceCount?.sql).toContain('j.empresa_id = f.empresa_id');
   });
 
   it('retorna campos de integridade quando jornada zerada tem HV positiva', async () => {

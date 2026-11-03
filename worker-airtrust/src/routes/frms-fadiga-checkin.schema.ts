@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { READINESS_PROTOCOL, READINESS_PROTOCOL_VERSIONS } from '../lib/frms/readiness';
+import { LATE_CREW_CHECKIN_REASONS } from '../lib/frms/checkin-date-guard';
 
 
 const ReadinessTrialSchema = z.object({
@@ -45,6 +46,7 @@ export const CheckinCreateSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
+    late_submission_reason: z.enum(LATE_CREW_CHECKIN_REASONS).optional(),
     hora_dormiu: z
       .string()
       .regex(/^\d{2}:\d{2}$/)
@@ -66,7 +68,7 @@ export const CheckinCreateSchema = z
     oportunidade_sono_horas_24h: z.number().min(0).max(24).optional(),
     horas_sono_48h: z.number().min(0).max(48).optional(),
     qualidade_sono: z.number().int().min(1).max(5).optional(),
-    kss_score: z.number().int().min(1).max(9).optional(),
+    kss_score: z.number().int().min(1).max(9),
     subjective_fatigue_level: z.number().int().min(0).max(10).optional(),
     sleepiness_level: z.number().int().min(0).max(10).optional(),
     sintomas: SintomasSchema,
@@ -87,6 +89,9 @@ export const CheckinCreateSchema = z
     aceite_termos: z.literal(true).optional(),
     aceite_privacidade: z.literal(true).optional(),
     readiness: EmbeddedReadinessSchema.optional(),
+  })
+  .refine((data) => !data.reference_date || !data.data_checkin || data.reference_date === data.data_checkin, {
+    message: 'reference_date e data_checkin devem ser iguais', path: ['data_checkin'],
   })
   .refine((data) => {
     const temHoras = typeof data.horas_sono_24h === 'number';

@@ -267,12 +267,14 @@ export interface InputSono {
   horasSonoPadrao: number;
   horaDormiu?: number | null;
   horaAcordou?: number | null;
+  /** Duração declarada pelo tripulante, em minutos; não é oportunidade de sono. */
+  duracaoInformadaMin?: number | null;
 }
 
 export interface OutputSono {
   tAcordouMin: number;
-  tDormiuMin: number;
-  sonoEfetivoMin: number;
+  tDormiuMin: number | null;
+  sonoEfetivoMin: number | null;
   fonteSono: 'INFORMADO' | 'PADRAO';
   despertarEstimado: boolean;
 }
@@ -312,10 +314,9 @@ export function calcularPenalidadeWOCL(
  * Duas proveniências distintas são reportadas separadamente e não devem ser
  * confundidas (ver docs/frms/frms-scientific-audit.md, D-01):
  *
- * - `fonteSono` descreve a proveniência do **dado de sono** (duração). É
- *   `INFORMADO` quando o tripulante forneceu `horaDormiu` e/ou `horaAcordou`.
- *   Esta é a semântica gravada em `frms_jornada.fonte_sono` pela rota
- *   `frms.ts` ao registrar `hora_dormiu`, e é a que `informedData` consome.
+ * - `fonteSono` descreve a proveniência da duração: `INFORMADO` somente
+ *   quando há duração relatada ou janela de sono completa e válida.
+ *   Apenas o despertar não comprova a duração do sono.
  * - `despertarEstimado` descreve a proveniência do **horário de despertar**.
  *   É `true` sempre que o despertar foi derivado da apresentação.
  */
@@ -326,26 +327,24 @@ export function calcularSono(input: InputSono): OutputSono {
       ? input.horaApresentacaoMin - input.minutosAntesApresentacao
       : input.horaAcordou;
 
-  let sonoEfetivoMin: number;
-  if (input.horaDormiu != null) {
+  // O tempo explicitamente relatado prevalece sobre horários derivados.
+  const reported = input.duracaoInformadaMin;
+  const reportedValid = reported != null && Number.isFinite(reported) && reported >= 0 && reported <= 1440;
+  let sonoEfetivoMin: number | null = reportedValid ? Math.round(reported) : null;
+  if (!reportedValid && input.horaDormiu != null && input.horaAcordou != null) {
     const acordouDia = normalizeMinuteOfDay(tAcordouMin);
     const dormiuDia = normalizeMinuteOfDay(input.horaDormiu);
     const diff = acordouDia - dormiuDia;
-    sonoEfetivoMin = diff >= 0 ? diff : diff + 1440;
-  } else {
-    sonoEfetivoMin = Math.round(input.horasSonoPadrao * 60);
+    const windowMinutes = diff >= 0 ? diff : diff + 1440;
+    // 0 ou mais de 14 h na mesma janela indica horário inconsistente.
+    sonoEfetivoMin = windowMinutes > 0 && windowMinutes <= 840 ? windowMinutes : null;
   }
-
-  if (!Number.isFinite(sonoEfetivoMin) || sonoEfetivoMin <= 0) {
-    sonoEfetivoMin = Math.round(input.horasSonoPadrao * 60);
-  }
-  sonoEfetivoMin = Math.min(sonoEfetivoMin, 960);
 
   return {
     tAcordouMin,
-    tDormiuMin: tAcordouMin - sonoEfetivoMin,
+    tDormiuMin: sonoEfetivoMin == null ? null : tAcordouMin - sonoEfetivoMin,
     sonoEfetivoMin,
-    fonteSono: input.horaDormiu != null || input.horaAcordou != null ? 'INFORMADO' : 'PADRAO',
+    fonteSono: sonoEfetivoMin == null ? 'PADRAO' : 'INFORMADO',
     despertarEstimado,
   };
 }

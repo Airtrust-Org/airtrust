@@ -50,7 +50,8 @@ function round1(value: number): number { return Math.round(value * 10) / 10; }
 
 export function computeOperationalLoadV2(input: OperationalLoadV2Input): OperationalLoadV2Result {
   const count = Number.isFinite(input.landingsCount) ? Math.max(0, Math.floor(input.landingsCount)) : 0;
-  const quality = input.landingsEvidenceQuality ?? (count > 0 ? 'OBSERVED' : 'CONFIRMED_ZERO');
+  // Sem qualidade declarada, zero pousos é ausência de evidência, não dia sem voo.
+  const quality = input.landingsEvidenceQuality ?? (count > 0 ? 'OBSERVED' : 'INCOMPLETE');
   const noFlight = quality === 'CONFIRMED_ZERO';
   const hasTemp = !noFlight && input.temperatureMaxC != null && Number.isFinite(input.temperatureMaxC);
   const temp = hasTemp ? round1(Number(input.temperatureMaxC)) : null;

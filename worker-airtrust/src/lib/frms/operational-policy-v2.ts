@@ -258,14 +258,15 @@ export type RecoveryCreditActivity = 'OFF_DUTY' | 'STANDBY_HOME_HOTEL' | 'STANDB
 export interface RecoveryCreditResult { creditPoints: number; basePoints: number; restFactor: number; calloutMultiplier: number; eligible: boolean; }
 export function computeRecoveryCredit(input: {
   activityType: RecoveryCreditActivity;
-  absoluteRestHours: number | null;
+  /** Sono efetivamente relatado; não confundir com oportunidade de repouso. */
+  reportedSleepHours: number | null;
   noWorkHours: number | null;
   immediateCalloutRequired?: boolean | null;
 }, p: FrmsOperationalPolicyV2): RecoveryCreditResult {
   const basePoints = input.activityType === 'STANDBY_HOME_HOTEL' ? p.recoveryHotelMaxPoints
     : input.activityType === 'STANDBY_ONSITE' ? p.recoveryOnsiteMaxPoints : 0;
   const noWorkEligible = input.noWorkHours != null && Number.isFinite(input.noWorkHours) && input.noWorkHours >= p.recoveryNoWorkMinHours;
-  const rest = input.absoluteRestHours;
+  const rest = input.reportedSleepHours;
   let restFactor = 0;
   if (rest != null && Number.isFinite(rest)) {
     if (rest >= p.recoveryAbsoluteRestFullHours) restFactor = 1;
@@ -281,13 +282,10 @@ export function computeRecoveryCredit(input: {
 }
 
 export interface FlightHoursDeltaResult { rawPenaltyPoints: number; priorDayCreditAppliedPoints: number; netDeltaPoints: number; generatedCreditForNextDayPoints: number; }
-export function computeFlightHoursDelta(hvMinutesInput: number, priorDayCreditPointsInput: number, p: FrmsOperationalPolicyV2): FlightHoursDeltaResult {
+export function computeFlightHoursDelta(hvMinutesInput: number, _priorDayCreditPointsInput: number, p: FrmsOperationalPolicyV2): FlightHoursDeltaResult {
+  // Horas de voo reduzidas não comprovam descanso. A política antiga de crédito D+1
+  // podia neutralizar uma penalidade real no dia seguinte sem evidência de sono.
   const hvMinutes = Number.isFinite(hvMinutesInput) ? Math.max(0, hvMinutesInput) : 0;
-  const priorCredit = Number.isFinite(priorDayCreditPointsInput) ? Math.max(0, priorDayCreditPointsInput) : 0;
-  let generatedCreditForNextDayPoints = 0;
-  if (hvMinutes < p.hvCreditThresholdMinutes && p.hvCreditThresholdMinutes > 0) {
-    generatedCreditForNextDayPoints = p.hvCreditMaxPoints * ((p.hvCreditThresholdMinutes - hvMinutes) / p.hvCreditThresholdMinutes);
-  }
   let rawPenaltyPoints = 0;
   if (hvMinutes > p.hvNeutralMaxMinutes) {
     rawPenaltyPoints = Math.min(
@@ -295,11 +293,10 @@ export function computeFlightHoursDelta(hvMinutesInput: number, priorDayCreditPo
       ((hvMinutes - p.hvNeutralMaxMinutes) / 60) * p.hvPenaltyPerExcessHourPoints,
     );
   }
-  const applied = Math.min(rawPenaltyPoints, priorCredit);
   return {
     rawPenaltyPoints,
-    priorDayCreditAppliedPoints: applied,
-    netDeltaPoints: rawPenaltyPoints === applied ? 0 : -(rawPenaltyPoints - applied),
-    generatedCreditForNextDayPoints,
+    priorDayCreditAppliedPoints: 0,
+    netDeltaPoints: rawPenaltyPoints > 0 ? -rawPenaltyPoints : 0,
+    generatedCreditForNextDayPoints: 0,
   };
 }

@@ -35,6 +35,7 @@ function history(overrides: Partial<FadigaCheckinItem> = {}): FadigaCheckinItem 
     data_checkin: '2026-08-27',
     hora_checkin: '06:20',
     kss_score: 1,
+    kss_provenance: 'CREW_REPORTED',
     horas_sono: 8,
     qualidade_sono: 4,
     score_fadiga: 4,
@@ -55,11 +56,26 @@ describe('mergeFadigaPainelHistory', () => {
     expect(result.kss_score).toBe(1);
     expect(result.hora_checkin).toBe('06:20');
     expect(result.horas_sono).toBe(8);
-    expect(result.status_operacional).toBe('APTO');
+    expect(result.status).toBe('incomplete_checkin');
+    expect(result.requires_operational_review).toBe(1);
+    expect(result.status_operacional).toBeNull();
+    expect(result.nivel_fadiga).toBeNull();
+  });
+
+  it('não restaura APTO ou VERDE de histórico quando o snapshot está incompleto', () => {
+    const [result] = mergeFadigaPainelHistory([
+      panel({ status: 'incomplete_checkin', kss_provenance: null,
+        score_fadiga: null, nivel_fadiga: null, status_operacional: null }),
+    ], [history({ kss_score: 9, kss_provenance: 'CREW_REPORTED',
+      status_operacional: 'APTO', nivel_fadiga: 'VERDE' })]);
+    expect(result).toMatchObject({
+      status: 'incomplete_checkin', kss_score: 9,
+      nivel_fadiga: null, status_operacional: null, score_fadiga: null,
+    });
   });
 
   it('não sobrescreve KSS já informado pela visão diária', () => {
-    const [result] = mergeFadigaPainelHistory([panel({ kss_score: 5 })], [history({ kss_score: 1 })]);
+    const [result] = mergeFadigaPainelHistory([panel({ kss_score: 5, kss_provenance: 'CREW_REPORTED' })], [history({ kss_score: 1 })]);
     expect(result.kss_score).toBe(5);
   });
 
@@ -75,6 +91,7 @@ describe('mergeFadigaPainelHistory', () => {
           status: 'normal',
           data_source: 'crew_reported',
           kss_score: 3,
+          kss_provenance: 'CREW_REPORTED',
         },
       ],
     } as never);
@@ -83,6 +100,26 @@ describe('mergeFadigaPainelHistory', () => {
     // Reconciliação vira no-op quando a fonte primária já trouxe o valor.
     const [merged] = mergeFadigaPainelHistory([result], [history({ kss_score: 9 })]);
     expect(merged.kss_score).toBe(3);
+  });
+
+  it('não ressuscita KSS derivado ou sem origem via histórico', () => {
+    const [fromLegacy] = mergeFadigaPainelHistory([panel()], [
+      history({ kss_score: 5, kss_provenance: 'DEFAULTED' }),
+    ]);
+    expect(fromLegacy.kss_score).toBeNull();
+
+    const [fromDaily] = normalizeFadigaPainelPayload({
+      date: '2026-08-27',
+      items: [{
+        funcionario_id: 15, date: '2026-08-27', status: 'incomplete_checkin',
+        data_source: 'crew_reported', kss_score: 5, kss_provenance: 'DERIVED',
+      }],
+    });
+    expect(fromDaily.kss_score).toBeNull();
+    const [merged] = mergeFadigaPainelHistory([fromDaily], [
+      history({ kss_score: 5, kss_provenance: null }),
+    ]);
+    expect(merged.kss_score).toBeNull();
   });
 
   it('não mistura check-ins de outra pessoa ou outra data', () => {
@@ -124,6 +161,34 @@ describe('team fatigue classification provenance fail-closed', () => {
     expect(row.data_source).toBe('not_applicable');
     expect(row.score_fadiga).toBeNull();
     expect(row.requires_operational_review).toBe(0);
+  });
+
+  it('never displays green when a stale NORMAL is missing KSS provenance', () => {
+    const [result] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, kss_score: 5, kss_provenance: null,
+        score_fadiga: 10, nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+        requires_operational_review: 0 }],
+    });
+    expect(result).toMatchObject({
+      status: 'incomplete_checkin', requires_operational_review: 1,
+      risk_reconciled_from_evidence: true,
+      kss_score: null, nivel_fadiga: null, status_operacional: null, score_fadiga: null,
+    });
+  });
+
+  it('escalates stale normal KSS 9 without accepting a persisted APTO flag', () => {
+    const [result] = normalizeFadigaPainelPayload({
+      date: '2026-10-27',
+      items: [{ ...baseRow, kss_score: 9, kss_provenance: 'CREW_REPORTED',
+        score_fadiga: 35, nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+        requires_operational_review: 0 }],
+    });
+    expect(result).toMatchObject({
+      status: 'critical', requires_operational_review: 1,
+      risk_reconciled_from_evidence: true, kss_score: 9,
+      nivel_fadiga: null, status_operacional: null,
+    });
   });
 
   it('keeps operational review required when a risky row omits the review flag', () => {

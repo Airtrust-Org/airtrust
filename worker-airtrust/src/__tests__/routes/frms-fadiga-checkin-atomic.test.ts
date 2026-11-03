@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
 const { syncMock } = vi.hoisted(() => ({ syncMock: vi.fn() }));
@@ -12,6 +12,11 @@ vi.mock('../../middleware/auth', () => ({
     await next();
   },
 }));
+vi.mock('../../lib/frms/operational-date', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/frms/operational-date')>()),
+  frmsOperationalTodayIso: () => '2026-10-16',
+}));
+
 vi.mock('../../middleware/tenant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../middleware/tenant')>()),
   getEmpresaId: (c: { get: (name: string) => unknown }) => Number(c.get('empresaId') || 0),
@@ -125,8 +130,172 @@ function request(readiness?: object) {
 
 describe('daily check-in atomic commit', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-16T09:30:00Z'));
     vi.clearAllMocks();
     syncMock.mockResolvedValue({ sync: { sincronizado: false, jornada_id: null } });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['2099-01-01', '2026-02-30'])(
+    'rejects impossible or future reference day %s before D1 writes',
+    async (date) => {
+      const { db, batch } = fakeDb();
+      const body = (await request().json()) as Record<string, unknown>;
+      const response = await router.fetch(
+        new Request('http://localhost/fadiga-checkin', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, reference_date: date }),
+        }),
+        { DB: db } as Env, {} as ExecutionContext,
+      );
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        success: false, error: 'invalid_reference_date',
+      });
+      expect(batch).not.toHaveBeenCalled();
+      expect(syncMock).not.toHaveBeenCalled();
+    },
+  );
+
+
+  it('rejects check-in older than D-1, even with an alleged justification', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-14', late_submission_reason: 'SYSTEM_UNAVAILABLE' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'historical_checkin_out_of_window' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('requires a reason before accepting late D-1 crew declaration', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-15' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'late_submission_reason_required' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+
+  it('does not accept objective readiness trials submitted retroactively for D-1', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...body, reference_date: '2026-10-15', late_submission_reason: 'SYSTEM_UNAVAILABLE',
+        readiness: { duration_ms: 60000, trials: trials() },
+      }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'retrospective_readiness_not_allowed' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('records justified D-1 as non-preflight evidence and requires human review', async () => {
+    const { db, batch, statements } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, reference_date: '2026-10-15', late_submission_reason: 'SYSTEM_UNAVAILABLE' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('RESTRITO');
+    const event = writes.find((write) => write.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      requires_operational_review: 1,
+      submission_context: { timing: 'RETROSPECTIVE_D1', reason: 'SYSTEM_UNAVAILABLE', preflight_evidence: false },
+    });
+    const notification = statements.find((s) => s.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in retrospectivo aguardando revisão');
+    expect(String(notification?.binds[1])).toContain('não é avaliação pré-voo');
+    expect(JSON.parse(String(notification?.binds[2]))).toMatchObject({
+      retrospective_submission: true, late_submission_reason: 'SYSTEM_UNAVAILABLE',
+    });
+  });
+
+
+  it('preserves crew-reported NÃO APTO over the retrospective RESTRITO fallback', async () => {
+    const { db, batch, statements } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...body,
+        reference_date: '2026-10-15',
+        late_submission_reason: 'SYSTEM_UNAVAILABLE',
+        fit_for_duty: false,
+        motivo_inaptidao: 'Condição não segura declarada pelo tripulante',
+      }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('NAO_APTO');
+    expect(writes[0].binds).toContain('VERMELHO');
+    expect(writes[0].binds).toContain(1);
+    const event = writes.find((write) => write.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      status_operacional: 'NAO_APTO',
+      computed_risk_level: 'unfit_for_duty',
+      requires_operational_review: 1,
+      submission_context: { timing: 'RETROSPECTIVE_D1', preflight_evidence: false },
+    });
+    const notification = statements.find((stmt) => stmt.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in de fadiga em atenção');
+    expect(String(notification?.binds[1])).toContain('NÃO APTO');
+    expect(String(notification?.binds[1])).toContain('não comprova avaliação pré-voo');
+  });
+
+  it('rejects contradictory check-in dates before D1 mutations', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, data_checkin: '2026-10-15' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(400);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+
+  it('flags same-day post-presentation submission without making a pre-flight claim', async () => {
+    vi.setSystemTime(new Date('2026-10-16T10:15:00Z')); // 07:15 at the flight base.
+    const { db, batch, statements } = fakeDb();
+    const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const writes = batch.mock.calls[0][0];
+    expect(writes[0].binds).toContain('RESTRITO');
+    const event = writes.find((stmt) => stmt.sql.includes('INSERT INTO frms_fadiga_evento'));
+    expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
+      status_operacional: 'RESTRITO', requires_operational_review: 1,
+      submission_context: { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false },
+    });
+    const notification = statements.find((stmt) => stmt.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in após apresentação aguardando revisão');
+    expect(JSON.parse(String(notification?.binds[2]))).toMatchObject({
+      post_presentation_submission: true, retrospective_submission: false,
+    });
+  });
+
+  it('rejects embedded objective readiness after presentation before any D1 write', async () => {
+    vi.setSystemTime(new Date('2026-10-16T10:01:00Z'));
+    const { db, batch } = fakeDb();
+    const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }), {
+      DB: db,
+    } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'post_presentation_readiness_not_allowed' });
+    expect(batch).not.toHaveBeenCalled();
+    expect(syncMock).not.toHaveBeenCalled();
   });
 
   it('commits check-in, readiness and ten trials, then KSS event in ONE D1 batch', async () => {
@@ -138,11 +307,18 @@ describe('daily check-in atomic commit', () => {
     const writes = batch.mock.calls[0][0];
     expect(writes).toHaveLength(13);
     expect(writes[0].sql).toContain('INSERT INTO frms_fadiga_checkin');
+    expect(writes[0].sql).toContain('kss_provenance');
+    expect(writes[0].binds).toContain('CREW_REPORTED');
     expect(writes[1].sql).toContain('INSERT INTO frms_readiness_assessment');
     expect(writes.slice(2, 12).every((s) => s.sql.includes('INSERT INTO frms_readiness_vigilance_trial'))).toBe(true);
     expect(writes[12].sql).toContain('INSERT INTO frms_fadiga_evento');
     expect(writes[12].binds[1]).toBe(7);
     expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ kss_field_provenance: 'CREW_REPORTED', kss_field_provenance_version: 'CHECKIN_SERVER_V1' });
+    expect(JSON.parse(String(writes[12].binds[4]))).toMatchObject({ declared_evidence: {
+      contract: 'FRMS_CREW_DECLARATION_V1', reference_date: '2026-10-16',
+      wake_time: '06:15', kss_score: 3, kss_provenance: 'CREW_REPORTED',
+      horas_sono_24h: 7, fit_for_duty: 1, hora_apresentacao: '07:00',
+    } });
     expect(syncMock).toHaveBeenCalledWith(expect.objectContaining({ readinessAlreadyPersisted: true }));
   });
 
@@ -153,12 +329,17 @@ describe('daily check-in atomic commit', () => {
     const statements = batch.mock.calls[0][0];
     expect(statements).toHaveLength(2);
     expect(statements[0].sql).toContain('UPDATE frms_fadiga_checkin');
+    expect(statements[0].sql).toContain('kss_provenance = ?');
+    expect(statements[0].binds).toContain('CREW_REPORTED');
     expect(statements[0].sql).toContain(
       'WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL',
     );
     expect(statements[0].binds.slice(-4)).toEqual(['checkin-present', 7, 70, '2026-10-16']);
     expect(statements[1].sql).toContain('INSERT INTO frms_fadiga_evento');
     expect(statements[1].binds[3]).toBe('CHECKIN_ATUALIZADO');
+    expect(JSON.parse(String(statements[1].binds[4]))).toMatchObject({
+      declared_evidence: { contract: 'FRMS_CREW_DECLARATION_V1', kss_score: 3, horas_sono_24h: 7 },
+    });
   });
 
   it('prevalidates malformed trial timing without mutating an existing check-in', async () => {
