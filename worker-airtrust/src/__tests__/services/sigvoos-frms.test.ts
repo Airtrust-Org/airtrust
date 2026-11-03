@@ -475,6 +475,46 @@ describe('sigvoos-frms service', () => {
     ).rejects.toThrow('SIGVOOS_PAGINATION_STALLED');
   });
 
+  it('rejects upstream errors even if they contain a syntactically empty flight array', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ status: 'ERRO', data: { main: [] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UPSTREAM_SEARCH_REJECTED');
+  });
+
+  it('does not mistake a changed upstream response format for zero flights', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ message: 'unexpected envelope' }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UNEXPECTED_RESPONSE_SHAPE');
+  });
+
+  it('rejects malformed flight arrays rather than filtering them into zero', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ data: { main: ['unexpected-string'] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UNEXPECTED_RESPONSE_SHAPE');
+  });
+
+  it('accepts a genuine empty SIGVOOS flight array', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ status: 'SUCESSO', data: { main: [] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).resolves.toEqual([]);
+  });
+
   it('resolves a tripulante by manual SIGVOOS mapping before other criteria', async () => {
     const dbStub = createSigvoosDbStub({
       manualMappings: [
