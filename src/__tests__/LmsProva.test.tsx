@@ -102,4 +102,28 @@ describe('Prova final do aluno', () => {
     expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Concluir treinamento' })).toBeNull();
   });
+
+  it('impede envio ou nova seleção enquanto a última resposta ainda não foi persistida', async () => {
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    mocked.mockResolvedValueOnce(ok(attempt(), 201));
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar prova' }));
+    await screen.findByText(/Questão 1/);
+
+    let releaseSave: ((response: Response) => void) | undefined;
+    mocked.mockImplementationOnce(() => new Promise<Response>(resolve => { releaseSave = resolve; }));
+    fireEvent.click(screen.getAllByRole('radio', { name: 'Sim' })[0]);
+    const send = screen.getByRole('button', { name: 'Enviar prova' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect((screen.getAllByRole('radio', { name: 'Não' })[1] as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(send);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(calls().filter(value => value.includes('/enviar'))).toHaveLength(0);
+
+    if (!releaseSave) throw new Error('O PUT de salvamento não foi iniciado');
+    releaseSave(ok({ saved: true }));
+    await waitFor(() => expect(send.disabled).toBe(false));
+    fireEvent.click(send);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
 });
