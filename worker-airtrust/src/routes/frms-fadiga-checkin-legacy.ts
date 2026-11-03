@@ -1240,22 +1240,23 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       checkinId,
     });
 
-    if (dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
+    if (datePolicy.retrospective || dailyRiskLevel !== 'normal' || finalNivel === 'LARANJA' || finalNivel === 'VERMELHO') {
       await c.env.DB.prepare(
         `INSERT INTO notificacoes_sistema
            (tipo, prioridade, titulo, mensagem, grupo, dados, empresa_id, created_at, updated_at)
-           VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', 'Check-in de fadiga em atenção', ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
+           VALUES ('FRMS_CHECKIN_FADIGA', 'ALTA', ?, ?, 'frms', ?, ?, datetime('now'), datetime('now'))`,
       )
         .bind(
-          `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
+          datePolicy.retrospective ? 'Check-in retrospectivo aguardando revisão' : 'Check-in de fadiga em atenção',
+          datePolicy.retrospective ? `Tripulante #${funcionarioId} registrou check-in retrospectivo de ${dataCheckin}; não é avaliação pré-voo. Revisão operacional necessária.` : `Tripulante #${funcionarioId} registrou risco ${dailyRiskLevel} em ${dataCheckin}. Revisão operacional necessária.`,
           JSON.stringify({
             empresa_id: empresaId,
             funcionario_id: funcionarioId,
             checkin_id: checkinId,
             score_fadiga: scoreBase.score_fadiga,
             nivel_fadiga: finalNivel,
-            computed_risk_level: dailyRiskLevel,
-            requires_operational_review: requiresOperationalReview,
+            computed_risk_level: dailyRiskLevel, requires_operational_review: requiresOperationalReview,
+            retrospective_submission: datePolicy.retrospective, late_submission_reason: datePolicy.reason,
           }),
           empresaId,
         )
@@ -1278,7 +1279,6 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         )
         .run();
     }
-
     await registrarAuditoria({
       db: c.env.DB,
       tabela: 'frms_fadiga_checkin',
