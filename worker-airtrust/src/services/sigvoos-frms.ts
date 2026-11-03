@@ -2381,6 +2381,11 @@ export async function persistSigvoosSyncMetadata(
   empresaId: number | null | undefined,
   summary: SigvoosSyncSummary,
 ): Promise<void> {
+  // A successful HTTP fetch is not a completed operational day when even one
+  // selected FIRA journey failed. Retain the prior high-watermark for retry.
+  if (!Number.isSafeInteger(summary.totalErros) || summary.totalErros > 0 || summary.totalErros < 0) {
+    throw new Error('SIGVOOS_PARTIAL_IMPORT_NOT_CONSOLIDATED');
+  }
   const current = await getSigvoosConfig(db, empresaId);
   if (!shouldAdvanceSigvoosSyncProgress(current.last_sync_to, summary.periodo.to)) {
     // The newer completion marker remains intact; the historical sync is in
