@@ -92,6 +92,15 @@ describe('ModalAtribuirQualificacao', () => {
     serviceMocks.atualizarHistoricoQualificacao.mockResolvedValue({ id: 77 });
   });
 
+  it('allows a registered instructor to receive a qualification as an employee', () => {
+    render(<ModalAtribuirQualificacao isOpen onClose={vi.fn()} />);
+
+    const employeeSelect = screen.getAllByRole('combobox')[0];
+    expect(employeeSelect.querySelector('option[value="2"]')).toHaveTextContent(
+      'Instrutor Cadastrado (00999)',
+    );
+  });
+
   it('uses only the canonical category catalog rather than legacy type text', () => {
     render(<ModalAtribuirQualificacao isOpen onClose={vi.fn()} />);
 
