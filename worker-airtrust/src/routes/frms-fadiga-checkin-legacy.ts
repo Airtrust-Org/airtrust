@@ -939,7 +939,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const dataCheckin = input.dataCheckin;
     const datePolicy = evaluateCrewCheckinDate(dataCheckin, todayIso(), parsed.data.late_submission_reason);
     if (!datePolicy.valid) return c.json({ success: false, error: datePolicy.error }, 400);
-
+    if (datePolicy.retrospective && parsed.data.readiness) return c.json({ success: false, error: 'retrospective_readiness_not_allowed' }, 409);
     const config = await getConfig(c.env.DB, empresaId);
     if (!config.ativo) {
       return c.json({ success: false, error: 'Check-in diário desativado para esta empresa' }, 400);
