@@ -188,43 +188,14 @@ router.get('/team', async (c) => {
   // readiness table alone. Historical builds persisted these in two requests;
   // if the second request failed, the operator saw "check-in realizado" beside
   // a readiness gap without knowing whether the test write had been lost.
+  // Brief protocol has no validated same-device/rested baseline in this schema.
+  // Never count different-device sessions as evidence of normal readiness.
   const fields = `
     CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,
     ch.data_checkin AS reference_date,
-    CASE
-      WHEN ra.id IS NOT NULL THEN ra.classification
-      WHEN (
-        SELECT COUNT(*)
-          FROM frms_readiness_assessment prior
-         WHERE prior.empresa_id = ch.empresa_id
-           AND prior.funcionario_id = ch.funcionario_id
-           AND prior.protocol_version = ?
-           AND prior.reference_date < ch.data_checkin
-           AND prior.deleted_at IS NULL
-      ) < ? THEN 'baseline_building'
-      ELSE NULL
-    END AS classification,
-    COALESCE(
-      ra.baseline_sessions,
-      (
-        SELECT COUNT(*)
-          FROM frms_readiness_assessment prior
-         WHERE prior.empresa_id = ch.empresa_id
-           AND prior.funcionario_id = ch.funcionario_id
-           AND prior.protocol_version = ?
-           AND prior.reference_date < ch.data_checkin
-           AND prior.deleted_at IS NULL
-      )
-    ) AS baseline_sessions,
-    COALESCE(ra.baseline_ready, CASE WHEN (
-      SELECT COUNT(*)
-        FROM frms_readiness_assessment prior
-       WHERE prior.empresa_id = ch.empresa_id
-         AND prior.funcionario_id = ch.funcionario_id
-         AND prior.protocol_version = ?
-         AND prior.reference_date < ch.data_checkin
-         AND prior.deleted_at IS NULL
-    ) >= ? THEN 1 ELSE 0 END) AS baseline_ready,
+    COALESCE(ra.classification, 'baseline_building') AS classification,
+    COALESCE(ra.baseline_sessions, 0) AS baseline_sessions,
+    COALESCE(ra.baseline_ready, 0) AS baseline_ready,
     ra.median_rt_delta_pct,
     ra.lapse_rate_delta,
     ra.warning_signals_json,
@@ -241,15 +212,7 @@ router.get('/team', async (c) => {
       WHERE ch.empresa_id = ?
         AND ch.data_checkin = ?
         AND ch.deleted_at IS NULL`;
-  const commonBinds = [
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.minimumBaselineSessions,
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.version,
-    READINESS_PROTOCOL.minimumBaselineSessions,
-    empresaId,
-    referenceDate,
-  ] as const;
+  const commonBinds = [empresaId, referenceDate] as const;
   const statement = forcedFuncionarioId
     ? c.env.DB.prepare(`${baseSql} AND ch.funcionario_id = ? ORDER BY ch.funcionario_id ASC`).bind(
         ...commonBinds,
