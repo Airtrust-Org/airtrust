@@ -188,6 +188,11 @@ async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boo
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
   page,
 }) => {
+  // This single-pass test covers two learners, UI enrollment, progress, finalization,
+  // reconciliation and qualification evidence. The original 180s global timeout
+  // masked the bounded 45s response waiter late in the seventh phase.
+  // Preserve bounded action/response timeouts; only extend the complete scenario.
+  test.setTimeout(420_000);
   expect(CODE).toMatch(/^QA-COMP-LIFE-/);
 
   // This profile is intentionally write-capable, but only against staging.
