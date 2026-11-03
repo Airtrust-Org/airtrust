@@ -958,6 +958,8 @@ async function runSigvoosFrmsDailySync(
         {
           from: window.from,
           to: window.to,
+          pageSize: 100,
+          maxPages: 10,
           clearExisting: false,
         },
         env,
