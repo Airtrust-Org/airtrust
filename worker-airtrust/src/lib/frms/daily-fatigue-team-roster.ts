@@ -38,6 +38,7 @@ export async function loadDailyFatigueTeamRoster(params: {
           ch.horas_sono,
           ch.horas_sono_48h,
           ch.wake_time,
+          ch.fit_for_duty,
           ch.score_fadiga,
           ch.nivel_fadiga,
           ch.status_operacional,
