@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  reconcile:
+  d1_reconcile:
     name: Governed EAD Plataforma historical qualification data reconciliation
     environment: production
     runs-on: ubuntu-latest
