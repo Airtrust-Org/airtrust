@@ -1,0 +1,8 @@
+{
+  "changeId": "frms-checkin-kss-provenance-0573",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0573_frms_checkin_kss_provenance.sql",
+  "fileHash": "06fa491147a5898b334abbe12610befc58f2f483ac6d1eecb03b957adc8ec34d",
+  "planPath": "worker-airtrust/schema-v2/plans/frms-checkin-kss-provenance-0573.md",
+  "planHash": "7f5fe9e66e3b667325394ff2b10a90594e8bf6bdb0fb97d05bdd26845d7c4c89"
+}
