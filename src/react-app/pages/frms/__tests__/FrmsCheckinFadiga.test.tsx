@@ -283,6 +283,7 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
     status: 'normal',
     data_source: 'crew_reported',
     kss_score,
+    kss_provenance: 'CREW_REPORTED',
     sleep_hours_24h: 7,
     score_fadiga,
     nivel_fadiga: 'VERDE',
