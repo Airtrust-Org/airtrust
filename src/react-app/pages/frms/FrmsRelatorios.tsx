@@ -36,6 +36,7 @@ interface FrmsReportRow {
   dias_conformes?: number;
   dias_violacao?: number;
   dias_nao_avaliados?: number;
+  dias_pendente_validacao?: number;
   dias_mitigacao?: number;
   dias_atencao?: number;
   fontes_normativas?: string[];
@@ -277,7 +278,7 @@ export default function FrmsRelatorios() {
     let csvContent = metadataRows.map((row) => row.map(csvCell).join(',')).join('\n') + '\n\n';
 
     if (tipo === 'compliance') {
-      csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
+      csvContent += ['Tripulante', 'Dias avaliados', 'Conformes', 'Violações', 'Não avaliados', 'Possível desconformidade a validar', 'Mitigação', 'Atenção', 'Fontes normativas'].map(csvCell).join(',') + '\n';
       for (const row of orderedData ?? []) {
         csvContent += [
           row.nome || row.tripulante_id,
@@ -285,7 +286,8 @@ export default function FrmsRelatorios() {
           row.dias_conformes ?? '',
           row.dias_violacao ?? '',
           row.dias_nao_avaliados ?? '',
-          row.dias_mitigacao ?? '',
+          row.dias_pendente_validacao ?? '',
+          row.dias_mitigacao ?? '', 
           row.dias_atencao ?? '',
           Array.isArray(row.fontes_normativas) ? row.fontes_normativas.join(' | ') : '',
         ].map(csvCell).join(',') + '\n';
@@ -511,6 +513,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Conformes</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Violações</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Não avaliados</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Possível desconformidade a validar</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Mitigação</th>
             <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Atenção</th>
           </tr>
@@ -531,6 +534,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
                   {r.dias_nao_avaliados ?? '—'}
                 </span>
               </td>
+              <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_pendente_validacao ?? 0}</td>
               <td className="px-4 py-2.5 text-center text-orange-700">{r.dias_mitigacao ?? '—'}</td>
               <td className="px-4 py-2.5 text-center text-amber-700">{r.dias_atencao ?? '—'}</td>
             </tr>
@@ -538,7 +542,7 @@ function ComplianceTable({ data }: { data: FrmsReportRow[] }) {
         </tbody>
       </table>
       <p className="border-t border-gray-100 px-4 py-3 text-xs text-slate-500">
-        Avaliados são apenas os dias com veredito regulatório (conforme ou violação). Não avaliados são dias sem evidência suficiente para um veredito, e não comprovam conformidade. Mitigação e atenção são estados preventivos de fadiga e não equivalem a infração normativa.
+        Avaliados são apenas os dias com veredito regulatório (conforme ou violação). Não avaliados são dias sem evidência suficiente para um veredito. Possível desconformidade a validar é uma pendência adicional, mesmo quando as demais regras estejam conformes. Mitigação e atenção são estados preventivos de fadiga e não equivalem a infração normativa.
       </p>
     </div>
   );

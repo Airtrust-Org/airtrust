@@ -30,7 +30,7 @@ describe('operational readiness', () => {
         vigilance: summary,
         baselineSessions: 2,
       }).classification,
-    ).toBe('baseline_building');
+    ).toBe('attention'); // A high objective lapse proportion alone raises attention.
   });
 
   it('does not let baseline-building hide strong subjective fatigue signals', () => {
@@ -57,8 +57,36 @@ describe('operational readiness', () => {
 
     expect(result.classification).toBe('operational_review');
     expect(result.signals.map((signal) => signal.code)).toEqual(
-      expect.arrayContaining(['KSS_HIGH', 'SLEEP_LOW']),
+      expect.arrayContaining(['KSS_HIGH', 'SLEEP_LOW', 'BASELINE_BUILDING']),
     );
+  });
+
+  it('never calls historical or cross-device counts a preserved personal baseline', () => {
+    const input = {
+      kssScore: 4, sleepHours24h: 8, vigilance: null,
+      baselineSessions: 50,
+    };
+    const assessment = deriveReadinessAssessment(input);
+    expect(assessment.classification).toBe('baseline_building');
+    expect(assessment.signals.map((signal) => signal.code)).toContain('BASELINE_BUILDING');
+  });
+
+  it('requires ten validated rested same-device sessions for the personal baseline', () => {
+    const input = {
+      kssScore: 4, sleepHours24h: 8, vigilance: null,
+      baselineConfirmedSameDeviceAndRested: true,
+    };
+    expect(deriveReadinessAssessment({ ...input, baselineSessions: 9 }).classification).toBe('baseline_building');
+    expect(deriveReadinessAssessment({ ...input, baselineSessions: 10 }).classification).toBe('preserved');
+  });
+
+  it('KSS 7 alone triggers attention even with a validated same-device baseline', () => {
+    const result = deriveReadinessAssessment({
+      kssScore: 7, sleepHours24h: 8, vigilance: null,
+      baselineSessions: 10, baselineConfirmedSameDeviceAndRested: true,
+    });
+    expect(result.classification).toBe('attention');
+    expect(result.signals.map((signal) => signal.code)).toContain('KSS_ATTENTION');
   });
 
   it('keeps temperature scoring disabled until the governed benchmark is approved', () => {

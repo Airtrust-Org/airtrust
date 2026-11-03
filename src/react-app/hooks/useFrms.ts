@@ -739,6 +739,7 @@ export interface FrmsFadigaCheckinRow {
   data_checkin: string;
   hora_checkin: string;
   kss_score: number;
+  kss_provenance?: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | null;
   horas_sono: number;
   qualidade_sono: number;
   sintomas_json: string | null;

@@ -12,6 +12,7 @@
  */
 
 import type { Env } from '../types';
+import { nivelAlertaRank } from '../lib/frms/alert-case-preservation';
 import {
   listarTripulantesAtivos,
   recalcularAcumuloRolling,
@@ -47,20 +48,22 @@ async function inserirAlertaComDedupe24h(
     empresaId?: number | null;
   },
 ): Promise<boolean> {
-  const existente = await db
+  // Dedupe só suprime repetição de nível igual ou menor: uma escalada (ex.:
+  // AVISO → VIOLACAO no mesmo dia) sempre gera alerta novo.
+  const existentes = await db
     .prepare(
-      `SELECT id
+      `SELECT nivel
        FROM frms_alerta
        WHERE tripulante_id = ?
          AND tipo_limite = ?
          AND created_at >= datetime('now', '-24 hours')
-         AND deleted_at IS NULL
-       LIMIT 1`,
+         AND deleted_at IS NULL`,
     )
     .bind(String(input.tripulanteId), input.tipoLimite)
-    .first<{ id: string }>();
+    .all<{ nivel: string }>();
 
-  if (existente?.id) return false;
+  const rankNovo = nivelAlertaRank(input.nivel);
+  if ((existentes.results ?? []).some((row) => nivelAlertaRank(row.nivel) >= rankNovo)) return false;
 
   const id = crypto.randomUUID();
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);

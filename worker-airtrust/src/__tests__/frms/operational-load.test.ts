@@ -38,6 +38,12 @@ describe('Operational Load V2 — independent governed dimensions', () => {
     expect(result.imc_evidence_quality).toBe('INCOMPLETE');
   });
 
+  it('treats zero landings without declared evidence quality as incomplete, never as a no-flight day', () => {
+    const r = computeOperationalLoadV2({ landingsCount: 0, temperatureMaxC: null, policy: V2_POLICY, policyVersion: V2_POLICY_VERSION });
+    expect(r.landings_evidence_quality).toBe('INCOMPLETE');
+    expect(r.data_quality).toBe('SIGVOOS_UNAVAILABLE');
+  });
+
   it('marks confirmed no-flight as not applicable', () => {
     const result = compute({ landingsCount: 0, landingsEvidenceQuality: 'CONFIRMED_ZERO', temperatureMaxC: 40 });
     expect(result.weather_evidence_quality).toBe('NOT_APPLICABLE');

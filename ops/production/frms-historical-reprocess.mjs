@@ -911,6 +911,18 @@ async function processRecoveryAssessment(db, context, assessment) {
     }
     const policy = resolveOperationalPolicyV2(operationalContext.parameters);
     const restHours = assessment.rest_hours_input == null ? null : Number(assessment.rest_hours_input);
+    // Histórico: crédito condicionado ao sono real do check-in de D+1, nunca à janela de repouso.
+    const followingDayCheckin = await queryOne(
+      db,
+      `SELECT horas_sono FROM frms_fadiga_checkin
+        WHERE empresa_id=? AND funcionario_id=? AND data_checkin=date(?, '+1 day')
+          AND deleted_at IS NULL LIMIT 1`,
+      context.scope.empresaId,
+      Number(assessment.funcionario_id),
+      assessment.reference_date,
+    );
+    const reportedSleepHours = followingDayCheckin?.horas_sono == null
+      ? null : Number(followingDayCheckin.horas_sono);
     const totalDutyMinutes = assessment.total_duty_minutes == null ? null : Number(assessment.total_duty_minutes);
     const noWorkHours = totalDutyMinutes == null
       ? (assessment.activity_type === 'STANDBY_HOME_HOTEL' || assessment.activity_type === 'STANDBY_ONSITE' ? 24 : null)
@@ -920,7 +932,7 @@ async function processRecoveryAssessment(db, context, assessment) {
       : 'OTHER';
     const credit = computeRecoveryCredit({
       activityType,
-      absoluteRestHours: Number.isFinite(restHours) ? restHours : null,
+      reportedSleepHours: Number.isFinite(reportedSleepHours) ? reportedSleepHours : null,
       noWorkHours,
       immediateCalloutRequired: assessment.immediate_callout_required == null
         ? null

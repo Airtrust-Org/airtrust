@@ -410,7 +410,8 @@ export type EffectivenessNivel = 'verde' | 'amarelo' | 'atencao' | 'vermelho';
 export interface EffectivenessResult {
   effectiveness_pct: number;
   nivel: EffectivenessNivel;
-  tempo_abaixo_limiar_pct: number;
+  /** Não derivável dos fatores diários sem uma série temporal validada. */
+  tempo_abaixo_limiar_pct: number | null;
   fatorizacao_delta: number;
   fator_basica_calibrado_pct: number;
   fator_apresentacao_calibrado_pct: number;

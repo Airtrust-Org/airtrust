@@ -24,7 +24,7 @@ function effectivenessLabel(value: number | null): string {
 function factorName(code: string, fallback: string): string {
   if (code === 'basica') return 'Contexto circadiano';
   if (code === 'processo_c') return 'Janela circadiana';
-  if (code === 'processo_s') return 'Tempo acordado e ciclo de sono';
+  if (code === 'processo_s') return 'Ciclo embarcado (estimativa operacional)';
   if (code === 'hv') return 'Acúmulo de horas de voo';
   if (code === 'repouso') return 'Repouso e sono';
   if (code === 'duracao') return 'Duração da jornada';

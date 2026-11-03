@@ -48,7 +48,8 @@ export async function resolveJornadaLandings(
       .prepare(
         `SELECT
            COALESCE(SUM(COALESCE(leg.pousos_diurnos, 0) + COALESCE(leg.pousos_noturnos, 0)), 0) AS landings,
-           COUNT(*) AS legs
+           COUNT(*) AS legs,
+           SUM(CASE WHEN leg.pousos_diurnos IS NULL AND leg.pousos_noturnos IS NULL THEN 1 ELSE 0 END) AS legs_sem_pousos
          FROM (
            SELECT DISTINCT e.id AS id, e.pousos_diurnos AS pousos_diurnos, e.pousos_noturnos AS pousos_noturnos
              FROM cv_voo_tripulantes t
@@ -63,13 +64,18 @@ export async function resolveJornadaLandings(
          ) AS leg`,
       )
       .bind(empresaId, funcionarioId, dataYmd)
-      .first<{ landings: number; legs: number }>();
+      .first<{ landings: number; legs: number; legs_sem_pousos?: number | null }>();
 
     const legs = Number(row?.legs || 0);
     if (legs === 0) {
       return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
     }
     const landings = Number(row?.landings || 0);
+    // Etapa importada sem pousos (ou com total zero) não é observação de zero
+    // pousos: toda etapa voada termina em pelo menos um pouso.
+    if (Number(row?.legs_sem_pousos || 0) > 0 || !(landings > 0)) {
+      return { landingsCount: 0, source: 'SIGVOOS_UNAVAILABLE' };
+    }
     return {
       landingsCount: Number.isFinite(landings) && landings > 0 ? Math.round(landings) : 0,
       source: 'SIGVOOS_OBSERVED',

@@ -4,7 +4,7 @@ import {
   summarizeVigilanceTrials,
   type VigilanceSummary,
   type VigilanceTrial,
-  PVTB_V2_PROTOCOL,
+  BRIEF_ATTENTION_V1_PROTOCOL,
 } from '../../lib/frms/operationalReadiness';
 
 type Phase = 'instructions' | 'waiting' | 'stimulus' | 'invalidated' | 'complete';
@@ -49,7 +49,7 @@ function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string;
   if (feedback.outcome === 'lapse') {
     return {
       value: reactionTimeMs,
-      helper: 'Resposta lenta (≥ 500 ms).',
+      helper: 'Resposta lenta (> 355 ms).',
       className: 'text-amber-200',
     };
   }
@@ -61,7 +61,7 @@ function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string;
 }
 
 export default function OperationalVigilanceTest({
-  durationMs = PVTB_V2_PROTOCOL.defaultDurationMs,
+  durationMs = BRIEF_ATTENTION_V1_PROTOCOL.defaultDurationMs,
   onComplete,
   onCancel,
   onRunningChange,
@@ -111,7 +111,7 @@ export default function OperationalVigilanceTest({
     feedbackTimerRef.current = window.setTimeout(() => {
       setTrialFeedback(null);
       feedbackTimerRef.current = null;
-    }, PVTB_V2_PROTOCOL.feedbackHoldMs);
+    }, BRIEF_ATTENTION_V1_PROTOCOL.feedbackHoldMs);
   }, []);
 
   const finish = useCallback(() => {
@@ -128,7 +128,7 @@ export default function OperationalVigilanceTest({
     const summary = summarizeVigilanceTrials(
       trialsRef.current,
       measurementDuration,
-      PVTB_V2_PROTOCOL.version,
+      BRIEF_ATTENTION_V1_PROTOCOL.version,
     );
     setPhase('complete');
     onRunningChange?.(false);
@@ -149,8 +149,8 @@ export default function OperationalVigilanceTest({
     stimulusAtRef.current = null;
     // PVT-B inter-stimulus interval: ~1 s feedback hold + random 0–3 s delay.
     const delay =
-      PVTB_V2_PROTOCOL.feedbackHoldMs +
-      randomDelay(PVTB_V2_PROTOCOL.minPostFeedbackDelayMs, PVTB_V2_PROTOCOL.maxPostFeedbackDelayMs);
+      BRIEF_ATTENTION_V1_PROTOCOL.feedbackHoldMs +
+      randomDelay(BRIEF_ATTENTION_V1_PROTOCOL.minPostFeedbackDelayMs, BRIEF_ATTENTION_V1_PROTOCOL.maxPostFeedbackDelayMs);
     scheduledAtRef.current = now + delay;
     waitingTimerRef.current = window.setTimeout(() => {
       if (finishedRef.current || startedAtRef.current == null) return;
@@ -178,7 +178,7 @@ export default function OperationalVigilanceTest({
             return;
           }
           setCounterMs(Math.round(performance.now() - stimulusAtRef.current));
-        }, PVTB_V2_PROTOCOL.counterTickMs);
+        }, BRIEF_ATTENTION_V1_PROTOCOL.counterTickMs);
         responseTimerRef.current = window.setTimeout(() => {
           const currentStimulusAt = stimulusAtRef.current;
           if (currentStimulusAt == null) return;
@@ -190,16 +190,16 @@ export default function OperationalVigilanceTest({
             ),
             stimulusAtMs: Math.round(currentStimulusAt - (startedAtRef.current ?? 0)),
             responseAtMs: null,
-            reactionTimeMs: PVTB_V2_PROTOCOL.responseWindowMs,
+            reactionTimeMs: BRIEF_ATTENTION_V1_PROTOCOL.responseWindowMs,
             outcome: 'lapse',
           });
           stimulusAtRef.current = null;
           showTrialFeedback({
             outcome: 'lapse',
-            reactionTimeMs: PVTB_V2_PROTOCOL.responseWindowMs,
+            reactionTimeMs: BRIEF_ATTENTION_V1_PROTOCOL.responseWindowMs,
           });
           scheduleNext();
-        }, PVTB_V2_PROTOCOL.responseWindowMs);
+        }, BRIEF_ATTENTION_V1_PROTOCOL.responseWindowMs);
       });
     }, delay);
   }, [durationMs, finish, showTrialFeedback, stopCounter]);
@@ -273,9 +273,9 @@ export default function OperationalVigilanceTest({
     stopCounter();
     const reactionTimeMs = now - stimulusAtRef.current;
     const outcome: VigilanceTrial['outcome'] =
-      reactionTimeMs < PVTB_V2_PROTOCOL.falseStartThresholdMs
+      reactionTimeMs < BRIEF_ATTENTION_V1_PROTOCOL.falseStartThresholdMs
         ? 'false_start'
-        : reactionTimeMs >= PVTB_V2_PROTOCOL.lapseThresholdMs
+        : reactionTimeMs > BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs
           ? 'lapse'
           : 'response';
     const roundedReactionTimeMs = Math.round(reactionTimeMs);
@@ -340,7 +340,7 @@ export default function OperationalVigilanceTest({
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Etapa objetiva</p>
         <h2 id="vigilance-title" className="mt-1 text-lg font-semibold text-slate-900">
-          Teste breve de vigilância psicomotora (PVT-B)
+          Teste breve de atenção (protocolo AirTrust)
         </h2>
         <p className="mt-1 text-sm leading-5 text-slate-600">
           Um retângulo com borda vermelha fica visível sobre fundo preto. Quando um contador amarelo
@@ -429,17 +429,17 @@ export default function OperationalVigilanceTest({
       <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
         <summary className="cursor-pointer font-semibold text-slate-700">Protocolo e referência científica</summary>
         <p className="mt-2">
-          Protocolo AirTrust {PVTB_V2_PROTOCOL.version}. Janela de amostragem: {Math.round(PVTB_V2_PROTOCOL.defaultDurationMs / 1000)} s;
-          lapso: ≥ {PVTB_V2_PROTOCOL.lapseThresholdMs} ms; antecipação: &lt; {PVTB_V2_PROTOCOL.falseStartThresholdMs} ms;
-          resposta ausente: lapso de {PVTB_V2_PROTOCOL.responseWindowMs / 1000} s.
-          O backend revalida tempos e sequência; o baseline individual usa apenas sessões do mesmo protocolo.
+          Protocolo AirTrust {BRIEF_ATTENTION_V1_PROTOCOL.version}. Janela de amostragem: {Math.round(BRIEF_ATTENTION_V1_PROTOCOL.defaultDurationMs / 1000)} s;
+          lapso: &gt; {BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs} ms; antecipação: &lt; {BRIEF_ATTENTION_V1_PROTOCOL.falseStartThresholdMs} ms;
+          resposta ausente: lapso de {BRIEF_ATTENTION_V1_PROTOCOL.responseWindowMs / 1000} s.
+          O backend revalida tempos e sequência. Linha de base por aparelho e sessões descansadas ainda não disponível.
         </p>
         <p className="mt-2">
           Mantenha esta aba em primeiro plano. Trocar de aba, ocultar a janela ou interromper a medição
-          invalida a sessão. Implementação independente AirTrust do paradigma PVT-B.
+          invalida a sessão. Teste breve próprio e ainda não validado: não equivale ao PVT-B de três minutos nem autoriza voo.
         </p>
         <p className="mt-2">
-          Referência científica: Psychomotor Vigilance Task (PVT) —{' '}
+          Referência de paradigma (não de validação deste teste de 60 s): Psychomotor Vigilance Task (PVT) —{' '}
           <a
             href="https://www.nasa.gov/human-systems-integration-division/human-performance/fatigue-countermeasures-laboratory/"
             target="_blank"

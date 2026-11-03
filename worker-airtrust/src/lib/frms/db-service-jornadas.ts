@@ -3,6 +3,7 @@
  */
 
 import { LIMITES_DEFAULT, type FrmsJornada, type LimitesMap, type FrmsFatorizacao } from './types';
+import { ENGAGED_CASE_SQL, alertsNotCoveredByCases, type PreservedCaseAlert } from './alert-case-preservation';
 import {
   calcFatorizacao,
   calcEffectiveness,
@@ -522,17 +523,8 @@ export async function recalcularPipeline(
   let v2Daily = null;
   if (v2Policy) {
     const previousDate = previousIsoDate(jornada.data);
-    const priorHvMinutes = historico
-      .filter((item) => item.data === previousDate && shouldUseForRolling(item))
-      .reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos ?? 0), 0);
-    // Crédito D+1 de baixa HV só existe quando houve carga de voo real no dia
-    // anterior. Zero HV não significa repouso: pode representar treinamento,
-    // standby, deslocamento ou outra atividade sem voo.
-    const priorDayGenerated =
-      priorHvMinutes > 0
-        ? computeFlightHoursDelta(priorHvMinutes, 0, v2Policy).generatedCreditForNextDayPoints
-        : 0;
-    const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, priorDayGenerated, v2Policy);
+    // Redução de HV anterior não é evidência de repouso: proibir crédito D+1.
+    const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, 0, v2Policy);
     const recoveryCreditPoints = await readPriorRecoveryCreditPoints(db, jornada.tripulante_id, previousDate);
     v2Daily = {
       policy: v2Policy,
@@ -557,6 +549,9 @@ export async function recalcularPipeline(
       hora_termino: jornada.hora_termino,
       hora_dormiu: canUseEffectiveness ? jornada.hora_dormiu ?? null : null,
       hora_acordou: canUseEffectiveness ? checkinEvidence?.wakeTime ?? null : null,
+      sono_efetivo_min: canUseEffectiveness && checkinEvidence?.sleepHours24h != null
+        ? Math.round(checkinEvidence.sleepHours24h * 60)
+        : null,
       dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
@@ -779,15 +774,24 @@ export async function recalcularPipeline(
     limites,
   });
 
-  // 8. Persistir alertas
+  // 8. Persistir alertas — casos com ciência, tratamento ou encerramento são
+  // preservados; só alertas ainda não trabalhados são substituídos.
   await db
     .prepare(
-      'UPDATE frms_alerta SET deleted_at = ?, updated_at = ? WHERE jornada_id = ? AND deleted_at IS NULL',
+      `UPDATE frms_alerta SET deleted_at = ?, updated_at = ?
+        WHERE jornada_id = ? AND deleted_at IS NULL AND NOT ${ENGAGED_CASE_SQL}`,
     )
     .bind(timestamp, timestamp, jornada.id)
     .run();
+  const casosPreservados = await db
+    .prepare(
+      `SELECT tipo_limite, nivel FROM frms_alerta
+        WHERE jornada_id = ? AND deleted_at IS NULL AND ${ENGAGED_CASE_SQL}`,
+    )
+    .bind(jornada.id)
+    .all<PreservedCaseAlert>();
 
-  for (const a of alertas) {
+  for (const a of alertsNotCoveredByCases(alertas, casosPreservados.results ?? [])) {
     await persistirAlerta(db, a);
   }
 

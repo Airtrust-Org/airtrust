@@ -1,22 +1,22 @@
 /**
- * Active protocol: `airtrust-pvtb-v2` — AirTrust implementation of the published
- * PVT-B stimulus/response paradigm (Basner, Mollicone & Dinges 2011; PsyToolkit
- * PVT-B), adapted to a one-minute AirTrust operational sampling window. The
- * historical `airtrust-vigilance-v1` (blue-dot stimulus, 2–10 s ISI) is only kept
- * for interpreting already-stored sessions. Individual baseline is computed per
- * protocol version, so v1 sessions never contribute to a v2 baseline.
+ * Active 60 s protocol is a non-validated AirTrust brief attention screen,
+ * NOT the validated 3-minute PVT-B. Prior `airtrust-pvtb-v2` 60 s samples remain
+ * readable as legacy observations and never enter the new protocol baseline.
  */
 export const READINESS_PROTOCOL = {
-  version: 'airtrust-pvtb-v2',
-  scoringVersion: 'readiness-score-v1',
-  legacyVersions: ['airtrust-vigilance-v1'] as const,
+  version: 'airtrust-brief-v1',
+  scoringVersion: 'readiness-brief-v1',
+  legacyVersions: ['airtrust-vigilance-v1', 'airtrust-pvtb-v2'] as const,
   defaultDurationMs: 60_000,
   allowedDurationDriftMs: 15_000,
   minimumTrials: 10,
-  lapseThresholdMs: 500,
+  lapseThresholdMs: 355,
   falseStartThresholdMs: 100,
   responseWindowMs: 30_000,
-  minimumBaselineSessions: 5,
+  minimumBaselineSessions: 10,
+  // Historical unvalidated PVT-B sessions are retained for retrospective
+  // reporting only; this old 5-observation statistic never grants readiness.
+  historicalBaselineStatsSampleSessions: 5,
 } as const;
 
 export const READINESS_PROTOCOL_VERSIONS = [
@@ -101,7 +101,7 @@ export function normalizeReadinessTrials(
   protocolVersion: ReadinessProtocolVersion = READINESS_PROTOCOL.version,
 ): ReadinessTrial[] {
   const seenSequences = new Set<number>();
-  const isV2 = protocolVersion === READINESS_PROTOCOL.version;
+  const isV2 = protocolVersion === READINESS_PROTOCOL.version || protocolVersion === 'airtrust-pvtb-v2';
   const samplingMaxMs = Math.round(durationMs);
   const responseMaxMs = samplingMaxMs + (isV2 ? READINESS_PROTOCOL.responseWindowMs : 5_000);
   const legacyStimulusMaxMs = responseMaxMs;
@@ -177,7 +177,9 @@ export function normalizeReadinessTrials(
     const outcome: ReadinessTrialOutcome =
       reactionTimeMs < READINESS_PROTOCOL.falseStartThresholdMs
         ? 'false_start'
-        : reactionTimeMs >= READINESS_PROTOCOL.lapseThresholdMs
+        : protocolVersion === READINESS_PROTOCOL.version
+          ? reactionTimeMs > READINESS_PROTOCOL.lapseThresholdMs ? 'lapse' : 'response'
+          : reactionTimeMs >= 500
           ? 'lapse'
           : 'response';
 
@@ -230,6 +232,8 @@ export function deriveReadinessAssessment(input: {
   sleepHours: number;
   summary: ReadinessSummary;
   baselineSessions: number;
+  /** True only after independent same-device, rested-session validation. */
+  baselineConfirmedSameDeviceAndRested?: boolean;
 }): ReadinessAssessment {
   const warningSignals: string[] = [];
   const criticalSignals: string[] = [];
@@ -243,12 +247,16 @@ export function deriveReadinessAssessment(input: {
   if (input.summary.falseStartCount > 2) warningSignals.push('vigilance_false_starts');
   if (input.summary.lapseRate >= 0.2) warningSignals.push('vigilance_lapses');
 
-  const baselineReady = input.baselineSessions >= READINESS_PROTOCOL.minimumBaselineSessions;
+  // Legacy aggregated counts do not establish personal normality.
+  const baselineReady = input.baselineConfirmedSameDeviceAndRested === true &&
+    input.baselineSessions >= READINESS_PROTOCOL.minimumBaselineSessions;
   let classification: ReadinessClassification = 'preserved';
 
   if (!baselineReady) classification = 'baseline_building';
   if (criticalSignals.length > 0) classification = 'operational_review';
-  else if (baselineReady && warningSignals.length >= 2) classification = 'attention';
+  // KSS 7 and sleep < 6h are independent operational-attention triggers,
+  // even without a validated baseline or an abnormal brief-test metric.
+  else if (warningSignals.length > 0) classification = 'attention';
 
   return {
     classification,
