@@ -10,7 +10,8 @@ import {
   crossTenantSafeResponseStatusAndMessage,
 } from '../services/simuladores/shared';
 import { validateAndNormalizeSharedSessionRequest } from '../services/simuladores/shared-session-logic';
-import { assertSharedFeature, executeSharedSessionCreation } from '../services/simuladores/shared-session-helpers';
+import { assertSharedFeature } from '../services/simuladores/shared-session-helpers';
+import { executeSharedSessionCreation } from '../services/simuladores/shared-session-creation';
 import { assertEntityOwnership, assertNoExternalConflicts } from '../services/simuladores/shared-session-validation';
 import { loadSharedDetail, type LoadedSharedDetail } from '../services/simuladores/shared-session-detail';
 import {

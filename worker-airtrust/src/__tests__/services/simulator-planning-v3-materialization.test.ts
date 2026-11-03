@@ -9,7 +9,7 @@ const { validateInstructorAssignment, executeNormalSessionCreation, executeShare
 
 vi.mock('../../services/cae-planning-resource-assignment', () => ({ validateInstructorAssignment }));
 vi.mock('../../services/cae-planning-normal-session', () => ({ executeNormalSessionCreation }));
-vi.mock('../../services/simuladores/shared-session-helpers', () => ({ executeSharedSessionCreation }));
+vi.mock('../../services/simuladores/shared-session-creation', () => ({ executeSharedSessionCreation }));
 vi.mock('../../services/simuladores/shared-session-logic', () => ({ validateAndNormalizeSharedSessionRequest }));
 
 import { materializeSimulatorPlanningV3Draft, type SimulatorPlanningV3MaterializationSnapshot } from '../../services/simulator-planning-v3-materialization';

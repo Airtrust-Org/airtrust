@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/react-app/config/api';
+import { resolveApiBase } from '@/react-app/config/api-environment';
 import { notifyDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
 import { LruTtlCache } from '@/react-app/lib/lru-ttl-cache';
 import { getCurrentTenantId, registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
@@ -248,7 +248,9 @@ function notifyMutationDataChange(
   if (scope) notifyDataChanged(scope);
 }
 
-export function installGlobalApiFetch(apiBaseUrl: string = API_BASE_URL): void {
+// O padrão é resolvido aqui (e não importado de config/api) porque config/api importa
+// apiFetch; resolveApiBase() é a mesma fonte usada para definir API_BASE_URL.
+export function installGlobalApiFetch(apiBaseUrl: string = resolveApiBase()): void {
   if (typeof window === 'undefined' || globalThis.__airtrust_api_fetch_installed__) {
     return;
   }
