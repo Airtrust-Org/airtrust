@@ -278,9 +278,29 @@ export const qualificacoesService = {
 
   lookups: {
     async funcionariosAtivos(limit = 1000): Promise<ApiResponse<FuncionarioResumo[]>> {
-      return httpClient.get<FuncionarioResumo[]>(
-        `/funcionarios?status=ativos&orderBy=nome&order=ASC&limit=${limit}`,
-      );
+      // GET /funcionarios enforces a 100-row maximum regardless of the requested limit.
+      // Fetch every authorized page so employees after the first 100 remain selectable.
+      const pageSize = 100;
+      const funcionarios: FuncionarioResumo[] = [];
+      const seen = new Set<number>();
+      const maxItems = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 1000;
+      for (let page = 1; funcionarios.length < maxItems; page++) {
+        const response = await httpClient.get<FuncionarioResumo[]>(
+          `/funcionarios?status=ativos&orderBy=nome&order=ASC&limit=${pageSize}&page=${page}`,
+        );
+        if (!response.success) return response;
+        const items = response.data || [];
+        for (const funcionario of items) {
+          if (!seen.has(funcionario.id)) {
+            seen.add(funcionario.id);
+            funcionarios.push(funcionario);
+          }
+        }
+        if (items.length < pageSize || items.length === 0) break;
+        // Stop on repeated pages rather than looping forever on a broken API.
+        if (page > 1 && seen.size < (page - 1) * pageSize) break;
+      }
+      return { success: true, data: funcionarios.slice(0, maxItems) };
     },
 
     async tiposQualificacao(
