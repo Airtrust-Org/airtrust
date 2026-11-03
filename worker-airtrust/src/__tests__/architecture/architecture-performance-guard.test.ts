@@ -141,7 +141,6 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
   'routes/escalas-alocacoes.ts': 1,
   'routes/escalas-padroes.ts': 1,
-  'routes/escalas-shared.ts': 2,
   'routes/escalas-tripulacoes.ts': 4,
   'routes/frms-fadiga-checkin-legacy.ts': 3,
   // Two schema-compatible reads support import and mutation reliability guards.
