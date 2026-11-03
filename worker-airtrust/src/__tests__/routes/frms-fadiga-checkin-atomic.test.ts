@@ -180,6 +180,22 @@ describe('daily check-in atomic commit', () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
+
+  it('does not accept objective readiness trials submitted retroactively for D-1', async () => {
+    const { db, batch } = fakeDb();
+    const body = (await request().json()) as Record<string, unknown>;
+    const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...body, reference_date: '2026-10-15', late_submission_reason: 'SYSTEM_UNAVAILABLE',
+        readiness: { duration_ms: 60000, trials: trials() },
+      }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'retrospective_readiness_not_allowed' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
   it('records justified D-1 as non-preflight evidence and requires human review', async () => {
     const { db, batch } = fakeDb();
     const body = (await request().json()) as Record<string, unknown>;
