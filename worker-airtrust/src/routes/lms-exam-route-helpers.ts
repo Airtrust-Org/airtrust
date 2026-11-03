@@ -70,6 +70,6 @@ export function examHttpStatus(code:string):404|403|409|422{
   if(code.includes('CONCURRENT')||code.includes('IMMUTABLE')||code.includes('NOT_EDITABLE')||
       code.includes('REQUIRED')||code.includes('CONFLICT')||code.includes('SEALED')||
       code.includes('ALREADY')||code.includes('NOT_BOUND')||code.includes('NOT_COMPLETE')||
-      code.includes('NOT_PUBLISHED'))return 409;
+      code.includes('NOT_PUBLISHED')||code.includes('NOT_CURRENT'))return 409;
   return 422;
 }

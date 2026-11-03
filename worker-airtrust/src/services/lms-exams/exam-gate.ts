@@ -24,6 +24,7 @@ export type ExamGate = Readonly<{
   /** Pending study requirements (codes only); empty unless STUDY_PENDING. */
   missing: readonly string[];
   attemptsUsed: number;
+  hasOpenAttempt: boolean;
   evidence: ApprovedExamEvidence | null;
   readiness: ScormClosureReadiness | null;
 }>;
@@ -59,8 +60,12 @@ export async function loadExamGate(
   // Same answer for "not yours" and "does not exist": no enumeration of enrollments.
   if (!row) throw new ExamAttemptError('EXAM_ENROLLMENT_NOT_FOUND');
   const none = (state: ExamLearnerState, extra: Partial<ExamGate> = {}): ExamGate => ({
-    learner, scope: null, state, missing: [], attemptsUsed: 0, evidence: null, readiness: null, ...extra,
+    learner, scope: null, state, missing: [], attemptsUsed: 0, hasOpenAttempt: false, evidence: null, readiness: null, ...extra,
   });
+  // Cancelled/rejected enrollments must never continue an old exam simply
+  // because the last persisted SCORM evidence still says "completed".
+  const enrollmentStatus = String(row.status).toUpperCase();
+  if (!['NAO_INICIADO','EM_ANDAMENTO','CONCLUIDO'].includes(enrollmentStatus)) return none('NOT_AVAILABLE');
   if (String(row.tipo_conteudo ?? 'scorm').toLowerCase() !== 'scorm' ||
       !row.scorm_package_r2_prefix || !row.active_lms_cycle_id) return none('NOT_AVAILABLE');
 
@@ -79,17 +84,21 @@ export async function loadExamGate(
   ).bind(ids.empresaId, row.curso_id, pkg.package_sha256).first<{ ok: number }>();
   if (!binding) return none('NOT_AVAILABLE');
 
-  const used = await db.prepare(
-    "SELECT COUNT(*) AS n FROM lms_exam_attempts WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? AND state='SUBMITTED'"
-  ).bind(ids.empresaId, row.id, row.active_lms_cycle_id).first<{ n: number }>();
-  const attemptsUsed = Number(used?.n ?? 0);
+  const stats = await db.prepare(
+    "SELECT COUNT(CASE WHEN state='SUBMITTED' THEN 1 END) AS used, " +
+    "MAX(CASE WHEN state='IN_PROGRESS' AND started_by=? AND package_sha256=? THEN 1 ELSE 0 END) AS has_open " +
+    "FROM lms_exam_attempts WHERE empresa_id=? AND matricula_id=? AND ciclo_id=?"
+  ).bind(ids.userId, pkg.package_sha256, ids.empresaId, row.id, row.active_lms_cycle_id)
+    .first<{ used: number; has_open: number | null }>();
+  const attemptsUsed = Number(stats?.used ?? 0);
+  const hasOpenAttempt = Number(stats?.has_open ?? 0) === 1;
   if (String(row.status).toUpperCase() === 'CONCLUIDO') {
-    return none('COMPLETED', { scope, attemptsUsed });
+    return none('COMPLETED', { scope, attemptsUsed, hasOpenAttempt: false });
   }
   const evidence = await findApprovedExamEvidence(db, {
     empresaId: ids.empresaId, matriculaId: row.id, activePackagePrefix: row.scorm_package_r2_prefix,
   });
-  if (evidence) return none('PASSED', { scope, attemptsUsed, evidence });
+  if (evidence) return none('PASSED', { scope, attemptsUsed, hasOpenAttempt: false, evidence });
 
   const progresso = await db.prepare(
     'SELECT * FROM lms_progresso_scorm WHERE matricula_id=? AND empresa_id=?'
@@ -106,6 +115,6 @@ export async function loadExamGate(
   }, progresso ?? null, manifest);
   const ready = isStudyCompleteAwaitingExam(readiness);
   return none(ready ? 'READY' : 'STUDY_PENDING', {
-    scope, attemptsUsed, readiness, missing: ready ? [] : readiness.missing,
+    scope, attemptsUsed, hasOpenAttempt: ready && hasOpenAttempt, readiness, missing: ready ? [] : readiness.missing,
   });
 }

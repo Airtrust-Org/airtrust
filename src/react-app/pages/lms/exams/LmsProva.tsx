@@ -21,7 +21,7 @@ type Attempt = {
 };
 type ExamState = {
   state: 'NOT_AVAILABLE' | 'STUDY_PENDING' | 'READY' | 'PASSED' | 'COMPLETED';
-  missing: string[]; attemptsUsed: number; finalizeRequired: boolean;
+  missing: string[]; attemptsUsed: number; hasOpenAttempt?: boolean; finalizeRequired: boolean;
 };
 type Envelope<T> = { success: boolean; data?: T; code?: string };
 
@@ -159,7 +159,7 @@ export default function LmsProva(): React.ReactElement {
               <p className="mb-3">Estudo concluído. A prova avalia o conteúdo do treinamento e as respostas são corrigidas pelo sistema.
                 {exam.attemptsUsed > 0 ? ` Tentativas anteriores: ${exam.attemptsUsed}.` : ''}</p>
               <button type="button" className={primary} disabled={busy} onClick={() => void start()}>
-                {exam.attemptsUsed > 0 ? 'Tentar novamente' : 'Iniciar prova'}
+                {exam.hasOpenAttempt ? 'Retomar prova' : exam.attemptsUsed > 0 ? 'Tentar novamente' : 'Iniciar prova'}
               </button>
             </>
           ) : null}

@@ -173,6 +173,24 @@ async function loadAttempt(db: D1Database, learner: ExamLearner, attemptId: stri
   if (row.started_by !== learner.userId) deny('EXAM_ATTEMPT_FORBIDDEN');
   return row;
 }
+/**
+ * Retrieve the exact immutable attempt scope, after checking learner ownership.
+ * Used by learner HTTP routes to recheck the active enrollment/cycle/edition
+ * before every mutation. Never infer enrollment from untrusted request bodies.
+ */
+export async function getExamAttemptScope(db: D1Database, learner: ExamLearner,
+  attemptId: string): Promise<Readonly<{
+  scope: ExamCycleScope; state: 'IN_PROGRESS' | 'SUBMITTED';
+}>> {
+  requireLearner(learner);
+  const a = await loadAttempt(db, learner, attemptId);
+  return {
+    scope: { cursoId: a.curso_id, matriculaId: a.matricula_id,
+      cicloId: a.ciclo_id, packageSha256: a.package_sha256 },
+    state: a.state,
+  };
+}
+
 async function loadAnswers(db: D1Database, a: AttemptRow): Promise<Record<string, string>> {
   const rows = await db.prepare(
     'SELECT question_key,choice_id FROM lms_exam_attempt_responses WHERE attempt_id=? AND empresa_id=?'

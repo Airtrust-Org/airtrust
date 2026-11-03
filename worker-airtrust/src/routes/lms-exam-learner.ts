@@ -12,7 +12,7 @@ import {getEmpresaId} from '../middleware/tenant';
 import type {Env} from '../types';
 import {loadExamGate} from '../services/lms-exams/exam-gate';
 import {
-  ExamAttemptError,saveExamResponse,startExamAttempt,submitExamAttempt,
+  ExamAttemptError,getExamAttemptScope,saveExamResponse,startExamAttempt,submitExamAttempt,
 } from '../services/lms-exams/exam-attempt-store';
 import {exact,examErrorCode,examHttpStatus,parseBoundedJson,positive} from './lms-exam-route-helpers';
 
@@ -46,10 +46,36 @@ function ids(c:Parameters<typeof getEmpresaId>[0],matriculaId:string){
   return {empresaId:getEmpresaId(c),userId:userId(c),matriculaId:positive(matriculaId)};
 }
 
+/**
+ * Enforce that a learner's attempt remains in the active, authorized cycle
+ * and the currently served SCORM edition. Progress/cancellation can change
+ * after start; old attempt IDs are never a bypass of the study gate.
+ */
+async function currentAttemptLearner(c:Parameters<typeof getEmpresaId>[0] & {
+  env: Env
+},attemptId:string) {
+  const learner={empresaId:getEmpresaId(c),userId:userId(c)};
+  const attempt=await getExamAttemptScope(c.env.DB,learner,attemptId);
+  const gate=await loadExamGate(c.env,{
+    ...learner,matriculaId:attempt.scope.matriculaId,
+  });
+  const scope=gate.scope;
+  if (!scope ||
+      scope.cursoId!==attempt.scope.cursoId ||
+      scope.cicloId!==attempt.scope.cicloId ||
+      scope.packageSha256!==attempt.scope.packageSha256 ||
+      gate.state==='NOT_AVAILABLE' || gate.state==='STUDY_PENDING' ||
+      (attempt.state==='IN_PROGRESS' && gate.state!=='READY')) {
+    throw new ExamAttemptError('EXAM_ATTEMPT_NOT_CURRENT');
+  }
+  return learner;
+}
+
 routes.get('/matriculas/:matriculaId/prova',async c=>{
   const gate=await loadExamGate(c.env,ids(c,c.req.param('matriculaId')));
   return c.json({success:true,data:{
     state:gate.state,missing:gate.missing,attemptsUsed:gate.attemptsUsed,
+    hasOpenAttempt:gate.hasOpenAttempt,
     // After a pass the learner finalizes through the canonical endpoint.
     finalizeRequired:gate.state==='PASSED',
   }});
@@ -70,15 +96,17 @@ routes.post('/matriculas/:matriculaId/tentativas',async c=>{
 routes.put('/tentativas/:attemptId/respostas',async c=>{
   const body=await parseBoundedJson(c);
   exact(body,['questionId','choiceId']);
+  const learner=await currentAttemptLearner(c,c.req.param('attemptId'));
   const data=await saveExamResponse(c.env.DB,
-    {empresaId:getEmpresaId(c),userId:userId(c)},c.req.param('attemptId'),
+    learner,c.req.param('attemptId'),
     body.questionId as string,body.choiceId as string);
   return c.json({success:true,data});
 });
 
 routes.post('/tentativas/:attemptId/enviar',async c=>{
+  const learner=await currentAttemptLearner(c,c.req.param('attemptId'));
   const data=await submitExamAttempt(c.env.DB,
-    {empresaId:getEmpresaId(c),userId:userId(c)},c.req.param('attemptId'));
+    learner,c.req.param('attemptId'));
   return c.json({success:true,data});
 });
 
