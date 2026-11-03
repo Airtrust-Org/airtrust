@@ -207,6 +207,33 @@ describe('FRMS operational readiness', () => {
     expect(assessment.criticalSignals).toEqual([]);
   });
 
+  it('never calls an unqualified legacy count a valid personal baseline', () => {
+    const summary = summarizeReadinessTrials([trial(1, 280, 'response'), trial(2, 310, 'response')], 60_000);
+    const invalid = deriveReadinessAssessment({
+      kssScore: 4,
+      sleepHours: 8,
+      baselineSessions: 50,
+      summary,
+    });
+    expect(invalid.classification).toBe('baseline_building');
+    expect(invalid.baselineReady).toBe(false);
+
+    const nine = deriveReadinessAssessment({
+      kssScore: 4, sleepHours: 8, summary,
+      baselineSessions: 9,
+      baselineConfirmedSameDeviceAndRested: true,
+    });
+    expect(nine.baselineReady).toBe(false);
+
+    const ten = deriveReadinessAssessment({
+      kssScore: 4, sleepHours: 8, summary,
+      baselineSessions: 10,
+      baselineConfirmedSameDeviceAndRested: true,
+    });
+    expect(ten.baselineReady).toBe(true);
+    expect(ten.classification).toBe('preserved');
+  });
+
   it('raises attention on a high lapse rate even without a baseline', () => {
     const assessment = deriveReadinessAssessment({
       kssScore: 7,
