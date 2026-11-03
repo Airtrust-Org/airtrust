@@ -31,7 +31,7 @@ function failWithSafeMessage(error: unknown, fallback: string): never {
 }
 
 // Re-export funções individuais para compatibilidade
-export async function listarFuncionariosAtivos(limit = 1000) {
+export async function listarFuncionariosAtivos(limit?: number) {
   const response = await qualificacoesService.lookups.funcionariosAtivos(limit);
   if (!response.success) {
     failWithSafeMessage(response.error, 'Não foi possível carregar os funcionários.');
