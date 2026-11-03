@@ -56,7 +56,22 @@ describe('mergeFadigaPainelHistory', () => {
     expect(result.kss_score).toBe(1);
     expect(result.hora_checkin).toBe('06:20');
     expect(result.horas_sono).toBe(8);
-    expect(result.status_operacional).toBe('APTO');
+    expect(result.status).toBe('incomplete_checkin');
+    expect(result.requires_operational_review).toBe(1);
+    expect(result.status_operacional).toBeNull();
+    expect(result.nivel_fadiga).toBeNull();
+  });
+
+  it('não restaura APTO ou VERDE de histórico quando o snapshot está incompleto', () => {
+    const [result] = mergeFadigaPainelHistory([
+      panel({ status: 'incomplete_checkin', kss_provenance: null,
+        score_fadiga: null, nivel_fadiga: null, status_operacional: null }),
+    ], [history({ kss_score: 9, kss_provenance: 'CREW_REPORTED',
+      status_operacional: 'APTO', nivel_fadiga: 'VERDE' })]);
+    expect(result).toMatchObject({
+      status: 'incomplete_checkin', kss_score: 9,
+      nivel_fadiga: null, status_operacional: null, score_fadiga: null,
+    });
   });
 
   it('não sobrescreve KSS já informado pela visão diária', () => {
