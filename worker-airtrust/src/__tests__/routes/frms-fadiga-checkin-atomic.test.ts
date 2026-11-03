@@ -197,7 +197,7 @@ describe('daily check-in atomic commit', () => {
   });
 
   it('records justified D-1 as non-preflight evidence and requires human review', async () => {
-    const { db, batch } = fakeDb();
+    const { db, batch, statements } = fakeDb();
     const body = (await request().json()) as Record<string, unknown>;
     const response = await router.fetch(new Request('http://localhost/fadiga-checkin', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -210,6 +210,12 @@ describe('daily check-in atomic commit', () => {
     expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
       requires_operational_review: 1,
       submission_context: { timing: 'RETROSPECTIVE_D1', reason: 'SYSTEM_UNAVAILABLE', preflight_evidence: false },
+    });
+    const notification = statements.find((s) => s.sql.includes('INSERT INTO notificacoes_sistema'));
+    expect(notification?.binds[0]).toBe('Check-in retrospectivo aguardando revisão');
+    expect(String(notification?.binds[1])).toContain('não é avaliação pré-voo');
+    expect(JSON.parse(String(notification?.binds[2]))).toMatchObject({
+      retrospective_submission: true, late_submission_reason: 'SYSTEM_UNAVAILABLE',
     });
   });
 
