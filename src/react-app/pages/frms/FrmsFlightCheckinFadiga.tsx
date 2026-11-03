@@ -57,7 +57,7 @@ function badgeNivel(nivel: string) {
 }
 
 const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
-  APTO: 'Prontidão normal',
+  APTO: 'Sem sinal automático de revisão (não equivale a liberação de voo)',
   APTO_COM_RESSALVA: 'Atenção - revisar com gestor',
   INAPTO: 'Requer revisão operacional',
   NAO_APTO: 'Requer revisão imediata',
@@ -694,7 +694,6 @@ export default function FrmsFlightCheckinFadiga() {
 
     try {
       const kss = kssScore!;
-      const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
       const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
 
       if (!vigilanceResult) {
@@ -716,8 +715,6 @@ export default function FrmsFlightCheckinFadiga() {
         oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
-        subjective_fatigue_level: subjectiveFatigueLevel,
-        sleepiness_level: subjectiveFatigueLevel,
         fit_for_duty: fitForDuty!,
         motivo_inaptidao: isNeedsCoordinatorReview ? observacao.trim() : undefined,
         free_text_notes:
