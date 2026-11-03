@@ -188,10 +188,10 @@ function makeSnapshotDb(data: SnapshotDbData) {
   } as never;
 }
 
-function mockFrmsOperationalContext() {
+function mockFrmsOperationalContext(profileCode = 'LEGACY_GENERAL') {
   vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
     empresaId: 77,
-    profileCode: 'LEGACY_GENERAL',
+    profileCode,
     regulatoryProfileId: 'profile-1',
     configRevisionId: 'rev-1',
     modelVersion: 'FRMS_CONFIG_V1_TEST',
@@ -944,6 +944,34 @@ describe('frms operational snapshot builder', () => {
   });
 
   describe('janela de contexto do Compliance quinzenal', () => {
+    it('art. 42 recupera madrugadas anteriores mesmo sem período embarcado identificável', async () => {
+      mockFrmsOperationalContext('HELICOPTER_OFFSHORE');
+      vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+      const db = makeSnapshotDb({
+        funcionarios: [FUNCIONARIO_10],
+        jornadas: ['01', '02', '03'].map((day) =>
+          jornadaRow(`2026-11-${day}`, 10, {
+            hora_apresentacao: '05:30',
+            hora_termino: '14:00',
+          }),
+        ),
+      });
+
+      const result = await listFrmsOperationalSnapshot(db, {
+        empresaId: 77,
+        dataInicio: '2026-11-03',
+        dataFim: '2026-11-03',
+      });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].data_operacional).toBe('2026-11-03');
+      expect(result.items[0].compliance_pending_validation).toEqual(
+        expect.arrayContaining([expect.objectContaining({
+          code: 'LAW_ART42_CONSECUTIVE',
+          actual: 3,
+        })]),
+      );
+    });
+
     it('Caso 1 — consulta de um dia dentro de um período embarcado calcula o Compliance com dados reais', async () => {
       mockFrmsOperationalContext();
       // Âncora vem da fatorização persistida; ciclo não precisa resolver nada.
