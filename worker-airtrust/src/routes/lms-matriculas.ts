@@ -83,6 +83,7 @@ import {
   readMatriculaForCourseList,
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
+import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
@@ -352,14 +353,7 @@ app.get(
     const rows = await db
       .prepare(
         `
-      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula,
-        CASE WHEN EXISTS (
-          SELECT 1 FROM usuarios u
-          JOIN usuarios_empresas ue
-            ON ue.usuario_id = u.id AND ue.empresa_id = m.empresa_id
-          WHERE u.funcionario_id = m.funcionario_id
-            AND u.deleted_at IS NULL
-        ) THEN 1 ELSE 0 END AS aluno_vinculado
+      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
@@ -375,7 +369,8 @@ app.get(
       .bind(...binds, limit, offset)
       .all<Record<string, unknown>>();
 
-    const data = (rows.results ?? []).map((row) => {
+    const rowsComVinculo = await withAlunoVinculado(db, empresaId, rows.results ?? []);
+    const data = rowsComVinculo.map((row) => {
       const effectiveProgress = resolveLmsEffectiveProgress({
         status: row.status as string | null,
         progressoBruto: row.progresso_pct as number | null,
@@ -1107,7 +1102,10 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     }
   }
 
-  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas, detalhes_erros: detalhesErros } });
+  // Informativo: falha do diagnóstico não mascara matrículas já gravadas.
+  const matriculasComVinculo = await withAlunoVinculadoBestEffort(db, empresaId, matriculasCriadas, (error) =>
+    createLogger(c, 'LmsMatriculas.lote').warn('lms_matricula_lote_link_state_failed', { cursoId: curso_id, error: toError(error).message }));
+  return c.json({ success: true, data: { ...results, matriculas: matriculasComVinculo, detalhes_erros: detalhesErros } });
 });
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────
