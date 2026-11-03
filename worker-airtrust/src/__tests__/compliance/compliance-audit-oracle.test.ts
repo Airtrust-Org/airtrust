@@ -113,6 +113,26 @@ describe('computeRequirement — referência de data America/Sao_Paulo', () => {
     expect(result.status_compliance).toBe('CONFORME');
   });
 
+  it('às 22:30 BRT, conclusão gravada com a data UTC (dia seguinte) conta como realizada — LMS e Histórico', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-03T01:30:00Z')); // BRT 2026-11-02 22:30; gravadores usam 2026-11-03
+    const viaHistorico = computeRequirement(rule(), [history('2026-11-03', null)], []);
+    expect(viaHistorico.status_compliance).toBe('CONFORME');
+    const viaLms = computeRequirement(
+      rule({ validade_fonte: 'MODELO' }),
+      [],
+      [lms('CONCLUIDO', '2026-11-03')],
+    );
+    expect(viaLms.status_compliance).toBe('CONFORME');
+  });
+
+  it('evidência realmente futura (além do dia UTC corrente) continua não contando', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-03T01:30:00Z'));
+    const result = computeRequirement(rule(), [history('2026-11-04', null)], []);
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+  });
+
   it('janela de 30 dias respeita a data BRT: vence em 30 dias → VENCENDO; em 31 → CONFORME', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-03T01:30:00Z')); // hoje BRT = 2026-11-02
@@ -235,5 +255,88 @@ describe('computeRequirement — oráculo de status', () => {
       [],
     );
     expect(result.status_compliance).toBe('NAO_REALIZADO');
+  });
+});
+
+import { buildDailyComplianceSnapshots } from '../../services/training-compliance-snapshots';
+
+type Person = Parameters<typeof buildDailyComplianceSnapshots>[0][number];
+const person = (p: Partial<Person>): Person => ({
+  setor_id: null,
+  funcao_id: null,
+  total_obrigatorios: 0,
+  conformes: 0,
+  vencendo: 0,
+  vencidos: 0,
+  nao_realizados: 0,
+  em_andamento: 0,
+  ...p,
+});
+
+describe('agregados de conformidade — oráculo (razão de somas, 1 casa decimal)', () => {
+  // Dataset conhecido:
+  //   P1 setor 10 função 1: 4 obrig., 3 conformes (1 vencendo), 1 vencido
+  //   P2 setor 10 função 2: 2 obrig., 2 conformes
+  //   P3 setor 11 função 1: 3 obrig., 1 conforme, 2 não realizados
+  //   P4 setor 11 função 2: sem requisitos aplicáveis (0) — fora do denominador
+  const people = [
+    person({ setor_id: 10, funcao_id: 1, total_obrigatorios: 4, conformes: 3, vencendo: 1, vencidos: 1 }),
+    person({ setor_id: 10, funcao_id: 2, total_obrigatorios: 2, conformes: 2 }),
+    person({ setor_id: 11, funcao_id: 1, total_obrigatorios: 3, conformes: 1, nao_realizados: 2 }),
+    person({ setor_id: 11, funcao_id: 2 }),
+  ];
+  const rows = buildDailyComplianceSnapshots(people, '2026-11-02');
+  const find = (setor: number, funcao: number) =>
+    rows.find((r) => r.setor_id === setor && r.funcao_id === funcao)!;
+
+  it('empresa: (3+2+1)/(4+2+3) = 6/9 = 66.7%; pessoa sem requisitos não entra no denominador', () => {
+    const all = find(0, 0);
+    expect(all.pessoas).toBe(4);
+    expect(all.requisitos_obrigatorios).toBe(9);
+    expect(all.conformes).toBe(6);
+    expect(all.compliance_pct).toBe(66.7);
+  });
+
+  it('setor 10: 5/6 = 83.3% — setor 11: 1/3 = 33.3%', () => {
+    expect(find(10, 0).compliance_pct).toBe(83.3);
+    expect(find(11, 0).compliance_pct).toBe(33.3);
+  });
+
+  it('função 1: 4/7 = 57.1% — função 2: 2/2 = 100%', () => {
+    expect(find(0, 1).compliance_pct).toBe(57.1);
+    expect(find(0, 2).compliance_pct).toBe(100);
+  });
+
+  it('célula setor×função com só pessoa sem requisitos → null (nunca 0% nem 100%)', () => {
+    expect(find(11, 2).compliance_pct).toBeNull();
+    expect(find(11, 2).requisitos_obrigatorios).toBe(0);
+  });
+
+  it('subtotais de setores e de funções reconciliam com o total da empresa (sem dupla contagem)', () => {
+    const sum = (key: 'conformes' | 'requisitos_obrigatorios' | 'vencidos' | 'nao_realizados', which: 'setor' | 'funcao') =>
+      rows
+        .filter((r) => (which === 'setor' ? r.setor_id > 0 && r.funcao_id === 0 : r.funcao_id > 0 && r.setor_id === 0))
+        .reduce((acc, r) => acc + r[key], 0);
+    for (const key of ['conformes', 'requisitos_obrigatorios', 'vencidos', 'nao_realizados'] as const) {
+      expect(sum(key, 'setor')).toBe(find(0, 0)[key]);
+      expect(sum(key, 'funcao')).toBe(find(0, 0)[key]);
+    }
+  });
+
+  it('pessoas_com_pendencia conta quem tem vencendo/vencido/não realizado/em andamento (P1 e P3)', () => {
+    expect(find(0, 0).pessoas_com_pendencia).toBe(2);
+  });
+
+  it('lista vazia: um único registro da empresa com denominador zero → null', () => {
+    const empty = buildDailyComplianceSnapshots([], '2026-11-02');
+    expect(empty).toHaveLength(1);
+    expect(empty[0].compliance_pct).toBeNull();
+  });
+
+  it('arredondamento: 1/3 → 33.3 e 2/3 → 66.7', () => {
+    const one = buildDailyComplianceSnapshots([person({ total_obrigatorios: 3, conformes: 1 })], 'd')[0];
+    const two = buildDailyComplianceSnapshots([person({ total_obrigatorios: 3, conformes: 2 })], 'd')[0];
+    expect(one.compliance_pct).toBe(33.3);
+    expect(two.compliance_pct).toBe(66.7);
   });
 });
