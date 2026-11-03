@@ -79,6 +79,40 @@ describe('Lei 13.475 art. 42 — madrugadas', () => {
     expect(evaluateLawArt42Madrugadas('2027-01-01', history).violations).toContain('LAW_ART42_CONSECUTIVE');
   });
 
+  it('considera simulador noturno entre duas jornadas de voo na sequência de madrugadas', () => {
+    const history = buildArt42DutiesByCrew(
+      [
+        { data_operacional: '2026-11-01', funcionario_id: 7, hora_apresentacao: '05:30', hora_termino: '14:00', has_operational_data: 1 },
+        { data_operacional: '2026-11-03', funcionario_id: 7, hora_apresentacao: '05:30', hora_termino: '14:00', has_operational_data: 1 },
+      ],
+      [],
+      [{ data_operacional: '2026-11-02', funcionario_id: 7, hora_inicio: '05:30', hora_fim: '11:00' }],
+    );
+    const result = evaluateLawArt42Madrugadas('2026-11-03', history.get(7) ?? []);
+    expect(result.consecutiveMadrugadas).toBe(3);
+    expect(result.violations).toContain('LAW_ART42_CONSECUTIVE');
+  });
+
+  it('atividade de treinamento diurna impede inferir 48 horas livres de qualquer atividade', () => {
+    const flights = [
+      '01', '02', '05', '06', '07',
+    ].map((day) => ({
+      data_operacional: `2026-11-${day}`, funcionario_id: 7,
+      hora_apresentacao: '05:30', hora_termino: '13:00', has_operational_data: 1,
+    }));
+    const before = evaluateLawArt42Madrugadas(
+      '2026-11-07', buildArt42DutiesByCrew(flights, []).get(7) ?? [],
+    );
+    expect(before.violations).toEqual([]);
+    const history = buildArt42DutiesByCrew(
+      flights, [],
+      [{ data_operacional: '2026-11-04', funcionario_id: 7, hora_inicio: '12:00', hora_fim: '18:00' }],
+    );
+    const after = evaluateLawArt42Madrugadas('2026-11-07', history.get(7) ?? []);
+    expect(after.madrugadasIn168h).toBe(5);
+    expect(after.violations).toContain('LAW_ART42_168H');
+  });
+
   it('jornada realizada prevalece sobre a escala do mesmo dia; escala antecipa dias futuros', () => {
     const map = buildArt42DutiesByCrew(
       [{ data_operacional: '2026-11-03', funcionario_id: 7, hora_apresentacao: '07:00', hora_termino: '15:00', has_operational_data: 1 }],
