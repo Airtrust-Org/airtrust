@@ -328,7 +328,7 @@ async function computeContextoPiloto(
 
   const media7d = await db
     .prepare(
-      `SELECT AVG(kss_score) AS media_kss, AVG(horas_sono) AS media_sono
+      `SELECT AVG(CASE WHEN kss_provenance = 'CREW_REPORTED' THEN kss_score END) AS media_kss, AVG(horas_sono) AS media_sono
        FROM frms_fadiga_checkin
        WHERE funcionario_id = ?
          AND deleted_at IS NULL
@@ -440,7 +440,7 @@ async function buildDailyFatigueStatus(params: {
         `SELECT
             id, data_checkin, hora_checkin, horas_sono, horas_sono_48h, wake_time,
             jornada_inicio_prevista,
-            qualidade_sono, kss_score, subjective_fatigue_level, sleepiness_level,
+            qualidade_sono, kss_score, kss_provenance, subjective_fatigue_level, sleepiness_level,
             fit_for_duty, score_fadiga, nivel_fadiga, status_operacional,
             computed_risk_level, requires_operational_review, observacoes, submitted_at
          FROM frms_fadiga_checkin
@@ -494,7 +494,7 @@ async function buildDailyFatigueStatus(params: {
   const sleepHours = checkin.horas_sono == null ? Number.NaN : Number(checkin.horas_sono);
   const evidence = resolveDailyCheckinEvidence({
     hasCheckin: true, presentationTime, wakeTime, sleepHours: checkin.horas_sono,
-    kssScore: checkin.kss_score, fitForDuty: checkin.fit_for_duty,
+    kssScore: checkin.kss_score, kssProvenance: checkin.kss_provenance, fitForDuty: checkin.fit_for_duty,
     storedRiskLevel: checkin.computed_risk_level,
   });
   const checkinComplete = evidence.complete;
@@ -674,7 +674,7 @@ router.get('/daily-fatigue', async (c) => {
       const sleepHours = row.horas_sono == null ? Number.NaN : Number(row.horas_sono);
       const evidence = resolveDailyCheckinEvidence({
         hasCheckin, presentationTime, wakeTime, sleepHours: row.horas_sono,
-        kssScore: row.kss_score, fitForDuty: row.fit_for_duty,
+        kssScore: row.kss_score, kssProvenance: row.kss_provenance, fitForDuty: row.fit_for_duty,
         storedRiskLevel: row.computed_risk_level,
       });
       const checkinComplete = evidence.complete;
@@ -1039,7 +1039,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       ? c.env.DB.prepare(
         `UPDATE frms_fadiga_checkin
            SET hora_checkin = ?,
-               kss_score = ?,
+               kss_score = ?, kss_provenance = ?,
                horas_sono = ?,
                oportunidade_sono_horas_24h = ?,
                qualidade_sono = ?,
@@ -1074,7 +1074,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       )
         .bind(
           horaCheckin,
-          input.kssScore,
+          input.kssScore, input.kssProvenance,
           input.horasSono24h,
           input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
@@ -1114,7 +1114,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       : c.env.DB.prepare(
         `INSERT INTO frms_fadiga_checkin (
              id, empresa_id, funcionario_id, data_checkin, hora_checkin,
-             kss_score, horas_sono, oportunidade_sono_horas_24h, qualidade_sono,
+             kss_score, kss_provenance, horas_sono, oportunidade_sono_horas_24h, qualidade_sono,
              sintomas_json, observacoes,
              score_fadiga, nivel_fadiga, status_operacional, recomendacao,
              apto, requires_frat_review, frat_sugerido_nivel, associado_frat_avaliacao_id,
@@ -1124,7 +1124,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
              fit_for_duty, computed_risk_level, requires_operational_review, report_source,
              regulatory_profile_id, profile_code, config_revision_id, model_version, submitted_at,
              origem_registro, created_by, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           checkinId,
@@ -1132,7 +1132,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           funcionarioId,
           dataCheckin,
           horaCheckin,
-          input.kssScore,
+          input.kssScore, input.kssProvenance,
           input.horasSono24h,
           input.oportunidadeSonoHoras24h,
           input.qualidadeSono ?? 3,
@@ -1485,7 +1485,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
 
     const resumo = await c.env.DB.prepare(
       `SELECT
-           AVG(kss_score) AS media_kss,
+           AVG(CASE WHEN kss_provenance = 'CREW_REPORTED' THEN kss_score END) AS media_kss,
            AVG(horas_sono) AS media_sono_horas,
            AVG(score_fadiga) AS media_score_fadiga,
            COUNT(*) AS total_checkins,
@@ -1664,7 +1664,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
     const evolucaoDiaria = await c.env.DB.prepare(
       `SELECT
            ch.data_checkin AS data,
-           AVG(ch.kss_score) AS media_kss,
+           AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END) AS media_kss,
            AVG(ch.horas_sono) AS media_sono,
            AVG(ch.score_fadiga) AS media_score,
            COUNT(*) AS total_checkins
@@ -1701,7 +1701,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            f.nome,
            COALESCE(f.cargo, f.funcao) AS cargo,
            SUM(CASE WHEN ch.nivel_fadiga IN ('LARANJA', 'VERMELHO') THEN 1 ELSE 0 END) AS ocorrencias_laranja_vermelho,
-           AVG(ch.kss_score) AS media_kss
+           AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END) AS media_kss
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
