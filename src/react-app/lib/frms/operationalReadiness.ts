@@ -162,6 +162,8 @@ export function deriveReadinessAssessment(input: {
   sleepHours24h: number | null;
   vigilance: VigilanceSummary | null;
   baselineSessions: number;
+  /** Only true after the server validates 10 rested sessions on the same device. */
+  baselineConfirmedSameDeviceAndRested?: boolean;
 }): ReadinessAssessment {
   const signals: ReadinessSignal[] = [];
 
@@ -188,12 +190,15 @@ export function deriveReadinessAssessment(input: {
     }
   }
 
-  const baselineReady = input.baselineSessions >= 5;
+  // A raw historical count (including other devices or unverified sleep) is
+  // never evidence that the individual baseline is ready.
+  const baselineReady = input.baselineConfirmedSameDeviceAndRested === true &&
+    input.baselineSessions >= 10;
   if (!baselineReady) {
     signals.push({
       code: 'BASELINE_BUILDING',
       severity: 'info',
-      message: `Baseline individual em formação (${input.baselineSessions}/5 sessões mínimas).`,
+      message: `Baseline individual em formação (${input.baselineSessions}/10 sessões descansadas no mesmo aparelho).`,
     });
   }
 
@@ -209,7 +214,7 @@ export function deriveReadinessAssessment(input: {
   if (!baselineReady) {
     return { classification: 'baseline_building', signals };
   }
-  if (attentionSignals >= 2) {
+  if (attentionSignals >= 1) {
     return { classification: 'attention', signals };
   }
   return { classification: 'preserved', signals };
