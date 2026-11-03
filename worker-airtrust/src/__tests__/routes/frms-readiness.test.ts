@@ -19,6 +19,11 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
+vi.mock('../../lib/frms/operational-date', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/frms/operational-date')>()),
+  frmsOperationalTodayIso: () => '2026-08-27',
+}));
+
 vi.mock('../../middleware/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../middleware/tenant')>();
   return {
@@ -162,6 +167,23 @@ describe('FRMS readiness route', () => {
       success: true,
       data: { sessions: 30, minimum_sessions: 10, ready: false, protocol_version: 'airtrust-pvtb-v2' },
     });
+  });
+
+
+  it('rejects historical objective readiness even if a historical check-in exists', async () => {
+    const { db, statements } = createDb({
+      id: 'prior-checkin', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8,
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-26', duration_ms: 60000, trials: validTrials }),
+      }), { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'retrospective_readiness_not_allowed' });
+    expect(statements.some((query) => query.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
   });
 
   it('requires the tenant-scoped daily check-in before persisting objective trials', async () => {
