@@ -200,31 +200,35 @@ export function normalizeFadigaPainelPayload(
     if (!validStatuses.has(status) || !validSources.has(source)) {
       throw new Error('FRMS_TEAM_CLASSIFICATION_OR_PROVENANCE_MISSING');
     }
-    // The Worker supplies this flag. Older payloads may omit it; in that case,
-    // derive a conservative review flag from the explicit risk classification.
-    const requiresReview = ['not_submitted', 'incomplete_checkin', 'attention', 'critical', 'unfit_for_duty'].includes(status);
+    // A stale/cached NORMAL from an older Worker must not become a green
+    // panel row without verified crew KSS. Never weaken an existing alert.
+    const validKss = item.kss_provenance === 'CREW_REPORTED' &&
+      Number.isInteger(item.kss_score) && Number(item.kss_score) >= 1 && Number(item.kss_score) <= 9;
+    const kss = validKss ? Number(item.kss_score) : null;
+    const safeStatus = status === 'normal' && source === 'crew_reported'
+      ? kss == null ? 'incomplete_checkin' : kss >= 8 ? 'critical' : kss >= 7 ? 'attention' : status
+      : status;
+    const riskReconciledFromEvidence = safeStatus !== status;
+    const requiresReview = ['not_submitted', 'incomplete_checkin', 'attention', 'critical', 'unfit_for_duty'].includes(safeStatus);
+    const serverReview = item.requires_operational_review === 1 || item.requires_operational_review === '1';
     return {
       id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || requestedDate}`),
       funcionario_id: Number(item.funcionario_id || 0),
       funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
       cargo: item.cargo == null ? null : String(item.cargo),
       data: String(item.date || requestedDate || ''),
-      status,
+      status: safeStatus,
       data_source: source,
-      kss_score: item.kss_provenance === 'CREW_REPORTED' && Number.isInteger(Number(item.kss_score)) &&
-        Number(item.kss_score) >= 1 && Number(item.kss_score) <= 9
-          ? Number(item.kss_score) : null,
-      kss_provenance: item.kss_provenance === 'CREW_REPORTED' ? 'CREW_REPORTED' : null,
-      score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
-      nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
-      status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
+      risk_reconciled_from_evidence: riskReconciledFromEvidence,
+      kss_score: kss,
+      kss_provenance: validKss ? 'CREW_REPORTED' : null,
+      score_fadiga: riskReconciledFromEvidence || item.score_fadiga == null ? null : Number(item.score_fadiga),
+      nivel_fadiga: riskReconciledFromEvidence || item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
+      status_operacional: riskReconciledFromEvidence || item.status_operacional == null ? null : String(item.status_operacional),
       hora_checkin: item.hora_checkin == null ? null : String(item.hora_checkin),
       horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
       wake_time: item.wake_time == null ? null : String(item.wake_time),
-      requires_operational_review:
-        item.requires_operational_review == null ? (requiresReview ? 1 : 0) :
-        (item.requires_operational_review === 1 || item.requires_operational_review === '1' ? 1 :
-          item.requires_operational_review === 0 || item.requires_operational_review === '0' ? 0 : 1),
+      requires_operational_review: requiresReview || serverReview ? 1 : 0,
     };
   });
 }
