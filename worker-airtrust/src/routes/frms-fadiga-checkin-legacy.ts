@@ -1487,12 +1487,12 @@ router.get('/fadiga-checkin/historico', async (c) => {
       `SELECT
            AVG(CASE WHEN kss_provenance = 'CREW_REPORTED' THEN kss_score END) AS media_kss,
            AVG(horas_sono) AS media_sono_horas,
-           AVG(score_fadiga) AS media_score_fadiga,
-           COUNT(*) AS total_checkins,
-           SUM(CASE WHEN nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
-           SUM(CASE WHEN nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
-           SUM(CASE WHEN nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
-           SUM(CASE WHEN nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho
+           AVG(CASE WHEN kss_provenance = 'CREW_REPORTED' THEN score_fadiga END) AS media_score_fadiga,
+           COUNT(*) AS total_checkins, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado,
+           SUM(CASE WHEN kss_provenance = 'CREW_REPORTED' AND nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
+           SUM(CASE WHEN kss_provenance = 'CREW_REPORTED' AND nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
+           SUM(CASE WHEN kss_provenance = 'CREW_REPORTED' AND nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
+           SUM(CASE WHEN kss_provenance = 'CREW_REPORTED' AND nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f
            ON f.id = ch.funcionario_id
@@ -1525,7 +1525,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
             LARANJA: resumo?.laranja ?? 0,
             VERMELHO: resumo?.vermelho ?? 0,
           },
-          total_checkins: resumo?.total_checkins ?? 0,
+          total_checkins: resumo?.total_checkins ?? 0, sem_kss_verificado: resumo?.sem_kss_verificado ?? 0,
         },
       },
     });
@@ -1666,8 +1666,8 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
            ch.data_checkin AS data,
            AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END) AS media_kss,
            AVG(ch.horas_sono) AS media_sono,
-           AVG(ch.score_fadiga) AS media_score,
-           COUNT(*) AS total_checkins
+           AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.score_fadiga END) AS media_score,
+           COUNT(*) AS total_checkins, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
@@ -1682,10 +1682,10 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
 
     const distribuicao = await c.env.DB.prepare(
       `SELECT
-           SUM(CASE WHEN ch.nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
-           SUM(CASE WHEN ch.nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
-           SUM(CASE WHEN ch.nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
-           SUM(CASE WHEN ch.nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho
+           SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'VERDE' THEN 1 ELSE 0 END) AS verde,
+           SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'AMARELO' THEN 1 ELSE 0 END) AS amarelo,
+           SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'LARANJA' THEN 1 ELSE 0 END) AS laranja,
+           SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga = 'VERMELHO' THEN 1 ELSE 0 END) AS vermelho, SUM(CASE WHEN ch.kss_provenance IS NULL OR ch.kss_provenance <> 'CREW_REPORTED' THEN 1 ELSE 0 END) AS sem_kss_verificado
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
          WHERE ch.empresa_id = ?
@@ -1700,7 +1700,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
       `SELECT
            f.nome,
            COALESCE(f.cargo, f.funcao) AS cargo,
-           SUM(CASE WHEN ch.nivel_fadiga IN ('LARANJA', 'VERMELHO') THEN 1 ELSE 0 END) AS ocorrencias_laranja_vermelho,
+           SUM(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' AND ch.nivel_fadiga IN ('LARANJA', 'VERMELHO') THEN 1 ELSE 0 END) AS ocorrencias_laranja_vermelho,
            AVG(CASE WHEN ch.kss_provenance = 'CREW_REPORTED' THEN ch.kss_score END) AS media_kss
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f ON f.id = ch.funcionario_id AND f.deleted_at IS NULL
@@ -1759,7 +1759,7 @@ router.get('/fadiga-checkin/analytics', requirePermission('frms', 'visualizar', 
           LARANJA: distribuicao?.laranja ?? 0,
           VERMELHO: distribuicao?.vermelho ?? 0,
         },
-        ranking_atencao: rankingAtencao.results || [],
+        sem_kss_verificado: distribuicao?.sem_kss_verificado ?? 0, ranking_atencao: rankingAtencao.results || [],
         correlacao_sono_kss: correlacaoSonoKss.results || [],
         correlacao_score_effectiveness: correlacaoScoreEffectiveness.results || [],
       },
