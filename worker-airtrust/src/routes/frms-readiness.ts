@@ -114,13 +114,15 @@ router.get('/baseline', async (c) => {
   const protocolVersion = isReadinessProtocolVersion(protocolParam)
     ? protocolParam
     : READINESS_PROTOCOL.version;
-  const sessions = await countReadinessBaselineSessions(
-    c.env.DB,
-    empresaId,
-    funcionarioId,
-    protocolVersion,
-    beforeDate || undefined,
-  );
+  const sessions = protocolVersion === READINESS_PROTOCOL.version
+    ? 0 // Sem aparelho e critério descansado não há baseline válido.
+    : await countReadinessBaselineSessions(
+      c.env.DB,
+      empresaId,
+      funcionarioId,
+      protocolVersion,
+      beforeDate || undefined,
+    );
   return c.json({
     success: true,
     data: {
