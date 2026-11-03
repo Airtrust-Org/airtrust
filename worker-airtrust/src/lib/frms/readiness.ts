@@ -13,7 +13,10 @@ export const READINESS_PROTOCOL = {
   lapseThresholdMs: 355,
   falseStartThresholdMs: 100,
   responseWindowMs: 30_000,
-  minimumBaselineSessions: 5,
+  minimumBaselineSessions: 10,
+  // Historical unvalidated PVT-B sessions are retained for retrospective
+  // reporting only; this old 5-observation statistic never grants readiness.
+  historicalBaselineStatsSampleSessions: 5,
 } as const;
 
 export const READINESS_PROTOCOL_VERSIONS = [
@@ -229,6 +232,8 @@ export function deriveReadinessAssessment(input: {
   sleepHours: number;
   summary: ReadinessSummary;
   baselineSessions: number;
+  /** True only after independent same-device, rested-session validation. */
+  baselineConfirmedSameDeviceAndRested?: boolean;
 }): ReadinessAssessment {
   const warningSignals: string[] = [];
   const criticalSignals: string[] = [];
@@ -242,7 +247,9 @@ export function deriveReadinessAssessment(input: {
   if (input.summary.falseStartCount > 2) warningSignals.push('vigilance_false_starts');
   if (input.summary.lapseRate >= 0.2) warningSignals.push('vigilance_lapses');
 
-  const baselineReady = input.baselineSessions >= READINESS_PROTOCOL.minimumBaselineSessions;
+  // Legacy aggregated counts do not establish personal normality.
+  const baselineReady = input.baselineConfirmedSameDeviceAndRested === true &&
+    input.baselineSessions >= READINESS_PROTOCOL.minimumBaselineSessions;
   let classification: ReadinessClassification = 'preserved';
 
   if (!baselineReady) classification = 'baseline_building';
