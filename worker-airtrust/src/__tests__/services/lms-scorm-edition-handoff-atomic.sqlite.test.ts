@@ -3,6 +3,8 @@ import {resolve} from 'node:path';
 import {afterEach,describe,expect,it} from 'vitest';
 import {SqliteD1Database} from '../helpers/qualification-history-sqlite-d1';
 import {writeScormEditionHandoff} from '../../services/lms-scorm-edition-handoff-writer';
+import {restorePriorEditionAdministrativeCredit} from '../../services/lms-scorm-edition-credit-recovery';
+import {buildScormAdministrativeCredit} from '../../services/lms-scorm-administrative-credit';
 
 const opened:SqliteD1Database[]=[];
 afterEach(()=>{for(const db of opened.splice(0))db.close()});
@@ -175,4 +177,128 @@ describe('SCORM edition handoff — D1 batch rollback with SQLite',()=>{
     expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_EDITION_IN_CYCLE_HANDOFF'"))
       .toEqual({n:0});
   });
+
+  const activeManifest=()=>({
+    packageVersion:'QA_ACTIVE_2026',content:{
+      requiredSlides:Array.from({length:43},(_,i)=>'unit-'+String(i+1)),
+    },
+    assessment:{mode:'NONE'},completion:{workerApprovalRequired:true},
+  });
+  const activeBucket=() => ({
+    get:async(key:string)=>key==='lms/scorm/6/88/active/airtrust-completion-manifest.json'
+      ?{size:4000,text:async()=>JSON.stringify(activeManifest())}:null,
+  }) as unknown as R2Bucket;
+
+  it('credits the new-edition cursor and percent in the same archival transaction',async()=>{
+    const {db,activeSha}=fixture();
+    const manifest={
+      packageVersion:'QA_ACTIVE_2026',
+      requiredSlideIds:activeManifest().content.requiredSlides,
+      assessmentMode:'NONE' as const,workerApprovalRequired:true,
+    };
+    const credit=buildScormAdministrativeCredit({
+      manifest,packageSha256:activeSha,targetPosition:30,previousProgressPct:75,
+    });
+    const receipt=await writeScormEditionHandoff(db.asD1(),{
+      ...input(activeSha),
+      administrativeCredit:{progressPct:credit.progressPct,position:30,total:43,
+        creditedUnits:credit.creditedUnits,suspendData:credit.suspendData,cmiJson:credit.cmiJson},
+    });
+    expect(receipt.alreadyApplied).toBe(false);
+    expect(row(db,'SELECT status,progresso_pct,ultimo_slide,score_final,data_conclusao FROM lms_matriculas WHERE id=100'))
+      .toEqual({status:'EM_ANDAMENTO',progresso_pct:75,ultimo_slide:30,
+        score_final:null,data_conclusao:null});
+    const scorm=row(db,'SELECT lesson_status,suspend_data,cmi_json,score_raw FROM lms_progresso_scorm WHERE matricula_id=100');
+    expect(scorm.lesson_status).toBe('incomplete');
+    expect(scorm.score_raw).toBeNull();
+    expect(JSON.parse(String(scorm.suspend_data))).toMatchObject({v:4,p:'QA_ACTIVE_2026',a:29});
+    expect(JSON.parse(String(scorm.cmi_json))['cmi.core.lesson_location']).toBe('30/43');
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:1});
+    expect(row(db,'SELECT COUNT(*) AS n FROM lms_scorm_edition_handoffs')).toEqual({n:1});
+  });
+
+  it('restores already-reset handoffs, idempotently and without changing grades',async()=>{
+    const {db,activeSha}=fixture();
+    await writeScormEditionHandoff(db.asD1(),input(activeSha));
+    const params={db:db.asD1(),bucket:activeBucket(),empresaId:6,matriculaId:100,
+      actorId:9,callerFuncionarioId:48,isAdmin:false};
+    const result=await restorePriorEditionAdministrativeCredit(params);
+    expect(result).toMatchObject({progressPct:75,location:'30/43',alreadyApplied:false});
+    expect(row(db,'SELECT status,progresso_pct,score_final FROM lms_matriculas WHERE id=100'))
+      .toEqual({status:'EM_ANDAMENTO',progresso_pct:75,score_final:null});
+    expect(await restorePriorEditionAdministrativeCredit(params))
+      .toMatchObject({alreadyApplied:true});
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:1});
+  });
+
+  it('never overwrites active study evidence during historical credit catch-up',async()=>{
+    const {db,activeSha}=fixture();
+    await writeScormEditionHandoff(db.asD1(),input(activeSha));
+    db.database.prepare("UPDATE lms_matriculas SET status='EM_ANDAMENTO',progresso_pct=3 WHERE id=100").run();
+    db.database.prepare('UPDATE lms_progresso_scorm SET cmi_json=? WHERE matricula_id=100')
+      .run(JSON.stringify({'cmi.core.lesson_location':'2/43'}));
+    await expect(restorePriorEditionAdministrativeCredit({
+      db:db.asD1(),bucket:activeBucket(),empresaId:6,matriculaId:100,
+      actorId:9,callerFuncionarioId:48,isAdmin:false,
+    })).rejects.toThrow('ACTIVE_STUDY_ALREADY_STARTED');
+    expect(row(db,'SELECT progresso_pct FROM lms_matriculas WHERE id=100')).toEqual({progresso_pct:3});
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:0});
+  });
+
+  it('concurrent retroactive credit requests create at most one audit event',async()=>{
+    const {db,activeSha}=fixture();
+    await writeScormEditionHandoff(db.asD1(),input(activeSha));
+    const params={db:db.asD1(),bucket:activeBucket(),empresaId:6,matriculaId:100,
+      actorId:9,callerFuncionarioId:48,isAdmin:false};
+    const results=await Promise.all([
+      restorePriorEditionAdministrativeCredit(params),
+      restorePriorEditionAdministrativeCredit(params),
+    ]);
+    expect(results.filter(result=>!result.alreadyApplied)).toHaveLength(1);
+    expect(results.filter(result=>result.alreadyApplied)).toHaveLength(1);
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:1});
+  });
+
+  it('rejects forged learner ownership and cross-tenant retroactive credit',async()=>{
+    const {db,activeSha}=fixture();
+    await writeScormEditionHandoff(db.asD1(),input(activeSha));
+    const params={db:db.asD1(),bucket:activeBucket(),empresaId:6,matriculaId:100,
+      actorId:9,callerFuncionarioId:48,isAdmin:false};
+    await expect(restorePriorEditionAdministrativeCredit({...params,callerFuncionarioId:999}))
+      .rejects.toThrow('SCORM_ADMIN_CREDIT_FORBIDDEN');
+    await expect(restorePriorEditionAdministrativeCredit({...params,empresaId:7}))
+      .rejects.toThrow('SCORM_ADMIN_CREDIT_NO_ACTIVE_HANDOFF');
+    expect(row(db,'SELECT progresso_pct FROM lms_matriculas WHERE id=100')).toEqual({progresso_pct:0});
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:0});
+  });
+
+  it('a concurrent real student commit cannot be overwritten by old-edition credit',async()=>{
+    const {db,activeSha}=fixture();
+    await writeScormEditionHandoff(db.asD1(),input(activeSha));
+    const underlying=db.asD1();
+    const racing={
+      prepare:underlying.prepare.bind(underlying),
+      batch:async (statements:Parameters<D1Database['batch']>[0])=>{
+        db.database.prepare("UPDATE lms_matriculas SET status='EM_ANDAMENTO',progresso_pct=3 WHERE id=100").run();
+        db.database.prepare('UPDATE lms_progresso_scorm SET cmi_json=? WHERE matricula_id=100')
+          .run(JSON.stringify({'cmi.core.lesson_location':'2/43'}));
+        return underlying.batch(statements);
+      },
+    } as D1Database;
+    await expect(restorePriorEditionAdministrativeCredit({
+      db:racing,bucket:activeBucket(),empresaId:6,matriculaId:100,
+      actorId:9,callerFuncionarioId:48,isAdmin:false,
+    })).rejects.toThrow('SCORM_ADMIN_CREDIT_POSTCHECK_FAILED');
+    expect(row(db,'SELECT progresso_pct FROM lms_matriculas WHERE id=100')).toEqual({progresso_pct:3});
+    expect(JSON.parse(String(row(db,'SELECT cmi_json FROM lms_progresso_scorm WHERE matricula_id=100').cmi_json)))
+      .toMatchObject({'cmi.core.lesson_location':'2/43'});
+    expect(row(db,"SELECT COUNT(*) AS n FROM audit_logs WHERE action='SCORM_ADMIN_PRIOR_EDITION_CREDIT'"))
+      .toEqual({n:0});
+  });
+
 });

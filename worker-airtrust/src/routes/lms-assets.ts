@@ -1041,7 +1041,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.progresso_pct, m.data_inicio,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
         c.scorm_assessment_policy
@@ -1056,6 +1056,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       funcionario_id: number;
       empresa_id: number;
       status: string;
+      progresso_pct: number | null;
       data_inicio: string | null;
       curso_id: number;
       titulo: string;
@@ -1125,14 +1126,14 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   let navigationBookmark: { position: number; total: number } | null = null;
   if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
     const receipt = await db.prepare(`
-      SELECT h.id,h.resume_plan_json FROM lms_scorm_edition_handoffs h
+      SELECT h.id,h.resume_plan_json,h.previous_enrollment_json FROM lms_scorm_edition_handoffs h
       JOIN lms_scorm_package_versions p ON p.empresa_id=h.empresa_id
         AND p.curso_id=h.curso_id AND p.package_sha256=h.target_package_sha256
         AND p.r2_prefix=h.target_package_prefix AND p.status='ACTIVE'
       WHERE h.empresa_id=? AND h.matricula_id=? AND h.ciclo_id=?
         AND h.target_package_prefix=? ORDER BY h.id DESC LIMIT 1`)
       .bind(empresaId,matricula.id,ciclo.id,matricula.scorm_package_r2_prefix)
-      .first<{id:number;resume_plan_json:string}>();
+      .first<{id:number;resume_plan_json:string;previous_enrollment_json:string}>();
     const claimedHandoffId = Number(payload.asset_handoff_id ?? 0);
     const claimedCycleId = Number(payload.asset_cycle_id ?? 0);
     if (!isScormHandoffSessionCurrent({
@@ -1141,7 +1142,24 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     })) {
       throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
     }
-    if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
+    if (receipt) {
+      navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
+      // The previous implementation reset already-transferred enrollments to
+      // zero. Block launch until their governed catch-up POST has restored
+      // the archived cursor, otherwise the SCO could commit a blank attempt.
+      let previousPct=0;
+      try {
+        const archive=JSON.parse(receipt.previous_enrollment_json) as {
+          enrollment?:{progresso_pct?:number};
+        };
+        previousPct=Number(archive.enrollment?.progresso_pct??0);
+      } catch { previousPct=0; }
+      if (previousPct>0 && ['NAO_INICIADO','EM_ANDAMENTO'].includes(matricula.status) &&
+          Number(matricula.progresso_pct??0)===0 &&
+          !progressoScorm?.cmi_json && !progressoScorm?.suspend_data) {
+        throw new ApiError('SCORM_ADMIN_CREDIT_PENDING: recupere o progresso histórico antes de iniciar',409);
+      }
+    }
   }
 
   // Completed review also checks the edition: an old cursor is never replayed into another one.

@@ -7,6 +7,10 @@ export type ScormEditionHandoff = Readonly<{
   empresaId:number; matriculaId:number; actorId:number;
   operationId:string; targetSha256:string;
   resumePlanJson:string;
+  administrativeCredit?: {
+    progressPct:number;position:number;total:number;creditedUnits:number;
+    suspendData:string;cmiJson:string;
+  } | null;
 }>;
 export type HandoffReceipt = Readonly<{id:number;cycleId:number;targetSha256:string;alreadyApplied:boolean}>;
 const sha=/^[a-f0-9]{64}$/;
@@ -27,6 +31,7 @@ function verify(input:ScormEditionHandoff):void {
 }
 type ScopeRow={
   ciclo_id:number;curso_id:number;funcionario_id:number;target_prefix:string;
+  progresso_pct:number;
   cycle_started_at:string|null;
 };
 type ArchiveRow={id:number;ciclo_id:number;target_package_sha256:string;operation_id:string};
@@ -35,7 +40,7 @@ export async function writeScormEditionHandoff(
 ):Promise<HandoffReceipt> {
   verify(input);
   const scope=await db.prepare(`
-    SELECT cy.id ciclo_id,m.curso_id,m.funcionario_id,p.r2_prefix target_prefix,
+    SELECT cy.id ciclo_id,m.curso_id,m.funcionario_id,m.progresso_pct,p.r2_prefix target_prefix,
       cy.data_inicio cycle_started_at
     FROM lms_matriculas m
     JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
@@ -50,6 +55,30 @@ export async function writeScormEditionHandoff(
      AND p.status='ACTIVE' AND p.package_sha256=?`)
      .bind(input.matriculaId,input.empresaId,input.targetSha256).first<ScopeRow>();
   if(!scope?.ciclo_id||!scope.target_prefix)throw new Error('SCORM_HANDOFF_TARGET_OR_CYCLE_NOT_VERIFIED');
+  const credit=input.administrativeCredit??null;
+  if(credit){
+    let plan:Record<string,unknown>,cmi:Record<string,unknown>,state:Record<string,unknown>;
+    try{
+      plan=JSON.parse(input.resumePlanJson) as Record<string,unknown>;
+      cmi=JSON.parse(credit.cmiJson) as Record<string,unknown>;
+      state=JSON.parse(credit.suspendData) as Record<string,unknown>;
+    }catch{throw new Error('SCORM_ADMIN_CREDIT_INVALID');}
+    if(!Number.isSafeInteger(credit.progressPct)||credit.progressPct!==Math.min(99,Number(scope.progresso_pct))||
+      credit.progressPct<1||credit.progressPct>99||
+      credit.position!==Math.max(2,Number(plan.targetPosition))||credit.total!==plan.activeTotal||
+      credit.creditedUnits!==credit.position-1||
+      !Number.isSafeInteger(credit.total)||credit.position<2||credit.position>credit.total||
+      !Array.isArray(state.d)||state.d.length!==credit.creditedUnits||
+      state.d.some((n,i)=>n!==i)||state.a!==credit.creditedUnits||
+      state.v!==4||state.c!==false||
+      cmi['cmi.suspend_data']!==credit.suspendData||
+      cmi['cmi.core.lesson_location']!==String(credit.position)+'/'+String(credit.total)||
+      cmi['cmi.core.lesson_status']!=='incomplete'||
+      cmi['cmi.core.score.raw']!==undefined||
+      cmi['airtrust.total_slides']!==credit.total){
+      throw new Error('SCORM_ADMIN_CREDIT_INVALID');
+    }
+  }
   // After the first in-cycle handoff, current CMI belongs to that handoff's
   // target edition. The cycle start audit is only the fallback for the first
   // handoff; using it again would mislabel later snapshots with a stale SHA.
@@ -136,29 +165,35 @@ export async function writeScormEditionHandoff(
         input.targetSha256,scope.target_prefix,input.resumePlanJson,
         input.matriculaId,input.empresaId,scope.ciclo_id,input.targetSha256,scope.target_prefix),
     db.prepare(`UPDATE lms_progresso_scorm
-      SET lesson_status=NULL,completion_status=NULL,success_status=NULL,
+      SET lesson_status=?,completion_status=NULL,success_status=NULL,
        score_raw=NULL,score_max=NULL,score_min=NULL,score_scaled=NULL,
-       suspend_data=NULL,launch_data=NULL,cmi_json=NULL,
+       suspend_data=?,launch_data=NULL,cmi_json=?,
        session_time=NULL,total_time=NULL,session_count=0,
        last_commit_at=datetime('now'),updated_at=datetime('now')
       WHERE empresa_id=? AND matricula_id=? AND ${predicate}`)
-      .bind(input.empresaId,input.matriculaId,...scopeArgs),
+      .bind(credit?'incomplete':null,credit?.suspendData??null,credit?.cmiJson??null,
+        input.empresaId,input.matriculaId,...scopeArgs),
     db.prepare(`DELETE FROM lms_completion_diagnostics_snapshots
       WHERE empresa_id=? AND matricula_id=? AND ${predicate}`)
       .bind(input.empresaId,input.matriculaId,...scopeArgs),
-    db.prepare(`UPDATE lms_matriculas SET status='NAO_INICIADO',
-      progresso_pct=0,ultimo_slide=0,ultima_pagina=0,
-      score_final=NULL,tentativas=0,data_inicio=NULL,data_conclusao=NULL,
+    db.prepare(`UPDATE lms_matriculas SET status=?,
+      progresso_pct=?,ultimo_slide=?,ultima_pagina=?,
+      score_final=NULL,tentativas=0,data_inicio=CASE WHEN ? THEN datetime('now') ELSE NULL END,
+      data_conclusao=NULL,
       updated_at=datetime('now')
       WHERE id=? AND empresa_id=? AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
         AND qualificacao_historico_id IS NULL AND ${predicate}`)
-      .bind(input.matriculaId,input.empresaId,...scopeArgs),
-    db.prepare(`UPDATE lms_matricula_ciclos SET status='NAO_INICIADO',
-      progresso_pct=0,score_final=NULL,tentativas=0,data_inicio=NULL,
+      .bind(credit?'EM_ANDAMENTO':'NAO_INICIADO',credit?.progressPct??0,
+        credit?.position??0,credit?.position??0,credit?1:0,
+        input.matriculaId,input.empresaId,...scopeArgs),
+    db.prepare(`UPDATE lms_matricula_ciclos SET status=?,
+      progresso_pct=?,score_final=NULL,tentativas=0,
+      data_inicio=CASE WHEN ? THEN datetime('now') ELSE NULL END,
       data_conclusao=NULL,updated_at=datetime('now')
       WHERE id=? AND empresa_id=? AND matricula_id=? AND ciclo_atual=1
         AND deleted_at IS NULL AND ${predicate}`)
-      .bind(scope.ciclo_id,input.empresaId,input.matriculaId,...scopeArgs),
+      .bind(credit?'EM_ANDAMENTO':'NAO_INICIADO',credit?.progressPct??0,credit?1:0,
+        scope.ciclo_id,input.empresaId,input.matriculaId,...scopeArgs),
     db.prepare(`INSERT INTO audit_logs
       (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
       SELECT ?,'SCORM_EDITION_IN_CYCLE_HANDOFF','lms_matriculas',?,NULL,
@@ -167,6 +202,19 @@ export async function writeScormEditionHandoff(
       .bind(input.actorId,input.matriculaId,input.operationId,scope.ciclo_id,
         input.targetSha256,input.empresaId,...scopeArgs),
   ];
+  if(credit){
+    statements.push(db.prepare(`INSERT INTO audit_logs
+      (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at)
+      SELECT ?,'SCORM_ADMIN_PRIOR_EDITION_CREDIT','lms_matriculas',?,NULL,
+        json_object('authority','OWNER_GLOBAL_POLICY_2026_11_03',
+          'basis','PREVIOUS_EDITION_PROGRESS','cycle_id',?,
+          'target_sha',?,'credited_units',?,'location',?,
+          'prior_progress_pct',?,'handoff_operation_id',?),
+        ?,datetime('now') WHERE ${predicate}`)
+      .bind(input.actorId,input.matriculaId,scope.ciclo_id,input.targetSha256,
+        credit.creditedUnits,String(credit.position)+'/'+String(credit.total),
+        credit.progressPct,input.operationId,input.empresaId,...scopeArgs));
+  }
   try {await db.batch(statements);}
   catch(error){
     const race=await findReceipt();

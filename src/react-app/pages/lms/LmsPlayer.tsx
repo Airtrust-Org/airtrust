@@ -462,6 +462,42 @@ export default function LmsPlayer() {
     activeCycleId,
     handoffId: activeHandoffId,
   });
+  const priorEditionPct=(matricula as (typeof matricula & {
+    active_scorm_prior_progress_pct?: number | null;
+  }) | undefined)?.active_scorm_prior_progress_pct ?? null;
+  const needsAdminCreditRecovery=Boolean(activeHandoffId &&
+    typeof priorEditionPct==='number' && priorEditionPct>0 &&
+    Number(matricula?.progresso_pct??0)===0 &&
+    !newEditionRequired && !effectiveReviewMode);
+  const adminCreditAttemptRef=useRef<string|null>(null);
+  const [adminCreditRetry,setAdminCreditRetry]=useState(0);
+  const [adminCreditError,setAdminCreditError]=useState<string|null>(null);
+  useEffect(()=>{
+    if(!needsAdminCreditRecovery||!activeHandoffId)return;
+    const operation=String(empresaAtualId)+':'+String(id)+':'+String(activeHandoffId)+':'+String(adminCreditRetry);
+    if(adminCreditAttemptRef.current===operation)return;
+    adminCreditAttemptRef.current=operation;
+    let mounted=true;
+    setAdminCreditError(null);
+    void (async()=>{
+      try{
+        const response=await fetchWithAuth(
+          API_BASE_URL+'/lms/matriculas/'+String(id)+'/scorm-edition-admin-credit',
+          {method:'POST'},
+        );
+        const data=await response.json() as {success?:boolean;error?:string};
+        if(!response.ok||data.success!==true){
+          throw new Error(data.error||'Falha ao reconhecer o progresso anterior');
+        }
+        await refetchMatricula();
+        if(mounted)setAdminCreditError(null);
+      }catch(error){
+        if(mounted)setAdminCreditError(error instanceof Error?error.message:'Falha na recuperação administrativa');
+      }
+    })();
+    return ()=>{mounted=false};
+  },[needsAdminCreditRecovery,activeHandoffId,id,empresaAtualId,adminCreditRetry,refetchMatricula]);
+
   const sessionKeyRef = useRef<string | null>(null);
   const stableLaunchUrlRef = useRef<string | null>(null);
   const assetSessionKeyRef = useRef<string | null>(null);
@@ -474,7 +510,7 @@ export default function LmsPlayer() {
     // An edition mismatch must not even mount the active ZIP against an old
     // matrícula. Otherwise package initialization can autosave empty state
     // over the previous edition before the administrator starts a new cycle.
-    if (newEditionRequired && !effectiveReviewMode) return null;
+    if ((newEditionRequired && !effectiveReviewMode) || needsAdminCreditRecovery) return null;
     // The iframe URL never carries the access token. A short-lived,
     // HttpOnly cookie is established before the URL becomes available.
     if (!assetSessionReady || assetSessionKeyRef.current !== sessionKey || !matricula) {
@@ -1034,8 +1070,8 @@ export default function LmsPlayer() {
     if (startingNewEdition) return;
     const confirmed = window.confirm(
       isTenantAdmin
-        ? 'O sistema arquivará o CMI, progresso, avaliações e tentativas atuais antes de reinicializar a sessão no pacote ativo. Nenhuma nota ou conclusão será transferida. Continuar?'
-        : 'Este curso foi atualizado. Seu histórico anterior será guardado com segurança e você retomará a nova edição na posição sugerida. O progresso anterior não conta para a nova edição, então será preciso rever as telas para concluir. Continuar?',
+        ? 'O histórico será arquivado e as unidades já alcançadas serão reconhecidas na edição atual, preservando o percentual anterior. Notas e aprovações de avaliações não serão transferidas. Continuar?'
+        : 'Este curso foi atualizado. Seu progresso anterior será reconhecido administrativamente; a nova edição abrirá na posição sugerida, sem exigir que você refaça as unidades anteriores. Avaliações e certificados exigirão os requisitos vigentes. Continuar?',
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
@@ -1378,15 +1414,16 @@ export default function LmsPlayer() {
               {editionMismatch.reason === 'PACKAGE_VERSION_CHANGED' || editionMismatch.reason === 'SLIDE_IDS_CHANGED'
                 ? 'A versão ou a identidade das unidades mudou, mesmo que a quantidade de telas seja igual. '
                 : `O pacote anterior registra ${editionMismatch.previous_total} unidades e a edição ativa exige ${editionMismatch.active_total}. `}
-              O progresso de {displayProgress}% pertence ao ciclo anterior e não representa o avanço
-              na nova edição. As evidências serão preservadas; não é permitido reaproveitar
-              automaticamente essa conclusão. A continuidade na edição ativa exige preservar
-              o histórico antes da primeira gravação; não é necessário presumir um novo ciclo.
+              O progresso de {displayProgress}% pertence à edição anterior. Ao continuar,
+              as unidades correspondentes serão reconhecidas administrativamente como concluídas
+              na edição ativa e o histórico será arquivado. Notas, avaliações e certificados
+              continuarão sujeitos às regras vigentes do treinamento.
             </p>
             {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
               <p className="mt-1 text-xs font-medium text-amber-100">
                 Posição sugerida na edição ativa: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}.
-                Esse marcador é apenas para navegação; não comprova unidades estudadas nem autorização para concluir.
+                As unidades anteriores ao marcador serão reconhecidas por autorização administrativa,
+                sem atribuição de nota ou conclusão automática.
               </p>
             )}
           </div>
@@ -1400,7 +1437,7 @@ export default function LmsPlayer() {
                 >
                   {startingNewEdition
                     ? 'Preservando e preparando retomada...'
-                    : isTenantAdmin ? 'Preservar histórico e retomar edição ativa' : 'Continuar na nova edição'}
+                    : 'Reconhecer progresso e continuar'}
                 </button>
               )}
               {isTenantAdmin && (
@@ -1437,21 +1474,21 @@ export default function LmsPlayer() {
             {!launchUrl && !newEditionRequired && isScormContent ? (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-950 px-5" role={assetSessionError ? 'alert' : undefined} aria-live="polite">
                 <div className="max-w-md space-y-3 text-center text-white">
-                  {assetSessionError ? (
+                  {assetSessionError || adminCreditError ? (
                     <>
                       <AlertTriangle className="mx-auto h-9 w-9 text-amber-400" />
                       <p className="text-sm font-semibold">Não foi possível abrir o treinamento</p>
-                      <p className="text-xs text-white/70">{assetSessionError}</p>
+                      <p className="text-xs text-white/70">{adminCreditError || assetSessionError}</p>
                       <button
                         type="button"
-                        onClick={() => { setAssetSessionError(null); setAssetSessionRetry((value) => value + 1); }}
+                        onClick={() => { setAssetSessionError(null); setAdminCreditError(null); setAdminCreditRetry((value) => value + 1); setAssetSessionRetry((value) => value + 1); }}
                         className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
                       >Tentar novamente</button>
                     </>
                   ) : (
                     <>
                       <Loader2 className="mx-auto h-9 w-9 animate-spin text-white/40" />
-                      <p className="text-sm text-white/65">Autorizando o acesso ao conteúdo...</p>
+                      <p className="text-sm text-white/65">{needsAdminCreditRecovery ? 'Reconhecendo administrativamente o progresso anterior...' : 'Autorizando o acesso ao conteúdo...'}</p>
                     </>
                   )}
                 </div>
@@ -1479,7 +1516,7 @@ export default function LmsPlayer() {
                     {activeResumeProposal && activeResumeProposal.status !== 'INVALID_ACTIVE_PACKAGE' && (
                       <span className="mt-2 block text-amber-200">
                         Retomada proposta: {activeResumeProposal.targetPosition}/{activeResumeProposal.activeTotal}
-                        {' '}— somente referência de navegação, não uma conclusão certificada.
+                        {' '}— unidades anteriores serão reconhecidas administrativamente; não haverá conclusão automática.
                       </span>
                     )}
                   </p>
@@ -1489,7 +1526,7 @@ export default function LmsPlayer() {
                       disabled={startingNewEdition}
                       className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-300 disabled:opacity-60"
                     >
-                      {startingNewEdition ? 'Preparando a nova edição...' : 'Continuar na nova edição'}
+                      {startingNewEdition ? 'Reconhecendo progresso...' : 'Reconhecer progresso e continuar'}
                     </button>
                   )}
                 </div>
