@@ -134,3 +134,41 @@ test('renewal PDF QA targets the canonical Worker certificate routes, not the qu
   assert.match(spec, /%PDF-/);
   assert.match(spec, /SHA-256/);
 });
+
+
+test('synthetic lifecycle certificate CPF input is per-run, tenant-scoped and never a real identity', () => {
+  const renderSeed = (runId) => {
+    const code = 'QA-COMP-LIFE-' + runId;
+    return execFileSync(process.execPath, [
+      'scripts/staging/seed-qa-training-compliance-lifecycle.mjs',
+      '--code=' + code,
+      '--marker=QA_ONLY_TRAINING_COMPLIANCE_LIFECYCLE_' + runId,
+      '--print-sql-for-qa-test',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        STAGING_D1_NAME: 'airtrust-db-staging-baseline-20260701',
+      },
+    });
+  };
+  const extract = (sql) => [...sql.matchAll(
+    /VALUES \('QA-COMP-LIFE-\d+ Pessoa ([12])','QA-COMP-LIFE-\d+-E[12]','(000\d{8})'/g,
+  )].map((m) => ({ employee: Number(m[1]), cpf: m[2] }));
+  const a = extract(renderSeed('41734167941'));
+  const b = extract(renderSeed('41731014198'));
+  assert.equal(a.length, 2, 'both run-owned employees require synthetic CPF digits');
+  assert.equal(b.length, 2);
+  assert.deepEqual(a.map((x) => x.employee), [1, 2]);
+  assert.equal(new Set(a.map((x) => x.cpf)).size, 2);
+  assert.ok(a.every((x) => /^[0-9]{11}$/.test(x.cpf)));
+  assert.ok(a.every((x) => !b.some((y) => x.cpf === y.cpf)), 'different runs must not reuse CPF placeholders');
+  assert.match(seed, /employee_cpf_count INTEGER NOT NULL CHECK\(employee_cpf_count=2\)/);
+  assert.match(seed, /AND cpf=\$\{esc\(syntheticCpfE1\)\}/);
+  assert.match(seed, /AND cpf=\$\{esc\(syntheticCpfE2\)\}/);
+  // A real certificate requires all fields; do not weaken public hash/QR validation.
+  const validation = readFileSync('worker-airtrust/src/utils/certificate-validation-hash.ts', 'utf8');
+  assert.match(validation, /CERTIFICATE_VALIDATION_HASH_INPUT_INCOMPLETE/);
+  assert.match(validation, /funcionarioCpf/);
+});
