@@ -161,6 +161,7 @@ interface MatchedTripulante {
 }
 
 interface MonthlyPreviewInput {
+  empresaId: number;
   importacaoId: string;
   tripulanteId: string | null;
   tripulanteNomeFira: string;
@@ -1336,6 +1337,7 @@ export function groupSigvoosRecordsByDay(records: SigvoosNormalizedLeg[]): Sigvo
 
 async function loadExistingJornadasByDate(
   db: D1Database,
+  empresaId: number,
   tripulanteId: string | null,
   groupedDays: SigvoosGroupedDay[],
 ): Promise<Map<string, string>> {
@@ -1356,10 +1358,11 @@ async function loadExistingJornadasByDate(
          FROM frms_jornada
         WHERE deleted_at IS NULL
           AND tripulante_id = ?
+          AND empresa_id = ?
           AND data >= ?
           AND data <= ?`,
     )
-    .bind(Number(tripulanteId), firstDate, lastDate)
+    .bind(Number(tripulanteId), empresaId, firstDate, lastDate)
     .all<{ id: string; data: string }>();
 
   return new Map((rows.results || []).map((row) => [row.data, row.id]));
@@ -1370,6 +1373,7 @@ export async function buildSigvoosMonthlyPreview(
 ): Promise<SigvoosMonthlyPreview> {
   const existingJornadasByDate = await loadExistingJornadasByDate(
     input.db,
+    input.empresaId,
     input.tripulanteId,
     input.groupedDays,
   );
@@ -1407,6 +1411,7 @@ export async function buildSigvoosMonthlyPreview(
   const totalJornadaMin = lines.reduce((acc, line) => acc + line.duracao_jornada_min, 0);
 
   const preview: FiraImportacaoPreview = {
+    empresa_id: input.empresaId,
     importacao_id: input.importacaoId,
     tripulante_encontrado: Boolean(input.tripulanteId),
     tripulante_id: input.tripulanteId,
@@ -2497,6 +2502,7 @@ export async function syncSigvoosForFrms(
         monthlyPreviews.push(
           await buildSigvoosMonthlyPreview({
             db,
+            empresaId: resolvedEmpresaId,
             importacaoId: generateId(),
             tripulanteId: matchedOperational?.id || null,
             tripulanteNomeFira: first.tripulanteNome || matched?.nome || 'SIGVOOS',
