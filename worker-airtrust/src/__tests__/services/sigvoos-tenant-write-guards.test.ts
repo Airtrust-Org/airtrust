@@ -7,7 +7,7 @@ describe('SIGVOOS: all writes require tenant identity', () => {
   it('stops unresolved-company sync before any mutation or external HTTP', async () => {
     const db = {
       prepare: vi.fn(() => ({
-        all: async () => ({ results: [], success: true, meta: { duration: 0, changes: 0, last_row_id: 0, rows_read: 0, rows_written: 0, size_after: 0 } }),
+        all: async () => ({ results: [], success: true, meta: { duration: 0, changes: 0, last_row_id: 0, rows_read: 0, rows_written: 0, size_after: 0, changed_db: false } }),
         first: async () => null, run: vi.fn(),
         raw: vi.fn(), bind: vi.fn(),
       })),
