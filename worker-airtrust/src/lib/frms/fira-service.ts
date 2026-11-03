@@ -696,13 +696,13 @@ export async function confirmarImportacaoFira(
          LEFT JOIN funcionarios p ON p.id = CAST(f.tripulante_id AS INTEGER)
          LEFT JOIN funcionarios op ON op.id = CAST(f.importado_por AS INTEGER)
         WHERE f.id = ? AND f.deleted_at IS NULL
+          AND p.empresa_id = ?
           AND (
-            CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
-            OR p.empresa_id = ?
-            OR op.empresa_id = ?
+            json_extract(f.preview_json, '$.empresa_id') IS NULL
+            OR CAST(json_extract(f.preview_json, '$.empresa_id') AS INTEGER) = ?
           )`,
     )
-    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId, tenantEmpresaId)
+    .bind(importacaoId, tenantEmpresaId, tenantEmpresaId)
     .first<{
       id: string;
       tripulante_id: string | null;
