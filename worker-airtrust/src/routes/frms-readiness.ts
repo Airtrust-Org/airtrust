@@ -17,6 +17,7 @@ import {
 import recoveryRoutes, { refreshRecoveryAssessmentForActivityDate } from './frms-recovery';
 import { createLogger } from '../utils/logger';
 import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
+import { isValidPastOrTodayCheckinDate } from '../lib/frms/checkin-date-guard';
 
 const router = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
 router.use('*', auth());
@@ -41,7 +42,8 @@ const submitSchema = z.object({
     .min(READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs)
     .max(READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs),
   trials: z.array(trialSchema).min(READINESS_PROTOCOL.minimumTrials).max(300),
-  protocol_version: z.enum(READINESS_PROTOCOL_VERSIONS).optional(),
+  // Historical protocol versions are read-only: a 60 s upload cannot masquerade as PVT-B.
+  protocol_version: z.literal(READINESS_PROTOCOL.version).optional(),
 });
 
 function previousDate(value: string): string {
@@ -250,6 +252,10 @@ router.post('/', async (c) => {
       },
       400,
     );
+  }
+
+  if (!isValidPastOrTodayCheckinDate(parsed.data.reference_date, frmsOperationalTodayIso())) {
+    return c.json({ success: false, error: 'invalid_reference_date' }, 400);
   }
 
   // Subjective signals are authoritative from the already-saved tenant-scoped
