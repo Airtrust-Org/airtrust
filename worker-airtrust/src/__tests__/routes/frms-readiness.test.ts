@@ -437,7 +437,7 @@ describe('FRMS readiness route', () => {
           (80, 7, '2026-08-27', NULL, '2026-08-27 09:00:00');
       `);
       const rows = sqlite.prepare(query!.sql).all(...query!.binds);
-      expect(rows.map((row) => row.funcionario_id)).toEqual([70]);
+      expect(rows.map((row: { funcionario_id: number }) => row.funcionario_id)).toEqual([70]);
     } finally {
       sqlite.close();
     }
