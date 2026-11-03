@@ -698,6 +698,22 @@ describe('frms operational snapshot builder', () => {
     expect(estimatedSleep?.alertas).not.toContain('SONO_ESTIMADO');
   });
 
+  it('sono real de zero hora não é confundido com dado ausente e gera alerta', () => {
+    const input = createBaseInput();
+    input.rows.checkins.push({
+      data_operacional: '2026-05-28', funcionario_id: 10,
+      hora_checkin: '06:30', hora_apresentacao: '08:00',
+      kss_score: 9, horas_sono: 0, wake_time: '05:55',
+      score_fadiga: 100, nivel_fadiga: 'VERMELHO',
+      status_operacional: 'RESTRITO', computed_risk_level: 'critical',
+    });
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-28', 10);
+    expect(item?.horas_sono).toBe(0);
+    expect(item?.sleep_data_source).toBe('REAL');
+    expect(item?.alertas).toContain('SONO_INSUFICIENTE');
+    expect(item?.alertas).toContain('KSS_ALTO');
+  });
+
   it('6) jornada sem effectiveness_pct gera JORNADA_SEM_FATORIZACAO', () => {
     const input = createBaseInput();
 
