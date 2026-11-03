@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-29",
-    "last_reconciled_against": "0570 MGM formative approval renewals classified, schema pending governed staging apply; prior classifications preserved",
-    "schema_v2_digest": "acd1ebba8010d130693d9b1ecb5a4cdcfb03596fa66983cf75ef3be53757a18e",
+    "last_reconciled_at": "2026-11-03",
+    "last_reconciled_against": "0571 FRMS KSS row provenance added; reviewed manifest and governance pending, no D1 apply; 0570 and earlier states unchanged",
+    "schema_v2_digest": "f4e8611bb000cdf64160e7bda9f9300475d15933b2a8fb7b3f527014ab51eee6",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1708,6 +1708,20 @@
       "reviewed_manifest": "lms-scorm-formative-approval-renewals-0570.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-formative-approval-renewals-0570.md",
       "note": "DDL-only, zero backfill. Staging Schema 0569 is prerequisite; initial approvals, enrollments, progress, qualifications and certificates remain untouched."
+    },
+    {
+      "change_file": "0571_frms_checkin_kss_provenance.sql",
+      "change_id": "frms-checkin-kss-provenance-0571",
+      "sha256": "06fa491147a5898b334abbe12610befc58f2f483ac6d1eecb03b957adc8ec34d",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS FAD-003: nullable row-level KSS provenance, source-verified daily screening and legacy UNKNOWN preservation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-checkin-kss-provenance-0571.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-checkin-kss-provenance-0571.md",
+      "note": "Review-only Schema V2 candidate. The 13 scoped production snapshot tables do not include frms_fadiga_checkin; this is repository DDL only, not staging/production proof. No historical backfill; Worker using kss_provenance must not deploy before governed schema apply."
     }
   ]
 }
