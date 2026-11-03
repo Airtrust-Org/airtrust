@@ -138,6 +138,8 @@ const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze
     'Regra de contabilização da atividade ainda não pôde ser confirmada',
   DUTY_INTERVAL_MISSING:
     'Horário de início ou fim da jornada ainda não foi informado',
+  LAW_DUTY_CREW_COMPOSITION_UNKNOWN:
+    'Jornada acima de 11 h: a composição da tripulação não foi informada para confirmar o limite legal',
   MISSION_WORK_CONTEXT_INCOMPLETE:
     'Histórico do período operacional ainda está incompleto',
   POST_MISSION_WORK_CONTEXT_INCOMPLETE:

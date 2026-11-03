@@ -1,5 +1,6 @@
 import type { LimitesMap } from './types';
 import type { Art42Evaluation } from './law-art42-madrugadas';
+import { costaDoSolAct2025_2027InForce } from './compliance-policy';
 
 export interface RollingRegulatoryEvidence {
   data_referencia: string;
@@ -11,6 +12,44 @@ export interface RollingRegulatoryEvidence {
   hv_ano_calendario_min: number | null;
   repouso_anterior_min: number;
   repouso_suficiente: number;
+}
+
+type RawRollingRegulatoryEvidence = {
+  [K in keyof RollingRegulatoryEvidence]: RollingRegulatoryEvidence[K] | number | string | null | undefined;
+};
+
+function nonNegativeMinutes(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Acumulado nulo ou incoerente é evidência ausente, nunca zero. O ano civil
+ * menor que o mês civil denuncia linha anterior à coluna anual (default 0 da
+ * migration 0498) e é descartado apenas nessa dimensão.
+ */
+export function sanitizeRollingRegulatoryEvidence(
+  row: RawRollingRegulatoryEvidence,
+): RollingRegulatoryEvidence | null {
+  const hvDia = nonNegativeMinutes(row.hv_dia_min);
+  const hvMes = nonNegativeMinutes(row.hv_mes_calendario_min);
+  const hv28 = nonNegativeMinutes(row.hv_28_dias_min);
+  const hv365 = nonNegativeMinutes(row.hv_365_dias_min);
+  if (hvDia == null || hvMes == null || hv28 == null || hv365 == null) return null;
+  const hvAno = nonNegativeMinutes(row.hv_ano_calendario_min);
+  const repouso = nonNegativeMinutes(row.repouso_anterior_min);
+  return {
+    data_referencia: String(row.data_referencia),
+    funcionario_id: Number(row.funcionario_id),
+    hv_dia_min: hvDia,
+    hv_mes_calendario_min: hvMes,
+    hv_28_dias_min: hv28,
+    hv_365_dias_min: hv365,
+    hv_ano_calendario_min: hvAno != null && hvAno >= hvMes ? hvAno : null,
+    repouso_anterior_min: repouso ?? -1,
+    repouso_suficiente: Number(row.repouso_suficiente) === 1 ? 1 : 0,
+  };
 }
 
 export interface WorkRegulatoryEvidence {
@@ -47,6 +86,8 @@ export interface RegulatoryComplianceInput {
   profileCode: string;
   rbacBcApplicable: boolean;
   costaDoSolActApplicable?: boolean;
+  /** Data avaliada; o ACT só é citado dentro da vigência (cl. 1ª). */
+  dataReferencia?: string;
   mission?: CostaDoSolMissionEvidence | null;
   journeyDurationMin: number;
   rolling: RollingRegulatoryEvidence | null;
@@ -193,6 +234,32 @@ export function evaluateRegulatoryCompliance(
       label: 'Jornada/FDP diário',
     });
   }
+  // Lei 13.475 art. 37 (serviços II–V): 11 h simples, 14 h composta, 18 h revezamento.
+  // A composição da tripulação não está no snapshot: acima de 18 h é violação
+  // em qualquer composição; entre 11 h e 18 h, com perfil mais permissivo que
+  // 11 h, a conformidade legal não é verificável.
+  if (isHelicopter && input.journeyDurationMin > 18 * 60) {
+    pushMaxViolation(violations, {
+      code: 'LAW_DUTY_18H', source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 37 III',
+      actualMin: input.journeyDurationMin, limitMin: 18 * 60,
+      label: 'Jornada acima do maior limite legal (revezamento)',
+    });
+  } else if (
+    isHelicopter &&
+    input.journeyDurationMin > 11 * 60 &&
+    input.limites.FDP_MAXIMO_HORAS * 60 > 11 * 60
+  ) {
+    unknownReasons.add('LAW_DUTY_CREW_COMPOSITION_UNKNOWN');
+  }
+
+  // Os limites de missão e trabalho estão na Lei 13.475 (art. 41); o ACT é
+  // citado como instrumento adicional apenas na sua vigência.
+  const actInForce = Boolean(input.costaDoSolActApplicable) &&
+    (input.dataReferencia == null || costaDoSolAct2025_2027InForce(input.dataReferencia));
+  const withAct = (law: string, clause: string) =>
+    actInForce ? `${law}; ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, ${clause}` : law;
+
   const workLimitApplies = isHelicopter || input.rbacBcApplicable;
   if (workLimitApplies) {
     if (!input.work) {
@@ -200,10 +267,8 @@ export function evaluateRegulatoryCompliance(
     } else {
       pushMaxViolation(violations, {
         code: 'WORK_MONTH_176H',
-        source: input.costaDoSolActApplicable ? 'ACT' : 'LAW',
-        reference: input.costaDoSolActApplicable
-          ? 'Lei 13.475/2017 art. 41; ACT Costa do Sol 2025/2027 cláusula 8ª'
-          : 'Lei 13.475/2017 art. 41',
+        source: 'LAW',
+        reference: withAct('Lei 13.475/2017 art. 41 caput', 'cláusula 8ª'),
         actualMin: input.work.monthWorkToDateMin,
         limitMin: 176 * 60,
         label: 'Tempo de trabalho no mês',
@@ -221,8 +286,8 @@ export function evaluateRegulatoryCompliance(
         unknownReasons.add('ACT_CDS_MISSION_DAY_EVIDENCE_MISSING');
       } else if (missionDay > 21) {
         violations.push({
-          code: 'ACT_CDS_MISSION_21D', source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          code: 'ACT_CDS_MISSION_21D', source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §2º', 'cláusula 9ª caput'),
           actualMin: missionDay * 24 * 60, limitMin: 21 * 24 * 60,
           message: `Missão com ${missionDay} dias > limite de 21 dias`,
         });
@@ -231,8 +296,8 @@ export function evaluateRegulatoryCompliance(
       const effective = input.mission.effectiveWorkDaysAtOperation;
       if (effective != null && Number.isFinite(effective) && effective > 17) {
         violations.push({
-          code: 'ACT_CDS_EFFECTIVE_17D', source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          code: 'ACT_CDS_EFFECTIVE_17D', source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §3º', 'cláusula 9ª caput'),
           actualMin: effective * 24 * 60, limitMin: 17 * 24 * 60,
           message: `Trabalho efetivo no local da operação em ${effective} dias > limite de 17 dias`,
         });
@@ -251,8 +316,8 @@ export function evaluateRegulatoryCompliance(
       } else if (completed < required) {
         violations.push({
           code: 'ACT_CDS_POST_MISSION_REST',
-          source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª, parágrafo 1º',
+          source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §4º', 'cláusula 9ª, parágrafo 1º'),
           actualMin: completed * 24 * 60,
           limitMin: required * 24 * 60,
           message: `Folga pós-missão: ${completed} de ${required} dias completos antes de nova atividade`,

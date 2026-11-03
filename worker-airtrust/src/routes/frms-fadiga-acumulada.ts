@@ -17,7 +17,7 @@ import { buildCanonicalOperationalSourceSql, FRMS_OPERATIONAL_SOURCE_PRIORITY } 
 import { loadPreferredOperationalJourneys } from '../lib/frms/preferred-operational-source';
 import { loadLegalWorkMonth } from '../lib/frms/legal-work-service';
 import { asOperationalLimitesMap, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
+import { costaDoSolAct2025_2027Applies, costaDoSolAct2025_2027InForce, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
 
 const fadigaAcumulada = new Hono<{ Bindings: Env }>();
 
@@ -116,10 +116,11 @@ async function resolveRouteContext(db: D1Database, empresaId: number, month: str
     'B',
     'C',
   );
+  // ACT citado só quando o mês intersecta a vigência (cl. 1ª: 01/12/2025–30/11/2027).
   const costaDoSolActApplicable = costaDoSolAct2025_2027Applies({
     empresaId,
     limitsJson: context.regulatoryLimitsJson,
-  });
+  }) && (costaDoSolAct2025_2027InForce(`${month}-01`) || costaDoSolAct2025_2027InForce(lastDayOfMonth(month)));
   return {
     context,
     limits,

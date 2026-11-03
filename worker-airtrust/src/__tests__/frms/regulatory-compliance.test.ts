@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateRegulatoryCompliance } from '../../lib/frms/regulatory-compliance';
+import { evaluateRegulatoryCompliance, sanitizeRollingRegulatoryEvidence } from '../../lib/frms/regulatory-compliance';
 import { evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
 
 const limites = {
@@ -162,7 +162,7 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     });
     expect(result.status).toBe('VIOLATION');
     expect(result.violations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'ACT_CDS_POST_MISSION_REST', source: 'ACT', limitMin: 15 * 24 * 60 }),
+      expect.objectContaining({ code: 'ACT_CDS_POST_MISSION_REST', source: 'LAW', limitMin: 15 * 24 * 60 }),
     ]));
   });
 
@@ -236,6 +236,69 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
       expect(result.status).toBe('VIOLATION');
       expect(result.violations.map((v) => v.code)).toContain('LAW_ART42_CONSECUTIVE');
       expect(result.pendingValidation).toBeUndefined();
+    });
+  });
+
+  describe('lei como fonte, ACT só na vigência e piso legal de jornada', () => {
+    const missionViolation = {
+      inMission: true, missionDay: 22, effectiveWorkDaysAtOperation: 18,
+      effectiveWorkEvidenceComplete: true, incompleteReasons: [],
+    };
+    const base = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      costaDoSolActApplicable: true, journeyDurationMin: 8 * 60, rolling, work, limites,
+    };
+
+    it('art. 41 §§2º–3º são LAW e citam o ACT dentro da vigência', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, dataReferencia: '2026-09-26', mission: missionViolation });
+      const codes = result.violations.filter((v) => v.code.startsWith('ACT_CDS_'));
+      expect(codes.map((v) => v.source)).toEqual(['LAW', 'LAW']);
+      expect(codes[0].reference).toBe('Lei 13.475/2017 art. 41 §2º; ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput');
+    });
+
+    it('antes de 01/12/2025 o ACT 2025/2027 não é citado', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, dataReferencia: '2025-11-30', mission: missionViolation });
+      const references = result.violations.map((v) => v.reference);
+      expect(references).toContain('Lei 13.475/2017 art. 41 §2º');
+      expect(references.some((r) => r.includes('ACT'))).toBe(false);
+    });
+
+    it('jornada acima de 18 h viola o art. 37 em qualquer composição', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 18 * 60 + 1, limites: { ...limites, FDP_MAXIMO_HORAS: 20 },
+      });
+      expect(result.violations.map((v) => v.code)).toContain('LAW_DUTY_18H');
+    });
+
+    it('perfil acima de 11 h não declara conformidade legal para jornada de 12 h', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 12 * 60, limites: { ...limites, FDP_MAXIMO_HORAS: 14 },
+      });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.unknownReasons).toContain('LAW_DUTY_CREW_COMPOSITION_UNKNOWN');
+    });
+
+    it('jornada de exatamente 11 h com perfil de 14 h permanece conforme', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 11 * 60, limites: { ...limites, FDP_MAXIMO_HORAS: 14 },
+      });
+      expect(result.status).toBe('COMPLIANT');
+    });
+  });
+
+  describe('sanitizeRollingRegulatoryEvidence', () => {
+    const raw = { ...rolling };
+    it('acumulado nulo é evidência ausente, não zero', () => {
+      expect(sanitizeRollingRegulatoryEvidence({ ...raw, hv_28_dias_min: null })).toBeNull();
+    });
+    it('ano civil menor que o mês denuncia linha legada e vira ausente só no ano', () => {
+      const result = sanitizeRollingRegulatoryEvidence({ ...raw, hv_mes_calendario_min: 600, hv_ano_calendario_min: 0 });
+      expect(result?.hv_ano_calendario_min).toBeNull();
+      expect(result?.hv_mes_calendario_min).toBe(600);
+    });
+    it('repouso nulo falha fechado', () => {
+      const result = sanitizeRollingRegulatoryEvidence({ ...raw, repouso_anterior_min: null, repouso_suficiente: null });
+      expect(result).toMatchObject({ repouso_anterior_min: -1, repouso_suficiente: 0 });
     });
   });
 });

@@ -22,6 +22,7 @@ const UNKNOWN_REASON_LABELS: Record<string, string> = {
   REST_EVIDENCE_UNKNOWN: 'Repouso anterior não observável (jornada anterior sem horário ou sobreposta)',
   WORK_TIME_EVIDENCE_MISSING: 'Tempo de trabalho do mês (jornada, reserva, sobreaviso, treinamento) não apurado',
   DUTY_INTERVAL_MISSING: 'Jornada sem horário de apresentação ou término',
+  LAW_DUTY_CREW_COMPOSITION_UNKNOWN: 'Jornada acima de 11 h sem composição da tripulação informada (art. 37: 11/14/18 h)',
   ACTIVITY_INTERVAL_MISSING: 'Atividade de solo/treinamento sem horário',
   ACTIVITY_LEGAL_FACTOR_MISSING: 'Atividade sem regra de cômputo legal definida',
   HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE: 'Perfil regulatório da empresa não é helicóptero offshore',

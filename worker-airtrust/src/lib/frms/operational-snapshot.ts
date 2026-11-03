@@ -19,6 +19,7 @@ import { loadLegalWorkMonth, type LegalWorkMonthlyCrewSummary } from './legal-wo
 import { sumLegalWorkRollingDays } from './legal-work-time';
 import {
   evaluateRegulatoryCompliance,
+  sanitizeRollingRegulatoryEvidence,
   type CostaDoSolMissionEvidence,
   type RegulatoryComplianceResult,
   type RegulatoryPendingFinding,
@@ -1206,10 +1207,10 @@ async function loadOperationalSnapshotRows(
       .prepare(
         `SELECT ar.data_referencia,
                 CAST(ar.tripulante_id AS INTEGER) AS funcionario_id,
-                COALESCE(ar.hv_dia_min, 0) AS hv_dia_min,
-                COALESCE(ar.hv_mes_calendario_min, 0) AS hv_mes_calendario_min,
-                COALESCE(ar.hv_28_dias_min, 0) AS hv_28_dias_min,
-                COALESCE(ar.hv_365_dias_min, 0) AS hv_365_dias_min,
+                ar.hv_dia_min,
+                ar.hv_mes_calendario_min,
+                ar.hv_28_dias_min,
+                ar.hv_365_dias_min,
                 ar.hv_ano_calendario_min,
                 COALESCE(ar.repouso_anterior_min, -1) AS repouso_anterior_min,
                 COALESCE(ar.repouso_suficiente, 0) AS repouso_suficiente
@@ -1743,12 +1744,11 @@ export async function listFrmsOperationalSnapshot(
       new Map(rows.map((row) => [row.tripulante_id, row])),
     ]),
   );
-  const rollingByKey = new Map(
-    contextRows.regulatoryRolling.map((row) => [
-      `${row.data_referencia}::${Number(row.funcionario_id)}`,
-      row,
-    ]),
-  );
+  const rollingByKey = new Map<string, RollingRegulatoryEvidence>();
+  for (const row of contextRows.regulatoryRolling) {
+    const sanitized = sanitizeRollingRegulatoryEvidence(row);
+    if (sanitized) rollingByKey.set(`${row.data_referencia}::${Number(row.funcionario_id)}`, sanitized);
+  }
   const art42Enforced = lawArt42EnforcementEnabled({ limitsJson: operationalContext.regulatoryLimitsJson });
   const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows);
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
@@ -1781,6 +1781,7 @@ export async function listFrmsOperationalSnapshot(
       profileCode: operationalContext.profileCode,
       rbacBcApplicable,
       costaDoSolActApplicable,
+      dataReferencia: date,
       mission: missionEvidence,
       journeyDurationMin,
       rolling: rollingByKey.get(key) ?? null,

@@ -391,6 +391,16 @@ export function resolveCollectiveAgreementCode(input: {
   return input.empresaId === 6 ? COSTA_DO_SOL_ACT_2025_2027 : null;
 }
 
+/** ACT Costa do Sol 2025/2027, cláusula 1ª: vigência de 01/12/2025 a 30/11/2027. */
+export const COSTA_DO_SOL_ACT_2025_2027_START = '2025-12-01';
+export const COSTA_DO_SOL_ACT_2025_2027_END = '2027-11-30';
+
+export function costaDoSolAct2025_2027InForce(dataReferencia: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dataReferencia) &&
+    dataReferencia >= COSTA_DO_SOL_ACT_2025_2027_START &&
+    dataReferencia <= COSTA_DO_SOL_ACT_2025_2027_END;
+}
+
 export function costaDoSolAct2025_2027Applies(input: {
   empresaId: number;
   limitsJson?: string | null;
