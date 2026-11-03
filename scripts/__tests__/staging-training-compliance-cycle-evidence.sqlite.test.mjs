@@ -52,6 +52,11 @@ test('controlled expiry selects and updates only the completed E1 qualification 
     assert.deepEqual(candidates.map((row) => row.id), [101]);
     const update = sql.update.replace('WHERE qh.id=1 ', 'WHERE qh.id=101 ');
     db.exec(update);
+    // Verify the exact staging readback SELECT, not just the update and candidate selector.
+    // The deployed D1 rejects long LIKE patterns even though local SQLite accepts them.
+    const readback = db.prepare(sql.readback).get();
+    assert.equal(readback.expired_count, 1);
+    assert.doesNotMatch(sql.readback, /\bLIKE\b/i);
     const target = db.prepare('SELECT data_vencimento,observacoes FROM qualificacoes_historico WHERE id=101').get();
     assert.ok(target.data_vencimento < new Date().toISOString().slice(0, 10));
     assert.match(target.observacoes, new RegExp(`QA synthetic due date ${marker}`));
