@@ -22,7 +22,7 @@ function preview(day: number, jornadaId: string): FiraLinhPreview {
 
 describe('SIGVOOS replacement candidate lookup: tenant boundary', () => {
   it('refuses to consider duplicate journeys without a valid empresa_id', async () => {
-    const db = { prepare: vi.fn() } as D1Database;
+    const db = { prepare: vi.fn(), batch: vi.fn(), exec: vi.fn(), withSession: vi.fn(), dump: vi.fn() } as D1Database;
     await expect(buildSelectedDaysForSigvoosImport(db, [preview(3, 'other')], null))
       .rejects.toThrow('SIGVOOS_REPLACEMENT_REQUIRES_EMPRESA_ID');
     await expect(buildSelectedDaysForSigvoosImport(db, [preview(3, 'other')], 0))
