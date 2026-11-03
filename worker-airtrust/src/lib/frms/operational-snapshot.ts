@@ -843,7 +843,7 @@ export function buildFrmsOperationalSnapshot(
       alertas.push('DADO_INCONSISTENTE');
     }
 
-    if ((horasSono ?? 0) > 0 && (horasSono ?? 0) < 6) {
+    if (horasSono != null && horasSono < 6) {
       alertas.push('SONO_INSUFICIENTE');
     }
 
