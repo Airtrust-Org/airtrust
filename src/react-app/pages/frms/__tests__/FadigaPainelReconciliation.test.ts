@@ -35,6 +35,7 @@ function history(overrides: Partial<FadigaCheckinItem> = {}): FadigaCheckinItem 
     data_checkin: '2026-08-27',
     hora_checkin: '06:20',
     kss_score: 1,
+    kss_provenance: 'CREW_REPORTED',
     horas_sono: 8,
     qualidade_sono: 4,
     score_fadiga: 4,
@@ -59,7 +60,7 @@ describe('mergeFadigaPainelHistory', () => {
   });
 
   it('não sobrescreve KSS já informado pela visão diária', () => {
-    const [result] = mergeFadigaPainelHistory([panel({ kss_score: 5 })], [history({ kss_score: 1 })]);
+    const [result] = mergeFadigaPainelHistory([panel({ kss_score: 5, kss_provenance: 'CREW_REPORTED' })], [history({ kss_score: 1 })]);
     expect(result.kss_score).toBe(5);
   });
 
@@ -75,6 +76,7 @@ describe('mergeFadigaPainelHistory', () => {
           status: 'normal',
           data_source: 'crew_reported',
           kss_score: 3,
+          kss_provenance: 'CREW_REPORTED',
         },
       ],
     } as never);
@@ -83,6 +85,26 @@ describe('mergeFadigaPainelHistory', () => {
     // Reconciliação vira no-op quando a fonte primária já trouxe o valor.
     const [merged] = mergeFadigaPainelHistory([result], [history({ kss_score: 9 })]);
     expect(merged.kss_score).toBe(3);
+  });
+
+  it('não ressuscita KSS derivado ou sem origem via histórico', () => {
+    const [fromLegacy] = mergeFadigaPainelHistory([panel()], [
+      history({ kss_score: 5, kss_provenance: 'DEFAULTED' }),
+    ]);
+    expect(fromLegacy.kss_score).toBeNull();
+
+    const [fromDaily] = normalizeFadigaPainelPayload({
+      date: '2026-08-27',
+      items: [{
+        funcionario_id: 15, date: '2026-08-27', status: 'incomplete_checkin',
+        data_source: 'crew_reported', kss_score: 5, kss_provenance: 'DERIVED',
+      }],
+    });
+    expect(fromDaily.kss_score).toBeNull();
+    const [merged] = mergeFadigaPainelHistory([fromDaily], [
+      history({ kss_score: 5, kss_provenance: null }),
+    ]);
+    expect(merged.kss_score).toBeNull();
   });
 
   it('não mistura check-ins de outra pessoa ou outra data', () => {
