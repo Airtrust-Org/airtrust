@@ -164,6 +164,12 @@ interface Art42SourceRow {
 export function buildArt42DutiesByCrew(
   jornadas: ReadonlyArray<Art42SourceRow & { has_operational_data: number | string }>,
   escalas: ReadonlyArray<Art42SourceRow>,
+  atividades: ReadonlyArray<{
+    data_operacional: string;
+    funcionario_id: number | string;
+    hora_inicio: string | null;
+    hora_fim: string | null;
+  }> = [],
 ): Map<number, Art42DutyInput[]> {
   const byCrew = new Map<number, Art42DutyInput[]>();
   const realizedKeys = new Set<string>();
@@ -180,6 +186,16 @@ export function buildArt42DutiesByCrew(
   }
   for (const row of escalas) {
     if (!realizedKeys.has(`${row.data_operacional}::${Number(row.funcionario_id)}`)) push(row);
+  }
+  // Art. 42 concerns every work interval, not only flights. Preserve separate
+  // non-flight intervals; their times are also needed to verify the 48h reset.
+  for (const activity of atividades) {
+    push({
+      data_operacional: activity.data_operacional,
+      funcionario_id: activity.funcionario_id,
+      hora_apresentacao: activity.hora_inicio,
+      hora_termino: activity.hora_fim,
+    });
   }
   return byCrew;
 }
