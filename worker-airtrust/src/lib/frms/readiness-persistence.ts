@@ -85,6 +85,12 @@ export async function getReadinessBaselineSnapshot(
   protocolVersion: string,
   beforeReferenceDate?: string,
 ): Promise<ReadinessBaselineSnapshot> {
+  // O protocolo breve exige baseline de 10 sessões descansadas no mesmo
+  // aparelho. Como a tabela legada não registra aparelho, NÃO usar sua
+  // contagem agregada para concluir normalidade individual.
+  if (protocolVersion === READINESS_PROTOCOL.version) {
+    return { sessions: 0, medianRtMs: null, lapseRate: null };
+  }
   const sessions = await countReadinessBaselineSessions(
     db,
     empresaId,
