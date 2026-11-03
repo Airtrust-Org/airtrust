@@ -66,7 +66,7 @@ export interface FadigaHistoricoResponse {
   data: FadigaCheckinItem[];
   pagination: { page: number; limit: number; total: number; totalPages: number };
   resumo: {
-    media_kss: number;
+    media_kss: number | null;
     media_sono_horas: number;
     media_score_fadiga: number;
     distribuicao_niveis: { VERDE: number; AMARELO: number; LARANJA: number; VERMELHO: number };
@@ -77,7 +77,7 @@ export interface FadigaHistoricoResponse {
 export interface FadigaAnalyticsResponse {
   evolucao_diaria: Array<{
     data: string;
-    media_kss: number;
+    media_kss: number | null;
     media_sono: number;
     media_score: number;
     total_checkins: number;
@@ -92,7 +92,7 @@ export interface FadigaAnalyticsResponse {
     nome: string;
     cargo: string;
     ocorrencias_laranja_vermelho: number;
-    media_kss: number;
+    media_kss: number | null;
   }>;
   correlacao_sono_kss: Array<{ horas_sono: number; kss_score: number }>;
   correlacao_score_effectiveness: Array<{
