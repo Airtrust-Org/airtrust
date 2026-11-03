@@ -376,7 +376,13 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
           <button
             key={value}
             type="button"
-            onClick={() => setSection(value)}
+            onClick={() => {
+              setSection(value);
+              // Enrollment rules can be updated by another admin or directly
+              // through the API while this panel stays mounted. On navigation
+              // always read the current tenant-scoped reconciliation snapshot.
+              void reconciliation.refetch();
+            }}
             className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
               section === value ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-100'
             }`}

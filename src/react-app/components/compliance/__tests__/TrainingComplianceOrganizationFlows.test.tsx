@@ -250,6 +250,33 @@ const reconciliationData = {
 describe('Training enrollment reconciliation', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('refreshes pending invitations after a concurrent automatic enrollment', async () => {
+    let externallyEnrolled = false;
+    let reconciliationReads = 0;
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/reconciliacao')) {
+        reconciliationReads += 1;
+        return ok({
+          ...reconciliationData,
+          convites_matricula: externallyEnrolled ? reconciliationData.convites_matricula : [],
+        });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findByText('CRM EAD');
+    expect(screen.queryByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ })).not.toBeInTheDocument();
+
+    // Simulate the enrolled rule being saved through another UI/API session.
+    // Merely changing the tab must not keep an old cached "0 convites" forever.
+    externallyEnrolled = true;
+    fireEvent.click(screen.getByRole('button', { name: /Convites/ }));
+    await screen.findByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ });
+    expect(reconciliationReads).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('2 matrícula(s) ainda não iniciada(s)')).toBeInTheDocument();
+  });
+
   it('enrolls missing people and applies explicit reconciliation decisions', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET')) {

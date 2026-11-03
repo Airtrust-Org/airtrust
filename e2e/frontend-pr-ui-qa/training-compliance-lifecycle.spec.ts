@@ -358,6 +358,14 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   }
   let recon = await reconciliation(page, sector.id, fn.id);
   expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode)).toBe(false);
+  // Verify the authoritative backend before checking the live invitation tab.
+  // The rule was updated by direct API calls, bypassing the UI mutation cache.
+  const expectedInvites = recon.convites_matricula
+    .filter((row: any) => Number(row.curso_id) === requiredCourseId
+      && employeeIds.includes(Number(row.funcionario_id)))
+    .map((row: any) => Number(row.funcionario_id))
+    .sort((a: number, b: number) => a - b);
+  expect(expectedInvites).toEqual([...employeeIds].sort((a, b) => a - b));
 
   // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
   await page.getByRole('button', { name: /Convites/ }).click();
