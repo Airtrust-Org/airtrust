@@ -33,7 +33,7 @@ import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
-import { assertFuncionarioNoEscopoFrms } from './frms-shared';
+import { assertFuncionarioNoEscopoFrms, type FrmsAppContext } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
@@ -1790,10 +1790,8 @@ router.patch('/fadiga-checkin/:id/resposta-gestor', requirePermission('frms', 'e
     if (!checkin) {
       return c.json({ success: false, error: 'Check-in não encontrado' }, 404);
     }
-
-    // Manager permissions do not grant access to unrelated sectors.
-    // Check the employee linked to the tenant-scoped check-in before writing.
-    const scopeDenied = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(checkin.funcionario_id));
+    // Validate sector scope before any manager response is recorded.
+    const scopeDenied = await assertFuncionarioNoEscopoFrms(c as unknown as FrmsAppContext, empresaId, Number(checkin.funcionario_id));
     if (scopeDenied) return scopeDenied;
 
     await c.env.DB.prepare(
@@ -1932,10 +1930,8 @@ router.get('/fadiga-checkin/frat-prefill', async (c) => {
     if (!funcionarioId) {
       return c.json({ success: false, error: 'funcionario_id não encontrado' }, 400);
     }
-
-    // Prefill exposes individual fatigue, sleep and symptom data. Never let
-    // arbitrary ?funcionario_id bypass the same tenant/sector/self restriction.
-    const scopeDenied = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(funcionarioId));
+    // A prefill request cannot read an arbitrary crew member's fatigue data.
+    const scopeDenied = await assertFuncionarioNoEscopoFrms(c as unknown as FrmsAppContext, empresaId, Number(funcionarioId));
     if (scopeDenied) return scopeDenied;
 
     const row = await c.env.DB.prepare(
