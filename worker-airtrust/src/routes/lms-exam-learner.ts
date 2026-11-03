@@ -51,12 +51,11 @@ function ids(c:Parameters<typeof getEmpresaId>[0],matriculaId:string){
  * and the currently served SCORM edition. Progress/cancellation can change
  * after start; old attempt IDs are never a bypass of the study gate.
  */
-async function currentAttemptLearner(c:Parameters<typeof getEmpresaId>[0] & {
-  env: Env
-},attemptId:string) {
-  const learner={empresaId:getEmpresaId(c),userId:userId(c)};
-  const attempt=await getExamAttemptScope(c.env.DB,learner,attemptId);
-  const gate=await loadExamGate(c.env,{
+async function currentAttemptLearner(
+  env:Env,learner:Readonly<{empresaId:number;userId:number}>,attemptId:string
+) {
+  const attempt=await getExamAttemptScope(env.DB,learner,attemptId);
+  const gate=await loadExamGate(env,{
     ...learner,matriculaId:attempt.scope.matriculaId,
   });
   const scope=gate.scope;
@@ -96,7 +95,7 @@ routes.post('/matriculas/:matriculaId/tentativas',async c=>{
 routes.put('/tentativas/:attemptId/respostas',async c=>{
   const body=await parseBoundedJson(c);
   exact(body,['questionId','choiceId']);
-  const learner=await currentAttemptLearner(c,c.req.param('attemptId'));
+  const learner=await currentAttemptLearner(c.env,{empresaId:getEmpresaId(c),userId:userId(c)},c.req.param('attemptId'));
   const data=await saveExamResponse(c.env.DB,
     learner,c.req.param('attemptId'),
     body.questionId as string,body.choiceId as string);
@@ -104,7 +103,7 @@ routes.put('/tentativas/:attemptId/respostas',async c=>{
 });
 
 routes.post('/tentativas/:attemptId/enviar',async c=>{
-  const learner=await currentAttemptLearner(c,c.req.param('attemptId'));
+  const learner=await currentAttemptLearner(c.env,{empresaId:getEmpresaId(c),userId:userId(c)},c.req.param('attemptId'));
   const data=await submitExamAttempt(c.env.DB,
     learner,c.req.param('attemptId'));
   return c.json({success:true,data});
