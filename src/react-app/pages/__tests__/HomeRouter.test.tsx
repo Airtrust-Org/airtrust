@@ -18,11 +18,11 @@ vi.mock('../../services/funcionarios.service', () => ({
   },
 }));
 
-vi.mock('../../pages/DashboardPrincipal', () => ({
+vi.mock('../DashboardPrincipal', () => ({
   default: () => <div>dashboard-principal</div>,
 }));
 
-vi.mock('../../pages/HomePerfil', () => ({
+vi.mock('../HomePerfil', () => ({
   default: ({
     homeProfile,
     funcionarioContext,
