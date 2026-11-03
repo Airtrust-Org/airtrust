@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../middleware/employee-sector-access';
 import {
   countReadinessBaselineSessions,
   persistReadinessAssessment,
@@ -188,6 +189,11 @@ router.get('/team', async (c) => {
     forcedFuncionarioId = funcionarioId;
   }
 
+  // A team-view role does not grant access to all sectors in the tenant.
+  // Apply the same employee-sector policy used by other FRMS team reports.
+  const teamSectorAccess = hasTeamScope ? await getEmployeeSectorAccess(c, empresaId) : null;
+  const teamScope = teamSectorAccess ? buildFuncionarioScopeWhere(teamSectorAccess, 'f') : null;
+
   // Anchor the team view in the authoritative daily check-in instead of the
   // readiness table alone. Historical builds persisted these in two requests;
   // if the second request failed, the operator saw "check-in realizado" beside
@@ -208,6 +214,10 @@ router.get('/team', async (c) => {
     CASE WHEN ra.id IS NULL THEN 1 ELSE 0 END AS assessment_missing`;
   const baseSql = `SELECT ${fields}
        FROM frms_fadiga_checkin ch
+       INNER JOIN funcionarios f
+         ON f.id = CAST(ch.funcionario_id AS INTEGER)
+        AND f.empresa_id = ch.empresa_id
+        AND f.deleted_at IS NULL
        LEFT JOIN frms_readiness_assessment ra
          ON ra.empresa_id = ch.empresa_id
         AND ra.funcionario_id = ch.funcionario_id
@@ -215,8 +225,9 @@ router.get('/team', async (c) => {
         AND ra.deleted_at IS NULL
       WHERE ch.empresa_id = ?
         AND ch.data_checkin = ?
-        AND ch.deleted_at IS NULL`;
-  const commonBinds = [empresaId, referenceDate] as const;
+        AND ch.deleted_at IS NULL
+        AND ${teamScope?.clause ?? '1 = 1'}`;
+  const commonBinds = [empresaId, referenceDate, ...(teamScope?.bindings ?? [])] as const;
   const statement = forcedFuncionarioId
     ? c.env.DB.prepare(`${baseSql} AND ch.funcionario_id = ? ORDER BY ch.funcionario_id ASC`).bind(
         ...commonBinds,
@@ -292,6 +303,16 @@ router.post('/', async (c) => {
       success: false,
       error: 'KSS_PROVENANCE_UNVERIFIED',
       message: 'É necessário KSS explicitamente informado pelo tripulante para registrar o teste.',
+    }, 409);
+  }
+
+  // SQL NULL must not be coerced to 0 hours of sleep: absence is not a
+  // crew-declared sleepless night, and readiness cannot infer the difference.
+  if (checkin.horas_sono == null || !Number.isFinite(Number(checkin.horas_sono))) {
+    return c.json({
+      success: false,
+      error: 'SLEEP_EVIDENCE_MISSING',
+      message: 'Informe as horas de sono no check-in antes de registrar o teste.',
     }, 409);
   }
 
