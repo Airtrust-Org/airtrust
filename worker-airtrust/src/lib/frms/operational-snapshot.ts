@@ -760,13 +760,13 @@ export function buildFrmsOperationalSnapshot(
         : 'NAO_APLICAVEL';
 
     const kss = checkin ? asNumber(checkin.kss_score, 0) : null;
-    const horasSonoCheckin = checkin ? Number(checkin.horas_sono ?? 0) : null;
+    const horasSonoCheckin = checkin?.horas_sono == null ? null : Number(checkin.horas_sono);
 
     // Sem check-in válido não há fallback de sono de 8 h nem despertar inferido.
     // O snapshot permanece incompleto/ausente e a decisão operacional deve refletir
     // a falta de evidência, em vez de fabricar precisão.
     const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] =
-      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin > 0
+      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin >= 0 && horasSonoCheckin <= 24
         ? 'REAL'
         : 'AUSENTE';
 
