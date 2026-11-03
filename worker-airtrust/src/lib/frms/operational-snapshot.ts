@@ -101,6 +101,7 @@ export interface FrmsOperationalSnapshotItem {
   /** Instante UTC de envio, para exibição no fuso operacional. */
   checkin_submitted_at?: string | null;
   kss_score: number | null;
+  kss_provenance?: string | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
   hora_acordar: string | null;
@@ -230,6 +231,7 @@ interface CheckinSnapshotRow {
   submitted_at?: string | null;
   hora_apresentacao?: string | null;
   kss_score: number | null;
+  kss_provenance?: string | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
   wake_time: string | null;
@@ -759,7 +761,10 @@ export function buildFrmsOperationalSnapshot(
         ? 'PENDENTE'
         : 'NAO_APLICAVEL';
 
-    const kss = checkin ? asNumber(checkin.kss_score, 0) : null;
+    const rawKss = checkin?.kss_score == null ? null : Number(checkin.kss_score);
+    const kss = checkin?.kss_provenance === 'CREW_REPORTED' &&
+      rawKss != null && Number.isInteger(rawKss) && rawKss >= 1 && rawKss <= 9
+      ? rawKss : null;
     const horasSonoCheckin = checkin?.horas_sono == null ? null : Number(checkin.horas_sono);
 
     // Sem check-in válido não há fallback de sono de 8 h nem despertar inferido.
@@ -780,6 +785,7 @@ export function buildFrmsOperationalSnapshot(
     const completeDailyCheckin =
       Boolean(checkin) &&
       Boolean(checkinPresentationTime) &&
+      kss != null &&
       sleepDataSource === 'REAL' &&
       wakeDataSource === 'REAL';
 
@@ -910,11 +916,12 @@ export function buildFrmsOperationalSnapshot(
       checkin_horario: normalizeText(checkin?.hora_checkin),
       checkin_submitted_at: normalizeText(checkin?.submitted_at),
       kss_score: kss,
+      kss_provenance: checkin?.kss_provenance ?? null,
       horas_sono: horasSono,
       qualidade_sono: checkin ? asNumber(checkin.qualidade_sono, 0) : null,
       hora_acordar: horaAcordar,
       fadiga_score: checkin ? asNumber(checkin.score_fadiga, 0) : null,
-      status_operacional_checkin: normalizeText(checkin?.status_operacional),
+      status_operacional_checkin: completeDailyCheckin ? normalizeText(checkin?.status_operacional) : null,
 
       effectiveness_pct: effectivenessPctNormalized,
       effectiveness_componentes:
@@ -1121,7 +1128,7 @@ async function loadOperationalSnapshotRows(
            ch.hora_checkin,
            ch.submitted_at,
            ch.jornada_inicio_prevista AS hora_apresentacao,
-           ch.kss_score,
+           ch.kss_score, ch.kss_provenance,
            ch.horas_sono,
            ch.qualidade_sono,
            ch.wake_time,
