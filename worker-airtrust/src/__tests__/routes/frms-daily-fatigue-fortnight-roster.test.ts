@@ -103,6 +103,7 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
       wake_time: '05:00',
       computed_risk_level: 'critical',
       kss_score: 9,
+      kss_provenance: 'CREW_REPORTED',
       fit_for_duty: 1,
     };
     const response = await router.request(
@@ -138,6 +139,7 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
         wake_time: '05:00',
         horas_sono: 8,
         kss_score: 9,
+        kss_provenance: 'CREW_REPORTED',
         fit_for_duty: 1,
         computed_risk_level: 'normal',
         score_fadiga: 35,
@@ -163,6 +165,7 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
       wake_time: '05:00',
       horas_sono: 7,
       kss_score: 4,
+      kss_provenance: 'CREW_REPORTED',
       fit_for_duty: 1,
     };
     const response = await router.request(
