@@ -1964,18 +1964,30 @@ export async function fetchCompleteSigvoosWindow(
  * mistaken for a valid empty flight list. Empty arrays are legitimate; absent
  * or malformed arrays are not evidence that the day had zero flights.
  */
-function isRecognizedSigvoosRecordArray(value: unknown, depth = 0): boolean {
-  if (Array.isArray(value)) {
-    return value.every(
-      (item) => item !== null && typeof item === 'object' && !Array.isArray(item),
-    );
-  }
-  if (!value || typeof value !== 'object' || depth >= 3) return false;
+function isRecognizedSigvoosRecordArray(value: unknown): boolean {
+  const isRecords = (candidate: unknown): boolean =>
+    Array.isArray(candidate) &&
+    candidate.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item));
+  if (isRecords(value)) return true;
+  if (!value || typeof value !== 'object') return false;
+
   const object = value as Record<string, unknown>;
-  return ['main', 'data', 'results', 'items', 'rows', 'payload', 'result'].some(
-    (key) => Object.prototype.hasOwnProperty.call(object, key) &&
-      isRecognizedSigvoosRecordArray(object[key], depth + 1),
-  );
+  if (['main', 'data', 'results', 'items', 'rows', 'payload'].some((key) => isRecords(object[key]))) {
+    return true;
+  }
+  const nestedPaths = [
+    ['data', 'main'],
+    ['data', 'items'],
+    ['data', 'results'],
+    ['payload', 'main'],
+    ['payload', 'items'],
+    ['result', 'main'],
+  ] as const;
+  return nestedPaths.some(([parent, child]) => {
+    const parentValue = object[parent];
+    return parentValue !== null && typeof parentValue === 'object' &&
+      isRecords((parentValue as Record<string, unknown>)[child]);
+  });
 }
 
 export function shouldClearExistingSigvoosData(clearExisting?: boolean): boolean {
