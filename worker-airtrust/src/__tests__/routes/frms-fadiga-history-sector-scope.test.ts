@@ -19,6 +19,11 @@ vi.mock('../../middleware/tenant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../middleware/tenant')>()),
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
 }));
+vi.mock('../../middleware/rbac', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../middleware/rbac')>()),
+  requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
+}));
+
 vi.mock('../../middleware/frms-access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../middleware/frms-access')>()),
   canSeeFrmsTeamScopeForContext: async () => state.role !== 'tripulante',
@@ -45,6 +50,10 @@ function createDb() {
         },
         async first() {
           statements.push({ sql: normalized, binds });
+          if (normalized.includes('SELECT f.id FROM funcionarios f')) return null;
+          if (normalized.includes('FROM frms_fadiga_checkin') && normalized.includes('WHERE id = ?')) {
+            return { id: 'checkin-other-sector', funcionario_id: 99 };
+          }
           if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ?')) {
             return { id: 70 };
           }
@@ -101,6 +110,43 @@ describe('FRMS — histórico de fadiga com RBAC setorial', () => {
     const queries = statements.filter((query) => query.sql.includes('frms_fadiga_checkin ch'));
     expect(queries).toHaveLength(3);
     expect(queries.every((query) => query.sql.includes('AND 1 = 0'))).toBe(true);
+  });
+
+  it('tripulante não consulta o FRAT pré-preenchido de outro funcionário', async () => {
+    state.role = 'tripulante';
+    sectorAccessMock.mockResolvedValue({ mode: 'self', setorIds: [], funcionarioId: 70 });
+    const { db, statements } = createDb();
+    const response = await frmsRoutes.fetch(
+      new Request('http://localhost/fadiga-checkin/frat-prefill?funcionario_id=99&date=2026-10-03'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ code: 'FRMS_INDIVIDUAL_SCOPE_DENIED' });
+    expect(statements.every((q) => !q.sql.includes('FROM frms_fadiga_checkin'))).toBe(true);
+  });
+
+  it('gestor de outro setor não consulta FRAT nem responde ao check-in', async () => {
+    const { db, statements } = createDb();
+    const prefill = await frmsRoutes.fetch(
+      new Request('http://localhost/fadiga-checkin/frat-prefill?funcionario_id=99&date=2026-10-03'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(prefill.status).toBe(403);
+
+    const answer = await frmsRoutes.fetch(
+      new Request('http://localhost/fadiga-checkin/checkin-other-sector/resposta-gestor', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resposta: 'Revisar condições operacionais' }),
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(answer.status).toBe(403);
+    await expect(answer.json()).resolves.toMatchObject({ code: 'FRMS_INDIVIDUAL_SCOPE_DENIED' });
+    const scopeQueries = statements.filter((q) => q.sql.includes('SELECT f.id FROM funcionarios f'));
+    expect(scopeQueries).toHaveLength(2);
+    expect(scopeQueries.every((q) => q.sql.includes('f.setor_id IN (?)'))).toBe(true);
+    expect(scopeQueries.every((q) => q.binds.join(',') === '99,7,3')).toBe(true);
+    expect(statements.every((q) => !q.sql.includes('INSERT INTO frms_fadiga_evento'))).toBe(true);
   });
 
   it('administrador tem acesso à empresa inteira sem escopo setorial', async () => {
