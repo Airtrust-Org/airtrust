@@ -5,7 +5,7 @@
  *   - Conversão total_fatorizado → effectiveness_pct
  *   - Classificação de nível (verde / atencao / amarelo / vermelho)
  *   - Cap em 0% e 100%
- *   - Cálculo de tempo_abaixo_limiar
+ *   - Ausência explícita de tempo_abaixo_limiar não mensurado
  *   - Decomposição de componentes
  *   - Testes com limites customizados
  *   - Anti-regressão: nivel nunca undefined
@@ -132,36 +132,13 @@ describe('calcEffectiveness — classificação de nível', () => {
 // ─── Tempo abaixo do limiar ─────────────────────────────────────────
 
 describe('calcEffectiveness — tempo_abaixo_limiar', () => {
-  it('sem fatores de risco → 0 min', () => {
-    const r = calcEffectiveness(makeFat(0), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(0);
-  });
-
-  it('apenas noturno_dep → +45', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_noturno_dep_pct: -5 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(45);
-  });
-
-  it('apenas noturno_arr → +30', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_noturno_arr_pct: -5 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(30);
-  });
-
-  it('repouso negativo → +30', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_repouso_pct: -3 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(30);
-  });
-
-  it('todos os fatores de risco → 105 min', () => {
-    const r = calcEffectiveness(
-      makeFat(-0.3, {
-        fator_noturno_dep_pct: -5,
-        fator_noturno_arr_pct: -5,
-        fator_repouso_pct: -3,
-      }),
-      L,
-    );
-    expect(r.tempo_abaixo_limiar_pct).toBe(105);
+  it('não inventa minutos de risco, com ou sem fatores de fadiga (inclusive legado)', () => {
+    for (const fat of [makeFat(0), makeFat(-0.3, {
+      fator_noturno_dep_pct: -5, fator_noturno_arr_pct: -5, fator_repouso_pct: -3,
+    })]) {
+      expect(calcEffectiveness(fat, L).tempo_abaixo_limiar_pct).toBeNull();
+      expect(calcEffectiveness(fat, L, { hora_apresentacao: '06:00' }).tempo_abaixo_limiar_pct).toBeNull();
+    }
   });
 });
 
