@@ -37,13 +37,13 @@ import {
   AlocacaoUpdateSchema,
   SituacaoCreateSchema,
   SituacaoUpdateSchema,
-} from './escalas-alocacoes-schemas';
+} from '../services/escalas/alocacao-schemas';
 import {
   removerFolgaAutomaticaOrfa,
   regenerarEventosAutomaticosFuncionarioEscala,
   recalcularCoberturaAeronave,
   desalocarAeronaveInativa,
-} from './escalas-alocacoes-engine';
+} from '../services/escalas/alocacao-engine';
 import {
   getUserId,
   escalasClientError,
@@ -59,7 +59,7 @@ import {
   buscarAlocacoesDetalhadas,
   mapAlocacaoDetalhada,
   type SobreposicaoFuncionarioDetalhe,
-} from './escalas-alocacoes-helpers-internal';
+} from '../services/escalas/alocacao-helpers';
 import situacoesRoutes from './escalas-situacoes';
 export { desalocarAeronaveInativa, recalcularCoberturaAeronave };
 

@@ -18,8 +18,8 @@ import {
   type SituacaoTipoRow,
   SituacaoCreateSchema,
   SituacaoUpdateSchema,
-} from './escalas-alocacoes-schemas';
-import { removerFolgaAutomaticaOrfa } from './escalas-alocacoes-engine';
+} from '../services/escalas/alocacao-schemas';
+import { removerFolgaAutomaticaOrfa } from '../services/escalas/alocacao-engine';
 import {
   getUserId,
   escalasClientError,
@@ -32,7 +32,7 @@ import {
   auditarAlocacao,
   buscarAlocacoesDetalhadas,
   mapAlocacaoDetalhada,
-} from './escalas-alocacoes-helpers-internal';
+} from '../services/escalas/alocacao-helpers';
 
 const situacoes = new Hono<{ Bindings: Env }>();
 

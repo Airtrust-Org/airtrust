@@ -45,7 +45,7 @@ async function runUpdate(db: D1Database, sql: string, ...args: unknown[]) {
 /**
  * Extrai o userId do contexto Hono autenticado sem recorrer a `as any` —
  * mesmo padrão estrutural usado em `simuladores-fichas.ts`
- * (`getContextUserId`) e `escalas-alocacoes-helpers-internal.ts` (`getUserId`).
+ * (`getContextUserId`) e `services/escalas/alocacao-helpers.ts` (`getUserId`).
  */
 function getContextUserId(c: { get: (k: string) => unknown }): string {
   return String(c.get('userId') || 'system');

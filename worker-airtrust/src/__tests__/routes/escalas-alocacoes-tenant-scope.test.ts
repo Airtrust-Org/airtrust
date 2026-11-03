@@ -24,7 +24,7 @@ vi.mock('../../shared/domainEvents', () => ({
 }));
 
 import alocacoesRoutes from '../../routes/escalas-alocacoes';
-import { checarSobreposicaoFuncionario } from '../../routes/escalas-alocacoes-helpers-internal';
+import { checarSobreposicaoFuncionario } from '../../services/escalas/alocacao-helpers';
 
 type QueryLog = { sql: string; binds: unknown[]; method: 'first' | 'all' | 'run' };
 
