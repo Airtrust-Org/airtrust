@@ -213,3 +213,42 @@ Montagens em `worker-airtrust/src/index.ts`: `/api/frms` → `frms.ts` (com sub-
 ### FRMS-AUD-021 — Lacunas de processo (não são defeitos de código)
 - **P2 · média · observado:** (a) nenhum monitoramento de **prazo vencido** de tratamento (o prazo é exigido, mas nada alerta quando expira; `grep prazo` em `cron/` só encontra SGSO/LMS); (b) não há **reabertura** de caso; (c) não há **encaminhamento ao SGSO** a partir do caso FRMS (a única menção a SGSO no módulo é no check-in de voo); (d) não há métrica de efetividade do processo (tempo alerta→tratamento, % com eficácia avaliada, reincidência).
 - **Correção proposta:** (a) cron diário que lista casos `EM_TRATAMENTO` com prazo < hoje e notifica o responsável/gestor; (b) `PUT /alertas/:id/reabrir` com justificativa e auditoria; (c) ação "encaminhar ao SGSO" criando relato vinculado, sem dados pessoais além do necessário; (d) endpoint de indicadores de processo para o relatório de Coordenação.
+
+## 10. Fundamentação científica dos indicadores
+
+### 10.1 Inventário dos indicadores e o que cada um realmente mede
+
+| Indicador | Implementação | Natureza real | Validação |
+|---|---|---|---|
+| Score de fadiga do check-in (0–100, VERDE/AMARELO/LARANJA/VERMELHO) | `lib/frms/fadiga-score.ts` — soma ponderada de KSS normalizado (peso default 0,35, migration 0287), duração e qualidade do sono, sintomas; +8 medicação, +15 álcool; `apto=0` força vermelho | Triagem autorreferida composta | Nenhuma calibração (o próprio código diz "penalidades provisórias de triagem, não calibradas") |
+| KSS (1–9) | entrada do check-in | Sonolência subjetiva momentânea — instrumento validado (Åkerstedt & Gillberg, 1990); KSS ≥ 7 associa-se a queda de desempenho em estudos de privação | Instrumento validado; o *uso* no score não é |
+| "Effectiveness" estimada (%) | `calculos.ts` `calcEffectiveness` — produto/soma de fatores (apresentação, duração, repouso, noturno, HV, ciclo embarcado, carga operacional V2) com faixas 90/77/65 | Índice de exposição por regras | Não é SAFTE/FAST; não validado. O nome e as faixas lembram o modelo SAFTE-FAST, o que convida a interpretá-lo como efetividade cognitiva |
+| Score quinzenal (0–100, ATENÇÃO 45 / CRÍTICO 75) | `fortnight-indicator.ts` | Exposição acumulada + qualidade de dado | Ver #1476 (pesos sem homologação científica) |
+| PVT-B / prontidão | `frms-readiness.ts` | Desempenho psicomotor (PVT é padrão-ouro de vigilância; versão breve de 3 min tem validação na literatura, mas o limiar local não) | Limiar local não validado |
+| WOCL | `woclStartMinute=120`, `woclEndMinute=360` | 02:00–05:59 | Conforme definição ICAO (Doc 9966) |
+
+### FRMS-AUD-022 — Score de check-in não calibrado emite rótulo de aptidão
+- **P1 · alta · comprovado · requer decisão**
+- `fadiga-score.ts` l. ~212: `status_operacional = APTO | APTO_COM_RESSALVA | INAPTO` derivado diretamente do score composto. O próprio código declara que os pesos são provisórios e não calibrados. Um rótulo de aptidão vindo de um score não validado contraria a premissa da missão ("o FRMS não deve decidir unilateralmente sobre aptidão") e as orientações ICAO Doc 9966 / FAA AC 120-103A, que tratam autoavaliação como insumo da decisão, não como decisão.
+- **Correção proposta (não implementada — muda texto e contrato visível ao piloto):** renomear os estados para linguagem de triagem (`SEM_SINAL`, `REVISAR`, `REVISAO_OBRIGATORIA`), manter "INAPTO" apenas quando o próprio tripulante declarar `apto=0`, e tratar KSS ≥ 7 como gatilho próprio e explícito de revisão (não diluído na soma ponderada). Requer decisão da Coordenação/SGSO porque altera a comunicação com o tripulante.
+
+### FRMS-AUD-023 — Qualidade de dado misturada a sinal fisiológico nos scores
+- **P2 · alta · comprovado** — (a) score quinzenal: check-in pendente +10, dado estimado +7 e "dados completos" −4 pontos (#1476); (b) check-in: sono não informado vale 0,6 (penaliza) em vez de "incompleto"; (c) "effectiveness": sem horário de sono informado, assume a premissa padrão de 8 h (`fonteSono='PADRAO'`, migration 0353) — **hipótese otimista** — e o resultado é exibido como percentual. Em (c) o snapshot marca `sleep_data_source='ESTIMADO'` e a confiança da decisão cai (`frmsOperationalDecision.ts` l. 141), o que mitiga parcialmente.
+- **Correção:** separar dois eixos em todos os scores — `exposicao_fadiga` (só fatores fisiológicos/operacionais) e `qualidade_evidencia` (completude, estimativas, pendências). Dado ausente nunca soma nem subtrai pontos de fadiga; ele rebaixa a confiança e pode, isoladamente, exigir revisão. Depende da revisão científica de #1476.
+
+### FRMS-AUD-024 — Nomenclatura "effectiveness" e faixas 90/77/65
+- **P2 · média** — usar "efetividade" e faixas semelhantes às do SAFTE-FAST para um índice próprio por regras induz o usuário a ler o número como predição de desempenho cognitivo. Correção: renomear para "Índice de exposição da jornada (regras AirTrust)", exibir os fatores que o compõem e declarar na UI que não é modelo biomatemático validado.
+
+### 10.2 Matriz de aderência científica
+
+| Tema | Referência | Implementação | Lacuna | Recomendação |
+|---|---|---|---|---|
+| Processo homeostático (vigília prolongada, sono prévio) | Borbély 1982 (modelo de dois processos); Doc 9966 cap. 2 | Sono prévio entra como duração/qualidade autorreferida; vigília contínua não é calculada | Tempo acordado até o fim da jornada não é calculado nem quando o despertar é informado | Calcular "horas acordado no fim da jornada" quando despertar e término forem reais; não estimar sem dado |
+| Ritmo circadiano / WOCL | Doc 9966; ICAO Fatigue Management Guide for Helicopter Operators (2020) | Fatores de apresentação na madrugada e janela WOCL 02–06 h | Pesos não calibrados | Manter como fator de exposição, não como percentual de desempenho |
+| Débito de sono acumulado e recuperação | Belenky et al. 2003; Van Dongen et al. 2003 (perda cumulativa com 6 h/noite) | "Algum sono < 6 h" +12 na quinzena; créditos de recuperação V2 | Conta ocorrência, não débito acumulado; não há regra de duas noites de sono irrestrito para recuperação | Medir débito cumulativo a partir de check-ins reais (sem estimar ausentes) |
+| Sonolência subjetiva | KSS (Åkerstedt & Gillberg 1990); Samn-Perelli | KSS no check-in | Samn-Perelli ausente (é a escala recomendada em vários guias de FRMS para tripulações) | Opcional: adicionar Samn-Perelli no check-in de voo; não exigir ambos diariamente |
+| Desempenho objetivo | PVT (Dinges & Powell 1985); PVT-B 3 min (Basner & Dinges 2011) | PVT-B em readiness | Limiar local sem validação | Registrar lapsos/tempo médio e comparar com baseline individual; não usar como apto/inapto |
+| Prescritivo × FRMS | Doc 9966; RBAC 117 subparte de GRF/SGRF | Motor prescritivo completo; não há registro de SGRF aprovado | Software chama-se FRMS sem regime aprovado documentado | Exibir regime vigente (prescritivo + GRF) e não sugerir aprovação de SGRF |
+| Gestão de risco (preditiva/proativa/reativa) | Doc 9966 cap. 4; Doc 9859 | Preditiva: projeção e escala programada (agora também art. 42); proativa: check-in/PVT; reativa: casos | Reativa sem ligação ao SGSO (AUD-021) | Ver AUD-021 |
+
+Referências bibliográficas citadas são as publicações clássicas e de domínio público do tema; nenhum número delas foi usado para calibrar o produto nesta auditoria.
