@@ -21,7 +21,7 @@ export function resolveTrainingEntryPath({
 
   // Restricted roles only had LMS available from the legacy hub.
   if (isAluno || isInstrutor) {
-    return lmsAvailable ? '/lms/cursos' : '/';
+    return lmsAvailable ? '/lms' : '/';
   }
 
   if (canAccessModule('qualificacoes', modulosAtivos) && can('qualificacoes.view')) {

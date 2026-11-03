@@ -27,7 +27,7 @@ describe('resolveTrainingEntryPath', () => {
     ).toBe('/lms');
   });
 
-  it('mantém o acesso de aluno/instrutor no catálogo LMS, sem expor os demais módulos', () => {
+  it('leva aluno/instrutor diretamente aos próprios treinamentos', () => {
     expect(
       resolveTrainingEntryPath({
         modulosAtivos: ['qualificacoes', 'lms', 'simuladores'],
@@ -35,7 +35,7 @@ describe('resolveTrainingEntryPath', () => {
         isAluno: true,
         isInstrutor: false,
       }),
-    ).toBe('/lms/cursos');
+    ).toBe('/lms');
   });
 
   it('volta à home quando nenhum destino de treinamento está liberado', () => {
