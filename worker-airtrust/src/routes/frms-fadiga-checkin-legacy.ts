@@ -1419,6 +1419,14 @@ router.get('/fadiga-checkin/historico', async (c) => {
       whereClauses.push('ch.funcionario_id = ?');
       whereValues.push(funcionarioId);
     } else {
+      // Team access is not company-wide access. Apply the canonical sector
+      // scope to COUNT, rows and aggregates, not only to the page of results.
+      // An unassigned manager gets clause 1=0 (fail closed).
+      const access = await getEmployeeSectorAccess(c, empresaId);
+      const scope = buildFuncionarioScopeWhere(access, 'f');
+      whereClauses.push(scope.clause);
+      whereValues.push(...scope.bindings);
+
       if (requestedFuncionario) {
         const requestedFuncionarioId = Number(requestedFuncionario);
         if (!Number.isInteger(requestedFuncionarioId) || requestedFuncionarioId <= 0) {
@@ -1448,6 +1456,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f
            ON f.id = ch.funcionario_id
+          AND f.empresa_id = ch.empresa_id
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
@@ -1461,6 +1470,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f
            ON f.id = ch.funcionario_id
+          AND f.empresa_id = ch.empresa_id
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
@@ -1484,6 +1494,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
          FROM frms_fadiga_checkin ch
          JOIN funcionarios f
            ON f.id = ch.funcionario_id
+          AND f.empresa_id = ch.empresa_id
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
