@@ -138,3 +138,78 @@ Severidade P0–P3 conforme a missão. "Comprovado" = demonstrado por código e 
 - Frontend: `vitest run src/react-app/pages/frms src/react-app/hooks` — 67 arquivos, 480 testes, PASS.
 - `npm run lint` (todos os guards, incl. layer-boundaries e schema-contract) — PASS.
 - Não executados: E2E, staging, produção.
+
+---
+
+# PARTE II — Auditoria ampliada (continuação, 03/11/2026)
+
+## 7. Inventário de superfície (backend)
+
+Montagens em `worker-airtrust/src/index.ts`: `/api/frms` → `frms.ts` (com sub-rotas `frms-cases`, `frms-relatorios-config`, `frms-fira`, `frms-fadiga-acumulada`), `frms-fadiga-checkin` (+ legado), `/api/frms/readiness`, `frms-operational-snapshot`, `frms-read-ack`, `frms-override`, `frms-projection`; `frms-recovery` montado separadamente. Todas as rotas têm `auth()` (em `frms.ts` o `use('*', auth())` da linha 921 vem depois apenas de rotas `/maintenance/*`, que têm `auth()+tenantMiddleware()` próprios — verificado, sem lacuna). **Não existe gate de módulo/RBAC para `/api/frms`**: a autorização por papel é feita, ou não, endpoint a endpoint.
+
+| Arquivo | Endpoints | Linhas |
+|---|---|---|
+| `frms.ts` | jornadas (CRUD, sono), acúmulo, score-atual, reprocessar, explicação do dia, comparar dias, simular cenário, justificativas, alertas (lista, contagem, envio), escalas FRMS, importação APUS/simulador, validar escala, manutenção (cobertura/materialização) | 3 359 |
+| `frms-cases.ts` | `PUT /alertas/:id/{visualizar,tratamento,resolver}` | 133 |
+| `frms-relatorios-config.ts` | relatórios (individual, compliance, mapa de fadiga, histórico de alertas), configurações governadas, localidades, notificações | 804 |
+| `frms-fira.ts` | upload FIRA (simples, lote, multipágina), confirmar, vincular, listar, excluir, comparativo de fontes, heatmap, timeline | 1 077 |
+| `frms-fadiga-checkin-legacy.ts` | check-in (hoje, me, histórico, config, painel, painel-gestor, analytics, resposta do gestor, export, FRAT prefill), daily-fatigue | 1 991 |
+| `frms-read-ack.ts` / `frms-override.ts` | eventos de ciência e override operacional | 775 / 250 |
+| `frms-readiness.ts` / `frms-recovery.ts` | PVT-B/prontidão e atividade de recuperação (autosserviço) | 348 / 797 |
+| `frms-operational-snapshot.ts` / `frms-projection.ts` | snapshot diário e projeção (leitura) | 385 / 178 |
+
+## 8. RBAC, tenant e privacidade — matriz de escrita
+
+| Endpoint de escrita | Guard observado | Avaliação |
+|---|---|---|
+| `PUT /alertas/:id/visualizar\|tratamento\|resolver` | `requirePermission('frms','editar','admin','manager')` + tenant | OK |
+| `PUT /fadiga-checkin/config`, `PATCH /fadiga-checkin/:id/resposta-gestor` | `requirePermission(... 'manager')` | OK |
+| `PUT /configuracoes*`, localidades, restaurar | `requireRole('admin')`/`requirePlatformAdmin` | OK |
+| `POST /override/:eventId` | `canApplyOverride` (ADMINISTRADOR/GESTOR) | OK |
+| `POST /readiness`, `POST /recovery/activity`, check-in `me` | próprio funcionário (`resolveOwnFuncionarioId`) | OK (autosserviço) |
+| `PUT /notificacoes/:id/ler` | `WHERE id = ? AND funcionario_id = ?` | OK |
+| `POST /importacao/fira/:id/confirmar`, `fonte-calculo`, `reprocessar*`, `DELETE /jornadas/mes/*` | `requireRole('admin')` | OK |
+| **`POST /jornadas`, `PUT /jornadas/:id`, `DELETE /jornadas/:id`** | só tenant (`assertTripulanteEmpresa`/`assertJornadaEmpresa`) | **AUD-015** |
+| **`POST /escalas`, `PUT/DELETE /escalas/:id`, `POST /importacao/{apus,simulador}`** | só tenant | **AUD-015** |
+| **`POST /importacao/fira/upload*`, `DELETE /importacao/fira/:id`** | só tenant | **AUD-016** |
+| **`POST /read-ack/events/:id/ack`** | escopo calculado e **não comparado** | **AUD-017** |
+| `POST /read-ack/events/generate` | escopo por funcionário para não-gestor | OK |
+| `PATCH /jornada/:id/sono` | lista fixa `ADMIN\|MANAGER\|GESTOR` ou próprio | AUD-014 (alinhar RBAC) |
+
+### FRMS-AUD-015 — Qualquer usuário autenticado da empresa grava/apaga jornadas e escalas de qualquer tripulante
+- **P1 · alta · comprovado (código) · especificado**
+- **Evidência:** `routes/frms.ts` `POST /jornadas` (l. 1175) chama só `assertTripulanteEmpresa`; `PUT /jornadas/:id` (l. 1310) e `DELETE /jornadas/:id` (l. 1539) só `assertJornadaEmpresa`; idem `/escalas*` e importação APUS/simulador. Não há middleware de módulo em `/api/frms`.
+- **Impacto:** um tripulante, mecânico ou aluno do LMS da mesma empresa pode alterar ou apagar a jornada de outra pessoa. Isso muda os acumulados legais, a fatorização, os alertas e a decisão operacional — integridade de dados de segurança operacional.
+- **Correção exata:** aplicar `requirePermission('frms','editar','admin','manager')` às rotas de escrita de jornada/escala/importação; para autosserviço (se o produto permitir que o tripulante registre a própria jornada), aceitar não-gestor somente quando `resolveFuncionarioId(c) === tripulante_id` e registrar `registrado_por`. Teste: usuário `piloto` recebe 403 ao gravar jornada de outro tripulante; gestor e o próprio tripulante (se permitido) recebem 200.
+- **Decisão necessária:** confirmar se o tripulante pode lançar a própria jornada (FrmsFormJornada está na Ficha do Tripulante).
+
+### FRMS-AUD-016 — Upload e exclusão de FIRA sem papel
+- **P2 · alta · comprovado** — `frms-fira.ts` l. 78/150/269 (upload) e l. 491 (delete) só verificam tenant. Confirmar exige admin, então o dado não entra no cálculo sem gestor, mas qualquer usuário pode criar/apagar importações em revisão de terceiros. Correção: `requirePermission('frms','editar','admin','manager')` em upload/delete.
+
+### FRMS-AUD-017 — Ciência (ack) de evento de outro tripulante
+- **P1 · alta · comprovado (código) · especificado**
+- `frms-read-ack.ts` l. 708: `enforceFuncionarioScope(c, empresaId, event.funcionario_id)` devolve o **próprio** funcionário para quem não é gestor, mas o handler não compara esse valor com `event.funcionario_id`. Qualquer usuário da empresa pode dar ciência ao evento de outro tripulante, retirando-o da fila de pendências.
+- **Correção:** `if (!canSeeTeam(c) && scopedFuncionarioId !== event.funcionario_id) return 403`. Teste negativo com usuário não gestor.
+
+### FRMS-AUD-018 — Dados individuais de fadiga legíveis por qualquer usuário da empresa (LGPD)
+- **P1 · alta · comprovado (código) · especificado**
+- `GET /score-atual/:funcionarioid` (l. 924), `GET /jornadas/:tripulante_id` (l. 1562), `GET /acumulo/:tripulante_id` (l. 1605), `GET /tripulante/:id/explicacao-dia` (l. 1926) verificam apenas que o tripulante pertence à empresa. Retornam score, horário de sono, sono estimado e jornadas. Os relatórios (`/relatorios/*`) aplicam escopo por setor (`getEmployeeSectorAccess`); esses endpoints não.
+- **Impacto:** dado de sono/fadiga é dado pessoal sensível no contexto de saúde ocupacional; minimização e finalidade (LGPD art. 6º I e III) exigem acesso só do titular e de quem tem a gestão legítima.
+- **Correção:** helper único `assertFrmsIndividualAccess(c, tripulanteId)`: titular OU papel gestor com escopo de setor (`getEmployeeSectorAccess`) OU admin. Aplicar a todos os GET individuais. Teste: piloto A → 403 nos dados do piloto B.
+
+## 9. Alertas, casos, mitigação e eficácia
+
+**O que existe e está correto** (`frms-cases.ts`, `case-resolution.ts`, `db-service-alertas.ts`): ciência → tratamento (obrigatórios: responsável, prazo, medida, justificativa) → encerramento (obrigatória: avaliação de eficácia; não reescreve o tratamento); escrita com escopo de tenant e `logAuditoria` com valor anterior. É a cadeia exigida (perigo → decisão → mitigação → responsável → eficácia).
+
+### FRMS-AUD-019 — Recálculo apaga casos em tratamento ou resolvidos e recria alertas abertos
+- **P1 · alta · comprovado (código) · especificado (corrigível sem schema)**
+- `lib/frms/db-service-jornadas.ts` l. 782–791: a cada `recalcularPipeline` executa `UPDATE frms_alerta SET deleted_at = ? WHERE jornada_id = ? AND deleted_at IS NULL` — sem filtrar `resolvido`, `visualizado` ou `notas_resolucao` — e insere alertas novos. `recalcularPipeline` roda ao salvar qualquer jornada anterior do tripulante (todas as futuras são recalculadas, l. ~995) e no reprocessamento.
+- **Impacto:** o tratamento registrado pela coordenação some da fila (fica só no log de auditoria), o caso volta como novo e não tratado, e um caso encerrado com eficácia avaliada reaparece aberto. Quebra a rastreabilidade decisória e gera alertas repetidos sem providência.
+- **Correção:** soft-delete apenas de alertas sem tratamento (`COALESCE(resolvido,0)=0 AND notas_resolucao IS NULL AND COALESCE(visualizado,0)=0`); antes de inserir, pular alerta cuja chave (`jornada_id`,`tipo_limite`,`nivel`) já exista preservada; se o nível subiu, inserir novo. Teste: alerta em tratamento sobrevive ao recálculo; nenhum duplicado.
+
+### FRMS-AUD-020 — Deduplicação de 24 h suprime escalada de nível
+- **P2 · alta · comprovado** — `cron/frms-daily-check.ts` `inserirAlertaComDedupe24h`: existe alerta do mesmo `tipo_limite` nas últimas 24 h → não insere, **independente do nível**. Um AVISO às 08:00 impede o registro de VIOLAÇÃO às 18:00 do mesmo limite. Correção: suprimir só quando o nível existente for ≥ ao novo (ordem AVISO < ATENCAO < CRITICO < VIOLACAO). A consulta também não filtra tenant (filtra por `tripulante_id`, que é global) — aceitável, mas incluir `empresa_id` por defesa em profundidade.
+
+### FRMS-AUD-021 — Lacunas de processo (não são defeitos de código)
+- **P2 · média · observado:** (a) nenhum monitoramento de **prazo vencido** de tratamento (o prazo é exigido, mas nada alerta quando expira; `grep prazo` em `cron/` só encontra SGSO/LMS); (b) não há **reabertura** de caso; (c) não há **encaminhamento ao SGSO** a partir do caso FRMS (a única menção a SGSO no módulo é no check-in de voo); (d) não há métrica de efetividade do processo (tempo alerta→tratamento, % com eficácia avaliada, reincidência).
+- **Correção proposta:** (a) cron diário que lista casos `EM_TRATAMENTO` com prazo < hoje e notifica o responsável/gestor; (b) `PUT /alertas/:id/reabrir` com justificativa e auditoria; (c) ação "encaminhar ao SGSO" criando relato vinculado, sem dados pessoais além do necessário; (d) endpoint de indicadores de processo para o relatório de Coordenação.
