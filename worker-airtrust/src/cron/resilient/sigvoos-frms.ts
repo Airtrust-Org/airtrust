@@ -47,6 +47,7 @@ interface IngestMetadata {
   periodTo?: string;
   totalRaw?: number;
   totalImportacoes?: number;
+  lastReviewedOperationalDate?: string;
 }
 
 function parseMetadata(value: string | null | undefined): IngestMetadata {
@@ -62,6 +63,9 @@ function parseMetadata(value: string | null | undefined): IngestMetadata {
       totalRaw: Number.isFinite(Number(parsed.totalRaw)) ? Number(parsed.totalRaw) : undefined,
       totalImportacoes: Number.isFinite(Number(parsed.totalImportacoes))
         ? Number(parsed.totalImportacoes)
+        : undefined,
+      lastReviewedOperationalDate: typeof parsed.lastReviewedOperationalDate === 'string'
+        ? parsed.lastReviewedOperationalDate
         : undefined,
     };
   } catch {
@@ -317,17 +321,19 @@ async function runTenantIngestion(
       let periodTo = prior.stage === 'FRMS_ENQUEUE' ? prior.periodTo : undefined;
       let totalRaw = prior.totalRaw ?? 0;
       let totalImportacoes = prior.totalImportacoes ?? 0;
+      let lastReviewedOperationalDate = prior.lastReviewedOperationalDate;
       let enqueueCursor =
         prior.stage === 'FRMS_ENQUEUE' ? Number(context.state?.cursor_value ?? 0) : 0;
       if (!Number.isFinite(enqueueCursor) || enqueueCursor < 0) enqueueCursor = 0;
 
       if (!periodFrom || !periodTo) {
-        const nextDay = resolveNextSigvoosDay(
+        const nextWindow = resolveSigvoosIngestionWindow(
           context.state?.watermark_to,
           config.last_sync_to,
           operationalDate,
+          lastReviewedOperationalDate,
         );
-        if (!nextDay) {
+        if (!nextWindow) {
           return {
             outcome: 'SUCCEEDED' as const,
             processedCount: 0,
@@ -338,12 +344,13 @@ async function runTenantIngestion(
               config.last_sync_to,
               operationalDate,
             ),
-            metadata: { stage: 'COMPLETE', operationalDate },
+            metadata: { stage: 'COMPLETE', operationalDate, lastReviewedOperationalDate },
           };
         }
 
-        periodFrom = nextDay;
-        periodTo = nextDay;
+        periodFrom = nextWindow.from;
+        periodTo = nextWindow.to;
+        if (nextWindow.retrospective) lastReviewedOperationalDate = operationalDate;
         const sync = await syncSigvoosForFrms(
           db,
           empresaId,
@@ -369,6 +376,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
         });
         await context.heartbeat();
@@ -448,6 +456,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
         });
         await context.heartbeat();
@@ -466,6 +475,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
           markStateSuccess: false,
         };
@@ -484,6 +494,7 @@ async function runTenantIngestion(
           totalRaw,
           totalImportacoes,
           frms_items_enqueued: enqueued,
+          lastReviewedOperationalDate,
         },
       };
     },
