@@ -1901,6 +1901,50 @@ export function shouldStopSigvoosPaging(
   return false;
 }
 
+/**
+ * Read every SIGVOOS page before mutating FRMS data. A full-sized last page
+ * does not prove the request was exhausted; a repeated full page indicates
+ * the upstream endpoint ignored paging, not another set of flight records.
+ * In both cases fail closed instead of advancing the durable watermark.
+ */
+export async function fetchCompleteSigvoosWindow(
+  client: SigvoosSyncClient,
+  window: { from: string; to: string },
+  pageSize: number,
+  maxPages: number,
+): Promise<Record<string, unknown>[]> {
+  const records: Record<string, unknown>[] = [];
+  const dateStart = formatBrDateFromIso(window.from);
+  const dateFinish = formatBrDateFromIso(window.to);
+  let previousPageSignature: string | null = null;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
+      date_start: dateStart,
+      date_finish: dateFinish,
+      page,
+      page_size: pageSize,
+      limit: pageSize,
+    });
+    const pageItems = getArrayPayload(payload.data ?? payload);
+
+    if (page > 1 && pageItems.length > 0) {
+      const currentPageSignature = JSON.stringify(pageItems);
+      if (previousPageSignature === currentPageSignature) {
+        throw new Error('SIGVOOS_PAGINATION_STALLED');
+      }
+    }
+
+    records.push(...pageItems);
+    if (shouldStopSigvoosPaging(page, pageItems.length, pageSize)) {
+      return records;
+    }
+    previousPageSignature = JSON.stringify(pageItems);
+  }
+
+  throw new Error('SIGVOOS_PAGINATION_INCOMPLETE');
+}
+
 export function shouldClearExistingSigvoosData(clearExisting?: boolean): boolean {
   return clearExisting === true;
 }
@@ -2438,27 +2482,10 @@ export async function syncSigvoosForFrms(
     const fieldNames = new Set<string>();
 
     for (const window of buildSigvoosMonthlyWindows(input.from, input.to)) {
-      const dateStart = formatBrDateFromIso(window.from);
-      const dateFinish = formatBrDateFromIso(window.to);
-
-      for (let page = 1; page <= maxPages; page++) {
-        const payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
-          date_start: dateStart,
-          date_finish: dateFinish,
-          page,
-          page_size: pageSize,
-          limit: pageSize,
-        });
-
-        const pageItems = getArrayPayload(payload.data ?? payload);
-        for (const item of pageItems) {
-          rawRecords.push(item);
-          for (const key of detectFieldNames(item)) fieldNames.add(key);
-        }
-
-        if (shouldStopSigvoosPaging(page, pageItems.length, pageSize)) {
-          break;
-        }
+      const pageItems = await fetchCompleteSigvoosWindow(client, window, pageSize, maxPages);
+      for (const item of pageItems) {
+        rawRecords.push(item);
+        for (const key of detectFieldNames(item)) fieldNames.add(key);
       }
     }
 
