@@ -148,6 +148,36 @@ export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor)
     updatedAt:row.updated_at,
   }));
 }
+/**
+ * Composer catalogue. Validates the exact published revision on the Worker,
+ * but returns metadata only (never gabarito, explanation or content_json).
+ */
+export async function listPublishedExamQuestions(db:D1Database,actor:QuestionAdminActor,offset:number):
+Promise<Readonly<{items:readonly {
+ questionId:string;revision:number;moduleId:string;topicId:string;prompt:string;
+ sourceSha256:string;contentSha256:string;
+}[];nextOffset:number|null}>> {
+  const {scope}=actorScope(actor);
+  if(!Number.isSafeInteger(offset)||offset<0||offset>100000)deny('EXAM_PAGINATION_INVALID');
+  const rows=await db.prepare(
+    'SELECT empresa_id,curso_id,question_key,revision,status,content_json,edit_version,'+
+    'created_by,last_edited_by,reviewed_by,published_by,content_sha256 '+
+    'FROM lms_exam_question_revisions WHERE empresa_id=? AND curso_id=? '+
+    "AND status='PUBLISHED' ORDER BY question_key,revision DESC LIMIT 101 OFFSET ?"
+  ).bind(scope.empresaId,scope.cursoId,offset).all<DbRow>();
+  const all=rows.results||[];
+  const items=await Promise.all(all.slice(0,100).map(async row=>{
+    const q=deserialize(row).revision;
+    if(q.tenantId!==scope.empresaId||q.courseId!==scope.cursoId||
+      q.status!=='PUBLISHED'||!(await verifyPublishedQuestion(q))) {
+      deny('EXAM_PUBLISHED_REVISION_HASH_MISMATCH');
+    }
+    return {questionId:q.questionId,revision:q.revision,moduleId:q.moduleId,
+      topicId:q.topicId,prompt:q.prompt,sourceSha256:q.sourceSha256,
+      contentSha256:q.contentSha256 as string};
+  }));
+  return {items,nextOffset:all.length>100?offset+100:null};
+}
 export async function createAdminQuestionDraft(db:D1Database,
   actor:QuestionAdminActor,questionId:string,content:QuestionContent):Promise<StoredQuestion> {
   const {scope,user}=actorScope(actor);
