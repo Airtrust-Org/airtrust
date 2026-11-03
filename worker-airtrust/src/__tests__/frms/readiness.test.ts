@@ -47,6 +47,13 @@ describe('FRMS operational readiness', () => {
     expect(normalized.map((item) => item.reactionTimeMs)).toEqual([620, 280, 0, 30_000]);
   });
 
+  it('new brief protocol uses >355ms while preserving old 500ms threshold', () => {
+    const brief = normalizeReadinessTrials([trial(1, 355, 'response'), trial(2, 356, 'lapse')], 60_000);
+    const legacy = normalizeReadinessTrials([trial(1, 355, 'response'), trial(2, 356, 'response')], 60_000, 'airtrust-pvtb-v2');
+    expect(brief.map((t) => t.outcome)).toEqual(['response', 'lapse']);
+    expect(legacy.map((t) => t.outcome)).toEqual(['response', 'response']);
+  });
+
   it('preserves the historical v1 missed interpretation without mixing protocols', () => {
     const normalized = normalizeReadinessTrials(
       [{ ...trial(1, null, 'missed'), reactionTimeMs: null }],
