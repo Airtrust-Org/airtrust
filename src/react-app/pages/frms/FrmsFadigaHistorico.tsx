@@ -240,7 +240,7 @@ export default function FrmsFadigaHistorico() {
                         {row.qualidade_sono}/5
                       </td>
                       <td className="px-2 py-2 font-semibold">{row.kss_provenance === 'CREW_REPORTED' ? row.score_fadiga : '—'}</td>
-                      <td className="px-2 py-2">{unsafeGreenStatus && row.nivel_fadiga === 'VERDE' ? '— (revisão)' : row.nivel_fadiga}</td>
+                      <td className="px-2 py-2">{unsafeGreenStatus && ['BAIXO', 'VERDE'].includes(String(row.nivel_fadiga ?? '').toUpperCase()) ? '— (revisão)' : row.nivel_fadiga}</td>
                       <td className="px-2 py-2">{auditSafeOperationalStatus(row)}</td>
                       <td className="px-2 py-2">
                         <span
