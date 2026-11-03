@@ -499,4 +499,34 @@ describe('qualificacoes historico write router', () => {
     );
     expect(updateCall?.args).toEqual(['2099-05-10', '2027-05-10', 654]);
   });
+
+  it('limpa o vínculo da matrícula e do ciclo LMS ao excluir a qualificação', async () => {
+    historicoPertenceEmpresaMock.mockResolvedValueOnce({ id: 7160, funcionario_id: 41 });
+
+    const { db, calls } = createMockDb([
+      ['UPDATE qualificacoes_historico SET deleted_at', { run: () => ({ meta: { changes: 1 } }) }],
+      ['UPDATE lms_matriculas SET qualificacao_historico_id = NULL', { run: () => ({ meta: { changes: 1 } }) }],
+      ['UPDATE lms_matricula_ciclos SET qualificacao_historico_id = NULL', { run: () => ({ meta: { changes: 1 } }) }],
+    ]);
+
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/historico', writeRouter);
+
+    const response = await app.fetch(
+      new Request('http://localhost/historico/7160', { method: 'DELETE' }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const runs = calls.filter((call) => call.method === 'run');
+    expect(runs.map((call) => call.query.trim().split(/\s+/).slice(0, 3).join(' '))).toEqual([
+      'UPDATE qualificacoes_historico SET',
+      'UPDATE lms_matriculas SET',
+      'UPDATE lms_matricula_ciclos SET',
+    ]);
+    // Same id and tenant on all three statements, in one atomic batch.
+    for (const call of runs) expect(call.args).toEqual([7160, 1]);
+    expect(db.batch).toHaveBeenCalledTimes(1);
+  });
 });

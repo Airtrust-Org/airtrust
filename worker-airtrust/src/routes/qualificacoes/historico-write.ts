@@ -1503,13 +1503,28 @@ writeRouter.delete(
       return c.json({ success: false, error: 'Registro não encontrado' }, 404);
     }
 
-    // Soft delete (padrão do sistema)
-    await db
-      .prepare(
-        'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
-      )
-      .bind(id, tenantCtx.empresaId)
-      .run();
+    // Soft delete (padrão do sistema). The LMS enrollment and its cycle keep
+    // their completion; only the pointer to the removed qualification is
+    // cleared, atomically, so no enrollment is left referencing a deleted row.
+    await db.batch([
+      db
+        .prepare(
+          'UPDATE qualificacoes_historico SET deleted_at = datetime("now") WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+        )
+        .bind(id, tenantCtx.empresaId),
+      db
+        .prepare(
+          `UPDATE lms_matriculas SET qualificacao_historico_id = NULL, updated_at = datetime('now')
+            WHERE qualificacao_historico_id = ? AND empresa_id = ?`,
+        )
+        .bind(id, tenantCtx.empresaId),
+      db
+        .prepare(
+          `UPDATE lms_matricula_ciclos SET qualificacao_historico_id = NULL, updated_at = datetime('now')
+            WHERE qualificacao_historico_id = ? AND empresa_id = ?`,
+        )
+        .bind(id, tenantCtx.empresaId),
+    ]);
 
     // Deleting a row that was a real successor (or predecessor) breaks the
     // lineage — a predecessor left materialized RENOVADA with no real

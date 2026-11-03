@@ -188,6 +188,11 @@ async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boo
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
   page,
 }) => {
+  // This single-pass test covers two learners, UI enrollment, progress, finalization,
+  // reconciliation and qualification evidence. The original 180s global timeout
+  // masked the bounded 45s response waiter late in the seventh phase.
+  // Preserve bounded action/response timeouts; only extend the complete scenario.
+  test.setTimeout(420_000);
   expect(CODE).toMatch(/^QA-COMP-LIFE-/);
 
   // This profile is intentionally write-capable, but only against staging.
@@ -358,6 +363,14 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   }
   let recon = await reconciliation(page, sector.id, fn.id);
   expect(recon.gaps_matricula.some((item: any) => item.qualificacao_tipo_codigo === requiredTypeCode)).toBe(false);
+  // Verify the authoritative backend before checking the live invitation tab.
+  // The rule was updated by direct API calls, bypassing the UI mutation cache.
+  const expectedInvites = recon.convites_matricula
+    .filter((row: any) => Number(row.curso_id) === requiredCourseId
+      && employeeIds.includes(Number(row.funcionario_id)))
+    .map((row: any) => Number(row.funcionario_id))
+    .sort((a: number, b: number) => a - b);
+  expect(expectedInvites).toEqual([...employeeIds].sort((a, b) => a - b));
 
   // Invitation is a separate explicit step. Synthetic employees have no e-mail, so no external mail is emitted.
   await page.getByRole('button', { name: /Convites/ }).click();

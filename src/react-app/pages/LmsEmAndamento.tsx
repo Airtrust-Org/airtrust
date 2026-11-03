@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Search, RotateCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ArrowDownUp, ArrowUp, ArrowDown, Loader2, Search, RotateCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
@@ -27,6 +27,8 @@ type InProgressResponse = {
 };
 
 const PAGE_SIZE = 50;
+type SortColumn = 'funcionario' | 'curso' | 'progresso' | 'inicio' | 'prazo';
+type SortDirection = 'asc' | 'desc';
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -38,9 +40,15 @@ export default function LmsEmAndamento() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const debouncedSearch = useDebounce(search.trim(), 300);
   const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
   if (debouncedSearch) params.set('q', debouncedSearch);
+  if (sortBy) {
+    params.set('sort_by', sortBy);
+    params.set('sort_dir', sortDirection);
+  }
   const { data, loading, error, refetch } = useApi<InProgressResponse>(
     `/api/lms/matriculas/em-andamento?${params.toString()}`,
     { preserveEnvelope: true, staleTime: 15_000 },
@@ -48,6 +56,28 @@ export default function LmsEmAndamento() {
   const rows = data?.data ?? [];
   const total = data?.pagination?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function toggleSort(column: SortColumn) {
+    if (sortBy === column) {
+      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDirection('asc');
+    }
+    setPage(1);
+  }
+
+  function sortHeader(label: string, column: SortColumn) {
+    const Icon = sortBy !== column ? ArrowDownUp : sortDirection === 'asc' ? ArrowUp : ArrowDown;
+    return (
+      <button type="button" onClick={() => toggleSort(column)}
+        aria-label={`Ordenar ${label.toLowerCase()} ${sortBy === column && sortDirection === 'asc' ? 'decrescente' : 'crescente'}`}
+        aria-pressed={sortBy === column}
+        className="inline-flex items-center gap-1.5 whitespace-nowrap hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 dark:hover:text-blue-300">
+        {label}<Icon aria-hidden="true" className="h-3.5 w-3.5" />
+      </button>
+    );
+  }
 
   function updateSearch(value: string) {
     setSearch(value);
@@ -131,11 +161,11 @@ export default function LmsEmAndamento() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       <tr>
-                        <th className="px-4 py-3">Funcionário</th>
-                        <th className="px-4 py-3">Curso</th>
-                        <th className="px-4 py-3">Progresso</th>
-                        <th className="hidden px-4 py-3 md:table-cell">Início</th>
-                        <th className="hidden px-4 py-3 lg:table-cell">Prazo</th>
+                        <th className="px-4 py-3">{sortHeader('Funcionário', 'funcionario')}</th>
+                        <th className="px-4 py-3">{sortHeader('Curso', 'curso')}</th>
+                        <th className="px-4 py-3">{sortHeader('Progresso', 'progresso')}</th>
+                        <th className="hidden px-4 py-3 md:table-cell">{sortHeader('Início', 'inicio')}</th>
+                        <th className="hidden px-4 py-3 lg:table-cell">{sortHeader('Prazo', 'prazo')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

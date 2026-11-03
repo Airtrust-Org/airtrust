@@ -15,6 +15,7 @@ import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
@@ -82,6 +83,7 @@ import {
   readMatriculaForCourseList,
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
+import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
@@ -220,8 +222,7 @@ function emitScormCommitTelemetry(
   });
 }
 
-// Enriquece a linha da matrícula com o progresso efetivo (nunca fabrica conclusão:
-// a regra vive em resolveLmsEffectiveProgress).
+// Preserva o progresso efetivo sem fabricar conclusão (resolveLmsEffectiveProgress).
 function withEffectiveProgress(row: Record<string, unknown>) {
   const effectiveProgress = resolveLmsEffectiveProgress({
     status: row.status as string | null,
@@ -243,9 +244,9 @@ app.get('/minhas-ead', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const funcionarioId = await resolveCallerFuncionarioId(c, db);
 
-  if (!funcionarioId) {
-    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
-  }
+  // Sem vínculo funcional, a conta administrativa não possui matrículas pessoais.
+  if (!funcionarioId && hasRole(c, 'admin', 'manager')) return c.json({ success: true, data: [] });
+  if (!funcionarioId) throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
 
   const rows = await listMinhasEadEnrollments(db, { funcionarioId, empresaId });
 
@@ -264,9 +265,10 @@ app.get('/minhas', async (c) => {
   const limit = Math.min(parsePositiveInt(c.req.query('limit'), 100), 200);
   const offset = (page - 1) * limit;
 
-  if (!funcionarioId) {
-    throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
+  if (!funcionarioId && hasRole(c, 'admin', 'manager')) {
+    return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
   }
+  if (!funcionarioId) throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
 
   const total = await countMinhasEnrollments(db, { funcionarioId, empresaId });
   const rows = await listMinhasEnrollments(db, { funcionarioId, empresaId, limit, offset });
@@ -351,14 +353,7 @@ app.get(
     const rows = await db
       .prepare(
         `
-      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula,
-        CASE WHEN EXISTS (
-          SELECT 1 FROM usuarios u
-          JOIN usuarios_empresas ue
-            ON ue.usuario_id = u.id AND ue.empresa_id = m.empresa_id
-          WHERE u.funcionario_id = m.funcionario_id
-            AND u.deleted_at IS NULL
-        ) THEN 1 ELSE 0 END AS aluno_vinculado
+      SELECT m.*, f.nome AS funcionario_nome, f.matricula AS funcionario_matricula
       FROM lms_matriculas m
       LEFT JOIN funcionarios f
         ON f.id = m.funcionario_id
@@ -374,7 +369,8 @@ app.get(
       .bind(...binds, limit, offset)
       .all<Record<string, unknown>>();
 
-    const data = (rows.results ?? []).map((row) => {
+    const rowsComVinculo = await withAlunoVinculado(db, empresaId, rows.results ?? []);
+    const data = rowsComVinculo.map((row) => {
       const effectiveProgress = resolveLmsEffectiveProgress({
         status: row.status as string | null,
         progressoBruto: row.progresso_pct as number | null,
@@ -532,7 +528,8 @@ app.get('/:id', async (c) => {
     ? buildPersistedScormClosureReadiness(matricula, progressoScorm, await loadManifestEvidenceForEnrollment(c.env.BUCKET, matricula, empresaId, typeof progressoScorm?.cmi_json === 'string' ? progressoScorm.cmi_json : null))
     : null;
   const {mismatch:editionMismatch,proposal:activeResumeProposal,handoffId:activeHandoffId,
-    handoffBookmark:activeHandoffBookmark,handoffAvailable}=await readLmsScormEditionState({
+    handoffBookmark:activeHandoffBookmark,handoffPriorProgressPct:activeHandoffPriorPct,
+    handoffAvailable}=await readLmsScormEditionState({
       db,bucket:c.env.BUCKET,empresaId,matriculaId,matricula,progressoScorm,
       handoffEnabled:c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED==='true',
     });
@@ -556,6 +553,7 @@ app.get('/:id', async (c) => {
       active_resume_proposal: activeResumeProposal,
       active_scorm_handoff_id: activeHandoffId,
       active_scorm_resume_position: activeHandoffBookmark,
+      active_scorm_prior_progress_pct: activeHandoffPriorPct,
       scorm_handoff_available: handoffAvailable,
     },
   });
@@ -1106,7 +1104,10 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     }
   }
 
-  return c.json({ success: true, data: { ...results, matriculas: matriculasCriadas, detalhes_erros: detalhesErros } });
+  // Informativo: falha do diagnóstico não mascara matrículas já gravadas.
+  const matriculasComVinculo = await withAlunoVinculadoBestEffort(db, empresaId, matriculasCriadas, (error) =>
+    createLogger(c, 'LmsMatriculas.lote').warn('lms_matricula_lote_link_state_failed', { cursoId: curso_id, error: toError(error).message }));
+  return c.json({ success: true, data: { ...results, matriculas: matriculasComVinculo, detalhes_erros: detalhesErros } });
 });
 
 // ── Cancelar matrícula ────────────────────────────────────────────────────────
@@ -1484,11 +1485,10 @@ app.post('/scorm/commit', async (c) => {
   let dataConclusao: string | null = null;
   if (sucesso) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'CONCLUIDO');
-    dataConclusao = new Date().toISOString().slice(0, 10);
   } else if (falha) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'REPROVADO');
-    dataConclusao = new Date().toISOString().slice(0, 10);
   }
+  if (sucesso || falha) dataConclusao = getTodayIsoSaoPaulo();
 
   // Evita reemitir qualificação e certificado.
   const isNewCompletion =
@@ -1869,7 +1869,7 @@ app.post('/:id/finalizar', async (c) => {
     );
   }
 
-  const dataConclusao = new Date().toISOString().slice(0, 10);
+  const dataConclusao = getTodayIsoSaoPaulo();
 
   // O serviço canônico garante a conclusão/qualificação de forma atômica.
   let qualificacaoGerada: Record<string, unknown> | null = null;
@@ -2050,7 +2050,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
   }
 
   const { status, observacoes } = parsed.data;
-  const now = new Date().toISOString().slice(0, 10);
+  const now = getTodayIsoSaoPaulo();
 
   // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
   if (status === 'CONCLUIDO') {

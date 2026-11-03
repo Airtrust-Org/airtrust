@@ -2,6 +2,7 @@ import type { Env } from '../types';
 import { buildSnapshot } from '../routes/compliance-treinamentos';
 import type { EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { persistTrainingComplianceDailySnapshots } from '../services/training-compliance-snapshots';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 const ALL_ACCESS: EmployeeSectorAccess = { mode: 'all', setorIds: [], funcionarioId: null };
 
@@ -10,7 +11,7 @@ export async function refreshTrainingComplianceSnapshots(env: Env): Promise<{
   gravados: number;
   falhas: number;
 }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayIsoSaoPaulo();
   const companies = await env.DB
     .prepare('SELECT id FROM empresas WHERE deleted_at IS NULL ORDER BY id')
     .all<{ id: number }>();

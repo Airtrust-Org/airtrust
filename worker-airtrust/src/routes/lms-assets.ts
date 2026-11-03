@@ -31,7 +31,8 @@ import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
-import { buildScormLaunchState, readScormNavigationBookmark, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
+import { buildScormLaunchState, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
+import { readActiveScormHandoff } from '../services/lms-scorm-active-handoff-read';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1041,7 +1042,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.progresso_pct, m.data_inicio,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
         c.scorm_assessment_policy
@@ -1056,6 +1057,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       funcionario_id: number;
       empresa_id: number;
       status: string;
+      progresso_pct: number | null;
       data_inicio: string | null;
       curso_id: number;
       titulo: string;
@@ -1124,24 +1126,23 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
 
   let navigationBookmark: { position: number; total: number } | null = null;
   if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
-    const receipt = await db.prepare(`
-      SELECT h.id,h.resume_plan_json FROM lms_scorm_edition_handoffs h
-      JOIN lms_scorm_package_versions p ON p.empresa_id=h.empresa_id
-        AND p.curso_id=h.curso_id AND p.package_sha256=h.target_package_sha256
-        AND p.r2_prefix=h.target_package_prefix AND p.status='ACTIVE'
-      WHERE h.empresa_id=? AND h.matricula_id=? AND h.ciclo_id=?
-        AND h.target_package_prefix=? ORDER BY h.id DESC LIMIT 1`)
-      .bind(empresaId,matricula.id,ciclo.id,matricula.scorm_package_r2_prefix)
-      .first<{id:number;resume_plan_json:string}>();
-    const claimedHandoffId = Number(payload.asset_handoff_id ?? 0);
-    const claimedCycleId = Number(payload.asset_cycle_id ?? 0);
+    const handoff = await readActiveScormHandoff({
+      db, enabled: true, empresaId, matriculaId: matricula.id,
+      cycleId: ciclo.id, activePrefix: matricula.scorm_package_r2_prefix,
+    });
     if (!isScormHandoffSessionCurrent({
-      claimedHandoffId,claimedCycleId,activeCycleId:ciclo.id,
-      activeHandoffId:receipt?.id ?? null,
-    })) {
-      throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+      claimedHandoffId: Number(payload.asset_handoff_id ?? 0),
+      claimedCycleId: Number(payload.asset_cycle_id ?? 0),
+      activeCycleId: ciclo.id, activeHandoffId: handoff?.id ?? null,
+    })) throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+    navigationBookmark = handoff?.bookmark ?? null;
+    // Never launch a blank SCO over an archived prior-edition checkpoint.
+    if (handoff && Number(handoff.previousProgressPct ?? 0) > 0 &&
+        ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(matricula.status) &&
+        Number(matricula.progresso_pct ?? 0) === 0 &&
+        !progressoScorm?.cmi_json && !progressoScorm?.suspend_data) {
+      throw new ApiError('SCORM_ADMIN_CREDIT_PENDING: recupere o progresso histórico antes de iniciar', 409);
     }
-    if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
   }
 
   // Completed review also checks the edition: an old cursor is never replayed into another one.

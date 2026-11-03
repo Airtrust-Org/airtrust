@@ -28,7 +28,7 @@ const AlertasNotificacoes = lazyWithRetry(
   'ConfiguracoesAlertasNotificacoesTab',
 );
 const SigvoosIntegration = lazyWithRetry(
-  () => import('../components/integracoes/SigvoosIntegration'),
+  () => import('./Configuracoes/Integracoes/Sigvoos'),
   'ConfiguracoesSigvoosIntegrationTab',
 );
 const GestaoEmpresas = lazyWithRetry(

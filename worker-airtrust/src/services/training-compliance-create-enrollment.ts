@@ -14,6 +14,13 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
   const supportsConditions=await hasSchemaTable(db,'funcionarios_compliance_condicoes');
   const supportsAircraft=await hasSchemaTable(db,'funcionarios_aeronaves') &&
     await hasSchemaTable(db,'aeronaves');
+  // The deployed legacy funcionarios_aeronaves table has no empresa_id.
+  // Both employee and aircraft are independently tenant-bound in the JOIN;
+  // enforce the assignment tenant too only on newer schemas that expose it.
+  const hasAircraftAssignmentTenant=supportsAircraft &&
+    await hasSchemaColumn(db,'funcionarios_aeronaves','empresa_id');
+  const aircraftAssignmentTenantGuard=hasAircraftAssignmentTenant
+    ? 'AND fa.empresa_id=f.empresa_id' : '';
   const conditionGuard=(alias:string)=> hasCondition
     ? supportsConditions ? `AND (${alias}.condicao_id IS NULL OR EXISTS (
          SELECT 1 FROM funcionarios_compliance_condicoes fcc
@@ -30,7 +37,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           SELECT 1 FROM funcionarios_aeronaves fa
           JOIN aeronaves a ON a.id=fa.aeronave_id AND a.empresa_id=f.empresa_id
             AND a.deleted_at IS NULL
-          WHERE fa.empresa_id=f.empresa_id AND fa.funcionario_id=f.id
+          WHERE fa.funcionario_id=f.id
+            ${aircraftAssignmentTenantGuard}
             AND fa.ativo=1 AND fa.deleted_at IS NULL
             AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
             AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))

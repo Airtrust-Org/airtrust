@@ -15,7 +15,7 @@ import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import type { FuncionarioCreate, FuncionarioUpdate } from '@/types';
 
 const ModalFuncionario = lazyWithRetry(
-  () => import('@/react-app/components/modals/ModalFuncionario'),
+  () => import('@/react-app/pages/funcionarios/ModalFuncionario'),
   'FuncionariosModalFuncionario',
 );
 const ImportarFuncionariosCSVModal = lazyWithRetry(

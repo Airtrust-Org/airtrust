@@ -19,6 +19,21 @@ app.get(
     const page = parsePositiveInt(c.req.query('page'), 1);
     const limit = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
     const offset = (page - 1) * limit;
+    const sortBy = c.req.query('sort_by') || '';
+    const sortDir = c.req.query('sort_dir') === 'desc' ? 'DESC' : 'ASC';
+    // Fixed allowlist: never interpolate user-provided identifiers or SQL expressions.
+    const sortColumns: Record<string, string> = {
+      funcionario: 'f.nome COLLATE NOCASE',
+      curso: 'c.titulo COLLATE NOCASE',
+      progresso: 'MIN(99, MAX(0, ROUND(COALESCE(m.progresso_pct, 0))))',
+      inicio: 'm.data_matricula',
+      prazo: 'm.data_expiracao',
+    };
+    const sortExpression = Object.prototype.hasOwnProperty.call(sortColumns, sortBy)
+      ? sortColumns[sortBy] : null;
+    const orderBy = sortExpression
+      ? `${sortExpression} IS NULL ASC, ${sortExpression} ${sortDir}, m.id ASC`
+      : 'm.updated_at DESC, f.nome COLLATE NOCASE, c.titulo COLLATE NOCASE, m.id ASC';
     const search = (c.req.query('q') || '').trim().slice(0, 120);
     const employeeScope = employeeSectorSql(access, 'f');
 
@@ -86,7 +101,7 @@ app.get(
                   JOIN lms_cursos c ON c.id = m.curso_id
                   JOIN funcionarios f ON f.id = m.funcionario_id
                  ${where}
-                 ORDER BY m.updated_at DESC, f.nome COLLATE NOCASE, c.titulo COLLATE NOCASE
+                 ORDER BY ${orderBy}
                  LIMIT ? OFFSET ?`)
       .bind(...binds, limit, offset)
       .all<Record<string, unknown>>();

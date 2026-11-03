@@ -2,7 +2,7 @@
  * Validators - Centralized validation logic
  *
  * Elimina duplicação de validações em múltiplos componentes
- * Uso: import { validators } from '@/utils/validators'
+ * Uso: import { validators } from '@/react-app/utils/validators'
  */
 
 export const validators = {
