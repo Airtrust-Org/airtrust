@@ -37,7 +37,7 @@ function auditSafeOperationalStatus(row: FrmsFadigaCheckinRow): string {
   if (row.computed_risk_level === 'not_submitted' || row.computed_risk_level === 'incomplete_checkin') {
     return 'Não avaliável — check-in incompleto';
   }
-  if (row.requires_operational_review === 1) {
+  if (row.requires_operational_review === 1 || row.computed_risk_level !== 'normal') {
     return 'Revisão operacional necessária';
   }
   return statusOperacionalLabel(row.status_operacional);
@@ -216,6 +216,9 @@ export default function FrmsFadigaHistorico() {
                 <tbody>
                   {rows.map((row) => {
                     const sourceMeta = resolveCheckinDataSource(row);
+                    const unsafeGreenStatus = row.kss_provenance !== 'CREW_REPORTED' ||
+                      row.kss_score >= 7 || row.horas_sono < 5 ||
+                      row.apto !== 1 || row.computed_risk_level !== 'normal';
                     return (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-700">
                       <td className="px-2 py-2">{row.data_checkin}</td>
@@ -236,8 +239,8 @@ export default function FrmsFadigaHistorico() {
                       <td className="px-2 py-2">
                         {row.qualidade_sono}/5
                       </td>
-                      <td className="px-2 py-2 font-semibold">{row.score_fadiga}</td>
-                      <td className="px-2 py-2">{row.nivel_fadiga}</td>
+                      <td className="px-2 py-2 font-semibold">{row.kss_provenance === 'CREW_REPORTED' ? row.score_fadiga : '—'}</td>
+                      <td className="px-2 py-2">{unsafeGreenStatus && row.nivel_fadiga === 'VERDE' ? '— (revisão)' : row.nivel_fadiga}</td>
                       <td className="px-2 py-2">{auditSafeOperationalStatus(row)}</td>
                       <td className="px-2 py-2">
                         <span
