@@ -22,6 +22,15 @@ function statusOperacionalLabel(value: unknown): string {
 
 
 function auditSafeOperationalStatus(row: FrmsFadigaCheckinRow): string {
+  if (row.kss_provenance !== 'CREW_REPORTED') {
+    return 'KSS sem origem verificada — revisão necessária';
+  }
+  if (row.kss_score >= 8 || row.horas_sono < 4) {
+    return 'Revisão operacional imediata — sinais críticos';
+  }
+  if (row.kss_score >= 7 || row.horas_sono < 5 || row.apto === 0) {
+    return 'Revisão operacional necessária — sinais de atenção';
+  }
   if (!row.data_source || row.data_source === 'missing_checkin' || row.data_source === 'default_estimate') {
     return 'Não avaliável — revisão necessária';
   }
@@ -218,7 +227,9 @@ export default function FrmsFadigaHistorico() {
                           {row.funcionario_nome || `#${row.funcionario_id}`}
                         </Link>
                       </td>
-                      <td className="px-2 py-2">{row.kss_score}</td>
+                      <td className="px-2 py-2" title={row.kss_provenance === 'CREW_REPORTED' ? 'KSS autodeclarado' : 'KSS histórico sem proveniência verificada'}>
+                        {row.kss_provenance === 'CREW_REPORTED' ? row.kss_score : '— (origem não verificada)'}
+                      </td>
                       <td className="px-2 py-2">
                         {row.horas_sono}h
                       </td>
