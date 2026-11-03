@@ -87,6 +87,32 @@ describe('FRMS daily fatigue self: zero sleep and absent evidence', () => {
       q.binds.join(',') === '7,70,2026-11-03')).toBe(true);
   });
 
+  it('escalona KSS 9 legado classificado NORMAL, sem mostrar rótulo APTO ou VERDE', async () => {
+    state.checkin = {
+      ...state.checkin,
+      horas_sono: 8,
+      kss_score: 9,
+      score_fadiga: 30,
+      nivel_fadiga: 'VERDE',
+      status_operacional: 'APTO',
+      computed_risk_level: 'normal',
+      requires_operational_review: 0,
+    };
+    const { db } = dbForOwnCheckin();
+    const response = await router.fetch(
+      new Request('http://localhost/daily-fatigue?date=2026-11-03'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        status: 'critical', risk_reconciled_from_evidence: true,
+        requires_operational_review: true, nivel_fadiga: null, status_operacional: null,
+      },
+    });
+  });
+
   it('não converte horas_sono NULL do banco em zero informado', async () => {
     state.checkin = { ...state.checkin, horas_sono: null };
     const { db } = dbForOwnCheckin();
