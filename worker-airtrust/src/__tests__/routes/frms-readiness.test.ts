@@ -39,7 +39,7 @@ type MockStatement = {
 };
 
 function createDb(
-  checkin: { id: string; kss_score: number; horas_sono: number } | null = null,
+  checkin: { id: string; kss_score: number; kss_provenance?: string | null; horas_sono: number } | null = null,
   readinessRows: Array<Record<string, unknown>> = [],
   recoveryReadError?: Error,
 ) {
@@ -175,8 +175,25 @@ describe('FRMS readiness route', () => {
     expect(checkinQuery?.binds).toEqual([7, 70, '2026-08-27']);
   });
 
+  it('rejeita KSS legado sem proveniência verificada antes de persistir testes', async () => {
+    const { db } = createDb({
+      id: 'checkin-legacy', kss_score: 5, kss_provenance: null, horas_sono: 8,
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'KSS_PROVENANCE_UNVERIFIED' });
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+  });
+
   it('uses KSS and sleep from the saved check-in instead of accepting client subjective values', async () => {
-    const { db } = createDb({ id: 'checkin-7-70', kss_score: 8, horas_sono: 4.5 });
+    const { db } = createDb({ id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 8, horas_sono: 4.5 });
     const response = await frmsReadinessRoutes.fetch(
       new Request('http://localhost/', {
         method: 'POST',
@@ -209,7 +226,7 @@ describe('FRMS readiness route', () => {
 
   it('fails closed on a real recovery database error after readiness persistence', async () => {
     const { db } = createDb(
-      { id: 'checkin-7-70', kss_score: 8, horas_sono: 4.5 },
+      { id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 8, horas_sono: 4.5 },
       [],
       new Error('D1_ERROR: database is locked'),
     );
@@ -229,7 +246,7 @@ describe('FRMS readiness route', () => {
   });
 
   it('rejects malformed trial payloads before any readiness persistence', async () => {
-    const { db, statements } = createDb({ id: 'checkin-7-70', kss_score: 3, horas_sono: 8 });
+    const { db, statements } = createDb({ id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8 });
     const response = await frmsReadinessRoutes.fetch(
       new Request('http://localhost/', {
         method: 'POST',
