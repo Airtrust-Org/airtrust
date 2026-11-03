@@ -40,9 +40,11 @@ import {
   resolverQuinzenaPadraoPorPeriodo,
   verificarHabilitacaoModelo,
 } from './alocacao-helpers';
-import type { AlocacaoUpdateSchema } from './alocacao-schemas';
+import type { AlocacaoUpdateSchema, FuncaoAlocacao } from './alocacao-schemas';
 
 export type AlocacaoUpdateInput = z.infer<typeof AlocacaoUpdateSchema>;
+/** Linha atual da alocação, com a função já estreitada ao enum do domínio. */
+type AlocacaoAtual = Omit<AlocacaoAtualRow, 'funcao'> & { funcao: FuncaoAlocacao };
 type Logger = ReturnType<typeof createLogger>;
 type Row = Awaited<ReturnType<typeof buscarAlocacoesDetalhadas>>[number];
 
@@ -62,7 +64,7 @@ const alocacaoNaoEncontrada = () =>
   falha(404, escalasClientError('Alocação não encontrada', 'ESCALAS_ALOCACAO_NOT_FOUND', 404));
 
 /** Valores efetivos após a edição (o enviado vence o atual) e quais verificações se aplicam. */
-export function planAlocacaoUpdate(atual: AlocacaoAtualRow, d: AlocacaoUpdateInput) {
+export function planAlocacaoUpdate(atual: AlocacaoAtual, d: AlocacaoUpdateInput) {
   return {
     novoFuncionarioId: d.funcionario_id ?? atual.funcionario_id,
     novaFuncao: d.funcao ?? atual.funcao,
@@ -144,7 +146,7 @@ async function validarConflitos(
     logger: Logger;
     escalaId: string;
     alocacaoId: string;
-    atual: AlocacaoAtualRow;
+    atual: AlocacaoAtual;
     plano: ReturnType<typeof planAlocacaoUpdate>;
     conflitoOverride: boolean;
   },
@@ -239,7 +241,7 @@ export async function atualizarAlocacao(
   const escala = await getEscalaVerificada(db, escalaId, empresaId);
   if (!escala) return escalaNaoEncontrada();
 
-  const atual = await findAlocacaoDaEscala(db, alocacaoId, escalaId);
+  const atual = (await findAlocacaoDaEscala(db, alocacaoId, escalaId)) as AlocacaoAtual | null;
   if (!atual) return alocacaoNaoEncontrada();
   if (atual.status === 'cancelado') {
     return falha(

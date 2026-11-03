@@ -5,13 +5,11 @@
  * verificada pelo chamador, então o filtro não altera o resultado — apenas amarra o tenant na query.
  */
 
-import type { FuncaoAlocacao } from '../services/escalas/alocacao-schemas';
-
 export interface AlocacaoAtualRow {
   id: string;
   funcionario_id: string;
   aeronave_id: number | null;
-  funcao: FuncaoAlocacao;
+  funcao: string;
   quinzena_id: number | null;
   data_inicio: string;
   data_fim: string;
