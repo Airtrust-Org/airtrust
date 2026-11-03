@@ -26,7 +26,7 @@ function createDb() {
     CREATE TABLE funcionarios(id INTEGER PRIMARY KEY,empresa_id INTEGER,matricula TEXT);
     CREATE TABLE lms_cursos(id INTEGER PRIMARY KEY,empresa_id INTEGER,titulo TEXT,observacoes TEXT,qualificacao_tipo_id INTEGER,deleted_at TEXT);
     CREATE TABLE lms_matriculas(id INTEGER PRIMARY KEY,empresa_id INTEGER,curso_id INTEGER,funcionario_id INTEGER,status TEXT,deleted_at TEXT);
-    CREATE TABLE qualificacoes_historico(id INTEGER PRIMARY KEY,empresa_id INTEGER,funcionario_id INTEGER,qualificacao_id INTEGER,lms_matricula_id INTEGER,status TEXT,origem_tipo TEXT,data_vencimento TEXT,updated_at TEXT,observacoes TEXT,deleted_at TEXT);
+    CREATE TABLE qualificacoes_historico(id INTEGER PRIMARY KEY,empresa_id INTEGER,funcionario_id INTEGER,qualificacao_id INTEGER,lms_matricula_id INTEGER,status TEXT,origem_tipo TEXT,data_conclusao TEXT,data_vencimento TEXT,updated_at TEXT,observacoes TEXT,deleted_at TEXT);
     INSERT INTO empresas VALUES (1,'qa_examiner_training'),(2,'other_tenant');
     INSERT INTO funcionarios VALUES (11,1,'${code}-E1'),(12,1,'${code}-E2'),(21,2,'${code}-E1');
     INSERT INTO lms_cursos VALUES (31,1,'${code} EAD obrigatório','${marker}',41,NULL);
@@ -35,11 +35,11 @@ function createDb() {
       (53,1,31,11,'EM_ANDAMENTO',NULL),(54,1,31,11,'CONCLUIDO',NULL),
       (55,2,31,21,'CONCLUIDO',NULL);
     INSERT INTO qualificacoes_historico VALUES
-      (101,1,11,41,51,'CONCLUIDA','LMS','2099-01-01',NULL,'initial completion',NULL),
-      (102,1,12,41,52,'CONCLUIDA','LMS','2099-01-01',NULL,'employee 2',NULL),
-      (103,1,11,41,53,'CONCLUIDA','LMS','2099-01-01',NULL,'active enrollment',NULL),
-      (104,1,11,41,54,'CANCELADA','LMS','2099-01-01',NULL,'cancelled evidence',NULL),
-      (105,2,21,41,55,'CONCLUIDA','LMS','2099-01-01',NULL,'other tenant',NULL);
+      (101,1,11,41,51,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'initial completion',NULL),
+      (102,1,12,41,52,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'employee 2',NULL),
+      (103,1,11,41,53,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'active enrollment',NULL),
+      (104,1,11,41,54,'CANCELADA','LMS',date('now'),'2099-01-01',NULL,'cancelled evidence',NULL),
+      (105,2,21,41,55,'CONCLUIDA','LMS',date('now'),'2099-01-01',NULL,'other tenant',NULL);
   `);
   return db;
 }
@@ -57,11 +57,17 @@ test('controlled expiry selects and updates only the completed E1 qualification 
     const readback = db.prepare(sql.readback).get();
     assert.equal(readback.expired_count, 1);
     assert.doesNotMatch(sql.readback, /\bLIKE\b/i);
-    const target = db.prepare('SELECT data_vencimento,observacoes FROM qualificacoes_historico WHERE id=101').get();
+    const target = db.prepare('SELECT data_conclusao,data_vencimento,observacoes FROM qualificacoes_historico WHERE id=101').get();
+    assert.equal(target.data_conclusao, db.prepare("SELECT date('now','-13 months') AS dt").get().dt);
     assert.ok(target.data_vencimento < new Date().toISOString().slice(0, 10));
+    // Two distinct civil completion dates are needed to prove a genuine renewed
+    // qualification instead of same-day idempotent reuse of expired evidence.
+    assert.notEqual(target.data_conclusao, db.prepare("SELECT date('now') AS dt").get().dt);
     assert.match(target.observacoes, new RegExp(`QA synthetic due date ${marker}`));
     for (const id of [102, 103, 104, 105]) {
-      assert.equal(db.prepare('SELECT data_vencimento FROM qualificacoes_historico WHERE id=?').get(id).data_vencimento, '2099-01-01');
+      const untouched = db.prepare('SELECT data_conclusao,data_vencimento FROM qualificacoes_historico WHERE id=?').get(id);
+      assert.equal(untouched.data_vencimento, '2099-01-01');
+      assert.equal(untouched.data_conclusao, db.prepare("SELECT date('now') AS dt").get().dt);
     }
     assert.deepEqual(db.prepare(sql.select).all(), []);
   } finally {
