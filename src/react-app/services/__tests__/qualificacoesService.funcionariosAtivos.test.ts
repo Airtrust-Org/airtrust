@@ -32,7 +32,9 @@ function mockPaginatedEmployees(total: number) {
 }
 
 describe('qualificacoesService.lookups.funcionariosAtivos', () => {
-  beforeEach(() => getMock.mockReset());
+  beforeEach(() => {
+    getMock.mockReset();
+  });
 
   it('loads employees beyond the backend 100-row cap including instructors as students', async () => {
     mockPaginatedEmployees(218);
