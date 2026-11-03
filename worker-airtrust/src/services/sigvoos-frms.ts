@@ -2361,11 +2361,32 @@ async function insertPreviewImportacao(
     .run();
 }
 
+/** A historical recheck must never roll the last completed import date backwards. */
+export function shouldAdvanceSigvoosSyncProgress(
+  currentTo: string | null | undefined,
+  candidateTo: string,
+): boolean {
+  const valid = (date: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    !Number.isNaN(new Date(`${date}T00:00:00Z`).getTime()) &&
+    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+  if (!valid(candidateTo) || (currentTo && !valid(currentTo))) {
+    throw new Error('SIGVOOS_INVALID_PROGRESS_DATE');
+  }
+  return !currentTo || candidateTo >= currentTo;
+}
+
 async function persistSyncMetadata(
   db: D1Database,
   empresaId: number | null | undefined,
   summary: SigvoosSyncSummary,
 ): Promise<void> {
+  const current = await getSigvoosConfig(db, empresaId);
+  if (!shouldAdvanceSigvoosSyncProgress(current.last_sync_to, summary.periodo.to)) {
+    // The newer completion marker remains intact; the historical sync is in
+    // integracoes_sigvoos_eventos and must not redefine chronological progress.
+    return;
+  }
   await upsertSigvoosConfig(db, 'last_sync_at', new Date().toISOString(), empresaId);
   await upsertSigvoosConfig(db, 'last_sync_from', summary.periodo.from, empresaId);
   await upsertSigvoosConfig(db, 'last_sync_to', summary.periodo.to, empresaId);
