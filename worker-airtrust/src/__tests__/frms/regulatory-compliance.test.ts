@@ -231,6 +231,32 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
       ]);
     });
 
+    it('não presume conformidade quando art. 42 está ativado mas falta horário de madrugada intermediária', () => {
+      const evidence = evaluateLawArt42Madrugadas('2026-09-26', [
+        { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-25', hora_apresentacao: null, hora_termino: null },
+        { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      ]);
+      expect(evidence.incompleteDuties).toBe(1);
+      const result = evaluateRegulatoryCompliance({ ...base, art42: evidence, art42Enforced: true });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.unknownReasons).toContain('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+      expect(result.violations).toHaveLength(0);
+    });
+
+    it('mantém a violação comprovada mesmo com jornada adicional sem horário no histórico', () => {
+      const evidence = evaluateLawArt42Madrugadas('2026-09-26', [
+        { data: '2026-09-23', hora_apresentacao: null, hora_termino: null },
+        { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-25', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      ]);
+      const result = evaluateRegulatoryCompliance({ ...base, art42: evidence, art42Enforced: true });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((violation) => violation.code)).toContain('LAW_ART42_CONSECUTIVE');
+      expect(result.unknownReasons).toContain('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+    });
+
     it('com ativação validada no perfil, a terceira madrugada consecutiva é violação legal', () => {
       const result = evaluateRegulatoryCompliance({ ...base, art42: thirdEarlyStart, art42Enforced: true });
       expect(result.status).toBe('VIOLATION');
