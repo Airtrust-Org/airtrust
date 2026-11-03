@@ -10,6 +10,7 @@ export interface FadigaCheckinItem {
   data_checkin: string;
   hora_checkin: string;
   kss_score: number;
+  kss_provenance?: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | null;
   horas_sono: number;
   qualidade_sono: number;
   score_fadiga: number;
@@ -119,6 +120,7 @@ export interface FadigaPainelEquipeItem {
     | 'no_duty';
   data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable';
   kss_score: number | null;
+  kss_provenance?: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | null;
   score_fadiga: number | null;
   nivel_fadiga: string | null;
   status_operacional: string | null;
@@ -209,7 +211,10 @@ export function normalizeFadigaPainelPayload(
       data: String(item.date || requestedDate || ''),
       status,
       data_source: source,
-      kss_score: item.kss_score == null ? null : Number(item.kss_score),
+      kss_score: item.kss_provenance === 'CREW_REPORTED' && Number.isInteger(Number(item.kss_score)) &&
+        Number(item.kss_score) >= 1 && Number(item.kss_score) <= 9
+          ? Number(item.kss_score) : null,
+      kss_provenance: item.kss_provenance === 'CREW_REPORTED' ? 'CREW_REPORTED' : null,
       score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
       nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
       status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
@@ -234,13 +239,17 @@ export function mergeFadigaPainelHistory(
   }
 
   return items.map((item) => {
-    if (item.kss_score != null) return item;
+    if (item.kss_score != null && item.kss_provenance === 'CREW_REPORTED') return item;
     const row = canonical.get(`${item.funcionario_id}:${item.data}`);
-    if (!row || row.kss_score == null || !Number.isFinite(Number(row.kss_score))) return item;
+    if (!row || row.kss_provenance !== 'CREW_REPORTED' ||
+        !Number.isInteger(Number(row.kss_score)) || Number(row.kss_score) < 1 || Number(row.kss_score) > 9) {
+      return { ...item, kss_score: null, kss_provenance: null };
+    }
 
     return {
       ...item,
       kss_score: Number(row.kss_score),
+      kss_provenance: 'CREW_REPORTED',
       score_fadiga: item.score_fadiga ?? Number(row.score_fadiga),
       nivel_fadiga: item.nivel_fadiga ?? row.nivel_fadiga,
       status_operacional: item.status_operacional ?? row.status_operacional,
