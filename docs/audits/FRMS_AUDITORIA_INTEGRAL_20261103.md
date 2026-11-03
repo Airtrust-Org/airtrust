@@ -252,3 +252,21 @@ Montagens em `worker-airtrust/src/index.ts`: `/api/frms` → `frms.ts` (com sub-
 | Gestão de risco (preditiva/proativa/reativa) | Doc 9966 cap. 4; Doc 9859 | Preditiva: projeção e escala programada (agora também art. 42); proativa: check-in/PVT; reativa: casos | Reativa sem ligação ao SGSO (AUD-021) | Ver AUD-021 |
 
 Referências bibliográficas citadas são as publicações clássicas e de domínio público do tema; nenhum número delas foi usado para calibrar o produto nesta auditoria.
+
+## 11. Linhagem de dados, integrações, jobs e observabilidade
+
+**Cadeia vigente (verificada no código):** SIGVOOS → `services/sigvoos-frms.ts` (`syncSigvoosForFrms`) → `cv_voos`/`cv_voo_etapas`/`cv_voo_tripulantes` + `frms_jornada` (origem SIGVOOS) → `preferred-operational-source.ts` escolhe por dia/tripulante: Controle de Voos nativo (primário) → SIGVOOS/CV importado (fallback), campo a campo → `recalcularPipeline` (fatorização, acúmulo, alertas) → snapshot operacional → UI. O guard `guard:frms-no-direct-sigvoos` impede leitura direta do SIGVOOS pelo FRMS. Estados de proveniência: `operational_data_source` (`CONTROLE_VOOS`, `SIGVOOS`, `..._COM_FALLBACK_SIGVOOS`, `AUSENTE`), `jornada_data_source` (`REAL`, `MANUAL`, `ESTIMADO`, `AUSENTE`, `INCONSISTENTE`), `sleep/wake_data_source` (`REAL`, `ESTIMADO`, `AUSENTE`), `landings_evidence_quality` (`OBSERVED`, `CONFIRMED_ZERO`, `INCOMPLETE`).
+
+**Robustez do job (positivo):** `cron/resilient/sigvoos-frms.ts` usa lease, estado durável por item, retentativa exponencial (até 1 h), esgotamento após 7 tentativas com alerta deduplicado, `INSERT OR IGNORE` de eventos e shadow-compare CV × legado sem afetar ingestão.
+
+### FRMS-AUD-025 — Ingestão SIGVOOS importa só o dia corrente e nunca revisita
+- **P1 · alta · comprovado (código) · especificado**
+- `resolveNextSigvoosDay` (l. 113) importa `last_sync_to + 1` até a data operacional de São Paulo **do dia da execução**; a execução ocorre na hora configurada (default 19 UTC = 16:00 BRT, `shouldRunSigvoosAtCurrentHour`). O cron legado (`scheduled-handler.ts` l. ~940) faz o mesmo. Não há janela de retroação.
+- **Consequências:** (1) voos realizados depois das 16:00 BRT do dia importado e relatórios de voo fechados depois disso **não entram** sem sincronização manual; (2) correções retroativas e cancelamentos posteriores no SIGVOOS não chegam ao FRMS; (3) como os acumulados somam só o que foi importado (AUD-005), a ausência vira zero nos limites legais. Mitigação existente: Controle de Voos nativo é a fonte primária quando preenchido.
+- **Correção:** importar a janela `[D−3, D−1]` (dias encerrados) a cada execução, com upsert idempotente por etapa (`sigvoos_flight_report_id`/chave natural) e recálculo só dos tripulantes cujo hash de dados mudou; manter o dia corrente como "provisório". Registrar por dia/tenant `sync_status` (`PROVISORIO`, `CONSOLIDADO`, `FALHOU`) para alimentar a cobertura do AUD-005.
+
+### FRMS-AUD-026 — Data de programação × data da jornada na contagem de pousos
+- **P3 · média** — `resolveJornadaLandings` filtra `v.data_programacao = data da jornada`. Voo programado num dia e realizado após 00:00 do dia seguinte (missão noturna) é atribuído à data de programação. Correção: decidir a regra canônica (data da apresentação da jornada) e usar o vínculo `cv_voo_tripulantes`→jornada quando existir.
+
+### FRMS-AUD-027 — Observabilidade da qualidade do dado para o usuário
+- **P2 · média · observado** — já registrado em #1426 item 4: a UI não mostra última sincronização por fonte nem o impacto de atraso na avaliação atual. Com AUD-025 isso passa a ser crítico: a coordenação não sabe se o dia está provisório. Correção: exibir no cabeçalho da Operação "SIGVOOS sincronizado até DD/MM HH:MM (dias consolidados até DD/MM)" e marcar itens de dias provisórios.
