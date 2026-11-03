@@ -138,6 +138,8 @@ describe('daily check-in atomic commit', () => {
     const writes = batch.mock.calls[0][0];
     expect(writes).toHaveLength(13);
     expect(writes[0].sql).toContain('INSERT INTO frms_fadiga_checkin');
+    expect(writes[0].sql).toContain('kss_provenance');
+    expect(writes[0].binds).toContain('CREW_REPORTED');
     expect(writes[1].sql).toContain('INSERT INTO frms_readiness_assessment');
     expect(writes.slice(2, 12).every((s) => s.sql.includes('INSERT INTO frms_readiness_vigilance_trial'))).toBe(true);
     expect(writes[12].sql).toContain('INSERT INTO frms_fadiga_evento');
@@ -153,6 +155,8 @@ describe('daily check-in atomic commit', () => {
     const statements = batch.mock.calls[0][0];
     expect(statements).toHaveLength(2);
     expect(statements[0].sql).toContain('UPDATE frms_fadiga_checkin');
+    expect(statements[0].sql).toContain('kss_provenance = ?');
+    expect(statements[0].binds).toContain('CREW_REPORTED');
     expect(statements[0].sql).toContain(
       'WHERE id = ? AND empresa_id = ? AND funcionario_id = ? AND data_checkin = ? AND deleted_at IS NULL',
     );
