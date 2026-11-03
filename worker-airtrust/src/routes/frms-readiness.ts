@@ -255,7 +255,7 @@ router.post('/', async (c) => {
   // Subjective signals are authoritative from the already-saved tenant-scoped
   // daily fatigue check-in. The browser cannot override KSS or sleep values here.
   const checkin = await c.env.DB.prepare(
-    `SELECT id, kss_score, horas_sono
+    `SELECT id, kss_score, kss_provenance, horas_sono
        FROM frms_fadiga_checkin
       WHERE empresa_id = ?
         AND funcionario_id = ?
@@ -264,7 +264,7 @@ router.post('/', async (c) => {
       LIMIT 1`,
   )
     .bind(empresaId, funcionarioId, parsed.data.reference_date)
-    .first<{ id: string; kss_score: number; horas_sono: number }>();
+    .first<{ id: string; kss_score: number; kss_provenance: string | null; horas_sono: number | null }>();
 
   if (!checkin?.id) {
     return c.json(
@@ -275,6 +275,18 @@ router.post('/', async (c) => {
       },
       409,
     );
+  }
+
+  // Legacy numeric KSS without provenance is not evidence of a crew response.
+  // Never compute objective-readiness conclusions from a defaulted/derived KSS.
+  if (checkin.kss_provenance !== 'CREW_REPORTED' ||
+      !Number.isInteger(checkin.kss_score) ||
+      checkin.kss_score < 1 || checkin.kss_score > 9) {
+    return c.json({
+      success: false,
+      error: 'KSS_PROVENANCE_UNVERIFIED',
+      message: 'É necessário KSS explicitamente informado pelo tripulante para registrar o teste.',
+    }, 409);
   }
 
   try {
