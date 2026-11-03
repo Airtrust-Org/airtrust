@@ -1,4 +1,4 @@
-export type VigilanceProtocolVersion = 'airtrust-vigilance-v1' | 'airtrust-pvtb-v2';
+export type VigilanceProtocolVersion = 'airtrust-vigilance-v1' | 'airtrust-pvtb-v2' | 'airtrust-brief-v1';
 
 export type VigilanceTrial = {
   sequence: number;
@@ -84,7 +84,13 @@ export const PVTB_V2_PROTOCOL = {
  * Backwards-compatible alias. Existing imports of `VIGILANCE_PROTOCOL` keep
  * working and resolve to the active PVT-B V2 protocol.
  */
-export const VIGILANCE_PROTOCOL = PVTB_V2_PROTOCOL;
+export const BRIEF_ATTENTION_V1_PROTOCOL = {
+  ...PVTB_V2_PROTOCOL,
+  version: 'airtrust-brief-v1' as const,
+  lapseThresholdMs: 355,
+};
+
+export const VIGILANCE_PROTOCOL = BRIEF_ATTENTION_V1_PROTOCOL;
 
 function quantile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
@@ -104,7 +110,7 @@ function round(value: number, digits = 1): number {
 export function summarizeVigilanceTrials(
   trials: VigilanceTrial[],
   durationMs: number,
-  protocolVersion: VigilanceProtocolVersion = PVTB_V2_PROTOCOL.version,
+  protocolVersion: VigilanceProtocolVersion = BRIEF_ATTENTION_V1_PROTOCOL.version,
 ): VigilanceSummary {
   const valid = trials
     .filter((trial) => trial.outcome === 'response' || trial.outcome === 'lapse')
@@ -196,6 +202,10 @@ export function deriveReadinessAssessment(input: {
   }
 
   const attentionSignals = signals.filter((signal) => signal.severity === 'attention').length;
+  if (input.vigilance && (input.vigilance.lapses / Math.max(1, input.vigilance.validResponses + input.vigilance.missed) >= 0.2 ||
+    input.vigilance.falseStarts > 2)) {
+    return { classification: 'attention', signals };
+  }
   if (!baselineReady) {
     return { classification: 'baseline_building', signals };
   }
