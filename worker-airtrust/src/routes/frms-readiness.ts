@@ -128,7 +128,9 @@ router.get('/baseline', async (c) => {
     data: {
       sessions,
       minimum_sessions: READINESS_PROTOCOL.minimumBaselineSessions,
-      ready: sessions >= READINESS_PROTOCOL.minimumBaselineSessions,
+      // No persisted device/rested qualification exists in Schema V2 yet.
+      // A historical session count does not establish a valid baseline.
+      ready: false,
       protocol_version: protocolVersion,
     },
   });
