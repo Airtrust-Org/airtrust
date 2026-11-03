@@ -32,11 +32,10 @@ import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roste
 import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
+import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
-
-type DailyRiskLevel = 'normal' | 'attention' | 'critical' | 'unfit_for_duty';
 
 function isDailyRiskLevel(value: unknown): value is DailyRiskLevel {
   return value === 'normal' || value === 'attention' || value === 'critical' || value === 'unfit_for_duty';
@@ -268,20 +267,6 @@ function buildScoreInput(input: NormalizedCheckinInput): FadigaScoreInput {
     meds_ult_12h: input.medsUlt12h,
     alcool_ult_12h: input.alcoolUlt12h,
   };
-}
-
-function evaluateDailyRisk(input: NormalizedCheckinInput): DailyRiskLevel {
-  if (input.apto === 0) return 'unfit_for_duty';
-  // Gatilhos operacionais explícitos: valores de triagem, não diagnóstico ou liberação de voo.
-  if (input.kssScore >= 8) return 'critical';
-  if (input.horasSono24h < 4) return 'critical';
-  if ((input.subjectiveFatigueLevel ?? 0) >= 8) return 'critical';
-  if ((input.sleepinessLevel ?? 0) >= 8) return 'critical';
-  if (input.kssScore >= 7) return 'attention';
-  if (input.horasSono24h < 5) return 'attention';
-  if ((input.subjectiveFatigueLevel ?? 0) >= 6) return 'attention';
-  if ((input.sleepinessLevel ?? 0) >= 6) return 'attention';
-  return 'normal';
 }
 
 function mapRiskToSeverity(level: DailyRiskLevel): 'ATENCAO' | 'CRITICO' | null {
