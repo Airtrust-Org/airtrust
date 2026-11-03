@@ -1650,14 +1650,16 @@ export async function listFrmsOperationalSnapshot(
   );
 
   // ------------------------------------------------------------------------
-  // Janela INTERNA de contexto: cobre todo o período embarcado que contém os
-  // dias solicitados + 6 dias anteriores para o rolling de 168h. Sem período
-  // real, mantém a janela solicitada (não fabrica contexto).
+  // Contexto de missão e janela legal independentes: Art. 42 pode exigir
+  // histórico mesmo quando não existe período embarcado resolvível. Carregar
+  // os 8 dias anteriores conforme a janela consumida pelo avaliador legal.
   // ------------------------------------------------------------------------
-  const contextStart =
+  const contextStart = minIso(
+    addDaysIso(requestedStart, -8),
     minPeriodoInicio != null
-      ? minIso(addDaysIso(minPeriodoInicio, -ROLLING_168H_CONTEXT_LEAD_DAYS), requestedStart)
-      : requestedStart;
+      ? addDaysIso(minPeriodoInicio, -ROLLING_168H_CONTEXT_LEAD_DAYS)
+      : requestedStart,
+  );
   const contextEnd = maxPeriodoFim != null ? maxIso(maxPeriodoFim, requestedEnd) : requestedEnd;
 
   // ------------------------------------------------------------------------
@@ -1694,7 +1696,7 @@ export async function listFrmsOperationalSnapshot(
     if (sanitized) rollingByKey.set(`${row.data_referencia}::${Number(row.funcionario_id)}`, sanitized);
   }
   const art42Enforced = lawArt42EnforcementEnabled({ limitsJson: operationalContext.regulatoryLimitsJson });
-  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows.jornadas, contextRows.escalas);
+  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows.jornadas, contextRows.escalas, contextRows.activities);
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
   const complianceKeys = new Set(collectOperationalKeys(contextRows));
   for (const key of complianceKeys) {
