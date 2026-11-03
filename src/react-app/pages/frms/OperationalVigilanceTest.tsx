@@ -49,7 +49,7 @@ function feedbackCopy(feedback: TrialFeedback): { value: string; helper: string;
   if (feedback.outcome === 'lapse') {
     return {
       value: reactionTimeMs,
-      helper: 'Resposta lenta (≥ 500 ms).',
+      helper: 'Resposta lenta (> 355 ms).',
       className: 'text-amber-200',
     };
   }
@@ -275,7 +275,7 @@ export default function OperationalVigilanceTest({
     const outcome: VigilanceTrial['outcome'] =
       reactionTimeMs < BRIEF_ATTENTION_V1_PROTOCOL.falseStartThresholdMs
         ? 'false_start'
-        : reactionTimeMs >= BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs
+        : reactionTimeMs > BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs
           ? 'lapse'
           : 'response';
     const roundedReactionTimeMs = Math.round(reactionTimeMs);
@@ -430,9 +430,9 @@ export default function OperationalVigilanceTest({
         <summary className="cursor-pointer font-semibold text-slate-700">Protocolo e referência científica</summary>
         <p className="mt-2">
           Protocolo AirTrust {BRIEF_ATTENTION_V1_PROTOCOL.version}. Janela de amostragem: {Math.round(BRIEF_ATTENTION_V1_PROTOCOL.defaultDurationMs / 1000)} s;
-          lapso: ≥ {BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs} ms; antecipação: &lt; {BRIEF_ATTENTION_V1_PROTOCOL.falseStartThresholdMs} ms;
+          lapso: &gt; {BRIEF_ATTENTION_V1_PROTOCOL.lapseThresholdMs} ms; antecipação: &lt; {BRIEF_ATTENTION_V1_PROTOCOL.falseStartThresholdMs} ms;
           resposta ausente: lapso de {BRIEF_ATTENTION_V1_PROTOCOL.responseWindowMs / 1000} s.
-          O backend revalida tempos e sequência; o baseline individual usa apenas sessões do mesmo protocolo.
+          O backend revalida tempos e sequência. Linha de base por aparelho e sessões descansadas ainda não disponível.
         </p>
         <p className="mt-2">
           Mantenha esta aba em primeiro plano. Trocar de aba, ocultar a janela ou interromper a medição
