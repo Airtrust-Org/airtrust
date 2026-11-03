@@ -109,8 +109,9 @@ describe('Prova final do aluno', () => {
     const button = await screen.findByRole('button', {name:'Retomar prova'});
     mocked.mockResolvedValueOnce(ok(attempt({answers:{q1:'o2'}}),201));
     fireEvent.click(button);
-    const selected = await screen.findByRole('radio', {name:'Não'});
-    expect((selected as HTMLInputElement).checked).toBe(true);
+    await screen.findByRole('form', {name:'Tentativa 1'});
+    const selected = screen.getAllByRole('radio', {name:'Não'})[0] as HTMLInputElement;
+    expect(selected.checked).toBe(true);
     expect(calls().filter(x => x.includes('/tentativas'))).toHaveLength(1);
   });
   it('impede envio ou nova seleção enquanto a última resposta ainda não foi persistida', async () => {
