@@ -6,7 +6,10 @@ import { syncSigvoosForFrms } from '../../services/sigvoos-frms';
 describe('SIGVOOS: all writes require tenant identity', () => {
   it('stops unresolved-company sync before any mutation or external HTTP', async () => {
     const db = {
-      prepare: vi.fn(() => ({ all: async () => ({ results: [] }) })),
+      prepare: vi.fn(() => ({
+        all: async () => ({ results: [] }), first: async () => null, run: vi.fn(),
+        raw: vi.fn(), bind: vi.fn(),
+      })),
       batch: vi.fn(), exec: vi.fn(), withSession: vi.fn(), dump: vi.fn(),
     } as D1Database;
     await expect(syncSigvoosForFrms(
