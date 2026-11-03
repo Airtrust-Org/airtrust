@@ -190,6 +190,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-1',
       tripulanteId: '33',
       tripulanteNomeFira: 'JOAO SILVA',
@@ -251,6 +252,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-short-window',
       tripulanteId: '33',
       tripulanteNomeFira: 'CREW MEMBER',
@@ -287,6 +289,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-overnight',
       tripulanteId: '33',
       tripulanteNomeFira: 'CREW MEMBER',
@@ -324,6 +327,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-inconsistent',
       tripulanteId: '33',
       tripulanteNomeFira: 'JOAO SILVA',
