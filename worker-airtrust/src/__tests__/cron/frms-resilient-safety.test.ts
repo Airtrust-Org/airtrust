@@ -25,7 +25,7 @@ describe('FRMS resilient safety', () => {
     expect(resolveNextSigvoosDay(null, null, '2027-01-01')).toBe('2026-12-31');
   });
 
-  it('never marks today's in-progress data as a completed SIGVOOS watermark', () => {
+  it('never marks in-progress operational data as a completed SIGVOOS watermark', () => {
     expect(resolveNextSigvoosDay(null, '2026-08-01', '2026-08-02')).toBeNull();
     expect(resolveSigvoosNoopWatermark(null, '2026-08-01', '2026-08-02')).toBe('2026-08-01');
     expect(resolveSigvoosNoopWatermark('2026-08-01', '2026-07-31', '2026-08-02')).toBe('2026-08-01');
