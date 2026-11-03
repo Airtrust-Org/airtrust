@@ -32,7 +32,7 @@ Hoje o AirTrust coleta bem e calcula muito, mas o passo 2 está escondido atrás
 
 | Problema | Efeito para a coordenação |
 |---|---|
-| **Quatro números de "fadiga" concorrentes**: score do check-in (0–100), "efetividade" (%), score quinzenal (0–100), classificação de prontidão (PVT) | Ninguém sabe qual olhar; os números podem se contradizer no mesmo dia (ex.: sono 4 h no check-in e efetividade calculada com 8 h) |
+| **Quatro números de "fadiga" concorrentes**: score do check-in (0–100), "efetividade" (%), score quinzenal (0–100), classificação de prontidão do teste de atenção | Ninguém sabe qual olhar; os números podem se contradizer no mesmo dia (ex.: sono 4 h no check-in e efetividade calculada com 8 h) |
 | **Scores sem validação** que misturam fadiga com qualidade de dado (check-in faltando soma pontos de fadiga) | O número sobe por falta de dado, não por fadiga; perde credibilidade |
 | **Rótulos de aptidão** ("APTO", "INAPTO", "preserved") vindos de pesos não calibrados | Falsa segurança (KSS 9 → "APTO") e risco jurídico; o software parece decidir aptidão |
 | **Estimativas apresentadas como fatos** (sono padrão de 8 h "informado", KSS 5 por default) | Decisões em cima de dado inventado |
@@ -88,11 +88,7 @@ Quatro áreas para a coordenação, no lugar das 11 telas atuais. O resto vira d
 
 **Álcool/medicação em 12 h:** recomendo **não** manter no check-in diário. Já existe regra própria (RBAC 91/120 e política da empresa), e perguntar todo dia gera respostas automáticas "não". Se a empresa quiser manter, que seja um "Sim" que gera contato obrigatório, e não pontos num score.
 
-**PVT:**
-- **Opção A (recomendada):** opcional, oferecido quando o KSS for ≥ 7 ou o sono < 6 h. Usar o protocolo validado (PVT-B de 3 min, lapso > 355 ms).
-- **Opção B:** remover até haver protocolo validado.
-
-Hoje o teste de 60 s acrescenta tempo, não segue o protocolo validado e quase nunca muda a classificação.
+**Teste de atenção (prontidão) — DECISÃO: modelo em dois estágios.** Detalhado na seção 4.5. Resumo: teste curto de cerca de 60 s todos os dias, comparado com o normal da própria pessoa; PVT-B de 3 min só nos dias com sinal.
 
 **Regras de coleta:**
 - **Prazo:** até a hora de apresentação. Check-in feito depois da apresentação fica marcado como "pós-apresentação" e não vale como avaliação pré-voo.
@@ -124,6 +120,54 @@ Da escala, do Controle de Voos e do SIGVOOS, só os **fatos**:
 
 Cada fato carrega a origem e se é **previsto, realizado ou não recebido**. Dia sem dado importado aparece como "dado não recebido", nunca como zero.
 
+
+### 4.5 Teste de atenção em dois estágios (decisão aprovada)
+
+**Por que dois estágios:**
+- Os auditores valorizam ter uma medida objetiva, não só autorrelato.
+- Três minutos todos os dias é tempo demais para o tripulante.
+- O teste atual de 60 s não segue o protocolo validado e quase nunca altera o resultado (FAD-007/FAD-008).
+
+A solução mantém a medida objetiva diária e reserva o teste longo para quando ele importa.
+
+**Estágio 1 — todos os dias, no check-in (cerca de 60 s)**
+
+| Item | Como fica |
+|---|---|
+| Duração e intervalo entre estímulos | Mantém o teste atual: 60 s, intervalo de 1 a 4 s |
+| Nome na tela e nos documentos | "Teste breve de atenção (protocolo AirTrust)" — **não** chamar de PVT-B |
+| Lapso | Resposta acima de **355 ms** (mesmo critério do PVT-B; hoje é 500 ms) |
+| Antecipação | Resposta abaixo de 100 ms (como hoje) |
+| Métricas guardadas | Mediana do tempo de reação, nº de lapsos, nº de antecipações, nº de estímulos, aparelho usado |
+| Como interpretar | **Comparar com o normal da própria pessoa**, não com um limite fixo |
+| Normal da pessoa (linha de base) | Mediana das últimas 10 sessões feitas em dias "descansados" (sono ≥ 7 h e KSS ≤ 5), no **mesmo aparelho** |
+| Sinal | 🟡 "Atenção abaixo do seu normal" quando a mediana de reação de hoje fica claramente acima do normal da pessoa ou os lapsos ficam claramente acima do habitual. Esse sinal vale **sozinho**, sem esperar outro sinal |
+| Enquanto a linha de base não existe (primeiras sessões) | Só um limite absoluto conservador; mostrar "linha de base em formação", nunca "preservado" |
+
+A margem do que é "claramente acima do normal" (por exemplo, desvio de X % na mediana, ou Y lapsos a mais) é **política inicial, a calibrar com os dados da própria empresa** nos primeiros meses.
+
+**Estágio 2 — só quando necessário (PVT-B de 3 min)**
+
+- **Quando:** oferecido automaticamente no mesmo check-in se houver ao menos um destes sinais:
+  - teste breve abaixo do normal;
+  - KSS ≥ 7;
+  - sono < 6 h nas últimas 24 h.
+- **Protocolo:** PVT-B validado (Basner, Mollicone & Dinges, 2011) — 3 min, intervalo de 1 a 4 s, lapso acima de 355 ms.
+- **Uso do resultado:** vai para a coordenação junto com os outros sinais (seção 5.1). **Nunca decide aptidão sozinho.**
+- **Frequência esperada:** poucos dias por mês por tripulante, não todos os dias.
+
+**O que a empresa deve documentar (para a auditoria)**
+
+1. O teste breve é protocolo próprio, usado para comparar a pessoa com ela mesma. Ele não é o PVT-B validado.
+2. O PVT-B de 3 min é o instrumento validado e entra só nos dias com sinal.
+3. **Plano de validação:** em 3 a 6 meses, verificar com os dados da empresa se as pioras no teste breve acompanham noites curtas e KSS alto relatados. Depois disso, ajustar ou retirar o teste.
+4. Todo sinal do teste gera registro e ação na fila da coordenação, como os demais.
+
+**Cuidados técnicos**
+- O tempo de reação muda conforme o aparelho (cada celular tem atraso de tela diferente). Guardar o aparelho e comparar a pessoa só com sessões no mesmo aparelho; trocou de aparelho, a linha de base recomeça.
+- Teste interrompido ou com poucos estímulos fica "incompleto" e não entra na linha de base.
+- O resultado do teste aparece para a coordenação como fato ("reação 18 % mais lenta que o seu normal; 3 lapsos"), nunca como "apto/preservado".
+
 ---
 
 ## 5. Sinalizar: regras simples no lugar dos scores
@@ -149,7 +193,8 @@ Três níveis:
 | Duas noites seguidas < 6 h | 🔴 | "Duas noites curtas seguidas (5 h e 5,5 h)" | perda de sono se acumula entre noites (literatura de restrição crônica) |
 | Estará acordado > 16 h no fim da jornada (despertar real + término previsto) | 🔴 (> 18 h) / 🟡 (16–18 h) | "Acordado desde 04:10 — terá 17 h acordado ao pouso previsto" | vigília prolongada é central no modelo de dois processos; corte é política |
 | Check-in não feito até 60 min antes da apresentação | ⚪ → 🔴 na hora da apresentação | "Check-in pendente (apresentação 06:00)" | sem dado não há como decidir |
-| PVT com lapsos elevados (se o PVT for mantido) | 🟡 | "Teste de atenção com muitos lapsos" | só com protocolo validado |
+| Teste breve de atenção abaixo do normal da própria pessoa | 🟡 | "Atenção abaixo do seu normal (reação 18 % mais lenta; 3 lapsos)" | comparação intraindividual; margem é política a calibrar (seção 4.5) |
+| PVT-B de 3 min (estágio 2) com piora | 🔴 se houver também KSS ≥ 8 ou sono < 5 h; senão 🟡 | "PVT-B: 6 lapsos (> 355 ms)" | PVT-B validado (Basner et al., 2011); corte é política |
 
 ### 5.2 Sinais da escala (preditivos: aparecem dias antes)
 
@@ -172,7 +217,7 @@ Sinais da escala são calculados **para os próximos 7 dias**, na tela "Previsã
 | Score do check-in 0–100 + APTO/INAPTO | **Remover** da operação. Os sinais da seção 5.1 substituem com regras explícitas |
 | "Efetividade" % | **Remover da tela operacional.** Manter só como dado de pesquisa até ser validado. Se ficar visível, renomear para "Índice de exposição (regras AirTrust, não validado)" |
 | Score quinzenal 0–100 | **Substituir** por um "Resumo da missão" com fatos (ver seção 7.3) |
-| Classificação de prontidão (PVT) | Vira só o sinal 🟡 de lapsos, se o PVT for mantido |
+| Classificação de prontidão (PVT) | **Substituir** pelo modelo em dois estágios (seção 4.5): sinais de "abaixo do seu normal" e do PVT-B, sem rótulo "preservado" |
 | IMA v3 | Manter fora da tela, só pesquisa (como já está) |
 
 Por que regras e não scores: com os dados que o AirTrust tem, nenhum score pode ser validado agora. Regras explícitas dizem **por quê** ("dormiu 4 h"). Isso é o que o gestor precisa para decidir e para explicar a decisão ao tripulante e ao auditor. Quando houver dados suficientes (ver seção 10), dá para testar se um score agrega algo.
@@ -292,7 +337,7 @@ Ver seção 9. Substitui o mapa de fadiga e os gráficos de score.
 | Score quinzenal | **SUBSTITUIR** pelo resumo da missão (7.3) | Mistura qualidade de dado com fadiga |
 | Créditos de recuperação e de horas de voo | **REMOVER** | Sem base; complicam a explicação |
 | Carga operacional (pousos, temperatura, IMC) | **SIMPLIFICAR**: mostrar como fatos ("12 pousos, 2 em IMC"), sem pontos | Fato útil, ponto inventado |
-| PVT de 60 s | **SUBSTITUIR** pelo PVT-B de 3 min opcional, ou **REMOVER** | Não segue protocolo validado; quase nunca muda a decisão |
+| Teste de atenção de 60 s ("PVT-B" atual) | **MANTER como estágio 1**, renomeado "teste breve de atenção", lapso > 355 ms, interpretado contra o normal da pessoa; **ACRESCENTAR** PVT-B de 3 min como estágio 2 (seção 4.5) | Mantém medida objetiva diária (valorizada pela auditoria) sem custar 3 min por dia |
 | Alertas/casos + read-ack + override | **CONSOLIDAR** em "Ação FRMS" | Três filas para a mesma coisa |
 | Fluxo de caso (responsável, prazo, eficácia) | **MANTER** a regra, **SIMPLIFICAR** a interface (botões da seção 6.2) | A regra é boa; o texto livre não escala |
 | Telas Painel de fadiga, Histórico de fadiga, Fadiga acumulada | **CONSOLIDAR** no detalhe do tripulante e nos Relatórios | Informação repetida |
@@ -364,18 +409,18 @@ Com essas regras, em 3 a 6 meses a empresa terá uma base limpa para testar, com
 | Fase | Entrega | Usa achados | Dependências |
 |---|---|---|---|
 | **1 — Dados verdadeiros** (curto prazo) | Corrigir FAD-001 a 006; sem padrões inventados; KSS obrigatório; check-in com prazo e imutável; origem visível | FAD-001–006, FAD-012 | nenhuma |
-| **2 — Sinais e tela HOJE** | Lista de sinais (5.1) no lugar dos scores na tela operacional; tela HOJE; retirar APTO/INAPTO | FAD-004, FAD-011, AUD-022/023/024 | aprovação dos limiares pela Coordenação/SGSO |
+| **2 — Sinais e tela HOJE** | Lista de sinais (5.1) no lugar dos scores na tela operacional; tela HOJE; retirar APTO/INAPTO; teste de atenção em dois estágios (4.5) | FAD-004, FAD-007, FAD-008, FAD-011, AUD-022/023/024 | aprovação dos limiares pela Coordenação/SGSO |
 | **3 — Ação única** | "Ação FRMS" unificando casos, read-ack e override; botões de ação; prazo na apresentação; aviso de vencimento | AUD-019/020/021 | definição do catálogo de ações |
 | **4 — Previsão** | Sinais da escala nos próximos 7 dias (madrugadas, repouso, limites, viagem + apresentação cedo) | AUD-001, art. 42, AUD-005/025 | AUD-025 (dados SIGVOOS completos) |
 | **5 — Verificação e relatório** | Verificação automática de eficácia no check-in seguinte; relatório mensal (seção 9) | AUD-021 | fases 1–3 |
-| **6 — Consolidação** | Um check-in só; remover telas e scores substituídos; PVT-B opcional ou removido | AUD-028/029, FAD-007/008 | fases 1–5 em uso |
+| **6 — Consolidação** | Um check-in só; remover telas e scores substituídos | AUD-028/029 | fases 1–5 em uso |
 | **7 — Validação** | Com 3–6 meses de dados limpos, testar se algum índice agrega ao conjunto de sinais | #1476 | dados das fases 1–5 |
 
 ---
 
 ## 13. Decisões que a empresa precisa tomar para começar
 
-1. **Aprovar o formulário de check-in** da seção 4.1: o que entra e o que sai, inclusive álcool/medicação e PVT.
+1. **Aprovar o formulário de check-in** da seção 4.1: o que entra e o que sai, inclusive álcool/medicação. O teste de atenção já está decidido (dois estágios, seção 4.5). Falta aprovar a margem inicial do "abaixo do seu normal".
 2. **Aprovar os sinais e os limiares iniciais** da seção 5, como política versionada.
 3. **Aprovar o catálogo de ações** da seção 6.2 e quem pode escolher cada uma (coordenador de base, gestor de operações).
 4. **Definir o gestor de plantão** que recebe ações 🔴 vencidas.

@@ -423,9 +423,11 @@ Check-in (FrmsFlightCheckinFadiga.tsx / FrmsCheckinFadiga.tsx / Pilot App)
 - **P1 · alta · comprovado (código + referência verificada)**
 - `src/react-app/lib/frms/operationalReadiness.ts` `PVTB_V2_PROTOCOL` e `worker-airtrust/src/lib/frms/readiness.ts`: **60 s**, intervalo 1–4 s, **lapso ≥ 500 ms**, mínimo 10 estímulos. O PVT-B validado (Basner, Mollicone & Dinges, 2011, Acta Astronautica) usa **3 min**, intervalo 1–4 s e **lapso > 355 ms**; os autores aceitaram perda média de 22,7 % no tamanho de efeito em troca da redução de 10 para 3 min e pediram validação adicional em campo. Um teste de 60 s com limiar de 500 ms não é o PVT-B e não tem validação conhecida.
 - **Correção:** ou adotar o PVT-B (3 min, 355 ms) no check-in pré-voo, ou renomear para "teste breve de atenção (não validado)" e não usá-lo para classificar.
+- **Decisão tomada depois desta auditoria (03/11/2026):** modelo em dois estágios — teste breve diário comparado com o normal da própria pessoa + PVT-B de 3 min só nos dias com sinal. Especificação: arquivo 03, seção 4.5. Esta é a versão que vale.
 
 ### FRMS-FAD-008 — Prontidão ignora o PVT isolado e não usa a linha de base individual
 - **P1 · alta · comprovado** — `readiness.ts` `deriveReadinessAssessment` (≈l. 228): lapsos ≥ 20 % são apenas **um** sinal de alerta; "attention" exige **dois**. Com KSS e sono normais, **50 % de lapsos → `preserved`**. Nas 5 primeiras sessões (`minimumBaselineSessions`), nenhum sinal de alerta conta (`baseline_building`). A "linha de base individual" é só um contador de sessões: média/variabilidade pessoal de tempo de reação nunca é comparada.
+- **Decisão final:** ver arquivo 03, seção 4.5 (dois estágios). Os itens abaixo continuam válidos dentro desse modelo.
 - **Correção:** (a) lapsos elevados (ou queda relevante vs. a própria linha de base) bastam para "atenção"; (b) calcular a linha de base pessoal (mediana do tempo de reação, % lapsos) e sinalizar desvio; (c) durante a construção da linha de base, aplicar limiar absoluto conservador em vez de silenciar; (d) trocar "preserved" por linguagem que não sugira aptidão.
 
 ### FRMS-FAD-009 — Índice de efetividade: rótulos científicos sem a ciência correspondente

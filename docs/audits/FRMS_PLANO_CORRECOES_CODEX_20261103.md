@@ -38,8 +38,8 @@ Pedido do responsável pelo produto: **a prioridade é a fadiga (cálculo e cole
 | 2 | FAD-004 | P0 | KSS entra em `evaluateDailyRisk` como gatilho próprio (proposta: 7 → atenção; 8–9 → revisão obrigatória, a validar); parar de enviar fadiga subjetiva como `sleepiness_level` | `routes/frms-fadiga-checkin-legacy.ts` (`evaluateDailyRisk`, `normalizeCheckinInput`), `src/react-app/pages/frms/FrmsFlightCheckinFadiga.tsx` (payload) |
 | 3 | FAD-003 | P1 | KSS obrigatório; remover default 5 e conversão 0–10→KSS; gravar `kss_provenance` na linha (Schema V2); tratar `DERIVED/DEFAULTED` legados como ausentes | `normalizeCheckinInput`, `lib/frms/kss-checkin-provenance.ts`, schema `frms_fadiga_checkin` |
 | 4 | FAD-002 | P1 | Rejeitar janela de sono inválida (0 h ou > 14 h) no check-in; no cálculo, inválido = indisponível, nunca 8 h/16 h | `fadiga-score.ts` `calcularSono`, `routes/frms-fadiga-checkin-validation.ts` |
-| 5 | FAD-008 | P1 | Prontidão: lapsos elevados sozinhos bastam para "atenção"; linha de base pessoal (mediana de RT, % lapsos) com detecção de desvio; limiar absoluto durante a construção da linha de base | `lib/frms/readiness.ts` `deriveReadinessAssessment` |
-| 6 | FAD-007 | P1 | Adotar o PVT-B validado (3 min, lapso > 355 ms) ou renomear o teste de 60 s para "teste breve de atenção (não validado)" e não classificar com ele | `src/react-app/lib/frms/operationalReadiness.ts` `PVTB_V2_PROTOCOL`, `lib/frms/readiness.ts` `READINESS_PROTOCOL` |
+| 5 | FAD-007 + FAD-008 | P1 | **Teste de atenção em dois estágios (decisão aprovada — especificação na seção 4.5 do arquivo 03).** Estágio 1 diário (60 s): renomear para "teste breve de atenção (protocolo AirTrust)", lapso > 355 ms, guardar aparelho, linha de base pessoal = mediana das últimas 10 sessões descansadas no mesmo aparelho, sinal "abaixo do seu normal" vale sozinho, sem rótulo "preserved". Estágio 2: PVT-B de 3 min (lapso > 355 ms) oferecido no mesmo check-in quando houver teste breve abaixo do normal, KSS ≥ 7 ou sono < 6 h | `src/react-app/lib/frms/operationalReadiness.ts` (`PVTB_V2_PROTOCOL` → dois protocolos), `src/react-app/pages/frms/OperationalVigilanceTest.tsx`, `FrmsFlightCheckinFadiga.tsx`, `worker-airtrust/src/lib/frms/readiness.ts` (`READINESS_PROTOCOL`, `deriveReadinessAssessment`, baseline), `routes/frms-readiness.ts`; aparelho e protocolo do estágio por sessão podem exigir Schema V2 |
+| 6 | — | — | (item incorporado ao 5) | — |
 | 7 | FAD-005 | P2 | Status operacional derivado do nível final (não do score base) | `frms-fadiga-checkin-legacy.ts` ≈l. 983–994 |
 | 8 | FAD-006 | P2 | `SONO_INSUFICIENTE` também para 0 h (`horasSono != null && horasSono < 6`) | `lib/frms/operational-snapshot.ts` ≈l. 846 |
 | 9 | FAD-012 | P2 | Primeira resposta pré-voo imutável + correções versionadas; `data_checkin` só a data operacional (D−1 com justificativa); classificar relato pós-apresentação como não pré-voo; separar fadiga (Samn-Perelli 1–7 ou 0–10) de sonolência (KSS) | `frms-fadiga-checkin-legacy.ts`, `frms-fadiga-checkin.schema.ts`, formulários |
@@ -51,7 +51,7 @@ Pedido do responsável pelo produto: **a prioridade é a fadiga (cálculo e cole
 - `calcularScoreFadiga`: KSS 9 com 8 h hoje dá 35 VERDE APTO; depois da correção, o resultado da rota tem que ser revisão obrigatória.
 - `calcularSono`: só despertar → não pode resultar em 480 `INFORMADO`; dormiu 04:30 e acordou 04:00 → inválido.
 - Pipeline: check-in com 4 h → efetividade com 240 min e `frms_jornada.sono_efetivo_min = 240`.
-- Prontidão: 50 % de lapsos com KSS 5 e 8 h → "atenção".
+- Teste de atenção: 50 % de lapsos com KSS 5 e 8 h → sinal "abaixo do normal" (ou limite absoluto na fase de linha de base) e oferta do PVT-B; sessões em aparelhos diferentes não se misturam na linha de base; nenhuma resposta usa o rótulo "preserved".
 
 **Medir o impacto em produção (somente leitura, com autorização):** ajustar nomes de colunas ao schema atual antes de rodar.
 ```sql
