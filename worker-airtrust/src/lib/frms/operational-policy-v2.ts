@@ -296,7 +296,7 @@ export function computeFlightHoursDelta(hvMinutesInput: number, _priorDayCreditP
   return {
     rawPenaltyPoints,
     priorDayCreditAppliedPoints: 0,
-    netDeltaPoints: -rawPenaltyPoints,
+    netDeltaPoints: rawPenaltyPoints > 0 ? -rawPenaltyPoints : 0,
     generatedCreditForNextDayPoints: 0,
   };
 }
