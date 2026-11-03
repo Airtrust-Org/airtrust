@@ -6,6 +6,7 @@ type FatigueEvidenceInput = {
   wakeTime: unknown;
   sleepHours: unknown;
   kssScore: unknown;
+  kssProvenance: unknown;
   fitForDuty: unknown;
   storedRiskLevel: unknown;
 };
@@ -52,6 +53,7 @@ export function resolveDailyCheckinEvidence(input: FatigueEvidenceInput): Fatigu
   if (!Number.isInteger(input.kssScore) || Number(input.kssScore) < 1 || Number(input.kssScore) > 9) {
     return incomplete;
   }
+  if (input.kssProvenance !== 'CREW_REPORTED') return incomplete;
   if (input.fitForDuty !== 0 && input.fitForDuty !== 1 &&
       input.fitForDuty !== false && input.fitForDuty !== true) {
     return incomplete;
