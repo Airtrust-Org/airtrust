@@ -1425,7 +1425,7 @@ frmsRoutes.patch(
       return c.json({ success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED' }, 403);
     }
 
-    await c.env.DB.prepare(
+    const writeResult = await c.env.DB.prepare(
       `UPDATE frms_jornada
           SET hora_dormiu = ?,
               fonte_sono = 'INFORMADO',
@@ -1442,6 +1442,15 @@ frmsRoutes.patch(
     )
       .bind(parsed.data.horaDormiu, jornadaId, empresaId)
       .run();
+    // A leitura prévia não basta: se o vínculo setorial/tenant mudou durante a
+    // requisição, nenhuma recomputação pode seguir após UPDATE sem linha gravada.
+    if (Number(writeResult.meta?.changes ?? 0) !== 1) {
+      return c.json({
+        success: false,
+        error: 'Jornada indisponível para atualização no escopo atual.',
+        code: 'SLEEP_PATCH_SCOPE_OR_VERSION_CONFLICT',
+      }, 409);
+    }
 
     // recalcularPipeline's limites parameter is inert (self-resolves governed context).
     const jornadaAtualizada = {
