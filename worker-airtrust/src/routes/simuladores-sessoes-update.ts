@@ -28,6 +28,7 @@ import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
+import { syncExaminadorChecks, syncFichasEspeciais } from '../services/simuladores/session-examiner-checks';
 import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
@@ -128,254 +129,24 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
-    // ============================
-    // CHECKS COM EXAMINADORES
-    // - Se examinador_id informado: is_check=1
-    // - Se examinador_id removido: is_check=0 e soft-delete vínculos
-    // - Atualiza vínculos em sessoes_checks
-    // ============================
-
-    const examinadorIdBodyRaw =
-      b.examinador_id === undefined
-        ? undefined
-        : b.examinador_id === null
-          ? null
-          : Number(b.examinador_id);
-    const wantsCheck = examinadorIdBodyRaw ? 1 : 0;
-    const shouldUpdateCheckFields = b.examinador_id !== undefined || b.checks !== undefined;
-
-    if (shouldUpdateCheckFields) {
-      // Validar examinador quando presente
-      if (examinadorIdBodyRaw) {
-        const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
-        const hasIsExaminador = funcionarioColumns.has('is_examinador');
-        const hasIsChecador = funcionarioColumns.has('is_checador');
-        const examinadorFlagExpr =
-          hasIsExaminador && hasIsChecador
-            ? '(COALESCE(is_examinador, 0) = 1 OR COALESCE(is_checador, 0) = 1)'
-            : hasIsExaminador
-              ? 'COALESCE(is_examinador, 0) = 1'
-              : hasIsChecador
-                ? 'COALESCE(is_checador, 0) = 1'
-                : '0 = 1';
-        const examinador = await c.env.DB.prepare(
-          `SELECT id
-           FROM funcionarios
-             WHERE id = ?
-               AND ${examinadorFlagExpr}
-               AND empresa_id = ?
-               AND deleted_at IS NULL`,
-        )
-          .bind(examinadorIdBodyRaw, empresaId)
-          .first();
-        if (!examinador) {
-          return c.json({ success: false, error: 'Examinador inválido' }, 400);
-        }
-      }
-
-      // Se tiver examinador, exige checks (pelo menos 1)
-      if (examinadorIdBodyRaw && checksNormalizados.length === 0) {
-        return c.json(
-          { success: false, error: 'Selecione pelo menos 1 check ao informar examinador' },
-          400,
-        );
-      }
-
-      // Atualizar campos na sessão
-      await c.env.DB.prepare(
-        "UPDATE simulador_agendamentos SET examinador_id=?, is_check=?, updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
-      )
-        .bind(examinadorIdBodyRaw || null, wantsCheck, id, empresaId)
-        .run();
-
-      // Soft delete vínculos existentes
-      const scOld = await c.env.DB.prepare(
-        `SELECT id
-         FROM sessoes_checks
-         WHERE sessao_id = ? AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .all();
-
-      if (scOld.results && scOld.results.length > 0) {
-        const ids = scOld.results.map((r: any) => r.id).filter((v: any) => v !== undefined);
-
-        await c.env.DB.prepare(
-          "UPDATE sessoes_checks SET deleted_at=datetime('now'), updated_at=datetime('now') WHERE sessao_id=? AND deleted_at IS NULL",
-        )
-          .bind(id)
-          .run();
-
-        // Soft delete resultados vinculados aos sessao_check antigos
-        for (const scId of ids) {
-          await c.env.DB.prepare(
-            "UPDATE sessoes_checks_resultados SET deleted_at=datetime('now'), updated_at=datetime('now') WHERE sessao_check_id=? AND deleted_at IS NULL",
-          )
-            .bind(scId)
-            .run();
-        }
-      }
-
-      // Inserir vínculos novos (se for check)
-      if (wantsCheck && checksNormalizados.length > 0) {
-        for (const qualificacao_tipo_id of checksNormalizados) {
-          await c.env.DB.prepare(
-            `INSERT INTO sessoes_checks (sessao_id, qualificacao_tipo_id, created_at, updated_at)
-             VALUES (?, ?, datetime('now'), datetime('now'))`,
-          )
-            .bind(id, qualificacao_tipo_id)
-            .run();
-        }
-      }
-
-      await audit(c.env.DB, {
-        tabela: 'simulador_agendamentos',
-        acao: 'UPDATE_CHECK_FIELDS',
-        registro_id: id,
-        dados_anteriores: {
-          examinador_id: (a as any).examinador_id,
-          is_check: (a as any).is_check,
-        },
-        dados_novos: {
-          examinador_id: examinadorIdBodyRaw || null,
-          is_check: wantsCheck,
-          checks: checksNormalizados,
-        },
-      });
+    // Examinador + checks (vínculos, is_check, auditoria) e fichas especiais CRED-EXA.
+    const checksSync = await syncExaminadorChecks(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      checksNormalizados,
+    });
+    if (!checksSync.ok) {
+      return c.json({ success: false, error: checksSync.error }, checksSync.status);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // FICHAS ESPECIAIS: TREINAMENTO DE INSTRUTOR / CREDENCIAMENTO DE EXAMINADOR
-    // Executado independentemente do bloco shouldUpdateCheckFields.
-    // Condições (OR):
-    //   1. Flag explícita no body: gerar_ficha_examinador
-    //   2. Codes FAP13 presentes nos checks atuais da sessão
-    // ─────────────────────────────────────────────────────────────────────────
-    {
-      const instrutorEspecial =
-        b.instrutor_id !== undefined ? b.instrutor_id : (a as any).instrutor_id;
-      if (instrutorEspecial) {
-        // Buscar códigos dos checks atuais da sessão
-        const codRes = await c.env.DB.prepare(
-          `SELECT qt.codigo FROM sessoes_checks sc
-           JOIN qualificacoes_tipos qt ON sc.qualificacao_tipo_id = qt.id
-           WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL AND qt.deleted_at IS NULL`,
-        )
-          .bind(id)
-          .all();
-        const codsAtuais = (codRes.results || []).map((r: any) =>
-          String(r.codigo || '').toUpperCase(),
-        );
-
-        // Buscar template_ids dos modelos especiais
-        const tplRes = await c.env.DB.prepare(
-          `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('CRED-EXA') AND empresa_id = ? AND deleted_at IS NULL`,
-        )
-          .bind(empresaId)
-          .all();
-        const tplMap = new Map(
-          (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
-        );
-
-        // Inferir tipo_aeronave das fichas existentes
-        let tipoAeronaveEsp = b.tipo_aeronave || null;
-        if (!tipoAeronaveEsp) {
-          const fichaRef = await c.env.DB.prepare(
-            `SELECT tipo_aeronave FROM fichas_sessao
-             WHERE agendamento_slot_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(id, empresaId)
-            .first();
-          tipoAeronaveEsp = (fichaRef as any)?.tipo_aeronave || null;
-        }
-        const dataEsp = b.data || (a as any).data;
-        const examinadorEsp =
-          examinadorIdBodyRaw !== undefined
-            ? examinadorIdBodyRaw
-            : ((a as any).examinador_id ?? null);
-
-        const fichasEsp = [
-          {
-            modelo: 'CRED-EXA',
-            ativo:
-              b.gerar_ficha_examinador === true || codsAtuais.some((c) => c.startsWith('FAP13')),
-          },
-        ];
-
-        for (const esp of fichasEsp) {
-          const existe = await c.env.DB.prepare(
-            `SELECT id,
-                    status,
-                    assinatura_aluno_timestamp,
-                    assinatura_instrutor_timestamp,
-                    assinatura_aluno_imagem,
-                    assinatura_instrutor_imagem,
-                    data_conclusao
-             FROM fichas_sessao
-             WHERE agendamento_slot_id = ? AND colaborador_id_aluno = ?
-               AND tipo_sessao = ? AND empresa_id = ? AND deleted_at IS NULL`,
-          )
-            .bind(id, instrutorEspecial, esp.modelo, empresaId)
-            .first();
-
-          if (!esp.ativo) {
-            if (existe) {
-              const fichaExistente = existe as any;
-              const fichaJaUtilizada = Boolean(
-                fichaExistente.assinatura_aluno_timestamp ||
-                fichaExistente.assinatura_instrutor_timestamp ||
-                fichaExistente.assinatura_aluno_imagem ||
-                fichaExistente.assinatura_instrutor_imagem ||
-                fichaExistente.data_conclusao ||
-                (fichaExistente.status && fichaExistente.status !== 'AVALIACAO_PENDENTE'),
-              );
-
-              if (!fichaJaUtilizada) {
-                await c.env.DB.prepare(
-                  `UPDATE fichas_sessao
-                   SET deleted_at = datetime('now')
-                   WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-                )
-                  .bind(fichaExistente.id, empresaId)
-                  .run();
-
-                await c.env.DB.prepare(
-                  `UPDATE fichas_sessao_manobras
-                   SET deleted_at = datetime('now')
-                   WHERE ficha_id = ? AND deleted_at IS NULL`,
-                )
-                  .bind(fichaExistente.id)
-                  .run();
-              }
-            }
-
-            continue;
-          }
-
-          if (!existe) {
-            await c.env.DB.prepare(
-              `INSERT INTO fichas_sessao
-                 (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
-                  tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?)`,
-            )
-              .bind(
-                crypto.randomUUID(),
-                id,
-                instrutorEspecial,
-                examinadorEsp || instrutorEspecial,
-                esp.modelo,
-                tipoAeronaveEsp,
-                dataEsp,
-                tplMap.get(esp.modelo) ?? null,
-                empresaId,
-              )
-              .run();
-          }
-        }
-      }
-    }
+    await syncFichasEspeciais(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      examinadorIdBodyRaw: checksSync.examinadorIdBodyRaw,
+    });
 
     // Determinar tipo_dispositivo final
     const tipoDispositivoFinal: 'SIMULADOR' | 'AERONAVE' =

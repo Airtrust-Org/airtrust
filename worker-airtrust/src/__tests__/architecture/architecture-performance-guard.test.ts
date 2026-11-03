@@ -116,7 +116,6 @@ const SQL_PREPARE_CAPS = {
   // Cap raised 2026-07-19: counted 64 (fail-closed sector check on manager invite/accept).
   'routes/auth.ts': 64,
   // Cap raised 2026-07-09: counted 55 (pre-existing growth of schema guards).
-  'routes/simuladores-sessoes-update.ts': 55,
   // The extracted compatibility router retains the historical prepare count.
   'routes/lms-cursos-legacy.ts': 55,
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
