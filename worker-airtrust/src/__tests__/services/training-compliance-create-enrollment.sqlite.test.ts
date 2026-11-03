@@ -150,6 +150,34 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(count(db, 'lms_matriculas')).toBe(1);
   });
 
+  it('stamps the effective aircraft-scoped evidence profile on legacy aircraft schema', async () => {
+    const db = setup();
+    db.database.exec(`
+      ALTER TABLE funcionarios ADD COLUMN aeronave TEXT;
+      CREATE TABLE funcionarios_compliance_condicoes (
+        empresa_id INTEGER, funcionario_id INTEGER, condicao_id INTEGER,
+        ativo INTEGER, deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      UPDATE treinamento_requisitos
+        SET perfil_competencia='AW139_PF', aeronave_modelo='AW139' WHERE id=91;
+      INSERT INTO aeronaves VALUES (30, 1, 'AW139', NULL);
+      INSERT INTO funcionarios_aeronaves VALUES (1000, 30, 1, NULL, NULL, NULL);
+    `);
+    const id = await createComplianceEnrollmentAtomic(db.asD1(), request());
+    expect(id).toBeGreaterThan(0);
+    const record = db.database.prepare(
+      'SELECT perfil_competencia FROM lms_matriculas WHERE id=?',
+    ).get(id) as { perfil_competencia: string | null };
+    // Do not silently omit the governed evidence profile because the SQL
+    // rule engine assumes an employee-aircraft tenant column that is absent.
+    expect(record.perfil_competencia).toBe('AW139_PF');
+  });
+
   it('enrolls only with an active explicitly assigned matching aircraft',async()=>{
     const db=setup();
     db.database.exec(`
