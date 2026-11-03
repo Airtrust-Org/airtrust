@@ -14,6 +14,7 @@ import {
   type TrainingComplianceScope,
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { trainingComplianceEvidenceIsRealizedBy } from './training-compliance-enrollment-policy';
 
 export const SCOPES = TRAINING_COMPLIANCE_SCOPES;
@@ -514,8 +515,10 @@ export function computeRequirement(
   rule: Rule,
   historyItems: Evidence[] | undefined,
   lmsItems: Evidence[] | undefined,
+  // Data operacional (America/Sao_Paulo): a data UTC adianta o "hoje" entre 21h e 24h BRT
+  // e marcava como VENCIDO, durante essas horas, um item que ainda vence hoje.
+  today: string = getTodayIsoSaoPaulo(),
 ) {
-  const today = new Date().toISOString().slice(0, 10);
   const allHistory = historyItems || [];
   const allLms = lmsItems || [];
   const historyForProfile = allHistory.filter(
