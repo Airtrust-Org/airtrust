@@ -13,7 +13,7 @@ const canonicalPage = readFileSync(
 
 describe('nomenclatura canônica da integração SIGVOOS', () => {
   it('carrega a integração ativa pelo nome SIGVOOS', () => {
-    expect(configuracoes).toContain("import('../components/integracoes/SigvoosIntegration')");
+    expect(configuracoes).toContain("import('./Configuracoes/Integracoes/Sigvoos')");
     expect(configuracoes).toContain('<SigvoosIntegration />');
     expect(configuracoes).not.toContain('<EdAppIntegration />');
   });
