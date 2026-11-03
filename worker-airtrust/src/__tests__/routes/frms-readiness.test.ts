@@ -141,6 +141,21 @@ describe('FRMS readiness route', () => {
     });
   });
 
+  it('never exposes an unverified historical baseline as ready, regardless of count', async () => {
+    countReadinessBaselineSessionsMock.mockResolvedValue(30);
+    const { db } = createDb(null);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/baseline?date=2026-08-27&protocol=airtrust-pvtb-v2'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { sessions: 30, minimum_sessions: 10, ready: false, protocol_version: 'airtrust-pvtb-v2' },
+    });
+  });
+
   it('requires the tenant-scoped daily check-in before persisting objective trials', async () => {
     const { db, statements } = createDb(null);
     const response = await frmsReadinessRoutes.fetch(
