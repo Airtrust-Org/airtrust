@@ -18,6 +18,7 @@ import { Hono } from 'hono';
 import learnerRoutes from '../../routes/lms-exam-learner';
 import adminRoutes from '../../routes/lms-exam-question-bank-admin';
 import { OTHER_USER, PKG, externalBucket, lmsExamDb, publishExam } from '../helpers/exam-lms-fixture';
+import { examHttpStatus } from '../../routes/lms-exam-route-helpers';
 
 const app = new Hono();
 // The real app maps ApiError (RBAC, auth) through its global handler.
@@ -37,6 +38,13 @@ function call(db: ReturnType<typeof lmsExamDb>, path: string, init: RequestInit 
 const json = (method: string, body?: unknown, headers: Record<string, string> = {}) => ({
   method, headers: { 'content-type': 'application/json', ...headers },
   body: body === undefined ? undefined : JSON.stringify(body),
+});
+
+describe('HTTP mapping de conflito de edição', () => {
+  it('retorna 409 e não 422 para a tentativa presa em edição antiga', () => {
+    expect(examHttpStatus('EXAM_ATTEMPT_EDITION_CHANGED')).toBe(409);
+    expect(examHttpStatus('EXAM_ATTEMPT_NOT_CURRENT')).toBe(409);
+  });
 });
 
 describe('rotas do aluno — prova externa', () => {
