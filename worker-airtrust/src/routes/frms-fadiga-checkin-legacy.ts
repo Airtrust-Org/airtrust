@@ -34,11 +34,11 @@ import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/fr
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
 import { resolveDailyCheckinEvidence } from '../lib/frms/daily-checkin-evidence';
+import { buildDailyCheckinDeclarationEvidence } from '../lib/frms/daily-checkin-declaration';
 import { assertFuncionarioNoEscopoFrms } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
-
 type NormalizedCheckinInput = {
   dataCheckin: string;
   horaDormiu: string | null;
@@ -1191,7 +1191,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
           componentes: scoreBase.componentes,
-          ...kssProvenanceEventFields(input.kssProvenance),
+          ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, new Date().toISOString()),
         }),
         now,
       );
