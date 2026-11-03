@@ -275,13 +275,24 @@ async function runShadowComparison(
   }
 }
 
-async function runTenantIngestion(
+export async function runTenantIngestion(
   db: D1Database,
   empresaId: number | null,
   env: Env,
   logger: CronJobLogger,
   now: Date,
 ) {
+  // A global/unresolved company must not enqueue every tenant's crew or
+  // attempt cross-tenant FRMS recalculation from a legacy SIGVOOS config.
+  if (!Number.isSafeInteger(empresaId) || Number(empresaId) <= 0) {
+    logger.warn('[SIGVOOS_CRON] tenant identity missing; refusing import and FRMS queue');
+    return {
+      outcome: 'FAILED' as const,
+      processedCount: 0,
+      failedCount: 1,
+      errorCode: 'SIGVOOS_CRON_TENANT_REQUIRED',
+    };
+  }
   const scopeKey = buildCronScopeKey(empresaId);
   const operationalDate = formatSaoPauloDate(now);
   const result = await runCronJobWithLease({
@@ -581,7 +592,7 @@ async function validateTripulanteTenant(
   tripulanteId: number,
   empresaId: number | null,
 ): Promise<boolean> {
-  if (empresaId === null) return true;
+  if (empresaId === null) return false;
   const row = await db
     .prepare(
       `SELECT id
@@ -603,7 +614,10 @@ async function runFrmsQueueScope(
   logger: CronJobLogger,
 ) {
   const empresaId = scopeToEmpresaId(scopeKey);
-  if (empresaId === undefined) return;
+  if (empresaId === undefined || empresaId === null) {
+    logger.warn('[SIGVOOS_CRON] ignoring legacy global FRMS queue without tenant identity');
+    return;
+  }
 
   await runCronJobWithLease({
     db,
