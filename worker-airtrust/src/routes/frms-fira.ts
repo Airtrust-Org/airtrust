@@ -458,7 +458,8 @@ firaRoutes.patch(
 firaRoutes.get(
   '/importacao/fira',
   safe(async (c) => {
-    const empresaId = getEmpresaIdSafe(c);
+    const empresaId = getFiraEmpresaId(c);
+    if (!empresaId) return invalidFiraTenantResponse(c);
     const q = c.req.query();
     const result = await buscarHistoricoFira(c.env.DB, {
       empresa_id: empresaId,
