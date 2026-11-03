@@ -117,7 +117,7 @@ export async function getReadinessBaselineSnapshot(
       protocolVersion,
       beforeReferenceDate || null,
       beforeReferenceDate || null,
-      READINESS_PROTOCOL.minimumBaselineSessions,
+      READINESS_PROTOCOL.historicalBaselineStatsSampleSessions,
     )
     .all<{ median_rt_ms: number | null; lapse_rate: number | null }>();
 
@@ -180,6 +180,9 @@ export async function prepareReadinessAssessmentWrites(
     sleepHours: input.sleepHours,
     summary,
     baselineSessions: baseline.sessions,
+    // No device/rested qualification is persisted yet. Historical counts are
+    // descriptive only; never authorize a "preserved" classification.
+    baselineConfirmedSameDeviceAndRested: false,
   });
   const medianRtDeltaPct =
     baseline.medianRtMs != null && baseline.medianRtMs > 0 && summary.medianRtMs != null
