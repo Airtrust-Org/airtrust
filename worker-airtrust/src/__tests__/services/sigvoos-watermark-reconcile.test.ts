@@ -71,6 +71,12 @@ describe('SIGVOOS historical reconciliation progress', () => {
       await persistSigvoosSyncMetadata(db, 7, summary('2026-11-03', '2026-11-03', 12));
       expect(get('last_sync_to')).toBe('2026-11-03');
       expect(get('last_sync_total_raw')).toBe('12');
+      const incomplete = summary('2026-11-04', '2026-11-04', 5);
+      incomplete.totalErros = 1;
+      await expect(persistSigvoosSyncMetadata(db, 7, incomplete))
+        .rejects.toThrow('SIGVOOS_PARTIAL_IMPORT_NOT_CONSOLIDATED');
+      expect(get('last_sync_to')).toBe('2026-11-03');
+      expect(get('last_sync_total_raw')).toBe('12');
       expect(sqlite.prepare('SELECT COUNT(*) AS n FROM integracoes_sigvoos_config WHERE empresa_id = 7 AND chave = ?').get('last_sync_to')?.n).toBe(1);
     } finally {
       sqlite.close();
