@@ -1118,7 +1118,7 @@ export default function FrmsFlightCheckinFadiga() {
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
-                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o PVT-B para manter a validade da medição.
+                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o teste breve de atenção para manter a validade da medição.
                   </div>
                 ) : null}
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
