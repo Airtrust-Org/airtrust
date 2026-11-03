@@ -112,6 +112,8 @@ const ALERT_PRIORIDADE: FrmsOperationalSnapshotAlertCode[] = [
 const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   ROLLING_REGULATORY_EVIDENCE_MISSING:
     'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
+  ROLLING_FLIGHT_COVERAGE_INCOMPLETE:
+    'Nem todos os dias esperados dos acumulados têm origem operacional confirmada; os totais podem estar subestimados',
   CALENDAR_YEAR_FLIGHT_EVIDENCE_MISSING:
     'Horas de voo do ano-calendário ainda incompletas para a avaliação regulatória',
   REST_EVIDENCE_UNKNOWN:
