@@ -20,7 +20,7 @@ function trial(sequence: number, reactionTimeMs: number | null, outcome: Readine
 
 describe('FRMS operational readiness', () => {
   it('pins the active PVT-B response ceiling at 30 seconds', () => {
-    expect(READINESS_PROTOCOL.version).toBe('airtrust-pvtb-v2');
+    expect(READINESS_PROTOCOL.version).toBe('airtrust-brief-v1');
     expect(READINESS_PROTOCOL.responseWindowMs).toBe(30_000);
   });
 
@@ -176,11 +176,11 @@ describe('FRMS operational readiness', () => {
     expect(assessment.criticalSignals).toEqual(expect.arrayContaining(['kss_high', 'sleep_short']));
   });
 
-  it('raises attention only after baseline exists and multiple warning signals are present', () => {
+  it('raises attention on a high lapse rate even without a baseline', () => {
     const assessment = deriveReadinessAssessment({
       kssScore: 7,
       sleepHours: 5.5,
-      baselineSessions: READINESS_PROTOCOL.minimumBaselineSessions,
+      baselineSessions: 0,
       summary: summarizeReadinessTrials(
         [trial(1, 550, 'lapse'), trial(2, 560, 'lapse'), trial(3, 300, 'response')],
         180_000,
@@ -188,7 +188,7 @@ describe('FRMS operational readiness', () => {
     });
 
     expect(assessment.classification).toBe('attention');
-    expect(assessment.baselineReady).toBe(true);
+    expect(assessment.baselineReady).toBe(false);
     expect(assessment.warningSignals).toEqual(
       expect.arrayContaining(['kss_elevated', 'sleep_reduced', 'vigilance_lapses']),
     );
