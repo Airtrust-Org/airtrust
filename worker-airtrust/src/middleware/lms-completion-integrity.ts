@@ -6,7 +6,11 @@ import type { LmsCompletionDecision } from '../services/lms-completion-evidence'
 import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../lib/lms/lms-progress-guardrails';
 import { evaluateScormClosureReadiness, type ScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-import { isEligibleForHistoricEditionCredit, isAuthorizedAdmin99EditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
+import {
+  isEligibleForHistoricEditionCredit,
+  isAuthorizedAdmin99EditionCredit,
+  isAuthorizedAdminEditionCredit20261103,
+} from '../lib/lms/lms-historical-edition-admin-credit';
 import {
   buildEnrollmentCompletionDecision as buildDecision,
   hasStoredRuntimeEvidence,
@@ -446,7 +450,8 @@ async function guardAdministrativeStatus(
           'A conclusão administrativa não pode usar evidências de outra edição.', edition);
       }
       historicEditionCredit = true;
-      authorizedAdmin99EditionCredit = isAuthorizedAdmin99EditionCredit(historicCheck);
+      authorizedAdmin99EditionCredit = isAuthorizedAdmin99EditionCredit(historicCheck) ||
+        isAuthorizedAdminEditionCredit20261103(historicCheck);
       // Edition mismatch is the only waived condition. Continue through the
       // canonical administrative decision below: score/mastery, failure
       // precedence, authorization and content evidence MUST still pass.
