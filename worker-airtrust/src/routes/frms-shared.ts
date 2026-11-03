@@ -4,7 +4,7 @@
  */
 
 import type { Context } from 'hono';
-import type { Env, Variables } from '../types';
+import type { Env, Variables, AppEnv } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { resolvePlatformAccessState, isPlatformAdminAccess } from '../lib/rbac/platform-access';
@@ -102,7 +102,7 @@ export async function auditFrms(
  * demais usuários apenas o próprio cadastro. Vale para leitura e escrita.
  */
 export async function assertFuncionarioNoEscopoFrms(
-  c: FrmsAppContext,
+  c: FrmsAppContext | Context<AppEnv>,
   empresaId: number,
   funcionarioId: number,
 ): Promise<Response | null> {
