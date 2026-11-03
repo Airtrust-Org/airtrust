@@ -114,7 +114,7 @@ export async function listMinhasEadEnrollments(
     .all<Record<string, unknown>>();
 }
 
-/** Total de matrículas do aluno (GET /matriculas/minhas). */
+/** Total de matrículas do aluno (GET /matriculas/minhas); CANCELADO não soma (mesmo contrato de /minhas-ead). */
 export async function countMinhasEnrollments(
   db: D1Database,
   params: { funcionarioId: number; empresaId: number },
@@ -127,7 +127,8 @@ export async function countMinhasEnrollments(
         WHERE m.funcionario_id = ?
           AND m.empresa_id = ?
           AND m.deleted_at IS NULL
-          AND c.deleted_at IS NULL`,
+          AND c.deleted_at IS NULL
+          AND m.status != 'CANCELADO'`,
     )
     .bind(params.funcionarioId, params.empresaId)
     .first<{ n: number }>();
@@ -148,6 +149,7 @@ export async function listMinhasEnrollments(
       JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
       WHERE m.funcionario_id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
         AND c.deleted_at IS NULL
+        AND m.status != 'CANCELADO'
       ORDER BY m.updated_at DESC
       LIMIT ? OFFSET ?
     `,
