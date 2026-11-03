@@ -494,12 +494,12 @@ async function buildDailyFatigueStatus(params: {
 
   const presentationTime = String(checkin.jornada_inicio_prevista || '').trim();
   const wakeTime = String(checkin.wake_time || '').trim();
-  const sleepHours = Number(checkin.horas_sono);
+  const sleepHours = checkin.horas_sono == null ? Number.NaN : Number(checkin.horas_sono);
   const checkinComplete =
     parseTimeToMinutes(presentationTime) != null &&
     parseTimeToMinutes(wakeTime) != null &&
     Number.isFinite(sleepHours) &&
-    sleepHours > 0 &&
+    sleepHours >= 0 &&
     sleepHours <= 24 &&
     isDailyRiskLevel(checkin.computed_risk_level);
 
@@ -515,7 +515,7 @@ async function buildDailyFatigueStatus(params: {
       requires_operational_review: true,
       calculation_available: false,
       presentation_time: parseTimeToMinutes(presentationTime) == null ? null : presentationTime,
-      sleep_hours_24h: Number.isFinite(sleepHours) && sleepHours > 0 ? sleepHours : null,
+      sleep_hours_24h: Number.isFinite(sleepHours) && sleepHours >= 0 ? sleepHours : null,
       sleep_hours_48h:
         checkin.horas_sono_48h == null ? null : Number(checkin.horas_sono_48h || 0),
       wake_time: parseTimeToMinutes(wakeTime) == null ? null : wakeTime,
@@ -672,13 +672,13 @@ router.get('/daily-fatigue', async (c) => {
       const hasCheckin = Boolean(row.checkin_id);
       const presentationTime = String(row.checkin_apresentacao || '').trim();
       const wakeTime = String(row.wake_time || '').trim();
-      const sleepHours = Number(row.horas_sono);
+      const sleepHours = row.horas_sono == null ? Number.NaN : Number(row.horas_sono);
       const checkinComplete =
         hasCheckin &&
         parseTimeToMinutes(presentationTime) != null &&
         parseTimeToMinutes(wakeTime) != null &&
         Number.isFinite(sleepHours) &&
-        sleepHours > 0 &&
+        sleepHours >= 0 &&
         sleepHours <= 24 &&
         isDailyRiskLevel(row.computed_risk_level);
 
@@ -711,7 +711,7 @@ router.get('/daily-fatigue', async (c) => {
         hora_apresentacao: checkinComplete ? presentationTime : null,
         presentation_time: checkinComplete ? presentationTime : null,
         sleep_hours_24h:
-          hasCheckin && Number.isFinite(sleepHours) && sleepHours > 0 ? sleepHours : null,
+          hasCheckin && Number.isFinite(sleepHours) && sleepHours >= 0 ? sleepHours : null,
         sleep_hours_48h:
           hasCheckin && row.horas_sono_48h != null ? Number(row.horas_sono_48h || 0) : null,
         wake_time: hasCheckin && parseTimeToMinutes(wakeTime) != null ? wakeTime : null,
