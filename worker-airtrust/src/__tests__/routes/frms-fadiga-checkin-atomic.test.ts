@@ -129,6 +129,27 @@ describe('daily check-in atomic commit', () => {
     syncMock.mockResolvedValue({ sync: { sincronizado: false, jornada_id: null } });
   });
 
+  it.each(['2099-01-01', '2026-02-30'])(
+    'rejects impossible or future reference day %s before D1 writes',
+    async (date) => {
+      const { db, batch } = fakeDb();
+      const body = (await request().json()) as Record<string, unknown>;
+      const response = await router.fetch(
+        new Request('http://localhost/fadiga-checkin', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, reference_date: date }),
+        }),
+        { DB: db } as Env, {} as ExecutionContext,
+      );
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        success: false, error: 'invalid_reference_date',
+      });
+      expect(batch).not.toHaveBeenCalled();
+      expect(syncMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('commits check-in, readiness and ten trials, then KSS event in ONE D1 batch', async () => {
     const { db, batch } = fakeDb();
     const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }),
