@@ -60,6 +60,7 @@ describe('FRMS daily fatigue self: zero sleep and absent evidence', () => {
       horas_sono_48h: 0,
       fit_for_duty: 1,
       kss_score: 9,
+      kss_provenance: 'CREW_REPORTED',
       score_fadiga: 80,
       nivel_fadiga: 'VERMELHO',
       status_operacional: 'RESTRITO',
