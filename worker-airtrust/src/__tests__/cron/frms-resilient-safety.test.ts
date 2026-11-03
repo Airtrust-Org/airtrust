@@ -5,6 +5,7 @@ import {
   resolveNextSigvoosDay,
   resolveSigvoosNoopWatermark,
   resolveSigvoosIngestionWindow,
+  parseMetadata,
   shouldRunSigvoosAtCurrentHour,
   SIGVOOS_TENANT_BATCH,
   SIGVOOS_TRIPULANTE_ENQUEUE_BATCH,
@@ -49,6 +50,27 @@ describe('FRMS resilient safety', () => {
       .toEqual({ from: '2026-12-29', to: '2026-12-31', retrospective: true });
     expect(() => resolveSigvoosIngestionWindow('2026-11-03', null, '2026-11-03'))
       .toThrow('SIGVOOS_WATERMARK_NOT_CLOSED');
+  });
+
+  it('preserva checkpoint de enfileiramento entre ticks e marcador diário de rechecagem', () => {
+    const restored = parseMetadata(JSON.stringify({
+      stage: 'FRMS_ENQUEUE',
+      periodFrom: '2026-10-31',
+      periodTo: '2026-11-02',
+      totalRaw: 9,
+      totalImportacoes: 2,
+      lastReviewedOperationalDate: '2026-11-03',
+    }));
+    expect(restored).toMatchObject({
+      stage: 'FRMS_ENQUEUE',
+      periodFrom: '2026-10-31',
+      periodTo: '2026-11-02',
+      lastReviewedOperationalDate: '2026-11-03',
+    });
+    expect({ ...restored, skipped: 'OUTSIDE_CONFIGURED_HOUR' }).toMatchObject({
+      stage: 'FRMS_ENQUEUE', lastReviewedOperationalDate: '2026-11-03',
+    });
+    expect(parseMetadata('invalid-json')).toEqual({});
   });
 
   it('executa SIGVOOS somente na hora operacional configurada', () => {
