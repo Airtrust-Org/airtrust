@@ -197,6 +197,18 @@ describe('computeRequirement — oráculo de status', () => {
     expect(result.status_compliance).toBe('CONFORME');
   });
 
+  it('qualificação EAD vencida prevalece sobre matrícula LMS concluída na mesma data', () => {
+    noon('2026-11-03');
+    const result = computeRequirement(
+      rule({ modalidade_requerida: 'EAD', validade_fonte: 'EVIDENCIA' }),
+      [{ ...history('2026-11-03', '2026-11-02'), modalidade: 'EAD' }],
+      [lms('CONCLUIDO', '2026-11-03')],
+    );
+    expect(result.evidencia_origem).toBe('QUALIFICACAO');
+    expect(result.data_validade).toBe('2026-11-02');
+    expect(result.status_compliance).toBe('VENCIDO');
+  });
+
   it('LMS concluído há mais de 12 meses → VENCIDO', () => {
     noon('2026-06-15');
     const result = computeRequirement(
