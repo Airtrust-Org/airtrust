@@ -356,6 +356,11 @@ export function evaluateRegulatoryCompliance(
   }
 
   const pendingValidation: RegulatoryPendingFinding[] = [];
+  if (isHelicopter && input.art42 && input.art42Enforced && input.art42.incompleteDuties > 0) {
+    // Missing historical duty times may conceal a consecutive madrugada or 48h reset.
+    // Proven violations still take precedence over incomplete evidence.
+    unknownReasons.add('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+  }
   if (isHelicopter && input.art42) {
     for (const finding of art42Findings(input.art42)) {
       if (input.art42Enforced) {
