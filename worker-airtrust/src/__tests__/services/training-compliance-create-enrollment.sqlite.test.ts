@@ -113,6 +113,43 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeGreaterThan(0);
   });
 
+  it('supports the deployed legacy aircraft assignment schema without empresa_id for ordinary enrollment', async () => {
+    const db = setup();
+    db.database.exec(`
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+    `);
+    // The staging database has aircraft assignments but no tenant column on that table.
+    // Even an organization-wide rule must compile and create an enrollment safely.
+    expect(await createComplianceEnrollmentAtomic(db.asD1(), request())).toBeGreaterThan(0);
+    expect(count(db, 'lms_matriculas')).toBe(1);
+    expect(count(db, 'lms_matricula_ciclos')).toBe(1);
+    expect(count(db, 'audit_logs')).toBe(1);
+  });
+
+  it('keeps cross-tenant aircraft denied with the deployed legacy assignment schema', async () => {
+    const db = setup();
+    db.database.exec(`
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      UPDATE treinamento_requisitos SET aeronave_modelo='S-92' WHERE id=91;
+      INSERT INTO aeronaves VALUES (30, 2, 'S-92', NULL);
+      INSERT INTO funcionarios_aeronaves VALUES (1000, 30, 1, NULL, NULL, NULL);
+    `);
+    // The employee is in tenant 1 but the linked aircraft belongs to tenant 2.
+    expect(await createComplianceEnrollmentAtomic(db.asD1(), request())).toBeNull();
+    expect(count(db, 'lms_matriculas')).toBe(0);
+    db.database.exec("UPDATE aeronaves SET empresa_id=1 WHERE id=30");
+    expect(await createComplianceEnrollmentAtomic(db.asD1(), request())).toBeGreaterThan(0);
+    expect(count(db, 'lms_matriculas')).toBe(1);
+  });
+
   it('enrolls only with an active explicitly assigned matching aircraft',async()=>{
     const db=setup();
     db.database.exec(`
