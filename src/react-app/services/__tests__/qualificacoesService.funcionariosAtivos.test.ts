@@ -7,6 +7,7 @@ vi.mock('../http-client', () => ({
 }));
 
 import { qualificacoesService } from '../qualificacoes';
+import { listarFuncionariosAtivos } from '../qualificacoesService';
 
 function funcionario(id: number) {
   return {
@@ -41,6 +42,15 @@ function mockPaginatedEmployees(total: number) {
 describe('qualificacoesService.lookups.funcionariosAtivos', () => {
   beforeEach(() => {
     getMock.mockReset();
+  });
+
+  it('preserves the success/data envelope consumed by the React Query employee hook', async () => {
+    mockPaginatedEmployees(151);
+    const response = await listarFuncionariosAtivos();
+    expect(response.success).toBe(true);
+    expect(Array.isArray(response.data)).toBe(true);
+    expect(response.data).toHaveLength(151);
+    expect(response.data?.find((item) => item.id === 150)?.is_instrutor).toBe(1);
   });
 
   it('loads employees beyond the backend 100-row cap including instructors as students', async () => {
