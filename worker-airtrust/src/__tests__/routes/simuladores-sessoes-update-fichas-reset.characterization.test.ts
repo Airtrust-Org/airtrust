@@ -6,7 +6,9 @@ import { createSessoesUpdateSchema } from '../helpers/simuladores-sessoes-update
 
 // Caracterização do sincronismo de instrutor nas fichas e do RESET DO FLUXO DE FICHAS do
 // PUT /sessoes/:id (SQLite real). Fixa o comportamento atual: `resetar_fluxo_fichas` é
-// opt-out (vale true quando ausente) e o reset não protege fichas assinadas ou concluídas.
+// opt-out (vale true quando ausente). O reset PROTEGE fichas com assinatura (aluno ou instrutor)
+// ou conclusão: elas e as respectivas manobras são preservadas; só as fichas em andamento voltam
+// a pendente.
 
 const criarMock = vi.hoisted(() => vi.fn());
 
@@ -102,67 +104,94 @@ beforeEach(() => {
 afterEach(() => sqlite.close());
 
 describe('PUT /sessoes/:id — reset do fluxo de fichas', () => {
-  const RESETADA = {
-    status: 'AVALIACAO_PENDENTE',
-    resultado_final: 'PENDENTE',
-    aprovado: null,
-    observacoes: null,
-    observacoes_gerais: null,
-    assinatura_aluno_ip: null,
-    assinatura_aluno_timestamp: null,
-    assinatura_aluno_imagem: null,
-    assinatura_instrutor_ip: null,
-    assinatura_instrutor_timestamp: null,
-    assinatura_instrutor_imagem: null,
-    assinatura_tripulante: 0,
-    assinatura_instrutor: 0,
-    assinatura_aluno_completa: 0,
-    assinatura_instrutor_completa: 0,
-    data_conclusao: null,
+  const PRESERVADA = {
+    status: 'APROVADO',
+    resultado_final: 'APROVADO',
+    aprovado: 1,
+    observacoes: 'obs',
+    observacoes_gerais: 'obs gerais',
+    assinatura_aluno_ip: '1.1.1.1',
+    assinatura_aluno_timestamp: '2026-05-10 10:00:00',
+    assinatura_aluno_imagem: 'img-a',
+    assinatura_instrutor_ip: '2.2.2.2',
+    assinatura_instrutor_timestamp: '2026-05-10 10:05:00',
+    assinatura_instrutor_imagem: 'img-i',
+    assinatura_tripulante: 1,
+    assinatura_instrutor: 1,
+    assinatura_aluno_completa: 1,
+    assinatura_instrutor_completa: 1,
+    data_conclusao: '2026-05-10',
   };
 
-  it('SEM a flag, um PUT qualquer apaga assinaturas e resultado de ficha já aprovada e assinada', async () => {
+  it('SEM a flag, um PUT qualquer preserva a ficha já aprovada e assinada e suas manobras', async () => {
     const r = await put(10, { observacoes: 'só mudei uma observação' });
     expect(r.status).toBe(200);
-    expect(ficha(501)).toMatchObject(RESETADA);
-    expect(ficha(502)).toMatchObject({ status: 'AVALIACAO_PENDENTE', resultado_final: 'PENDENTE' });
-    expect(manobra(601)).toMatchObject({ resultado: null, observacoes: '' });
-  });
-
-  it('resetar_fluxo_fichas:true (o que o modal de edição envia) reseta do mesmo jeito', async () => {
-    await put(10, { observacoes: 'x', resetar_fluxo_fichas: true });
-    expect(ficha(501)).toMatchObject(RESETADA);
-  });
-
-  it('só resetar_fluxo_fichas:false preserva as fichas assinadas e concluídas', async () => {
-    await put(10, { observacoes: 'x', resetar_fluxo_fichas: false });
-    expect(ficha(501)).toMatchObject({
-      status: 'APROVADO',
-      resultado_final: 'APROVADO',
-      aprovado: 1,
-      assinatura_aluno_imagem: 'img-a',
-      assinatura_instrutor_timestamp: '2026-05-10 10:05:00',
-      assinatura_instrutor_completa: 1,
-      data_conclusao: '2026-05-10',
-    });
+    expect(ficha(501)).toMatchObject(PRESERVADA);
     expect(manobra(601)).toMatchObject({ resultado: 'S', observacoes: 'bom' });
   });
 
-  it('o reset vale para as fichas vivas da sessão, inclusive as especiais; não toca outra sessão nem apagadas', async () => {
-    await put(10, { observacoes: 'x' });
-    expect(ficha(503).status).toBe('AVALIACAO_PENDENTE');
-    expect(ficha(505)).toMatchObject({ status: 'APROVADO' }); // apagada
-    expect(ficha(506)).toMatchObject({ status: 'APROVADO' }); // outra sessão
-    expect(manobra(602)).toMatchObject({ resultado: 'S', observacoes: 'bom' });
+  it('resetar_fluxo_fichas:true (o que o modal de edição envia) também preserva a ficha assinada', async () => {
+    await put(10, { observacoes: 'x', resetar_fluxo_fichas: true });
+    expect(ficha(501)).toMatchObject(PRESERVADA);
+    expect(manobra(601)).toMatchObject({ resultado: 'S', observacoes: 'bom' });
   });
 
-  it('o reset acontece mesmo em sessão CONCLUIDA, sem reverter nada que dependa dela', async () => {
+  it('as fichas em andamento seguem resetadas (inclusive as especiais), com suas manobras', async () => {
+    sqlite.database.exec(`
+      UPDATE fichas_sessao SET status = 'EM_ANDAMENTO', resultado_final = 'REPROVADO', aprovado = 0,
+        observacoes = 'rascunho' WHERE id IN (502, 503);
+      INSERT INTO fichas_sessao_manobras (id, ficha_id, resultado, observacoes) VALUES (603, 502, 'S', 'rascunho');
+    `);
+    await put(10, { observacoes: 'x' });
+    for (const id of [502, 503]) {
+      expect(ficha(id)).toMatchObject({
+        status: 'AVALIACAO_PENDENTE', resultado_final: 'PENDENTE', aprovado: null, observacoes: null,
+      });
+    }
+    expect(manobra(603)).toMatchObject({ resultado: null, observacoes: '' });
+  });
+
+  it.each([
+    ['assinatura do aluno', `assinatura_aluno_timestamp = '2026-05-10 10:00:00'`],
+    ['assinatura do instrutor', `assinatura_instrutor_timestamp = '2026-05-10 10:05:00'`],
+    ['aluno completo', `assinatura_aluno_completa = 1`],
+    ['instrutor completo', `assinatura_instrutor_completa = 1`],
+    ['data de conclusão', `data_conclusao = '2026-05-10'`],
+  ])('uma única marca de %s basta para proteger a ficha', async (_nome, set) => {
+    sqlite.database.exec(`
+      UPDATE fichas_sessao SET status = 'EM_ANDAMENTO', ${set} WHERE id = 502;
+      INSERT INTO fichas_sessao_manobras (id, ficha_id, resultado, observacoes) VALUES (603, 502, 'S', 'bom');
+    `);
+    await put(10, { observacoes: 'x' });
+    expect(ficha(502).status).toBe('EM_ANDAMENTO');
+    expect(manobra(603)).toMatchObject({ resultado: 'S', observacoes: 'bom' });
+  });
+
+  it('resetar_fluxo_fichas:false não reseta nada', async () => {
+    sqlite.database.exec(`UPDATE fichas_sessao SET status = 'EM_ANDAMENTO' WHERE id = 502`);
+    await put(10, { observacoes: 'x', resetar_fluxo_fichas: false });
+    expect(ficha(501)).toMatchObject(PRESERVADA);
+    expect(ficha(502).status).toBe('EM_ANDAMENTO');
+  });
+
+  it('o reset só alcança as fichas vivas da sessão; não toca outra sessão nem apagadas', async () => {
+    sqlite.database.exec(`
+      UPDATE fichas_sessao SET status = 'EM_ANDAMENTO', data_conclusao = NULL, assinatura_aluno_timestamp = NULL,
+        assinatura_instrutor_timestamp = NULL, assinatura_aluno_completa = 0, assinatura_instrutor_completa = 0
+        WHERE id IN (505, 506);
+      INSERT INTO fichas_sessao_manobras (id, ficha_id, resultado, observacoes) VALUES (604, 505, 'S', 'x');
+    `);
+    await put(10, { observacoes: 'x' });
+    expect(ficha(505).status).toBe('EM_ANDAMENTO'); // apagada
+    expect(ficha(506).status).toBe('EM_ANDAMENTO'); // outra sessão
+    expect(manobra(602)).toMatchObject({ resultado: 'S', observacoes: 'bom' });
+    expect(manobra(604)).toMatchObject({ resultado: 'S', observacoes: 'x' });
+  });
+
+  it('em sessão CONCLUIDA as fichas assinadas continuam intactas', async () => {
     sqlite.database.exec(`UPDATE simulador_agendamentos SET status = 'CONCLUIDA' WHERE id = 10`);
     await put(10, { observacoes: 'x' });
-    expect(ficha(501).status).toBe('AVALIACAO_PENDENTE');
-    expect(
-      sqlite.database.prepare('SELECT status FROM simulador_agendamentos WHERE id = 10').get(),
-    ).toEqual({ status: 'CONCLUIDA' }); // a sessão segue concluída; só as fichas voltam a pendente
+    expect(ficha(501)).toMatchObject(PRESERVADA);
   });
 });
 
@@ -182,13 +211,12 @@ describe('PUT /sessoes/:id — sincronismo do instrutor nas fichas', () => {
     expect(instrutorDe(506)).toBe(100); // outra sessão
   });
 
-  it('com o reset padrão, a troca de instrutor alcança também a ficha antes assinada', async () => {
+  it('com o reset padrão, a troca de instrutor deixa a ficha assinada intacta', async () => {
     sqlite.database.exec(`UPDATE funcionarios SET is_instrutor = 1 WHERE id = 202`);
     await put(10, { instrutor_id: 202 });
-    // o sincronismo roda ANTES do reset: 501 estava assinada e manteve o instrutor antigo,
-    // e o reset a devolve a pendente sem trocar o instrutor
+    // 501 estava assinada: mantém instrutor antigo e continua aprovada
     expect(instrutorDe(501)).toBe(100);
-    expect(ficha(501).status).toBe('AVALIACAO_PENDENTE');
+    expect(ficha(501).status).toBe('APROVADO');
     expect(instrutorDe(502)).toBe(202);
   });
 

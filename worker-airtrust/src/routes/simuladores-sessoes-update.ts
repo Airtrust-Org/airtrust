@@ -58,6 +58,68 @@ function getContextUserId(c: { get: (k: string) => unknown }): string {
   return String(c.get('userId') || 'system');
 }
 
+/**
+ * Devolve a pendente o fluxo das fichas da sessão que ainda estão em andamento.
+ *
+ * Ficha com qualquer assinatura (aluno ou instrutor) ou data de conclusão é
+ * documento assinado/concluído: NÃO é resetada, nem as suas manobras. Editar a
+ * sessão (ex.: só uma observação) nunca pode apagar uma avaliação já assinada.
+ */
+const FICHA_ASSINADA_OU_CONCLUIDA_SQL = `(
+  assinatura_aluno_timestamp IS NOT NULL
+  OR assinatura_instrutor_timestamp IS NOT NULL
+  OR COALESCE(assinatura_aluno_completa, 0) = 1
+  OR COALESCE(assinatura_instrutor_completa, 0) = 1
+  OR data_conclusao IS NOT NULL
+)`;
+
+async function resetFluxoFichasEmAndamento(db: D1Database, sessaoId: number | string) {
+  await db
+    .prepare(
+      `UPDATE fichas_sessao
+       SET status = 'AVALIACAO_PENDENTE',
+           resultado_final = 'PENDENTE',
+           aprovado = NULL,
+           observacoes = NULL,
+           observacoes_gerais = NULL,
+           assinatura_aluno_ip = NULL,
+           assinatura_aluno_timestamp = NULL,
+           assinatura_aluno_imagem = NULL,
+           assinatura_instrutor_ip = NULL,
+           assinatura_instrutor_timestamp = NULL,
+           assinatura_instrutor_imagem = NULL,
+           assinatura_tripulante = 0,
+           assinatura_instrutor = 0,
+           assinatura_aluno_completa = 0,
+           assinatura_instrutor_completa = 0,
+           data_conclusao = NULL,
+           updated_at = datetime('now')
+       WHERE agendamento_slot_id = ?
+         AND deleted_at IS NULL
+         AND NOT ${FICHA_ASSINADA_OU_CONCLUIDA_SQL}`,
+    )
+    .bind(sessaoId)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE fichas_sessao_manobras
+       SET resultado = NULL,
+           observacoes = '',
+           updated_at = datetime('now')
+       WHERE ficha_id IN (
+         SELECT id
+         FROM fichas_sessao
+         WHERE agendamento_slot_id = ?
+           AND deleted_at IS NULL
+           AND NOT ${FICHA_ASSINADA_OU_CONCLUIDA_SQL}
+       )
+         AND deleted_at IS NULL`,
+    )
+    .bind(sessaoId)
+    .run();
+}
+
 /** Shape of a participante item as received in the PUT /sessoes/:id request body. */
 interface SessaoParticipanteInput {
   funcionario_id?: string | number;
@@ -223,46 +285,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     }
 
     if (resetarFluxoFichas) {
-      await c.env.DB.prepare(
-        `UPDATE fichas_sessao
-         SET status = 'AVALIACAO_PENDENTE',
-             resultado_final = 'PENDENTE',
-             aprovado = NULL,
-             observacoes = NULL,
-             observacoes_gerais = NULL,
-             assinatura_aluno_ip = NULL,
-             assinatura_aluno_timestamp = NULL,
-             assinatura_aluno_imagem = NULL,
-             assinatura_instrutor_ip = NULL,
-             assinatura_instrutor_timestamp = NULL,
-             assinatura_instrutor_imagem = NULL,
-             assinatura_tripulante = 0,
-             assinatura_instrutor = 0,
-             assinatura_aluno_completa = 0,
-             assinatura_instrutor_completa = 0,
-             data_conclusao = NULL,
-             updated_at = datetime('now')
-         WHERE agendamento_slot_id = ?
-           AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .run();
-
-      await c.env.DB.prepare(
-        `UPDATE fichas_sessao_manobras
-         SET resultado = NULL,
-             observacoes = '',
-             updated_at = datetime('now')
-         WHERE ficha_id IN (
-           SELECT id
-           FROM fichas_sessao
-           WHERE agendamento_slot_id = ?
-             AND deleted_at IS NULL
-         )
-           AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .run();
+      await resetFluxoFichasEmAndamento(c.env.DB, id);
     }
 
     // ATUALIZAR PARTICIPANTES + SINCRONIZAR FICHAS
@@ -501,46 +524,7 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       }
 
       if (resetarFluxoFichas) {
-        await c.env.DB.prepare(
-          `UPDATE fichas_sessao
-           SET status = 'AVALIACAO_PENDENTE',
-               resultado_final = 'PENDENTE',
-               aprovado = NULL,
-               observacoes = NULL,
-               observacoes_gerais = NULL,
-               assinatura_aluno_ip = NULL,
-               assinatura_aluno_timestamp = NULL,
-               assinatura_aluno_imagem = NULL,
-               assinatura_instrutor_ip = NULL,
-               assinatura_instrutor_timestamp = NULL,
-               assinatura_instrutor_imagem = NULL,
-               assinatura_tripulante = 0,
-               assinatura_instrutor = 0,
-               assinatura_aluno_completa = 0,
-               assinatura_instrutor_completa = 0,
-               data_conclusao = NULL,
-               updated_at = datetime('now')
-           WHERE agendamento_slot_id = ?
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .run();
-
-        await c.env.DB.prepare(
-          `UPDATE fichas_sessao_manobras
-           SET resultado = NULL,
-               observacoes = '',
-               updated_at = datetime('now')
-           WHERE ficha_id IN (
-             SELECT id
-             FROM fichas_sessao
-             WHERE agendamento_slot_id = ?
-               AND deleted_at IS NULL
-           )
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .run();
+        await resetFluxoFichasEmAndamento(c.env.DB, id);
       }
 
       try {
