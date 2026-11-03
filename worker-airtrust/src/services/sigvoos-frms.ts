@@ -1926,7 +1926,21 @@ export async function fetchCompleteSigvoosWindow(
       page_size: pageSize,
       limit: pageSize,
     });
-    const pageItems = getArrayPayload(payload.data ?? payload);
+    const payloadStatus = payload.status;
+    if (
+      payload.success === false ||
+      payloadStatus === false ||
+      (typeof payloadStatus === 'number' && payloadStatus >= 400) ||
+      (typeof payloadStatus === 'string' &&
+        ['ERRO', 'ERROR', 'FALHA', 'FAILED'].includes(payloadStatus.trim().toUpperCase()))
+    ) {
+      throw new Error('SIGVOOS_UPSTREAM_SEARCH_REJECTED');
+    }
+    const recordsEnvelope = payload.data ?? payload;
+    if (!isRecognizedSigvoosRecordArray(recordsEnvelope)) {
+      throw new Error('SIGVOOS_UNEXPECTED_RESPONSE_SHAPE');
+    }
+    const pageItems = getArrayPayload(recordsEnvelope);
 
     if (page > 1 && pageItems.length > 0) {
       const currentPageSignature = JSON.stringify(pageItems);
@@ -1943,6 +1957,25 @@ export async function fetchCompleteSigvoosWindow(
   }
 
   throw new Error('SIGVOOS_PAGINATION_INCOMPLETE');
+}
+
+/**
+ * An upstream error document or a changed response envelope must never be
+ * mistaken for a valid empty flight list. Empty arrays are legitimate; absent
+ * or malformed arrays are not evidence that the day had zero flights.
+ */
+function isRecognizedSigvoosRecordArray(value: unknown, depth = 0): boolean {
+  if (Array.isArray(value)) {
+    return value.every(
+      (item) => item !== null && typeof item === 'object' && !Array.isArray(item),
+    );
+  }
+  if (!value || typeof value !== 'object' || depth >= 3) return false;
+  const object = value as Record<string, unknown>;
+  return ['main', 'data', 'results', 'items', 'rows', 'payload', 'result'].some(
+    (key) => Object.prototype.hasOwnProperty.call(object, key) &&
+      isRecognizedSigvoosRecordArray(object[key], depth + 1),
+  );
 }
 
 export function shouldClearExistingSigvoosData(clearExisting?: boolean): boolean {
