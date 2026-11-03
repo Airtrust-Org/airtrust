@@ -7,6 +7,7 @@ const base = {
   wakeTime: '05:00',
   sleepHours: 8,
   kssScore: 4,
+  kssProvenance: 'CREW_REPORTED',
   fitForDuty: 1,
   storedRiskLevel: 'normal',
 };
@@ -22,6 +23,9 @@ describe('FRMS daily fatigue: fail-closed persisted evidence', () => {
     { kssScore: null },
     { kssScore: 0 },
     { kssScore: 10 },
+    { kssProvenance: null },
+    { kssProvenance: 'DERIVED' },
+    { kssProvenance: 'DEFAULTED' },
     { fitForDuty: null },
     { sleepHours: null },
     { sleepHours: -1 },
