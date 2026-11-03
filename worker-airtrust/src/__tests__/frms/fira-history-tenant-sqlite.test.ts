@@ -31,7 +31,7 @@ describe('FIRA history: tenant and crew ownership', () => {
             },
           };
         },
-      } as D1Database;
+      } as unknown as D1Database;
 
       const results = await buscarHistoricoFira(db, { empresa_id: 7 });
       expect(results.total).toBe(2);
