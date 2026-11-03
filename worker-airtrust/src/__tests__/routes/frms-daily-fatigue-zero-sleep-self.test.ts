@@ -79,7 +79,7 @@ describe('FRMS daily fatigue self: zero sleep and absent evidence', () => {
       data: {
         date: '2026-11-03', funcionario_id: 70, status: 'critical',
         calculation_available: true, sleep_hours_24h: 0,
-        requires_operational_review: 1,
+        requires_operational_review: true,
       },
     });
     expect(statements.some((q) => q.sql.includes('FROM frms_fadiga_checkin') &&
