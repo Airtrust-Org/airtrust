@@ -114,6 +114,7 @@ import {
   auditFrms,
   assertTripulanteEmpresa,
   assertJornadaEmpresa,
+  assertFuncionarioNoEscopoFrms,
   resolveFuncionarioId,
 } from './frms-shared';
 const frmsRoutes = new Hono<{ Bindings: Env; Variables: Partial<Variables> }>();
@@ -948,6 +949,8 @@ frmsRoutes.get(
           403,
         );
       }
+      const outOfScope = await assertFuncionarioNoEscopoFrms(c, empresaId, Number(func.id));
+      if (outOfScope) return outOfScope;
     }
 
     // Triagem operacional usa apenas fonte canônica (SIGVOOS); FIRA/MANUAL não inflam o score.

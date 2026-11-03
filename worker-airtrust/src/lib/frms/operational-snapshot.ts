@@ -14,7 +14,7 @@ import {
 } from './activity-context';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
 import { costaDoSolAct2025_2027Applies, lawArt42EnforcementEnabled, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
-import { evaluateLawArt42Madrugadas, type Art42DutyInput } from './law-art42-madrugadas';
+import { buildArt42DutiesByCrew, evaluateLawArt42Madrugadas } from './law-art42-madrugadas';
 import { loadLegalWorkMonth, type LegalWorkMonthlyCrewSummary } from './legal-work-service';
 import { sumLegalWorkRollingDays } from './legal-work-time';
 import {
@@ -1540,38 +1540,6 @@ export function deriveCostaDoSolMissionEvidenceForDate(
   };
 }
 
-/**
- * Jornadas por tripulante para o art. 42: a jornada realizada com dado
- * operacional prevalece; sem ela, a escala programada permite antecipar a
- * madrugada antes da operação.
- */
-function buildArt42DutiesByCrew(rows: OperationalSnapshotRows): Map<number, Art42DutyInput[]> {
-  const realized = new Map<string, Art42DutyInput[]>();
-  for (const row of rows.jornadas) {
-    if (asNumber(row.has_operational_data) !== 1) continue;
-    const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
-    const list = realized.get(key) ?? [];
-    list.push({ data: row.data_operacional, hora_apresentacao: row.hora_apresentacao, hora_termino: row.hora_termino });
-    realized.set(key, list);
-  }
-  const byCrew = new Map<number, Art42DutyInput[]>();
-  const push = (funcionarioId: number, duty: Art42DutyInput) => {
-    const list = byCrew.get(funcionarioId) ?? [];
-    list.push(duty);
-    byCrew.set(funcionarioId, list);
-  };
-  for (const [key, duties] of realized) {
-    const funcionarioId = Number(key.split('::')[1]);
-    for (const duty of duties) push(funcionarioId, duty);
-  }
-  for (const row of rows.escalas) {
-    const funcionarioId = asNumber(row.funcionario_id);
-    if (realized.has(`${row.data_operacional}::${funcionarioId}`)) continue;
-    push(funcionarioId, { data: row.data_operacional, hora_apresentacao: row.hora_apresentacao, hora_termino: row.hora_termino });
-  }
-  return byCrew;
-}
-
 function collectOperationalKeys(
   rows: OperationalSnapshotRows,
   start?: string,
@@ -1750,7 +1718,7 @@ export async function listFrmsOperationalSnapshot(
     if (sanitized) rollingByKey.set(`${row.data_referencia}::${Number(row.funcionario_id)}`, sanitized);
   }
   const art42Enforced = lawArt42EnforcementEnabled({ limitsJson: operationalContext.regulatoryLimitsJson });
-  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows);
+  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows.jornadas, contextRows.escalas);
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
   const complianceKeys = new Set(collectOperationalKeys(contextRows));
   for (const key of complianceKeys) {

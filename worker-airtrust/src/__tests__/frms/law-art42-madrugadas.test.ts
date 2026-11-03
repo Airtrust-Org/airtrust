@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
+import { buildArt42DutiesByCrew, evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
 
 const duty = (data: string, hora_apresentacao: string | null, hora_termino: string | null) => ({
   data, hora_apresentacao, hora_termino,
@@ -77,5 +77,19 @@ describe('Lei 13.475 art. 42 — madrugadas', () => {
       duty('2027-01-01', '05:00', '12:00'),
     ];
     expect(evaluateLawArt42Madrugadas('2027-01-01', history).violations).toContain('LAW_ART42_CONSECUTIVE');
+  });
+
+  it('jornada realizada prevalece sobre a escala do mesmo dia; escala antecipa dias futuros', () => {
+    const map = buildArt42DutiesByCrew(
+      [{ data_operacional: '2026-11-03', funcionario_id: 7, hora_apresentacao: '07:00', hora_termino: '15:00', has_operational_data: 1 }],
+      [
+        { data_operacional: '2026-11-03', funcionario_id: 7, hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data_operacional: '2026-11-04', funcionario_id: 7, hora_apresentacao: '05:30', hora_termino: '14:00' },
+      ],
+    );
+    expect(map.get(7)).toEqual([
+      { data: '2026-11-03', hora_apresentacao: '07:00', hora_termino: '15:00' },
+      { data: '2026-11-04', hora_apresentacao: '05:30', hora_termino: '14:00' },
+    ]);
   });
 });

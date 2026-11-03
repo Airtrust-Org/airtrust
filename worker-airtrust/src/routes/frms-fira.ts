@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requirePermission, requireRole } from '../middleware/rbac';
 import { rateLimiter } from '../middleware/rate-limit';
 import { reprocessarTripulanteCompleto } from '../lib/frms/db-service';
 import { LIMITES_DEFAULT } from '../lib/frms/types';
@@ -77,6 +77,8 @@ function invalidFiraTenantResponse(c: Parameters<typeof getEmpresaIdSafe>[0]): R
 firaRoutes.post(
   '/importacao/fira/upload',
   rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-fira-upload' }),
+  // Importação FIRA é dado de entrada administrativo (AUD-016).
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const operadorId = await resolveFuncionarioId(c);
 
@@ -149,6 +151,8 @@ firaRoutes.post(
 firaRoutes.post(
   '/importacao/fira/upload-lote',
   rateLimiter({ maxRequests: 5, windowSeconds: 60, keyPrefix: 'frms-fira-lote' }),
+  // Importação FIRA é dado de entrada administrativo (AUD-016).
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const operadorId = await resolveFuncionarioId(c);
 
@@ -268,6 +272,8 @@ firaRoutes.post(
 firaRoutes.post(
   '/importacao/fira/upload-multipagina',
   rateLimiter({ maxRequests: 10, windowSeconds: 60, keyPrefix: 'frms-fira-multi' }),
+  // Importação FIRA é dado de entrada administrativo (AUD-016).
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const operadorId = await resolveFuncionarioId(c);
 
@@ -489,6 +495,7 @@ firaRoutes.get(
  */
 firaRoutes.delete(
   '/importacao/fira/:importacaoId',
+  requirePermission('frms', 'editar', 'admin', 'manager'),
   safe(async (c) => {
     const importacaoId = c.req.param('importacaoId') ?? '';
     const empresaId = getFiraEmpresaId(c);

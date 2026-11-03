@@ -148,3 +148,38 @@ export function evaluateLawArt42Madrugadas(
   if (in168h > LAW_ART42_MAX_IN_168H) violations.push('LAW_ART42_168H');
   return { touchesMadrugada: true, consecutiveMadrugadas: consecutive, madrugadasIn168h: in168h, violations, incompleteDuties };
 }
+
+interface Art42SourceRow {
+  data_operacional: string;
+  funcionario_id: number | string;
+  hora_apresentacao: string | null;
+  hora_termino: string | null;
+}
+
+/**
+ * Jornadas por tripulante para o art. 42: a jornada realizada com dado
+ * operacional prevalece; sem ela, a escala programada permite antecipar a
+ * madrugada antes da operação.
+ */
+export function buildArt42DutiesByCrew(
+  jornadas: ReadonlyArray<Art42SourceRow & { has_operational_data: number | string }>,
+  escalas: ReadonlyArray<Art42SourceRow>,
+): Map<number, Art42DutyInput[]> {
+  const byCrew = new Map<number, Art42DutyInput[]>();
+  const realizedKeys = new Set<string>();
+  const push = (row: Art42SourceRow) => {
+    const funcionarioId = Number(row.funcionario_id);
+    const list = byCrew.get(funcionarioId) ?? [];
+    list.push({ data: row.data_operacional, hora_apresentacao: row.hora_apresentacao, hora_termino: row.hora_termino });
+    byCrew.set(funcionarioId, list);
+  };
+  for (const row of jornadas) {
+    if (Number(row.has_operational_data) !== 1) continue;
+    realizedKeys.add(`${row.data_operacional}::${Number(row.funcionario_id)}`);
+    push(row);
+  }
+  for (const row of escalas) {
+    if (!realizedKeys.has(`${row.data_operacional}::${Number(row.funcionario_id)}`)) push(row);
+  }
+  return byCrew;
+}

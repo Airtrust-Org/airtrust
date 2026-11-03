@@ -332,3 +332,26 @@ Avaliação global: **não confiável para decisão autônoma; utilizável como 
 ## 15. Resposta à pergunta final (revisada com a Parte II)
 
 O FRMS acrescenta mecanismos reais além das obrigações legais — check-in com KSS, apuração legal completa do trabalho, folga pós-missão, projeção pela escala e um fluxo de casos que exige responsável, prazo e eficácia. Mas hoje **não pode ser considerado um mecanismo efetivo e confiável de gerenciamento do risco de fadiga** porque: (1) qualquer usuário da empresa pode alterar jornadas e dar ciência a eventos de terceiros (AUD-015/017), o que compromete a integridade da evidência; (2) o recálculo apaga as decisões registradas (AUD-019), quebrando a cadeia decisão → ação → eficácia; (3) dias não importados contam como zero (AUD-005/025); (4) os scores não são validados e ainda emitem rótulo de aptidão (AUD-022). Corrigidos os itens 1–7 do plano, o FRMS passa a ser um apoio confiável à coordenação; a validação científica (#1476) define se os scores podem ir além de triagem.
+
+## 16. Status de execução das correções (atualizado em 03/11/2026)
+
+| Achado | Status | Onde | Testes |
+|---|---|---|---|
+| AUD-001 art. 42 | Implementado; ativação depende de `law_art42_enforced` | `law-art42-madrugadas.ts`, `regulatory-compliance.ts` | `law-art42-madrugadas.test.ts`, `regulatory-compliance.test.ts` |
+| AUD-002 conformidade visível | Implementado | `FrmsRegulatoryCompliancePanel.tsx` | `FrmsRegulatoryCompliancePanel.test.tsx` |
+| AUD-003/004 pousos | Implementado | `operational-load-resolver.ts`, `operational-load.ts` | `operational-load*.test.ts` |
+| AUD-006 acumulado nulo | Implementado | `sanitizeRollingRegulatoryEvidence` | `regulatory-compliance.test.ts` |
+| AUD-007 | Refutado | — | — |
+| AUD-008 art. 37 | Implementado (sem composição da tripulação → não verificável) | `regulatory-compliance.ts` | idem |
+| AUD-009 | Parcial (fonte LAW; outros tenants pendentes) | idem | idem |
+| AUD-010 vigência ACT | Implementado | `compliance-policy.ts`, `frms-fadiga-acumulada.ts` | idem |
+| **AUD-015 escrita sem papel** | **Implementado** — `assertTripulanteEmpresa`/`assertJornadaEmpresa` exigem também o escopo de setor: admin = empresa; gestor = seus setores; demais = só o próprio cadastro | `routes/frms-shared.ts` (`assertFuncionarioNoEscopoFrms`) | `frms-individual-scope.test.ts` |
+| **AUD-016 FIRA** | **Implementado** — `requirePermission('frms','editar','admin','manager')` em upload (3) e exclusão | `routes/frms-fira.ts` | `frms-fira-tenant.test.ts` (negativo) |
+| **AUD-017 ack alheio** | **Implementado** — não gestor só dá ciência ao próprio evento | `routes/frms-read-ack.ts` | `frms-read-ack-events.test.ts` (negativo + positivo) |
+| **AUD-018 leitura individual** | **Implementado** — mesma regra do AUD-015, inclusive `GET /score-atual` | `frms-shared.ts`, `frms.ts` | `frms-individual-scope.test.ts` |
+| **AUD-019 recálculo apaga casos** | **Implementado** — recálculo só substitui alertas não trabalhados; caso existente de nível ≥ bloqueia duplicata; piora de nível gera alerta novo | `alert-case-preservation.ts`, `db-service-jornadas.ts` | `alert-case-preservation.test.ts` (SQLite real) |
+| **AUD-020 dedupe** | **Implementado** — suprime só repetição de nível igual ou menor | `cron/frms-daily-check.ts` | regra coberta por `alert-case-preservation.test.ts`; governança do cron sem regressão |
+| AUD-005, 011–014, 021–031 (exceto 030) | Especificados, não implementados | — | — |
+| AUD-030 | Não implementado (P3) | — | — |
+
+**Risco de implantação de AUD-015/018 (verificar antes do deploy):** gestores que acessam fichas FRMS precisam estar vinculados aos setores dos tripulantes em `setores_gestores` (mesma regra já aplicada nos Relatórios). Gestor sem vínculo passa a receber 403 nas fichas individuais (`FRMS_INDIVIDUAL_SCOPE_DENIED`). Consulta de leitura recomendada antes do deploy: gestores com papel `manager` sem linha ativa em `setores_gestores`. Se o produto não deve permitir que o tripulante grave a própria jornada/escala, restringir também o modo `self` às leituras (decisão pendente).

@@ -3,6 +3,7 @@
  */
 
 import { LIMITES_DEFAULT, type FrmsJornada, type LimitesMap, type FrmsFatorizacao } from './types';
+import { ENGAGED_CASE_SQL, alertsNotCoveredByCases, type PreservedCaseAlert } from './alert-case-preservation';
 import {
   calcFatorizacao,
   calcEffectiveness,
@@ -779,15 +780,24 @@ export async function recalcularPipeline(
     limites,
   });
 
-  // 8. Persistir alertas
+  // 8. Persistir alertas — casos com ciência, tratamento ou encerramento são
+  // preservados; só alertas ainda não trabalhados são substituídos.
   await db
     .prepare(
-      'UPDATE frms_alerta SET deleted_at = ?, updated_at = ? WHERE jornada_id = ? AND deleted_at IS NULL',
+      `UPDATE frms_alerta SET deleted_at = ?, updated_at = ?
+        WHERE jornada_id = ? AND deleted_at IS NULL AND NOT ${ENGAGED_CASE_SQL}`,
     )
     .bind(timestamp, timestamp, jornada.id)
     .run();
+  const casosPreservados = await db
+    .prepare(
+      `SELECT tipo_limite, nivel FROM frms_alerta
+        WHERE jornada_id = ? AND deleted_at IS NULL AND ${ENGAGED_CASE_SQL}`,
+    )
+    .bind(jornada.id)
+    .all<PreservedCaseAlert>();
 
-  for (const a of alertas) {
+  for (const a of alertsNotCoveredByCases(alertas, casosPreservados.results ?? [])) {
     await persistirAlerta(db, a);
   }
 
