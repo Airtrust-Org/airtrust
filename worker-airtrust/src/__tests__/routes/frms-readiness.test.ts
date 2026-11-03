@@ -245,6 +245,25 @@ describe('FRMS readiness route', () => {
     expect(persistReadinessAssessmentMock).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    { reference_date: '2026-08-27', duration_ms: 60_000, trials: validTrials, protocol_version: 'airtrust-pvtb-v2' },
+    { reference_date: '2099-01-01', duration_ms: 60_000, trials: validTrials, protocol_version: 'airtrust-brief-v1' },
+    { reference_date: '2026-02-30', duration_ms: 60_000, trials: validTrials },
+  ])('blocks legacy protocol or invalid date before reading check-in', async (payload) => {
+    const { db, statements } = createDb({ id: 'checkin', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 7 });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(400);
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+    expect(statements.some((q) => q.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+  });
+
   it('rejects malformed trial payloads before any readiness persistence', async () => {
     const { db, statements } = createDb({ id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8 });
     const response = await frmsReadinessRoutes.fetch(
