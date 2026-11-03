@@ -55,6 +55,7 @@ describe('FRMS Data Transparency - historico', () => {
           funcionario_nome: 'Trip 1',
           data_checkin: '2026-05-28',
           kss_score: 3,
+          kss_provenance: 'CREW_REPORTED',
           horas_sono: 7,
           qualidade_sono: 4,
           score_fadiga: 24,
@@ -69,6 +70,7 @@ describe('FRMS Data Transparency - historico', () => {
           funcionario_nome: 'Trip 2',
           data_checkin: '2026-05-28',
           kss_score: 6,
+          kss_provenance: 'DEFAULTED',
           horas_sono: 5,
           qualidade_sono: 2,
           score_fadiga: 68,
@@ -90,6 +92,8 @@ describe('FRMS Data Transparency - historico', () => {
 
     expect(screen.getByText('Dado informado')).toBeInTheDocument();
     expect(screen.getByText('Estimativa legada')).toBeInTheDocument();
+    expect(screen.getByText('— (origem não verificada)')).toBeInTheDocument();
+    expect(screen.getByText('KSS sem origem verificada — revisão necessária')).toBeInTheDocument();
     expect(screen.queryByText(/SAFTE-FAST validado/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^inapto$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^apto$/i)).not.toBeInTheDocument();
