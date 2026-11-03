@@ -711,14 +711,14 @@ test('expired synthetic evidence renews cycle two and issues an authorized PDF',
   expect(secondHistoryId).toBeGreaterThan(0);
   expect(secondHistoryId).not.toBe(firstHistoryId);
 
-  const certificate = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados/gerar`, {
+  const certificate = await api(page, `/api/certificados/historico/${secondHistoryId}/certificados/gerar`, {
     method: 'POST', body: {},
   });
   expect(certificate.ok, JSON.stringify(certificate.json)).toBe(true);
   expect(certificate.json.data).toMatchObject({ id: expect.any(Number), r2_key: expect.any(String) });
   expect(certificate.json.data.r2_key).toMatch(/^certificados\/empresa-\d+\/funcionario-\d+\/historico-\d+\/[0-9a-f-]+\.pdf$/i);
 
-  const listed = await api(page, `/api/qualificacoes/historico/${secondHistoryId}/certificados`);
+  const listed = await api(page, `/api/certificados/historico/${secondHistoryId}/certificados`);
   expect(listed.ok).toBe(true);
   expect(listed.json.data.some((item: any) => Number(item.documento_id || item.id) === Number(certificate.json.data.id))).toBe(true);
 
