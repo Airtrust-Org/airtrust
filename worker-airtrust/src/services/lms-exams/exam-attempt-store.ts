@@ -231,19 +231,28 @@ export async function startExamAttempt(db: D1Database, learner: ExamLearner,
   scope: ExamCycleScope, idempotencyKey: string): Promise<LearnerAttemptView> {
   requireLearner(learner); requireScope(scope);
   if (typeof idempotencyKey !== 'string' || !IDEM.test(idempotencyKey)) deny('EXAM_IDEMPOTENCY_KEY_INVALID');
-  const same = (r: AttemptRow) => r.started_by === learner.userId && r.curso_id === scope.cursoId &&
-    r.package_sha256 === scope.packageSha256;
+  const checkedReplay = (r: AttemptRow): Promise<LearnerAttemptView> => {
+    // A content replacement must never turn into a misleading access-denied
+    // or silently reopen the attempt for a different package in the same cycle.
+    if (r.started_by !== learner.userId || r.curso_id !== scope.cursoId) {
+      deny('EXAM_ATTEMPT_FORBIDDEN');
+    }
+    if (r.package_sha256 !== scope.packageSha256) {
+      deny('EXAM_ATTEMPT_EDITION_CHANGED');
+    }
+    return buildView(db, r);
+  };
   const reuse = async (): Promise<LearnerAttemptView | null> => {
     const replay = await db.prepare(
       `SELECT ${ATTEMPT_COLUMNS} FROM lms_exam_attempts ` +
       'WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? AND idempotency_key=? LIMIT 1'
     ).bind(learner.empresaId, scope.matriculaId, scope.cicloId, idempotencyKey).first<AttemptRow>();
-    if (replay) return same(replay) ? buildView(db, replay) : deny('EXAM_ATTEMPT_FORBIDDEN');
+    if (replay) return checkedReplay(replay);
     const open = await db.prepare(
       `SELECT ${ATTEMPT_COLUMNS} FROM lms_exam_attempts ` +
       "WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? AND state='IN_PROGRESS' LIMIT 1"
     ).bind(learner.empresaId, scope.matriculaId, scope.cicloId).first<AttemptRow>();
-    if (open) return same(open) ? buildView(db, open) : deny('EXAM_ATTEMPT_FORBIDDEN');
+    if (open) return checkedReplay(open);
     return null;
   };
   const existing = await reuse();

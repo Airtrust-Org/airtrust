@@ -119,6 +119,15 @@ describe('tentativa do aluno', () => {
     expect(a.sections[0].questions).toHaveLength(10);
     expect(JSON.stringify(a)).not.toMatch(/correctChoiceId|explanation|SEGREDO|contentSha256/);
   });
+  it('troca de edição dentro do ciclo não reutiliza tentativa antiga nem apaga histórico', async () => {
+    await ready();
+    const old = await startExamAttempt(db.asD1(), learner, scope, 'idem-source-0001');
+    const nextScope = { ...scope, packageSha256: 'b'.repeat(64) };
+    await expect(startExamAttempt(db.asD1(), learner, nextScope, 'idem-source-0002'))
+      .rejects.toThrow('EXAM_ATTEMPT_EDITION_CHANGED');
+    expect((await startExamAttempt(db.asD1(), learner, scope, 'idem-source-0003')).attemptId)
+      .toBe(old.attemptId);
+  });
   it('outro aluno ou outro tenant não lê, grava nem envia', async () => {
     await ready();
     const a = await startExamAttempt(db.asD1(), learner, scope, 'idem-00000001');

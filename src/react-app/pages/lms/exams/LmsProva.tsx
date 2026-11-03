@@ -30,6 +30,8 @@ const MESSAGES: Record<string, string> = {
   EXAM_STUDY_NOT_COMPLETE: 'Conclua todo o conteúdo antes de iniciar a prova.',
   EXAM_ALREADY_PASSED: 'Você já foi aprovado nesta prova.',
   EXAM_ATTEMPT_SEALED: 'Esta tentativa já foi enviada.',
+  EXAM_ATTEMPT_NOT_CURRENT: 'Esta tentativa não corresponde mais à matrícula, ao ciclo ou à edição ativa. Solicite a regularização à gestão de treinamento. Não reinicie sua matrícula.',
+  EXAM_ATTEMPT_EDITION_CHANGED: 'O conteúdo foi substituído durante uma tentativa aberta. Solicite à gestão de treinamento a regularização da edição e do ciclo. Suas respostas anteriores não foram apagadas.',
   EXAM_ENROLLMENT_NOT_FOUND: 'Matrícula não encontrada.',
 };
 const explain = (code?: string) => (code && MESSAGES[code]) || 'Não foi possível concluir a operação. Tente novamente.';
@@ -94,13 +96,15 @@ export default function LmsProva(): React.ReactElement {
         body: JSON.stringify({ questionId, choiceId }),
       });
       setStatus('Resposta salva.');
-    } catch {
+    } catch (e) {
       setAnswers(a => {
         const next = { ...a };
         if (previous) next[questionId] = previous; else delete next[questionId];
         return next;
       });
-      setStatus('Não foi possível salvar esta resposta. Selecione novamente.');
+      const code = (e as { code?: string }).code;
+      setStatus(code && MESSAGES[code] ? explain(code) :
+        'Não foi possível salvar esta resposta. Selecione novamente.');
     } finally {
       saveInFlight.current = false;
       setSaving(false);

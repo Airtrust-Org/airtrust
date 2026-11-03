@@ -103,6 +103,15 @@ describe('Prova final do aluno', () => {
     expect(screen.queryByRole('button', { name: 'Concluir treinamento' })).toBeNull();
   });
 
+  it('explica alteração de edição sem orientar o aluno a reiniciar a matrícula', async () => {
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    mocked.mockResolvedValueOnce(fail('EXAM_ATTEMPT_EDITION_CHANGED', 409));
+    fireEvent.click(await screen.findByRole('button', {name:'Iniciar prova'}));
+    const msg = await screen.findByRole('alert');
+    expect(msg.textContent).toMatch(/conteúdo foi substituído/);
+    expect(msg.textContent).toMatch(/respostas anteriores não foram apagadas/);
+  });
   it('indica e retoma a tentativa aberta sem criar uma segunda prova', async () => {
     mocked.mockResolvedValueOnce(ok(state('READY', {hasOpenAttempt:true})));
     renderPage();
