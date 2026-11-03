@@ -33,14 +33,11 @@ import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
 import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
+import { resolveDailyCheckinEvidence } from '../lib/frms/daily-checkin-evidence';
 import { assertFuncionarioNoEscopoFrms } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
 type FrmsContext = Context<AppEnv>;
-
-function isDailyRiskLevel(value: unknown): value is DailyRiskLevel {
-  return value === 'normal' || value === 'attention' || value === 'critical' || value === 'unfit_for_duty';
-}
 
 type NormalizedCheckinInput = {
   dataCheckin: string;
@@ -495,13 +492,13 @@ async function buildDailyFatigueStatus(params: {
   const presentationTime = String(checkin.jornada_inicio_prevista || '').trim();
   const wakeTime = String(checkin.wake_time || '').trim();
   const sleepHours = checkin.horas_sono == null ? Number.NaN : Number(checkin.horas_sono);
-  const checkinComplete =
-    parseTimeToMinutes(presentationTime) != null &&
-    parseTimeToMinutes(wakeTime) != null &&
-    Number.isFinite(sleepHours) &&
-    sleepHours >= 0 &&
-    sleepHours <= 24 &&
-    isDailyRiskLevel(checkin.computed_risk_level);
+  const evidence = resolveDailyCheckinEvidence({
+    hasCheckin: true,
+    presentationTime, wakeTime, sleepHours: checkin.horas_sono,
+    kssScore: checkin.kss_score, fitForDuty: checkin.fit_for_duty,
+    storedRiskLevel: checkin.computed_risk_level,
+  });
+  const checkinComplete = evidence.complete;
 
   if (!checkinComplete) {
     return {
@@ -530,7 +527,7 @@ async function buildDailyFatigueStatus(params: {
     };
   }
 
-  const riskLevel = checkin.computed_risk_level as DailyRiskLevel;
+  const riskLevel = evidence.riskLevel ?? 'critical';
   return {
     status: riskLevel,
     submitted: true,
@@ -540,7 +537,8 @@ async function buildDailyFatigueStatus(params: {
       riskLevel === 'normal'
         ? 'Fadiga diária informada pelo tripulante.'
         : 'Fadiga diária informada pelo tripulante com revisão operacional necessária.',
-    requires_operational_review: Number(checkin.requires_operational_review || 0) === 1,
+    requires_operational_review: riskLevel !== 'normal' || Number(checkin.requires_operational_review || 0) === 1,
+    risk_reconciled_from_evidence: evidence.riskReconciledFromEvidence,
     calculation_available: true,
     presentation_time: presentationTime,
     sleep_hours_24h: sleepHours,
@@ -552,7 +550,8 @@ async function buildDailyFatigueStatus(params: {
     score_fadiga: checkin.score_fadiga == null ? null : Number(checkin.score_fadiga),
     nivel_fadiga: checkin.nivel_fadiga == null ? null : String(checkin.nivel_fadiga),
     status_operacional:
-      checkin.status_operacional == null ? null : String(checkin.status_operacional),
+      evidence.riskReconciledFromEvidence || checkin.status_operacional == null
+        ? null : String(checkin.status_operacional),
     checkin,
     has_jornada: Boolean(jornada?.id),
     jornada_id: jornada?.id ?? null,
@@ -673,14 +672,12 @@ router.get('/daily-fatigue', async (c) => {
       const presentationTime = String(row.checkin_apresentacao || '').trim();
       const wakeTime = String(row.wake_time || '').trim();
       const sleepHours = row.horas_sono == null ? Number.NaN : Number(row.horas_sono);
-      const checkinComplete =
-        hasCheckin &&
-        parseTimeToMinutes(presentationTime) != null &&
-        parseTimeToMinutes(wakeTime) != null &&
-        Number.isFinite(sleepHours) &&
-        sleepHours >= 0 &&
-        sleepHours <= 24 &&
-        isDailyRiskLevel(row.computed_risk_level);
+      const evidence = resolveDailyCheckinEvidence({
+        hasCheckin, presentationTime, wakeTime, sleepHours: row.horas_sono,
+        kssScore: row.kss_score, fitForDuty: row.fit_for_duty,
+        storedRiskLevel: row.computed_risk_level,
+      });
+      const checkinComplete = evidence.complete;
 
       const status = !hasCheckin
         ? row.jornada_id
@@ -688,7 +685,7 @@ router.get('/daily-fatigue', async (c) => {
           : 'no_duty'
         : !checkinComplete
           ? 'incomplete_checkin'
-          : String(row.computed_risk_level);
+          : String(evidence.riskLevel);
       const source =
         status === 'not_submitted'
           ? 'missing_checkin'
@@ -708,6 +705,7 @@ router.get('/daily-fatigue', async (c) => {
         status,
         data_source: source,
         calculation_available: checkinComplete,
+        risk_reconciled_from_evidence: evidence.riskReconciledFromEvidence,
         hora_apresentacao: checkinComplete ? presentationTime : null,
         presentation_time: checkinComplete ? presentationTime : null,
         sleep_hours_24h:
@@ -716,9 +714,12 @@ router.get('/daily-fatigue', async (c) => {
           hasCheckin && row.horas_sono_48h != null ? Number(row.horas_sono_48h || 0) : null,
         wake_time: hasCheckin && parseTimeToMinutes(wakeTime) != null ? wakeTime : null,
         score_fadiga: checkinComplete && row.score_fadiga != null ? Number(row.score_fadiga) : null,
-        nivel_fadiga: checkinComplete && row.nivel_fadiga != null ? String(row.nivel_fadiga) : null,
+        nivel_fadiga:
+          checkinComplete && !evidence.riskReconciledFromEvidence && row.nivel_fadiga != null
+            ? String(row.nivel_fadiga) : null,
         status_operacional:
-          checkinComplete && row.status_operacional != null ? String(row.status_operacional) : null,
+          checkinComplete && !evidence.riskReconciledFromEvidence && row.status_operacional != null
+            ? String(row.status_operacional) : null,
         requires_operational_review: reviewRequired ? 1 : 0,
         status_label:
           status === 'not_submitted'
