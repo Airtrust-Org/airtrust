@@ -45,7 +45,7 @@ class TestContract(unittest.TestCase):
         db.executescript('''
         CREATE TABLE funcionarios (id INTEGER PRIMARY KEY,empresa_id INTEGER,deleted_at TEXT);
         CREATE TABLE qualificacoes_tipos (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT,codigo TEXT UNIQUE,nome TEXT,descricao TEXT,categoria TEXT,categoria_id INTEGER,area_id INTEGER,classe_requisito TEXT,carga_horaria INTEGER,carga_horaria_inicial INTEGER,carga_horaria_recorrente INTEGER,validade INTEGER,vencimento_fim_mes INTEGER,ativo INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
-        CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY AUTOINCREMENT,funcionario_id INTEGER,qualificacao_id INTEGER,qualificacao_codigo TEXT,tipo TEXT,categoria TEXT,categoria_id INTEGER,data_conclusao TEXT,data_vencimento TEXT,validade_meses INTEGER,observacoes TEXT,status TEXT,renovada INTEGER,carga_horaria INTEGER,numero_certificado TEXT,arquivo_url TEXT,origem_tipo TEXT,lms_matricula_id INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
+        CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY AUTOINCREMENT,funcionario_id INTEGER,qualificacao_id INTEGER,qualificacao_codigo TEXT,tipo TEXT,categoria TEXT,categoria_id INTEGER,data_conclusao TEXT,data_vencimento TEXT,validade_meses INTEGER,observacoes TEXT,status TEXT,renovada INTEGER,carga_horaria INTEGER,numero_certificado TEXT,arquivo_url TEXT,origem_tipo TEXT CHECK(origem_tipo IS NULL OR origem_tipo IN ('LMS','PRESENCIAL','SIMULADOR','IMPORTADO_EDAPP','MANUAL')),lms_matricula_id INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
         CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT);
         CREATE UNIQUE INDEX uq ON qualificacoes_historico(funcionario_id,qualificacao_codigo,data_conclusao) WHERE deleted_at IS NULL;
         ''')
@@ -92,6 +92,7 @@ class TestContract(unittest.TestCase):
         self.assertNotIn('INSERT INTO lms_',script)
         db.executescript(script)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM audit_logs').fetchone()[0],474)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM qualificacoes_historico WHERE origem_tipo NOT IN ('MANUAL') AND origem_tipo IS NOT NULL").fetchone()[0],0)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico').fetchone()[0],471)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico WHERE data_vencimento IS NOT NULL').fetchone()[0],0)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM qualificacoes_historico WHERE observacoes LIKE 'Observação original%' ").fetchone()[0],90)
