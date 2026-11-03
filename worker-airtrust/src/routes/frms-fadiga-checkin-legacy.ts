@@ -35,6 +35,7 @@ import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persiste
 import { evaluateDailyRisk, type DailyRiskLevel } from '../lib/frms/daily-checkin-risk';
 import { resolveDailyCheckinEvidence } from '../lib/frms/daily-checkin-evidence';
 import { buildDailyCheckinDeclarationEvidence } from '../lib/frms/daily-checkin-declaration';
+import { isValidPastOrTodayCheckinDate } from '../lib/frms/checkin-date-guard';
 import { assertFuncionarioNoEscopoFrms } from './frms-shared';
 const router = new Hono<AppEnv>();
 router.use('*', auth());
@@ -936,6 +937,9 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
 
     const input = normalizeCheckinInput(parsed.data, fitNorm.apto);
     const dataCheckin = input.dataCheckin;
+    if (!isValidPastOrTodayCheckinDate(dataCheckin, todayIso())) {
+      return c.json({ success: false, error: 'invalid_reference_date' }, 400);
+    }
 
     const config = await getConfig(c.env.DB, empresaId);
     if (!config.ativo) {
@@ -1012,8 +1016,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const medsUlt12hDb = input.medsUlt12h ?? 0;
     const alcoolUlt12hDb = input.alcoolUlt12h ?? 0;
 
-    // Prepare and validate optional readiness before mutating a check-in.
-    // Standalone readiness requests continue through persistReadinessAssessment().
+    // Validate optional readiness before mutation; standalone readiness uses its own endpoint.
     let readinessStatements: D1PreparedStatement[] = [];
     if (parsed.data.readiness) {
       try {
@@ -1196,9 +1199,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         now,
       );
 
-    // One D1 transaction keeps the check-in, optional PVT-B trials, and
-    // immutable KSS provenance event coherent. A rejected trial or unique
-    // daily-key conflict rolls back the entire submission, not only one table.
+    // Atomic D1 batch: check-in, optional trials and immutable event commit together.
     try {
       await c.env.DB.batch([checkinWrite, ...readinessStatements, provenanceEvent]);
       committedCheckinId = checkinId;
@@ -1219,8 +1220,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       }
       throw error;
     }
-    // All validation errors must be returned before DB.batch. From this point
-    // on even a typed downstream error cannot undo the committed submission.
+    // After DB.batch, downstream errors cannot undo the committed submission.
     const { sync } = await persistReadinessAndSyncFrms({
       db: c.env.DB, empresaId, funcionarioId, userId: userId || null, checkinId, dataCheckin,
       kssScore: input.kssScore, sleepHours: input.horasSono24h, wakeTime: input.horaAcordou,
@@ -1421,8 +1421,7 @@ router.get('/fadiga-checkin/historico', async (c) => {
       whereClauses.push('ch.funcionario_id = ?');
       whereValues.push(funcionarioId);
     } else {
-      // Team access is not company-wide access. Apply the canonical sector
-      // scope to COUNT, rows and aggregates, not only to the page of results.
+      // Sector scope applies to team COUNT, rows and aggregates, not just pagination.
       // An unassigned manager gets clause 1=0 (fail closed).
       const access = await getEmployeeSectorAccess(c, empresaId);
       const scope = buildFuncionarioScopeWhere(access, 'f');
