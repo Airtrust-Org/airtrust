@@ -548,7 +548,9 @@ async function buildDailyFatigueStatus(params: {
     fit_for_duty:
       checkin.fit_for_duty == null ? null : Number(checkin.fit_for_duty || 0) === 1,
     score_fadiga: checkin.score_fadiga == null ? null : Number(checkin.score_fadiga),
-    nivel_fadiga: checkin.nivel_fadiga == null ? null : String(checkin.nivel_fadiga),
+    nivel_fadiga:
+      evidence.riskReconciledFromEvidence || checkin.nivel_fadiga == null
+        ? null : String(checkin.nivel_fadiga),
     status_operacional:
       evidence.riskReconciledFromEvidence || checkin.status_operacional == null
         ? null : String(checkin.status_operacional),
