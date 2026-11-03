@@ -511,11 +511,17 @@ function newestEvidence(items: Evidence[]): Evidence | undefined {
   return items[0];
 }
 
+/** Corte "evidência não é futura": nunca atrás da data operacional, aceita a data UTC dos gravadores. */
+function resolveRealizedCutoff(today: string): string {
+  const utcToday = new Date().toISOString().slice(0, 10);
+  return utcToday > today ? utcToday : today;
+}
+
 export function computeRequirement(
   rule: Rule,
   historyItems: Evidence[] | undefined,
   lmsItems: Evidence[] | undefined,
-  options?: { today?: string },
+  options?: { today?: string; realizedCutoff?: string },
 ) {
   // Vencimento é classificado pela data operacional (America/Sao_Paulo): a data UTC adianta o
   // "hoje" entre 21h e 24h BRT e marcava VENCIDO, nessas horas, um item que ainda vence hoje.
@@ -523,8 +529,7 @@ export function computeRequirement(
   // As conclusões (LMS/Histórico) são gravadas com a data UTC. O corte "evidência não é futura"
   // precisa aceitá-las no mesmo dia civil UTC, senão uma conclusão de 21h–24h BRT sumiria até a
   // meia-noite. O corte nunca fica atrás da data operacional.
-  const utcToday = new Date().toISOString().slice(0, 10);
-  const realizedCutoff = options?.today ?? (utcToday > today ? utcToday : today);
+  const realizedCutoff = options?.realizedCutoff ?? options?.today ?? resolveRealizedCutoff(today);
   const allHistory = historyItems || [];
   const allLms = lmsItems || [];
   const historyForProfile = allHistory.filter(
@@ -681,6 +686,9 @@ export async function buildSnapshot(
     loadLmsEvidence(db, empresaId),
   ]);
   const employees = filterEmployeesByAccess(allEmployees, access);
+  // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
+  const today = getTodayIsoSaoPaulo();
+  const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today) };
 
   const people = employees.map((employee) => {
     const resolved = resolvedRules(rules, employee);
@@ -691,6 +699,7 @@ export async function buildSnapshot(
           rule,
           historyMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
           lmsMap.get(`${employee.id}:${rule.qualificacao_tipo_id}`),
+          dateOptions,
         ),
       );
     const mandatory = requirements.filter((r) => r.obrigatoriedade === 'OBRIGATORIA');

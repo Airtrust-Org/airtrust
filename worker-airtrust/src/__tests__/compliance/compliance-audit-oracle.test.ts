@@ -340,3 +340,23 @@ describe('agregados de conformidade — oráculo (razão de somas, 1 casa decima
     expect(two.compliance_pct).toBe(66.7);
   });
 });
+
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+
+describe('getTodayIsoSaoPaulo — formatter reutilizado e fronteiras', () => {
+  it('não constrói um Intl.DateTimeFormat por chamada (custo escalaria com funcionário×requisito)', () => {
+    const construct = vi.spyOn(Intl, 'DateTimeFormat');
+    for (let i = 0; i < 1000; i++) getTodayIsoSaoPaulo(new Date('2026-11-03T01:30:00Z'));
+    expect(construct).not.toHaveBeenCalled();
+    construct.mockRestore();
+  });
+
+  it.each([
+    ['2026-11-03T02:59:59Z', '2026-11-02'], // 23:59:59 BRT
+    ['2026-11-03T03:00:00Z', '2026-11-03'], // 00:00:00 BRT
+    ['2028-03-01T02:59:59Z', '2028-02-29'], // bissexto
+    ['2027-01-01T02:59:59Z', '2026-12-31'], // virada de ano
+  ])('%s → %s', (iso, expected) => {
+    expect(getTodayIsoSaoPaulo(new Date(iso))).toBe(expected);
+  });
+});
