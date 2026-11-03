@@ -53,6 +53,9 @@ export default function LmsProva(): React.ReactElement {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // Synchronous guard: React state updates may be batched between rapid clicks.
+  const saveInFlight = useRef(false);
   const [confirming, setConfirming] = useState(false);
   // One key per start click: a network retry reuses it, so no duplicate attempt.
   const startKey = useRef<string>('');
@@ -79,7 +82,9 @@ export default function LmsProva(): React.ReactElement {
   }
 
   async function choose(questionId: string, choiceId: string) {
-    if (!attempt || attempt.state !== 'IN_PROGRESS') return;
+    if (!attempt || attempt.state !== 'IN_PROGRESS' || busy || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSaving(true);
     const previous = answers[questionId];
     setAnswers(a => ({ ...a, [questionId]: choiceId }));
     setStatus('Salvando resposta…');
@@ -96,6 +101,9 @@ export default function LmsProva(): React.ReactElement {
         return next;
       });
       setStatus('Não foi possível salvar esta resposta. Selecione novamente.');
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
   }
 
@@ -103,7 +111,8 @@ export default function LmsProva(): React.ReactElement {
   const unanswered = total - Object.keys(answers).length;
 
   async function submit() {
-    if (!attempt) return;
+    // Never seal an attempt while its last answer is still in flight.
+    if (!attempt || busy || saveInFlight.current) return;
     setBusy(true); setError('');
     try {
       const data = await call<Attempt>(`/api/lms/exams/tentativas/${attempt.attemptId}/enviar`, { method: 'POST' });
@@ -165,7 +174,7 @@ export default function LmsProva(): React.ReactElement {
       ) : null}
 
       {attempt && attempt.state === 'IN_PROGRESS' ? (
-        <form onSubmit={e => { e.preventDefault(); setConfirming(true); }} aria-label={`Tentativa ${attempt.attemptNo}`}>
+        <form onSubmit={e => { e.preventDefault(); if (!busy && !saveInFlight.current) setConfirming(true); }} aria-label={`Tentativa ${attempt.attemptNo}`}>
           {attempt.sections.map((section, si) => (
             <div key={section.moduleId} className="mb-6">
               <h2 className="mb-2 text-base font-semibold text-slate-900 dark:text-white">Parte {si + 1}</h2>
@@ -175,7 +184,8 @@ export default function LmsProva(): React.ReactElement {
                   {q.choices.map(c => (
                     <label key={c.id} className="flex cursor-pointer items-start gap-2 py-1.5 text-sm">
                       <input type="radio" name={q.questionId} value={c.id} className="mt-1"
-                        checked={answers[q.questionId] === c.id} onChange={() => void choose(q.questionId, c.id)} />
+                        checked={answers[q.questionId] === c.id} disabled={busy || saving}
+                        onChange={() => void choose(q.questionId, c.id)} />
                       <span>{c.text}</span>
                     </label>
                   ))}
@@ -191,12 +201,12 @@ export default function LmsProva(): React.ReactElement {
                   : 'Enviar a prova agora? Depois do envio não é possível alterar as respostas.'}
               </p>
               <div className="flex gap-2">
-                <button type="button" className={primary} disabled={busy} onClick={() => void submit()}>Confirmar envio</button>
+                <button type="button" className={primary} disabled={busy || saving} onClick={() => void submit()}>Confirmar envio</button>
                 <button type="button" className={secondary} onClick={() => setConfirming(false)}>Voltar às questões</button>
               </div>
             </div>
           ) : (
-            <button type="submit" className={primary} disabled={busy}>Enviar prova</button>
+            <button type="submit" className={primary} disabled={busy || saving}>Enviar prova</button>
           )}
         </form>
       ) : null}
