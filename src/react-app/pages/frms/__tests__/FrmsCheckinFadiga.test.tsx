@@ -283,6 +283,7 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
     status: 'normal',
     data_source: 'crew_reported',
     kss_score,
+    kss_provenance: 'CREW_REPORTED',
     sleep_hours_24h: 7,
     score_fadiga,
     nivel_fadiga: 'VERDE',
@@ -695,8 +696,9 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.fit_for_duty).toBe(true);
     expect(payload.meds_ult_12h).toBeNull();
     expect(payload.alcool_ult_12h).toBeNull();
-    expect(payload.subjective_fatigue_level).toBe(3);
-    expect(payload.sleepiness_level).toBe(3);
+    // KSS is its own validated scale, not a synthetic independent fatigue report.
+    expect(payload).not.toHaveProperty('subjective_fatigue_level');
+    expect(payload).not.toHaveProperty('sleepiness_level');
     expect(payload).not.toHaveProperty('sintomas');
     expect(payload).not.toHaveProperty('horas_sono_48h');
     expect(payload.motivo_inaptidao).toBeUndefined();
@@ -1318,7 +1320,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const interruptedWarning = screen.getByText(/A página foi interrompida durante o teste objetivo/i);
     expect(interruptedWarning).toHaveTextContent(/respostas do check-in foram preservadas/i);
-    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o PVT-B/i);
+    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o teste breve de atenção/i);
     expect(screen.getByRole('radio', { name: '7 horas' })).toBeChecked();
     expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('07:00');
     expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:45');

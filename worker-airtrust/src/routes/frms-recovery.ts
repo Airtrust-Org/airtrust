@@ -428,8 +428,8 @@ async function upsertRecoveryAssessment(params: {
   const credit = v2Policy ? computeRecoveryCredit({
     activityType: params.activityType === 'OFF_DUTY' || params.activityType === 'STANDBY_HOME_HOTEL' || params.activityType === 'STANDBY_ONSITE'
       ? params.activityType : 'OTHER',
-    // Do not award recovery credit by interpreting reported sleep as opportunity.
-    absoluteRestHours: evidence.opportunityHours24h,
+    // Só sono efetivamente relatado pode gerar crédito; oportunidade isolada não comprova recuperação.
+    reportedSleepHours: evidence.sleepHours24h,
     noWorkHours,
     immediateCalloutRequired: params.immediateCalloutRequired,
   }, v2Policy) : { creditPoints: 0, basePoints: 0, restFactor: 0, calloutMultiplier: 1, eligible: false };

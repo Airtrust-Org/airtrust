@@ -10,6 +10,7 @@ export interface FadigaCheckinItem {
   data_checkin: string;
   hora_checkin: string;
   kss_score: number;
+  kss_provenance?: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | null;
   horas_sono: number;
   qualidade_sono: number;
   score_fadiga: number;
@@ -65,7 +66,7 @@ export interface FadigaHistoricoResponse {
   data: FadigaCheckinItem[];
   pagination: { page: number; limit: number; total: number; totalPages: number };
   resumo: {
-    media_kss: number;
+    media_kss: number | null;
     media_sono_horas: number;
     media_score_fadiga: number;
     distribuicao_niveis: { VERDE: number; AMARELO: number; LARANJA: number; VERMELHO: number };
@@ -76,7 +77,7 @@ export interface FadigaHistoricoResponse {
 export interface FadigaAnalyticsResponse {
   evolucao_diaria: Array<{
     data: string;
-    media_kss: number;
+    media_kss: number | null;
     media_sono: number;
     media_score: number;
     total_checkins: number;
@@ -91,7 +92,7 @@ export interface FadigaAnalyticsResponse {
     nome: string;
     cargo: string;
     ocorrencias_laranja_vermelho: number;
-    media_kss: number;
+    media_kss: number | null;
   }>;
   correlacao_sono_kss: Array<{ horas_sono: number; kss_score: number }>;
   correlacao_score_effectiveness: Array<{
@@ -119,6 +120,7 @@ export interface FadigaPainelEquipeItem {
     | 'no_duty';
   data_source: 'crew_reported' | 'missing_checkin' | 'default_estimate' | 'not_applicable';
   kss_score: number | null;
+  kss_provenance?: 'CREW_REPORTED' | 'DERIVED' | 'DEFAULTED' | null;
   score_fadiga: number | null;
   nivel_fadiga: string | null;
   status_operacional: string | null;
@@ -198,28 +200,35 @@ export function normalizeFadigaPainelPayload(
     if (!validStatuses.has(status) || !validSources.has(source)) {
       throw new Error('FRMS_TEAM_CLASSIFICATION_OR_PROVENANCE_MISSING');
     }
-    // The Worker supplies this flag. Older payloads may omit it; in that case,
-    // derive a conservative review flag from the explicit risk classification.
-    const requiresReview = ['not_submitted', 'incomplete_checkin', 'attention', 'critical', 'unfit_for_duty'].includes(status);
+    // A stale/cached NORMAL from an older Worker must not become a green
+    // panel row without verified crew KSS. Never weaken an existing alert.
+    const validKss = item.kss_provenance === 'CREW_REPORTED' &&
+      Number.isInteger(item.kss_score) && Number(item.kss_score) >= 1 && Number(item.kss_score) <= 9;
+    const kss = validKss ? Number(item.kss_score) : null;
+    const safeStatus = status === 'normal' && source === 'crew_reported'
+      ? kss == null ? 'incomplete_checkin' : kss >= 8 ? 'critical' : kss >= 7 ? 'attention' : status
+      : status;
+    const riskReconciledFromEvidence = safeStatus !== status;
+    const requiresReview = ['not_submitted', 'incomplete_checkin', 'attention', 'critical', 'unfit_for_duty'].includes(safeStatus);
+    const serverReview = item.requires_operational_review === 1 || item.requires_operational_review === '1';
     return {
       id: String(item.checkin_id || `daily-fatigue-${item.funcionario_id || 'unknown'}-${item.date || requestedDate}`),
       funcionario_id: Number(item.funcionario_id || 0),
       funcionario_nome: String(item.funcionario_nome || item.funcionario_id || '-'),
       cargo: item.cargo == null ? null : String(item.cargo),
       data: String(item.date || requestedDate || ''),
-      status,
+      status: safeStatus,
       data_source: source,
-      kss_score: item.kss_score == null ? null : Number(item.kss_score),
-      score_fadiga: item.score_fadiga == null ? null : Number(item.score_fadiga),
-      nivel_fadiga: item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
-      status_operacional: item.status_operacional == null ? null : String(item.status_operacional),
+      risk_reconciled_from_evidence: riskReconciledFromEvidence,
+      kss_score: kss,
+      kss_provenance: validKss ? 'CREW_REPORTED' : null,
+      score_fadiga: riskReconciledFromEvidence || item.score_fadiga == null ? null : Number(item.score_fadiga),
+      nivel_fadiga: riskReconciledFromEvidence || item.nivel_fadiga == null ? null : String(item.nivel_fadiga),
+      status_operacional: riskReconciledFromEvidence || item.status_operacional == null ? null : String(item.status_operacional),
       hora_checkin: item.hora_checkin == null ? null : String(item.hora_checkin),
       horas_sono: item.sleep_hours_24h == null ? null : Number(item.sleep_hours_24h),
       wake_time: item.wake_time == null ? null : String(item.wake_time),
-      requires_operational_review:
-        item.requires_operational_review == null ? (requiresReview ? 1 : 0) :
-        (item.requires_operational_review === 1 || item.requires_operational_review === '1' ? 1 :
-          item.requires_operational_review === 0 || item.requires_operational_review === '0' ? 0 : 1),
+      requires_operational_review: requiresReview || serverReview ? 1 : 0,
     };
   });
 }
@@ -234,18 +243,28 @@ export function mergeFadigaPainelHistory(
   }
 
   return items.map((item) => {
-    if (item.kss_score != null) return item;
+    if (item.kss_score != null && item.kss_provenance === 'CREW_REPORTED') return item;
     const row = canonical.get(`${item.funcionario_id}:${item.data}`);
-    if (!row || row.kss_score == null || !Number.isFinite(Number(row.kss_score))) return item;
+    const historicalKssValid = row?.kss_provenance === 'CREW_REPORTED' &&
+      Number.isInteger(row.kss_score) && row.kss_score >= 1 && row.kss_score <= 9;
+    const safeStatus = item.status === 'normal' ? 'incomplete_checkin' : item.status;
 
+    // Historical KSS may enrich what was entered, but the history endpoint
+    // must never reintroduce APTO, VERDE or a computed score that the daily
+    // canonical snapshot withheld for incomplete/unverified evidence.
     return {
       ...item,
-      kss_score: Number(row.kss_score),
-      score_fadiga: item.score_fadiga ?? Number(row.score_fadiga),
-      nivel_fadiga: item.nivel_fadiga ?? row.nivel_fadiga,
-      status_operacional: item.status_operacional ?? row.status_operacional,
-      hora_checkin: item.hora_checkin ?? row.hora_checkin,
-      horas_sono: item.horas_sono ?? Number(row.horas_sono),
+      status: safeStatus,
+      requires_operational_review: safeStatus !== item.status ? 1 : item.requires_operational_review,
+      risk_reconciled_from_evidence: safeStatus !== item.status ||
+        item.risk_reconciled_from_evidence === true,
+      kss_score: historicalKssValid ? row!.kss_score : null,
+      kss_provenance: historicalKssValid ? 'CREW_REPORTED' : null,
+      score_fadiga: safeStatus !== item.status ? null : item.score_fadiga,
+      nivel_fadiga: safeStatus !== item.status ? null : item.nivel_fadiga,
+      status_operacional: safeStatus !== item.status ? null : item.status_operacional,
+      hora_checkin: item.hora_checkin ?? row?.hora_checkin ?? null,
+      horas_sono: item.horas_sono ?? row?.horas_sono ?? null,
     };
   });
 }

@@ -166,6 +166,27 @@ export interface FrmsOperationalSnapshotItem {
   estado_operacional: 'NORMAL' | 'ATENCAO' | 'MITIGACAO_NECESSARIA' | 'CRITICO_VIOLACAO' | 'NAO_AVALIADO';
   motivos_principais: string[];
   acao_recomendada_texto: string;
+
+  /** Dimensão A — conformidade legal/contratual calculada no backend. */
+  compliance_status?: 'COMPLIANT' | 'VIOLATION' | 'UNKNOWN';
+  violacoes_normativas?: Array<{
+    code: string;
+    source: string;
+    reference: string;
+    actualMin: number;
+    limitMin: number;
+    message: string;
+  }>;
+  compliance_unknown_reasons?: string[];
+  /** Regras legais calculadas, aguardando validação para virar bloqueio. */
+  compliance_pending_validation?: Array<{
+    code: string;
+    source: string;
+    reference: string;
+    actual: number;
+    limit: number;
+    message: string;
+  }>;
 }
 
 export interface FrmsOperationalSnapshotSummary {
