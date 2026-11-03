@@ -2376,7 +2376,7 @@ export function shouldAdvanceSigvoosSyncProgress(
   return !currentTo || candidateTo >= currentTo;
 }
 
-async function persistSyncMetadata(
+export async function persistSigvoosSyncMetadata(
   db: D1Database,
   empresaId: number | null | undefined,
   summary: SigvoosSyncSummary,
@@ -2674,7 +2674,7 @@ export async function syncSigvoosForFrms(
       controleVoosImport,
     };
 
-    await persistSyncMetadata(db, resolvedEmpresaId, summary);
+    await persistSigvoosSyncMetadata(db, resolvedEmpresaId, summary);
     await finalizeSigvoosEvento(db, eventoId, 'SUCESSO', summary);
     return summary;
   } catch (error) {
