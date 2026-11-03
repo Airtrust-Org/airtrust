@@ -1485,11 +1485,10 @@ app.post('/scorm/commit', async (c) => {
   let dataConclusao: string | null = null;
   if (sucesso) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'CONCLUIDO');
-    dataConclusao = getTodayIsoSaoPaulo();
   } else if (falha) {
     novoStatus = mergeMonotonicMatriculaStatus(statusSemConclusao, 'REPROVADO');
-    dataConclusao = getTodayIsoSaoPaulo();
   }
+  if (sucesso || falha) dataConclusao = getTodayIsoSaoPaulo();
 
   // Evita reemitir qualificação e certificado.
   const isNewCompletion =
