@@ -1,0 +1,210 @@
+name: Production EAD Plataforma Qualification Reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only preview or the explicitly approved, reviewed data-only application
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      expected_main_sha:
+        description: Exact reviewed main SHA (never use a floating branch)
+        required: true
+        type: string
+      confirmation:
+        description: Exact mode-specific confirmation
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply; successful same-SHA and same-private-plan dry-run
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-ead-plataforma-qualification-reconciliation-tenant6
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Governed EAD Plataforma historical qualification data reconciliation
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+      MODE: ${{ inputs.mode }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      EAD_PRIVATE_PLAN_B64: ${{ secrets.AIRTRUST_EAD_20261103_PLAN_B64 }}
+
+    steps:
+      - name: Validate exact immutable dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_BRANCH_REQUIRED; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo EXACT_SHA_REQUIRED; exit 1; }
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]] || { echo MAIN_SHA_MISMATCH; exit 1; }
+          if [[ "$MODE" == 'dry-run' ]]; then
+            [[ "$CONFIRMATION" == 'AIRTRUST_EAD_PLATAFORMA_READ_ONLY_20261103' ]] || exit 1
+          elif [[ "$MODE" == 'apply' ]]; then
+            [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_EAD_PLATAFORMA_APPLY_20261103' ]] || exit 1
+            [[ '${{ inputs.reviewed_dry_run_run_id }}' =~ ^[1-9][0-9]*$ ]] || exit 1
+          else
+            echo INVALID_MODE
+            exit 1
+          fi
+          [[ -n "$EAD_PRIVATE_PLAN_B64" ]] || { echo PRIVATE_APPROVED_PLAN_MISSING; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || {
+            echo PRODUCTION_D1_CREDENTIAL_MISSING
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify pinned source and live main
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(git ls-remote origin refs/heads/main | awk '{print $1}')" == "$GITHUB_SHA" ]] || {
+            echo MAIN_ADVANCED_SINCE_APPROVAL
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm --prefix worker-airtrust ci --ignore-scripts
+
+      - name: Validate Python syntax and deterministic fixture
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/production/ead-plataforma-20261103.py
+          python3 -B scripts/__tests__/ead-plataforma-20261103.test.py
+
+      - name: Verify all eight official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      - name: Decode private candidate in runner temp (never a Git checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          private_path="$RUNNER_TEMP/ead-platform-reviewed-private-plan.json"
+          export PRIVATE_PLAN_PATH="$private_path"
+          python3 - <<'PY'
+          import base64,os,pathlib,zlib
+          encoded=os.environ['EAD_PRIVATE_PLAN_B64']
+          private=zlib.decompress(base64.b64decode(encoded,validate=True))
+          if len(private)>1000000:
+              raise SystemExit('PRIVATE_PLAN_TOO_LARGE')
+          p=pathlib.Path(os.environ['PRIVATE_PLAN_PATH'])
+          p.write_bytes(private)
+          p.chmod(0o600)
+          PY
+          echo "PRIVATE_PLAN_PATH=$private_path" >> "$GITHUB_ENV"
+          python3 -B scripts/production/ead-plataforma-20261103.py validate --plan "$private_path" > /dev/null
+
+      - name: Check earlier reviewed dry-run SHA, projection and state
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<< "$run")" == 'Production EAD Plataforma Qualification Reconciliation' ]] || exit 1
+          [[ "$(jq -r .event <<< "$run")" == workflow_dispatch ]] || exit 1
+          [[ "$(jq -r .conclusion <<< "$run")" == success ]] || exit 1
+          [[ "$(jq -r .head_sha <<< "$run")" == "$GITHUB_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "ead-plataforma-qualification-dry-run-$GITHUB_SHA" \
+            --dir "$RUNNER_TEMP/reviewed"
+          file="$RUNNER_TEMP/reviewed/result.json"
+          jq -e --arg expected "c6e7a811d31859b806a9ea53cdcc9c8a8a51058fd59178d1e0b15986ca8fee86" '
+            .mode=="dry-run" and .empresa_id==6 and
+            .plan_sha256==$expected and .candidate_count==471 and
+            .models_to_create==3 and .mutation_executed==false and
+            .pii_emitted==false and (.plan_state_hash|test("^[a-f0-9]{64}$"))
+          ' "$file" >/dev/null
+          echo "REVIEWED_PRESTATE_SHA=$(jq -r .plan_state_hash "$file")" >> "$GITHUB_ENV"
+
+      - name: Verify D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx --no-install wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery-check.txt"
+          test -s "$RUNNER_TEMP/recovery-check.txt"
+          echo "D1_RECOVERY_POINT_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/recovery-check.txt"
+
+      - name: Execute read-only preview or immutable reviewed data-only apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == 'dry-run' ]]; then
+            python3 -B scripts/production/ead-plataforma-20261103.py dry-run \
+              --plan "$PRIVATE_PLAN_PATH" > "$RUNNER_TEMP/result.json"
+            jq -e '.candidate_count==471 and .mutation_executed==false and .pii_emitted==false and .audit_initial==0' "$RUNNER_TEMP/result.json" >/dev/null
+          else
+            [[ -n "${REVIEWED_PRESTATE_SHA:-}" ]] || exit 1
+            python3 -B scripts/production/ead-plataforma-20261103.py apply \
+              --plan "$PRIVATE_PLAN_PATH" --expected-main-sha "$EXPECTED_SHA" \
+              --expected-prestate-hash "$REVIEWED_PRESTATE_SHA" \
+              --confirmation "$CONFIRMATION" > "$RUNNER_TEMP/result.json"
+            jq -e '.candidate_count==471 and .mutation_executed==true and .pii_emitted==false and .postconditions_verified==true and .postcondition_failures==0' "$RUNNER_TEMP/result.json" >/dev/null
+          fi
+
+      - name: Readback production health
+        if: ${{ inputs.mode == 'apply' && success() }}
+        shell: bash
+        run: |
+          curl --fail --silent --show-error https://api.airtrust.online/api/health >/dev/null
+          curl --fail --silent --show-error https://api.airtrust.online/api/version >/dev/null
+
+      - name: Publish sanitized evidence
+        if: ${{ success() }}
+        run: |
+          jq '{mode,empresa_id,plan_sha256,approved_manifest_sha256,source_sha256,candidate_count,models_to_create,actions,plan_state_hash,audit_initial,mutation_executed,audit_counts,postconditions_verified,postcondition_failures,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized read-only/application evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ead-plataforma-qualification-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Delete private data and runner review copies
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${PRIVATE_PLAN_PATH:-$RUNNER_TEMP/ead-platform-reviewed-private-plan.json}"
+          rm -rf "$RUNNER_TEMP/reviewed"
