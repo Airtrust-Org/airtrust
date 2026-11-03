@@ -17,9 +17,9 @@ Arquivo: `worker-airtrust/schema-v2/changes/0573_frms_checkin_kss_provenance.sql
 ## Ordem de execução (governada)
 1. Revalidar `main`, unicidade do número 0573, `changeId=frms-checkin-kss-provenance-0573`, hashes do manifest e ledger canônico com consulta *somente leitura*. Precheck de `frms_fadiga_checkin`, `empresa_id`, `kss_score`, `deleted_at` e inexistência de `kss_provenance`; se já existir, investigar em vez de reaplicar.
 2. Executar testes SQLite da migração e smoke de criação/atualização de check-in e leitura do painel em worktree isolado; oito gates oficiais e revisão de PR devem estar aprovados no SHA exato.
-3. Criar recovery point / backup D1 segundo o contrato de release. Aplicar via **workflow oficial** `apply-schema-change-v2.yml` com manifest/hashes revisados; **uma alteração por execução**, primeiro staging.
+3. Criar recovery point / backup D1 segundo o contrato de release. Staging usa exclusivamente `staging-apply-schema-v2.yml`, que deve reconhecer explicitamente `frms-checkin-kss-provenance-0573` e seus hashes na `main` confiável. **Bloqueio atual:** o workflow de staging ainda não possui 0573 em sua allowlist; não usar o aplicador legado `deploy-staging.yml`, scripts D1 diretos nem o workflow de produção como atalho.
 4. Publicar Worker+Pages de staging no mesmo SHA e validar duas empresas/setores com KSS explícito, ausência de KSS legado e atualização com nova origem. Confirmar `NULL` nos registros antigos por leitura; não modificar dados para simular aceite.
-5. Só prosseguir com produção mediante autorização específica de SHA/escopo/componentes e gates requeridos. Verificar pós-deploy, rastreabilidade no ledger e métricas de check-in.
+5. Produção usa exclusivamente `apply-schema-change-v2.yml` após integração governada na `main`, com autorização específica de SHA/escopo/componentes e gates requeridos. Verificar pós-deploy, rastreabilidade no ledger e métricas de check-in.
 
 ## Critérios de aceite
 - Coluna e CHECK existem; `INSERT` novo salva `CREW_REPORTED`; atualização autenticada grava `CREW_REPORTED`; origem de cliente não é aceita sem validação.
