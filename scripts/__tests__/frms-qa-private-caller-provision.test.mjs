@@ -31,6 +31,12 @@ test('exactCallerProvisionPlan constructs immutable, bounded caller plan', async
   assert.equal(plan.d1_writes_authorized, 0);
   assert.equal(plan.r2_writes_authorized, 0);
   assert.equal(plan.production_authorized, false);
+  assert.equal(plan.credential_mode, 'existing_staging_worker_deploy_only');
+  const dedicated = exactCallerProvisionPlan({ sha, accountId, callerConfig,
+    credentialMode: 'dedicated' });
+  assert.equal(dedicated.credential_mode, 'dedicated');
+  assert.throws(() => exactCallerProvisionPlan({ sha, accountId, callerConfig,
+    credentialMode: 'unapproved_mode' }), /FRMS_QA_CALLER_CONFIG_INVALID/);
 });
 
 test('exactCallerProvisionPlan rejects modified or insecure wrangler config', () => {
@@ -70,8 +76,11 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
     FRMS_QA_CALLER_CONFIRM: 'AIRTRUST_FRMS_QA_CALLER_WORKER_STAGING_DEPLOY',
     FRMS_QA_CALLER_EXPECTED_SHA: sha,
     FRMS_QA_CALLER_GRANT_ID: grantId,
+    FRMS_QA_CREDENTIAL_MODE: 'existing_staging_worker_deploy_only',
   };
 
+  let blockedGate = null;
+  let revokedActor = false;
   const fetcher = async (url) => {
     const path = String(url).replace('https://api.github.com/', '');
     if (path === 'repos/' + REPO + '/branches/main') {
@@ -110,7 +119,16 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
       };
     }
     if (path === 'repos/' + REPO + '/collaborators/admin-user/permission') {
-      return { status: 200, redirected: false, ok: true, json: async () => ({ permission: 'admin' }) };
+      return { status: 200, redirected: false, ok: true,
+        json: async () => ({ permission: revokedActor ? 'write' : 'admin' }) };
+    }
+    if (path.startsWith('repos/' + REPO + '/commits/' + sha + '/check-runs?')) {
+      const name = new URL(String(url)).searchParams.get('check_name');
+      return { status: 200, redirected: false, ok: true,
+        json: async () => ({ check_runs: name === blockedGate ? [] : [{
+          name, head_sha: sha, status: 'completed', conclusion: 'success',
+          app: { slug: 'github-actions' },
+        }] }) };
     }
     throw new Error('Unexpected URL: ' + path);
   };
@@ -124,6 +142,19 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
 
   assert.equal(verified.status, 'CALLER_PROVISION_ADMIN_GRANT_VERIFIED');
   assert.equal(verified.callerWorker, EXPECTED_CALLER_WORKER);
+  blockedGate = 'frontend-coverage';
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_ADMIN_OR_GATES_REQUIRED/);
+  blockedGate = null;
+  revokedActor = true;
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_ADMIN_OR_GATES_REQUIRED/);
+  revokedActor = false;
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env: { ...env, FRMS_QA_CREDENTIAL_MODE: 'dedicated' }, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_GRANT_NOT_EXACT/);
 });
 
 test('buildCallerRuntimeSecrets constructs deterministic hashes without logging', () => {
