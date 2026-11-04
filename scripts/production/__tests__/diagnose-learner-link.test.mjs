@@ -17,3 +17,11 @@ test('duplicate identity and wrong tenant do not become eligible',()=>{
  const cross=assessLearnerIdentity({...args,users:[{...u,funcionario_id:9}],staff:[{...f,empresa_id:7}]});
  assert.equal(cross.recommendation,'LINK_WRONG_TENANT_OR_DELETED');
 });
+
+test('a candidate already linked to another active user is never suggested for repair',()=>{
+ const other={...u,id:12,nome:'Outra Pessoa',email:'other@test.invalid',funcionario_id:9};
+ const x=assessLearnerIdentity({...args,users:[u,other]});
+ assert.equal(x.recommendation,'LINK_CONFLICT_ALREADY_ASSIGNED');
+ assert.equal(x.other_active_users_linked_to_email_candidate,1);
+ assert.equal(x.unique_active_email_match,false);
+});
