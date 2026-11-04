@@ -179,13 +179,13 @@ test('protected caller workflow authenticates the grant and never invokes bare W
     import.meta.url), 'utf8');
   assert.match(source, /Verify actual F0 administrator grant, actor and eight official gates/);
   assert.match(source, /verifyCallerProvisionAdminGrant/);
-  assert.match(source, /run: node ops\\/frms-qa-repair\\/run-private-caller-provision\\.mjs/);
-  assert.doesNotMatch(source, /run: \\|\\s*set -euo pipefail\\s*npx wrangler deploy --config/);
+  assert.match(source, /run: node ops\/frms-qa-repair\/run-private-caller-provision\.mjs/);
+  assert.doesNotMatch(source, /run: \|\s*set -euo pipefail\s*npx wrangler deploy --config/);
   assert.match(runner, /FRMS_QA_CALLER_PARTIAL_DEPLOYMENT_RECONCILIATION_REQUIRED/);
   assert.match(runner, /await verifyCallerProvisionAdminGrant/);
   assert.match(runner, /getOnly=async/);
   assert.match(runner, /secret','bulk/);
   assert.match(runner, /secret','list/);
   assert.match(queues, /FRMS_QA_PRIVATE_QUEUES_PROVISION_FAILED_CLOSED_PHASE_/);
-  assert.doesNotMatch(queues, /console\\.error\\(.*error\\.message/);
+  assert.doesNotMatch(queues, /console\.error\(.*error\.message/);
 });
