@@ -18,14 +18,19 @@ export function assessLearnerIdentity({users,staff,access,permissions,tenantId,t
   const byName=employees.filter(f=>matches(f.nome,target));
   const linkedId=Number(user?.funcionario_id||0);
   const linked=linkedId>0?employees.find(f=>Number(f.id)===linkedId):null;
+  const candidateId=byEmail.length===1?Number(byEmail[0].id):0;
+  const conflictingLinks=candidateId>0?(users||[]).filter(u=>Number(u.empresa_id)===tenantId&&Number(u.active)===1&&
+    Number(u.id)!==Number(user?.id)&&Number(u.funcionario_id)===candidateId).length:0;
   const denied=(permissions||[]).some(p=>p.permissao==='funcionarios.edit'&&upper(p.tipo)==='DENY');
   const recommendation=!user?'IDENTITY_REVIEW_REQUIRED':active(linked)?'LINK_VALID_CHECK_RBAC':
     linked?'LINKED_EMPLOYEE_INACTIVE':linkedId>0?'LINK_WRONG_TENANT_OR_DELETED':
+    conflictingLinks>0?'LINK_CONFLICT_ALREADY_ASSIGNED':
     byEmail.length===1&&active(byEmail[0])?'LINK_CANDIDATE_VERIFY_AND_AUTHORIZE':'MANUAL_IDENTITY_REVIEW';
   return {tenant_id:tenantId,active_user_matches:found.length,user_has_employee_link:linkedId>0,
     linked_employee_in_tenant:!!linked,linked_employee_active:active(linked),
     employee_email_matches:byEmail.length,employee_name_matches:byName.length,
-    unique_active_email_match:byEmail.length===1&&active(byEmail[0]),
+    other_active_users_linked_to_email_candidate:conflictingLinks,
+    unique_active_email_match:byEmail.length===1&&active(byEmail[0])&&conflictingLinks===0,
     account_role:user?upper(user.perfil):'UNRESOLVED',enterprise_role:upper(access?.role),
     explicit_profiles:[...new Set((access?.perfis||[]).map(upper))].sort(),
     employee_edit_explicit_deny:denied,recommendation};
