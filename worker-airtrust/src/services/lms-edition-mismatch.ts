@@ -20,6 +20,7 @@ export async function detectLmsEditionMismatch(params: {
   activePrefix: unknown;
   empresaId: number;
   cursoId: number;
+  matriculaId?: number;
   cmiJson: unknown;
   suspendData?: unknown;
   db?: D1Database;
@@ -105,6 +106,42 @@ export async function detectLmsEditionMismatch(params: {
     }
     if (priorPackageVersion && typeof activeVersion === 'string' &&
         activeVersion.length > 0 && priorPackageVersion !== activeVersion) {
+      // Factory's runtime engine identifier in suspend_data.p may differ from
+      // the authored edition identifier in the manifest. Only an immutable,
+      // same-enrollment handoff tied to the exact ACTIVE package SHA and current
+      // cycle proves that later SCORM commits belong to the active edition.
+      if (params.db && Number.isSafeInteger(params.matriculaId) &&
+          Number(params.matriculaId) > 0) {
+        try {
+          const activeHandoff = await params.db.prepare(`
+            SELECT h.id
+              FROM lms_scorm_edition_handoffs h
+              JOIN lms_matriculas m ON m.id=h.matricula_id
+                AND m.empresa_id=h.empresa_id AND m.curso_id=h.curso_id
+                AND m.deleted_at IS NULL AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+              JOIN lms_matricula_ciclos cy ON cy.id=h.ciclo_id
+                AND cy.empresa_id=h.empresa_id AND cy.matricula_id=m.id
+                AND cy.curso_id=m.curso_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+              JOIN lms_cursos c ON c.id=m.curso_id
+                AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+                AND c.tipo_conteudo='scorm'
+              JOIN lms_scorm_package_versions p ON p.empresa_id=c.empresa_id
+                AND p.curso_id=c.id AND p.r2_prefix=c.scorm_package_r2_prefix
+                AND p.status='ACTIVE' AND p.package_sha256=h.target_package_sha256
+              JOIN lms_progresso_scorm ps ON ps.matricula_id=m.id
+                AND ps.empresa_id=m.empresa_id
+              WHERE h.empresa_id=? AND h.curso_id=? AND h.matricula_id=?
+                AND h.target_package_prefix=? AND c.scorm_package_r2_prefix=?
+                AND datetime(ps.last_commit_at)>=datetime(h.created_at)
+              ORDER BY h.id DESC LIMIT 1
+          `).bind(params.empresaId, params.cursoId, params.matriculaId,
+            prefix, prefix).first<{ id: number }>();
+          if (activeHandoff && Number.isSafeInteger(activeHandoff.id) &&
+              activeHandoff.id > 0) return null;
+        } catch {
+          // Missing/inaccessible provenance never turns a mismatch into approval.
+        }
+      }
       return {
         required: true, previous_total: priorTotal, active_total: activeTotal,
         reason: 'PACKAGE_VERSION_CHANGED',

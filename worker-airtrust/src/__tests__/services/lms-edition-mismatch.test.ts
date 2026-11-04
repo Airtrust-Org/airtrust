@@ -68,6 +68,36 @@ describe('published SCORM edition mismatch (CFIT 41 → 37)', () => {
       active_version: 'mgo-rev15',
     });
   });
+  it('accepts a resumed active handoff even when engine and manifest version identifiers differ', async () => {
+    const currentCmi = JSON.stringify({
+      'cmi.core.lesson_location': '10/49',
+      'cmi.suspend_data': JSON.stringify({ v: 4, p: 'v3.4-engine-2026-11-02', a: 9, d: [0, 1, 2] }),
+    });
+    const first = vi.fn(async (): Promise<{ id: number } | null> => ({ id: 13 }));
+    const bind = vi.fn(() => ({ first }));
+    const db = { prepare: vi.fn(() => ({ bind })) } as unknown as D1Database;
+    const params = {
+      ...base, matriculaId: 690, cmiJson: currentCmi,
+      bucket: bucket(49, false, 'S76C_SOP_REV03_2026-11-02'), db,
+    };
+    expect(await detectLmsEditionMismatch(params)).toBeNull();
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining('p.package_sha256=h.target_package_sha256'));
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining('cy.ciclo_atual=1'));
+    expect(bind).toHaveBeenCalledWith(6, 119, 690, base.activePrefix, base.activePrefix);
+
+    first.mockResolvedValueOnce(null);
+    expect(await detectLmsEditionMismatch(params)).toMatchObject({
+      required: true, reason: 'PACKAGE_VERSION_CHANGED',
+    });
+    expect(await detectLmsEditionMismatch({ ...params, matriculaId: undefined })).toMatchObject({
+      required: true, reason: 'PACKAGE_VERSION_CHANGED',
+    });
+    first.mockRejectedValueOnce(new Error('ledger unavailable'));
+    expect(await detectLmsEditionMismatch(params)).toMatchObject({
+      required: true, reason: 'PACKAGE_VERSION_CHANGED',
+    });
+  });
+
   it('uses separately persisted SCORM suspend_data when older CMI snapshots omit the field', async () => {
     const cmiWithoutSuspend = JSON.stringify({
       'cmi.core.lesson_location': '35/46',

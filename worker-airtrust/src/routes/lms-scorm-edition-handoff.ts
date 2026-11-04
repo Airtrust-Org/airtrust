@@ -62,7 +62,7 @@ export function registerLmsScormEditionHandoffRoute(app: Hono<{Bindings:Env}>): 
     }
     const mismatch = await detectLmsEditionMismatch({
       bucket:c.env.BUCKET,contentType:row.tipo_conteudo,
-      activePrefix:row.scorm_package_r2_prefix,empresaId,cursoId:Number(row.curso_id),
+      activePrefix:row.scorm_package_r2_prefix,empresaId,cursoId:Number(row.curso_id),matriculaId,
       cmiJson:row.cmi_json,suspendData:row.suspend_data,db,enrollmentStartedAt:row.data_inicio,
     });
     if (!mismatch) throw new ApiError('A matrícula não exige reconciliação de edição', 409);
