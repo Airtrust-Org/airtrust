@@ -31,6 +31,23 @@ class TestContract(unittest.TestCase):
         self.assertIn('EAD Plataforma', mod.note_append_sql('observacoes', 'Treinamento realizado na plataforma anterior EAD Plataforma.'))
         self.assertIn('AIRTRUST_EAD_PLATAFORMA_CAS_GUARD_FAILED', mod.guard('1=0'))
 
+    def test_dispatch_input_is_not_shell_source(self):
+        import os
+        import subprocess
+        workflow=(ROOT / '.github/workflows/production-ead-plataforma-qualification-reconciliation.yml').read_text()
+        self.assertNotIn("[[ '${{ inputs.reviewed_dry_run_run_id }}'", workflow)
+        self.assertIn('[[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]]', workflow)
+        self.assertIn('REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}', workflow)
+        payload="' =~ .* ]] ; printf 'INJECTED'; #"
+        result=subprocess.run(['bash','-c','[[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]]'],
+                              env={**os.environ,'REVIEWED_RUN':payload},capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('INJECTED',result.stdout)
+        # Keep secrets out of job-level env, before immutable SHA and 8/8 gates.
+        job_env=workflow.split('    steps:',1)[0]
+        self.assertNotIn('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN',job_env)
+        self.assertNotIn('secrets.AIRTRUST_EAD_20261103_PLAN_B64',job_env)
+
     def test_missing_private_payload_fails_closed(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:

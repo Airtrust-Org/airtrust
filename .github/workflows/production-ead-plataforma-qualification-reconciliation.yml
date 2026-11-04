@@ -40,12 +40,10 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       EXPECTED_SHA: ${{ inputs.expected_main_sha }}
       MODE: ${{ inputs.mode }}
       CONFIRMATION: ${{ inputs.confirmation }}
-      EAD_PRIVATE_PLAN_B64: ${{ secrets.AIRTRUST_EAD_20261103_PLAN_B64 }}
+      REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
 
     steps:
       - name: Validate exact immutable dispatch
@@ -59,16 +57,11 @@ jobs:
             [[ "$CONFIRMATION" == 'AIRTRUST_EAD_PLATAFORMA_READ_ONLY_20261103' ]] || exit 1
           elif [[ "$MODE" == 'apply' ]]; then
             [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_EAD_PLATAFORMA_APPLY_20261103' ]] || exit 1
-            [[ '${{ inputs.reviewed_dry_run_run_id }}' =~ ^[1-9][0-9]*$ ]] || exit 1
+            [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || exit 1
           else
             echo INVALID_MODE
             exit 1
           fi
-          [[ -n "$EAD_PRIVATE_PLAN_B64" ]] || { echo PRIVATE_APPROVED_PLAN_MISSING; exit 1; }
-          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || {
-            echo PRODUCTION_D1_CREDENTIAL_MISSING
-            exit 1
-          }
 
       - uses: actions/checkout@v4
         with:
@@ -107,8 +100,21 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/ci/verify-release-gates.mjs
 
+      - name: Require production-scoped credentials only after release gates
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EAD_PRIVATE_PLAN_B64: ${{ secrets.AIRTRUST_EAD_20261103_PLAN_B64 }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo PRODUCTION_D1_CREDENTIAL_MISSING; exit 1; }
+          [[ -n "$EAD_PRIVATE_PLAN_B64" ]] || { echo PRIVATE_APPROVED_PLAN_MISSING; exit 1; }
+
       - name: Decode private candidate in runner temp (never a Git checkout)
         shell: bash
+        env:
+          EAD_PRIVATE_PLAN_B64: ${{ secrets.AIRTRUST_EAD_20261103_PLAN_B64 }}
         run: |
           set -euo pipefail
           private_path="$RUNNER_TEMP/ead-platform-reviewed-private-plan.json"
@@ -156,6 +162,9 @@ jobs:
         if: ${{ inputs.mode == 'apply' }}
         shell: bash
         working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -166,6 +175,9 @@ jobs:
 
       - name: Execute read-only preview or immutable reviewed data-only apply
         shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           if [[ "$MODE" == 'dry-run' ]]; then
