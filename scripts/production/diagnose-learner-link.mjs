@@ -7,7 +7,7 @@ import {assertAllowedProductionBaseUrl,decodeJwtPayload,extractAccessToken,fetch
 const upper=v=>String(v||'').trim().toUpperCase();
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const matches=(name,needle)=>norm(name)===norm(needle)||norm(name).startsWith(norm(needle)+' ');
-const active=f=>!!f&&Number(f.ativo)===1&&upper(f.status||'ATIVO')==='ATIVO';
+const active=f=>!!f&&((f.ativo!==undefined&&f.ativo!==null)?Number(f.ativo)===1:upper(f.status)==='ATIVO')&&(!f.status||upper(f.status)==='ATIVO');
 
 export function assessLearnerIdentity({users,staff,access,permissions,tenantId,target}){
   const allUsers=(users||[]).filter(u=>Number(u.empresa_id)===tenantId&&matches(u.nome,target));
@@ -52,9 +52,10 @@ async function main(){
     token=extractAccessToken(s.json);claims=decodeJwtPayload(token);
   }
   if(Number(claims?.empresa_id)!==6||!['ADMIN','ADMINISTRADOR'].includes(upper(claims?.role)))throw Error('ADMIN_TENANT_SESSION_REQUIRED');
-  async function get(path){
+  async function get(path, allowInaccessibleLink=false){
     if(!/^\/api\/(?:admin\/usuarios|funcionarios|empresas\/usuarios\/)/.test(path))throw Error('READ_PATH_BLOCKED');
     const r=await fetchJson(base+path,{headers:{Authorization:'Bearer '+token}});
+    if(allowInaccessibleLink && (r.status===403||r.status===404))return null;
     if(r.status!==200||r.json?.success!==true)throw Error('READONLY_HTTP_'+r.status);
     return r.json.data;
   }
@@ -70,7 +71,7 @@ async function main(){
   }
   const employeeId=Number(user.funcionario_id||0);
   if(employeeId>0&&!staffMap.has(employeeId)){
-    const f=await get('/api/funcionarios/'+employeeId);
+    const f=await get('/api/funcionarios/'+employeeId,true);
     if(Number(f?.id)===employeeId)staffMap.set(employeeId,{...f,empresa_id:6});
   }
   const access=await get('/api/empresas/usuarios/'+Number(user.id)+'/acessos');
