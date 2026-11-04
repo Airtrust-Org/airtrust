@@ -47,6 +47,9 @@ class TestContract(unittest.TestCase):
         job_env=workflow.split('    steps:',1)[0]
         self.assertNotIn('secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN',job_env)
         self.assertNotIn('secrets.AIRTRUST_EAD_20261103_PLAN_B64',job_env)
+        # Compile-only validation cannot dirty an immutable release checkout.
+        self.assertNotIn('py_compile', workflow)
+        self.assertIn('ast.parse', workflow)
 
     def test_missing_private_payload_fails_closed(self):
         import tempfile

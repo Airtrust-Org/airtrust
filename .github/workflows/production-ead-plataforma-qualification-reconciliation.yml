@@ -90,7 +90,12 @@ jobs:
       - name: Validate Python syntax and deterministic fixture
         run: |
           set -euo pipefail
-          python3 -B -m py_compile scripts/production/ead-plataforma-20261103.py
+          python3 - <<'PYCODE'
+          import ast
+          from pathlib import Path
+          path=Path('scripts/production/ead-plataforma-20261103.py')
+          ast.parse(path.read_text(encoding='utf-8'),filename=str(path))
+          PYCODE
           python3 -B scripts/__tests__/ead-plataforma-20261103.test.py
 
       - name: Verify all eight official release gates on exact SHA
