@@ -62,7 +62,7 @@ class TestContract(unittest.TestCase):
         db.executescript('''
         CREATE TABLE funcionarios (id INTEGER PRIMARY KEY,empresa_id INTEGER,deleted_at TEXT);
         CREATE TABLE qualificacoes_tipos (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT,codigo TEXT UNIQUE,nome TEXT,descricao TEXT,categoria TEXT,categoria_id INTEGER,area_id INTEGER,classe_requisito TEXT,carga_horaria INTEGER,carga_horaria_inicial INTEGER,carga_horaria_recorrente INTEGER,validade INTEGER,vencimento_fim_mes INTEGER,ativo INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
-        CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY AUTOINCREMENT,funcionario_id INTEGER,qualificacao_id INTEGER,qualificacao_codigo TEXT,tipo TEXT,categoria TEXT,categoria_id INTEGER,data_conclusao TEXT,data_vencimento TEXT,validade_meses INTEGER,observacoes TEXT,status TEXT,renovada INTEGER,carga_horaria INTEGER,numero_certificado TEXT,arquivo_url TEXT,origem_tipo TEXT CHECK(origem_tipo IS NULL OR origem_tipo IN ('LMS','PRESENCIAL','SIMULADOR','IMPORTADO_EDAPP','MANUAL')),lms_matricula_id INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
+        CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY AUTOINCREMENT,funcionario_id INTEGER,qualificacao_id INTEGER,qualificacao_codigo TEXT,tipo TEXT,categoria TEXT,categoria_id INTEGER,data_conclusao TEXT,data_vencimento TEXT,validade_meses INTEGER,observacoes TEXT,status TEXT CHECK(status IS NULL OR status IN ('PLANEJADA','CONCLUIDA','CANCELADA','RENOVADA')),renovada INTEGER,tipo_treinamento TEXT CHECK(tipo_treinamento IS NULL OR tipo_treinamento IN ('INICIAL','RECORRENTE','SEMESTRAL','UPGRADE','ESPECIFICO')),carga_horaria INTEGER,numero_certificado TEXT,arquivo_url TEXT,origem_tipo TEXT CHECK(origem_tipo IS NULL OR origem_tipo IN ('LMS','PRESENCIAL','SIMULADOR','IMPORTADO_EDAPP','MANUAL')),lms_matricula_id INTEGER,lms_matricula_ciclo_id INTEGER,renovacao_de INTEGER,empresa_id INTEGER,created_at TEXT,updated_at TEXT,deleted_at TEXT);
         CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,old_values TEXT,new_values TEXT,empresa_id INTEGER,created_at TEXT);
         CREATE UNIQUE INDEX uq ON qualificacoes_historico(funcionario_id,qualificacao_codigo,data_conclusao) WHERE deleted_at IS NULL;
         ''')
@@ -104,11 +104,27 @@ class TestContract(unittest.TestCase):
                 selected.append({'op':op,'employee_id':fid,'model_id':model_id,'model_code':code,
                                  'type':{'nome':code,'categoria':'EAD','categoria_id':13},'old':old})
         self.assertEqual(len(selected),471)
+        # The earlier historical cycle has since been superseded by newer
+        # evidence; it must not be inserted as another active conclusion.
+        selected[0]['superseded']=True
+        fdm=next(r for r in selected if r['op']['action']=='RECLASSIFY_FDM')
+        fdm['superseded']=True
+        fdm['old']['renovacao_de']=98765
+        db.execute('UPDATE qualificacoes_historico SET renovacao_de=98765 WHERE id=?',(fdm['old']['id'],))
+        sgso=next(r for r in selected if r['op']['action']=='FIX_COMPLETION_STATUS')
+        sgso['old']['renovada']=1
+        db.execute('UPDATE qualificacoes_historico SET renovada=1 WHERE id=?',(sgso['old']['id'],))
         script=mod.compile_sql(selected,models)
         self.assertNotIn('UPDATE lms_',script)
         self.assertNotIn('INSERT INTO lms_',script)
         db.executescript(script)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM audit_logs').fetchone()[0],474)
+        self.assertEqual(db.execute("SELECT status||':'||renovada FROM qualificacoes_historico WHERE funcionario_id=1").fetchone()[0], 'RENOVADA:1')
+        self.assertEqual(db.execute('SELECT qualificacao_codigo,status,renovada,renovacao_de FROM qualificacoes_historico WHERE id=?',(fdm['old']['id'],)).fetchone(),
+                         ('FDM_TRIP','RENOVADA',1,98765))
+        self.assertEqual(db.execute('SELECT status,renovada FROM qualificacoes_historico WHERE id=?',(sgso['old']['id'],)).fetchone(),
+                         ('CONCLUIDA',0))
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM audit_logs WHERE entity_type='qualificacoes_historico' AND old_values IS NOT NULL").fetchone()[0],90)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM qualificacoes_historico WHERE origem_tipo NOT IN ('MANUAL') AND origem_tipo IS NOT NULL").fetchone()[0],0)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico').fetchone()[0],471)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico WHERE data_vencimento IS NOT NULL').fetchone()[0],0)
