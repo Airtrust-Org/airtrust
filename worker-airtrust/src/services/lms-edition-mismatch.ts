@@ -133,6 +133,15 @@ export async function detectLmsEditionMismatch(params: {
               WHERE h.empresa_id=? AND h.curso_id=? AND h.matricula_id=?
                 AND h.target_package_prefix=? AND c.scorm_package_r2_prefix=?
                 AND datetime(ps.last_commit_at)>=datetime(h.created_at)
+                -- Do not select a historical handoff when a later handoff in
+                -- the same cycle targets another package (A -> B -> rollback A).
+                AND h.id = (
+                  SELECT MAX(h_latest.id)
+                  FROM lms_scorm_edition_handoffs h_latest
+                  WHERE h_latest.empresa_id=h.empresa_id
+                    AND h_latest.matricula_id=h.matricula_id
+                    AND h_latest.ciclo_id=h.ciclo_id
+                )
               ORDER BY h.id DESC LIMIT 1
           `).bind(params.empresaId, params.cursoId, params.matriculaId,
             prefix, prefix).first<{ id: number }>();
