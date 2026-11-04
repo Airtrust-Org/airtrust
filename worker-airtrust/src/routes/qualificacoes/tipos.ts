@@ -812,7 +812,7 @@ router.get(
             : 'NULL as conteudo_programatico'
         }, ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'}, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
-        }, qt.created_at, qt.updated_at,
+        }, qt.created_at, qt.updated_at
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildAreaJoin(columnsSupport.hasAreaId)}
