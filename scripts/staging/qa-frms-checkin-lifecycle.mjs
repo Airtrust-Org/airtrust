@@ -10,6 +10,8 @@ import { QA_EMAIL, TENANT_ID } from './provision-frms-ux-identity.mjs';
 
 const API='https://airtrust-api-staging.airtrust.workers.dev';
 export const CONFIRM='AIRTRUST_STAGING_FRMS_CHECKIN_QA';
+// The active 60-second screen is NOT a validated 3-minute PVT-B.
+export const ACTIVE_BRIEF_PROTOCOL='airtrust-brief-v1';
 
 export function localReferenceDate(now=new Date()) {
   const parts=new Intl.DateTimeFormat('en-US',{
@@ -55,7 +57,7 @@ export function checkinPayload(date, kssScore, readiness=false, schedule) {
     hora_apresentacao:schedule.presentationTime,
     horas_sono_24h:7,fit_for_duty:true,kss_score:kssScore,
     ...(readiness?{readiness:{duration_ms:60000,
-      protocol_version:'airtrust-pvtb-v2',trials:sampleTrials()}}:{})};
+      protocol_version:ACTIVE_BRIEF_PROTOCOL,trials:sampleTrials()}}:{})};
 }
 
 function assertScopedAuth(payload) {
@@ -110,7 +112,7 @@ async function main() {
 
   const readiness=await authGet(token,'/api/frms/readiness/today?date='+date);
   if(readiness.status!==200||readiness.json?.success!==true||
-      readiness.json?.data?.protocol_version!=='airtrust-pvtb-v2' ||
+      readiness.json?.data?.protocol_version!==ACTIVE_BRIEF_PROTOCOL ||
       Number(readiness.json?.data?.valid_trials)<10) {
     throw new Error('FRMS_QA_PVTB_V2_PERSISTENCE_MISMATCH');
   }
@@ -128,7 +130,7 @@ async function main() {
   if(after.status!==200||after.json?.success!==true ||
      String(after.json?.data?.id||'')!==id ||
      Number(after.json?.data?.kss_score)!==4)throw new Error('FRMS_QA_CANONICAL_READBACK_FAILED');
-  console.log('FRMS_SYNTHETIC_CHECKIN_PVTB_KSS_API_PASS tenant=999013 trials=10 update=1 production_writes=0');
+  console.log('FRMS_SYNTHETIC_CHECKIN_BRIEF_60S_KSS_API_PASS tenant=999013 trials=10 update=1 production_writes=0');
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)

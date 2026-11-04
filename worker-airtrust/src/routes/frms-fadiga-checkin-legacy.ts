@@ -1029,7 +1029,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         readinessStatements = prepared.statements;
       } catch (error) {
         const code = error instanceof Error ? error.message : 'readiness_preparation_failed';
-        if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing') {
+        if (code === 'invalid_trial_sequence' || code === 'invalid_trial_timing' || code === 'invalid_readiness_protocol') {
           return c.json({ success: false, error: code }, 400);
         }
         throw error;

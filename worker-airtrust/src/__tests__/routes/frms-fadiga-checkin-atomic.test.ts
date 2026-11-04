@@ -185,6 +185,20 @@ describe('daily check-in atomic commit', () => {
   });
 
 
+  it('rejects legacy PVT-B v2 as a new 60s trial with 400 and no D1 write', async () => {
+    const { db, batch } = fakeDb();
+    const response = await router.fetch(
+      request({ duration_ms: 60000, protocol_version: 'airtrust-pvtb-v2', trials: trials() }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false, error: 'invalid_readiness_protocol',
+    });
+    expect(batch).not.toHaveBeenCalled();
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
   it('does not accept objective readiness trials submitted retroactively for D-1', async () => {
     const { db, batch } = fakeDb();
     const body = (await request().json()) as Record<string, unknown>;
