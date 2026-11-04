@@ -471,21 +471,75 @@ function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): str
   `;
 }
 
-// Contagem de registros no histórico por tipo. Antes era uma subconsulta
-// correlacionada executada por linha (O(N) COUNTs), o que forçou o teto de
-// listagem para 75 linhas em d6415b53 para evitar CPU timeout no Worker.
-// Uma única agregação GROUP BY (mesmo padrão de buildSetoresAggregationJoin)
-// remove esse custo e permite um teto uniforme de 500.
-function buildHistoricoCountJoin(): string {
-  return `
-    LEFT JOIN (
-      SELECT qh.qualificacao_id AS tipo_id, COUNT(*) AS total_no_historico
-      FROM qualificacoes_historico qh
-      WHERE qh.deleted_at IS NULL
-      GROUP BY qh.qualificacao_id
-    ) qhc
-      ON qhc.tipo_id = qt.id
-  `;
+// Load aggregates only for the types returned by the already tenant/RBAC-scoped
+// listing. The former derived-table GROUP BY scanned all tenants' histories
+// and sector links even when the requested page contained only a few models.
+// Passing IDs through json_each(?) also avoids D1's SQL bind-variable ceiling.
+export async function loadTipoListMetrics(
+  db: D1Database,
+  empresaId: number,
+  tipoIds: Array<number | string>,
+  hasQualificacoesTiposSetores: boolean,
+): Promise<Map<string, Pick<TipoQualificacaoRow, 'total_no_historico' | 'setores_json' | 'setores_count'>>> {
+  const ids = [...new Set(tipoIds.map((id) => String(id)).filter(Boolean))];
+  const metrics = new Map<
+    string,
+    Pick<TipoQualificacaoRow, 'total_no_historico' | 'setores_json' | 'setores_count'>
+  >();
+  if (ids.length === 0) return metrics;
+
+  const idsJson = JSON.stringify(ids);
+  type HistoryMetric = { tipo_id: number | string; total_no_historico: number };
+  type SectorMetric = { tipo_id: number | string; setores_json: string; setores_count: number };
+
+  const [history, sectors] = await Promise.all([
+    db.prepare(
+      `SELECT qh.qualificacao_id AS tipo_id, COUNT(*) AS total_no_historico
+         FROM qualificacoes_historico qh
+        WHERE qh.empresa_id = ?
+          AND qh.deleted_at IS NULL
+          AND qh.qualificacao_id IN (SELECT value FROM json_each(?))
+        GROUP BY qh.qualificacao_id`,
+    )
+      .bind(empresaId, idsJson)
+      .all<HistoryMetric>(),
+    hasQualificacoesTiposSetores
+      ? db.prepare(
+          `SELECT qts.tipo_id AS tipo_id,
+                  json_group_array(json_object('id', s.id, 'nome', s.nome)) AS setores_json,
+                  COUNT(*) AS setores_count
+             FROM qualificacoes_tipos_setores qts
+             INNER JOIN setores s
+               ON s.id = qts.setor_id
+              AND s.empresa_id = qts.empresa_id
+              AND s.deleted_at IS NULL
+            WHERE qts.empresa_id = ?
+              AND qts.deleted_at IS NULL
+              AND qts.tipo_id IN (SELECT value FROM json_each(?))
+            GROUP BY qts.tipo_id`,
+        )
+          .bind(empresaId, idsJson)
+          .all<SectorMetric>()
+      : Promise.resolve({ results: [] as SectorMetric[] }),
+  ]);
+
+  for (const id of ids) {
+    metrics.set(id, { total_no_historico: 0, setores_json: '[]', setores_count: 0 });
+  }
+  for (const row of history.results || []) {
+    const key = String(row.tipo_id);
+    const current = metrics.get(key);
+    if (current) current.total_no_historico = Number(row.total_no_historico) || 0;
+  }
+  for (const row of sectors.results || []) {
+    const key = String(row.tipo_id);
+    const current = metrics.get(key);
+    if (current) {
+      current.setores_json = row.setores_json || '[]';
+      current.setores_count = Number(row.setores_count) || 0;
+    }
+  }
+  return metrics;
 }
 
 function buildCategoriaJoin(hasCategoriaId: boolean): string {
@@ -829,14 +883,10 @@ router.get(
         }, ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'}, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
         }, qt.created_at, qt.updated_at,
-        COALESCE(qhc.total_no_historico, 0) AS total_no_historico,
-        ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildAreaJoin(columnsSupport.hasAreaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
-        ${buildHistoricoCountJoin()}
-        ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
         ORDER BY qt.categoria, qt.nome
         LIMIT ?`,
@@ -844,10 +894,18 @@ router.get(
       .bind(...bindings, limitFinal)
       .all<TipoQualificacaoRow>();
 
+    const rows = results || [];
+    const metrics = await loadTipoListMetrics(
+      db,
+      empresaId,
+      rows.map((row) => row.id),
+      hasQualificacoesTiposSetores,
+    );
+
     return c.json({
       success: true,
-      data: (results || []).map(enrichTipoRow),
-      meta: { count: (results || []).length, limit: limitFinal },
+      data: rows.map((row) => enrichTipoRow({ ...row, ...metrics.get(String(row.id)) })),
+      meta: { count: rows.length, limit: limitFinal },
     });
   }),
 );
