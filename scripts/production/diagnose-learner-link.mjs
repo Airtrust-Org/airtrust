@@ -9,6 +9,12 @@ const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim
 const matches=(name,needle)=>norm(name)===norm(needle)||norm(name).startsWith(norm(needle)+' ');
 const active=f=>!!f&&((f.ativo!==undefined&&f.ativo!==null)?Number(f.ativo)===1:upper(f.status)==='ATIVO')&&(!f.status||upper(f.status)==='ATIVO');
 
+export function unwrapLinkedEmployeeResponse(response){
+  if(response.status===403||response.status===404)return null;
+  if(response.status!==200||response.json?.success!==true)throw Error('LINK_DETAIL_HTTP_'+response.status);
+  return response.json.data;
+}
+
 export function assessLearnerIdentity({users,staff,access,permissions,tenantId,target}){
   const allUsers=(users||[]).filter(u=>Number(u.empresa_id)===tenantId&&matches(u.nome,target));
   const found=allUsers.filter(u=>Number(u.active)===1);
@@ -55,7 +61,7 @@ async function main(){
   async function get(path, allowInaccessibleLink=false){
     if(!/^\/api\/(?:admin\/usuarios|funcionarios|empresas\/usuarios\/)/.test(path))throw Error('READ_PATH_BLOCKED');
     const r=await fetchJson(base+path,{headers:{Authorization:'Bearer '+token}});
-    if(allowInaccessibleLink && (r.status===403||r.status===404))return null;
+    if(allowInaccessibleLink)return unwrapLinkedEmployeeResponse(r);
     if(r.status!==200||r.json?.success!==true)throw Error('READONLY_HTTP_'+r.status);
     return r.json.data;
   }
