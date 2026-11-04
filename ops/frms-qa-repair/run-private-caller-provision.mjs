@@ -9,7 +9,7 @@
 import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {createHash,createPublicKey} from 'node:crypto';
-import {verifyCallerProvisionAdminGrant,buildCallerRuntimeSecrets}
+import {verifyCallerProvisionAdminGrant,buildCallerRuntimeSecrets,callerProvisionReadCredentials}
   from './provision-private-caller.mjs';
 import {ensurePrivateQueues} from './provision-private-queues.mjs';
 import {inspectPrivateStagingResources} from './verify-readiness.mjs';
@@ -78,6 +78,7 @@ async function main(){
   if(verified.status!=='CALLER_PROVISION_ADMIN_GRANT_VERIFIED'||
      verified.sha!==env.GITHUB_SHA)deny();
   assertSignerPin(env);
+  const scoped=callerProvisionReadCredentials(env);
   const secrets=buildCallerRuntimeSecrets({env,sha:env.GITHUB_SHA});
   const getOnly=async(url,options)=>{
     if(options?.method!=='GET')deny();
@@ -85,11 +86,11 @@ async function main(){
   };
   phase='REMOTE_READONLY_PREFLIGHT';
   await inspectPrivateStagingResources({
-    accountId:verified.accountId,token:env.CLOUDFLARE_API_TOKEN,
+    accountId:verified.accountId,token:scoped.metadata,
     fetcher:getOnly,
   });
   const queue=await ensurePrivateQueues({
-    accountId:verified.accountId,token:env.CLOUDFLARE_API_TOKEN,
+    accountId:verified.accountId,token:scoped.queue,
     fetcher:getOnly,
   });
   if(queue.queuesCreated!==0||queue.retentionUpdates!==0||

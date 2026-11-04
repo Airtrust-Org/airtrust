@@ -214,11 +214,35 @@ export async function verifyCallerProvisionAdminGrant({
   });
 }
 
+/**
+ * Deployment bearer must not be used for metadata/Queue reads in dedicated
+ * mode. A deliberate existing-staging exception is allowed only by the
+ * separately reviewed exact credential-mode grant.
+ */
+export function callerProvisionReadCredentials(env = {}) {
+  const deploy = env.CLOUDFLARE_API_TOKEN;
+  const mode = env.FRMS_QA_CREDENTIAL_MODE;
+  if (typeof deploy !== 'string' || !deploy.trim() ||
+      !['dedicated', 'existing_staging_worker_deploy_only'].includes(mode)) {
+    fail('FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED');
+  }
+  const metadata = mode === 'dedicated' ?
+    env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN : deploy;
+  const queue = mode === 'dedicated' ?
+    env.CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN : deploy;
+  if (typeof metadata !== 'string' || !metadata.trim() ||
+      typeof queue !== 'string' || !queue.trim() ||
+      (mode === 'dedicated' && (deploy === metadata || deploy === queue))) {
+    fail('FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED');
+  }
+  return Object.freeze({metadata, queue});
+}
+
 export function buildCallerRuntimeSecrets({ env = {}, sha } = {}) {
   if (!HEX64.test(env.FRMS_QA_CALLER_KEY_HEX || '')) {
     fail('FRMS_QA_CALLER_KEY_HEX_REQUIRED');
   }
-  const callerSha = createHash('sha256').update(env.FRMS_QA_CALLER_KEY_HEX).digest('hex');
+  const callerSha = createHash('sha256').update(Buffer.from(env.FRMS_QA_CALLER_KEY_HEX, 'hex')).digest('hex');
   return Object.freeze({
     ENVIRONMENT: 'staging',
     D1_ID: TARGET.db_id,

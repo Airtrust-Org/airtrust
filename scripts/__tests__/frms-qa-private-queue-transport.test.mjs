@@ -8,6 +8,7 @@ import {createTrustedQueuePrepareMessage,consumeTrustedQueuePrepare,
   verifyPrivateQueueReply} from
   '../../ops/frms-qa-repair/queue-prepare-transport.mjs';
 import {exactPreparePlan} from '../../ops/frms-qa-repair/verify-prepare-admin-grant.mjs';
+import {buildCallerRuntimeSecrets} from '../../ops/frms-qa-repair/provision-private-caller.mjs';
 import {exactApplyGrantPlan} from '../../ops/frms-qa-repair/verify-apply-admin-grant.mjs';
 import {buildReviewPlan} from '../../scripts/staging/frms-qa-cases-repair-plan.mjs';
 import {durableCoordinator} from '../../ops/frms-qa-repair/adapters.mjs';
@@ -33,11 +34,9 @@ const env={
   CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),
   CLOUDFLARE_WORKER_API_TOKEN:'fixture-cloudflare-get-only-token',
 };
-const runtime={
-  ENVIRONMENT:'staging',D1_ID:DB,RELEASE_SHA:SHA,
-  CALLER_KEY_HEX:KEY,CALLER_KEY_SHA256:
-    createHash('sha256').update(Buffer.from(KEY,'hex')).digest('hex'),
-};
+const runtime=buildCallerRuntimeSecrets({
+  env:{FRMS_QA_CALLER_KEY_HEX:KEY},sha:SHA,
+});
 const clock=Date.now();
 function fixture(change={},phase='prepare'){
   const applying=phase==='apply';
