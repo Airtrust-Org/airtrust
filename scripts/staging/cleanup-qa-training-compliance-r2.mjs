@@ -36,8 +36,11 @@ export function ownedPdfKey(row, code, marker) {
   const prefix = `certificados/empresa-${tenant}/funcionario-${employee}/historico-${history}/`;
   const key = String(row.r2_key || '');
   const uuid = key.slice(prefix.length);
+  // The Worker currently writes crypto.randomUUID().substring(0, 8), while
+  // older PDFs may use a full UUID. Both remain strictly tenant/history-bound
+  // by the D1 proof above; never accept arbitrary names or broad prefixes.
   if (!key.startsWith(prefix) ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/i.test(uuid))
+      !/^(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$/i.test(uuid))
     throw Error('QA_PDF_KEY_REJECTED');
   return key;
 }
@@ -86,7 +89,7 @@ export async function cleanupOwnedPdfs(rows, code, marker, storage, apply = fals
 // The existing staging Worker API token is scoped by the workflow environment.
 // This adapter never enumerates a bucket: every object key is generated from
 // an already verified D1 ownership row, or is this run's disposable canary.
-const REST_OBJECT_KEY = /^(?:certificados\/empresa-[1-9][0-9]*\/funcionario-[1-9][0-9]*\/historico-[1-9][0-9]*\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf|__airtrust_qa_preflight__\/compliance\/[0-9]{3,32}\/capability\.txt)$/i;
+const REST_OBJECT_KEY = /^(?:certificados\/empresa-[1-9][0-9]*\/funcionario-[1-9][0-9]*\/historico-[1-9][0-9]*\/(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf|__airtrust_qa_preflight__\/compliance\/[0-9]{3,32}\/capability\.txt)$/i;
 
 export function createCloudflareR2Storage({ accountId, token, fetchImpl = fetch }) {
   if (!/^[0-9a-f]{32}$/.test(String(accountId || '')) || typeof token !== 'string' || !token)

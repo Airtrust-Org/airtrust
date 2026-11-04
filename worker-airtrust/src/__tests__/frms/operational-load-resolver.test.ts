@@ -46,6 +46,22 @@ describe('resolveJornadaLandings', () => {
     });
   });
 
+  it('fails closed when an imported leg has no landings recorded (legs>0, pousos NULL)', async () => {
+    const db = makeDb(() => ({ landings: 3, legs: 2, legs_sem_pousos: 1 }));
+    expect(await resolveJornadaLandings(db, 6, 42, '2026-08-20')).toEqual({
+      landingsCount: 0,
+      source: 'SIGVOOS_UNAVAILABLE',
+    });
+  });
+
+  it('never reports zero observed landings for flown legs', async () => {
+    const db = makeDb(() => ({ landings: 0, legs: 2, legs_sem_pousos: 0 }));
+    expect(await resolveJornadaLandings(db, 6, 42, '2026-08-20')).toEqual({
+      landingsCount: 0,
+      source: 'SIGVOOS_UNAVAILABLE',
+    });
+  });
+
   it('marks SIGVOOS unavailable if the cv_voo_* tables/query are unavailable', async () => {
     const db = makeDb(() => {
       throw new Error('no such table: cv_voo_tripulantes');

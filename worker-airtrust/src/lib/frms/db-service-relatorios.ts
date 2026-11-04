@@ -60,6 +60,8 @@ export interface FrmsComplianceReportRow {
   dias_conformes: number;
   dias_violacao: number;
   dias_nao_avaliados: number;
+  /** Dias com possível desconformidade ainda dependente de validação. */
+  dias_pendente_validacao: number;
   dias_mitigacao: number;
   dias_atencao: number;
   violacoes_normativas: string[];
@@ -95,6 +97,7 @@ export function aggregateCanonicalComplianceReport(
         dias_conformes: 0,
         dias_violacao: 0,
         dias_nao_avaliados: 0,
+        dias_pendente_validacao: 0,
         dias_mitigacao: 0,
         dias_atencao: 0,
         violacoes_normativas: [],
@@ -119,6 +122,9 @@ export function aggregateCanonicalComplianceReport(
       row.dias_nao_avaliados += 1;
     }
 
+    // A pendência de parecer não deve desaparecer ao contar um dia como conforme
+    // perante as regras já decididas; os contadores são intencionalmente distintos.
+    if ((item.compliance_pending_validation?.length ?? 0) > 0) row.dias_pendente_validacao += 1;
     if (item.estado_operacional === 'MITIGACAO_NECESSARIA') row.dias_mitigacao += 1;
     if (item.estado_operacional === 'ATENCAO') row.dias_atencao += 1;
 

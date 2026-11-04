@@ -3,6 +3,12 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
 
+// Escopo por setor coberto em frms-individual-scope.test.ts; aqui o gestor tem a empresa.
+vi.mock('../../middleware/employee-sector-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../middleware/employee-sector-access')>()),
+  getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [], funcionarioId: null })),
+}));
+
 vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: any, next: () => Promise<void>) => {
     c.set('userId', 99);

@@ -47,9 +47,10 @@ interface IngestMetadata {
   periodTo?: string;
   totalRaw?: number;
   totalImportacoes?: number;
+  lastReviewedOperationalDate?: string;
 }
 
-function parseMetadata(value: string | null | undefined): IngestMetadata {
+export function parseMetadata(value: string | null | undefined): IngestMetadata {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
@@ -62,6 +63,9 @@ function parseMetadata(value: string | null | undefined): IngestMetadata {
       totalRaw: Number.isFinite(Number(parsed.totalRaw)) ? Number(parsed.totalRaw) : undefined,
       totalImportacoes: Number.isFinite(Number(parsed.totalImportacoes))
         ? Number(parsed.totalImportacoes)
+        : undefined,
+      lastReviewedOperationalDate: typeof parsed.lastReviewedOperationalDate === 'string'
+        ? parsed.lastReviewedOperationalDate
         : undefined,
     };
   } catch {
@@ -115,15 +119,57 @@ export function resolveNextSigvoosDay(
   legacyLastTo: string | null | undefined,
   operationalDate: string,
 ): string | null {
+  // A day is eligible only after it has ended in the operational IANA timezone.
+  // The current day may still have flights or reports arriving after the cron.
+  const lastClosedDay = addIsoDay(operationalDate, -1);
   const lastTo = durableLastTo || legacyLastTo || null;
-  if (!lastTo) return operationalDate;
+  if (!lastTo) return lastClosedDay;
   const candidate = addIsoDay(lastTo, 1);
-  if (candidate > operationalDate) return null;
+  if (candidate > lastClosedDay) return null;
   // The job already processes a single operational day per invocation. Never
   // jump the watermark forward to enforce a catch-up horizon: doing so silently
   // discards every missed day before that horizon. Resume from the exact next
   // durable/legacy day and let subsequent scheduled invocations catch up.
   return candidate;
+}
+
+/**
+ * Never stamp the in-progress operational date as a completed SIGVOOS day.
+ * Durable and legacy markers only attest to an already synchronized closed day.
+ */
+export function resolveSigvoosNoopWatermark(
+  durableLastTo: string | null | undefined,
+  legacyLastTo: string | null | undefined,
+  operationalDate: string,
+): string | null {
+  const verified = durableLastTo || legacyLastTo || null;
+  if (!verified) return null;
+  const lastClosedDay = addIsoDay(operationalDate, -1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(verified) || verified > lastClosedDay) {
+    throw new Error('SIGVOOS_WATERMARK_NOT_CLOSED');
+  }
+  return verified;
+}
+
+/**
+ * Closed-day reconciliation: recheck D-3..D-1 once per operational day after
+ * catching up, but never jump over older unsynchronized days.
+ * Absence from SIGVOOS is not proof of cancellation (separate acceptance).
+ */
+export function resolveSigvoosIngestionWindow(
+  durableLastTo: string | null | undefined,
+  legacyLastTo: string | null | undefined,
+  operationalDate: string,
+  lastReviewedOperationalDate?: string | null,
+): { from: string; to: string; retrospective: boolean } | null {
+  const lastClosedDay = addIsoDay(operationalDate, -1);
+  resolveSigvoosNoopWatermark(durableLastTo, legacyLastTo, operationalDate);
+  const nextDay = resolveNextSigvoosDay(durableLastTo, legacyLastTo, operationalDate);
+  if (nextDay && nextDay < lastClosedDay) {
+    return { from: nextDay, to: nextDay, retrospective: false };
+  }
+  if (!nextDay && lastReviewedOperationalDate === operationalDate) return null;
+  return { from: addIsoDay(lastClosedDay, -2), to: lastClosedDay, retrospective: true };
 }
 
 export function shouldRunSigvoosAtCurrentHour(
@@ -229,13 +275,24 @@ async function runShadowComparison(
   }
 }
 
-async function runTenantIngestion(
+export async function runTenantIngestion(
   db: D1Database,
   empresaId: number | null,
   env: Env,
   logger: CronJobLogger,
   now: Date,
 ) {
+  // A global/unresolved company must not enqueue every tenant's crew or
+  // attempt cross-tenant FRMS recalculation from a legacy SIGVOOS config.
+  if (!Number.isSafeInteger(empresaId) || Number(empresaId) <= 0) {
+    logger.warn('[SIGVOOS_CRON] tenant identity missing; refusing import and FRMS queue');
+    return {
+      outcome: 'FAILED' as const,
+      processedCount: 0,
+      failedCount: 1,
+      errorCode: 'SIGVOOS_CRON_TENANT_REQUIRED',
+    };
+  }
   const scopeKey = buildCronScopeKey(empresaId);
   const operationalDate = formatSaoPauloDate(now);
   const result = await runCronJobWithLease({
@@ -255,7 +312,8 @@ async function runTenantIngestion(
           cursorAfter: context.state?.cursor_value ?? null,
           watermarkFrom: context.state?.watermark_from ?? null,
           watermarkTo: context.state?.watermark_to ?? null,
-          metadata: { stage: 'COMPLETE', skipped: 'CONFIG_DISABLED_OR_INCOMPLETE' },
+          metadata: { ...parseMetadata(context.state?.metadata_json), skipped: 'CONFIG_DISABLED_OR_INCOMPLETE' },
+          markStateSuccess: false,
         };
       }
       if (!shouldRunSigvoosAtCurrentHour(config.auto_sync_hora_utc, now)) {
@@ -265,7 +323,7 @@ async function runTenantIngestion(
           cursorAfter: context.state?.cursor_value ?? null,
           watermarkFrom: context.state?.watermark_from ?? null,
           watermarkTo: context.state?.watermark_to ?? null,
-          metadata: { stage: 'COMPLETE', skipped: 'OUTSIDE_CONFIGURED_HOUR' },
+          metadata: { ...parseMetadata(context.state?.metadata_json), skipped: 'OUTSIDE_CONFIGURED_HOUR' },
           markStateSuccess: false,
         };
       }
@@ -275,29 +333,36 @@ async function runTenantIngestion(
       let periodTo = prior.stage === 'FRMS_ENQUEUE' ? prior.periodTo : undefined;
       let totalRaw = prior.totalRaw ?? 0;
       let totalImportacoes = prior.totalImportacoes ?? 0;
+      let lastReviewedOperationalDate = prior.lastReviewedOperationalDate;
       let enqueueCursor =
         prior.stage === 'FRMS_ENQUEUE' ? Number(context.state?.cursor_value ?? 0) : 0;
       if (!Number.isFinite(enqueueCursor) || enqueueCursor < 0) enqueueCursor = 0;
 
       if (!periodFrom || !periodTo) {
-        const nextDay = resolveNextSigvoosDay(
+        const nextWindow = resolveSigvoosIngestionWindow(
           context.state?.watermark_to,
           config.last_sync_to,
           operationalDate,
+          lastReviewedOperationalDate,
         );
-        if (!nextDay) {
+        if (!nextWindow) {
           return {
             outcome: 'SUCCEEDED' as const,
             processedCount: 0,
             cursorAfter: null,
             watermarkFrom: context.state?.watermark_from ?? null,
-            watermarkTo: context.state?.watermark_to ?? operationalDate,
-            metadata: { stage: 'COMPLETE', operationalDate },
+            watermarkTo: resolveSigvoosNoopWatermark(
+              context.state?.watermark_to,
+              config.last_sync_to,
+              operationalDate,
+            ),
+            metadata: { stage: 'COMPLETE', operationalDate, lastReviewedOperationalDate },
           };
         }
 
-        periodFrom = nextDay;
-        periodTo = nextDay;
+        periodFrom = nextWindow.from;
+        periodTo = nextWindow.to;
+        if (nextWindow.retrospective) lastReviewedOperationalDate = operationalDate;
         const sync = await syncSigvoosForFrms(
           db,
           empresaId,
@@ -306,7 +371,7 @@ async function runTenantIngestion(
             from: periodFrom,
             to: periodTo,
             pageSize: 100,
-            maxPages: 1,
+            maxPages: 10,
             clearExisting: false,
           },
           env,
@@ -323,6 +388,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
         });
         await context.heartbeat();
@@ -402,6 +468,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
         });
         await context.heartbeat();
@@ -420,6 +487,7 @@ async function runTenantIngestion(
             periodTo,
             totalRaw,
             totalImportacoes,
+            lastReviewedOperationalDate,
           },
           markStateSuccess: false,
         };
@@ -438,6 +506,7 @@ async function runTenantIngestion(
           totalRaw,
           totalImportacoes,
           frms_items_enqueued: enqueued,
+          lastReviewedOperationalDate,
         },
       };
     },
@@ -523,7 +592,7 @@ async function validateTripulanteTenant(
   tripulanteId: number,
   empresaId: number | null,
 ): Promise<boolean> {
-  if (empresaId === null) return true;
+  if (empresaId === null) return false;
   const row = await db
     .prepare(
       `SELECT id
@@ -545,7 +614,10 @@ async function runFrmsQueueScope(
   logger: CronJobLogger,
 ) {
   const empresaId = scopeToEmpresaId(scopeKey);
-  if (empresaId === undefined) return;
+  if (empresaId === undefined || empresaId === null) {
+    logger.warn('[SIGVOOS_CRON] ignoring legacy global FRMS queue without tenant identity');
+    return;
+  }
 
   await runCronJobWithLease({
     db,

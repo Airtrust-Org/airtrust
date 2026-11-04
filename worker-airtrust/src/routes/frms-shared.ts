@@ -4,8 +4,9 @@
  */
 
 import type { Context } from 'hono';
-import type { Env, Variables } from '../types';
+import type { Env, Variables, AppEnv } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { resolvePlatformAccessState, isPlatformAdminAccess } from '../lib/rbac/platform-access';
 import { registrarAuditoria } from '../utils/auditoria';
 import { createLogger, toError } from '../utils/logger';
@@ -95,6 +96,35 @@ export async function auditFrms(
   }
 }
 
+/**
+ * Dado individual do FRMS (jornada, sono, score, escala) segue a mesma política
+ * de escopo dos relatórios: admin vê a empresa, gestor só os seus setores,
+ * demais usuários apenas o próprio cadastro. Vale para leitura e escrita.
+ */
+export async function assertFuncionarioNoEscopoFrms(
+  c: FrmsAppContext | Context<AppEnv>,
+  empresaId: number,
+  funcionarioId: number,
+): Promise<Response | null> {
+  const deny = () => c.json({
+    success: false,
+    error: 'Tripulante fora do seu escopo de acesso no FRMS.',
+    code: 'FRMS_INDIVIDUAL_SCOPE_DENIED',
+  }, 403);
+  if (!Number.isSafeInteger(funcionarioId) || funcionarioId <= 0) return deny();
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  if (access.mode === 'all') return null;
+  if (access.mode === 'self') return access.funcionarioId === funcionarioId ? null : deny();
+  if (access.setorIds.length === 0) return deny();
+  const row = await c.env.DB.prepare(
+    `SELECT f.id FROM funcionarios f
+      WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+        AND f.setor_id IN (${access.setorIds.map(() => '?').join(', ')})
+      LIMIT 1`,
+  ).bind(funcionarioId, empresaId, ...access.setorIds).first<{ id: number }>();
+  return row ? null : deny();
+}
+
 export async function assertTripulanteEmpresa(
   c: FrmsAppContext,
   tripulanteId: string,
@@ -134,7 +164,7 @@ export async function assertTripulanteEmpresa(
     );
   }
 
-  return null;
+  return assertFuncionarioNoEscopoFrms(c, empresaId, Number(row.id));
 }
 
 export async function assertJornadaEmpresa(
@@ -153,7 +183,7 @@ export async function assertJornadaEmpresa(
   }
 
   const row = await c.env.DB.prepare(
-    `SELECT j.id
+    `SELECT j.id, f.id AS funcionario_id
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
       WHERE j.id = ?
@@ -165,7 +195,7 @@ export async function assertJornadaEmpresa(
       LIMIT 1`,
   )
     .bind(jornadaId, empresaId)
-    .first<{ id: string }>();
+    .first<{ id: string; funcionario_id?: number | null }>();
 
   if (!row) {
     return c.json(
@@ -178,7 +208,7 @@ export async function assertJornadaEmpresa(
     );
   }
 
-  return null;
+  return assertFuncionarioNoEscopoFrms(c, empresaId, Number(row.funcionario_id));
 }
 
 export async function assertAlertaEmpresa(
