@@ -60,7 +60,7 @@ function assertSignerPin(env){
      u.protocol!=='https:'||u.username||u.password||u.port||u.pathname!=='/'||
      u.search||u.hash||u.hostname==='localhost'||
      u.hostname.endsWith('.local')||u.hostname.endsWith('.internal')||
-     /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(u.hostname)||
+     /^\d{1,3}(?:\.\d{1,3}){3}$/.test(u.hostname)||
      createHash('sha256').update(u.origin).digest('hex')!==
        env.FRMS_QA_SIGNER_ORIGIN_SHA256)
     deny();
