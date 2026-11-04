@@ -111,18 +111,21 @@ test('forged, edited, old, non-admin, wrong workflow, main or gates fail closed'
 });
 function cfHarness({existing=[],failPostName='',badInventory=false,
   badExistingRetention=false,badConsumer=false,callerDeployed=false,
-  foreignPrepareConsumer=false}={}){
+  foreignPrepareConsumer=false,omitConsumerQueueName=false,
+  wrongConsumerQueueName=false}={}){
   const items=new Map(),calls=[];
   const idFor=name=>name===NAMES[0]?'1'.repeat(32):'2'.repeat(32);
   const knownId=id=>[...items.values()].find(q=>q.queue_id===id);
   for(const name of existing){
+    const verifiedConsumerName=omitConsumerQueueName?undefined:
+      wrongConsumerQueueName?'another-queue':name;
     items.set(name,{queue_id:idFor(name),queue_name:name,
       settings:{message_retention_period:badExistingRetention?345600:900},
       consumers:name===NAMES[1]?[{
-        type:badConsumer?'worker':'http_pull',queue_name:name,
+        type:badConsumer?'worker':'http_pull',queue_name:verifiedConsumerName,
         settings:{batch_size:1,visibility_timeout_ms:30000},
       }]:callerDeployed||foreignPrepareConsumer?[{
-        type:'worker',queue_name:name,settings:{batch_size:1},
+        type:'worker',queue_name:verifiedConsumerName,settings:{batch_size:1},
         script_name:foreignPrepareConsumer?'unreviewed-other-worker':
           'airtrust-frms-qa-caller-staging-private',
       }]:[]});
@@ -170,7 +173,8 @@ function cfHarness({existing=[],failPostName='',badInventory=false,
       assert.deepEqual(data,{type:'http_pull',settings:{
         batch_size:1,visibility_timeout_ms:30000,max_retries:1,
       }});
-      const consumer={...data,queue_name:item.queue_name};
+      const consumer={...data,queue_name:omitConsumerQueueName?undefined:
+        wrongConsumerQueueName?'another-queue':item.queue_name};
       item.consumers.push(consumer);
       return Response.json({success:true,result:consumer});
     }
@@ -231,4 +235,21 @@ test('bad Queue inventory or missing token stops before all write attempts',asyn
   assert.equal(f.calls.filter(x=>x.method==='POST').length,0);
   await assert.rejects(ensurePrivateQueues({accountId:ACCOUNT,token:''}),
     /FRMS_QA_QUEUE_PROVISION_DENIED/);
+});
+
+test('Cloudflare may omit Consumer queue_name when enclosing Queue ID and name are pinned',async()=>{
+  for(const existing of [NAMES,[]]){
+    const f=cfHarness({existing,omitConsumerQueueName:true});
+    const r=await ensurePrivateQueues({accountId:ACCOUNT,token:CF,fetcher:f.fetcher});
+    assert.equal(r.queueNamesPresent,2);
+    assert.equal(r.queueHttpPullConfigured,true);
+    if(existing.length===2)assert.ok(f.calls.every(c=>c.method==='GET'));
+  }
+});
+test('an explicit foreign Consumer queue_name still fails closed without writes',async()=>{
+  const f=cfHarness({existing:NAMES,wrongConsumerQueueName:true});
+  await assert.rejects(ensurePrivateQueues({
+    accountId:ACCOUNT,token:CF,fetcher:f.fetcher,
+  }),/FRMS_QA_QUEUE_PROVISION_DENIED/);
+  assert.ok(f.calls.every(c=>c.method==='GET'));
 });
