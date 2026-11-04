@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadTipoListMetrics } from '../../routes/qualificacoes/tipos';
+import { loadTipoListMetrics } from '../../routes/qualificacoes/tipos-list-metrics';
 
 type SqlCall = { sql: string; bindings: unknown[] };
 
