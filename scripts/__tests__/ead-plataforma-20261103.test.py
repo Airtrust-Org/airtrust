@@ -75,7 +75,7 @@ class TestContract(unittest.TestCase):
         models = [dict(codigo=code,nome=code,descricao='Curso importado',categoria_id=13,area_id=1,
                        carga_horaria_inicial=8,carga_horaria_recorrente=8,validade=None) for code in sorted(mod.NEW_CODES)]
         for code, model_id in [('BASE',1),('FDM-EAD',119),('FDM_TRIP',199),('SGSO',23)]:
-            db.execute("INSERT INTO qualificacoes_tipos(id,codigo,nome,categoria,categoria_id,ativo,empresa_id) VALUES(?,?,?,'EAD',13,1,6)",(model_id,code,code))
+            db.execute("INSERT INTO qualificacoes_tipos(id,codigo,nome,categoria,categoria_id,ativo,empresa_id,carga_horaria) VALUES(?,?,?,'EAD',13,1,6,2)",(model_id,code,code))
         specs = [('INSERT_HISTORICAL_CYCLE',181),('INSERT_MISSING',180),('INSERT_AFTER_MODEL_CREATE',20),('CORRECT_DATE',69),('RECLASSIFY_FDM',18),('FIX_COMPLETION_STATUS',3)]
         selected = []
         for action, n in specs:
@@ -99,12 +99,12 @@ class TestContract(unittest.TestCase):
                     old_date='2025-05-11' if action=='CORRECT_DATE' else source_date
                     old={'id':old_id,'funcionario_id':fid,'qualificacao_id':old_type,'qualificacao_codigo':old_code,
                          'data_conclusao':old_date,'status':None,'origem_tipo':None,'lms_matricula_id':None,
-                         'observacoes':'Observação original','numero_certificado':None,'arquivo_url':None,'renovacao_de':None}
-                    db.execute('INSERT INTO qualificacoes_historico(id,funcionario_id,qualificacao_id,qualificacao_codigo,data_conclusao,status,observacoes,empresa_id) VALUES(?,?,?,?,?,?,?,6)',(old_id,fid,old_type,old_code,old_date,None,'Observação original'))
+                         'observacoes':'Observação original','numero_certificado':None,'arquivo_url':None,'renovacao_de':None,'carga_horaria':2}
+                    db.execute('INSERT INTO qualificacoes_historico(id,funcionario_id,qualificacao_id,qualificacao_codigo,data_conclusao,status,observacoes,carga_horaria,empresa_id) VALUES(?,?,?,?,?,?,?,?,6)',(old_id,fid,old_type,old_code,old_date,None,'Observação original',2))
                 op={'action':action,'completion_date':source_date,'source_row':fid+2,
                     'source_certificate_code':f'EAD{fid:05d}',
                     'source_certificate_url':f'https://example.invalid/certificate/{fid}',
-                    'source_workload_minutes':480,
+                    'source_workload_minutes':60 if action=='RECLASSIFY_FDM' else 480,
                     'observation_append':f'Treinamento realizado na plataforma anterior EAD Plataforma. Código do certificado: EAD{fid:05d}.',
                     'existing': {'expected_completion_date':old_date} if existing else None}
                 selected.append({'op':op,'employee_id':fid,'model_id':model_id,'model_code':code,
@@ -126,11 +126,13 @@ class TestContract(unittest.TestCase):
         db.executescript(script)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM audit_logs').fetchone()[0],474)
         self.assertEqual(db.execute("SELECT status||':'||renovada FROM qualificacoes_historico WHERE funcionario_id=1").fetchone()[0], 'RENOVADA:1')
-        self.assertEqual(db.execute('SELECT qualificacao_codigo,status,renovada,renovacao_de FROM qualificacoes_historico WHERE id=?',(fdm['old']['id'],)).fetchone(),
-                         ('FDM_TRIP','RENOVADA',1,98765))
+        self.assertEqual(db.execute('SELECT qualificacao_codigo,status,renovada,renovacao_de,carga_horaria FROM qualificacoes_historico WHERE id=?',(fdm['old']['id'],)).fetchone(),
+                         ('FDM_TRIP','RENOVADA',1,98765,1))
+        self.assertEqual(db.execute('SELECT carga_horaria FROM qualificacoes_tipos WHERE id=119').fetchone()[0],2)
         self.assertEqual(db.execute('SELECT status,renovada FROM qualificacoes_historico WHERE id=?',(sgso['old']['id'],)).fetchone(),
                          ('CONCLUIDA',0))
         self.assertEqual(db.execute("SELECT COUNT(*) FROM audit_logs WHERE entity_type='qualificacoes_historico' AND old_values IS NOT NULL").fetchone()[0],90)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM qualificacoes_historico WHERE carga_horaria=2").fetchone()[0],0)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM qualificacoes_historico WHERE origem_tipo NOT IN ('MANUAL') AND origem_tipo IS NOT NULL").fetchone()[0],0)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico').fetchone()[0],471)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM qualificacoes_historico WHERE data_vencimento IS NOT NULL').fetchone()[0],0)

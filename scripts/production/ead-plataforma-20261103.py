@@ -182,7 +182,7 @@ def read_d1(sql: str) -> list[dict]:
 def get_live(ops: list[dict], models: list[dict]) -> tuple[list[dict], dict, list[dict], dict]:
     people = read_d1("SELECT id,nome,LOWER(TRIM(email)) email,empresa_id,deleted_at FROM funcionarios WHERE empresa_id=6 AND deleted_at IS NULL")
     models_live = read_d1("SELECT id,codigo,nome,categoria,categoria_id,area_id,ativo,deleted_at,validade FROM qualificacoes_tipos WHERE empresa_id=6")
-    hist = read_d1("SELECT id,funcionario_id,qualificacao_id,qualificacao_codigo,substr(data_conclusao,1,10) data_conclusao,CAST(data_vencimento AS TEXT) data_vencimento,status,renovada,origem_tipo,lms_matricula_id,lms_matricula_ciclo_id,CAST(observacoes AS TEXT) observacoes,CAST(numero_certificado AS TEXT) numero_certificado,CAST(arquivo_url AS TEXT) arquivo_url,renovacao_de FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL")
+    hist = read_d1("SELECT id,funcionario_id,qualificacao_id,qualificacao_codigo,substr(data_conclusao,1,10) data_conclusao,CAST(data_vencimento AS TEXT) data_vencimento,carga_horaria,status,renovada,origem_tipo,lms_matricula_id,lms_matricula_ciclo_id,CAST(observacoes AS TEXT) observacoes,CAST(numero_certificado AS TEXT) numero_certificado,CAST(arquivo_url AS TEXT) arquivo_url,renovacao_de FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL")
     audit_count = read_d1("SELECT COUNT(*) n FROM audit_logs WHERE empresa_id=6 AND action=" + sql_quote(AUDIT_ACTION))[0]['n']
     by_email = collections.defaultdict(list)
     by_name = collections.defaultdict(list)
@@ -320,7 +320,9 @@ def get_live(ops: list[dict], models: list[dict]) -> tuple[list[dict], dict, lis
                   r['op']['action'].startswith('INSERT_') and r['superseded']),
               'fdm_renewed_on_reclassification':sum(1 for r in selected if
                   r['op']['action']=='RECLASSIFY_FDM' and r['superseded']),
-              'audit_initial':audit_count}
+              'historical_workload_corrections':sum(1 for r in selected if r['old'] is not None
+                and r['old'].get('carga_horaria')!=r['op']['source_workload_minutes']//60),
+            'audit_initial':audit_count}
     return selected, status, models_live, by_hid
 
 
@@ -355,6 +357,7 @@ def compile_sql(selected: list[dict], models: list[dict]) -> str:
                         f" AND COALESCE(h.renovada,0)={int(old.get('renovada') or 0)}"
                         f" AND h.renovacao_de IS {sql_quote(old.get('renovacao_de'))}"
                         f" AND h.data_vencimento IS {sql_quote(old.get('data_vencimento'))}"
+                        f" AND h.carga_horaria IS {sql_quote(old.get('carga_horaria'))}"
                         f" AND h.observacoes IS {sql_quote(old.get('observacoes'))}"
                         f" AND h.numero_certificado IS {sql_quote(old.get('numero_certificado'))}"
                         f" AND h.arquivo_url IS {sql_quote(old.get('arquivo_url'))}"
@@ -386,21 +389,22 @@ def compile_sql(selected: list[dict], models: list[dict]) -> str:
         else:
             hid=int(old['id']);entity_expr=str(hid)
             if action=='CORRECT_DATE':
-                statements.append(f"UPDATE qualificacoes_historico SET data_conclusao={sql_quote(day)},data_vencimento=NULL,observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND substr(data_conclusao,1,10)={sql_quote(op['existing']['expected_completion_date'])} AND qualificacao_id={model} AND deleted_at IS NULL;")
+                statements.append(f"UPDATE qualificacoes_historico SET data_conclusao={sql_quote(day)},data_vencimento=NULL,carga_horaria={hours},observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND substr(data_conclusao,1,10)={sql_quote(op['existing']['expected_completion_date'])} AND qualificacao_id={model} AND deleted_at IS NULL;")
             elif action=='RECLASSIFY_FDM':
                 # Keep existing renewal references and native certificates
                 # intact; only reclassify this reviewed non-LMS history.
                 # Reflect later same-code completions without rewriting them.
-                statements.append(f"UPDATE qualificacoes_historico SET qualificacao_id={model},qualificacao_codigo={sql_quote(code)},tipo={sql_quote(r['type']['nome'])},categoria={sql_quote(r['type']['categoria'])},categoria_id={r['type']['categoria_id'] if r['type']['categoria_id'] is not None else 'NULL'},status={sql_quote(completed_status)},renovada={renewed},observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND qualificacao_id=119 AND UPPER(qualificacao_codigo)='FDM-EAD' AND deleted_at IS NULL;")
+                statements.append(f"UPDATE qualificacoes_historico SET qualificacao_id={model},qualificacao_codigo={sql_quote(code)},tipo={sql_quote(r['type']['nome'])},categoria={sql_quote(r['type']['categoria'])},categoria_id={r['type']['categoria_id'] if r['type']['categoria_id'] is not None else 'NULL'},status={sql_quote(completed_status)},renovada={renewed},carga_horaria={hours},observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND qualificacao_id=119 AND UPPER(qualificacao_codigo)='FDM-EAD' AND deleted_at IS NULL;")
             elif action=='FIX_COMPLETION_STATUS':
-                statements.append(f"UPDATE qualificacoes_historico SET status={sql_quote(completed_status)},renovada={renewed},observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND TRIM(COALESCE(status,''))='' AND deleted_at IS NULL;")
+                statements.append(f"UPDATE qualificacoes_historico SET status={sql_quote(completed_status)},renovada={renewed},carga_horaria={hours},observacoes={note_append_sql('observacoes',obs)},updated_at=datetime('now') WHERE id={hid} AND empresa_id={COMPANY} AND funcionario_id={fid} AND TRIM(COALESCE(status,''))='' AND deleted_at IS NULL;")
             else:raise AssertionError('Unknown action')
         audit=json.dumps({'source':'EAD Plataforma','source_row':op['source_row'],'source_cert':cert,'action':action,'employee_id':fid,'qualification_code':code,'completion_date':day},ensure_ascii=False,separators=(',',':'))
         old_values=None if old is None else json.dumps({
             'status':old.get('status'),'renovada':old.get('renovada'),
             'renovacao_de':old.get('renovacao_de'),
             'data_conclusao':old.get('data_conclusao'),
-            'qualificacao_codigo':old.get('qualificacao_codigo')
+            'qualificacao_codigo':old.get('qualificacao_codigo'),
+            'carga_horaria':old.get('carga_horaria')
         },ensure_ascii=False,separators=(',',':'))
         statements.append("INSERT INTO audit_logs (user_id,action,entity_type,entity_id,old_values,new_values,empresa_id,created_at) SELECT NULL,"+sql_quote(AUDIT_ACTION)+",'qualificacoes_historico',"+entity_expr+","+sql_quote(old_values)+","+sql_quote(audit)+f",{COMPANY},datetime('now');")
     statements.append(guard(f"(SELECT COUNT(*) FROM audit_logs WHERE empresa_id={COMPANY} AND action={sql_quote(AUDIT_ACTION)})=474"))
@@ -414,7 +418,7 @@ def verify_production_target() -> None:
 
 
 def post_readback(selected: list[dict], models: list[dict]) -> dict:
-    hist=read_d1("SELECT id,funcionario_id,qualificacao_codigo,qualificacao_id,substr(data_conclusao,1,10) day,status,renovada,renovacao_de,tipo_treinamento,observacoes,numero_certificado,arquivo_url,data_vencimento,lms_matricula_id,lms_matricula_ciclo_id,certificado_arquivo_id FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL")
+    hist=read_d1("SELECT id,funcionario_id,qualificacao_codigo,qualificacao_id,substr(data_conclusao,1,10) day,status,renovada,renovacao_de,tipo_treinamento,carga_horaria,observacoes,numero_certificado,arquivo_url,data_vencimento,lms_matricula_id,lms_matricula_ciclo_id,certificado_arquivo_id FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL")
     audit=read_d1("SELECT entity_type,COUNT(*) n FROM audit_logs WHERE empresa_id=6 AND action="+sql_quote(AUDIT_ACTION)+" GROUP BY entity_type")
     bykey=collections.defaultdict(list)
     byid={int(h['id']):h for h in hist}
@@ -428,6 +432,7 @@ def post_readback(selected: list[dict], models: list[dict]) -> dict:
             h=matches[0]
             if h['numero_certificado']!=op['source_certificate_code'] or h['arquivo_url']!=op['source_certificate_url']:failures+=1
             if h['data_vencimento'] is not None:failures+=1
+            if h['carga_horaria']!=op['source_workload_minutes']//60:failures+=1
             if (h['status']!=('RENOVADA' if r['superseded'] else 'CONCLUIDA')
                 or int(h.get('renovada') or 0)!=int(r['superseded'])):failures+=1
             kind='RECORRENTE' if int(op['source_row']) in RECURRENT_SOURCE_ROWS else 'INICIAL'
@@ -436,6 +441,7 @@ def post_readback(selected: list[dict], models: list[dict]) -> dict:
         else:
             h=byid.get(int(old['id']))
             if h is None:failures+=1;continue
+            if h['carga_horaria']!=op['source_workload_minutes']//60:failures+=1
             if action=='CORRECT_DATE' and (h['day']!=day or h['data_vencimento'] is not None):failures+=1
             if action=='RECLASSIFY_FDM' and (h['qualificacao_id']!=r['model_id']
                 or h['qualificacao_codigo'].upper()!=code.upper()
