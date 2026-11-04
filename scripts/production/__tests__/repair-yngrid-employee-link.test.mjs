@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectStrictLinkCandidate,linkCandidateHash} from '../repair-yngrid-employee-link.mjs';
+import {selectStrictLinkCandidate,linkCandidateHash,assertListedUnlinkedEmployee} from '../repair-yngrid-employee-link.mjs';
 const u={id:71,empresa_id:6,nome:'Yngrid Fonseca',email:'yngrid@example.invalid',
   active:1,perfil:'ADMIN',funcionario_id:null};
 const f={id:81,empresa_id:6,nome:'Yngrid Fonseca',email:'yngrid@example.invalid',
@@ -33,4 +33,10 @@ test('rejects role elevation, changed profiles or ambiguous email',()=>{
  assert.throws(()=>selectStrictLinkCandidate({...args,access:{role:'admin',perfis:['ADMIN','ALUNO']}}),/TENANT_PROFILES_CHANGED/);
  assert.throws(()=>selectStrictLinkCandidate({...args,users:[{...u,perfil:'GESTOR'}]}),/USER_ROLE_CHANGED/);
  assert.throws(()=>selectStrictLinkCandidate({...args,staff:[{...f,email:'wrong@example.invalid'}]}),/EMPLOYEE_NOT_UNIQUE/);
+});
+
+test('requires the canonical active-unlinked roster; fails closed on truncated pagination',()=>{
+ assert.doesNotThrow(()=>assertListedUnlinkedEmployee([{id:81}],81));
+ assert.throws(()=>assertListedUnlinkedEmployee([{id:80}],81),/EMPLOYEE_ALREADY_LINKED_OR_UNAVAILABLE/);
+ assert.throws(()=>assertListedUnlinkedEmployee(Array.from({length:200},(_,i)=>({id:i+100})),81),/UNLINKED_STAFF_LIST_TRUNCATED/);
 });
