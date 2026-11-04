@@ -8,11 +8,11 @@ on:
         required: true
         type: string
       pr_number:
-        description: Same-repository reviewed PR; merged HFA 0529 must match current protected main
+        description: Same-repository reviewed PR; merged exceptions require current protected main
         required: true
         type: string
       release_sha:
-        description: Exact reviewed PR HEAD SHA, or current main merge SHA for HFA 0529
+        description: Exact reviewed open PR HEAD or protected main SHA for explicitly allowlisted merged PR
         required: true
         type: string
       change_id:
@@ -131,7 +131,22 @@ jobs:
             reviewedMergedMgm0570 = currentProtectedMain &&
               process.env.CHANGE_ID === 'lms-scorm-formative-approval-renewals-0570' && number === '1855';
           }
-          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa || reviewedMergedMgm0570)) {
+          // FRMS #1922: the Schema V2 0573 workflow became trusted only after
+          // squash merge. Admit its immutable reviewed merge commit (or a
+          // protected-main descendant) without accepting arbitrary merged PRs.
+          let reviewedMergedFrms0573 = false;
+          if (sameRepo && pr.merged === true && number === '1922' &&
+              process.env.CHANGE_ID === 'frms-checkin-kss-provenance-0573' &&
+              pr.merge_commit_sha?.toLowerCase() === 'f293ad21b5a57a291122aef477cc1a5600beebf2') {
+            const mainRef = await github('/git/refs/heads/main');
+            if (mainRef.object?.sha?.toLowerCase() === sha) {
+              const ancestry = await github('/compare/f293ad21b5a57a291122aef477cc1a5600beebf2...' + sha);
+              reviewedMergedFrms0573 =
+                (ancestry.status === 'ahead' || ancestry.status === 'identical') &&
+                ancestry.behind_by === 0;
+            }
+          }
+          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa || reviewedMergedMgm0570 || reviewedMergedFrms0573)) {
             throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
           }
           if (process.env.CHANGE_ID === 'lms-scorm-qa-evidence-bindings-0568') {

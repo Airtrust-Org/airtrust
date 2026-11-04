@@ -18,6 +18,14 @@ const pdf=id=>({
   expected_marker:marker,
   r2_key:`certificados/empresa-999014/funcionario-${200+id}/historico-${300+id}/1e43ca78-5c79-4f13-9327-a16d7eef000${id}.pdf`,
 });
+
+const shortPdf=id=>({
+  ...pdf(id),
+  // Mirrors generateCertificateForHistorico's run-scoped short UUID key.
+  r2_key: 'certificados/empresa-999014/funcionario-'+(200+id)+
+    '/historico-'+(300+id)+'/1e43ca7'+id+'.pdf',
+});
+
 const bucket=initial=>{
   const keys=new Set(initial);
   const calls=[];
@@ -224,4 +232,27 @@ test('R2 canary is compensated if PUT persists remotely but the reply times out'
   );
   assert.equal(r.keys.size,0,'canary must be deleted after an ambiguous PUT');
   assert.deepEqual(r.calls.map(x=>x.method),['PUT','DELETE','GET']);
+});
+
+
+test('cleanup also accepts the exact short UUID filenames emitted by the active Worker',async()=>{
+  const r=bucket([shortPdf(1).r2_key,pdf(2).r2_key,'foreign']);
+  assert.deepEqual(await cleanupOwnedPdfs([shortPdf(1),pdf(2)],code,marker,r,true),
+    {checked:2,deleted:2,dryRun:false});
+  assert.deepEqual([...r.keys],['foreign']);
+  const client=createCloudflareR2Storage({
+    accountId,token,
+    fetchImpl:fakeRest().fetchImpl,
+  });
+  // The REST allowlist must accept the same exact short name.
+  assert.equal(await client.exists(shortPdf(1).r2_key),false);
+  for (const forged of ['abc123.pdf','../1e43ca71.pdf','1e43ca71.pdf/../../other']) {
+    await assert.rejects(
+      ()=>client.delete('certificados/empresa-999014/funcionario-201/historico-301/'+forged),
+      /QA_R2_OBJECT_KEY_DENIED/,
+    );
+  }
+  const generator=readFileSync('worker-airtrust/src/services/generate-certificate.ts','utf8');
+  assert.match(generator,/crypto\.randomUUID\(\)\.substring\(0, 8\)/);
+  assert.match(generator,/buildCertificadoR2Key/);
 });
