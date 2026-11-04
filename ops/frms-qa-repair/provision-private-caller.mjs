@@ -44,8 +44,8 @@ export function exactCallerProvisionPlan({ sha, accountId, callerConfig,
     callerConfig.length < 150 ||
     !callerConfig.includes('workers_dev = false') ||
     !callerConfig.includes('preview_urls = false') ||
-    /^(?:\\s*)(?:route|routes|triggers)\\s*=|^\\s*\\[\\[(?:routes|triggers)\\]\\]/m.test(callerConfig) ||
-    /^\\s*(?:workers_dev|preview_urls)\\s*=\\s*true/m.test(callerConfig) ||
+    /^(?:\s*)(?:route|routes|triggers)\s*=|^\s*\[\[(?:routes|triggers)\]\]/m.test(callerConfig) ||
+    /^\s*(?:workers_dev|preview_urls)\s*=\s*true/m.test(callerConfig) ||
     !callerConfig.includes(EXPECTED_CALLER_WORKER) ||
     !callerConfig.includes(EXPECTED_REPAIR_WORKER)
   ) {
