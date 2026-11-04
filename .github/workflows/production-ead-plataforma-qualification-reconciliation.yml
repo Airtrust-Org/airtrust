@@ -27,6 +27,7 @@ permissions:
   actions: read
   checks: read
   statuses: read
+  issues: read
 
 concurrency:
   group: production-ead-plataforma-qualification-reconciliation-tenant6
@@ -62,6 +63,21 @@ jobs:
             echo INVALID_MODE
             exit 1
           fi
+
+      # The production environment has branch-only protection. Require an
+      # explicit, owner-authored SHA+dry-run-specific attestation as well.
+      # This step runs BEFORE any Cloudflare token or private plan is exposed.
+      - name: Verify exact owner approval for production apply
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          approval="/ead-plataforma-qualification apply sha=$GITHUB_SHA plan=c6e7a811d31859b806a9ea53cdcc9c8a8a51058fd59178d1e0b15986ca8fee86 run=$REVIEWED_RUN count=471 models=3"
+          gh api "repos/$GITHUB_REPOSITORY/issues/1935/comments" --paginate --jq '.[] | {author: .user.login, body: .body}' |
+            jq -s -e --arg expected "$approval" 'any(.[]; .author=="isaeldaumas" and .body==$expected)' >/dev/null ||
+              { echo OWNER_SHA_SPECIFIC_APPROVAL_MISSING; exit 1; }
 
       - uses: actions/checkout@v4
         with:

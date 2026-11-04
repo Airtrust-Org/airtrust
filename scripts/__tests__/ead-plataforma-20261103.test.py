@@ -50,6 +50,9 @@ class TestContract(unittest.TestCase):
         # Compile-only validation cannot dirty an immutable release checkout.
         self.assertNotIn('py_compile', workflow)
         self.assertIn('ast.parse', workflow)
+        self.assertIn('OWNER_SHA_SPECIFIC_APPROVAL_MISSING', workflow)
+        self.assertIn('.author=="isaeldaumas"', workflow)
+        self.assertIn('run=$REVIEWED_RUN count=471 models=3', workflow)
 
     def test_missing_private_payload_fails_closed(self):
         import tempfile
