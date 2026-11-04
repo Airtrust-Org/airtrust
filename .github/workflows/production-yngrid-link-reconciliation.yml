@@ -1,0 +1,134 @@
+name: Production Yngrid Link Reconciliation
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA for candidate and workflow
+        required: true
+        type: string
+      expected_production_sha:
+        description: Exact deployed production Worker SHA
+        required: true
+        type: string
+      mode:
+        description: Dry-run is entirely read-only; apply is single-identity write
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Explicit confirmation for selected mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required on apply, successful previous dry-run same SHA
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-yngrid-single-identity-link
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Validate exact immutable candidate and approval mode
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo BAD_MAIN_SHA >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo MAIN_SHA_DRIFT >&2; exit 1; }
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo BAD_WORKER_SHA >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_YNGRID_LINK_DRY_RUN ]] || { echo DRY_RUN_CONFIRMATION_REQUIRED >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_YNGRID_LINK_APPLY ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+          else
+            echo INVALID_MODE >&2; exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify eight official release gates on exact SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Run single-link safety and no-promotion tests
+        run: node --test scripts/production/__tests__/repair-yngrid-employee-link.test.mjs
+      - name: Verify reviewed dry-run exact SHA and candidate hash
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_PROD_SHA: ${{ inputs.expected_production_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || { echo PREVIOUS_DRY_RUN_REQUIRED >&2; exit 1; }
+          report="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$report")" == 'Production Yngrid Link Reconciliation' ]] || exit 1
+          [[ "$(jq -r .event <<<"$report")" == workflow_dispatch ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$report")" == success ]] || exit 1
+          [[ "$(jq -r .head_sha <<<"$report")" == "$EXPECTED_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "production-yngrid-link-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
+          jq -e --arg sha "$EXPECTED_SHA" --arg prod "$EXPECTED_PROD_SHA" \
+            '.mode == "dry-run" and .source_sha == $sha and .production_sha == $prod and
+             .mutation_executed == false and .candidate_count == 1 and
+             .pii_emitted == false and .profile_preserved == true and
+             .employee_email_identity_unique == true and
+             .employee_other_user_conflict == false' \
+            "$RUNNER_TEMP/reviewed/result.json" > /dev/null
+          candidate_hash="$(jq -r .candidate_hash "$RUNNER_TEMP/reviewed/result.json")"
+          [[ "$candidate_hash" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          echo "REVIEWED_CANDIDATE_HASH=$candidate_hash" >> "$GITHUB_ENV"
+      - name: Prepare or apply exact identity link through authorized API
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          LINK_MODE: ${{ inputs.mode }}
+          REPAIR_RESULT_FILE: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          node scripts/production/repair-yngrid-employee-link.mjs
+          test -s "$RUNNER_TEMP/result.json"
+      - name: Emit sanitized audit summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.pii_emitted == false and .profile_preserved == true and
+                 ((.mode == "dry-run" and .mutation_executed == false) or
+                 (.mode == "apply" and .mutation_executed == true and .postconditions_verified == true))' \
+            "$RUNNER_TEMP/result.json" >/dev/null
+          jq '{mode,source_sha,production_sha,empresa_id,candidate_count,candidate_hash,
+            profile_preserved,employee_active,employee_email_identity_unique,
+            employee_other_user_conflict,mutation_executed,postconditions_verified,touched,pii_emitted}' \
+            "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Store sanitized review evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-yngrid-link-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 30
+          if-no-files-found: error
