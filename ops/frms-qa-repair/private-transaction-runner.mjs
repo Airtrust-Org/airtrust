@@ -87,7 +87,9 @@ export async function resolvePrivateTransactionQueues({
        q.settings.message_retention_period>900||
        !Array.isArray(q.consumers)||q.consumers.length!==1)deny();
     const consumer=q.consumers[0];
-    if(consumer.queue_name!==name||
+    // Cloudflare may omit the name on the embedded Consumer object. The
+    // enclosing Queue has already been checked by ID and exact queue_name.
+    if((consumer.queue_name!==undefined&&consumer.queue_name!==name)||
        (name===PREPARE?
          consumer.type!=='worker'||
            consumer.script_name!=='airtrust-frms-qa-caller-staging-private'||
