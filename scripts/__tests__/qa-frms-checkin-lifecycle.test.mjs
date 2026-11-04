@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import {
-  CONFIRM, sampleTrials, checkinPayload, localReferenceDate, syntheticPreflightSchedule,
+  CONFIRM, ACTIVE_BRIEF_PROTOCOL, sampleTrials, checkinPayload, localReferenceDate, syntheticPreflightSchedule,
 } from '../staging/qa-frms-checkin-lifecycle.mjs';
 
 test('synthetic check-in fixture explicitly identifies the authorized staging workflow', () => {
@@ -10,7 +10,7 @@ test('synthetic check-in fixture explicitly identifies the authorized staging wo
   assert.equal(localReferenceDate(new Date('2026-10-17T12:00:00Z')),'2026-10-17');
 });
 
-test('PVT-B V2 sample contains 10 well-ordered synthetic responses within 60 seconds', () => {
+test('AirTrust brief-v1 sample contains 10 well-ordered synthetic responses within 60 seconds', () => {
   const trials=sampleTrials();
   assert.equal(trials.length,10);
   assert.equal(new Set(trials.map(x=>x.sequence)).size,10);
@@ -20,14 +20,15 @@ test('PVT-B V2 sample contains 10 well-ordered synthetic responses within 60 sec
     x.outcome==='response'));
 });
 
-test('initial submission embeds protocol; same-day update omits PVT-B (no false redraw)', () => {
+test('initial submission embeds active brief protocol; same-day update omits objective trials', () => {
   const schedule=syntheticPreflightSchedule(new Date('2026-10-17T09:30:00Z'));
   const initial=checkinPayload('2026-10-17',3,true,schedule);
   const update=checkinPayload('2026-10-17',4,false,schedule);
   assert.equal(initial.reference_date,update.reference_date);
   assert.equal(initial.kss_score,3);
   assert.equal(update.kss_score,4);
-  assert.equal(initial.readiness.protocol_version,'airtrust-pvtb-v2');
+  assert.equal(initial.readiness.protocol_version,ACTIVE_BRIEF_PROTOCOL);
+  assert.equal(ACTIVE_BRIEF_PROTOCOL,'airtrust-brief-v1');
   assert.equal(initial.readiness.duration_ms,60000);
   assert.equal(update.readiness,undefined);
   assert.equal(initial.hora_apresentacao,'06:55');
