@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { validateSessionParticipantTenant } from '../../services/simuladores/session-participant-tenant';
@@ -86,7 +85,7 @@ describe('simulator session participant tenant guard', () => {
   });
 
   it('is called before the first session UPDATE in the real route', () => {
-    const source = readFileSync(fileURLToPath(new URL('../../routes/simuladores-sessoes-update.ts', import.meta.url)), 'utf8');
+    const source = readFileSync('src/routes/simuladores-sessoes-update.ts', 'utf8');
     const validation = source.indexOf('await validateSessionParticipantTenant(c.env.DB, empresaId, b.participantes)');
     const firstMutation = source.indexOf('UPDATE simulador_agendamentos SET examinador_id');
     expect(validation).toBeGreaterThan(0);
