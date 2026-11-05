@@ -23,9 +23,17 @@ PINNED_FORMATIVE_V3 = {
     **PINNED_CORE,
     "app.js": "66e46d3ec3baf3c331a92d48037148a429fec7ca5eb137c0ff93a2344ce69a98",
 }
+# V3 RC5 is an independently pinned recovery candidate. RC4 remains immutable:
+# activating RC5 requires new package QA, governance and edition handoff.
+FORMATIVE_V3_RECOVERY_VERSION = "AIRTRUST_GOLDEN_MASTER_CORE_V3_RC5_RESUME_RECOVERY_CANDIDATE"
+PINNED_FORMATIVE_V3_RECOVERY = {
+    **PINNED_FORMATIVE_V3,
+    "app.js": "abf5b151561ca6f362f98b6c12faf98ec9893de56455be8c112a064c5e8a995f",
+}
 REGISTERED_VERSIONS = {
     GOLDEN_MASTER_VERSION: PINNED_CORE,
     FORMATIVE_V3_VERSION: PINNED_FORMATIVE_V3,
+    FORMATIVE_V3_RECOVERY_VERSION: PINNED_FORMATIVE_V3_RECOVERY,
 }
 REQUIRED_METADATA = ("imsmanifest.xml", "airtrust-completion-manifest.json")
 MAX_CORE_BYTES = 512 * 1024
