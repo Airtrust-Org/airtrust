@@ -277,6 +277,30 @@ describe('LMS matrícula alerts', () => {
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 
+  it('bloqueia a intenção PREPARADO com auditoria indeterminada mesmo com confirmação de reenvio', async () => {
+    historyRows.push({
+      id: 'lms:20:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'pendente', enviado_em: new Date().toISOString(),
+      gestor: 0, destinatario: null,
+    });
+    const preview = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: false },
+    }, '/convites/lote/preview');
+    const before = (await preview.response.json()) as { data: Record<string, number> };
+    expect(before.data.email_pendente_historico).toBe(1);
+    const send = await post({
+      matricula_ids: [11], modo: 'alerta', reenviar_hoje: true,
+      canais: { email: true, whatsapp: false },
+    });
+    expect(send.response.status).toBe(200);
+    const result = (await send.response.json()) as { data: Record<string, number> };
+    expect(result.data.email_pendente_historico).toBe(1);
+    expect(result.data.email_ja_alertado).toBe(1);
+    expect(result.data.email_enviados).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(logAuditMock).not.toHaveBeenCalled();
+  });
+
   it('recusa alerta sem canal selecionado', async () => {
     const { response } = await post({
       matricula_ids: [11],
