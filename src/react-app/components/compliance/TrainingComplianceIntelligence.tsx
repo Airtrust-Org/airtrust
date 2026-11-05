@@ -49,6 +49,10 @@ type NoticePreview = {
   sem_whatsapp: number;
   vencidos: number;
   nunca_realizados: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type NoticeResult = {
@@ -59,6 +63,10 @@ type NoticeResult = {
   whatsapp_falha: number;
   sem_email: number;
   sem_whatsapp: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type Communication = {
@@ -73,6 +81,7 @@ type Communication = {
   status_compliance: string | null;
   tipo: string | null;
   destinatario: string | null;
+  destinatario_fonte?: 'REGISTRO_ENVIO' | 'CADASTRO_ATUAL' | null;
   status_envio: string | null;
   erro: string | null;
   enviado_em: string | null;
@@ -333,20 +342,22 @@ export function TrainingComplianceIntelligence({
       ),
   });
 
+  const [reenviarHoje, setReenviarHoje] = useState(false);
   const sendNotices = useMutation({
     mutationFn: async () =>
       readJson<NoticeResult>(
         await fetchWithAuth('/api/compliance-treinamentos/avisos/enviar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targets: requestTargets, canais: noticeChannels }),
+          body: JSON.stringify({ targets: requestTargets, canais: noticeChannels, reenviar_hoje: reenviarHoje }),
         }),
       ),
     onSuccess: (result) => {
       toast.success(
-        `Cobrança enviada: ${result.email_sucesso} e-mail(s) e ${result.whatsapp_sucesso} WhatsApp(s).`,
+        `Cobrança processada: ${result.email_sucesso} e-mail(s), ${result.whatsapp_sucesso} WhatsApp(s); ${(result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0)} repetição(ões) evitada(s), sendo ${(result.email_pendente_historico || 0) + (result.whatsapp_pendente_historico || 0)} auditoria(s) pendente(s).`,
       );
       setNoticeOpen(false);
+      setReenviarHoje(false);
       setSelected(new Set());
       void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
     },
@@ -451,6 +462,7 @@ export function TrainingComplianceIntelligence({
               <option value="enviada">Aceito para envio</option>
               <option value="erro">Falha</option>
               <option value="sem_contato">Sem contato cadastrado</option>
+              <option value="pendente">Resultado não confirmado (auditoria)</option>
             </select>
           </label>
           <label className="text-xs text-slate-600">
@@ -501,7 +513,15 @@ export function TrainingComplianceIntelligence({
                   <td className="px-3 py-3 text-slate-600">
                     {String(row.tipo || '').replace('_COMPLIANCE', '').replace('_GESTOR', '')}
                   </td>
-                  <td className="px-3 py-3 text-slate-500">{row.destinatario || 'Não registrado'}</td>
+                  <td className="px-3 py-3 text-slate-500">
+                    {row.destinatario || 'Não registrado'}
+                    {row.destinatario && row.destinatario_fonte === 'CADASTRO_ATUAL' ? (
+                      <div className="max-w-[180px] text-xs text-amber-700"
+                        title="O endereço é do cadastro atual e não comprova o destino usado na data do alerta.">
+                        Contato atual (não é comprovante do envio)
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-3">
                     <span className={`rounded-full px-2 py-1 text-xs font-medium ${
                       row.status_envio === 'enviada'
@@ -511,7 +531,7 @@ export function TrainingComplianceIntelligence({
                           : 'bg-red-50 text-red-700'
                     }`}>
                       {row.status_envio === 'enviada' ? 'Aceito para envio'
-                        : row.status_envio === 'sem_contato' ? 'Sem contato'
+                        : row.status_envio === 'pendente' ? 'Resultado não confirmado' : row.status_envio === 'sem_contato' ? 'Sem contato'
                           : row.status_envio === 'erro' ? 'Falha' : 'Não confirmado'}
                     </span>
                     {row.erro ? <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div> : null}
@@ -1047,7 +1067,7 @@ export function TrainingComplianceIntelligence({
               </div>
               <button
                 type="button"
-                onClick={() => setNoticeOpen(false)}
+                onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
@@ -1097,6 +1117,28 @@ export function TrainingComplianceIntelligence({
                 <span className="text-sm font-medium">WhatsApp</span>
               </label>
             </div>
+            {(preview.data?.email_ja_alertado || preview.data?.whatsapp_ja_alertado) ? (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Alertas identificados hoje: {preview.data?.email_ja_alertado || 0} por e-mail
+                e {preview.data?.whatsapp_ja_alertado || 0} por WhatsApp.
+                O sistema não os reenviará automaticamente.
+                {(preview.data?.email_pendente_historico || preview.data?.whatsapp_pendente_historico) ? (
+                  <p className="mt-2 text-red-800">
+                    Auditoria pendente: {preview.data?.email_pendente_historico || 0} e-mail(s)
+                    e {preview.data?.whatsapp_pendente_historico || 0} WhatsApp(s).
+                    Esses avisos não podem ser reenviados até reconciliação.
+                  </p>
+                ) : null}
+                {((preview.data?.email_ja_alertado || 0) - (preview.data?.email_pendente_historico || 0) +
+                  (preview.data?.whatsapp_ja_alertado || 0) - (preview.data?.whatsapp_pendente_historico || 0)) > 0 ? (
+                  <label className="mt-2 flex items-center gap-2">
+                    <input type="checkbox" checked={reenviarHoje}
+                      onChange={(event) => setReenviarHoje(event.target.checked)} />
+                    Reenviar explicitamente apenas avisos com aceite confirmado hoje
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
             {preview.data?.sem_email || preview.data?.sem_whatsapp ? (
               <p className="mt-3 text-xs text-amber-700">
                 Sem contato: {preview.data?.sem_email || 0} sem e-mail ·{' '}
@@ -1107,7 +1149,7 @@ export function TrainingComplianceIntelligence({
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setNoticeOpen(false)}
+                onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
               >
                 Cancelar
