@@ -1,0 +1,156 @@
+name: Staging PPTX Qualifying Live QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AIRTRUST_STAGING_PPTX_QA
+        required: true
+        type: string
+      release_sha:
+        description: Exact currently deployed staging Worker and Pages SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  actions: read
+
+# Staging D1 mutations and shared Pages/Worker deploys must not overlap QA.
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+  STAGING_API_BASE_URL: https://airtrust-api-staging.airtrust.workers.dev
+
+jobs:
+  guard:
+    name: Guard exact deployed release and official gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit staging-only dispatch
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'MAIN_ONLY'; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_STAGING_PPTX_QA' ]] || { echo 'CONFIRMATION_REQUIRED'; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'RELEASE_SHA_INVALID'; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Confirm release is in protected main history
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" HEAD
+      - name: Reuse official release gates for exact SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Require exact LIVE Worker and Pages SHA before any D1 QA seed
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const sha = process.env.RELEASE_SHA;
+          const version = await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version');
+          if (!version.ok) throw new Error('PPTX_STAGING_WORKER_VERSION_UNAVAILABLE');
+          const body = await version.json();
+          if (body?.data?.sourceSha !== sha) throw new Error('PPTX_STAGING_WORKER_SHA_MISMATCH');
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin('https://staging.airtrust.pages.dev', sha.slice(0, 7));
+          console.log('PPTX_STAGING_RUNTIME_SHA_READY');
+          NODE
+
+  d1-synthetic-identity:
+    name: Staging D1 synthetic LMS QA identity provision
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    env:
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install governed staging D1 seed dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
+      - name: Guard exact staging D1 and dedicated synthetic account
+        run: |
+          set -euo pipefail
+          [[ "$STAGING_D1_NAME" == 'airtrust-db-staging-baseline-20260701' ]]
+          [[ -n "$STAGING_SMOKE_PASSWORD" && -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'STAGING_D1_QA_SECRETS_MISSING'; exit 1; }
+      - name: Idempotently seed dedicated synthetic LMS admin
+        env:
+          STAGING_SMOKE_EMAIL: qa-pptx-admin@staging.airtrust.invalid
+          STAGING_SMOKE_EMPRESA_CODIGO: qa_lms_catalog_audit_smoke
+          STAGING_SMOKE_EMPRESA_NOME: QA LMS Catalog Audit Smoke
+          STAGING_SMOKE_USER_NOME: QA PPTX Administrator
+          STAGING_SMOKE_PERFIL: ADMINISTRADOR
+          STAGING_SMOKE_ROLE: admin
+        run: |
+          set -euo pipefail
+          node scripts/seed-staging-smoke-user.mjs
+          node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
+
+  live-qa:
+    name: Synthetic learner PPTX browser + API + qualification QA
+    needs: [guard, d1-synthetic-identity]
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 25
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      CONFIRM_STAGING_PPTX_QA: AIRTRUST_STAGING_PPTX_QA
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      PPTX_QA_RESULT_PATH: qa-state/staging-pptx/result.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install locked QA dependencies
+        run: npm ci
+      - name: Guard staging D1 identity and secret scope
+        run: |
+          set -euo pipefail
+          [[ "$STAGING_D1_NAME" == 'airtrust-db-staging-baseline-20260701' ]]
+          [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_QA_SECRET_MISSING'; exit 1; }
+          node --check scripts/staging/lms-pptx-qualifying-live-qa.mjs
+          node scripts/staging/lms-pptx-qualifying-live-qa.mjs
+      - name: Idempotently verify isolated synthetic learner
+        env:
+          QA_LMS_STUDENT_EMAIL: qa-lms-e2e@staging.airtrust.invalid
+          QA_LMS_STUDENT_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+        run: node scripts/staging/lms-audit-student-readiness.mjs
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium webkit
+      - name: Live tenant-isolated qualifying PPTX acceptance
+        run: node scripts/staging/lms-pptx-qualifying-live-qa.mjs --apply
+      - name: Upload sanitized QA evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-pptx-qualifying-qa-${{ github.run_id }}
+          path: qa-state/staging-pptx/result.json
+          if-no-files-found: warn
+          retention-days: 30
