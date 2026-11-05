@@ -30,6 +30,7 @@ import {
   sqlStatusEqualsAny,
 } from '../../lib/status/status-codes';
 import { getCertificadosStorageColumns } from '../../services/qualificacoes/certificados-helpers';
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
 import {
   resolveOperationalReadScope,
   appendOperationalReadFilter,
@@ -700,9 +701,11 @@ export const getHistoricoListHandler = safe(async (c) => {
       .all();
 
     // H-4: comparação por string ISO evita off-by-one de timezone com Date.getTime()
-    const today = new Date().toISOString().split('T')[0];
-    const d30 = new Date();
-    d30.setDate(d30.getDate() + 30);
+    // Dia civil de São Paulo (como o Compliance): a data UTC marcaria VENCIDA, entre 21h e 24h BRT,
+    // o que ainda vence hoje.
+    const today = getTodayIsoSaoPaulo();
+    const d30 = new Date(`${today}T00:00:00Z`);
+    d30.setUTCDate(d30.getUTCDate() + 30);
     const today30 = d30.toISOString().split('T')[0];
     const enriched = (results || []).map((r: any) => {
       // Usar ?? (nullish) para distinguir null (sem vencimento) de 0 (inválido).

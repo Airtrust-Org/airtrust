@@ -118,8 +118,8 @@ app.post('/requisitos', requireRole('admin', 'manager'), async (c) => {
     .run();
 
   const created = await db
-    .prepare('SELECT * FROM requisitos_compliance WHERE id = ?')
-    .bind(result.meta.last_row_id)
+    .prepare('SELECT * FROM requisitos_compliance WHERE id = ? AND empresa_id = ?')
+    .bind(result.meta.last_row_id, empresaId)
     .first();
 
   return c.json({ success: true, data: created }, 201);
@@ -157,8 +157,8 @@ app.put('/requisitos/:id', requireRole('admin', 'manager'), async (c) => {
     .run();
 
   const updated = await db
-    .prepare('SELECT * FROM requisitos_compliance WHERE id = ?')
-    .bind(id)
+    .prepare('SELECT * FROM requisitos_compliance WHERE id = ? AND empresa_id = ?')
+    .bind(id, empresaId)
     .first();
 
   return c.json({ success: true, data: updated });
