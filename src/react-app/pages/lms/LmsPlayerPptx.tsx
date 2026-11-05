@@ -70,7 +70,7 @@ export default function LmsPlayerPptx() {
         letterbox: true,
       });
     },
-    [token],
+    [], // Asset transport refreshes its own credentials; token rotation must not reparse the entire PPTX.
   );
 
   useEffect(() => {
