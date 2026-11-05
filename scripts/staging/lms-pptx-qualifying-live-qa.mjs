@@ -11,7 +11,7 @@ import { dirname, resolve } from 'node:path';
 import { chromium, webkit } from 'playwright';
 import {
   assert, assertAllowedStagingBaseUrl, decodeJwtPayload, extractAccessToken,
-  fetchJson, login, selectEmpresa,
+  extractRefreshToken, fetchJson, login, selectEmpresa,
 } from '../smoke-auth-common.mjs';
 
 const API = assertAllowedStagingBaseUrl('https://airtrust-api-staging.airtrust.workers.dev');
@@ -96,7 +96,7 @@ async function observe(token, id, slide, etag) {
   return request(token, `/api/lms/matriculas/${id}/pptx-evidence`, 'POST',
     { slide_index: slide, asset_etag: etag });
 }
-async function browserReview(token, user, matriculaId, result) {
+async function browserReview(token, refreshToken, user, matriculaId, result) {
   for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     const browser = await engine.launch({ headless: true });
     try {
@@ -105,6 +105,7 @@ async function browserReview(token, user, matriculaId, result) {
           origin: PAGES, localStorage: [
             { name: 'airtrust_persist_login', value: '1' },
             { name: 'airtrust_token', value: token },
+            { name: 'airtrust_refresh_token', value: refreshToken },
             { name: 'airtrust_user', value: JSON.stringify(user) },
           ],
         }] }, viewport: { width: 1366, height: 768 },
@@ -115,14 +116,14 @@ async function browserReview(token, user, matriculaId, result) {
       try {
         await page.getByText('Slide 1 de 3').waitFor({ timeout: 25000 });
       } catch {
-        // The qualifying API lifecycle already passed; distinguish a redirect,
-        // authentication denial, unsupported fixture, or renderer failure.
-        // Only surface the synthetic page path and bounded, redacted UI text.
-        const path = new URL(page.url()).pathname.slice(0, 140);
-        const visible = (await page.locator('body').innerText().catch(() => ''))
-          .replace(/\b[\w.+-]+@[\w.-]+\b/g, '[synthetic-email]')
-          .replace(/\s+/g, ' ').slice(0, 420);
-        throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_MISSING path=${path} visible=${visible}`);
+        // Sanitize the browser failure rather than logging HTML, credentials
+        // or user records. All routes and courses here are synthetic staging.
+        const path = new URL(page.url()).pathname.replace(/[^/A-Za-z0-9_-]/g, '');
+        const authExpired = await page.getByText('Sessão expirada. Faça login novamente.').count() > 0;
+        const courseUnavailable = await page.getByText(
+          'Conteúdo PowerPoint não disponível para esta matrícula.').count() > 0;
+        const loading = await page.getByText('Carregando apresentação...').count() > 0;
+        throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_1_UNAVAILABLE_PATH_${path}_AUTH_${authExpired ? 'EXPIRED' : 'OK'}_COURSE_${courseUnavailable ? 'UNAVAILABLE' : 'OK'}_LOADING_${loading ? 'YES' : 'NO'}`);
       }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
@@ -302,7 +303,8 @@ async function main() {
     assert(inactive.status === 409 && inactive.json?.code === 'PPTX_ENROLLMENT_INACTIVE',
       'PPTX_QA_COMPLETED_REVIEW_NOT_READONLY');
     result.history_id = historyId;
-    await browserReview(student.token, student.loginPayload?.data?.user || {}, matriculaId, result);
+    await browserReview(student.token, extractRefreshToken(student.loginPayload),
+      student.loginPayload?.data?.user || {}, matriculaId, result);
     await provenance();
     result.status = 'PASS';
   } catch (error) {
