@@ -51,6 +51,8 @@ type NoticePreview = {
   nunca_realizados: number;
   email_ja_alertado?: number;
   whatsapp_ja_alertado?: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type NoticeResult = {
@@ -63,6 +65,8 @@ type NoticeResult = {
   sem_whatsapp: number;
   email_ja_alertado?: number;
   whatsapp_ja_alertado?: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type Communication = {
@@ -350,7 +354,7 @@ export function TrainingComplianceIntelligence({
       ),
     onSuccess: (result) => {
       toast.success(
-        `Cobrança processada: ${result.email_sucesso} e-mail(s), ${result.whatsapp_sucesso} WhatsApp(s); ${(result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0)} repetição(ões) evitada(s).`,
+        `Cobrança processada: ${result.email_sucesso} e-mail(s), ${result.whatsapp_sucesso} WhatsApp(s); ${(result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0)} repetição(ões) evitada(s), sendo ${(result.email_pendente_historico || 0) + (result.whatsapp_pendente_historico || 0)} auditoria(s) pendente(s).`,
       );
       setNoticeOpen(false);
       setReenviarHoje(false);
@@ -1115,14 +1119,24 @@ export function TrainingComplianceIntelligence({
             </div>
             {(preview.data?.email_ja_alertado || preview.data?.whatsapp_ja_alertado) ? (
               <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                Já alertados hoje: {preview.data?.email_ja_alertado || 0} por e-mail
+                Alertas identificados hoje: {preview.data?.email_ja_alertado || 0} por e-mail
                 e {preview.data?.whatsapp_ja_alertado || 0} por WhatsApp.
                 O sistema não os reenviará automaticamente.
-                <label className="mt-2 flex items-center gap-2">
-                  <input type="checkbox" checked={reenviarHoje}
-                    onChange={(event) => setReenviarHoje(event.target.checked)} />
-                  Reenviar explicitamente os avisos já enviados hoje
-                </label>
+                {(preview.data?.email_pendente_historico || preview.data?.whatsapp_pendente_historico) ? (
+                  <p className="mt-2 text-red-800">
+                    Auditoria pendente: {preview.data?.email_pendente_historico || 0} e-mail(s)
+                    e {preview.data?.whatsapp_pendente_historico || 0} WhatsApp(s).
+                    Esses avisos não podem ser reenviados até reconciliação.
+                  </p>
+                ) : null}
+                {((preview.data?.email_ja_alertado || 0) - (preview.data?.email_pendente_historico || 0) +
+                  (preview.data?.whatsapp_ja_alertado || 0) - (preview.data?.whatsapp_pendente_historico || 0)) > 0 ? (
+                  <label className="mt-2 flex items-center gap-2">
+                    <input type="checkbox" checked={reenviarHoje}
+                      onChange={(event) => setReenviarHoje(event.target.checked)} />
+                    Reenviar explicitamente apenas avisos com aceite confirmado hoje
+                  </label>
+                ) : null}
               </div>
             ) : null}
             {preview.data?.sem_email || preview.data?.sem_whatsapp ? (
