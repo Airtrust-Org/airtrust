@@ -154,23 +154,59 @@ async function main() {
     const categories = requireOk(await request(admin.token, '/api/categorias'),
       200, 'qualification categories');
     assert(Array.isArray(categories), 'PPTX_QA_CATEGORIES_INVALID');
-    const ead = categories.filter((entry) => String(entry.nome).trim().toUpperCase() === 'EAD');
+    const ead = categories.filter((entry) =>
+      String(entry.nome).trim().toUpperCase() === 'EAD' && entry.ativo === true);
     assert(ead.length <= 1, 'PPTX_QA_CANONICAL_EAD_AMBIGUOUS');
-    if (ead.length === 0) {
-      requireOk(await request(admin.token, '/api/categorias', 'POST',
+    const categoryId = ead.length === 1
+      ? requireId(ead[0].id, 'QA EAD category')
+      : requireId(requireOk(await request(admin.token, '/api/categorias', 'POST',
         { nome: 'EAD', codigo: 'EAD', descricao: 'Categoria de testes staging LMS',
-          ativo: true }), 201, 'QA EAD category');
-    }
+          dominio_codigo: 'OPERACOES', ativo: true }), 201, 'QA EAD category').id, 'QA EAD category');
+
+    // A qualifying PPTX must reference a real, current tenant EAD qualification
+    // model. Creating an EAD course with gerar_qualificacao=1 but no type ID
+    // passes course validation and only fails when LMS completion is attempted.
+    const areas = requireOk(await request(admin.token, '/api/qualificacoes/areas'),
+      200, 'qualification areas');
+    assert(Array.isArray(areas), 'PPTX_QA_AREAS_INVALID');
+    const existingArea = areas.find((area) =>
+      area.codigo === 'QA_PPTX_EAD' && area.ativo === true);
+    const areaId = existingArea
+      ? requireId(existingArea.id, 'QA qualification area')
+      : requireId(requireOk(await request(admin.token, '/api/qualificacoes/areas', 'POST',
+        { codigo: 'QA_PPTX_EAD', nome: 'QA PPTX EAD',
+          descricao: 'Area sintética persistente de qualificações PPTX staging' }),
+        201, 'QA qualification area').id, 'QA qualification area');
+    const qualificationType = requireOk(
+      await request(admin.token, '/api/qualificacoes/tipos', 'POST', {
+        nome: `${RUN_TAG} - qualificação de teste PPTX`,
+        codigo: RUN_TAG,
+        categoria_id: categoryId,
+        area_id: areaId,
+        validade: 12,
+        carga_horaria_recorrente: 0.1,
+        observacoes: RUN_TAG,
+        ativo: true,
+      }), 201, 'QA qualification type');
+    const qualificationTypeId = requireId(qualificationType.id, 'QA qualification type');
+    result.qualification_type_id = qualificationTypeId;
+    result.qualification_area_id = areaId;
     const course = requireOk(await request(admin.token, '/api/lms/cursos', 'POST', {
       titulo: `${RUN_TAG} - Synthetic Qualification`,
       descricao: 'PPTX QA isolado; nunca material didático real',
       categoria: 'EAD', tipo_conteudo: 'pptx', idioma: 'pt-BR',
       carga_horaria_minutos: 6, gerar_qualificacao_ao_concluir: 1,
+      qualificacao_tipo_id: qualificationTypeId,
       scorm_mastery_score: 80, publicado: 1, ativo: 1,
       observacoes: RUN_TAG,
     }), 201, 'PPTX QA course create');
     courseId = requireId(course.id, 'course');
     result.course_id = courseId;
+    const boundCourse = requireOk(await request(admin.token, `/api/lms/cursos/${courseId}`),
+      200, 'PPTX qualification binding readback');
+    assert(Number(boundCourse.qualificacao_tipo_id) === qualificationTypeId &&
+      Number(boundCourse.gerar_qualificacao_ao_concluir) === 1,
+    'PPTX_QA_QUALIFICATION_BINDING_NOT_PERSISTED');
     await upload(admin.token, courseId, 'a');
     const matricula = requireOk(await request(admin.token, '/api/lms/matriculas', 'POST',
       { curso_id: courseId, funcionario_id: employeeId, observacoes: RUN_TAG }),
