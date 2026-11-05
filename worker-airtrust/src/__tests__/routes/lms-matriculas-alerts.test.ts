@@ -85,7 +85,10 @@ function createDb() {
       bind: (...args: unknown[]) => ({
         all: async () => {
           if (query.includes('SELECT m.id,m.funcionario_id,m.curso_id')) {
-            return { results: enrollmentRows };
+            // O banco real limita o lote pelos IDs solicitados; a fixture
+            // precisa respeitar o mesmo filtro para os testes de falha parcial.
+            const ids = new Set(args.slice(1).map(Number));
+            return { results: enrollmentRows.filter((row) => ids.has(row.id)) };
           }
           return { results: [] };
         },
