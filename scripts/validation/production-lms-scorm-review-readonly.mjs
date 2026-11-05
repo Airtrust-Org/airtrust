@@ -165,15 +165,48 @@ async function inspectPlayerReadOnly(cookie, candidateId) {
     invariant(frame, 'SCORM_FRAME_NOT_ATTACHED');
     await frame.waitForLoadState('domcontentloaded', { timeout: 25_000 });
     await frame.locator('body').waitFor({ state: 'attached', timeout: 10_000 });
-    const frameState = await frame.evaluate(() => ({
-      ready_state: document.readyState,
-      body_text_length: document.body?.innerText?.length || 0,
-    }));
+    const frameState = await frame.evaluate(() => {
+      // Strictly read-only, sanitized Factory V3 terminal diagnostics. The
+      // user's CMI, answers, personal data and package source never leave
+      // the browser. This distinguishes a disabled SCO button from a Worker
+      // rejection of an actual completion request.
+      const player = window.__AIRTRUST_PLAYER_TEST__?.getState?.();
+      const slides = window.COURSE_DATA?.slides;
+      const scorm = window.Scorm;
+      let factory = null;
+      if (player && Array.isArray(slides) && slides.length > 0) {
+        const completed = new Set(Array.isArray(player.done)
+          ? player.done.filter(Number.isInteger) : []);
+        const scenarios = slides.slice(0, -1).filter(s => s?.kind === 'scenario');
+        const pendingScenarios = scenarios.filter(s => player.scenario?.[s.id] == null);
+        const priorUnitsComplete = slides.slice(0, -1).every((_, i) => completed.has(i));
+        const index = Number.isInteger(player.active) ? player.active : null;
+        factory = {
+          active_index: index,
+          slide_total: slides.length,
+          completed_unit_count: completed.size,
+          at_last_unit: index === slides.length - 1,
+          prior_units_complete: priorUnitsComplete,
+          scenario_total: scenarios.length,
+          scenario_answers_missing: pendingScenarios.length,
+          scorm_initialized: scorm?.isInitialized?.() === true,
+          scorm_finished: scorm?.isFinished?.() === true,
+          final_button_disabled: document.getElementById('next')?.disabled === true,
+          mode: ['journey', 'review', 'preview'].includes(player.mode) ? player.mode : 'unknown',
+        };
+      }
+      return {
+        ready_state: document.readyState,
+        body_text_length: document.body?.innerText?.length || 0,
+        factory,
+      };
+    });
     return {
       launch_http_status: response.status(),
       frame_loaded: ['interactive', 'complete'].includes(frameState.ready_state),
       frame_candidate_matches_enrollment: frame.url().includes(`/_candidates/${candidateId}/`),
       body_text_length: frameState.body_text_length,
+      factory: frameState.factory,
       failed_scorm_asset_count: assetFailures.length,
       blocked_write_attempt_count: Object.values(blockedWrites).reduce((sum, count) => sum + count, 0),
       blocked_write_methods: blockedWrites,
