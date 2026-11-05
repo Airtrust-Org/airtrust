@@ -49,6 +49,8 @@ type NoticePreview = {
   sem_whatsapp: number;
   vencidos: number;
   nunca_realizados: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
 };
 
 type NoticeResult = {
@@ -59,6 +61,8 @@ type NoticeResult = {
   whatsapp_falha: number;
   sem_email: number;
   sem_whatsapp: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
 };
 
 type Communication = {
@@ -73,6 +77,7 @@ type Communication = {
   status_compliance: string | null;
   tipo: string | null;
   destinatario: string | null;
+  destinatario_fonte?: 'REGISTRO_ENVIO' | 'CADASTRO_ATUAL' | null;
   status_envio: string | null;
   erro: string | null;
   enviado_em: string | null;
@@ -333,20 +338,22 @@ export function TrainingComplianceIntelligence({
       ),
   });
 
+  const [reenviarHoje, setReenviarHoje] = useState(false);
   const sendNotices = useMutation({
     mutationFn: async () =>
       readJson<NoticeResult>(
         await fetchWithAuth('/api/compliance-treinamentos/avisos/enviar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targets: requestTargets, canais: noticeChannels }),
+          body: JSON.stringify({ targets: requestTargets, canais: noticeChannels, reenviar_hoje: reenviarHoje }),
         }),
       ),
     onSuccess: (result) => {
       toast.success(
-        `Cobrança enviada: ${result.email_sucesso} e-mail(s) e ${result.whatsapp_sucesso} WhatsApp(s).`,
+        `Cobrança processada: ${result.email_sucesso} e-mail(s), ${result.whatsapp_sucesso} WhatsApp(s); ${(result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0)} repetição(ões) evitada(s).`,
       );
       setNoticeOpen(false);
+      setReenviarHoje(false);
       setSelected(new Set());
       void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
     },
@@ -501,7 +508,15 @@ export function TrainingComplianceIntelligence({
                   <td className="px-3 py-3 text-slate-600">
                     {String(row.tipo || '').replace('_COMPLIANCE', '').replace('_GESTOR', '')}
                   </td>
-                  <td className="px-3 py-3 text-slate-500">{row.destinatario || 'Não registrado'}</td>
+                  <td className="px-3 py-3 text-slate-500">
+                    {row.destinatario || 'Não registrado'}
+                    {row.destinatario && row.destinatario_fonte === 'CADASTRO_ATUAL' ? (
+                      <div className="max-w-[180px] text-xs text-amber-700"
+                        title="O endereço é do cadastro atual e não comprova o destino usado na data do alerta.">
+                        Contato atual (não é comprovante do envio)
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-3">
                     <span className={`rounded-full px-2 py-1 text-xs font-medium ${
                       row.status_envio === 'enviada'
@@ -1097,6 +1112,18 @@ export function TrainingComplianceIntelligence({
                 <span className="text-sm font-medium">WhatsApp</span>
               </label>
             </div>
+            {(preview.data?.email_ja_alertado || preview.data?.whatsapp_ja_alertado) ? (
+              <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Já alertados hoje: {preview.data?.email_ja_alertado || 0} por e-mail
+                e {preview.data?.whatsapp_ja_alertado || 0} por WhatsApp.
+                O sistema não os reenviará automaticamente.
+                <label className="mt-2 flex items-center gap-2">
+                  <input type="checkbox" checked={reenviarHoje}
+                    onChange={(event) => setReenviarHoje(event.target.checked)} />
+                  Reenviar explicitamente os avisos já enviados hoje
+                </label>
+              </div>
+            ) : null}
             {preview.data?.sem_email || preview.data?.sem_whatsapp ? (
               <p className="mt-3 text-xs text-amber-700">
                 Sem contato: {preview.data?.sem_email || 0} sem e-mail ·{' '}
