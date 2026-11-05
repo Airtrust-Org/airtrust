@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BellRing, Mail, MessageCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import Button from '@/react-app/components/Button';
@@ -72,6 +72,11 @@ export function LmsEnrollmentAlertModal({
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState<AlertPreview | null>(null);
   const [reenviarHoje, setReenviarHoje] = useState(false);
+  const targetIds = targets.map((target) => target.id).join(',');
+  useEffect(() => {
+    setPreview(null);
+    setReenviarHoje(false);
+  }, [isOpen, targetIds]);
 
   const statusCounts = useMemo(
     () => ({
