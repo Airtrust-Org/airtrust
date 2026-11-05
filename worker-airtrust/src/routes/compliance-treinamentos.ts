@@ -53,6 +53,7 @@ import {
   asPositiveInt,
   normalizeEnum,
   resolvedRules,
+  ruleApplies,
   loadEmployees,
   loadAircraftModelsCatalog,
   loadRules,
@@ -1304,6 +1305,47 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const cargosSemMatriz = Array.from(byRole.values()).filter(
     (cargo) => cargo.pessoas > 0 && cargo.sem === cargo.pessoas,
   ).length;
+
+  // "Sem qualquer regra" e "sem regra específica" são diagnósticos diferentes.
+  // Regras EMPRESA podem configurar todos os funcionários, sem cobrir um escopo
+  // particular de SETOR/FUNCAO. Não presumir, porém, que regras específicas sejam
+  // obrigatórias: estes números são para revisão, não prova de desconformidade.
+  const funcoesComRegraEspecifica = new Map<string, boolean>();
+  const setoresComRegraEspecifica = new Map<number, boolean>();
+  let pessoasSemRegraEspecificaFuncao = 0;
+  for (const person of people) {
+    const regraFuncao = snapshot.rules.some(
+      (rule) =>
+        (rule.escopo === 'FUNCAO' || rule.escopo === 'SETOR_FUNCAO') &&
+        ruleApplies(rule, person),
+    );
+    const regraSetor = snapshot.rules.some(
+      (rule) =>
+        (rule.escopo === 'SETOR' || rule.escopo === 'SETOR_FUNCAO') &&
+        ruleApplies(rule, person),
+    );
+    if (person.funcao_id !== null) {
+      const key = `${person.setor_id ?? 0}:${person.funcao_id}`;
+      funcoesComRegraEspecifica.set(
+        key,
+        Boolean(funcoesComRegraEspecifica.get(key)) || regraFuncao,
+      );
+      if (!regraFuncao) pessoasSemRegraEspecificaFuncao += 1;
+    }
+    if (person.setor_id !== null) {
+      setoresComRegraEspecifica.set(
+        person.setor_id,
+        Boolean(setoresComRegraEspecifica.get(person.setor_id)) || regraSetor,
+      );
+    }
+  }
+  const funcoesSemRegraEspecifica = [...funcoesComRegraEspecifica.values()].filter(
+    (hasRule) => !hasRule,
+  ).length;
+  const setoresSemRegraEspecifica = [...setoresComRegraEspecifica.values()].filter(
+    (hasRule) => !hasRule,
+  ).length;
+
   let matriculasSemRequisito = 0;
   if (await tableExists(c.env.DB, 'lms_matriculas')) {
     const [enrollments, decisions] = await Promise.all([
@@ -1328,6 +1370,9 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
       pessoas_sem_configuracao: people.filter((p) => !p.configurado).length,
       setores_sem_matriz: setoresSemMatriz,
       cargos_sem_matriz: cargosSemMatriz,
+      funcoes_sem_regra_especifica: funcoesSemRegraEspecifica,
+      setores_sem_regra_especifica: setoresSemRegraEspecifica,
+      pessoas_sem_regra_especifica_funcao: pessoasSemRegraEspecificaFuncao,
       matriculas_sem_requisito: matriculasSemRequisito,
       requisitos_obrigatorios: totalObrigatorios,
       requisitos_distintos: aggregateDistinctMandatoryRequirements(people).length,

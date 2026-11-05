@@ -392,6 +392,71 @@ describe('training compliance engine', () => {
     );
   });
 
+  it('separa regras gerais de cobertura específica de setor e função no resumo', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+    const readSummary = async (path = '/resumo') => {
+      const response = await app.request(path);
+      expect(response.status).toBe(200);
+      return ((await response.json()) as any).data;
+    };
+
+    const corporateOnly = await readSummary();
+    // A regra corporativa configura as 3 pessoas, mas não é regra específica.
+    expect(corporateOnly).toMatchObject({
+      pessoas: 3,
+      pessoas_sem_configuracao: 0,
+      funcoes_sem_regra_especifica: 2,
+      setores_sem_regra_especifica: 2,
+      pessoas_sem_regra_especifica_funcao: 3,
+      cargos_sem_matriz: 0,
+      setores_sem_matriz: 0,
+    });
+    expect(await readSummary('/resumo?setor_id=11')).toMatchObject({
+      pessoas: 1,
+      pessoas_sem_configuracao: 0,
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 1,
+      pessoas_sem_regra_especifica_funcao: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR', 11, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 0,
+      pessoas_sem_regra_especifica_funcao: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'FUNCAO', 2, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 0,
+      setores_sem_regra_especifica: 0,
+      pessoas_sem_regra_especifica_funcao: 0,
+    });
+  });
+
   it('preserva a matriz legada por função enquanto o schema V2 ainda não foi aplicado', async () => {
     sqlite.database.exec(`
       DROP TABLE treinamento_requisitos;
