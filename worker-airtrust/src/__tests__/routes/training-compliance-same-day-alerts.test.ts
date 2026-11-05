@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 
-const { sendNotification, readHistory } = vi.hoisted(() => ({
+const { sendNotification, readHistory, pendingState } = vi.hoisted(() => ({
   sendNotification: vi.fn(),
   readHistory: vi.fn(),
+  pendingState: { active: false },
 }));
 
 vi.mock('../../middleware/rbac', () => ({
@@ -73,9 +74,12 @@ async function post(path: string, data: Record<string, unknown>) {
 describe('Compliance manual same-day notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    pendingState.active = false;
     readHistory.mockResolvedValue({
       wasSent: (target: { funcionario_id: number }, channel: string) =>
         target.funcionario_id === 101 && channel === 'EMAIL',
+      isPending: (target: { funcionario_id: number }, channel: string) =>
+        pendingState.active && target.funcionario_id === 101 && channel === 'EMAIL',
     });
     sendNotification.mockImplementation(async (
       _env: unknown, _db: unknown,
@@ -120,6 +124,23 @@ describe('Compliance manual same-day notifications', () => {
     const payload = await response.json() as { data: Record<string, number> };
     expect(payload.data.email_ja_alertado).toBe(0);
     expect(payload.data.email_sucesso).toBe(2);
+  });
+
+  it('não força reenvio quando o aviso anterior tem resultado de auditoria pendente', async () => {
+    pendingState.active = true;
+    const preview = await post('/avisos/preview', { targets });
+    expect(preview.status).toBe(200);
+    const snapshot = await preview.json() as { data: Record<string, number> };
+    expect(snapshot.data.email_pendente_historico).toBe(1);
+    const response = await post('/avisos/enviar', {
+      targets, canais: { email: true, whatsapp: false }, reenviar_hoje: true,
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { data: Record<string, number> };
+    expect(payload.data.email_ja_alertado).toBe(1);
+    expect(payload.data.email_pendente_historico).toBe(1);
+    expect(payload.data.email_sucesso).toBe(1);
+    expect(sendNotification.mock.calls.map((args) => args[2].funcionario_id)).toEqual([102]);
   });
 
   it('fails closed without sending if the history is unavailable', async () => {
