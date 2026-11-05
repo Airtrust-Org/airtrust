@@ -13,6 +13,7 @@ import {
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
+import { listTrainingCommunications } from '../services/training-communication-history';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -483,75 +484,56 @@ export function createTrainingComplianceIntelligenceRoutes({
   app.get('/comunicacoes', requireRole('admin', 'manager'), async (c) => {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
-    const q = normalizeSearchText(c.req.query('q'));
-    const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
-    const limit = Math.min(300, Math.max(1, Number(c.req.query('limit') || 100)));
-    if (!(await tableExists(c.env.DB, 'notificacoes_log')))
-      return c.json({ success: true, data: [] });
-    const rows = await c.env.DB.prepare(
-      `SELECT id, tipo, destinatario, assunto, corpo, status, erro_mensagem,
-                COALESCE(enviado_em, created_at) AS event_at
-           FROM notificacoes_log
-          WHERE empresa_id = ?
-            AND (assunto LIKE '[COMPLIANCE_TREINAMENTO:%' OR assunto LIKE '[COMPLIANCE_GESTOR:%')
-          ORDER BY COALESCE(enviado_em, created_at) DESC
-          LIMIT ?`,
-    )
-      .bind(empresaId, limit * 4)
-      .all<{
-        id: number;
-        tipo: string | null;
-        destinatario: string | null;
-        assunto: string | null;
-        corpo: string | null;
-        status: string | null;
-        erro_mensagem: string | null;
-        event_at: string | null;
-      }>();
-    const data = [] as Array<Record<string, unknown>>;
-    for (const row of rows.results || []) {
-      let body: Record<string, unknown> = {};
-      try {
-        body = row.corpo ? (JSON.parse(row.corpo) as Record<string, unknown>) : {};
-      } catch {
-        body = {};
-      }
-      const funcionarioId = Number(body.funcionario_id || 0);
-      const person = peopleById.get(funcionarioId);
-      if (!funcionarioId || !person) continue;
-      if (funcionarioQ && !normalizeSearchText(person.nome).includes(funcionarioQ)) continue;
-      if (
-        q &&
-        ![
-          body.funcionario_nome,
-          body.setor_nome,
-          body.qualificacao_nome,
-          row.destinatario,
-          row.tipo,
-        ].some((value) => normalizeSearchText(value).includes(q))
-      ) {
-        continue;
-      }
-      data.push({
-        id: row.id,
-        funcionario_id: funcionarioId,
-        funcionario_nome: body.funcionario_nome || null,
-        setor_nome: body.setor_nome || null,
-        qualificacao_tipo_id: Number(body.qualificacao_tipo_id || 0) || null,
-        qualificacao_nome: body.qualificacao_nome || null,
-        status_compliance: body.status_compliance || null,
-        tipo: row.tipo,
-        destinatario: maskNotificationDestination(row.destinatario),
-        status_envio: row.status,
-        erro: row.erro_mensagem || null,
-        enviado_em: row.event_at,
-        gestor: String(row.assunto || '').startsWith('[COMPLIANCE_GESTOR:'),
-      });
-      if (data.length >= limit) break;
+    const rawLimit = Number(c.req.query('limit') || 100);
+    const rawOffset = Number(c.req.query('offset') || 0);
+    const validDate = (value: string | undefined) =>
+      !value || /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+    const inicio = c.req.query('inicio');
+    const fim = c.req.query('fim');
+    if (!validDate(inicio) || !validDate(fim) || (inicio && fim && inicio > fim)) {
+      throw new ApiError('Período de comunicações inválido', 400);
     }
-    return c.json({ success: true, data });
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 ||
+        !Number.isInteger(rawOffset) || rawOffset < 0) {
+      throw new ApiError('Paginação de comunicações inválida', 400);
+    }
+    const canal = c.req.query('canal');
+    const origem = c.req.query('origem');
+    const resultado = c.req.query('resultado');
+    if ((canal && !['EMAIL', 'WHATSAPP'].includes(canal)) ||
+        (origem && !['COMPLIANCE', 'LMS_ALERTA', 'LMS_CONVITE'].includes(origem)) ||
+        (resultado && !['enviada', 'erro', 'sem_contato'].includes(resultado))) {
+      throw new ApiError('Filtro de comunicações inválido', 400);
+    }
+    const limit = Math.min(200, rawLimit);
+    const offset = rawOffset;
+    const history = await listTrainingCommunications(
+      c.env.DB,
+      empresaId,
+      access,
+      {
+        notifications: await tableExists(c.env.DB, 'notificacoes_log'),
+        audit: await tableExists(c.env.DB, 'audit_logs'),
+      },
+      {
+        funcionario_q: c.req.query('funcionario_q'),
+        treinamento_q: c.req.query('treinamento_q') || c.req.query('q'),
+        canal: canal as 'EMAIL' | 'WHATSAPP' | undefined,
+        origem: origem as 'COMPLIANCE' | 'LMS_ALERTA' | 'LMS_CONVITE' | undefined,
+        resultado: resultado as 'enviada' | 'erro' | 'sem_contato' | undefined,
+        inicio,
+        fim,
+        setor_id: asPositiveInt(c.req.query('setor_id')) || undefined,
+        funcao_id: asPositiveInt(c.req.query('funcao_id')) || undefined,
+        limit,
+        offset,
+      },
+    );
+    return c.json({
+      success: true,
+      data: history.rows,
+      pagination: { limit, offset, has_more: history.has_more },
+    });
   });
 
   app.get('/relatorios/automacao', requireRole('admin', 'manager'), async (c) => {
