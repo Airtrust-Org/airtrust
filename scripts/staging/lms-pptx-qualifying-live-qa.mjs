@@ -112,7 +112,18 @@ async function browserReview(token, user, matriculaId, result) {
       const page = await context.newPage();
       await page.goto(`${PAGES}/lms/player/pptx/${matriculaId}`,
         { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await page.getByText('Slide 1 de 3').waitFor({ timeout: 40000 });
+      try {
+        await page.getByText('Slide 1 de 3').waitFor({ timeout: 25000 });
+      } catch {
+        // The qualifying API lifecycle already passed; distinguish a redirect,
+        // authentication denial, unsupported fixture, or renderer failure.
+        // Only surface the synthetic page path and bounded, redacted UI text.
+        const path = new URL(page.url()).pathname.slice(0, 140);
+        const visible = (await page.locator('body').innerText().catch(() => ''))
+          .replace(/\b[\w.+-]+@[\w.-]+\b/g, '[synthetic-email]')
+          .replace(/\s+/g, ' ').slice(0, 420);
+        throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_MISSING path=${path} visible=${visible}`);
+      }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
         await page.getByText(`Slide ${index} de 3`).waitFor();
