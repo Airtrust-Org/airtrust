@@ -60,9 +60,45 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/ci/verify-release-gates.mjs
 
+  d1-synthetic-identity:
+    name: Staging D1 synthetic LMS QA identity provision
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    env:
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install governed staging D1 seed dependencies
+        run: npm ci && npm --prefix worker-airtrust ci
+      - name: Guard exact staging D1 and dedicated synthetic account
+        run: |
+          set -euo pipefail
+          [[ "$STAGING_D1_NAME" == 'airtrust-db-staging-baseline-20260701' ]]
+          [[ -n "$STAGING_SMOKE_PASSWORD" && -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'STAGING_D1_QA_SECRETS_MISSING'; exit 1; }
+      - name: Idempotently seed dedicated synthetic LMS admin
+        env:
+          STAGING_SMOKE_EMAIL: qa-pptx-admin@staging.airtrust.invalid
+          STAGING_SMOKE_EMPRESA_CODIGO: qa_lms_catalog_audit_smoke
+          STAGING_SMOKE_EMPRESA_NOME: QA LMS Catalog Audit Smoke
+          STAGING_SMOKE_USER_NOME: QA PPTX Administrator
+          STAGING_SMOKE_PERFIL: ADMINISTRADOR
+          STAGING_SMOKE_ROLE: admin
+        run: |
+          set -euo pipefail
+          node scripts/seed-staging-smoke-user.mjs
+          node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
+
   live-qa:
     name: Synthetic learner PPTX browser + API + qualification QA
-    needs: guard
+    needs: [guard, d1-synthetic-identity]
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 25
@@ -70,8 +106,6 @@ jobs:
       RELEASE_SHA: ${{ inputs.release_sha }}
       CONFIRM_STAGING_PPTX_QA: AIRTRUST_STAGING_PPTX_QA
       STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PPTX_QA_RESULT_PATH: qa-state/staging-pptx/result.json
     steps:
       - uses: actions/checkout@v7
@@ -85,21 +119,9 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$STAGING_D1_NAME" == 'airtrust-db-staging-baseline-20260701' ]]
-          [[ -n "$STAGING_SMOKE_PASSWORD" && -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo 'STAGING_QA_SECRETS_MISSING'; exit 1; }
+          [[ -n "$STAGING_SMOKE_PASSWORD" ]] || { echo 'STAGING_QA_SECRET_MISSING'; exit 1; }
           node --check scripts/staging/lms-pptx-qualifying-live-qa.mjs
           node scripts/staging/lms-pptx-qualifying-live-qa.mjs
-      - name: Idempotently seed dedicated synthetic LMS admin
-        env:
-          STAGING_SMOKE_EMAIL: qa-pptx-admin@staging.airtrust.invalid
-          STAGING_SMOKE_EMPRESA_CODIGO: qa_lms_catalog_audit_smoke
-          STAGING_SMOKE_EMPRESA_NOME: QA LMS Catalog Audit Smoke
-          STAGING_SMOKE_USER_NOME: QA PPTX Administrator
-          STAGING_SMOKE_PERFIL: ADMINISTRADOR
-          STAGING_SMOKE_ROLE: admin
-        run: |
-          set -euo pipefail
-          node scripts/seed-staging-smoke-user.mjs
-          node scripts/seed-staging-smoke-user.mjs --apply --confirm-staging-baseline
       - name: Idempotently verify isolated synthetic learner
         env:
           QA_LMS_STUDENT_EMAIL: qa-lms-e2e@staging.airtrust.invalid
