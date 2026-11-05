@@ -33,6 +33,8 @@ import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-sess
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { buildScormLaunchState, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
 import { readActiveScormHandoff } from '../services/lms-scorm-active-handoff-read';
+import { readActiveCompletionManifest } from '../services/lms-completion-manifest-evidence';
+import { projectS76Rc3AdministrativeResume } from '../services/lms-scorm-s76-rc3-resume-bridge';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1043,6 +1045,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .prepare(
       `
       SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.progresso_pct, m.data_inicio,
+        m.qualificacao_historico_id,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
         c.scorm_assessment_policy
@@ -1059,6 +1062,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       status: string;
       progresso_pct: number | null;
       data_inicio: string | null;
+      qualificacao_historico_id: number | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1125,6 +1129,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   if (!ciclo) throw new ApiError('Ciclo ativo da matrícula não encontrado', 409);
 
   let navigationBookmark: { position: number; total: number } | null = null;
+  let verifiedHandoff: Awaited<ReturnType<typeof readActiveScormHandoff>> = null;
   if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
     const handoff = await readActiveScormHandoff({
       db, enabled: true, empresaId, matriculaId: matricula.id,
@@ -1135,6 +1140,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       claimedCycleId: Number(payload.asset_cycle_id ?? 0),
       activeCycleId: ciclo.id, activeHandoffId: handoff?.id ?? null,
     })) throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+    verifiedHandoff = handoff;
     navigationBookmark = handoff?.bookmark ?? null;
     // Never launch a blank SCO over an archived prior-edition checkpoint.
     if (handoff && Number(handoff.previousProgressPct ?? 0) > 0 &&
@@ -1155,7 +1161,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   // FORMATIVE (F5) packages own their cursor: orphan locations and browser backups never override it.
   const formativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
-  const { initialCmiJson, hasResumeState } = buildScormLaunchState(
+  let { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
@@ -1163,6 +1169,50 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     navigationBookmark,
     { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
+
+  // Emergency compatibility for one immutable, verified S-76 RC3 handoff.
+  // The ACTIVE SCO understands V2 only, while the authorized administrative
+  // navigation credit is V4. Project the same 48/49 indexes for THIS launch,
+  // never writing D1, granting score or marking an enrollment completed.
+  if (empresaId === 6 && matricula.curso_id === 39 && matricula.id === 690 &&
+      ciclo.id === 889 && verifiedHandoff?.id === 30 &&
+      matricula.status === 'EM_ANDAMENTO' &&
+      matricula.qualificacao_historico_id === null &&
+      matricula.scorm_assessment_policy === 'FORMATIVE' &&
+      matricula.scorm_package_r2_prefix) {
+    const matchingActive = await db.prepare(`
+      SELECT p.package_sha256 AS sha FROM lms_scorm_package_versions p
+      JOIN lms_scorm_edition_handoffs h ON h.empresa_id=p.empresa_id
+        AND h.curso_id=p.curso_id AND h.target_package_sha256=p.package_sha256
+        AND h.target_package_prefix=p.r2_prefix
+      WHERE p.empresa_id=? AND p.curso_id=? AND p.r2_prefix=?
+        AND p.status='ACTIVE' AND h.id=? AND h.matricula_id=?
+        AND h.ciclo_id=? LIMIT 1
+    `).bind(empresaId,matricula.curso_id,matricula.scorm_package_r2_prefix,
+      verifiedHandoff.id,matricula.id,ciclo.id)
+      .first<{sha:string}>();
+    if (matchingActive) {
+      const manifest = await readActiveCompletionManifest({
+        bucket:c.env.BUCKET,empresaId,cursoId:matricula.curso_id,
+        activePrefix:matricula.scorm_package_r2_prefix,
+      });
+      const projection = projectS76Rc3AdministrativeResume({
+        empresaId,cursoId:matricula.curso_id,matriculaId:matricula.id,
+        cicloId:ciclo.id,handoffId:verifiedHandoff.id,
+        handoffPreviousProgressPct:verifiedHandoff.previousProgressPct,
+        handoffBookmark:verifiedHandoff.bookmark,
+        activePackageSha256:matchingActive.sha,
+        assessmentPolicy:matricula.scorm_assessment_policy,
+        enrollmentStatus:matricula.status,
+        qualificationHistoryId:matricula.qualificacao_historico_id,
+        manifest,initialCmiJson,
+      });
+      if (projection !== null) {
+        initialCmiJson = projection;
+        hasResumeState = true;
+      }
+    }
+  }
 
   const html = buildLaunchPage({
     matriculaId: matricula.id,
