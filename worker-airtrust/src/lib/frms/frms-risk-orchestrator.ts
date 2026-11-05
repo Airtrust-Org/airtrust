@@ -62,7 +62,7 @@ function mapEnvironmental(level: EnvironmentalRiskAssessment['level']): AirTrust
 
 export function orchestrateFrmsRisk(input: FrmsRiskOrchestrationInput): FrmsRiskOrchestrationResult {
   const anyViolation = input.compliance.some((item) => item.status === 'VIOLATION');
-  const anyComplianceUnknown = input.compliance.some((item) => item.status === 'UNKNOWN');
+  const anyComplianceUnknown = input.compliance.length === 0 || input.compliance.some((item) => item.status === 'UNKNOWN');
   const complianceLevel: AirTrustRiskLevel = anyViolation
     ? 'VIOLATION'
     : !input.regulatoryProfileReady || anyComplianceUnknown
@@ -91,6 +91,13 @@ export function orchestrateFrmsRisk(input: FrmsRiskOrchestrationInput): FrmsRisk
     reasons.push('Existe violação de limite obrigatório; nenhum score pode compensá-la.');
     overallLevel = 'VIOLATION';
   }
+  if (input.compliance.length === 0) {
+    alerts.push('REGULATORY_EVALUATIONS_MISSING');
+    reasons.push('Nenhuma regra regulatória foi efetivamente avaliada.');
+  }
+  if (biologicalLevel === 'UNKNOWN') alerts.push('BIOLOGICAL_EVIDENCE_MISSING');
+  if (operationalLevel === 'UNKNOWN') alerts.push('OPERATIONAL_RISK_UNKNOWN');
+  if (environmentalLevel === 'UNKNOWN') alerts.push('ENVIRONMENTAL_RISK_UNKNOWN');
 
   // Explicit interaction required by the AirTrust IOGP design: high heat/cold
   // plus high operational demand escalates to CRITICAL even if neither domain
@@ -112,13 +119,21 @@ export function orchestrateFrmsRisk(input: FrmsRiskOrchestrationInput): FrmsRisk
     alerts.push('ENVIRONMENTAL_DATA_LOW_CONFIDENCE');
   }
 
+  // A known elevated/critical hazard remains visible even if another dimension
+  // is unknown. If the known dimensions are all normal, unknown evidence must
+  // never be represented as an overall normal result.
+  const anyChannelUnknown = [complianceLevel, biologicalLevel, operationalLevel, environmentalLevel]
+    .includes('UNKNOWN');
+  if (anyChannelUnknown && overallLevel === 'NORMAL') overallLevel = 'UNKNOWN';
+
   const uniqueAlerts = [...new Set(alerts)];
   const automaticApprovalAllowed =
     input.regulatoryProfileReady &&
     complianceLevel === 'NORMAL' &&
+    !anyChannelUnknown &&
     rank[overallLevel] < rank.CRITICAL &&
-    input.operational.dataQuality !== 'INSUFFICIENT' &&
-    input.environmental.dataQuality !== 'INSUFFICIENT';
+    input.operational.dataQuality === 'COMPLETE' &&
+    input.environmental.dataQuality === 'COMPLETE';
 
   return {
     overallLevel,
