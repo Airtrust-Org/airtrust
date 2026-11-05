@@ -50,7 +50,9 @@ export class SameDayTrainingAlerts {
 
   constructor(rows: TrainingCommunication[], day: string) {
     for (const row of rows) {
-      if (row.status_envio !== 'enviada' || row.gestor) continue;
+      // Uma intenção PREPARADO sem resultado final é potencialmente aceita pelo provedor.
+      // Falhar fechado: não reenviar até reconciliação explícita desse estado.
+      if (!['enviada', 'pendente'].includes(row.status_envio || '') || row.gestor) continue;
       const stamp = parseSqliteTimestamp(row.enviado_em);
       if (!stamp || localDay(stamp) !== day) continue;
       const channel = String(row.tipo || '').toUpperCase().startsWith('EMAIL')
@@ -95,13 +97,24 @@ export async function readSameDayTrainingAlerts(
   const end = following.toISOString().slice(0, 10);
   const rows: TrainingCommunication[] = [];
 
-  for (let offset = 0; offset <= 20000; offset += 200) {
-    const page = await listTrainingCommunications(
-      db, empresaId, access, { notifications: true, audit: true },
-      { inicio: start, fim: end, resultado: 'enviada', limit: 200, offset },
-    );
-    rows.push(...page.rows);
-    if (!page.has_more) return new SameDayTrainingAlerts(rows, day);
+  // Consultar os dois estados individualmente mantém a filtragem SQL e evita
+  // paginar milhares de falhas/sem-contato. Ambos bloqueiam reenvio automático.
+  for (const resultado of ['enviada', 'pendente'] as const) {
+    let exhausted = false;
+    for (let offset = 0; offset <= 20000; offset += 200) {
+      const page = await listTrainingCommunications(
+        db, empresaId, access, { notifications: true, audit: true },
+        { inicio: start, fim: end, resultado, limit: 200, offset },
+      );
+      rows.push(...page.rows);
+      if (!page.has_more) {
+        exhausted = true;
+        break;
+      }
+    }
+    if (!exhausted) {
+      throw new Error('Histórico de alertas excedeu limite de verificação segura; envio bloqueado');
+    }
   }
-  throw new Error('Histórico de alertas excedeu limite de verificação segura; envio bloqueado');
+  return new SameDayTrainingAlerts(rows, day);
 }
