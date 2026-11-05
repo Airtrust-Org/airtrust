@@ -115,6 +115,10 @@ jobs:
     name: Synthetic learner PPTX browser + API + qualification QA
     needs: [guard, d1-synthetic-identity]
     runs-on: ubuntu-latest
+    # Pin the browser runtime to the lockfile Playwright version. Avoid
+    # unbounded apt downloads from --with-deps on the hosted runner.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
     environment: staging
     timeout-minutes: 25
     env:
@@ -142,8 +146,16 @@ jobs:
           QA_LMS_STUDENT_EMAIL: qa-lms-e2e@staging.airtrust.invalid
           QA_LMS_STUDENT_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
         run: node scripts/staging/lms-audit-student-readiness.mjs
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium webkit
+      - name: Verify preinstalled browser engines
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync } from 'node:fs';
+          import { chromium, webkit } from 'playwright';
+          for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
+            if (!existsSync(engine.executablePath())) throw new Error(`PPTX_QA_${name}_BROWSER_MISSING`);
+          }
+          console.log('PPTX_QA_BROWSERS_READY');
+          NODE
       - name: Live tenant-isolated qualifying PPTX acceptance
         run: node scripts/staging/lms-pptx-qualifying-live-qa.mjs --apply
       - name: Upload sanitized QA evidence
