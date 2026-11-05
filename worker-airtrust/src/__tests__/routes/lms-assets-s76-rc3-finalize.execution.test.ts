@@ -28,7 +28,7 @@ function launch(params: {
   const frame = g.document.getElementById('scorm-frame');
   const doc = frame.contentWindow.document;
   doc.body.innerHTML = `<span class="counter">${params.screen ?? '49/49'}</span><button id="nextUnit">${params.label ?? 'Concluir treinamento'}</button>`;
-  const button = doc.getElementById('nextUnit') as HTMLButtonElement;
+  const button = doc.getElementById('nextUnit') as { disabled: boolean };
   button.disabled = params.disabled ?? false;
   frame.contentWindow.AIRTRUST_COURSE_MODEL = {
     courseId: params.courseId ?? 's76c-sop-rev03',
