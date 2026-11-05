@@ -54,9 +54,11 @@ describe('S-76 #690 immutable handoff readonly inspection', () => {
     assert.equal(output.archive.lesson_location, '55/55');
     assert.doesNotMatch(JSON.stringify(output), /SENSITIVE_FREEFORM_TEXT/);
   });
-  it('fails closed when the active package SHA no longer matches handoff', () => {
-    assert.throws(() => sanitize({ ...row(), active_package_sha: 'c'.repeat(64) }),
-      /ACTIVE_PACKAGE_CHANGED/);
+  it('reports replacement after handoff without authorizing credit or completion', () => {
+    const report = sanitize({ ...row(), active_package_sha: 'c'.repeat(64) });
+    assert.equal(report.active_sha_matches_handoff, false);
+    assert.equal(report.evidence_transfer_executed, false);
+    assert.equal(report.completion_granted, false);
   });
   it('fails closed without archived progress or a proven navigation plan', () => {
     assert.throws(() => sanitize({ ...row(), previous_enrollment_json: '{}' }),
