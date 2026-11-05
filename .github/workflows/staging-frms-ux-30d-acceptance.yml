@@ -93,6 +93,13 @@ jobs:
     needs: guard
     environment: staging
     runs-on: ubuntu-latest
+    # Avoid apt mirror timeouts: browser binaries and dependencies are pinned
+    # to the repo's locked Playwright 1.58.2 version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 20
     env:
       BASE_URL: https://staging.airtrust.pages.dev
@@ -119,8 +126,14 @@ jobs:
           --target es2022 --module nodenext --moduleResolution nodenext
           --esModuleInterop --types node
           e2e/staging-frms-ux-30d-acceptance.spec.ts
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Verify preinstalled Chromium
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync } from 'node:fs';
+          import { chromium } from 'playwright';
+          if (!existsSync(chromium.executablePath())) throw new Error('FRMS_QA_CHROMIUM_BROWSER_MISSING');
+          console.log('FRMS_QA_CHROMIUM_READY');
+          NODE
       - name: Inspect Operação, Casos, Manutenção and Relatórios, read-only
         run: npx playwright test e2e/staging-frms-ux-30d-acceptance.spec.ts --project=chromium --no-deps
       - name: Preserve synthetic-only main-panel screenshots and traces
