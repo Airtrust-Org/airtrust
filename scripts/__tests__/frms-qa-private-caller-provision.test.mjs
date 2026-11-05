@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {
   REPO,
   WORKFLOW,
@@ -10,6 +11,7 @@ import {
   exactCallerProvisionPlan,
   verifyCallerProvisionAdminGrant,
   buildCallerRuntimeSecrets,
+  callerProvisionReadCredentials,
 } from '../../ops/frms-qa-repair/provision-private-caller.mjs';
 
 const sha = 'c'.repeat(40);
@@ -31,6 +33,12 @@ test('exactCallerProvisionPlan constructs immutable, bounded caller plan', async
   assert.equal(plan.d1_writes_authorized, 0);
   assert.equal(plan.r2_writes_authorized, 0);
   assert.equal(plan.production_authorized, false);
+  assert.equal(plan.credential_mode, 'existing_staging_worker_deploy_only');
+  const dedicated = exactCallerProvisionPlan({ sha, accountId, callerConfig,
+    credentialMode: 'dedicated' });
+  assert.equal(dedicated.credential_mode, 'dedicated');
+  assert.throws(() => exactCallerProvisionPlan({ sha, accountId, callerConfig,
+    credentialMode: 'unapproved_mode' }), /FRMS_QA_CALLER_CONFIG_INVALID/);
 });
 
 test('exactCallerProvisionPlan rejects modified or insecure wrangler config', () => {
@@ -70,8 +78,11 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
     FRMS_QA_CALLER_CONFIRM: 'AIRTRUST_FRMS_QA_CALLER_WORKER_STAGING_DEPLOY',
     FRMS_QA_CALLER_EXPECTED_SHA: sha,
     FRMS_QA_CALLER_GRANT_ID: grantId,
+    FRMS_QA_CREDENTIAL_MODE: 'existing_staging_worker_deploy_only',
   };
 
+  let blockedGate = null;
+  let revokedActor = false;
   const fetcher = async (url) => {
     const path = String(url).replace('https://api.github.com/', '');
     if (path === 'repos/' + REPO + '/branches/main') {
@@ -110,7 +121,16 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
       };
     }
     if (path === 'repos/' + REPO + '/collaborators/admin-user/permission') {
-      return { status: 200, redirected: false, ok: true, json: async () => ({ permission: 'admin' }) };
+      return { status: 200, redirected: false, ok: true,
+        json: async () => ({ permission: revokedActor ? 'write' : 'admin' }) };
+    }
+    if (path.startsWith('repos/' + REPO + '/commits/' + sha + '/check-runs?')) {
+      const name = new URL(String(url)).searchParams.get('check_name');
+      return { status: 200, redirected: false, ok: true,
+        json: async () => ({ check_runs: name === blockedGate ? [] : [{
+          name, head_sha: sha, status: 'completed', conclusion: 'success',
+          app: { slug: 'github-actions' },
+        }] }) };
     }
     throw new Error('Unexpected URL: ' + path);
   };
@@ -124,6 +144,19 @@ test('verifyCallerProvisionAdminGrant enforces exact F0 admin comment and fresh 
 
   assert.equal(verified.status, 'CALLER_PROVISION_ADMIN_GRANT_VERIFIED');
   assert.equal(verified.callerWorker, EXPECTED_CALLER_WORKER);
+  blockedGate = 'frontend-coverage';
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_ADMIN_OR_GATES_REQUIRED/);
+  blockedGate = null;
+  revokedActor = true;
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_ADMIN_OR_GATES_REQUIRED/);
+  revokedActor = false;
+  await assert.rejects(verifyCallerProvisionAdminGrant({
+    env: { ...env, FRMS_QA_CREDENTIAL_MODE: 'dedicated' }, callerConfig, fetcher, now,
+  }), /FRMS_QA_CALLER_GRANT_NOT_EXACT/);
 });
 
 test('buildCallerRuntimeSecrets constructs deterministic hashes without logging', () => {
@@ -136,5 +169,74 @@ test('buildCallerRuntimeSecrets constructs deterministic hashes without logging'
   assert.equal(secrets.RELEASE_SHA, sha);
   assert.equal(secrets.CALLER_KEY_HEX, callerKey);
   assert.equal(secrets.CALLER_KEY_SHA256.length, 64);
+  assert.equal(secrets.CALLER_KEY_SHA256,
+    createHash('sha256').update(Buffer.from(callerKey, 'hex')).digest('hex'));
   assert.equal(Object.hasOwn(secrets, 'CLOUDFLARE_API_TOKEN'), false);
+});
+
+test('protected caller workflow authenticates the grant and never invokes bare Wrangler deploy', async () => {
+  const source = await readFile(new URL('../../.github/workflows/staging-frms-qa-private-caller.yml',
+    import.meta.url), 'utf8');
+  const runner = await readFile(new URL('../../ops/frms-qa-repair/run-private-caller-provision.mjs',
+    import.meta.url), 'utf8');
+  const queues = await readFile(new URL('../../ops/frms-qa-repair/run-private-queue-provision.mjs',
+    import.meta.url), 'utf8');
+  assert.match(source, /Verify actual F0 administrator grant, actor and eight official gates/);
+  assert.match(source, /verifyCallerProvisionAdminGrant/);
+  assert.match(source, /run: node ops\/frms-qa-repair\/run-private-caller-provision\.mjs/);
+  assert.doesNotMatch(source, /run: \|\s*set -euo pipefail\s*npx wrangler deploy --config/);
+  assert.match(runner, /FRMS_QA_CALLER_PARTIAL_DEPLOYMENT_RECONCILIATION_REQUIRED/);
+  assert.match(runner, /await verifyCallerProvisionAdminGrant/);
+  assert.match(runner, /getOnly=async/);
+  assert.match(runner, /secret','bulk/);
+  assert.match(runner, /secret','list/);
+  assert.match(queues, /FRMS_QA_PRIVATE_QUEUES_PROVISION_FAILED_CLOSED_PHASE_/);
+  assert.doesNotMatch(queues, /console\.error\(.*error\.message/);
+});
+
+test('dedicated credentials keep deploy rights distinct from metadata and queue inspection', () => {
+  const mode='dedicated';
+  const deploy='fake-deploy-only', metadata='fake-metadata-read-only';
+  const queues='fake-queue-read-only';
+  const base={
+    FRMS_QA_CREDENTIAL_MODE:mode,
+    CLOUDFLARE_API_TOKEN:deploy,
+    CLOUDFLARE_FRMS_QA_READ_API_TOKEN:metadata,
+    CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN:queues,
+  };
+  const result=callerProvisionReadCredentials(base);
+  assert.deepEqual(result,{metadata,queue:queues});
+  assert.equal(Object.isFrozen(result),true);
+  for(const malformed of [
+    {CLOUDFLARE_FRMS_QA_READ_API_TOKEN:''},
+    {CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN:''},
+    {CLOUDFLARE_FRMS_QA_READ_API_TOKEN:deploy},
+    {CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN:deploy},
+  ]) assert.throws(()=>callerProvisionReadCredentials({...base,...malformed}),
+    /FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED/);
+});
+
+test('the explicit existing-token staging exception remains mode-pinned', () => {
+  const result=callerProvisionReadCredentials({
+    FRMS_QA_CREDENTIAL_MODE:'existing_staging_worker_deploy_only',
+    CLOUDFLARE_API_TOKEN:'fake-existing-staging-only',
+  });
+  assert.equal(result.metadata,'fake-existing-staging-only');
+  assert.equal(result.queue,'fake-existing-staging-only');
+  assert.throws(()=>callerProvisionReadCredentials({
+    FRMS_QA_CREDENTIAL_MODE:'invalid',
+    CLOUDFLARE_API_TOKEN:'fake-existing-staging-only',
+  }),/FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED/);
+});
+
+test('dedicated runner uses separate credentials for actual Cloudflare GET preflights',async()=>{
+  const workflow=await readFile(new URL('../../.github/workflows/staging-frms-qa-private-caller.yml',
+    import.meta.url),'utf8');
+  const runner=await readFile(new URL('../../ops/frms-qa-repair/run-private-caller-provision.mjs',
+    import.meta.url),'utf8');
+  assert.match(workflow,/CLOUDFLARE_FRMS_QA_READ_API_TOKEN:/);
+  assert.match(workflow,/CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN:/);
+  assert.match(runner,/callerProvisionReadCredentials/);
+  assert.match(runner,/token:scoped.metadata/);
+  assert.match(runner,/token:scoped.queue/);
 });
