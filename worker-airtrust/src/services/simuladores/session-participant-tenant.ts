@@ -1,3 +1,5 @@
+import { chunkByBindBudget } from '../../utils/d1-bind-chunks';
+
 /**
  * Validate every participant referenced by a simulator session mutation before
  * the session, its participant rows, or any ficha is changed.
@@ -32,9 +34,9 @@ export async function validateSessionParticipantTenant(
   }
 
   const unique = [...ids];
-  // SQLite/D1 binds have a finite limit; leave room for the tenant parameter.
-  for (let offset = 0; offset < unique.length; offset += 250) {
-    const batch = unique.slice(offset, offset + 250);
+  // D1 has a 100-bind ceiling per statement; one parameter is the tenant.
+  // Use the shared conservative budget (90 list IDs per query).
+  for (const batch of chunkByBindBudget(unique, 1)) {
     const placeholders = batch.map(() => '?').join(', ');
     const result = await db.prepare(
       `SELECT id FROM funcionarios
