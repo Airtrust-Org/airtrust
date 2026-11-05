@@ -80,6 +80,25 @@ test('MGM 1855 uses an explicit, independently scoped F0 grant and cannot reuse 
   assert.equal(await verify(mgm, 'read-token', get, now), true);
 });
 
+test('NR26 RC5 grant is pinned to only tenant 6/course 52/physical ZIP hash and bytes', () => {
+  const target={ ...base,prNumber:'1977',tenantId:'6',courseId:'52',
+    packageSha256:'ba6f2399257de017de4dc62b3f56b86d44238b0f3b9b9ff09e31e003e6cb9c29',
+    zipBytes:'6327348' };
+  assert.doesNotThrow(()=>assertConfig(target));
+  assert.equal(expectedGrant(target).pr,1977);
+  assert.equal(expectedGrant(target).candidate_status,'INACTIVE');
+  assert.equal(expectedGrant(target).activation,'PROHIBITED');
+  assert.equal(expectedGrant(target).certification,'PROHIBITED');
+  for(const patch of [
+    {tenantId:'7'}, {courseId:'51'}, {packageSha256:'f'.repeat(64)},
+    {zipBytes:'6327347'}, {zipBytes:'6327349'}
+  ]) assert.throws(()=>assertConfig({...target,...patch}),/F5_NR26_RC5_EXACT_TENANT_COURSE_ZIP_SCOPE_REQUIRED/);
+  assert.throws(()=>checkGrantBody(grantBody(base),target),/F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.throws(()=>checkGrantBody(grantBody(target),base),/F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.match(readFileSync('.github/workflows/staging-scorm-f5-readiness.yml','utf8'),
+    /- '1977'/);
+});
+
 test('requires all official release gates on the exact candidate SHA', () => {
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
     'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
