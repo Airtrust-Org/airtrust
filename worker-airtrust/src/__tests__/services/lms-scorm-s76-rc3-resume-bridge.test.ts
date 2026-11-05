@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { projectS76Rc3AdministrativeResume, type S76Rc3ResumeBridgeInput } from
   '../../services/lms-scorm-s76-rc3-resume-bridge';
 import type { ActiveCompletionManifest } from '../../services/lms-completion-manifest-evidence';
+import { buildScormLaunchState } from '../../services/lms-scorm-launch-state';
 
 const sha = '9c65dc726af8e57b2ac3424b0898559b1a80d00348605b6805eb155ad6a1bb12';
 const version = 'v3.4-no-module-exams-rc2-2026-11-02';
@@ -65,6 +66,26 @@ describe('S-76 RC3 V4 administrative credit projection (launch-only)', () => {
       JSON.parse(original.initialCmiJson)['airtrust.administrative_credit']);
     expect(cmi).not.toHaveProperty('cmi.core.score.raw');
     expect(cmi).not.toHaveProperty('cmi.core.lesson_status', 'completed');
+  });
+
+  it('integrates the real launch-state assembler without mutating the original checkpoint', () => {
+    const original = input();
+    const launch = buildScormLaunchState(
+      original.initialCmiJson, null, false, false, { position: 49, total: 49 },
+      { persisted: { lesson_status: 'incomplete' }, formativeCourse: true },
+    );
+    expect(launch.hasResumeState).toBe(true);
+    const before = JSON.parse(launch.initialCmiJson);
+    expect(JSON.parse(before['cmi.suspend_data']).v).toBe(4);
+    const bridged = projectS76Rc3AdministrativeResume({
+      ...original, initialCmiJson: launch.initialCmiJson,
+    });
+    expect(bridged).not.toBeNull();
+    const after = JSON.parse(bridged!);
+    expect(JSON.parse(after['cmi.suspend_data']).c).toHaveLength(48);
+    expect(JSON.parse(after['cmi.suspend_data']).d).toHaveLength(48);
+    expect(after['cmi.core.lesson_location']).toBe('49/49');
+    expect(before['cmi.core.lesson_location']).toBe('3/49');
   });
 
   it('rejects scope, handoff, identity, policy and completed-course mismatches', () => {
