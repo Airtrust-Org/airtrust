@@ -1850,11 +1850,8 @@ app.post('/:id/finalizar', async (c) => {
   }
 
   if (
-    requiresServerValidatedNonScormEvidence(
-      matricula.tipo_conteudo,
-      matricula.gerar_qualificacao_ao_concluir,
-    ) && !(String(matricula.tipo_conteudo).toLowerCase() === 'pptx' &&
-      await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
+    requiresServerValidatedNonScormEvidence(matricula.tipo_conteudo, matricula.gerar_qualificacao_ao_concluir) &&
+    !(matricula.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
   ) {
     return c.json(
       {
@@ -2153,11 +2150,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     }
 
     if (
-      requiresServerValidatedNonScormEvidence(
-        existing.tipo_conteudo,
-        existing.gerar_qualificacao_ao_concluir,
-      ) && !(String(existing.tipo_conteudo).toLowerCase() === 'pptx' &&
-        await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
+      requiresServerValidatedNonScormEvidence(existing.tipo_conteudo, existing.gerar_qualificacao_ao_concluir) &&
+      !(existing.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
     ) {
       return c.json(
         {
