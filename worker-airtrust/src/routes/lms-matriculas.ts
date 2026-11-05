@@ -83,8 +83,10 @@ import {
   readMatriculaForCourseList,
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
+import { registerPptxEvidenceRoutes } from './lms-pptx-evidence';
+import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
-import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import lmsMatriculasConvitesRoutes, { sendMatriculaTracked } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
 import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
@@ -94,6 +96,7 @@ import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
+registerPptxEvidenceRoutes(app);
 app.route('/convites', lmsMatriculasConvitesRoutes);
 registerLmsScormEditionHandoffRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
@@ -669,7 +672,7 @@ app.post('/', async (c) => {
           resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
       if (enviar_convite_email)
-        await sendMatriculaEmail(c, c.env, db, {
+        await sendMatriculaTracked(c, c.env, db, existente.id, {
           funcionarioId: funcionario_id,
           empresaId,
           cursoId: curso_id,
@@ -774,7 +777,7 @@ app.post('/', async (c) => {
       },
     });
     if (enviar_convite_email)
-      await sendMatriculaEmail(c, c.env, db, {
+      await sendMatriculaTracked(c, c.env, db, matriculaId, {
         funcionarioId: funcionario_id,
         empresaId,
         cursoId: curso_id,
@@ -994,7 +997,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         });
         etapa = 'convite';
         if (enviar_convite_email)
-          await sendMatriculaEmail(c, c.env, db, {
+          await sendMatriculaTracked(c, c.env, db, existente.id, {
             funcionarioId,
             empresaId,
             cursoId: curso_id,
@@ -1063,7 +1066,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
       etapa = 'convite';
       if (enviar_convite_email)
-        await sendMatriculaEmail(c, c.env, db, {
+        await sendMatriculaTracked(c, c.env, db, matriculaId, {
           funcionarioId,
           empresaId,
           cursoId: curso_id,
@@ -1847,10 +1850,8 @@ app.post('/:id/finalizar', async (c) => {
   }
 
   if (
-    requiresServerValidatedNonScormEvidence(
-      matricula.tipo_conteudo,
-      matricula.gerar_qualificacao_ao_concluir,
-    )
+    requiresServerValidatedNonScormEvidence(matricula.tipo_conteudo, matricula.gerar_qualificacao_ao_concluir) &&
+    !(matricula.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
   ) {
     return c.json(
       {
@@ -2149,10 +2150,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     }
 
     if (
-      requiresServerValidatedNonScormEvidence(
-        existing.tipo_conteudo,
-        existing.gerar_qualificacao_ao_concluir,
-      )
+      requiresServerValidatedNonScormEvidence(existing.tipo_conteudo, existing.gerar_qualificacao_ao_concluir) &&
+      !(existing.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
     ) {
       return c.json(
         {
