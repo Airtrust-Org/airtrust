@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-03",
-    "last_reconciled_against": "0573 FRMS KSS row provenance added (avoids reserved LMS 0571/0572); reviewed manifest and governance pending, no D1 apply; 0570 and earlier states unchanged",
-    "schema_v2_digest": "35ce485981910cb2f553c33d17887c6f6179fb48dbcce5385445bf8316e4c79c",
+    "last_reconciled_at": "2026-11-05",
+    "last_reconciled_against": "0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
+    "schema_v2_digest": "551cc32a08cf4d3fe0d8b0522f059b9ba0b67d25094fdb16af92e9361ec5a6aa",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1722,6 +1722,20 @@
       "reviewed_manifest": "frms-checkin-kss-provenance-0573.json",
       "evidence": "worker-airtrust/schema-v2/plans/frms-checkin-kss-provenance-0573.md",
       "note": "Review-only Schema V2 candidate. The 13 scoped production snapshot tables do not include frms_fadiga_checkin; this is repository DDL only, not staging/production proof. No historical backfill; Worker using kss_provenance must not deploy before governed schema apply."
+    },
+    {
+      "change_file": "0574_lms_pptx_slide_evidence.sql",
+      "change_id": "lms-pptx-slide-evidence-0574",
+      "sha256": "65919384fc508a02975890f114230b8c958d44450079c8a97d2e75f28904ecbd",
+      "targets": [
+        "lms_pptx_slide_evidences"
+      ],
+      "domain": "LMS: immutable tenant/cycle/asset-bound PPTX slide observations for qualifying completion",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-pptx-slide-evidence-0574.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
+      "note": "Additive only, no backfill, no session grants or retroactive qualifications. Must apply Schema V2 in staging/production before enabling new Worker endpoints."
     }
   ]
 }
