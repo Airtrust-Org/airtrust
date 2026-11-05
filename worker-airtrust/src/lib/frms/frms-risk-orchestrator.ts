@@ -131,7 +131,7 @@ export function orchestrateFrmsRisk(input: FrmsRiskOrchestrationInput): FrmsRisk
     input.regulatoryProfileReady &&
     complianceLevel === 'NORMAL' &&
     !anyChannelUnknown &&
-    rank[overallLevel] < rank.CRITICAL &&
+    overallLevel === 'NORMAL' &&
     input.operational.dataQuality === 'COMPLETE' &&
     input.environmental.dataQuality === 'COMPLETE';
 

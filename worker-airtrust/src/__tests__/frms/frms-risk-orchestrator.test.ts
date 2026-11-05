@@ -93,4 +93,14 @@ describe('FRMS risk orchestration', () => {
     expect(partial.automaticApprovalAllowed).toBe(false);
     expect(partial.alerts).toContain('ENVIRONMENTAL_DATA_LOW_CONFIDENCE');
   });
+
+  it('never allows automatic approval for elevated or high observed risk', () => {
+    for (const level of ['MODERATE', 'HIGH'] as const) {
+      const result = orchestrateFrmsRisk({
+        ...baseline, operational: { ...operationalBase, level },
+      });
+      expect(result.overallLevel).toBe(level === 'MODERATE' ? 'ELEVATED' : 'HIGH');
+      expect(result.automaticApprovalAllowed).toBe(false);
+    }
+  });
 });
