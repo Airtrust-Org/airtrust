@@ -2,7 +2,9 @@
 /**
  * Governed reconciliation of exactly one pre-reviewed user/employee identity.
  * Never changes tenant membership, roles, phone, LMS enrollment or certificates.
- * Uses the existing tenant-admin API (no raw D1 SQL).
+ * Uses the tenant-admin CAS API (no raw D1 SQL).
+ * Uses the tenant-admin CAS API with a D1-atomic single-row update and audit.
+ * The worker endpoint must already be deployed; there is no legacy PUT fallback.
  */
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -29,9 +31,8 @@ export function selectStrictLinkCandidate({ users, staff, access, target='Yngrid
   requireCondition(selected.length === 1, 'USER_NOT_UNIQUE_ACTIVE_TENANT');
   const user = selected[0], userId = Number(user.id);
   requireCondition(Number.isSafeInteger(userId) && userId > 0, 'USER_ID_INVALID');
-  const allMemberships = users.filter(u => Number(u.id) === userId);
-  requireCondition(allMemberships.length === 1 &&
-    Number(allMemberships[0].empresa_id) === TENANT, 'GLOBAL_IDENTITY_MULTITENANT');
+  // This admin directory is tenant-scoped, never evidence of global uniqueness.
+  // The Worker CAS eligibility endpoint checks every membership in D1.
   requireCondition(['ADMIN','ADMINISTRADOR'].includes(upper(user.perfil)), 'USER_ROLE_CHANGED');
   requireCondition(user.funcionario_id === null || user.funcionario_id === undefined,
     'EXISTING_USER_LINK_REQUIRES_MANUAL_REVIEW');
@@ -102,7 +103,7 @@ async function main() {
     ['ADMIN','ADMINISTRADOR'].includes(upper(claims?.role)), 'ADMIN_TENANT_REQUIRED');
 
   async function request(path, init) {
-    requireCondition(/^\/api\/(?:admin\/usuarios(?:\/funcionarios-sem-usuario|\/[0-9]+)?|funcionarios(?:\?.*)?|empresas\/usuarios\/[0-9]+\/acessos)$/.test(path),
+    requireCondition(/^\/api\/(?:admin\/usuarios(?:\/funcionarios-sem-usuario|\/[0-9]+(?:\/employee-link-(?:cas|eligibility)(?:\?funcionario_id=[0-9]+)?)?)?|funcionarios(?:\?.*)?|empresas\/usuarios\/[0-9]+\/acessos)$/.test(path),
       'API_PATH_NOT_ALLOWED');
     const response = await fetchJson(base + path, {
       ...init, headers: { Authorization: 'Bearer ' + token,
@@ -135,6 +136,12 @@ async function main() {
     });
     const unlinked = await request('/api/admin/usuarios/funcionarios-sem-usuario');
     assertListedUnlinkedEmployee(unlinked, candidate.employeeId);
+    // The definitive global-membership and CAS predicate is checked by
+    // the Worker in the same D1 database that will execute the write.
+    const eligibility = await request('/api/admin/usuarios/' + candidate.userId +
+      '/employee-link-eligibility?funcionario_id=' + candidate.employeeId);
+    requireCondition(eligibility?.eligible === true &&
+      Number(eligibility?.tenant_id) === TENANT, 'SERVER_SIDE_LINK_INELIGIBLE');
     return candidate;
   }
 
@@ -149,8 +156,11 @@ async function main() {
     const again = await collect();
     requireCondition(linkCandidateHash(again, expectedSha) === hash,
       'IDENTITY_DRIFT_BEFORE_WRITE');
-    const result = await request('/api/admin/usuarios/' + candidate.userId, {
-      method: 'PUT', body: JSON.stringify({funcionario_id:candidate.employeeId}),
+    const result = await request('/api/admin/usuarios/' + candidate.userId +
+      '/employee-link-cas', {
+      method: 'POST', body: JSON.stringify({
+        funcionario_id: candidate.employeeId, expected_previous_link: null,
+      }),
     });
     requireCondition(Number(result?.funcionario_id) === candidate.employeeId,
       'UPDATE_RESPONSE_LINK_MISMATCH');
