@@ -67,7 +67,7 @@ function launch(params: {
     const calls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
     return JSON.parse(calls[calls.length - 1][1].body) as Record<string, unknown>;
   };
-  return { api, click, listener, button, payload };
+  return { api, click, listener, button, payload, fetchMock };
 }
 
 describe('S-76 RC3 immutable-package explicit finalization bridge', () => {
@@ -119,6 +119,6 @@ describe('S-76 RC3 immutable-package explicit finalization bridge', () => {
     preview.click(true);
     preview.api.LMSFinish('');
     // A preview cannot make an authenticated learner finalization request.
-    expect((await preview.payload()).commit_event).not.toBe('SCORM_USER_FINALIZE');
+    expect(preview.fetchMock).not.toHaveBeenCalled();
   });
 });
