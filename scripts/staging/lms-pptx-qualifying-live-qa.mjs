@@ -225,7 +225,8 @@ async function main() {
     'PPTX_QA_QUALIFICATION_BINDING_NOT_PERSISTED');
     await upload(admin.token, courseId, 'a');
     const matricula = requireOk(await request(admin.token, '/api/lms/matriculas', 'POST',
-      { curso_id: courseId, funcionario_id: employeeId, observacoes: RUN_TAG }),
+      { curso_id: courseId, funcionario_id: employeeId, observacoes: RUN_TAG,
+        enviar_convite_email: false }),
       201, 'PPTX QA enrollment');
     matriculaId = requireId(matricula.id, 'enrollment');
     result.enrollment_id = matriculaId;
@@ -235,7 +236,7 @@ async function main() {
       initial.ready_to_finalize === false, 'PPTX_QA_INITIAL_STATE_INVALID');
     const denied = await request(student.token, `/api/lms/matriculas/${matriculaId}/finalizar`, 'POST', {});
     assert(denied.status === 409 && denied.json?.code === 'CONTENT_EVIDENCE_REQUIRED',
-      'PPTX_QA_EARLY_FINALIZATION_NOT_BLOCKED');
+      `PPTX_QA_EARLY_FINALIZATION_NOT_BLOCKED_HTTP_${denied.status}_CODE_${String(denied.json?.code || 'none').replace(/[^A-Za-z0-9_]/g, '').slice(0, 60)}`);
     const first = await observe(student.token, matriculaId, 0, initial.asset_etag);
     requireOk(first, 200, 'initial slide');
     const resumed = await getState(student.token, matriculaId);
