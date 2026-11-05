@@ -53,6 +53,9 @@ function d1(sql,write=false){
     }else args.push('--command',sql);
     const r=spawnSync('npx',args,{cwd:join(process.cwd(),'worker-airtrust'),encoding:'utf8',maxBuffer:4*1024*1024});
     if(r.status!==0)throw Error(write?'FRMS_F0C_STAGING_SEED_REJECTED':'FRMS_F0C_READ_REJECTED');
+    // Wrangler --file output may include human-readable status despite --json.
+    // Never confuse a successful committed seed with a failed JSON parse.
+    if(write)return [];
     const payload=JSON.parse(r.stdout);
     return (Array.isArray(payload)?payload[0]?.results:payload.results)??[];
   }finally{if(dir)rmSync(dir,{recursive:true,force:true});}
