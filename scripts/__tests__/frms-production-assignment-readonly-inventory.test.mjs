@@ -124,3 +124,14 @@ test('read-only inventory surfaces only fixed error phases and safe classificati
     assert.match(script, new RegExp(phase));
   }
 });
+
+test('production revision inventory selects model version from actual governed policy_version column', () => {
+  const script = read(SCRIPT);
+  const schema = read('worker-airtrust/migrations/0464_frms_parameter_governance_recalc.sql');
+  const revisionTable = schema.split('CREATE TABLE frms_config_revisions (')[1].split(');')[0];
+  assert.match(revisionTable, /policy_version TEXT NOT NULL/);
+  assert.doesNotMatch(revisionTable, /\\bmodel_version\\b/);
+  assert.match(script, /SELECT id, revision_number, policy_version AS model_version, policy_version/);
+  const canonical = read('worker-airtrust/src/lib/frms/parameter-governance.ts');
+  assert.match(canonical, /modelVersion: revision\.policy_version/);
+});

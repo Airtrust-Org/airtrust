@@ -122,7 +122,7 @@ async function main() {
     if (activeRegulatoryProfiles.length === 1) {
       const profileCode = activeRegulatoryProfiles[0].profile_code;
       const revisions = await query(
-        `SELECT id, revision_number, model_version, policy_version, effective_from, empresa_id FROM frms_config_revisions ` +
+        `SELECT id, revision_number, policy_version AS model_version, policy_version, effective_from, empresa_id FROM frms_config_revisions ` +
           `WHERE profile_code = '${profileCode}' AND status = 'ACTIVE' ` +
           `AND (empresa_id = ${empresaId} OR empresa_id IS NULL) ` +
           `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
