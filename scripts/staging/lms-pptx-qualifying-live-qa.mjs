@@ -114,7 +114,7 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       await page.goto(`${PAGES}/lms/player/pptx/${matriculaId}`,
         { waitUntil: 'domcontentloaded', timeout: 45000 });
       try {
-        await page.getByText('Slide 1 de 3').waitFor({ timeout: 40000 });
+        await page.getByText('Slide 1 de 3').waitFor({ timeout: 25000 });
       } catch {
         // Sanitize the browser failure rather than logging HTML, credentials
         // or user records. All routes and courses here are synthetic staging.
