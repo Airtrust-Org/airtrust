@@ -127,6 +127,9 @@ export function sanitize(row) {
     previous_package_sha_present: oldShaValid,
     previous_differs_from_active: oldShaValid ? oldSha !== row.active_package_sha : null,
     active_sha_matches_handoff: row.active_package_sha === row.target_package_sha256,
+    active_package_sha256: row.active_package_sha,
+    handoff_target_sha256: row.target_package_sha256,
+    previous_package_sha256: oldShaValid ? oldSha : null,
     handoff_plan: {
       status: plan.status ?? null,
       active_total: a, target_position: b,
