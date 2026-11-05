@@ -56,6 +56,9 @@ describe('S-76 #690 immutable handoff readonly inspection', () => {
     const emitted = JSON.stringify(s);
     assert.doesNotMatch(emitted, /DO_NOT_EMIT|target_package_prefix|previous_scorm_json|previous_enrollment_json/);
     assert.equal(s.active_sha_matches_handoff, true);
+    assert.equal(s.active_package_sha256, sha);
+    assert.equal(s.handoff_target_sha256, sha);
+    assert.equal(s.previous_package_sha256, 'b'.repeat(64));
   });
   it('redacts arbitrary free-form SCORM location and retains numeric bookmark', () => {
     const base = row();
