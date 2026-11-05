@@ -28,9 +28,11 @@ beforeEach(() => {
       empresa_id INTEGER NOT NULL,
       action TEXT,
       entity_type TEXT,
+      entity_id INTEGER,
       new_values TEXT,
       created_at TEXT
     );
+    CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
     CREATE TABLE notificacoes_log (
       id INTEGER PRIMARY KEY,
       empresa_id INTEGER NOT NULL,
@@ -140,6 +142,7 @@ describe('consolidated training communication history', () => {
       (16,1,'LMS_MATRICULA_ALERTA','lms_matriculas',
        '{"tentativa_id":"attempt-done","funcionario_id":1000,"curso_id":30,"email_resultado":"ENVIADO"}',
        '2026-11-04 17:01:00');
+      UPDATE audit_logs SET entity_id = 900 WHERE id IN (14,15,16);
     `);
     const report = await read({ resultado: 'pendente' });
     expect(report.rows.map((row) => row.id)).toEqual(['lms:14:EMAIL']);
