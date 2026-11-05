@@ -1607,6 +1607,18 @@ export default function LmsPlayer() {
                         {describeScormClosureMissing(closureReadiness.missing).join('; ')}.
                       </p>
                     ) : null}
+                    {!isCompletedState && closureReadiness?.missing?.includes('manifest_required_units') &&
+                      closureReadiness.study_coverage ? (
+                      <p className="text-xs text-amber-200/90" data-testid="lms-manifest-coverage-status">
+                        Cobertura da edição ativa: {closureReadiness.study_coverage.recorded}/
+                        {closureReadiness.study_coverage.required_total} unidades obrigatórias comprovadas
+                        (fonte: {closureReadiness.study_coverage.source === 'PACKAGE_STATE'
+                          ? 'estado do pacote' : closureReadiness.study_coverage.source === 'WRAPPER_LEDGER'
+                            ? 'registro do player' : 'não identificada'}).
+                        Se todas as unidades já foram realizadas, não reinicie o treinamento:
+                        solicite a verificação do registro SCORM pela administração.
+                      </p>
+                    ) : null}
                     {!isCompletedState && closureReadiness?.missing?.includes('distinct_slide_coverage') &&
                       closureReadiness.slide_coverage?.missing_numbers?.length ? (
                       <p className="text-xs text-amber-200/90" data-testid="lms-missing-slide-numbers">

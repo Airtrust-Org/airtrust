@@ -12,6 +12,14 @@ describe('Player 2.0: requisitos de fechamento que o aluno pode compreender', ()
     expect(reasons.join(' ')).toMatch(/conclusão ou aprovação/);
   });
 
+  it('explica o bloqueio de cobertura por manifesto sem afirmar que o aluno deixou de estudar', () => {
+    const reasons = describeScormClosureMissing(['manifest_required_units', 'verified_external_assessment']);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toMatch(/manifesto da edição ativa/);
+    expect(reasons[1]).toMatch(/avaliação externa/);
+    expect(reasons.join(' ')).not.toMatch(/treinamento concluído/i);
+  });
+
   it('não mostra aprovação inexistente nem repete motivos; argumentos inesperados são seguros', () => {
     expect(describeScormClosureMissing(null)).toEqual([]);
     const reasons = describeScormClosureMissing(['assessment_pass', 'assessment_pass', 'UNKNOWN']);

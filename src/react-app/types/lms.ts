@@ -101,6 +101,14 @@ export interface LmsMatricula {
     terminal_status_verified: boolean;
     assessment_verified: boolean;
     slide_coverage?: { total: number; recorded: number; missing_numbers: number[] } | null;
+    /** Evidence reported by Worker for the active package; informational only. */
+    study_coverage?: {
+      source: 'WRAPPER_LEDGER' | 'PACKAGE_STATE' | null;
+      verified: boolean;
+      required_total: number;
+      recorded: number;
+      package_version: string | null;
+    } | null;
   } | null;
   completion_diagnostic?: LmsCompletionDiagnostic | null;
   /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
