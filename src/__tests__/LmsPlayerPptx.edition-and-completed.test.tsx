@@ -83,6 +83,7 @@ describe('PPTX learner edition and completed navigation', () => {
     fireEvent.click(next);
     await waitFor(() => expect(screen.getByText('Slide 2 de 3')).toBeTruthy());
     expect(mocks.fetchWithAuth).not.toHaveBeenCalled();
+    expect(mocks.save.mutate).not.toHaveBeenCalled();
     expect(mocks.finalize.mutate).not.toHaveBeenCalled();
   });
 

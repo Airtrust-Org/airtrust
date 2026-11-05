@@ -359,9 +359,9 @@ export default function LmsPlayerPptx() {
         setVisitedSlideIndexes((previous) => previous.includes(clamped)
           ? previous : [...previous, clamped]);
       }
-      saveProgress(clamped, slides.length);
+      if (!done) saveProgress(clamped, slides.length);
     },
-    [slides, saveProgress, qualifyingPptx, serverEvidence, alreadyConcluded],
+    [slides, saveProgress, qualifyingPptx, serverEvidence, alreadyConcluded, done],
   );
 
   const handleConclude = useCallback(() => {
