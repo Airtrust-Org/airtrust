@@ -12,6 +12,7 @@ export type TrainingCommunication = {
   status_compliance: string | null;
   tipo: string | null;
   destinatario: string | null;
+  destinatario_fonte: 'REGISTRO_ENVIO' | 'CADASTRO_ATUAL' | null;
   status_envio: string | null;
   erro: string | null;
   enviado_em: string | null;
@@ -92,6 +93,7 @@ export async function listTrainingCommunications(
              json_extract(n.corpo, '$.qualificacao_nome') AS qualificacao_nome,
              json_extract(n.corpo, '$.status_compliance') AS status_compliance,
              n.tipo AS tipo, n.destinatario AS destinatario,
+             'REGISTRO_ENVIO' AS destinatario_fonte,
              n.status AS status_envio, n.erro_mensagem AS erro,
              COALESCE(n.enviado_em, n.created_at) AS enviado_em,
              CASE WHEN n.assunto LIKE '[COMPLIANCE_GESTOR:%' THEN 1 ELSE 0 END AS gestor,
@@ -116,7 +118,14 @@ export async function listTrainingCommunications(
              CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER) AS curso_id,
              COALESCE(json_extract(a.new_values, '$.curso_titulo'), c.titulo) AS qualificacao_nome,
              json_extract(a.new_values, '$.status_matricula') AS status_compliance,
-             channel.canal AS tipo, NULL AS destinatario,
+             channel.canal AS tipo,
+             CASE WHEN channel.canal = 'EMAIL' THEN
+                 COALESCE(json_extract(a.new_values, '$.email_destinatario_mascarado'), f.email)
+               ELSE COALESCE(json_extract(a.new_values, '$.whatsapp_destinatario_mascarado'), f.telefone)
+             END AS destinatario,
+             CASE WHEN (channel.canal = 'EMAIL' AND json_extract(a.new_values, '$.email_destinatario_mascarado') IS NOT NULL)
+                    OR (channel.canal = 'WHATSAPP' AND json_extract(a.new_values, '$.whatsapp_destinatario_mascarado') IS NOT NULL)
+               THEN 'REGISTRO_ENVIO' ELSE 'CADASTRO_ATUAL' END AS destinatario_fonte,
              CASE json_extract(a.new_values, channel.result_path)
                WHEN 'ENVIADO' THEN 'enviada'
                WHEN 'FALHA' THEN 'erro'
