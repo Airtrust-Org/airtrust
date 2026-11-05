@@ -20,6 +20,8 @@ type AlertSummary = {
   nao_encontradas: number;
   email_ja_alertado?: number;
   whatsapp_ja_alertado?: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type AlertPreview = {
@@ -27,6 +29,8 @@ type AlertPreview = {
   processados: number;
   email_ja_alertado: number;
   whatsapp_ja_alertado: number;
+  email_pendente_historico?: number;
+  whatsapp_pendente_historico?: number;
 };
 
 type Props = {
@@ -134,8 +138,12 @@ export function LmsEnrollmentAlertModal({
         (channels.whatsapp ? result.whatsapp_falhas : 0);
 
       const skipped = (result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0);
+      const unresolved = (result.email_pendente_historico || 0) +
+        (result.whatsapp_pendente_historico || 0);
       if (result.processados === 0) {
         toast.warning('Nenhuma matrícula pendente válida foi encontrada para envio.');
+      } else if (unresolved > 0) {
+        toast.warning(`${unresolved} canal(is) com auditoria pendente permaneceram bloqueados. ${pieces.join(' · ')} processado(s).`);
       } else if (failures > 0) {
         toast.warning(
           `Alertas processados: ${pieces.join(' · ')}. ${failures} falha(s)${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}${skipped ? ` · ${skipped} envio(s) repetido(s) evitado(s)` : ''}.`,
@@ -257,13 +265,23 @@ export function LmsEnrollmentAlertModal({
             <strong>Já houve alertas aceitos para envio hoje.</strong>
             <p className="mt-1">
               {preview.email_ja_alertado} e-mail(s) e {preview.whatsapp_ja_alertado} WhatsApp(s)
-              repetido(s). Por padrão, estes envios serão ignorados.
+              identificados hoje. Por padrão, estes envios serão ignorados.
             </p>
-            <label className="mt-3 flex items-center gap-2">
-              <input type="checkbox" checked={reenviarHoje}
-                onChange={(event) => setReenviarHoje(event.target.checked)} />
-              Reenviar também os alertas já enviados hoje
-            </label>
+            {(preview.email_pendente_historico || preview.whatsapp_pendente_historico) ? (
+              <p className="mt-2 text-red-800">
+                {preview.email_pendente_historico || 0} e-mail(s) e {preview.whatsapp_pendente_historico || 0}
+                WhatsApp(s) têm auditoria pendente e ficarão bloqueados até reconciliação,
+                mesmo com a opção de reenvio.
+              </p>
+            ) : null}
+            {(preview.email_ja_alertado - (preview.email_pendente_historico || 0) +
+              preview.whatsapp_ja_alertado - (preview.whatsapp_pendente_historico || 0)) > 0 ? (
+              <label className="mt-3 flex items-center gap-2">
+                <input type="checkbox" checked={reenviarHoje}
+                  onChange={(event) => setReenviarHoje(event.target.checked)} />
+                Reenviar apenas os alertas com aceite confirmado hoje
+              </label>
+            ) : null}
           </div>
         ) : null}
 
