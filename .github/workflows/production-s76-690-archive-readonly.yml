@@ -13,8 +13,8 @@ on:
 permissions: {contents: read, checks: read, statuses: read}
 concurrency: {group: production-s76-690-archive-readonly, cancel-in-progress: false}
 jobs:
-  evidence:
-    name: S-76 enrollment archive (read-only)
+  d1_evidence:
+    name: S-76 D1 enrollment archive (read-only)
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
