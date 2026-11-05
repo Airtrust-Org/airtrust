@@ -117,10 +117,10 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       page.on('pageerror', () => { pageException = true; });
       page.on('response', (response) => {
         const responsePath = new URL(response.url()).pathname;
-        if (/\\/api\\/lms\\/pptx\\/asset\\/\\d+$/.test(responsePath)) {
+        if (responsePath.startsWith('/api/lms/pptx/asset/')) {
           assetHttp = String(response.status());
         }
-        if (/\\/api\\/lms\\/matriculas\\/\\d+$/.test(responsePath)) {
+        if (responsePath.startsWith('/api/lms/matriculas/')) {
           enrollmentHttp = String(response.status());
         }
       });
