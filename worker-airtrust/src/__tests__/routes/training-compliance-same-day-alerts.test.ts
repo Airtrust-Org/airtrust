@@ -124,9 +124,10 @@ describe('Compliance manual same-day notifications', () => {
 
   it('fails closed without sending if the history is unavailable', async () => {
     readHistory.mockRejectedValueOnce(new Error('UNAVAILABLE'));
-    await expect(post('/avisos/enviar', {
+    const response = await post('/avisos/enviar', {
       targets, canais: { email: true, whatsapp: true },
-    })).rejects.toThrow('UNAVAILABLE');
+    });
+    expect(response.status).toBe(500);
     expect(sendNotification).not.toHaveBeenCalled();
   });
 });
