@@ -38,7 +38,13 @@ export function registerPptxEvidenceRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!isActiveEnrollment(state.enrollment.status)) {
       throw new ApiError('Matrícula não está ativa para consumo', 409, 'PPTX_ENROLLMENT_INACTIVE');
     }
-    const input = await c.req.json().catch(() => null) as { slide_index?: unknown } | null;
+    const input = await c.req.json().catch(() => null) as { slide_index?: unknown; asset_etag?: unknown } | null;
+    // An old browser tab must never qualify a replacement PPTX, even when
+    // its slide count is identical. Only observations from the downloaded R2
+    // object version are eligible for persistence.
+    if (typeof input?.asset_etag !== 'string' || input.asset_etag !== state.coverage.asset_etag) {
+      throw new ApiError('A apresentação foi atualizada. Recarregue o arquivo.', 409, 'PPTX_ASSET_VERSION_MISMATCH');
+    }
     const slideIndex = input?.slide_index;
     if (!Number.isSafeInteger(slideIndex) || Number(slideIndex) < 0 ||
         Number(slideIndex) >= state.coverage.total_slides) {
