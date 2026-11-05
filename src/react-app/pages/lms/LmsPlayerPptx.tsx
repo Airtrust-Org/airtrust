@@ -22,6 +22,7 @@ import {
 import { pptxToHtml } from '@jvmr/pptx-to-html';
 import { fetchPptxViewerSession, type PptxViewerSession } from './pptxViewer';
 import { sanitizePptxSlideHtml } from './pptxSanitization';
+import { observePptxSlideLayout } from './pptxViewport';
 
 export default function LmsPlayerPptx() {
   const { matriculaId } = useParams<{ matriculaId: string }>();
@@ -203,24 +204,16 @@ export default function LmsPlayerPptx() {
       const frameHeight = Math.max(frame.clientHeight, 1);
       const scale = Math.min(frameWidth / width, frameHeight / height);
 
-      setSlideViewport({ width, height });
-      setSlideScale(Number.isFinite(scale) && scale > 0 ? scale : 1);
+      const nextScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+      setSlideViewport((prev) => prev.width === width && prev.height === height
+        ? prev : { width, height });
+      setSlideScale((prev) => prev === nextScale ? prev : nextScale);
     };
 
-    const rafId = window.requestAnimationFrame(measure);
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(measure);
-    });
-
-    if (slideFrameRef.current) resizeObserver.observe(slideFrameRef.current);
-    if (slideContentRef.current?.firstElementChild) {
-      resizeObserver.observe(slideContentRef.current.firstElementChild as Element);
-    }
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
-    };
+    return observePptxSlideLayout(measure, [
+      slideFrameRef.current,
+      slideContentRef.current?.firstElementChild ?? null,
+    ]);
   }, [slideHtml]);
 
   const goToSlide = useCallback(
