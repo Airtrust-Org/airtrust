@@ -97,7 +97,7 @@ describe('PPTX server evidence route (real SQLite, tenant and cycle boundary)', 
     const get = async () => (await app.request('/200/pptx-evidence')).json() as any;
     const post = async (i: number) => app.request('/200/pptx-evidence', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slide_index: i }),
+      body: JSON.stringify({ slide_index: i, asset_etag: etag.value }),
     });
     expect((await get()).data.next_slide).toBe(0);
     expect(await isPptxCompletionEvidenceReady(database.asD1(), bucket, 6, 200)).toBe(false);
@@ -115,11 +115,32 @@ describe('PPTX server evidence route (real SQLite, tenant and cycle boundary)', 
     expect(await isPptxCompletionEvidenceReady(database.asD1(), bucket, 6, 200)).toBe(true);
   });
 
+  it('rejects observations from a stale open tab after replacing R2 asset with the same slide count', async () => {
+    const app = createApp(database);
+    const post = (slide: number, loadedEtag: string) => app.request('/200/pptx-evidence', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slide_index: slide, asset_etag: loadedEtag }),
+    });
+    expect((await post(0, 'asset-a')).status).toBe(200);
+    etag.value = 'asset-b';
+    vi.setSystemTime(new Date('2026-11-05T10:00:03Z'));
+    const stale = await post(1, 'asset-a');
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({ code: 'PPTX_ASSET_VERSION_MISMATCH' });
+    expect(await isPptxCompletionEvidenceReady(database.asD1(), bucket, 6, 200)).toBe(false);
+    const freshState = await (await app.request('/200/pptx-evidence')).json() as any;
+    expect(freshState.data).toMatchObject({ next_slide: 0, ready_to_finalize: false, asset_etag: 'asset-b' });
+    expect((await post(0, 'asset-b')).status).toBe(200);
+    const restarted = await (await app.request('/200/pptx-evidence')).json() as any;
+    expect(restarted.data.visited_indexes).toEqual([0]);
+    expect(await isPptxCompletionEvidenceReady(database.asD1(), bucket, 6, 200)).toBe(false);
+  });
+
   it('cannot record as another employee, tenant or cancelled enrollment', async () => {
     const app = createApp(database);
     const post = () => app.request('/200/pptx-evidence', {
       method:'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slide_index: 0 }),
+      body: JSON.stringify({ slide_index: 0, asset_etag: etag.value }),
     });
     mockScope.funcionarioId = 70;
     expect((await post()).status).toBe(403);
@@ -135,7 +156,7 @@ describe('PPTX server evidence route (real SQLite, tenant and cycle boundary)', 
     const app = createApp(database);
     const post = async (i: number) => app.request('/200/pptx-evidence',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({slide_index:i}),
+      body: JSON.stringify({slide_index:i,asset_etag:etag.value}),
     });
     await post(0);
     vi.setSystemTime(new Date('2026-11-05T10:00:02Z'));
