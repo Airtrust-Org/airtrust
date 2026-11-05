@@ -5,10 +5,10 @@ import { costaDoSolAct2025_2027InForce } from './compliance-policy';
 export interface RollingRegulatoryEvidence {
   data_referencia: string;
   funcionario_id: number;
-  hv_dia_min: number;
-  hv_mes_calendario_min: number;
-  hv_28_dias_min: number;
-  hv_365_dias_min: number;
+  hv_dia_min: number | null;
+  hv_mes_calendario_min: number | null;
+  hv_28_dias_min: number | null;
+  hv_365_dias_min: number | null;
   hv_ano_calendario_min: number | null;
   repouso_anterior_min: number;
   repouso_suficiente: number;
@@ -36,7 +36,9 @@ export function sanitizeRollingRegulatoryEvidence(
   const hvMes = nonNegativeMinutes(row.hv_mes_calendario_min);
   const hv28 = nonNegativeMinutes(row.hv_28_dias_min);
   const hv365 = nonNegativeMinutes(row.hv_365_dias_min);
-  if (hvDia == null || hvMes == null || hv28 == null || hv365 == null) return null;
+  // Não descarte uma violação já comprovada só porque outra janela é
+  // desconhecida. Descarte apenas linhas sem nenhuma leitura de voo válida.
+  if ([hvDia, hvMes, hv28, hv365, nonNegativeMinutes(row.hv_ano_calendario_min)].every((v) => v == null)) return null;
   const hvAno = nonNegativeMinutes(row.hv_ano_calendario_min);
   const repouso = nonNegativeMinutes(row.repouso_anterior_min);
   return {
@@ -46,7 +48,7 @@ export function sanitizeRollingRegulatoryEvidence(
     hv_mes_calendario_min: hvMes,
     hv_28_dias_min: hv28,
     hv_365_dias_min: hv365,
-    hv_ano_calendario_min: hvAno != null && hvAno >= hvMes ? hvAno : null,
+    hv_ano_calendario_min: hvAno != null && (hvMes == null || hvAno >= hvMes) ? hvAno : null,
     repouso_anterior_min: repouso ?? -1,
     repouso_suficiente: Number(row.repouso_suficiente) === 1 ? 1 : 0,
   };
@@ -196,7 +198,11 @@ export function evaluateRegulatoryCompliance(
     if (!hasCompleteRollingFlightCoverage(input.rollingCoverage)) {
       unknownReasons.add('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
     }
-    pushMaxViolation(violations, {
+    if ([input.rolling.hv_dia_min, input.rolling.hv_mes_calendario_min,
+      input.rolling.hv_28_dias_min, input.rolling.hv_365_dias_min].some((v) => v == null)) {
+      unknownReasons.add('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    }
+    if (input.rolling.hv_dia_min != null) pushMaxViolation(violations, {
       code: 'LAW_HELI_FLIGHT_DAY_8H',
       source: 'LAW',
       reference: 'Lei 13.475/2017 art. 32 IV',
@@ -204,7 +210,7 @@ export function evaluateRegulatoryCompliance(
       limitMin: 8 * 60,
       label: 'Horas de voo em 24h',
     });
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_mes_calendario_min != null) pushMaxViolation(violations, {
       code: 'LAW_HELI_FLIGHT_MONTH_90H',
       source: 'LAW',
       reference: 'Lei 13.475/2017 art. 33 IV',
@@ -212,7 +218,8 @@ export function evaluateRegulatoryCompliance(
       limitMin: 90 * 60,
       label: 'Horas de voo no mês calendário',
     });
-    if (input.limites.HV_DIARIA_HORAS > 0 && input.limites.HV_DIARIA_HORAS < 8) {
+    if (input.rolling.hv_dia_min != null &&
+      input.limites.HV_DIARIA_HORAS > 0 && input.limites.HV_DIARIA_HORAS < 8) {
       pushMaxViolation(violations, {
         code: 'PROFILE_FLIGHT_DAY_LIMIT', source: 'PROFILE',
         reference: 'Perfil FRMS governado / HV_DIARIA_HORAS',
@@ -221,7 +228,8 @@ export function evaluateRegulatoryCompliance(
         label: 'Limite diário de voo do perfil',
       });
     }
-    if (input.limites.HV_MES_HORAS > 0 && input.limites.HV_MES_HORAS < 90) {
+    if (input.rolling.hv_mes_calendario_min != null &&
+      input.limites.HV_MES_HORAS > 0 && input.limites.HV_MES_HORAS < 90) {
       pushMaxViolation(violations, {
         code: 'PROFILE_FLIGHT_MONTH_LIMIT', source: 'PROFILE',
         reference: 'Perfil FRMS governado / HV_MES_HORAS',
@@ -360,13 +368,13 @@ export function evaluateRegulatoryCompliance(
   }
 
   if (input.rbacBcApplicable && input.rolling) {
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_28_dias_min != null) pushMaxViolation(violations, {
       code: 'RBAC117_BC_FLIGHT_28D_93H', source: 'ANAC',
       reference: 'RBAC 117 EMD 01 B117.25/C117.25',
       actualMin: input.rolling.hv_28_dias_min, limitMin: 93 * 60,
       label: 'Horas de voo em 28 dias consecutivos',
     });
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_365_dias_min != null) pushMaxViolation(violations, {
       code: 'RBAC117_BC_FLIGHT_365D_930H', source: 'ANAC',
       reference: 'RBAC 117 EMD 01 B117.25/C117.25',
       actualMin: input.rolling.hv_365_dias_min, limitMin: 930 * 60,
