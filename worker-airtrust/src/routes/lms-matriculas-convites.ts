@@ -421,6 +421,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             email_resultado: emailStatus,
             whatsapp_resultado: whatsappStatus,
             curso_id: row.curso_id,
+            curso_titulo: row.curso_titulo,
             funcionario_id: row.funcionario_id,
             status_matricula: row.status,
           },
