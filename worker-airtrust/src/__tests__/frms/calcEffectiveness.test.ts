@@ -275,6 +275,19 @@ describe('calcEffectiveness — offshore sleep model', () => {
     expect(r.fonte_sono).toBe('INFORMADO');
   });
 
+  it('expõe duração do sono 24h sem inventar hora_inicio_sono', () => {
+    for (const durationMinutes of [0, 240, 600]) {
+      const r = calcEffectiveness(makeFat(-0.1), L, {
+        hora_apresentacao: '05:30', hora_acordou: '04:00',
+        sono_efetivo_min: durationMinutes,
+      });
+      expect(r.duracao_sono_efetiva_min).toBe(durationMinutes);
+      expect(r.hora_despertar).toBe('04:00');
+      expect(r.hora_inicio_sono).toBeNull();
+      expect(r.fonte_sono).toBe('INFORMADO');
+    }
+  });
+
   it('acordou na WOCL marca flag', () => {
     const r = calcEffectiveness(makeFat(-0.1, { fator_repouso_pct: -0.05 }), L, {
       hora_apresentacao: '03:30',

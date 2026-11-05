@@ -418,6 +418,40 @@ describe('calcularSono (premissa operacional)', () => {
     expect(r.sonoEfetivoMin).toBe(0);
     expect(r.fonteSono).toBe('INFORMADO');
   });
+
+  it('total 24h informado não comprova início de episódio nem fabrica horário para zero', () => {
+    for (const minutes of [0, 240, 720, 1440]) {
+      const result = calcularSono({
+        horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+        horasSonoPadrao: 8, horaAcordou: 240, duracaoInformadaMin: minutes,
+      });
+      expect(result.sonoEfetivoMin).toBe(minutes);
+      expect(result.tDormiuMin).toBeNull();
+      expect(result.fonteSono).toBe('INFORMADO');
+    }
+  });
+
+  it('horário explícito de episódio mantém início real separado do total 24h', () => {
+    const result = calcularSono({
+      horaApresentacaoMin: 480, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaDormiu: 1380, horaAcordou: 390,
+      // 10 h combinadas entre sono noturno e cochilos: episódio 23:00–06:30 = 7h30.
+      duracaoInformadaMin: 600,
+    });
+    expect(result.sonoEfetivoMin).toBe(600);
+    expect(result.tDormiuMin).toBe(-60);
+    expect(result.fonteSono).toBe('INFORMADO');
+  });
+
+  it('episódio impossível não produz início fictício mesmo com total 24h válido', () => {
+    const result = calcularSono({
+      horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaDormiu: 300, horaAcordou: 240,
+      duracaoInformadaMin: 240,
+    });
+    expect(result.sonoEfetivoMin).toBe(240);
+    expect(result.tDormiuMin).toBeNull();
+  });
 });
 
 describe('WOCL helpers', () => {

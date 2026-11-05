@@ -53,6 +53,17 @@ describe('FRMS regulatory compliance evaluator', () => {
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, sourceVerified: false })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days28: { expectedDays: 8, confirmedDays: 7 } } })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 8, confirmedDays: 9 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days365: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({
+      sourceVerified: true,
+      windows: {
+        month: { expectedDays: 0, confirmedDays: 0 },
+        year: { expectedDays: 0, confirmedDays: 0 },
+        days28: { expectedDays: 0, confirmedDays: 0 },
+        days365: { expectedDays: 0, confirmedDays: 0 },
+      },
+    })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 1.5, confirmedDays: 1.5 } } })).toBe(false);
     expect(hasCompleteRollingFlightCoverage(completeCoverage)).toBe(true);
     const complete = evaluateRegulatoryCompliance({ ...input, rollingCoverage: completeCoverage });
@@ -354,8 +365,50 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
 
   describe('sanitizeRollingRegulatoryEvidence', () => {
     const raw = { ...rolling };
-    it('acumulado nulo é evidência ausente, não zero', () => {
-      expect(sanitizeRollingRegulatoryEvidence({ ...raw, hv_28_dias_min: null })).toBeNull();
+    it('janela individual nula permanece ausente, preservando as demais leituras', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({ ...raw, hv_28_dias_min: null });
+      expect(partial?.hv_28_dias_min).toBeNull();
+      expect(partial?.hv_dia_min).toBe(raw.hv_dia_min);
+    });
+    it('violação diária demonstrada prevalece mesmo quando a janela de 28 dias falta', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: 8 * 60 + 1, hv_28_dias_min: null,
+      });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('LAW_HELI_FLIGHT_DAY_8H');
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('violação de 28 dias B/C demonstrada prevalece mesmo quando o dia falta', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: null, hv_28_dias_min: 93 * 60 + 1,
+      });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: true,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('RBAC117_BC_FLIGHT_28D_93H');
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('janela parcial abaixo dos limites nunca é declarada conforme', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({ ...raw, hv_mes_calendario_min: null });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.violations).toHaveLength(0);
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('linha inteiramente sem acumulados de voo continua sem evidência', () => {
+      expect(sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: null, hv_mes_calendario_min: null,
+        hv_28_dias_min: null, hv_365_dias_min: null, hv_ano_calendario_min: null,
+      })).toBeNull();
     });
     it('ano civil menor que o mês denuncia linha legada e vira ausente só no ano', () => {
       const result = sanitizeRollingRegulatoryEvidence({ ...raw, hv_mes_calendario_min: 600, hv_ano_calendario_min: 0 });
