@@ -6,6 +6,8 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { logAudit } from '../utils/db';
+import { maskTrainingContact } from '../services/training-communication-history';
+import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 import { createLogger, toError } from '../utils/logger';
@@ -29,6 +31,7 @@ type MatriculaMessageMode = 'convite' | 'alerta';
 const ConviteMatriculaLoteSchema = z.object({
   matricula_ids: z.array(z.number().int().positive()).min(1).max(200),
   modo: z.enum(['convite', 'alerta']).optional().default('convite'),
+  reenviar_hoje: z.boolean().optional().default(false),
   canais: z
     .object({
       email: z.boolean().optional(),
@@ -323,6 +326,78 @@ export async function sendMatriculaWhatsApp(
   }
 }
 
+type AlertableEnrollment = {
+  id: number;
+  funcionario_id: number;
+  curso_id: number;
+  qualificacao_tipo_id: number | null;
+  data_expiracao: string | null;
+  status: string;
+  curso_titulo: string;
+  email: string | null;
+  telefone: string | null;
+};
+
+async function loadAlertableEnrollments(
+  db: D1Database,
+  empresaId: number,
+  ids: number[],
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+) {
+  const placeholders = ids.map(() => '?').join(',');
+  const scope = employeeSectorSql(access, 'f');
+  return db.prepare(
+    `SELECT m.id,m.funcionario_id,m.curso_id,c.qualificacao_tipo_id,m.data_expiracao,m.status,
+            c.titulo AS curso_titulo,f.email,f.telefone
+       FROM lms_matriculas m
+       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+       JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+      WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
+        AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+        AND ${scope.clause}`,
+  ).bind(empresaId, ...ids, ...scope.bindings).all<AlertableEnrollment>();
+}
+
+function alertIdentity(row: AlertableEnrollment) {
+  return {
+    funcionario_id: Number(row.funcionario_id),
+    qualificacao_tipo_id: row.qualificacao_tipo_id,
+    curso_id: Number(row.curso_id),
+  };
+}
+
+app.post('/lote/preview', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
+  const parsed = ConviteMatriculaLoteSchema.safeParse(await c.req.json<unknown>());
+  if (!parsed.success) throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+  if (parsed.data.modo !== 'alerta') throw new ApiError('Prévia disponível apenas para alertas', 400);
+  const channels = {
+    email: parsed.data.canais?.email ?? true,
+    whatsapp: parsed.data.canais?.whatsapp ?? false,
+  };
+  if (!channels.email && !channels.whatsapp) throw new ApiError('Selecione e-mail e/ou WhatsApp', 400);
+  const ids = [...new Set(parsed.data.matricula_ids)];
+  const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const [enrollments, history] = await Promise.all([
+    loadAlertableEnrollments(c.env.DB, empresaId, ids, access),
+    readSameDayTrainingAlerts(c.env.DB, empresaId, access),
+  ]);
+  const rows = enrollments.results || [];
+  return c.json({
+    success: true,
+    data: {
+      selecionados: ids.length,
+      processados: rows.length,
+      email_ja_alertado: channels.email
+        ? rows.filter((row) => history.wasSent(alertIdentity(row), 'EMAIL')).length : 0,
+      whatsapp_ja_alertado: channels.whatsapp
+        ? rows.filter((row) => history.wasSent(alertIdentity(row), 'WHATSAPP')).length : 0,
+    },
+  });
+});
+
 app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
@@ -342,30 +417,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     throw new ApiError('WhatsApp está disponível apenas para alertas de matrículas existentes', 400);
   }
 
-  const placeholders = ids.map(() => '?').join(',');
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const scope = employeeSectorSql(access, 'f');
-  const { results } = await db
-    .prepare(
-      `SELECT m.id,m.funcionario_id,m.curso_id,m.data_expiracao,m.status,c.titulo AS curso_titulo
-         FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
-         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
-        WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
-          AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
-          AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
-          AND ${scope.clause}`,
-    )
-    .bind(empresaId, ...ids, ...scope.bindings)
-    .all<{
-      id: number;
-      funcionario_id: number;
-      curso_id: number;
-      data_expiracao: string | null;
-      status: string;
-      curso_titulo: string;
-    }>();
+  const { results } = await loadAlertableEnrollments(db, empresaId, ids, access);
 
   const encontrados = new Set((results || []).map((row) => Number(row.id)));
   const summary = {
@@ -380,14 +433,36 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     sem_whatsapp: 0,
     whatsapp_falhas: 0,
     nao_encontradas: ids.filter((id) => !encontrados.has(id)).length,
+    email_ja_alertado: 0,
+    whatsapp_ja_alertado: 0,
   };
 
   const rows = results || [];
+  const history = mode === 'alerta'
+    ? await readSameDayTrainingAlerts(db, empresaId, access)
+    : null;
+  const attempted = new SameDayTrainingAlerts([], '');
   for (let index = 0; index < rows.length; index += 5) {
     const batch = rows.slice(index, index + 5);
+    // Reserve each logical channel before concurrent requests inside the batch.
+    // Previously accepted notices are skipped unless explicitly overridden.
+    const candidates = batch.map((row) => {
+      const identity = alertIdentity(row);
+      const emailDuplicate = mode === 'alerta' && channels.email &&
+        (attempted.wasSent(identity, 'EMAIL') ||
+          (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'EMAIL'))));
+      const whatsappDuplicate = mode === 'alerta' && channels.whatsapp &&
+        (attempted.wasSent(identity, 'WHATSAPP') ||
+          (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'WHATSAPP'))));
+      if (emailDuplicate) summary.email_ja_alertado += 1;
+      if (whatsappDuplicate) summary.whatsapp_ja_alertado += 1;
+      if (channels.email && !emailDuplicate) attempted.markAccepted(identity, 'EMAIL');
+      if (channels.whatsapp && !whatsappDuplicate) attempted.markAccepted(identity, 'WHATSAPP');
+      return { row, emailDuplicate, whatsappDuplicate };
+    });
     const outcomes = await Promise.all(
-      batch.map(async (row) => {
-        const emailStatus = channels.email
+      candidates.map(async ({ row, emailDuplicate, whatsappDuplicate }) => {
+        const emailStatus = channels.email && !emailDuplicate
           ? await sendMatriculaEmail(c, c.env, db, {
               funcionarioId: Number(row.funcionario_id),
               empresaId,
@@ -399,7 +474,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               statusMatricula: row.status,
             })
           : null;
-        const whatsappStatus = channels.whatsapp
+        const whatsappStatus = channels.whatsapp && !whatsappDuplicate
           ? await sendMatriculaWhatsApp(c, c.env, db, {
               funcionarioId: Number(row.funcionario_id),
               empresaId,
@@ -410,22 +485,28 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             })
           : null;
 
-        await logInviteAudit(
-          db,
-          c,
-          Number(row.id),
-          mode === 'alerta' ? 'LMS_MATRICULA_ALERTA' : 'LMS_MATRICULA_CONVITE_EMAIL',
-          {
-            modo: mode,
-            canais: channels,
-            email_resultado: emailStatus,
-            whatsapp_resultado: whatsappStatus,
-            curso_id: row.curso_id,
-            curso_titulo: row.curso_titulo,
-            funcionario_id: row.funcionario_id,
-            status_matricula: row.status,
-          },
-        );
+        if (emailStatus !== null || whatsappStatus !== null) {
+          await logInviteAudit(
+            db,
+            c,
+            Number(row.id),
+            mode === 'alerta' ? 'LMS_MATRICULA_ALERTA' : 'LMS_MATRICULA_CONVITE_EMAIL',
+            {
+              modo: mode,
+              canais: channels,
+              email_resultado: emailStatus,
+              whatsapp_resultado: whatsappStatus,
+              email_destinatario_mascarado: emailStatus === 'ENVIADO'
+                ? maskTrainingContact(row.email) : null,
+              whatsapp_destinatario_mascarado: whatsappStatus === 'ENVIADO'
+                ? maskTrainingContact(row.telefone) : null,
+              curso_id: row.curso_id,
+              curso_titulo: row.curso_titulo,
+              funcionario_id: row.funcionario_id,
+              status_matricula: row.status,
+            },
+          );
+        }
         return { emailStatus, whatsappStatus };
       }),
     );
