@@ -1148,7 +1148,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   // Completed review also checks the edition: an old cursor is never replayed into another one.
   const mismatch = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
-    empresaId, cursoId: matricula.curso_id,
+    empresaId, cursoId: matricula.curso_id, matriculaId: matricula.id,
     cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
     enrollmentStartedAt: matricula.data_inicio,
   });

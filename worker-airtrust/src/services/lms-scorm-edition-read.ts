@@ -17,7 +17,7 @@ export async function readLmsScormEditionState(params:{
   const mismatch=await detectLmsEditionMismatch({
     db:params.db,bucket:params.bucket,
     contentType:m.status==='CONCLUIDO'?null:contentType,
-    activePrefix,empresaId:params.empresaId,cursoId,
+    activePrefix,empresaId:params.empresaId,cursoId,matriculaId:params.matriculaId,
     cmiJson,suspendData:typeof p?.suspend_data==='string'?p.suspend_data:null,
     enrollmentStartedAt:typeof m.data_inicio==='string'?m.data_inicio:null,
   });

@@ -193,7 +193,7 @@ async function guardScormCommit(
   }
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
     cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
@@ -347,7 +347,7 @@ async function guardManualFinalize(
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
     cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
@@ -425,7 +425,7 @@ async function guardAdministrativeStatus(
   if (String(row.status).toUpperCase() !== 'CONCLUIDO') {
     const edition = await detectLmsEditionMismatch({
       bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
       cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
     });

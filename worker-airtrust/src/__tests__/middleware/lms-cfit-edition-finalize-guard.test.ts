@@ -30,8 +30,14 @@ async function attempt(
   edition?: { savedCmi: string; activeVersion: string },
 ) {
   const db = {
-    prepare: vi.fn(() => ({
-      bind: (..._args: unknown[]) => ({ first: async () => edition ? { ...row, cmi_json: edition.savedCmi } : row }),
+    prepare: vi.fn((sql: string) => ({
+      bind: (..._args: unknown[]) => ({
+        // An enrollment fixture does not prove an immutable edition handoff.
+        // Only a dedicated handoff fixture may unlock the current-edition guard.
+        first: async () => sql.includes('FROM lms_scorm_edition_handoffs')
+          ? null
+          : edition ? { ...row, cmi_json: edition.savedCmi } : row,
+      }),
     })),
   } as unknown as D1Database;
   const bucket = {
