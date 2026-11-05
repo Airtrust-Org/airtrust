@@ -194,7 +194,7 @@ export async function listTrainingCommunications(
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
   const result = await db.prepare(sql).bind(...bindings, ...terms, limit + 1, offset)
-    .all<TrainingCommunication & { gestor: number }>();
+    .all<Omit<TrainingCommunication, 'gestor'> & { gestor: number }>();
   const raw = result.results || [];
   return {
     rows: raw.slice(0, limit).map((row) => ({
