@@ -1062,7 +1062,7 @@ export function TrainingComplianceIntelligence({
               </div>
               <button
                 type="button"
-                onClick={() => setNoticeOpen(false)}
+                onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
@@ -1134,7 +1134,7 @@ export function TrainingComplianceIntelligence({
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setNoticeOpen(false)}
+                onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
               >
                 Cancelar
