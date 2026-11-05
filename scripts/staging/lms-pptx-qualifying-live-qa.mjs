@@ -140,7 +140,7 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
         const boundary = await page.getByText('Algo deu errado').count() > 0;
         const concluded = await page.getByText('Status: concluído').count() > 0;
         // Absence of an error message is NOT affirmative proof of authorization.
-        throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_MISSING_PATH_${path}_SESSION_ERROR_${Number(authExpired)}_COURSE_ERROR_${Number(courseUnavailable)}_LOADING_${Number(loading)}_PLAYER_ERROR_${Number(playerError)}_BOUNDARY_${Number(boundary)}_JS_ERROR_${Number(pageException)}_CONCLUDED_${Number(concluded)}_ASSET_HTTP_${assetHttp}_ENROLLMENT_HTTP_${enrollmentHttp}`);
+        throw new Error(`PPTX_QA_${name}_SLIDE_MISSING_${path}_SESSION_ERR${Number(authExpired)}_COURSE_ERR${Number(courseUnavailable)}_LOADING${Number(loading)}_PLAYER_ERR${Number(playerError)}_BOUNDARY${Number(boundary)}_JS_ERR${Number(pageException)}_DONE${Number(concluded)}_ASSET${assetHttp}_ENROLL${enrollmentHttp}`);
       }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
