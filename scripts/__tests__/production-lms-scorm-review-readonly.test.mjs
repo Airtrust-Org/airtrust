@@ -44,6 +44,16 @@ test('real-player review blocks all non-read HTTP requests and never targets SCO
   assert.match(script, /writes:\s*'none/);
 });
 
+test('resumed Factory V3 inspection reports only sanitized button evidence', () => {
+  assert.match(script, /scenario_answers_missing:/);
+  assert.match(script, /prior_units_complete:/);
+  assert.match(script, /scorm_initialized:/);
+  assert.match(script, /scorm_finished:/);
+  assert.match(script, /final_button_disabled:/);
+  assert.match(workflow, /Factory V3 final button disabled/);
+  assert.match(workflow, /Factory V3 scenario answers missing/);
+});
+
 test('failed launch preserves only a sanitized blocked-state report for the artifact', () => {
   assert.match(script, /if \(!launch\.ok\)/);
   assert.match(script, /errorCode.*LMS_NEW_EDITION_REQUIRED/s);
