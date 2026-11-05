@@ -189,7 +189,7 @@ describe('TrainingComplianceBulkNoticeComposer', () => {
 
     await screen.findByRole('button', { name: 'Enviar 5 alerta(s)' });
     expect(screen.getByText(/Sobreposições entre curso/)).toBeInTheDocument();
-    expect(screen.getByText(/Já alertados hoje/)).toBeInTheDocument();
+    expect(await screen.findByText(/Já alertados hoje/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar 5 alerta(s)' }));
 
