@@ -568,10 +568,15 @@ export function useLmsStats(enabled = true) {
   });
 }
 
-export function useMinhasMatriculas(enabled = true) {
+export function useMinhasMatriculas(enabled = true, strictEmployeeLink = false) {
   return useQuery({
-    queryKey: lmsKeys.minhasMatriculas(),
-    queryFn: () => lmsRequest<LmsMatricula[]>('/matriculas/minhas'),
+    // Keep the strict learner result distinct from legacy management consumers.
+    queryKey: strictEmployeeLink
+      ? [...lmsKeys.minhasMatriculas(), 'strict-employee-link']
+      : lmsKeys.minhasMatriculas(),
+    queryFn: () => lmsRequest<LmsMatricula[]>(
+      strictEmployeeLink ? '/matriculas/minhas?strict_link=1' : '/matriculas/minhas',
+    ),
     enabled,
     staleTime: 30_000,
   });
