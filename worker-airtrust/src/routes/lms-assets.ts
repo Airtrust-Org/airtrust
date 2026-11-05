@@ -2425,7 +2425,9 @@ ${buildScormSessionCloseRuntimeScript()}
       probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       // A governed parent close already persisted SCORM_FINISH before invoking
       // the SCORM API termination. Do not start another save after its ACK.
-      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
+      if (!sessionCloseHandled && !consumeFactoryV3ExplicitFinish()) {
+        commit(buildPayload(), 0, 'SCORM_FINISH');
+      }
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2611,6 +2613,7 @@ ${buildScormSessionCloseRuntimeScript()}
   document.getElementById('scorm-frame').addEventListener('load', function() {
     setStatus('Conteúdo carregado', true);
     bindFrameProgressTracking();
+    bindFactoryV3FinalClick();
     if (!resumeAppliedThisLoad && !userNavigatedManually) {
       resumeAppliedThisLoad = true;
       restoreResumeLocation(12);
