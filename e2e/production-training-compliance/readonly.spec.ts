@@ -339,7 +339,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   expectCount(currentTrend?.requisitos_obrigatorios ?? -1, 'trend.requisitos_obrigatorios');
   await expect(page.getByRole('heading', { name: 'Evolução do compliance — 90 dias' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gerador de relatórios' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Exportar PDF' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Gerar PDF (de requisitos|do histórico)/ })).toBeVisible();
 
   const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
   await page.getByRole('button', { name: 'Comunicações', exact: true }).click();
