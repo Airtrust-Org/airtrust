@@ -344,8 +344,8 @@ export async function sendMatriculaTracked(
   c: Context,
   env: Env,
   db: D1Database,
+  matriculaId: number,
   params: {
-    matriculaId: number;
     funcionarioId: number;
     empresaId: number;
     cursoId: number;
@@ -354,9 +354,10 @@ export async function sendMatriculaTracked(
     statusMatricula?: string | null;
     isNovoCiclo: boolean;
     modo?: MatriculaMessageMode;
-    canais: { email: boolean; whatsapp: boolean };
+    canais?: { email: boolean; whatsapp: boolean };
   },
 ): Promise<MatriculaDeliveryOutcome> {
+  const channels = params.canais ?? { email: true, whatsapp: false };
   const mode = params.modo || 'convite';
   const action: 'LMS_MATRICULA_ALERTA' | 'LMS_MATRICULA_CONVITE_EMAIL' =
     mode === 'alerta' ? 'LMS_MATRICULA_ALERTA' : 'LMS_MATRICULA_CONVITE_EMAIL';
@@ -364,21 +365,21 @@ export async function sendMatriculaTracked(
   const values = {
     tentativa_id: tentativaId,
     modo: mode,
-    canais: params.canais,
+    canais: channels,
     curso_id: params.cursoId,
     curso_titulo: params.cursoTitulo,
     funcionario_id: params.funcionarioId,
     status_matricula: params.statusMatricula ?? null,
   };
   const auditPrepared = await logInviteAudit(
-    db, c, params.matriculaId, `${action}_PREPARADO`,
-    { ...values, email_resultado: params.canais.email ? 'PENDENTE' : null,
-      whatsapp_resultado: params.canais.whatsapp ? 'PENDENTE' : null },
+    db, c, matriculaId, `${action}_PREPARADO`,
+    { ...values, email_resultado: channels.email ? 'PENDENTE' : null,
+      whatsapp_resultado: channels.whatsapp ? 'PENDENTE' : null },
   );
   if (!auditPrepared) {
     return { emailStatus: null, whatsappStatus: null, auditPrepared: false, auditFinal: false };
   }
-  const emailStatus = params.canais.email
+  const emailStatus = channels.email
     ? await sendMatriculaEmail(c, env, db, {
       funcionarioId: params.funcionarioId,
       empresaId: params.empresaId,
@@ -390,7 +391,7 @@ export async function sendMatriculaTracked(
       statusMatricula: params.statusMatricula,
     })
     : null;
-  const whatsappStatus = params.canais.whatsapp
+  const whatsappStatus = channels.whatsapp
     ? await sendMatriculaWhatsApp(c, env, db, {
       funcionarioId: params.funcionarioId,
       empresaId: params.empresaId,
@@ -400,7 +401,7 @@ export async function sendMatriculaTracked(
       statusMatricula: params.statusMatricula,
     })
     : null;
-  const auditFinal = await logInviteAudit(db, c, params.matriculaId, action, {
+  const auditFinal = await logInviteAudit(db, c, matriculaId, action, {
     ...values, email_resultado: emailStatus, whatsapp_resultado: whatsappStatus,
   });
   return { emailStatus, whatsappStatus, auditPrepared: true, auditFinal };
@@ -472,8 +473,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     const batch = rows.slice(index, index + 5);
     const outcomes = await Promise.all(
       batch.map(async (row) => {
-        return sendMatriculaTracked(c, c.env, db, {
-          matriculaId: Number(row.id),
+        return sendMatriculaTracked(c, c.env, db, Number(row.id), {
           funcionarioId: Number(row.funcionario_id),
           empresaId,
           cursoId: Number(row.curso_id),
