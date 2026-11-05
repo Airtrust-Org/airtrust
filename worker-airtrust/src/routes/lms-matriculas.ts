@@ -265,7 +265,7 @@ app.get('/minhas', async (c) => {
   const limit = Math.min(parsePositiveInt(c.req.query('limit'), 100), 200);
   const offset = (page - 1) * limit;
 
-  if (!funcionarioId && hasRole(c, 'admin', 'manager')) {
+  if (!funcionarioId && hasRole(c, 'admin', 'manager') && c.req.query('strict_link') !== '1') {
     return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
   }
   if (!funcionarioId) throw new ApiError('Sua conta não possui vínculo com um funcionário ativo desta empresa. Solicite a conferência do cadastro de usuário.', 409);
