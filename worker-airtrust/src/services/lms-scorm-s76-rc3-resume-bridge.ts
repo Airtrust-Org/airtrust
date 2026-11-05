@@ -12,7 +12,7 @@ import type { ActiveCompletionManifest } from './lms-completion-manifest-evidenc
  * Native RC3 must still collect the final interaction and explicitly finish;
  * the Worker validates the normal manifest, session and tenant gates.
  */
-const RC3_PACKAGE_SHA256 = '9c65dc726af8e57b2ac3424b0898559b1a80d00348605b6805eb155ad6a1bb12';
+export const S76_RC3_IMMUTABLE_SHA256 = '9c65dc726af8e57b2ac3424b0898559b1a80d00348605b6805eb155ad6a1bb12';
 const RC3_PACKAGE_VERSION = 'v3.4-no-module-exams-rc2-2026-11-02';
 const EXPECTED_SLIDES = 49;
 const CREDITED = 48;
@@ -54,7 +54,7 @@ export function projectS76Rc3AdministrativeResume(input: S76Rc3ResumeBridgeInput
       input.handoffPreviousProgressPct !== 100 ||
       input.handoffBookmark?.position !== EXPECTED_SLIDES ||
       input.handoffBookmark?.total !== EXPECTED_SLIDES ||
-      input.activePackageSha256 !== RC3_PACKAGE_SHA256 ||
+      input.activePackageSha256 !== S76_RC3_IMMUTABLE_SHA256 ||
       input.assessmentPolicy !== 'FORMATIVE' ||
       input.enrollmentStatus !== 'EM_ANDAMENTO' ||
       input.qualificationHistoryId !== null ||
@@ -73,7 +73,7 @@ export function projectS76Rc3AdministrativeResume(input: S76Rc3ResumeBridgeInput
   const marker = record(cmi['airtrust.administrative_credit']);
   if (!marker || marker.kind !== 'PREVIOUS_EDITION_UNITS_RECOGNIZED' ||
       marker.credited_units !== CREDITED ||
-      marker.package_sha256 !== RC3_PACKAGE_SHA256 ||
+      marker.package_sha256 !== S76_RC3_IMMUTABLE_SHA256 ||
       (marker.handoff_id !== null && marker.handoff_id !== 30)) return null;
 
   const state = parseObject(cmi['cmi.suspend_data']);
