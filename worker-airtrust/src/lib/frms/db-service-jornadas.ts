@@ -201,7 +201,7 @@ interface DailyCheckinEvidence {
   sleepHours24h: number;
 }
 
-async function loadDailyCheckinEvidence(
+export async function loadDailyCheckinEvidence(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
@@ -230,8 +230,11 @@ async function loadDailyCheckinEvidence(
     }>();
 
   if (!row?.id || !row.jornada_inicio_prevista || !row.wake_time) return null;
+  // 0 h relatadas são evidência de privação de sono, não dado ausente.
+  // Number(null) seria 0: verificar a presença ANTES da conversão.
+  if (row.horas_sono == null) return null;
   const sleepHours = Number(row.horas_sono);
-  if (!Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
+  if (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24) return null;
   if (hhmmToMinutes(row.jornada_inicio_prevista) < 0 || hhmmToMinutes(row.wake_time) < 0) return null;
   return {
     checkinId: row.id,
