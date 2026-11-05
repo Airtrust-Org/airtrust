@@ -64,6 +64,31 @@ class FactoryCoreLockTests(unittest.TestCase):
             module.PINNED_FORMATIVE_V3["app.js"],
         )
 
+    def test_recovery_rc5_has_a_separate_pinned_core_and_preserves_rc4(self):
+        candidate = SRC.parent / "cores" / "AIRTRUST_FORMATIVE_V3_RECOVERY_CANDIDATE.app.js.txt"
+        self.assertTrue(candidate.is_file())
+        self.assertEqual(
+            hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            module.PINNED_FORMATIVE_V3_RECOVERY["app.js"],
+        )
+        self.assertNotEqual(
+            module.PINNED_FORMATIVE_V3_RECOVERY["app.js"],
+            module.PINNED_FORMATIVE_V3["app.js"],
+        )
+        self.assertEqual(
+            module.REGISTERED_VERSIONS[module.FORMATIVE_V3_VERSION],
+            module.PINNED_FORMATIVE_V3,
+        )
+        self.assertEqual(
+            module.REGISTERED_VERSIONS[module.FORMATIVE_V3_RECOVERY_VERSION],
+            module.PINNED_FORMATIVE_V3_RECOVERY,
+        )
+        for name in ("styles.css", "scorm_api.js"):
+            self.assertEqual(
+                module.PINNED_FORMATIVE_V3_RECOVERY[name],
+                module.PINNED_FORMATIVE_V3[name],
+            )
+
     def test_registered_v3_hash_is_distinct_and_v2_is_unchanged(self):
         self.assertEqual(
             module.REGISTERED_VERSIONS[module.GOLDEN_MASTER_VERSION],
