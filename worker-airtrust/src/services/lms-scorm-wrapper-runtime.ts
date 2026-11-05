@@ -379,6 +379,33 @@ export function buildScormSessionCloseRuntimeScript(): string {
       var frame = document.getElementById('scorm-frame');
       var inner = frame && frame.contentWindow;
       var doc = inner && inner.document;
+      // SHA-pinned exception for the already-active S-76 RC3 SCO:
+      // its terminal control is #nextUnit, not Factory V3's #next.
+      if (S76_LEGACY_RC3_FINAL) {
+        var legacyModel = inner && inner.AIRTRUST_COURSE_MODEL;
+        if (!doc || !legacyModel ||
+            legacyModel.courseId !== 's76c-sop-rev03' ||
+            legacyModel.packageVersion !== 'v3.4-no-module-exams-rc2-2026-11-02' ||
+            !Array.isArray(legacyModel.slides) || legacyModel.slides.length !== 49 ||
+            legacyModel.slides[48].id !== 'M6-07') return;
+        if (factoryV3ObservedDocument === doc) return;
+        factoryV3ObservedDocument = doc;
+        doc.addEventListener('click', function(event) {
+          if (event.isTrusted !== true || PREVIEW_MODE || REVIEW_MODE ||
+              completed || sessionCloseHandled || !apiInitialized) return;
+          var target = event.target;
+          var button = target && typeof target.closest === 'function'
+            ? target.closest('#nextUnit') : null;
+          if (!button || button.disabled) return;
+          var label = String(button.textContent || '').trim().replace(/\s+/g, ' ');
+          var counter = doc.querySelector('.counter');
+          if (label !== 'Concluir treinamento' ||
+              !counter || String(counter.textContent || '').trim() !== '49/49') return;
+          factoryV3FinalClick = true;
+          window.setTimeout(function() { factoryV3FinalClick = false; }, 0);
+        }, true);
+        return;
+      }
       var authored = inner && inner.COURSE_DATA;
       if (!doc || !authored || typeof authored.packageVersion !== 'string' ||
           !Array.isArray(authored.slides) || authored.slides.length < 2) return;
