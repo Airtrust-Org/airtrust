@@ -67,6 +67,9 @@ const enrollmentRows = [
     id: 11,
     funcionario_id: 101,
     curso_id: 32,
+    qualificacao_tipo_id: null as number | null,
+    email: 'a@example.com',
+    telefone: '+5521999999991',
     data_expiracao: '2026-10-20',
     status: 'NAO_INICIADO',
     curso_titulo: 'Integração Corporativa',
@@ -75,6 +78,9 @@ const enrollmentRows = [
     id: 12,
     funcionario_id: 102,
     curso_id: 32,
+    qualificacao_tipo_id: null as number | null,
+    email: 'a@example.com',
+    telefone: '+5521999999991',
     data_expiracao: null,
     status: 'EM_ANDAMENTO',
     curso_titulo: 'Integração Corporativa',
@@ -90,7 +96,7 @@ function createDb() {
             return { results: historyRows };
           }
           if (query.includes('SELECT m.id,m.funcionario_id,m.curso_id')) {
-            return { results: enrollmentRows };
+            return { results: enrollmentRows.filter((row) => args.includes(row.id)) };
           }
           return { results: [] };
         },
@@ -186,7 +192,7 @@ describe('LMS matrícula alerts', () => {
   it('previews the already accepted channel without sending anything', async () => {
     historyRows.push({
       id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
-      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: '2026-11-05 15:00:00',
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: new Date().toISOString(),
       gestor: 0, destinatario: null,
     });
     const { response } = await post({
@@ -204,7 +210,7 @@ describe('LMS matrícula alerts', () => {
   it('skips a successful earlier e-mail but still sends missing channels', async () => {
     historyRows.push({
       id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
-      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: '2026-11-05 15:00:00',
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: new Date().toISOString(),
       gestor: 0, destinatario: null,
     });
     const { response } = await post({
@@ -224,7 +230,7 @@ describe('LMS matrícula alerts', () => {
     historyRows.push({
       id: 'compliance:1', funcionario_id: 101, curso_id: null, qualificacao_tipo_id: 100,
       tipo: 'EMAIL_COMPLIANCE', status_envio: 'enviada',
-      enviado_em: '2026-11-05 15:00:00', gestor: 0, destinatario: 'a@example.com',
+      enviado_em: new Date().toISOString(), gestor: 0, destinatario: 'a@example.com',
     });
     // A linked LMS course shares the same qualification as Compliance.
     enrollmentRows[0].qualificacao_tipo_id = 100;
@@ -234,7 +240,7 @@ describe('LMS matrícula alerts', () => {
         canais: { email: true, whatsapp: false },
       });
       expect(response.status).toBe(200);
-      expect(sendEmailMock).toHaveBeenCalledTimes(2); // DB mock selects both rows.
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
     } finally {
       enrollmentRows[0].qualificacao_tipo_id = null;
     }
