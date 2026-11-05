@@ -28,6 +28,7 @@ import { getTenantContext } from '../middleware/tenant';
 import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
 import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
+import { validateSessionParticipantTenant } from '../services/simuladores/session-participant-tenant';
 import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
@@ -94,6 +95,13 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
         { success: false, error: 'Sessão compartilhada deve ser editada pela rota de sessões compartilhadas' },
         409,
       );
+    }
+
+    // Reject cross-tenant/unknown participant IDs before any UPDATE or ficha write.
+    // Do not expose whether the employee ID exists in a different company.
+    if (b.participantes !== undefined &&
+        !(await validateSessionParticipantTenant(c.env.DB, empresaId, b.participantes))) {
+      return c.json({ success: false, error: 'Participante inválido ou fora da empresa' }, 400);
     }
 
     // ── Guardrail: se instrutor_id for alterado, validar flag is_instrutor ──
