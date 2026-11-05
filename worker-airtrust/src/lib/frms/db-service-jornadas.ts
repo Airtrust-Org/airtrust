@@ -244,18 +244,14 @@ export async function loadDailyCheckinEvidence(
   };
 }
 
-function deriveSleepStartFromCheckin(wakeTime: string, sleepHours24h: number): string {
-  const wakeMinutes = hhmmToMinutes(wakeTime);
-  const sleepMinutes = Math.max(0, Math.min(24 * 60, Math.round(sleepHours24h * 60)));
-  return minutesToHhmm(wakeMinutes - sleepMinutes);
-}
-
-
 export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
   limites: LimitesMap,
   provenance?: { configRevisionId: string; modelVersion: string },
+  /** Somente a rota com declaração explícita pode fornecer o início de episódio.
+   * Valores pré-existentes em frms_jornada não têm proveniência suficiente. */
+  explicitSleepEpisode?: { source: 'CREW_REPORTED'; horaDormiu: string },
 ): Promise<{
   fatorizacao: FatorizacaoRow;
   acumulo: AcumuloRollingResult;
@@ -383,13 +379,6 @@ export async function recalcularPipeline(
       jornada.duracao_jornada_minutos = boundary.durationMinutes;
       dutyBoundarySource = 'REAL';
 
-      if (checkinEvidence) {
-        jornada.hora_dormiu = deriveSleepStartFromCheckin(
-          checkinEvidence.wakeTime,
-          checkinEvidence.sleepHours24h,
-        );
-      }
-
       await db
         .prepare(
           `UPDATE frms_jornada
@@ -414,15 +403,13 @@ export async function recalcularPipeline(
         await db
           .prepare(
             `UPDATE frms_jornada
-                SET hora_dormiu = ?,
-                    hora_acordou = ?,
+                SET hora_acordou = ?,
                     sono_efetivo_min = ?,
                     fonte_sono = 'INFORMADO',
                     updated_at = ?
               WHERE id = ? AND deleted_at IS NULL`,
           )
           .bind(
-            jornada.hora_dormiu,
             checkinEvidence.wakeTime,
             Math.round(checkinEvidence.sleepHours24h * 60),
             now(),
@@ -550,7 +537,12 @@ export async function recalcularPipeline(
       hora_ultimo_pouso: jornada.hora_ultimo_pouso,
       hora_corte_motor: jornada.hora_corte_motor,
       hora_termino: jornada.hora_termino,
-      hora_dormiu: canUseEffectiveness ? jornada.hora_dormiu ?? null : null,
+      // Campo histórico hora_dormiu pode ter sido derivado do total 24h.
+      // Confiar apenas em um episódio explicitamente declarado nesta requisição
+      // autenticada, nunca no valor legado persistido nem no total de 24h.
+      hora_dormiu: canUseEffectiveness && explicitSleepEpisode?.source === 'CREW_REPORTED'
+        ? explicitSleepEpisode.horaDormiu
+        : null,
       hora_acordou: canUseEffectiveness ? checkinEvidence?.wakeTime ?? null : null,
       sono_efetivo_min: canUseEffectiveness && checkinEvidence?.sleepHours24h != null
         ? Math.round(checkinEvidence.sleepHours24h * 60)
