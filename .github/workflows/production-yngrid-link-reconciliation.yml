@@ -71,7 +71,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/ci/verify-release-gates.mjs
       - name: Run single-link safety and no-promotion tests
-        run: node --test scripts/production/__tests__/repair-yngrid-employee-link.test.mjs
+        run: node --test scripts/production/__tests__/repair-yngrid-employee-link.test.mjs scripts/production/__tests__/repair-yngrid-employee-link.sqlite.test.mjs
       - name: Verify reviewed dry-run exact SHA and candidate hash
         if: ${{ inputs.mode == 'apply' }}
         shell: bash
