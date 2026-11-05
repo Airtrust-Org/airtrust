@@ -97,6 +97,50 @@ async function observe(token, id, slide, etag) {
   return request(token, `/api/lms/matriculas/${id}/pptx-evidence`, 'POST',
     { slide_index: slide, asset_etag: etag });
 }
+async function browserActiveCompletion(token, refreshToken, user, matriculaId, result) {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({
+      storageState: { cookies: [], origins: [{ origin: PAGES, localStorage: [
+        { name: 'airtrust_persist_login', value: '1' },
+        { name: 'airtrust_token', value: token },
+        { name: 'airtrust_refresh_token', value: refreshToken },
+        { name: 'airtrust_user', value: JSON.stringify(user) },
+      ] }] }, viewport: { width: 1366, height: 768 },
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(30000);
+    const waitCoverage = async (count) => {
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        const state = await getState(token, matriculaId);
+        if (state.visited_indexes.length === count) return state;
+        await delay(500);
+      }
+      throw new Error(`PPTX_QA_BROWSER_COVERAGE_${count}_MISSING`);
+    };
+    await page.goto(`${PAGES}/lms/player/pptx/${matriculaId}`,
+      { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.getByText('Slide 1 de 3', { exact: true }).waitFor();
+    await page.getByText('AirTrust QA PPTX B — slide 1 de 3', { exact: true }).waitFor();
+    await waitCoverage(1);
+    // Reload before progressing: resume must be derived from persisted evidence.
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.getByText('Slide 2 de 3', { exact: true }).waitFor();
+    await page.getByText('AirTrust QA PPTX B — slide 2 de 3', { exact: true }).waitFor();
+    await waitCoverage(2);
+    await page.getByRole('button', { name: 'Próximo' }).click();
+    await page.getByText('Slide 3 de 3', { exact: true }).waitFor();
+    await page.getByText('AirTrust QA PPTX B — slide 3 de 3', { exact: true }).waitFor();
+    const complete = await waitCoverage(3);
+    assert(complete.ready_to_finalize === true &&
+      complete.visited_indexes.join(',') === '0,1,2', 'PPTX_QA_FINAL_COVERAGE_MISSING');
+    await page.getByRole('button', { name: 'Concluir curso' }).click();
+    await page.getByText('Concluído', { exact: true }).first().waitFor();
+    await context.close();
+    result.browser_active_chromium = 'PASS_UI_COMPLETED';
+  } finally { await browser.close(); }
+}
 async function browserReview(token, refreshToken, user, matriculaId, result) {
   for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     const browser = await engine.launch({ headless: true });
@@ -311,21 +355,12 @@ async function main() {
       'PPTX_QA_STALE_ETAG_NOT_REJECTED');
     const foreign = await observe(admin.token, matriculaId, 0, replaced.asset_etag);
     assert(foreign.status === 403, 'PPTX_QA_ADMIN_IMPERSONATION_NOT_REJECTED');
-    for (const index of [0, 1, 2]) {
-      if (index > 0) await delay(1850);
-      const evidence = requireOk(
-        await observe(student.token, matriculaId, index, replaced.asset_etag), 200,
-        `PPTX slide ${index}`);
-      assert(evidence.next_slide === index + 1, 'PPTX_QA_ORDERED_COVERAGE_FAILED');
-    }
-    const complete = await getState(student.token, matriculaId);
-    assert(complete.ready_to_finalize === true &&
-      complete.visited_indexes.join(',') === '0,1,2', 'PPTX_QA_FINAL_COVERAGE_MISSING');
-    const finalized = requireOk(
-      await request(student.token, `/api/lms/matriculas/${matriculaId}/finalizar`, 'POST', {}),
-      200, 'PPTX QA finalization');
-    assert(finalized.novo_status === 'CONCLUIDO', 'PPTX_QA_NOT_CONCLUDED');
-    historyId = requireId(finalized.qualificacao_gerada?.qualificacao_historico_id, 'qualification');
+    await browserActiveCompletion(student.token, extractRefreshToken(student.loginPayload),
+      student.loginPayload?.data?.user || {}, matriculaId, result);
+    const completedDetail = requireOk(await request(student.token,
+      `/api/lms/matriculas/${matriculaId}`), 200, 'PPTX browser finalization readback');
+    assert(completedDetail.status === 'CONCLUIDO', 'PPTX_QA_NOT_CONCLUDED');
+    historyId = requireId(completedDetail.qualificacao_historico_id, 'qualification');
     const repeated = requireOk(
       await request(student.token, `/api/lms/matriculas/${matriculaId}/finalizar`, 'POST', {}),
       200, 'PPTX repeated finalization');
