@@ -110,10 +110,12 @@ function repairStrandedCursor(cmi:Record<string,unknown>):void{
 }
 
 /**
- * An F5 package handed a location (`N/M`, N>1) with no suspend_data cannot restore:
- * it opens every screen as a preview ("edição incompatível") and the learner can
- * never complete it. Such a location is never real progress (the package writes
- * both together), so it is dropped and the course restarts from the first screen.
+ * An F5 package handed any location (`N/M`, including `1/M`) with no
+ * suspend_data cannot restore: the Factory V3 core rejects even an orphan
+ * first-screen `1/M` as an incompatible edition and locks into preview.
+ * A bare location is not proof of completed units (the package always writes
+ * suspend_data together with the cursor), so drop it only for a nonterminal
+ * formative launch. The course starts at screen 1 without crediting anything.
  * Nothing is credited; terminal evidence and scores are untouched.
  */
 function dropOrphanLocation(cmi:Record<string,unknown>):boolean{
@@ -121,7 +123,7 @@ function dropOrphanLocation(cmi:Record<string,unknown>):boolean{
   const locationKeys=['cmi.core.lesson_location','cmi.location'];
   const orphan=locationKeys.some(key=>{
     const pair=parseScormLocationPair(String(cmi[key]??''));
-    return Boolean(pair&&pair.current>1);
+    return Boolean(pair&&pair.current>=1);
   });
   if(!orphan)return false;
   for(const key of [...locationKeys,'cmi.entry','cmi.core.entry'])delete cmi[key];
