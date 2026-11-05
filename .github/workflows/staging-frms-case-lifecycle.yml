@@ -99,6 +99,8 @@ jobs:
           cache: npm
       - name: Install pinned Wrangler and run focused SQL contracts
         run: |
+          # case-resolution imports zod from the repository-root dependency tree.
+          npm ci
           npm --prefix worker-airtrust ci
           node --test scripts/__tests__/qa-frms-case-lifecycle.test.mjs
           cd worker-airtrust
