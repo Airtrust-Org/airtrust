@@ -19,6 +19,15 @@ UPDATE usuarios
         AND ue.empresa_id = ?
         AND UPPER(TRIM(ue.role)) IN ('ADMIN', 'ADMINISTRADOR')
    )
+   AND (
+     SELECT COUNT(*) FROM usuarios_empresas_perfis p
+      WHERE p.usuario_id = usuarios.id AND p.empresa_id = ? AND p.ativo = 1
+   ) = 1
+   AND EXISTS (
+     SELECT 1 FROM usuarios_empresas_perfis p
+      WHERE p.usuario_id = usuarios.id AND p.empresa_id = ? AND p.ativo = 1
+        AND UPPER(TRIM(p.perfil)) IN ('ADMIN', 'ADMINISTRADOR')
+   )
    AND EXISTS (
      SELECT 1 FROM funcionarios f
       WHERE f.id = ?
@@ -51,7 +60,7 @@ export async function eligibleAtomicUserEmployeeLink(
 ): Promise<boolean> {
   const { empresaId, userId, employeeId } = input;
   const query = await db.prepare(LINK_USER_EMPLOYEE_ELIGIBLE_SQL)
-    .bind(userId, empresaId, employeeId, empresaId, employeeId)
+    .bind(userId, empresaId, empresaId, empresaId, employeeId, empresaId, employeeId)
     .first<{ n: number }>();
   return Number(query?.n ?? 0) === 1;
 }
@@ -76,7 +85,7 @@ export function linkIdentityStatements(db: D1Database, input: LinkIdentityInput)
   const { empresaId, actorId, userId, employeeId } = input;
   return [
     db.prepare(LINK_USER_EMPLOYEE_CAS_SQL)
-      .bind(employeeId, userId, empresaId, employeeId, empresaId, employeeId),
+      .bind(employeeId, userId, empresaId, empresaId, empresaId, employeeId, empresaId, employeeId),
     db.prepare(LINK_USER_EMPLOYEE_AUDIT_SQL)
       .bind(empresaId, actorId, userId,
         JSON.stringify({ action: 'LINK_EMPLOYEE_TO_ADMIN_USER', empresa_id: empresaId,
