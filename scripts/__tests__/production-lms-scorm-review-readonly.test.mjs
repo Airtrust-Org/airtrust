@@ -28,8 +28,8 @@ test('active candidate can be resolved from the tenant-scoped enrollment read', 
 
 test('read-only asset session preserves the enrollment-issued handoff to avoid false 409', () => {
   assert.match(script, /active_scorm_handoff_id/);
-  assert.match(script, /expected_handoff_id:\\s*handoffId/);
-  assert.match(script, /getAssetSession\\(token,\\s*enrollment\\)/);
+  assert.match(script, /expected_handoff_id:\s*handoffId/);
+  assert.match(script, /getAssetSession\(token,\s*enrollment\)/);
   assert.match(script, /ENROLLMENT_HANDOFF_ID_INVALID/);
 });
 
