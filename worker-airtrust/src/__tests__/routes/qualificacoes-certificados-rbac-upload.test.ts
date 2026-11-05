@@ -373,6 +373,7 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
               data_conclusao: historico.data_conclusao,
               data_vencimento: historico.data_vencimento,
               certificado_arquivo_id: historico.certificado_arquivo_id,
+              numero_certificado: historico.numero_certificado,
               qualificacao_nome: 'Qualificação',
               codigo: 'OPC',
               funcionario_cpf: funcionario.cpf,
@@ -872,6 +873,43 @@ describe('qualificacoes certificados rbac e upload', () => {
     expect(body.data.multiprofile_supported).toBe(true);
     expect(body.data.perfis_permitidos).toContain('AVSEC_OPERACOES_SOLO');
     expect(body.data.perfis_permitidos).toContain('AVSEC_TRIPULANTE');
+  });
+
+  it('upload preserva numero de certificado legado mesmo com arquivo PDF de outro nome', async () => {
+    const { env, historicos, documentos } = createMockEnv();
+    const historico = historicos.find((row) => row.id === 2001);
+    expect(historico).toBeDefined();
+    historico!.numero_certificado = 'LEGACYabc123';
+    historico!.arquivo_url = 'https://legacy.example/certificate/LEGACYabc123';
+
+    const form = new FormData();
+    form.set('file', createPdfFile('comprovante-baixado.pdf'));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+
+    expect(response.status).toBe(201);
+    expect(historico!.numero_certificado).toBe('LEGACYabc123');
+    expect(historico!.certificado_arquivo_id).not.toBeNull();
+    expect(documentos.at(-1)?.nome_arquivo).toBe('comprovante-baixado.pdf');
+  });
+
+  it('upload mantém fallback de nome de arquivo quando o histórico não possui número', async () => {
+    const { env, historicos } = createMockEnv();
+    const form = new FormData();
+    form.set('file', createPdfFile('codigo-automatico.PDF'));
+    form.set('perfil_competencia', 'AVSEC_TRIPULANTE');
+
+    const response = await request('/api/certificados/historico/2001/certificados/upload', env, {
+      method: 'POST',
+      body: form,
+    });
+
+    expect(response.status).toBe(201);
+    expect(historicos.find((row) => row.id === 2001)?.numero_certificado).toBe('codigo-automatico');
   });
 
   it('upload registra explicitamente o perfil comprovado mesmo quando difere do perfil exigido', async () => {
