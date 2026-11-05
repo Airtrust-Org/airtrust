@@ -48,7 +48,7 @@ function launch(params: {
   });
   vi.stubGlobal('fetch', fetchMock);
   const html = buildLaunchPage({
-    matriculaId: 1133,
+    matriculaId: 990013,
     titulo: 'Factory V3 synthetic runtime',
     launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/1/index.html',
     commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
@@ -90,7 +90,7 @@ describe('Factory V3 user-owned finish bridge (server evidence remains mandatory
     test.click(true);
     test.api.LMSFinish('');
     expect(await test.lastPayload()).toMatchObject({
-      matricula_id: 1133,
+      matricula_id: 990013,
       lesson_status: 'completed',
       commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
