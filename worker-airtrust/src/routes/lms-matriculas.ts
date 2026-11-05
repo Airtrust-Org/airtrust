@@ -669,9 +669,7 @@ app.post('/', async (c) => {
           resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
       if (enviar_convite_email)
-        await sendMatriculaTracked(c, c.env, db, {
-          matriculaId: existente.id,
-          canais: { email: true, whatsapp: false },
+        await sendMatriculaTracked(c, c.env, db, existente.id, {
           funcionarioId: funcionario_id,
           empresaId,
           cursoId: curso_id,
@@ -776,9 +774,7 @@ app.post('/', async (c) => {
       },
     });
     if (enviar_convite_email)
-      await sendMatriculaTracked(c, c.env, db, {
-          matriculaId: matriculaId,
-          canais: { email: true, whatsapp: false },
+      await sendMatriculaTracked(c, c.env, db, matriculaId, {
         funcionarioId: funcionario_id,
         empresaId,
         cursoId: curso_id,
@@ -998,9 +994,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         });
         etapa = 'convite';
         if (enviar_convite_email)
-          await sendMatriculaTracked(c, c.env, db, {
-          matriculaId: existente.id,
-          canais: { email: true, whatsapp: false },
+          await sendMatriculaTracked(c, c.env, db, existente.id, {
             funcionarioId,
             empresaId,
             cursoId: curso_id,
@@ -1069,9 +1063,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
       etapa = 'convite';
       if (enviar_convite_email)
-        await sendMatriculaTracked(c, c.env, db, {
-          matriculaId: matriculaId,
-          canais: { email: true, whatsapp: false },
+        await sendMatriculaTracked(c, c.env, db, matriculaId, {
           funcionarioId,
           empresaId,
           cursoId: curso_id,
