@@ -7,7 +7,9 @@ const {
   sendWhatsAppMessageMock,
   logAuditMock,
   getLocalWhatsAppTemplateRecordMock,
+  historyRows,
 } = vi.hoisted(() => ({
+  historyRows: [] as Array<Record<string, unknown>>,
   sendEmailMock: vi.fn(async () => true),
   sendWhatsAppMessageMock: vi.fn(async () => ({ sid: 'SM123' })),
   logAuditMock: vi.fn(async () => undefined),
@@ -84,6 +86,9 @@ function createDb() {
     prepare: vi.fn((query: string) => ({
       bind: (...args: unknown[]) => ({
         all: async () => {
+          if (query.includes('WITH communications AS')) {
+            return { results: historyRows };
+          }
           if (query.includes('SELECT m.id,m.funcionario_id,m.curso_id')) {
             return { results: enrollmentRows };
           }
@@ -118,10 +123,10 @@ function makeApp() {
   return app;
 }
 
-async function post(body: object) {
+async function post(body: object, path = '/convites/lote') {
   const db = createDb();
   const response = await makeApp().fetch(
-    new Request('http://localhost/convites/lote', {
+    new Request(`http://localhost${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -140,6 +145,7 @@ describe('LMS matrícula alerts', () => {
     vi.clearAllMocks();
     sendEmailMock.mockResolvedValue(true);
     sendWhatsAppMessageMock.mockResolvedValue({ sid: 'SM123' });
+    historyRows.length = 0;
   });
 
   it('preserva o convite legado como envio somente por e-mail', async () => {
@@ -174,6 +180,64 @@ describe('LMS matrícula alerts', () => {
       expect.anything(),
       expect.objectContaining({ action: 'LMS_MATRICULA_ALERTA' }),
     );
+  });
+
+
+  it('previews the already accepted channel without sending anything', async () => {
+    historyRows.push({
+      id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: '2026-11-05 15:00:00',
+      gestor: 0, destinatario: null,
+    });
+    const { response } = await post({
+      matricula_ids: [11, 12], modo: 'alerta',
+      canais: { email: true, whatsapp: true },
+    }, '/convites/lote/preview');
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { data: Record<string, number> };
+    expect(json.data.email_ja_alertado).toBe(1);
+    expect(json.data.whatsapp_ja_alertado).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendWhatsAppMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('skips a successful earlier e-mail but still sends missing channels', async () => {
+    historyRows.push({
+      id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: '2026-11-05 15:00:00',
+      gestor: 0, destinatario: null,
+    });
+    const { response } = await post({
+      matricula_ids: [11, 12], modo: 'alerta',
+      canais: { email: true, whatsapp: true },
+    });
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { data: Record<string, number> };
+    expect(json.data.email_ja_alertado).toBe(1);
+    expect(json.data.email_enviados).toBe(1);
+    expect(json.data.whatsapp_enviados).toBe(2);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendWhatsAppMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows the resend only with explicit reenviar_hoje=true', async () => {
+    historyRows.push({
+      id: 'compliance:1', funcionario_id: 101, curso_id: null, qualificacao_tipo_id: 100,
+      tipo: 'EMAIL_COMPLIANCE', status_envio: 'enviada',
+      enviado_em: '2026-11-05 15:00:00', gestor: 0, destinatario: 'a@example.com',
+    });
+    // A linked LMS course shares the same qualification as Compliance.
+    enrollmentRows[0].qualificacao_tipo_id = 100;
+    try {
+      const { response } = await post({
+        matricula_ids: [11], modo: 'alerta', reenviar_hoje: true,
+        canais: { email: true, whatsapp: false },
+      });
+      expect(response.status).toBe(200);
+      expect(sendEmailMock).toHaveBeenCalledTimes(2); // DB mock selects both rows.
+    } finally {
+      enrollmentRows[0].qualificacao_tipo_id = null;
+    }
   });
 
   it('recusa alerta sem canal selecionado', async () => {
