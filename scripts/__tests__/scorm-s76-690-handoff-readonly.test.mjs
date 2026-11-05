@@ -46,6 +46,14 @@ describe('S-76 #690 immutable handoff readonly inspection', () => {
     assert.doesNotMatch(emitted, /DO_NOT_EMIT|target_package_prefix|previous_scorm_json|previous_enrollment_json/);
     assert.equal(s.active_sha_matches_handoff, true);
   });
+  it('redacts arbitrary free-form SCORM location and retains numeric bookmark', () => {
+    const base = row();
+    const cmi = JSON.stringify({ 'cmi.core.lesson_location': 'SENSITIVE_FREEFORM_TEXT' });
+    const output = sanitize({ ...base, current_cmi: cmi });
+    assert.equal(output.current.lesson_location, null);
+    assert.equal(output.archive.lesson_location, '55/55');
+    assert.doesNotMatch(JSON.stringify(output), /SENSITIVE_FREEFORM_TEXT/);
+  });
   it('fails closed when the active package SHA no longer matches handoff', () => {
     assert.throws(() => sanitize({ ...row(), active_package_sha: 'c'.repeat(64) }),
       /ACTIVE_PACKAGE_CHANGED/);
