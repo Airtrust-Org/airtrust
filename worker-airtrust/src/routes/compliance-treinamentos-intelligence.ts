@@ -397,7 +397,9 @@ export function createTrainingComplianceIntelligenceRoutes({
         com_email: targets.filter((item) => Boolean(item.email)).length,
         sem_email: targets.filter((item) => !item.email).length,
         email_ja_alertado: targets.filter((item) => already.wasSent(item, 'EMAIL')).length,
+        email_pendente_historico: targets.filter((item) => already.isPending(item, 'EMAIL')).length,
         whatsapp_ja_alertado: targets.filter((item) => already.wasSent(item, 'WHATSAPP')).length,
+        whatsapp_pendente_historico: targets.filter((item) => already.isPending(item, 'WHATSAPP')).length,
         com_whatsapp: targets.filter((item) => Boolean(item.telefone)).length,
         sem_whatsapp: targets.filter((item) => !item.telefone).length,
         vencidos: targets.filter((item) => item.status_compliance === 'VENCIDO').length,
@@ -431,6 +433,8 @@ export function createTrainingComplianceIntelligenceRoutes({
     const attempted = new SameDayTrainingAlerts([], '');
     let emailAlready = 0;
     let whatsappAlready = 0;
+    let emailPending = 0;
+    let whatsappPending = 0;
     let emailMissing = 0;
     let whatsappMissing = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
@@ -438,14 +442,18 @@ export function createTrainingComplianceIntelligenceRoutes({
     for (let index = 0; index < targets.length; index += 5) {
       const chunk = targets.slice(index, index + 5);
       const queued = chunk.map((target) => {
+        const isEmailPending = channels.email && history.isPending(target, 'EMAIL');
+        const isWhatsappPending = channels.whatsapp && history.isPending(target, 'WHATSAPP');
         const skipEmail = channels.email &&
-          (attempted.wasSent(target, 'EMAIL') ||
+          (isEmailPending || attempted.wasSent(target, 'EMAIL') ||
            (payload.reenviar_hoje !== true && history.wasSent(target, 'EMAIL')));
         const skipWhatsapp = channels.whatsapp &&
-          (attempted.wasSent(target, 'WHATSAPP') ||
+          (isWhatsappPending || attempted.wasSent(target, 'WHATSAPP') ||
            (payload.reenviar_hoje !== true && history.wasSent(target, 'WHATSAPP')));
         if (skipEmail) emailAlready++;
         if (skipWhatsapp) whatsappAlready++;
+        if (isEmailPending) emailPending++;
+        if (isWhatsappPending) whatsappPending++;
         if (channels.email && !skipEmail) attempted.markAccepted(target, 'EMAIL');
         if (channels.whatsapp && !skipWhatsapp) attempted.markAccepted(target, 'WHATSAPP');
         if (channels.email && !skipEmail && !target.email) emailMissing++;
@@ -488,6 +496,9 @@ export function createTrainingComplianceIntelligenceRoutes({
         whatsapp_sucesso: whatsappSuccess,
         email_ja_alertado: emailAlready,
         whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
+        reenvio_confirmado_hoje: payload.reenviar_hoje === true,
       },
       ...extrairUsuarioAuditoria(c),
     });
@@ -504,6 +515,8 @@ export function createTrainingComplianceIntelligenceRoutes({
         sem_whatsapp: whatsappMissing,
         email_ja_alertado: emailAlready,
         whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
       },
     });
   });
