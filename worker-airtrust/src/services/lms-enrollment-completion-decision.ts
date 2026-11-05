@@ -249,10 +249,12 @@ export function buildEnrollmentCompletionDecision(
     administrativeAuthorized?: boolean;
     administrativeReason?: unknown;
     administrativeScoreOverride?: boolean;
+    serverValidatedPptxCoverage?: boolean;
   } = {},
 ): LmsCompletionDecision {
   const interactive = isInteractive(row);
-  const progressPct = resolveProgressPct(row, incoming);
+  const progressPct = options.serverValidatedPptxCoverage === true && contentType(row) === 'pptx'
+    ? 100 : resolveProgressPct(row, incoming);
   const progressPresent =
     hasStoredRuntimeEvidence(row) ||
     hasIncomingRuntimeEvidence(incoming) ||
@@ -299,7 +301,8 @@ export function buildEnrollmentCompletionDecision(
     requiresAssessment: requiresAssessment && !options.administrativeScoreOverride,
     generatesQualification: row.gerar_qualificacao_ao_concluir === 1,
     informativeCourse: !interactive && row.gerar_qualificacao_ao_concluir !== 1,
-    contentEvidenceValidated: contentEvidenceValidated(row, source),
+    contentEvidenceValidated: contentEvidenceValidated(row, source) ||
+      (contentType(row) === 'pptx' && options.serverValidatedPptxCoverage === true),
     minimumTimeSatisfied: undefined,
     administrativeAuthorized: options.administrativeAuthorized,
     administrativeReason: options.administrativeReason,
