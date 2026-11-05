@@ -29,7 +29,7 @@ function renderWithClient(node: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
 }
 
 const pending = {
@@ -75,6 +75,88 @@ const props = {
 
 describe('TrainingComplianceIntelligence', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('shows LMS alerts together with compliance entries and sends filters and page offset to the API', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (!url.includes('/comunicacoes')) throw new Error(`unexpected ${url}`);
+      const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset') || 0);
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{
+            id: 'lms:10:EMAIL',
+            funcionario_id: 10,
+            funcionario_nome: 'Pessoa Pendente',
+            setor_nome: null,
+            qualificacao_tipo_id: 100,
+            curso_id: 30,
+            qualificacao_nome: 'CRM Gestores',
+            status_compliance: 'NAO_INICIADO',
+            tipo: 'EMAIL',
+            destinatario: null,
+            status_envio: 'enviada',
+            erro: null,
+            enviado_em: '2026-11-04T14:20:00Z',
+            gestor: false,
+            origem: 'LMS_ALERTA',
+          }],
+          pagination: { limit: 100, offset, has_more: offset === 0 },
+        }),
+      } as Response;
+    });
+
+    const { rerender, client } = renderWithClient(<TrainingComplianceIntelligence mode="comunicacoes" {...props} />);
+    await screen.findByText('CRM Gestores');
+    expect(screen.getByText('Alerta LMS')).toBeInTheDocument();
+    expect(screen.getAllByText('Aceito para envio').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Não registrado')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filtrar treinamento' }), {
+      target: { value: 'CRM' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar canal' }), {
+      target: { value: 'EMAIL' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar origem' }), {
+      target: { value: 'LMS_ALERTA' },
+    });
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.map(([url]) => String(url));
+      expect(calls.some((url) =>
+        url.includes('treinamento_q=CRM') &&
+        url.includes('canal=EMAIL') &&
+        url.includes('origem=LMS_ALERTA') &&
+        url.includes('setor_id=1')
+      )).toBe(true);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Próxima' })).not.toBeDisabled()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima' }));
+    await waitFor(() =>
+      expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).includes('offset=100')))
+        .toBe(true)
+    );
+    fetchWithAuthMock.mockClear();
+    rerender(
+      <QueryClientProvider client={client}>
+        <TrainingComplianceIntelligence mode="comunicacoes" {...props}
+          search="Pessoa" setorId={null} funcaoId={2} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.map(([url]) => String(url));
+      expect(calls.some((url) =>
+        url.includes('funcionario_q=Pessoa') &&
+        url.includes('funcao_id=2') &&
+        url.includes('offset=0') &&
+        !url.includes('setor_id=1')
+      )).toBe(true);
+    });
+    expect(screen.getByText('CRM Gestores')).toBeInTheDocument();
+  });
 
   it('shows actionable never-done pending items and previews resend channels', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {

@@ -39,6 +39,13 @@ vi.mock('../../middleware/employee-sector-access', () => ({
       access.mode === 'all' ? ids : ids.filter((id) => access.setorIds.includes(id)),
   ),
   assertFuncionarioInScope: vi.fn(async () => undefined),
+  employeeSectorSql: (access: { mode: string; setorIds: number[] }, alias = 'f') =>
+    access.mode === 'all'
+      ? { clause: '1 = 1', bindings: [] }
+      : {
+          clause: `${alias}.setor_id IN (${access.setorIds.map(() => '?').join(',') || 'NULL'})`,
+          bindings: access.setorIds,
+        },
 }));
 
 import complianceRouter from '../../routes/compliance-treinamentos';
