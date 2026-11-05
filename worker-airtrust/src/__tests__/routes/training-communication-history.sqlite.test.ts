@@ -14,6 +14,9 @@ beforeEach(() => {
   db = new SqliteD1Database();
   db.database.exec(`
     ALTER TABLE funcionarios ADD COLUMN funcao_id INTEGER;
+    ALTER TABLE funcionarios ADD COLUMN email TEXT;
+    ALTER TABLE funcionarios ADD COLUMN telefone TEXT;
+    UPDATE funcionarios SET email='ana@example.com', telefone='+5521999993333' WHERE id=1000;
     UPDATE funcionarios SET funcao_id = 5 WHERE id IN (1000, 1001);
     CREATE TABLE lms_cursos (
       id INTEGER PRIMARY KEY,
@@ -87,11 +90,13 @@ describe('consolidated training communication history', () => {
       qualificacao_nome: 'CRM - Gestores',
       origem: 'LMS_ALERTA',
       status_envio: 'enviada',
-      destinatario: null,
+      destinatario: 'a***@example.com',
+      destinatario_fonte: 'CADASTRO_ATUAL',
     });
     expect(result.rows.find((row) => row.id === 'lms:10:WHATSAPP')?.status_envio)
       .toBe('sem_contato');
     expect(result.rows[0].destinatario).toBe('p***@example.com');
+    expect(result.rows[0].destinatario_fonte).toBe('REGISTRO_ENVIO');
   });
 
   it('filters training, employee, source, channel, outcome, date and pages on the server', async () => {
