@@ -409,8 +409,12 @@ app.post('/lote/preview', requirePermission('lms', 'criar', 'admin', 'manager'),
       processados: rows.length,
       email_ja_alertado: channels.email
         ? rows.filter((row) => history.wasSent(alertIdentity(row), 'EMAIL')).length : 0,
+      email_pendente_historico: channels.email
+        ? rows.filter((row) => history.isPending(alertIdentity(row), 'EMAIL')).length : 0,
       whatsapp_ja_alertado: channels.whatsapp
         ? rows.filter((row) => history.wasSent(alertIdentity(row), 'WHATSAPP')).length : 0,
+      whatsapp_pendente_historico: channels.whatsapp
+        ? rows.filter((row) => history.isPending(alertIdentity(row), 'WHATSAPP')).length : 0,
     },
   });
 });
@@ -435,6 +439,7 @@ export async function sendMatriculaTracked(
     isNovoCiclo: boolean;
     modo?: MatriculaMessageMode;
     canais?: { email: boolean; whatsapp: boolean };
+    reenvioConfirmadoHoje?: boolean;
   },
 ): Promise<MatriculaDeliveryOutcome> {
   const channels = params.canais ?? { email: true, whatsapp: false };
@@ -446,6 +451,7 @@ export async function sendMatriculaTracked(
     tentativa_id: tentativaId,
     modo: mode,
     canais: channels,
+    reenvio_confirmado_hoje: params.reenvioConfirmadoHoje === true,
     curso_id: params.cursoId,
     curso_titulo: params.cursoTitulo,
     funcionario_id: params.funcionarioId,
@@ -532,6 +538,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     nao_encontradas: ids.filter((id) => !encontrados.has(id)).length,
     email_ja_alertado: 0,
     whatsapp_ja_alertado: 0,
+    email_pendente_historico: 0,
+    whatsapp_pendente_historico: 0,
     auditoria_preparo_falhas: 0,
     auditoria_resultado_pendente: 0,
   };
@@ -547,14 +555,22 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     // Previously accepted notices are skipped unless explicitly overridden.
     const candidates = batch.map((row) => {
       const identity = alertIdentity(row);
+      const emailPending = mode === 'alerta' && channels.email &&
+        Boolean(history?.isPending(identity, 'EMAIL'));
+      const whatsappPending = mode === 'alerta' && channels.whatsapp &&
+        Boolean(history?.isPending(identity, 'WHATSAPP'));
+      // Uma intenção PREPARADO sem resultado não pode ser forçada pelo checkbox.
+      // A confirmação de reenvio aplica-se apenas a aceites registrados, não a indeterminações.
       const emailDuplicate = mode === 'alerta' && channels.email &&
-        (attempted.wasSent(identity, 'EMAIL') ||
+        (emailPending || attempted.wasSent(identity, 'EMAIL') ||
           (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'EMAIL'))));
       const whatsappDuplicate = mode === 'alerta' && channels.whatsapp &&
-        (attempted.wasSent(identity, 'WHATSAPP') ||
+        (whatsappPending || attempted.wasSent(identity, 'WHATSAPP') ||
           (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'WHATSAPP'))));
       if (emailDuplicate) summary.email_ja_alertado += 1;
       if (whatsappDuplicate) summary.whatsapp_ja_alertado += 1;
+      if (emailPending) summary.email_pendente_historico += 1;
+      if (whatsappPending) summary.whatsapp_pendente_historico += 1;
       if (channels.email && !emailDuplicate) attempted.markAccepted(identity, 'EMAIL');
       if (channels.whatsapp && !whatsappDuplicate) attempted.markAccepted(identity, 'WHATSAPP');
       return { row, emailDuplicate, whatsappDuplicate };
@@ -577,6 +593,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           isNovoCiclo: false,
           modo: mode,
           canais: { email: emailEnabled, whatsapp: whatsappEnabled },
+          reenvioConfirmadoHoje: mode === 'alerta' && parsed.data.reenviar_hoje,
         });
       }),
     );
