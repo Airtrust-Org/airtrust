@@ -235,9 +235,25 @@ describe('completed enrollment review virtual CMI', () => {
       expect(cmi['cmi.core.lesson_location']).toBe('14/84');
     });
 
-    it('keeps a location on a non-formative course, on the first screen, or with terminal evidence', () => {
+    it('clears 1/26 without suspend_data: enrollment #978 must not lock into edition-incompatible preview', () => {
+      const result = buildScormLaunchState(JSON.stringify({
+        'cmi.core.lesson_location': '1/26',
+        'cmi.core.lesson_status': 'incomplete',
+        'airtrust.total_slides': 26,
+      }), null, false, false, null, { formativeCourse: true });
+      const cmi = JSON.parse(result.initialCmiJson);
+      expect(result.hasResumeState).toBe(false);
+      expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+      expect(cmi['cmi.suspend_data']).toBeUndefined();
+      expect(cmi['cmi.core.lesson_status']).toBe('incomplete');
+      expect(cmi['cmi.core.entry']).toBeUndefined();
+      expect(cmi['cmi.core.credit']).toBe('credit');
+    });
+
+    it('keeps legacy non-formative and terminal locations, but drops first-screen orphan in F5', () => {
       expect(launchOrphan({ 'cmi.core.lesson_location': '14/84' })['cmi.core.lesson_location']).toBe('14/84');
-      expect(launchOrphan({ 'cmi.core.lesson_location': '1/84' }, { formativeCourse: true })['cmi.core.lesson_location']).toBe('1/84');
+      expect(launchOrphan({ 'cmi.core.lesson_location': '1/84' })['cmi.core.lesson_location']).toBe('1/84');
+      expect(launchOrphan({ 'cmi.core.lesson_location': '1/84' }, { formativeCourse: true })['cmi.core.lesson_location']).toBeUndefined();
       expect(launchOrphan({ 'cmi.core.lesson_location': '84/84', 'cmi.core.lesson_status': 'passed' }, { formativeCourse: true })['cmi.core.lesson_location']).toBe('84/84');
     });
   });
