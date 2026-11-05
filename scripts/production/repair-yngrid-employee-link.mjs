@@ -60,13 +60,6 @@ export function selectStrictLinkCandidate({ users, staff, access, target='Yngrid
   return { tenantId: TENANT, userId, employeeId, normalizedEmail: email };
 }
 
-/** Server-side anti-join over active identities, including users without tenant memberships. */
-export function assertListedUnlinkedEmployee(rows, employeeId) {
-  requireCondition(Array.isArray(rows), 'UNLINKED_STAFF_LIST_INVALID');
-  requireCondition(rows.some(row => Number(row.id) === employeeId),
-    rows.length >= 200 ? 'UNLINKED_STAFF_LIST_TRUNCATED' : 'EMPLOYEE_ALREADY_LINKED_OR_UNAVAILABLE');
-}
-
 export function linkCandidateHash(candidate, productionSha) {
   const canonical = {
     tenant: candidate.tenantId, user: candidate.userId,
@@ -103,7 +96,7 @@ async function main() {
     ['ADMIN','ADMINISTRADOR'].includes(upper(claims?.role)), 'ADMIN_TENANT_REQUIRED');
 
   async function request(path, init) {
-    requireCondition(/^\/api\/(?:admin\/usuarios(?:\/funcionarios-sem-usuario|\/[0-9]+(?:\/employee-link-(?:cas|eligibility)(?:\?funcionario_id=[0-9]+)?)?)?|funcionarios(?:\?.*)?|empresas\/usuarios\/[0-9]+\/acessos)$/.test(path),
+    requireCondition(/^\/api\/(?:admin\/usuarios(?:\/[0-9]+(?:\/employee-link-(?:cas|eligibility)(?:\?funcionario_id=[0-9]+)?)?)?|funcionarios(?:\?.*)?|empresas\/usuarios\/[0-9]+\/acessos)$/.test(path),
       'API_PATH_NOT_ALLOWED');
     const response = await fetchJson(base + path, {
       ...init, headers: { Authorization: 'Bearer ' + token,
@@ -134,8 +127,8 @@ async function main() {
     const candidate = selectStrictLinkCandidate({
       users, staff: [...staff.values()], access: current[0], target: 'Yngrid',
     });
-    const unlinked = await request('/api/admin/usuarios/funcionarios-sem-usuario');
-    assertListedUnlinkedEmployee(unlinked, candidate.employeeId);
+    // No capped staff anti-join: the Worker executes an uncapped, authoritative
+    // global membership and conflict check using the same predicate as CAS.
     // The definitive global-membership and CAS predicate is checked by
     // the Worker in the same D1 database that will execute the write.
     const eligibility = await request('/api/admin/usuarios/' + candidate.userId +
