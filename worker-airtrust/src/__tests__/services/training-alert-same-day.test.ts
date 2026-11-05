@@ -56,6 +56,22 @@ describe('same-day training alert deduplication', () => {
     expect(history.wasSent(identity, 'EMAIL')).toBe(false);
   });
 
+  it('bloqueia intenção LMS pendente sem reenviar, mas não bloqueia falha final', () => {
+    const history = new SameDayTrainingAlerts([
+      { ...base, id: 'lms:prepared:EMAIL', status_envio: 'pendente' },
+      { ...base, id: 'lms:failed:WHATSAPP', status_envio: 'erro', tipo: 'WHATSAPP' },
+    ], '2026-11-05');
+    expect(history.wasSent(identity, 'EMAIL')).toBe(true);
+    expect(history.wasSent(identity, 'WHATSAPP')).toBe(false);
+  });
+
+  it('pending intention from the prior BRT day is not an all-day block', () => {
+    const history = new SameDayTrainingAlerts([
+      { ...base, status_envio: 'pendente', enviado_em: '2026-11-05 02:59:59' },
+    ], '2026-11-05');
+    expect(history.wasSent(identity, 'EMAIL')).toBe(false);
+  });
+
   it('falls back to the course identity for LMS courses with no qualification mapping', () => {
     const history = new SameDayTrainingAlerts([
       { ...base, qualificacao_tipo_id: null },
