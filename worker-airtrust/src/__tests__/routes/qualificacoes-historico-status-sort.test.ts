@@ -69,6 +69,7 @@ vi.mock('../../services/qualificacoes/historico-helpers', async () => {
 });
 
 import historicoRouter from '../../routes/qualificacoes/historico';
+import { buildVencimentoStatusPredicates } from '../../services/qualificacoes/historico-helpers';
 
 function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
@@ -155,6 +156,19 @@ function createMockDb() {
 }
 
 describe('qualificacoes historico status sort contract', () => {
+  it('usa exatamente os predicados BRT também nos contadores agregados', async () => {
+    const { db, calls } = createMockDb();
+    const response = await createApp(db).request('/historico?stats=true&limit=2&page=1');
+    expect(response.status).toBe(200);
+    const statsSql = calls.find((call) => call.method === 'first' && call.query.includes('as validas,') && call.query.includes('as vencidas,'))?.query || '';
+    expect(statsSql).not.toBe('');
+    expect(statsSql).not.toContain("julianday('now')");
+    const vencimentoExpr = "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
+    const predicates = buildVencimentoStatusPredicates(vencimentoExpr);
+    expect(statsSql).toContain(`AND ${predicates.valida} THEN 1 ELSE 0 END) as validas`);
+    expect(statsSql).toContain(`AND (${predicates.vencendo}) THEN 1 ELSE 0 END) as vencendo`);
+    expect(statsSql).toContain(`AND ${predicates.vencida} THEN 1 ELSE 0 END) as vencidas`);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     histCacheMock.cache = null;

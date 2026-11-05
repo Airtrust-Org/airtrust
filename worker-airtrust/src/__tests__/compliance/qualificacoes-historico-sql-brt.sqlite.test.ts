@@ -127,6 +127,24 @@ describe('filtros SQL do Histórico nas fronteiras de 21h–24h BRT (SQLite real
   });
 });
 
+describe('contadores agregados e filtros partilham a classificação por dia civil', () => {
+  it.each(FRONTEIRAS)('$label: soma dos grupos reproduz a classificação individual', ({ sqlInstant, today }) => {
+    const predicates = buildVencimentoStatusPredicates('q.venc', saoPauloTodaySqlAt(sqlInstant));
+    const counts = db.prepare(`SELECT
+      SUM(CASE WHEN ${predicates.valida} THEN 1 ELSE 0 END) AS validas,
+      SUM(CASE WHEN (${predicates.vencendo}) THEN 1 ELSE 0 END) AS vencendo,
+      SUM(CASE WHEN ${predicates.vencida} THEN 1 ELSE 0 END) AS vencidas
+      FROM q`).get() as { validas: number; vencendo: number; vencidas: number };
+    const expected = {
+      validas: VENCIMENTOS.filter((expiry) => rowStatus(expiry, today) === 'VALIDA').length,
+      vencendo: VENCIMENTOS.filter((expiry) => rowStatus(expiry, today) === 'VENCENDO_30').length,
+      vencidas: VENCIMENTOS.filter((expiry) => rowStatus(expiry, today) === 'VENCIDA').length,
+    };
+    expect(counts).toEqual(expected);
+    expect(counts.validas + counts.vencendo + counts.vencidas).toBe(VENCIMENTOS.length);
+  });
+});
+
 describe('ordenação por status/vencimento não usa mais date(\'now\') em UTC', () => {
   it.each(['status', 'data_vencimento', 'vencimento'])('ORDER BY %s', (orderBy) => {
     const clause = buildOrderByClause(orderBy, 'ASC');

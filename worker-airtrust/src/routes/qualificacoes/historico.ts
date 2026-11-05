@@ -472,12 +472,14 @@ export const getHistoricoListHandler = safe(async (c) => {
     const vencimentoExpr =
       "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
 
+    // Compartilhado por filtros e totais: usar uma só regra de vencimento em data civil BRT.
+    const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);
+
     if (selectedStatuses.length === 0) {
       conditions.push('qh.deleted_at IS NULL');
     } else {
       const statusConditions: string[] = [];
-      // Mesmo dia civil (São Paulo) do status derivado da linha: filtro e linha nunca divergem.
-      const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);
+      // O mesmo predicado já é usado nos totais agregados.
 
       for (const selectedStatus of selectedStatuses) {
         switch (selectedStatus) {
@@ -529,25 +531,12 @@ export const getHistoricoListHandler = safe(async (c) => {
     if (includeStats) {
       const statsQuery = `SELECT
         COUNT(*) as total,
-        SUM(CASE
-          WHEN ${operationalCurrentQualificationPredicate}
-           AND COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months')) IS NULL THEN 1
-          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) >= julianday('now')
-           AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) - julianday('now') > 30
-           AND ${operationalCurrentQualificationPredicate} THEN 1
-          ELSE 0
-        END) as validas,
-        SUM(CASE
-          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) - julianday('now') <= 30
-           AND julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) >= julianday('now')
-           AND ${operationalCurrentQualificationPredicate} THEN 1
-          ELSE 0
-        END) as vencendo,
-        SUM(CASE
-          WHEN julianday(COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))) < julianday('now')
-           AND ${operationalCurrentQualificationPredicate} THEN 1
-          ELSE 0
-        END) as vencidas,
+        SUM(CASE WHEN ${operationalCurrentQualificationPredicate}
+          AND ${vencimentoPredicates.valida} THEN 1 ELSE 0 END) as validas,
+        SUM(CASE WHEN ${operationalCurrentQualificationPredicate}
+          AND (${vencimentoPredicates.vencendo}) THEN 1 ELSE 0 END) as vencendo,
+        SUM(CASE WHEN ${operationalCurrentQualificationPredicate}
+          AND ${vencimentoPredicates.vencida} THEN 1 ELSE 0 END) as vencidas,
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
         SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
       ${baseFromAndJoins}
