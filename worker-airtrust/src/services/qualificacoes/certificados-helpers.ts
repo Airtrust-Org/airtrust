@@ -41,6 +41,7 @@ export interface HistoricoRow {
   data_conclusao: string | null;
   data_vencimento: string | null;
   certificado_arquivo_id: number | null;
+  numero_certificado: string | null;
   qualificacao_nome: string | null;
   codigo: string | null;
   qualificacao_is_check: number | null;
@@ -585,6 +586,7 @@ export async function resolveCertificadoContext(
         qh.data_conclusao,
         qh.data_vencimento,
         qh.certificado_arquivo_id,
+        qh.numero_certificado,
         qt.nome as qualificacao_nome,
         qt.codigo as codigo,
         COALESCE(qt.is_check, 0) as qualificacao_is_check,
