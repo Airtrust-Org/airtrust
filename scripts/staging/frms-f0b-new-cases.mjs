@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 // FRMS F0: additive synthetic staging-only cases, independent of the eight legacy QA rows.
 // Source: #1426 / #776, post-#1946 isolated SQL regression. No operational data imported.
+// source_reference: issues #1426/#776; PR #1946 actual buscarAlertas SQL contract.
+// operational_decision: staging tenant 999013, four NEW synthetic case/journey IDs only;
+//   never change the eight historical QA rows, production or FRMS business rules.
+// dry_run_required: default --inspect performs SELECT-only; --apply only from a
+//   SHA-pinned staging workflow after D1 target UUID and Time Travel preflight.
+// rollback_plan_required: --rollback deletes only untouched F0B QA rows after
+//   explicit recovery guard; never restores the entire shared staging D1.
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';

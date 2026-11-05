@@ -1,3 +1,9 @@
+// source_reference: issues #1426/#776; synthetic four-case F0B staging acceptance.
+// operational_decision: verify actual fixture SQL on disposable SQLite memory DB;
+//   preserve pre-existing eight legacy QA rows, tenant 999013 only.
+// dry_run_required: tests invoke buildApplySql() exclusively on in-memory DB.
+// rollback_plan_required: test buildRollbackSql() deletes only new synthetic
+//   records and confirms the legacy QA rows are unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
