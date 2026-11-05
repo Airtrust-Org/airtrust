@@ -27,6 +27,7 @@ export type PptxCoverage = {
   next_slide: number;
   ready_to_finalize: boolean;
   content_sha256: string;
+  asset_etag: string;
 };
 
 export function isActiveEnrollment(status: string): boolean {
@@ -57,7 +58,7 @@ async function authoritativePptxVersion(
   bucket: R2Bucket,
   empresaId: number,
   enrollment: PptxEnrollment,
-): Promise<{ contentSha256: string; totalSlides: number }> {
+): Promise<{ contentSha256: string; totalSlides: number; assetEtag: string }> {
   const totalSlides = Number(enrollment.pptx_slide_count);
   if (!Number.isSafeInteger(totalSlides) || totalSlides < 1 || totalSlides > MAX_SLIDES) {
     throw new ApiError('Contagem de slides não validada no catálogo do curso', 409, 'PPTX_SLIDE_COUNT_NOT_CONFIGURED');
@@ -71,7 +72,7 @@ async function authoritativePptxVersion(
   ].join(':'));
   const hash = await crypto.subtle.digest('SHA-256', input);
   const contentSha256 = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return { contentSha256, totalSlides };
+  return { contentSha256, totalSlides, assetEtag: object.etag };
 }
 
 async function requireEvidenceSchema(db: D1Database): Promise<void> {
@@ -86,6 +87,7 @@ async function readCoverage(
   enrollment: PptxEnrollment,
   contentSha256: string,
   totalSlides: number,
+  assetEtag: string,
 ): Promise<{ coverage: PptxCoverage; lastRecordedAt: string | null }> {
   const query = await db.prepare(
     `SELECT slide_index, server_received_at
@@ -111,6 +113,7 @@ async function readCoverage(
       next_slide: visitedIndexes.length,
       ready_to_finalize: visitedIndexes.length === totalSlides,
       content_sha256: contentSha256,
+      asset_etag: assetEtag,
     },
     lastRecordedAt: rows.length ? rows[rows.length - 1].server_received_at : null,
   };
@@ -133,8 +136,8 @@ export async function getPptxEvidenceState(
     throw new ApiError('Evidência qualificante não é exigida neste curso', 409, 'PPTX_EVIDENCE_NOT_REQUIRED');
   }
   await requireEvidenceSchema(db);
-  const { contentSha256, totalSlides } = await authoritativePptxVersion(bucket, empresaId, enrollment);
-  const { coverage, lastRecordedAt } = await readCoverage(db, empresaId, enrollment, contentSha256, totalSlides);
+  const { contentSha256, totalSlides, assetEtag } = await authoritativePptxVersion(bucket, empresaId, enrollment);
+  const { coverage, lastRecordedAt } = await readCoverage(db, empresaId, enrollment, contentSha256, totalSlides, assetEtag);
   return { enrollment, coverage, lastRecordedAt };
 }
 
