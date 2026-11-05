@@ -1,4 +1,5 @@
 import { employeeSectorSql, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
+import { normalizeSearchText } from '../utils/text-search';
 
 export type TrainingCommunication = {
   id: string;
@@ -33,6 +34,23 @@ export type TrainingCommunicationFilters = {
   limit: number;
   offset: number;
 };
+
+function accentInsensitiveSql(column: 'funcionario_nome' | 'qualificacao_nome'): string {
+  // SQLite LOWER/NOCASE não remove acentos portugueses. A busca antiga fazia isso
+  // em JavaScript; manter essa semântica antes da paginação SQL.
+  const pairs: Array<[string, string]> = [
+    ['á', 'a'], ['à', 'a'], ['â', 'a'], ['ã', 'a'], ['ä', 'a'],
+    ['é', 'e'], ['è', 'e'], ['ê', 'e'], ['ë', 'e'],
+    ['í', 'i'], ['ì', 'i'], ['î', 'i'], ['ï', 'i'],
+    ['ó', 'o'], ['ò', 'o'], ['ô', 'o'], ['õ', 'o'], ['ö', 'o'],
+    ['ú', 'u'], ['ù', 'u'], ['û', 'u'], ['ü', 'u'], ['ç', 'c'],
+  ];
+  let result = `COALESCE(${column}, '')`;
+  for (const [accent, plain] of pairs) {
+    result = `REPLACE(REPLACE(${result}, '${accent}', '${plain}'), '${accent.toUpperCase()}', '${plain}')`;
+  }
+  return `LOWER(${result})`;
+}
 
 export function maskTrainingContact(value: string | null): string | null {
   const raw = String(value || '').trim();
@@ -132,12 +150,12 @@ export async function listTrainingCommunications(
   const where: string[] = ['funcionario_id > 0'];
   const terms: unknown[] = [];
   if (filters.funcionario_q?.trim()) {
-    where.push('LOWER(funcionario_nome) LIKE ?');
-    terms.push(`%${filters.funcionario_q.trim().toLowerCase()}%`);
+    where.push(`${accentInsensitiveSql('funcionario_nome')} LIKE ?`);
+    terms.push(`%${normalizeSearchText(filters.funcionario_q)}%`);
   }
   if (filters.treinamento_q?.trim()) {
-    where.push('LOWER(COALESCE(qualificacao_nome, \'\')) LIKE ?');
-    terms.push(`%${filters.treinamento_q.trim().toLowerCase()}%`);
+    where.push(`${accentInsensitiveSql('qualificacao_nome')} LIKE ?`);
+    terms.push(`%${normalizeSearchText(filters.treinamento_q)}%`);
   }
   if (filters.canal) {
     where.push('UPPER(COALESCE(tipo, \'\')) LIKE ?');
