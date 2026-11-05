@@ -98,6 +98,7 @@ export async function sendMatriculaEmail(
     isNovoCiclo: boolean;
     modo?: MatriculaMessageMode;
     statusMatricula?: string | null;
+    onDestination?: (masked: string) => void;
   },
 ): Promise<MatriculaDeliveryStatus> {
   try {
@@ -117,6 +118,8 @@ export async function sendMatriculaEmail(
       });
       return 'SEM_EMAIL';
     }
+
+    params.onDestination?.(maskTrainingContact(funcionario.email) || '***');
 
     const cursoUrl =
       (await resolveTrainingAccessUrl(env, db, {
@@ -221,6 +224,7 @@ export async function sendMatriculaWhatsApp(
     cursoTitulo: string;
     dataExpiracao?: string | null;
     statusMatricula?: string | null;
+    onDestination?: (masked: string) => void;
   },
 ): Promise<MatriculaDeliveryStatus> {
   try {
@@ -240,6 +244,8 @@ export async function sendMatriculaWhatsApp(
       });
       return 'SEM_WHATSAPP';
     }
+
+    params.onDestination?.(maskTrainingContact(funcionario.telefone) || '***');
 
     const cursoUrl =
       (await resolveTrainingAccessUrl(env, db, {
@@ -462,6 +468,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     });
     const outcomes = await Promise.all(
       candidates.map(async ({ row, emailDuplicate, whatsappDuplicate }) => {
+        let actualEmailDestination: string | null = null;
+        let actualWhatsappDestination: string | null = null;
         const emailStatus = channels.email && !emailDuplicate
           ? await sendMatriculaEmail(c, c.env, db, {
               funcionarioId: Number(row.funcionario_id),
@@ -472,6 +480,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               isNovoCiclo: false,
               modo: mode,
               statusMatricula: row.status,
+              onDestination: (masked) => { actualEmailDestination = masked; },
             })
           : null;
         const whatsappStatus = channels.whatsapp && !whatsappDuplicate
@@ -482,6 +491,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               cursoTitulo: row.curso_titulo,
               dataExpiracao: row.data_expiracao,
               statusMatricula: row.status,
+              onDestination: (masked) => { actualWhatsappDestination = masked; },
             })
           : null;
 
@@ -496,10 +506,10 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               canais: channels,
               email_resultado: emailStatus,
               whatsapp_resultado: whatsappStatus,
-              email_destinatario_mascarado: emailStatus === 'ENVIADO'
-                ? maskTrainingContact(row.email) : null,
-              whatsapp_destinatario_mascarado: whatsappStatus === 'ENVIADO'
-                ? maskTrainingContact(row.telefone) : null,
+              email_destinatario_mascarado: emailStatus === 'ENVIADO' || emailStatus === 'FALHA'
+                ? actualEmailDestination : null,
+              whatsapp_destinatario_mascarado: whatsappStatus === 'ENVIADO' || whatsappStatus === 'FALHA'
+                ? actualWhatsappDestination : null,
               curso_id: row.curso_id,
               curso_titulo: row.curso_titulo,
               funcionario_id: row.funcionario_id,
