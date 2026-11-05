@@ -397,7 +397,7 @@ export function buildScormSessionCloseRuntimeScript(): string {
           var button = target && typeof target.closest === 'function'
             ? target.closest('#nextUnit') : null;
           if (!button || button.disabled) return;
-          var label = String(button.textContent || '').trim().replace(/\s+/g, ' ');
+          var label = String(button.textContent || '').trim().replace(/\\s+/g, ' ');
           var counter = doc.querySelector('.counter');
           if (label !== 'Concluir treinamento' ||
               !counter || String(counter.textContent || '').trim() !== '49/49') return;
