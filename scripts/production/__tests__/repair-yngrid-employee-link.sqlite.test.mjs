@@ -1,3 +1,7 @@
+// source_reference: worker-airtrust/src/services/usuario-funcionario-atomic-link.ts
+// operational_decision: local disposable SQLite fixture tests only; no remote database access.
+// dry_run_required: production write always requires separate approved dry-run and release gates.
+// rollback_plan_required: local test rolls back by closing in-memory database; production uses audited single-row CAS.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
