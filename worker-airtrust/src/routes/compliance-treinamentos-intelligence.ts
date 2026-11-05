@@ -530,7 +530,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const rawLimit = Number(c.req.query('limit') || 100);
     const rawOffset = Number(c.req.query('offset') || 0);
     const validDate = (value: string | undefined) =>
-      !value || /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+      !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
     const inicio = c.req.query('inicio');
     const fim = c.req.query('fim');
     if (!validDate(inicio) || !validDate(fim) || (inicio && fim && inicio > fim)) {
