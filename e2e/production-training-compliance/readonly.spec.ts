@@ -25,7 +25,25 @@ function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promi
 }
 
 async function payload(response: PlaywrightResponse) {
-  expect(response.ok(), `${response.url()} HTTP ${response.status()}`).toBeTruthy();
+  if (!response.ok()) {
+    // Only report a path, status, allowlisted error code and opaque correlation IDs.
+    // Response bodies/headers may contain credentials or employee data: never log them.
+    const headers = response.headers();
+    const isJson = /application\/json/i.test(headers['content-type'] || '');
+    const body = isJson ? await response.json().catch(() => null) : null;
+    const safeCode = typeof body?.code === 'string' && /^[A-Z0-9_]{1,90}$/.test(body.code)
+      ? body.code : 'NONE';
+    const candidateRequestId = String(body?.requestId || headers['x-request-id'] || '');
+    const requestId = /^[0-9a-z-]{1,80}$/i.test(candidateRequestId)
+      ? candidateRequestId : 'NONE';
+    const ray = /^[0-9a-z-]{1,80}$/i.test(headers['cf-ray'] || '')
+      ? headers['cf-ray'] : 'NONE';
+    const path = new URL(response.url()).pathname;
+    throw new Error(
+      `PRODUCTION_READONLY_API_FAILED path=${path} status=${response.status()} ` +
+      `json=${isJson} code=${safeCode} requestId=${requestId} cfRay=${ray}`,
+    );
+  }
   const json = await response.json();
   expect(json?.success).toBe(true);
   return json;
