@@ -111,6 +111,19 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
         }] }, viewport: { width: 1366, height: 768 },
       });
       const page = await context.newPage();
+      let pageException = false;
+      let assetHttp = 'NONE';
+      let enrollmentHttp = 'NONE';
+      page.on('pageerror', () => { pageException = true; });
+      page.on('response', (response) => {
+        const responsePath = new URL(response.url()).pathname;
+        if (responsePath.startsWith('/api/lms/pptx/asset/')) {
+          assetHttp = String(response.status());
+        }
+        if (responsePath.startsWith('/api/lms/matriculas/')) {
+          enrollmentHttp = String(response.status());
+        }
+      });
       await page.goto(`${PAGES}/lms/player/pptx/${matriculaId}`,
         { waitUntil: 'domcontentloaded', timeout: 45000 });
       try {
@@ -123,7 +136,11 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
         const courseUnavailable = await page.getByText(
           'Conteúdo PowerPoint não disponível para esta matrícula.').count() > 0;
         const loading = await page.getByText('Carregando apresentação...').count() > 0;
-        throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_1_UNAVAILABLE_PATH_${path}_AUTH_${authExpired ? 'EXPIRED' : 'OK'}_COURSE_${courseUnavailable ? 'UNAVAILABLE' : 'OK'}_LOADING_${loading ? 'YES' : 'NO'}`);
+        const playerError = await page.getByText(/Falha ao carregar apresenta|Falha ao carregar PPTX/).count() > 0;
+        const boundary = await page.getByText('Algo deu errado').count() > 0;
+        const concluded = await page.getByText('Status: concluído').count() > 0;
+        // Absence of an error message is NOT affirmative proof of authorization.
+        throw new Error(`PPTX_QA_${name}_SLIDE_MISSING_${path}_SESSION_ERR${Number(authExpired)}_COURSE_ERR${Number(courseUnavailable)}_LOADING${Number(loading)}_PLAYER_ERR${Number(playerError)}_BOUNDARY${Number(boundary)}_JS_ERR${Number(pageException)}_DONE${Number(concluded)}_ASSET${assetHttp}_ENROLL${enrollmentHttp}`);
       }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
