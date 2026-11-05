@@ -59,6 +59,21 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/ci/verify-release-gates.mjs
+      - name: Require exact LIVE Worker and Pages SHA before any D1 QA seed
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const sha = process.env.RELEASE_SHA;
+          const version = await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version');
+          if (!version.ok) throw new Error('PPTX_STAGING_WORKER_VERSION_UNAVAILABLE');
+          const body = await version.json();
+          if (body?.data?.sourceSha !== sha) throw new Error('PPTX_STAGING_WORKER_SHA_MISMATCH');
+          const { assertLiveFrontendShaFromOrigin } = await import('./e2e/lib/live-sha-guard.mjs');
+          await assertLiveFrontendShaFromOrigin('https://staging.airtrust.pages.dev', sha.slice(0, 7));
+          console.log('PPTX_STAGING_RUNTIME_SHA_READY');
+          NODE
 
   d1-synthetic-identity:
     name: Staging D1 synthetic LMS QA identity provision
