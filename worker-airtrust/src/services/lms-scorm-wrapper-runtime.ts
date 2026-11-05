@@ -393,7 +393,7 @@ export function buildScormSessionCloseRuntimeScript(): string {
         var button = target && typeof target.closest === 'function'
           ? target.closest('#next') : null;
         if (!button || button.disabled) return;
-        var label = String(button.textContent || '').trim().replace(/\s+/g, ' ');
+        var label = String(button.textContent || '').trim().replace(/\\s+/g, ' ');
         var isEnd = last.kind === 'study_end' && label === 'Confirmar encerramento do estudo';
         var isAssessmentEnd = last.kind === 'assessment' && label === 'Concluir curso';
         if (!isEnd && !isAssessmentEnd) return;
