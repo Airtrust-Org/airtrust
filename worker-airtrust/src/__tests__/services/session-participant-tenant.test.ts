@@ -87,7 +87,7 @@ describe('simulator session participant tenant guard', () => {
   it('is called before the first session UPDATE in the real route', () => {
     const source = readFileSync(new URL('../../routes/simuladores-sessoes-update.ts', import.meta.url), 'utf8');
     const validation = source.indexOf('await validateSessionParticipantTenant(c.env.DB, empresaId, b.participantes)');
-    const firstMutation = source.indexOf('await c.env.DB.prepare(\n        "UPDATE simulador_agendamentos');
+    const firstMutation = source.indexOf('UPDATE simulador_agendamentos SET examinador_id');
     expect(validation).toBeGreaterThan(0);
     expect(firstMutation).toBeGreaterThan(validation);
   });
