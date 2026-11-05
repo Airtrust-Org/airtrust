@@ -149,6 +149,7 @@ async function post(body: object, path = '/convites/lote') {
 describe('LMS matrícula alerts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
     sendWhatsAppMessageMock.mockResolvedValue({ sid: 'SM123' });
     historyRows.length = 0;
@@ -181,7 +182,7 @@ describe('LMS matrícula alerts', () => {
     expect(json.data.processados).toBe(2);
     expect(json.data.email_enviados).toBe(2);
     expect(json.data.whatsapp_enviados).toBe(2);
-    expect(logAuditMock).toHaveBeenCalledTimes(2);
+    expect(logAuditMock).toHaveBeenCalledTimes(4);
     expect(logAuditMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ action: 'LMS_MATRICULA_ALERTA' }),
@@ -244,6 +245,36 @@ describe('LMS matrícula alerts', () => {
     } finally {
       enrollmentRows[0].qualificacao_tipo_id = null;
     }
+  });
+
+  it('não dispara provedor quando a intenção não pôde ser registrada no D1', async () => {
+    logAuditMock.mockRejectedValue(new Error('D1 indisponível'));
+    const { response } = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: true },
+    });
+    const json = (await response.json()) as { success: boolean; data: Record<string, number> };
+    expect(json.success).toBe(false);
+    expect(json.data.auditoria_preparo_falhas).toBe(1);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendWhatsAppMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('não confirma trilha completa se o provedor aceitou, mas o audit final falhou', async () => {
+    logAuditMock.mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('D1 falhou após o provedor'));
+    const { response } = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: false },
+    });
+    const json = (await response.json()) as { success: boolean; error: string; data: Record<string, number> };
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('consulte o histórico');
+    expect(json.data.email_enviados).toBe(1);
+    expect(json.data.auditoria_resultado_pendente).toBe(1);
+    expect(logAuditMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      action: 'LMS_MATRICULA_ALERTA_PREPARADO',
+      newValues: expect.objectContaining({ email_resultado: 'PENDENTE' }),
+    }));
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 
   it('recusa alerta sem canal selecionado', async () => {

@@ -27,7 +27,7 @@ export type TrainingCommunicationFilters = {
   treinamento_q?: string;
   canal?: 'EMAIL' | 'WHATSAPP';
   origem?: TrainingCommunication['origem'];
-  resultado?: 'enviada' | 'erro' | 'sem_contato';
+  resultado?: 'enviada' | 'erro' | 'sem_contato' | 'pendente';
   inicio?: string;
   fim?: string;
   setor_id?: number;
@@ -129,11 +129,12 @@ export async function listTrainingCommunications(
              CASE json_extract(a.new_values, channel.result_path)
                WHEN 'ENVIADO' THEN 'enviada'
                WHEN 'FALHA' THEN 'erro'
+               WHEN 'PENDENTE' THEN 'pendente'
                WHEN 'SEM_EMAIL' THEN 'sem_contato'
                WHEN 'SEM_WHATSAPP' THEN 'sem_contato'
                ELSE 'desconhecido' END AS status_envio,
              NULL AS erro, a.created_at AS enviado_em, 0 AS gestor,
-             CASE WHEN a.action = 'LMS_MATRICULA_ALERTA' THEN 'LMS_ALERTA'
+             CASE WHEN a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_ALERTA_PREPARADO') THEN 'LMS_ALERTA'
                   ELSE 'LMS_CONVITE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
         FROM audit_logs a
@@ -147,7 +148,19 @@ export async function listTrainingCommunications(
           UNION ALL SELECT 'WHATSAPP', '$.whatsapp_resultado'
         ) channel ON json_extract(a.new_values, channel.result_path) IS NOT NULL
        WHERE a.empresa_id = ?
-         AND a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL')
+         AND a.action IN (
+           'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
+           'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO'
+         )
+         AND (a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
+           SELECT 1 FROM audit_logs done
+           WHERE done.empresa_id = a.empresa_id
+             AND done.action = REPLACE(a.action, '_PREPARADO', '')
+             AND done.entity_type = a.entity_type
+             AND json_valid(done.new_values) = 1
+             AND json_extract(done.new_values, '$.tentativa_id') =
+                 json_extract(a.new_values, '$.tentativa_id')
+         ))
          AND a.entity_type = 'lms_matriculas'
          AND json_valid(a.new_values) = 1
          AND ${scope.clause}`);
