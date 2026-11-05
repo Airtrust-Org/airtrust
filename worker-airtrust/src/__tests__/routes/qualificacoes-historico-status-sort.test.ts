@@ -181,6 +181,21 @@ describe('qualificacoes historico status sort contract', () => {
     });
   });
 
+  it.each([
+    '/historico/stats',
+    '/historico/stats-extended?extended=true',
+  ])('%s: totalizadores e categorias não usam vencimento por instante UTC', async (endpoint) => {
+    const { db, calls } = createMockDb();
+    const response = await createApp(db).request(endpoint);
+    expect(response.status).toBe(200);
+    const countQueries = calls.filter((call) => call.query.includes('as validas') && call.query.includes('as vencidas'));
+    expect(countQueries.length).toBeGreaterThan(0);
+    for (const call of countQueries) {
+      expect(call.query).not.toContain("julianday('now')");
+      expect(call.query).toContain("date('now','-3 hours')");
+    }
+  });
+
   it('usa rank server-side para status e preserva filtro planejada com paginação', async () => {
     const { db, calls } = createMockDb();
     const app = createApp(db);

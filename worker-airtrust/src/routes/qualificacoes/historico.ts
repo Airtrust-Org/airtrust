@@ -868,23 +868,24 @@ router.get(
     const statsExtraClause =
       statsConditions.length > 0 ? ` AND ${statsConditions.join(' AND ')}` : '';
 
+    const datePredicates = buildVencimentoStatusPredicates('date(qh.data_vencimento)');
     const statsResult = await db
       .prepare(
         `SELECT
         COUNT(*) as total,
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1
+          WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1
           ELSE 0
         END) as validas,
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1
+          WHEN (${datePredicates.vencendo}) THEN 1
           ELSE 0
         END) as vencendo,
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
-          WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1
+          WHEN ${datePredicates.vencida} THEN 1
           ELSE 0
         END) as vencidas,
         SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas
@@ -986,6 +987,7 @@ router.get(
       qualificacaoId,
     });
     const now = Date.now();
+    const datePredicates = buildVencimentoStatusPredicates('date(qh.data_vencimento)');
 
     let stats: {
       total: number;
@@ -1008,9 +1010,9 @@ router.get(
     } else {
       const statsQuery = `SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) >= julianday('now') AND julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) as validas,
-            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) as vencendo,
-            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) as vencidas,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) as validas,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) as vencendo,
+            SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN ${datePredicates.vencida} THEN 1 ELSE 0 END) as vencidas,
             SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
             SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
           ${baseFromAndJoins}
@@ -1028,7 +1030,7 @@ router.get(
         };
 
         if (materialized) {
-          const day = new Date().toISOString().substring(0, 10);
+          const day = getTodayIsoSaoPaulo();
           const statsResult = await db
             .prepare(statsQuery)
             .bind(...bindings)
@@ -1111,9 +1113,9 @@ router.get(
       try {
         const extQuery = `SELECT qt.categoria AS categoria,
                   COUNT(*) AS total,
-                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) < julianday('now') THEN 1 ELSE 0 END) AS vencidas,
-                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') <= 30 AND julianday(qh.data_vencimento) >= julianday('now') THEN 1 ELSE 0 END) AS vencendo,
-                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN julianday(qh.data_vencimento) - julianday('now') > 30 THEN 1 ELSE 0 END) AS validas
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN ${datePredicates.vencida} THEN 1 ELSE 0 END) AS vencidas,
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) AS vencendo,
+                  SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) AS validas
              ${baseFromAndJoins}
              WHERE ${whereClause}
              GROUP BY qt.categoria
