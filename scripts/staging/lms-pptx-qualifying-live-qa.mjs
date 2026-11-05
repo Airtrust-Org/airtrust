@@ -154,14 +154,37 @@ async function main() {
     const categories = requireOk(await request(admin.token, '/api/categorias'),
       200, 'qualification categories');
     assert(Array.isArray(categories), 'PPTX_QA_CATEGORIES_INVALID');
-    const ead = categories.filter((entry) =>
-      String(entry.nome).trim().toUpperCase() === 'EAD' && entry.ativo === true);
-    assert(ead.length <= 1, 'PPTX_QA_CANONICAL_EAD_AMBIGUOUS');
-    const categoryId = ead.length === 1
-      ? requireId(ead[0].id, 'QA EAD category')
-      : requireId(requireOk(await request(admin.token, '/api/categorias', 'POST',
-        { nome: 'EAD', codigo: 'EAD', descricao: 'Categoria de testes staging LMS',
-          dominio_codigo: 'OPERACOES', ativo: true }), 201, 'QA EAD category').id, 'QA EAD category');
+    // The qualification contract is keyed by lms_integrada, not the display
+    // name "EAD". Reuse the tenant's unique canonical LMS category; never
+    // create a second active integrated category or relax course validation.
+    const integrated = categories.filter((entry) =>
+      entry.ativo === true && entry.lms_integrada === true);
+    assert(integrated.length <= 1, 'PPTX_QA_INTEGRATED_CATEGORY_AMBIGUOUS');
+    let categoryId;
+    if (integrated.length === 1) {
+      categoryId = requireId(integrated[0].id, 'QA integrated LMS category');
+    } else {
+      const ead = categories.filter((entry) =>
+        String(entry.codigo).trim().toUpperCase() === 'EAD' && entry.ativo === true);
+      assert(ead.length <= 1, 'PPTX_QA_CANONICAL_EAD_AMBIGUOUS');
+      if (ead.length === 1) {
+        categoryId = requireId(ead[0].id, 'QA EAD category');
+        requireOk(await request(admin.token, `/api/categorias/${categoryId}`, 'PUT',
+          { lms_integrada: true }), 200, 'QA EAD category integration');
+      } else {
+        categoryId = requireId(requireOk(await request(admin.token, '/api/categorias', 'POST',
+          { nome: 'EAD', codigo: 'EAD', descricao: 'Categoria de testes staging LMS',
+            dominio_codigo: 'OPERACOES', lms_integrada: true, ativo: true }),
+          201, 'QA integrated EAD category').id, 'QA integrated EAD category');
+      }
+    }
+    const categoryReadback = requireOk(await request(admin.token, '/api/categorias'),
+      200, 'QA category integration readback');
+    assert(Array.isArray(categoryReadback) &&
+      categoryReadback.filter((entry) => entry.ativo === true && entry.lms_integrada === true).length === 1 &&
+      categoryReadback.some((entry) => Number(entry.id) === categoryId &&
+        entry.ativo === true && entry.lms_integrada === true),
+    'PPTX_QA_LMS_CATEGORY_NOT_INTEGRATED');
 
     // A qualifying PPTX must reference a real, current tenant EAD qualification
     // model. Creating an EAD course with gerar_qualificacao=1 but no type ID
