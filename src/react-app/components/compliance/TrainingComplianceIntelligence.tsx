@@ -182,6 +182,10 @@ export function TrainingComplianceIntelligence({
     setCommunicationFilters((current) => ({ ...current, [field]: value }));
     setCommunicationPage(0);
   };
+  // Busca, setor e função vêm da página pai: também devem reiniciar a paginação.
+  useEffect(() => {
+    setCommunicationPage(0);
+  }, [search, setorId, funcaoId]);
 
   const params = new URLSearchParams();
   if (setorId) params.set('setor_id', String(setorId));
