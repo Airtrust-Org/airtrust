@@ -88,6 +88,19 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a foreign employee before any session or ficha write', async () => {
+    const res = await app.request('/sessoes/1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantes: [{ funcionario_id: 201, funcao: 'PIC' }] }),
+    }, { DB: { prepare: prepareSpy } as any } as Env);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ success: false });
+    const writes = prepareSpy.mock.calls.filter(([sql]: [string]) => /^\s*(UPDATE|INSERT|DELETE)\b/i.test(sql));
+    expect(writes).toHaveLength(0);
+  });
+
   it('characterizes query count for PUT /sessoes/:id with participants', async () => {
     // 5 participants
     const participantes = Array.from({ length: 5 }).map((_, i) => ({
