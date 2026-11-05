@@ -27,7 +27,7 @@ const mock=[
   '};'
 ].join('\n');
 fs.copyFileSync(core,path.join(dir,'engine.js'));
-fs.writeFileSync(path.join(dir,'index.html'),'<html><body>'+html+'<script>'+mock+'</script><script src="engine.js"></script></body></html>');
+fs.writeFileSync(path.join(dir,'index.html'),'<html><head><meta charset="utf-8"></head><body>'+html+'<script>'+mock+'</script><script src="engine.js"></script></body></html>');
 const url=pathToFileURL(path.join(dir,'index.html')).href;
 async function run(engine,label){
   const browser=await engine.launch({headless:true}),context=await browser.newContext();
