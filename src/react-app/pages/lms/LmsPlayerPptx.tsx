@@ -29,19 +29,22 @@ type PptxEvidence = {
   visited_indexes: number[];
   next_slide: number;
   ready_to_finalize: boolean;
+  asset_etag: string;
 };
 
-async function requestPptxEvidence(id: number, slideIndex?: number): Promise<PptxEvidence> {
+async function requestPptxEvidence(id: number, slideIndex?: number, assetEtag?: string): Promise<PptxEvidence> {
   const response = await fetchWithAuth(`/api/lms/matriculas/${id}/pptx-evidence`, slideIndex == null
     ? {}
     : { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slide_index: slideIndex }) });
+        body: JSON.stringify({ slide_index: slideIndex, asset_etag: assetEtag }) });
   const body = await response.json().catch(() => null) as
     { success?: boolean; code?: string; data?: PptxEvidence } | null;
   if (!response.ok || body?.success !== true || !body.data) {
     throw new Error(body?.code === 'PPTX_SLIDE_INTERVAL_REQUIRED'
       ? 'PPTX_SLIDE_INTERVAL_REQUIRED'
-      : 'Não foi possível registrar a leitura no servidor.');
+      : body?.code === 'PPTX_ASSET_VERSION_MISMATCH'
+        ? 'PPTX_ASSET_VERSION_MISMATCH'
+        : 'Não foi possível registrar a leitura no servidor.');
   }
   return body.data;
 }
@@ -66,6 +69,9 @@ export default function LmsPlayerPptx() {
   const [maxReached, setMaxReached] = useState(0);
   const [visitedSlideIndexes, setVisitedSlideIndexes] = useState<number[]>([]);
   const [serverEvidence, setServerEvidence] = useState<PptxEvidence | null>(null);
+  const [loadedAssetEtag, setLoadedAssetEtag] = useState<string | null>(null);
+  const [assetReload, setAssetReload] = useState(0);
+  const [assetVersionStale, setAssetVersionStale] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [evidenceRetry, setEvidenceRetry] = useState(0);
   const [completed, setCompleted] = useState(false);
@@ -94,13 +100,15 @@ export default function LmsPlayerPptx() {
     async (cursoId: number) => {
       const resp = await fetchLmsCourseAsset('pptx', cursoId);
       if (!resp.ok) throw new Error(`Falha ao carregar apresentação (${resp.status})`);
+      const assetEtag = resp.headers.get('ETag')?.trim().replace(/^"|"$/g, '') ?? null;
       const arrayBuffer = await resp.arrayBuffer();
-      return pptxToHtml(arrayBuffer, {
+      const rendered = await pptxToHtml(arrayBuffer, {
         width: 1280,
         height: 720,
         scaleToFit: true,
         letterbox: true,
       });
+      return { rendered, assetEtag };
     },
     [], // Asset transport refreshes its own credentials; token rotation must not reparse the entire PPTX.
   );
@@ -115,7 +123,9 @@ export default function LmsPlayerPptx() {
         setLoadingPptx(true);
         setLoadError(null);
         setSlides(null);
+        setLoadedAssetEtag(null);
         setServerEvidence(null);
+        setAssetVersionStale(false);
         setEvidenceError(null);
         setIframeLoaded(false);
         positionRestored.current = false;
@@ -129,9 +139,10 @@ export default function LmsPlayerPptx() {
             // Office viewer unavailable — that's fine, preview link won't show
           });
 
-        const parsed = await loadRenderedSlides(activeCursoId);
+        const result = await loadRenderedSlides(activeCursoId);
         if (!cancelled) {
-          setSlides(parsed.map(sanitizePptxSlideHtml));
+          setLoadedAssetEtag(result.assetEtag);
+          setSlides(result.rendered.map(sanitizePptxSlideHtml));
         }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Falha ao carregar PPTX');
@@ -144,16 +155,22 @@ export default function LmsPlayerPptx() {
     return () => {
       cancelled = true;
     };
-  }, [loadRenderedSlides, matricula?.curso_id]);
+  }, [loadRenderedSlides, matricula?.curso_id, assetReload]);
 
   // The qualifying enrollment resumes from persisted server evidence only.
   useEffect(() => {
     if (!slides || !qualifyingPptx || alreadyConcluded) return;
+    if (!loadedAssetEtag) {
+      setAssetVersionStale(true);
+      setEvidenceError('Não foi possível verificar a versão do arquivo. Recarregue a apresentação.');
+      return;
+    }
     let cancelled = false;
     void requestPptxEvidence(id).then((coverage) => {
       if (cancelled) return;
-      if (coverage.total_slides !== slides.length) {
-        setEvidenceError('A contagem de slides não coincide com a edição publicada.');
+      if (coverage.total_slides !== slides.length || coverage.asset_etag !== loadedAssetEtag) {
+        setAssetVersionStale(true);
+        setEvidenceError('A apresentação foi atualizada. Recarregue os slides para continuar.');
         return;
       }
       setServerEvidence(coverage);
@@ -165,7 +182,7 @@ export default function LmsPlayerPptx() {
       if (!cancelled) setEvidenceError('Não foi possível carregar a evidência de leitura.');
     });
     return () => { cancelled = true; };
-  }, [slides, qualifyingPptx, alreadyConcluded, id, evidenceRetry]);
+  }, [slides, qualifyingPptx, alreadyConcluded, id, evidenceRetry, loadedAssetEtag]);
 
   // Unqualified courses retain legacy client-position restoration.
   useEffect(() => {
@@ -229,7 +246,12 @@ export default function LmsPlayerPptx() {
   // Server persistence is required for each slide; the browser marker never
   // authorizes a qualifying completion. Only submit a visible slide after dwell.
   useEffect(() => {
-    if (!slides || !qualifyingPptx || !serverEvidence || alreadyConcluded) return;
+    if (!slides || !qualifyingPptx || !serverEvidence || alreadyConcluded || assetVersionStale) return;
+    if (!loadedAssetEtag || serverEvidence.asset_etag !== loadedAssetEtag) {
+      setAssetVersionStale(true);
+      setEvidenceError('A versão da apresentação mudou. Recarregue o arquivo.');
+      return;
+    }
     if (document.visibilityState === 'hidden' ||
         currentSlide !== serverEvidence.next_slide ||
         serverEvidence.total_slides !== slides.length) return;
@@ -238,14 +260,22 @@ export default function LmsPlayerPptx() {
     const submit = async (attempt: number) => {
       if (cancelled || document.visibilityState === 'hidden') return;
       try {
-        const coverage = await requestPptxEvidence(id, currentSlide);
+        const coverage = await requestPptxEvidence(id, currentSlide, loadedAssetEtag);
         if (!cancelled) {
-          setServerEvidence(coverage);
-          setEvidenceError(null);
+          if (coverage.asset_etag !== loadedAssetEtag) {
+            setAssetVersionStale(true);
+            setEvidenceError('A apresentação foi substituída. Recarregue os slides.');
+          } else {
+            setServerEvidence(coverage);
+            setEvidenceError(null);
+          }
         }
       } catch (error) {
         if (cancelled) return;
-        if (error instanceof Error && error.message === 'PPTX_SLIDE_INTERVAL_REQUIRED' && attempt < 2) {
+        if (error instanceof Error && error.message === 'PPTX_ASSET_VERSION_MISMATCH') {
+          setAssetVersionStale(true);
+          setEvidenceError('A apresentação foi atualizada. Recarregue o arquivo.');
+        } else if (error instanceof Error && error.message === 'PPTX_SLIDE_INTERVAL_REQUIRED' && attempt < 2) {
           retryTimer = setTimeout(() => { void submit(attempt + 1); }, 1800);
         } else {
           setEvidenceError('A leitura deste slide não foi registrada. Use Tentar novamente.');
@@ -258,7 +288,8 @@ export default function LmsPlayerPptx() {
       clearTimeout(dwellTimer);
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [slides, qualifyingPptx, serverEvidence, currentSlide, alreadyConcluded, id, evidenceRetry]);
+  }, [slides, qualifyingPptx, serverEvidence, currentSlide, alreadyConcluded, id, evidenceRetry,
+      loadedAssetEtag, assetVersionStale]);
 
   useEffect(() => {
     if (!qualifyingPptx) return;
@@ -321,7 +352,7 @@ export default function LmsPlayerPptx() {
     (index: number) => {
       if (!slides) return;
       const clamped = Math.max(0, Math.min(index, slides.length - 1));
-      if (qualifyingPptx && (!serverEvidence || clamped > serverEvidence.next_slide)) return;
+      if (qualifyingPptx && !alreadyConcluded && (!serverEvidence || clamped > serverEvidence.next_slide)) return;
       setCurrentSlide(clamped);
       setMaxReached((prev) => Math.max(prev, clamped));
       if (!qualifyingPptx) {
@@ -330,7 +361,7 @@ export default function LmsPlayerPptx() {
       }
       saveProgress(clamped, slides.length);
     },
-    [slides, saveProgress, qualifyingPptx, serverEvidence],
+    [slides, saveProgress, qualifyingPptx, serverEvidence, alreadyConcluded],
   );
 
   const handleConclude = useCallback(() => {
@@ -491,7 +522,11 @@ export default function LmsPlayerPptx() {
           <div role="alert" className="mx-auto mb-4 flex max-w-2xl items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-950/40 p-4 text-sm text-amber-100">
             <span>{evidenceError}</span>
             <button type="button" className="rounded-lg bg-amber-600 px-3 py-2 text-white"
-              onClick={() => { setEvidenceError(null); setEvidenceRetry((n) => n + 1); }}>
+              onClick={() => {
+                setEvidenceError(null);
+                if (assetVersionStale) setAssetReload((n) => n + 1);
+                else setEvidenceRetry((n) => n + 1);
+              }}>
               Tentar novamente
             </button>
           </div>
@@ -594,7 +629,7 @@ export default function LmsPlayerPptx() {
                 {slides.map((_, idx) => (
                   <button
                     key={idx}
-                    disabled={qualifyingPptx && (!serverEvidence || idx > serverEvidence.next_slide)}
+                    disabled={qualifyingPptx && !alreadyConcluded && (!serverEvidence || idx > serverEvidence.next_slide)}
                     onClick={() => goToSlide(idx)}
                     className={`rounded-full transition-all ${
                       idx === currentSlide
@@ -610,7 +645,7 @@ export default function LmsPlayerPptx() {
 
               <button
                 disabled={currentSlide >= slides.length - 1 ||
-                  (qualifyingPptx && (!serverEvidence || currentSlide >= serverEvidence.next_slide))}
+                  (qualifyingPptx && !alreadyConcluded && (!serverEvidence || currentSlide >= serverEvidence.next_slide))}
                 onClick={() => goToSlide(currentSlide + 1)}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30 sm:w-auto"
               >
