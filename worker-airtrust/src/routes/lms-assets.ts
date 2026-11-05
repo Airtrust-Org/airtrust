@@ -34,7 +34,7 @@ import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { buildScormLaunchState, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
 import { readActiveScormHandoff } from '../services/lms-scorm-active-handoff-read';
 import { readActiveCompletionManifest } from '../services/lms-completion-manifest-evidence';
-import { projectS76Rc3AdministrativeResume } from '../services/lms-scorm-s76-rc3-resume-bridge';
+import { projectS76Rc3AdministrativeResume, S76_RC3_IMMUTABLE_SHA256 } from '../services/lms-scorm-s76-rc3-resume-bridge';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1170,47 +1170,46 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
 
-  // Emergency compatibility for one immutable, verified S-76 RC3 handoff.
-  // The ACTIVE SCO understands V2 only, while the authorized administrative
-  // navigation credit is V4. Project the same 48/49 indexes for THIS launch,
-  // never writing D1, granting score or marking an enrollment completed.
-  if (empresaId === 6 && matricula.curso_id === 39 && matricula.id === 690 &&
+  // Recognize the RC3 native final button only when the immutable package
+  // SHA is ACTIVE for this tenant/course (never from package-provided text).
+  let s76Rc3Active = false;
+  if (empresaId === 6 && matricula.curso_id === 39 &&
+      matricula.scorm_package_r2_prefix) {
+    const active = await db.prepare(`
+      SELECT package_sha256 AS sha FROM lms_scorm_package_versions
+      WHERE empresa_id=? AND curso_id=? AND r2_prefix=?
+        AND status='ACTIVE' LIMIT 1
+    `).bind(empresaId,matricula.curso_id,matricula.scorm_package_r2_prefix)
+      .first<{sha:string}>();
+    s76Rc3Active = active?.sha === S76_RC3_IMMUTABLE_SHA256;
+  }
+
+  // Project the same 48/49 administrative indexes only for verified handoff
+  // #30. This changes launch CMI in memory, never the underlying D1 row.
+  if (s76Rc3Active && matricula.id === 690 &&
       ciclo.id === 889 && verifiedHandoff?.id === 30 &&
       matricula.status === 'EM_ANDAMENTO' &&
       matricula.qualificacao_historico_id === null &&
       matricula.scorm_assessment_policy === 'FORMATIVE' &&
       matricula.scorm_package_r2_prefix) {
-    const matchingActive = await db.prepare(`
-      SELECT p.package_sha256 AS sha FROM lms_scorm_package_versions p
-      JOIN lms_scorm_edition_handoffs h ON h.empresa_id=p.empresa_id
-        AND h.curso_id=p.curso_id AND h.target_package_sha256=p.package_sha256
-        AND h.target_package_prefix=p.r2_prefix
-      WHERE p.empresa_id=? AND p.curso_id=? AND p.r2_prefix=?
-        AND p.status='ACTIVE' AND h.id=? AND h.matricula_id=?
-        AND h.ciclo_id=? LIMIT 1
-    `).bind(empresaId,matricula.curso_id,matricula.scorm_package_r2_prefix,
-      verifiedHandoff.id,matricula.id,ciclo.id)
-      .first<{sha:string}>();
-    if (matchingActive) {
-      const manifest = await readActiveCompletionManifest({
-        bucket:c.env.BUCKET,empresaId,cursoId:matricula.curso_id,
-        activePrefix:matricula.scorm_package_r2_prefix,
-      });
-      const projection = projectS76Rc3AdministrativeResume({
-        empresaId,cursoId:matricula.curso_id,matriculaId:matricula.id,
-        cicloId:ciclo.id,handoffId:verifiedHandoff.id,
-        handoffPreviousProgressPct:verifiedHandoff.previousProgressPct,
-        handoffBookmark:verifiedHandoff.bookmark,
-        activePackageSha256:matchingActive.sha,
-        assessmentPolicy:matricula.scorm_assessment_policy,
-        enrollmentStatus:matricula.status,
-        qualificationHistoryId:matricula.qualificacao_historico_id,
-        manifest,initialCmiJson,
-      });
-      if (projection !== null) {
-        initialCmiJson = projection;
-        hasResumeState = true;
-      }
+    const manifest = await readActiveCompletionManifest({
+      bucket:c.env.BUCKET,empresaId,cursoId:matricula.curso_id,
+      activePrefix:matricula.scorm_package_r2_prefix,
+    });
+    const projection = projectS76Rc3AdministrativeResume({
+      empresaId,cursoId:matricula.curso_id,matriculaId:matricula.id,
+      cicloId:ciclo.id,handoffId:verifiedHandoff.id,
+      handoffPreviousProgressPct:verifiedHandoff.previousProgressPct,
+      handoffBookmark:verifiedHandoff.bookmark,
+      activePackageSha256:S76_RC3_IMMUTABLE_SHA256,
+      assessmentPolicy:matricula.scorm_assessment_policy,
+      enrollmentStatus:matricula.status,
+      qualificationHistoryId:matricula.qualificacao_historico_id,
+      manifest,initialCmiJson,
+    });
+    if (projection !== null) {
+      initialCmiJson = projection;
+      hasResumeState = true;
     }
   }
 
@@ -1228,6 +1227,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
     reviewMode: matricula.status === 'CONCLUIDO',
+    legacyS76Rc3FinalButton: s76Rc3Active,
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
@@ -1324,6 +1324,7 @@ interface LaunchPageConfig {
   previewMode?: boolean;
   assetCacheBuster?: string;
   reviewMode?: boolean;
+  legacyS76Rc3FinalButton?: boolean;
 }
 
 export function buildLaunchPage(cfg: LaunchPageConfig): string {
@@ -1341,6 +1342,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     previewMode,
     assetCacheBuster,
     reviewMode,
+    legacyS76Rc3FinalButton = false,
   } = cfg;
 
   const launchUrlWithCacheBuster = assetCacheBuster
@@ -1448,6 +1450,7 @@ ${buildScormLocationHelpersScript()}
   var IS_2004 = ${isScorm2004 ? 'true' : 'false'};
   var PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
   var REVIEW_MODE = ${reviewMode ? 'true' : 'false'};
+  var S76_LEGACY_RC3_FINAL = ${legacyS76Rc3FinalButton ? 'true' : 'false'};
   var cmi = (function() {
     try {
       var parsed = JSON.parse(${JSON.stringify(initialCmiJson)});
