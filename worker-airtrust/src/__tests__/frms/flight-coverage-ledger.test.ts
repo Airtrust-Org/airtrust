@@ -23,7 +23,7 @@ function summary(overrides: Record<string, unknown> = {}): SigvoosSyncSummary {
       tripulante_id: '17', erros: 0,
     }],
     controleVoosImport: {
-      status: 'OK', rawRecords: 1,
+      status: 'OK', sourceMaterialized: true, rawRecords: 1,
       createdFlights: 1, createdEtapas: 1, createdTripulantes: 1,
       reusedRecords: 0, conflictRecords: 0, failedPayloads: 0,
     },
@@ -71,10 +71,13 @@ describe('FRMS SIGVOOS/CV closed-day coverage ledger', () => {
       totalRegistrosBrutos: 0, totalRegistrosNormalizados: 0,
       importacoes: [],
       controleVoosImport: {
-        status: 'OK', rawRecords: 0, createdFlights: 0, createdEtapas: 0,
+        status: 'OK', sourceMaterialized: true, rawRecords: 0, createdFlights: 0, createdEtapas: 0,
         createdTripulantes: 0, reusedRecords: 0, conflictRecords: 0, failedPayloads: 0,
       },
     }))).toBe(true); // zero from complete external API is valid evidence
+    expect(isVerifiedCvSigvoosSync(summary({
+      controleVoosImport: { ...summary().controleVoosImport, sourceMaterialized: false },
+    }))).toBe(false);
     expect(isVerifiedCvSigvoosSync(summary({ controleVoosImport: { status: 'DISABLED' } }))).toBe(false);
     expect(isVerifiedCvSigvoosSync(summary({ totalRegistrosNormalizados: 0 }))).toBe(false);
     expect(isVerifiedCvSigvoosSync(summary({ importacoes: [{ tripulante_id: null, erros: 0 }] }))).toBe(false);
@@ -93,7 +96,7 @@ describe('FRMS SIGVOOS/CV closed-day coverage ledger', () => {
     const zero = summary({
       totalRegistrosBrutos: 0, totalRegistrosNormalizados: 0, importacoes: [],
       controleVoosImport: {
-        status: 'OK', rawRecords: 0, createdFlights: 0, createdEtapas: 0,
+        status: 'OK', sourceMaterialized: true, rawRecords: 0, createdFlights: 0, createdEtapas: 0,
         createdTripulantes: 0, reusedRecords: 0, conflictRecords: 0, failedPayloads: 0,
       },
     });

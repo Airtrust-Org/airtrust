@@ -43,7 +43,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
-import { buildRollingFlightCoverage, loadConfirmedFlightDays } from './flight-coverage-ledger';
+import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
 import { clockToMinutes, minutesToClock, projectSleepStart } from './operational-clock';
 
 export type { MissionPeriodRow } from './mission-periods';
@@ -1004,6 +1004,8 @@ export function buildFrmsOperationalSnapshot(
 
 export interface ListFrmsOperationalSnapshotParams {
   empresaId: number;
+  /** Current operator approval, checked at read time so revocation is immediate. */
+  coverageApprovalCsv?: string;
   dataInicio: string;
   dataFim: string;
   filters?: FrmsOperationalSnapshotFilters;
@@ -1681,9 +1683,11 @@ export async function listFrmsOperationalSnapshot(
 
   // Data-source coverage is independent of accumulated minutes. Missing or
   // historically inferred zero-flight days never certify compliance.
-  const confirmedFlightDays = await loadConfirmedFlightDays(
+  const confirmedFlightDays = isApprovedCoverageTenant(
+    params.empresaId, params.coverageApprovalCsv,
+  ) ? await loadConfirmedFlightDays(
     db, params.empresaId, addDaysIso(contextStart, -364), contextEnd,
-  );
+  ) : new Map<string, string>();
   const rollingFlightCoverageByDay = new Map<string, ReturnType<typeof buildRollingFlightCoverage>>();
 
   const rbacBcApplicable = regulatoryProfileHasDocumentedAppendix(

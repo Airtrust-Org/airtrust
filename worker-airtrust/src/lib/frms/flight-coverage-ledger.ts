@@ -17,6 +17,7 @@ export interface FrmsCoverageSyncSummary {
   importacoes: ReadonlyArray<{ tripulante_id: string | null; erros: number }>;
   controleVoosImport?: {
     status: 'DISABLED' | 'OK' | 'ERROR';
+    sourceMaterialized: boolean;
     rawRecords: number;
     conflictRecords: number;
     failedPayloads: number;
@@ -57,7 +58,7 @@ export function isApprovedCoverageTenant(empresaId: number, csv: string | undefi
 export function isVerifiedCvSigvoosSync(summary: FrmsCoverageSyncSummary): boolean {
   const cv = summary.controleVoosImport;
   const nonNegativeInt = (n: number) => Number.isSafeInteger(n) && n >= 0;
-  if (!cv || cv.status !== 'OK' || summary.sourceWindowVerified !== true) return false;
+  if (!cv || cv.status !== 'OK' || cv.sourceMaterialized !== true || summary.sourceWindowVerified !== true) return false;
   if (!nonNegativeInt(summary.totalErros) || summary.totalErros !== 0 ||
       !nonNegativeInt(summary.totalRegistrosBrutos) ||
       !nonNegativeInt(summary.totalRegistrosNormalizados) ||

@@ -2494,7 +2494,6 @@ export async function syncSigvoosForFrms(
     const sourceWindowVerified = normalized.every((item) =>
       item.data >= input.from && item.data <= input.to,
     );
-
     const groupedByDay = groupSigvoosRecordsByDay(normalized);
 
     const tripulanteGroups = new Map<string, SigvoosGroupedDay[]>();

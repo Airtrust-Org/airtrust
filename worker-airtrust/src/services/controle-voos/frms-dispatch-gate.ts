@@ -358,11 +358,13 @@ export async function loadDispatchGateSnapshotIndex(
   db: D1Database,
   empresaId: number,
   dataOperacional: string,
+  coverageApprovalCsv?: string,
 ): Promise<DispatchGateSnapshotIndex> {
   const result = await listFrmsOperationalSnapshot(db, {
     empresaId,
     dataInicio: dataOperacional,
     dataFim: dataOperacional,
+    coverageApprovalCsv,
   });
 
   const itemsByFuncionario = new Map<number, FrmsOperationalSnapshotItem>();
