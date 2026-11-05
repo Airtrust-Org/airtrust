@@ -64,7 +64,7 @@ function launch(params: {
   const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
   api.LMSInitialize('');
   frame.dispatchEvent(new g.Event('load'));
-  const captured = addListener.mock.calls.find(([name]) => name === 'click');
+  const captured = addListener.mock.calls.find(([name, , capture]) => name === 'click' && capture === true);
   const onClick = captured?.[1] as ((event: unknown) => void) | undefined;
   const button = doc.getElementById('next');
   const click = (isTrusted: boolean) => {
