@@ -9,6 +9,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import { classifyBrowserError } from './pptx-browser-error-classifier.mjs';
 import {
   assert, assertAllowedStagingBaseUrl, decodeJwtPayload, extractAccessToken,
   extractRefreshToken, fetchJson, login, selectEmpresa,
@@ -112,9 +113,24 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       });
       const page = await context.newPage();
       let pageException = false;
+      const errorClasses = new Set();
+      const pendingConsole = [];
       let assetHttp = 'NONE';
       let enrollmentHttp = 'NONE';
-      page.on('pageerror', () => { pageException = true; });
+      page.on('pageerror', (error) => {
+        pageException = true;
+        errorClasses.add(classifyBrowserError(String(error)));
+      });
+      page.on('console', (message) => {
+        if (message.type() !== 'error') return;
+        errorClasses.add(classifyBrowserError(message.text()));
+        for (const argument of message.args()) {
+          pendingConsole.push(argument.evaluate((value) => {
+            if (value instanceof Error) return `${value.name}: ${value.message}`;
+            return '';
+          }).then((value) => { if (value) errorClasses.add(classifyBrowserError(value)); }).catch(() => {}));
+        }
+      });
       page.on('response', (response) => {
         const responsePath = new URL(response.url()).pathname;
         if (responsePath.startsWith('/api/lms/pptx/asset/')) {
@@ -129,6 +145,7 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       try {
         await page.getByText('Slide 1 de 3').waitFor({ timeout: 25000 });
       } catch {
+        await Promise.all(pendingConsole);
         // Sanitize the browser failure rather than logging HTML, credentials
         // or user records. All routes and courses here are synthetic staging.
         const path = new URL(page.url()).pathname.replace(/[^/A-Za-z0-9_-]/g, '');
@@ -140,7 +157,7 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
         const boundary = await page.getByText('Algo deu errado').count() > 0;
         const concluded = await page.getByText('Status: concluído').count() > 0;
         // Absence of an error message is NOT affirmative proof of authorization.
-        throw new Error(`PPTX_QA_${name}_SLIDE_MISSING_${path}_SESSION_ERR${Number(authExpired)}_COURSE_ERR${Number(courseUnavailable)}_LOADING${Number(loading)}_PLAYER_ERR${Number(playerError)}_BOUNDARY${Number(boundary)}_JS_ERR${Number(pageException)}_DONE${Number(concluded)}_ASSET${assetHttp}_ENROLL${enrollmentHttp}`);
+        throw new Error(`PPTX_QA_${name}_SLIDE_MISSING_${path}_SESSION_ERR${Number(authExpired)}_COURSE_ERR${Number(courseUnavailable)}_LOADING${Number(loading)}_PLAYER_ERR${Number(playerError)}_BOUNDARY${Number(boundary)}_JS_ERR${Number(pageException)}_DONE${Number(concluded)}_ASSET${assetHttp}_ENROLL${enrollmentHttp}_CLASSES_${[...errorClasses].sort().join('-') || 'NONE'}`);
       }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
