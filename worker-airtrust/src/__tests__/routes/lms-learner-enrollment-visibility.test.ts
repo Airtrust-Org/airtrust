@@ -143,6 +143,33 @@ describe('LMS learner enrollment visibility', () => {
     expect(state.queries.some(q => q.sql.includes('FROM lms_matriculas m'))).toBe(false);
   });
 
+  it.each(['admin', 'manager'] as const)(
+    'strict personal learner mode returns 409 for %s without a persisted employee link',
+    async (role) => {
+      state.userRole = role;
+      state.dbFuncionarioId = null;
+      const { app, db } = makeApp();
+      const response = await get(app, '/minhas?strict_link=1', db);
+      expect(response.status).toBe(409);
+      const body = await response.json() as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toContain('vínculo');
+      expect(state.queries).toHaveLength(1);
+      expect(state.queries[0].binds).toEqual([6, 42]);
+      expect(state.queries.some(q => q.sql.includes('FROM lms_matriculas m'))).toBe(false);
+    },
+  );
+
+  it('strict mode preserves personal enrollment access for linked administrators', async () => {
+    state.userRole = 'admin';
+    const { app, db } = makeApp();
+    const response = await get(app, '/minhas?strict_link=1', db);
+    expect(response.status).toBe(200);
+    const body = await response.json() as { pagination: { total: number } };
+    expect(body.pagination.total).toBe(60);
+    expect(state.queries.some(q => q.sql.includes('FROM lms_matriculas m'))).toBe(true);
+  });
+
   it('scopes the identity lookup to the authenticated tenant, never the token employee ID', async () => {
     state.dbFuncionarioId = null;
     const { app, db } = makeApp();

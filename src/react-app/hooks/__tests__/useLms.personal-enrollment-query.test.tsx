@@ -53,6 +53,27 @@ describe('useMinhasMatriculas — employee-link boundary', () => {
     );
   });
 
+  it('uses the strict employee link contract in administrator learner mode', async () => {
+    renderHook(() => useMinhasMatriculas(true, true), { wrapper: makeWrapper() });
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        '/api/lms/matriculas/minhas?strict_link=1',
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('propagates an explicit missing-link conflict instead of silently showing zero courses', async () => {
+    request.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ success: false, error: 'Conta sem vínculo funcional confirmado' }),
+    });
+    const { result } = renderHook(() => useMinhasMatriculas(true, true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+  });
+
   it('returns existing enrollment for a non-manager who explicitly enables the learner query', async () => {
     request.mockResolvedValueOnce({
       ok: true,
