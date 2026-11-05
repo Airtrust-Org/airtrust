@@ -331,18 +331,25 @@ export function calcularSono(input: InputSono): OutputSono {
   const reported = input.duracaoInformadaMin;
   const reportedValid = reported != null && Number.isFinite(reported) && reported >= 0 && reported <= 1440;
   let sonoEfetivoMin: number | null = reportedValid ? Math.round(reported) : null;
-  if (!reportedValid && input.horaDormiu != null && input.horaAcordou != null) {
+  // Um total autorrelatado nas últimas 24 h pode incluir vários episódios.
+  // Só existe início de episódio observável quando AMBOS os horários foram
+  // informados e a janela é válida; nunca subtrair o total de 24 h do despertar.
+  let inicioEpisodioMin: number | null = null;
+  if (input.horaDormiu != null && input.horaAcordou != null) {
     const acordouDia = normalizeMinuteOfDay(tAcordouMin);
     const dormiuDia = normalizeMinuteOfDay(input.horaDormiu);
     const diff = acordouDia - dormiuDia;
     const windowMinutes = diff >= 0 ? diff : diff + 1440;
     // 0 ou mais de 14 h na mesma janela indica horário inconsistente.
-    sonoEfetivoMin = windowMinutes > 0 && windowMinutes <= 840 ? windowMinutes : null;
+    if (windowMinutes > 0 && windowMinutes <= 840) {
+      inicioEpisodioMin = tAcordouMin - windowMinutes;
+      if (!reportedValid) sonoEfetivoMin = windowMinutes;
+    }
   }
 
   return {
     tAcordouMin,
-    tDormiuMin: sonoEfetivoMin == null ? null : tAcordouMin - sonoEfetivoMin,
+    tDormiuMin: inicioEpisodioMin,
     sonoEfetivoMin,
     fonteSono: sonoEfetivoMin == null ? 'PADRAO' : 'INFORMADO',
     despertarEstimado,
