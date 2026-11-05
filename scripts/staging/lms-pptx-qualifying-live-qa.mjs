@@ -9,6 +9,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import { resolvePptxQaLmsCategoryId } from './resolve-pptx-qa-category.mjs';
 import {
   assert, assertAllowedStagingBaseUrl, decodeJwtPayload, extractAccessToken,
   fetchJson, login, selectEmpresa,
@@ -157,10 +158,7 @@ async function main() {
     // A category called EAD is not necessarily the tenant's canonical LMS
     // category. Since Schema V2 0457, only lms_integrada=1 authorizes LMS
     // qualification binding. Never create/activate a category in live QA.
-    const integrated = categories.filter((entry) =>
-      entry.ativo === true && entry.lms_integrada === true);
-    assert(integrated.length === 1, 'PPTX_QA_CANONICAL_LMS_CATEGORY_NOT_UNIQUE');
-    const categoryId = requireId(integrated[0].id, 'QA canonical LMS category');
+    const categoryId = resolvePptxQaLmsCategoryId(categories);
 
     // A qualifying PPTX must reference a real, current tenant EAD qualification
     // model. Creating an EAD course with gerar_qualificacao=1 but no type ID
