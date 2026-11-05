@@ -51,8 +51,9 @@ describe('LmsEnrollmentAlertModal', () => {
   });
 
   it('envia as matrículas selecionadas por e-mail e WhatsApp', async () => {
-    fetchWithAuthMock.mockResolvedValue(
-      ok({
+    fetchWithAuthMock.mockResolvedValueOnce(ok({
+      selecionados: 2, processados: 2, email_ja_alertado: 0, whatsapp_ja_alertado: 0,
+    })).mockResolvedValue(ok({
         selecionados: 2,
         processados: 2,
         email_enviados: 2,
@@ -78,9 +79,9 @@ describe('LmsEnrollmentAlertModal', () => {
     );
 
     expect(screen.getByText('2 matrícula(s) selecionada(s)')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar 2 alerta(s)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 2 alerta(s)' }));
 
-    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
     expect(fetchWithAuthMock).toHaveBeenCalledWith(
       '/api/lms/matriculas/convites/lote',
       expect.objectContaining({
@@ -89,6 +90,7 @@ describe('LmsEnrollmentAlertModal', () => {
           matricula_ids: [11, 12],
           modo: 'alerta',
           canais: { email: true, whatsapp: true },
+          reenviar_hoje: false,
         }),
       }),
     );
@@ -98,8 +100,9 @@ describe('LmsEnrollmentAlertModal', () => {
   });
 
   it('permite escolher somente e-mail', async () => {
-    fetchWithAuthMock.mockResolvedValue(
-      ok({
+    fetchWithAuthMock.mockResolvedValueOnce(ok({
+      selecionados: 1, processados: 1, email_ja_alertado: 0, whatsapp_ja_alertado: 0,
+    })).mockResolvedValue(ok({
         selecionados: 1,
         processados: 1,
         email_enviados: 1,
@@ -123,11 +126,32 @@ describe('LmsEnrollmentAlertModal', () => {
 
     const whatsAppCheckbox = screen.getByLabelText('WhatsApp');
     fireEvent.click(whatsAppCheckbox);
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar 1 alerta(s)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
 
-    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(1));
-    const body = JSON.parse(String(fetchWithAuthMock.mock.calls[0][1].body));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
+    const body = JSON.parse(String(fetchWithAuthMock.mock.calls[1][1].body));
     expect(body.canais).toEqual({ email: true, whatsapp: false });
+  });
+
+
+  it('warns on a same-day alert and only resends with an explicit checkbox', async () => {
+    fetchWithAuthMock.mockResolvedValueOnce(ok({
+      selecionados: 1, processados: 1, email_ja_alertado: 1, whatsapp_ja_alertado: 1,
+    })).mockResolvedValue(ok({
+      selecionados: 1, processados: 1, email_enviados: 1, email_falhas: 0, sem_email: 0,
+      whatsapp_enviados: 1, whatsapp_falhas: 0, sem_whatsapp: 0, nao_encontradas: 0,
+    }));
+    render(<LmsEnrollmentAlertModal
+      isOpen onClose={vi.fn()} targets={[targets[0]]} cursoTitulo="Integração Corporativa"
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
+    await waitFor(() => expect(screen.getByText(/Já houve alertas aceitos/)).toBeInTheDocument());
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Reenviar também os alertas/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar envio' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
+    const body = JSON.parse(String(fetchWithAuthMock.mock.calls[1][1].body));
+    expect(body.reenviar_hoje).toBe(true);
   });
 
   it('considera alertáveis apenas matrículas não iniciadas ou em andamento', () => {
