@@ -148,6 +148,7 @@ export async function listTrainingCommunications(
            WHERE done.empresa_id = a.empresa_id
              AND done.action = REPLACE(a.action, '_PREPARADO', '')
              AND done.entity_type = a.entity_type
+             AND done.entity_id = a.entity_id
              AND json_valid(done.new_values) = 1
              AND json_extract(done.new_values, '$.tentativa_id') =
                  json_extract(a.new_values, '$.tentativa_id')
