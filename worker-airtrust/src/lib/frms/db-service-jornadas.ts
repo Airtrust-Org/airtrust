@@ -249,6 +249,9 @@ export async function recalcularPipeline(
   jornada: FrmsJornada,
   limites: LimitesMap,
   provenance?: { configRevisionId: string; modelVersion: string },
+  /** Somente a rota com declaração explícita pode fornecer o início de episódio.
+   * Valores pré-existentes em frms_jornada não têm proveniência suficiente. */
+  explicitSleepEpisode?: { source: 'CREW_REPORTED'; horaDormiu: string },
 ): Promise<{
   fatorizacao: FatorizacaoRow;
   acumulo: AcumuloRollingResult;
@@ -534,10 +537,12 @@ export async function recalcularPipeline(
       hora_ultimo_pouso: jornada.hora_ultimo_pouso,
       hora_corte_motor: jornada.hora_corte_motor,
       hora_termino: jornada.hora_termino,
-      // Campo histórico hora_dormiu pode ter sido derivado do total 24h sem
-      // proveniência de episódio. Não o reutilizar como observação real do
-      // check-in. Horário autenticado exigirá proveniência própria.
-      hora_dormiu: null,
+      // Campo histórico hora_dormiu pode ter sido derivado do total 24h.
+      // Confiar apenas em um episódio explicitamente declarado nesta requisição
+      // autenticada, nunca no valor legado persistido nem no total de 24h.
+      hora_dormiu: canUseEffectiveness && explicitSleepEpisode?.source === 'CREW_REPORTED'
+        ? explicitSleepEpisode.horaDormiu
+        : null,
       hora_acordou: canUseEffectiveness ? checkinEvidence?.wakeTime ?? null : null,
       sono_efetivo_min: canUseEffectiveness && checkinEvidence?.sleepHours24h != null
         ? Math.round(checkinEvidence.sleepHours24h * 60)

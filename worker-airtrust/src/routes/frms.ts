@@ -1458,7 +1458,10 @@ frmsRoutes.patch(
       hora_dormiu: parsed.data.horaDormiu,
     };
 
-    const result = await recalcularPipeline(c.env.DB, jornadaAtualizada as never, LIMITES_DEFAULT);
+    const result = await recalcularPipeline(
+      c.env.DB, jornadaAtualizada as never, LIMITES_DEFAULT, undefined,
+      { source: 'CREW_REPORTED', horaDormiu: parsed.data.horaDormiu },
+    );
 
     const fatorizacao = await c.env.DB.prepare(
       `SELECT ${FRMS_FATORIZACAO_SELECT_COLUMNS}

@@ -82,6 +82,12 @@ describe('AUD-014 sleep PATCH tenant and sector defense', () => {
     expect(update!.sql).toContain('f.id = CAST(frms_jornada.tripulante_id AS INTEGER)');
     expect(update!.binds).toEqual(['23:00', 'j-1', 42]);
     expect(recalcularPipeline).toHaveBeenCalledOnce();
+    // Declaração explícita autenticada é distinta de horário histórico derivado.
+    expect(recalcularPipeline).toHaveBeenCalledWith(
+      db, expect.objectContaining({ hora_dormiu: '23:00' }),
+      expect.anything(), undefined,
+      { source: 'CREW_REPORTED', horaDormiu: '23:00' },
+    );
   });
 
   it('does not recompute a journey when the scoped UPDATE affects zero rows', async () => {
