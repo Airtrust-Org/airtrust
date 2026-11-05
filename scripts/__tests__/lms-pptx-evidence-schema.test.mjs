@@ -1,3 +1,7 @@
+// source_reference: issue #1213; docs/ops/LMS_NON_SCORM_COMPLETION_EVIDENCE_CONTRACT.md
+// operational_decision: synthetic, in-memory SQLite fixtures only; no operational database writes.
+// dry_run_required: no remote connection; schema applied to disposable :memory: database.
+// rollback_plan_required: dispose SQLite in-memory database at test end; no production state.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
