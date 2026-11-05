@@ -15,9 +15,12 @@ test('single-tenant admin, unique same-email active employee yields exact candid
  assert.notEqual(h,linkCandidateHash({...x,employeeId:82},'a'.repeat(40)));
  assert.notEqual(h,linkCandidateHash(x,'b'.repeat(40)));
 });
-test('rejects duplicate active users and multi-company membership',()=>{
+test('rejects duplicate names; cross-tenant membership must be checked by DB CAS, not scoped directory',()=>{
  assert.throws(()=>selectStrictLinkCandidate({...args,users:[u,{...u,id:72}]}),/USER_NOT_UNIQUE/);
- assert.throws(()=>selectStrictLinkCandidate({...args,users:[u,{...u,empresa_id:7}]}),/GLOBAL_IDENTITY_MULTITENANT/);
+ // A tenant-scoped directory can conceal another membership, so candidate
+ // discovery is not proof of uniqueness. Actual global rejection is covered
+ // by the SQL-backed CAS regression in repair-yngrid-employee-link.sqlite.test.
+ assert.doesNotThrow(()=>selectStrictLinkCandidate({...args,users:[u,{...u,empresa_id:7}]}));
 });
 test('rejects pre-existing different user link and employee already claimed',()=>{
  assert.throws(()=>selectStrictLinkCandidate({...args,users:[{...u,funcionario_id:999}]}),/EXISTING_USER_LINK/);
