@@ -18,6 +18,8 @@
 // dry_run_required: not applicable — no side effects.
 // rollback_plan_required: not applicable — read-only.
 
+import { classifyFrmsD1Error, validatedPhase } from './frms-d1-error-classification.mjs';
+
 const PRODUCTION_DB_ID = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
 const BLOCKED_STAGING_DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
 const BLOCKED_DEV_DB_ID = 'a72fb05b-0912-4ad9-9686-e7948c8b09eb';
@@ -45,7 +47,7 @@ function assertProductionTarget(id) {
   if (i !== PRODUCTION_DB_ID) fail(`TARGET_NOT_PRODUCTION: got ${i}, expected ${PRODUCTION_DB_ID}`);
 }
 
-async function query(sql) {
+async function query(sql, phase) {
   assertReadOnlySql(sql);
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/d1/database/${PRODUCTION_DB_ID}/query`;
@@ -61,9 +63,10 @@ async function query(sql) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success !== true) {
     const codes = Array.isArray(payload?.errors)
-      ? payload.errors.map((x) => x?.code).filter(Boolean).join(',')
+      ? payload.errors.map((x) => x?.code).filter((code) => Number.isSafeInteger(code) && code > 0 && code < 100000).slice(0, 4).join(',')
       : '';
-    fail(`D1_READ_FAILED:http=${response.status}:codes=${codes || 'unknown'}`);
+    const category = classifyFrmsD1Error(response.status, payload);
+    fail(`D1_READ_FAILED:phase=${validatedPhase(phase)}:http=${response.status}:codes=${codes || 'unknown'}:category=${category}`);
   }
   const first = Array.isArray(payload.result) ? payload.result[0] : payload.result;
   if (first?.success === false) fail('D1_STATEMENT_FAILED');
@@ -93,6 +96,7 @@ async function main() {
       `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j ` +
         `JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL ` +
         `WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
+      'active_tenants',
     )
   ).map((r) => Number(r.empresa_id));
 
@@ -103,12 +107,14 @@ async function main() {
         `WHERE empresa_id = ${empresaId} AND status = 'ACTIVE' ` +
         `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
         `ORDER BY profile_code`,
+      'active_assignments',
     );
     const activeRegulatoryProfiles = await query(
       `SELECT id, profile_code, service_category FROM frms_regulatory_profiles ` +
         `WHERE empresa_id = ${empresaId} AND active = 1 AND deleted_at IS NULL ` +
         `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
         `ORDER BY profile_code, id`,
+      'regulatory_profiles',
     );
 
     let resolvedRevision = null;
@@ -121,6 +127,7 @@ async function main() {
           `AND (empresa_id = ${empresaId} OR empresa_id IS NULL) ` +
           `AND effective_from <= '${today}' AND (effective_to IS NULL OR effective_to >= '${today}') ` +
           `ORDER BY CASE WHEN empresa_id = ${empresaId} THEN 0 ELSE 1 END, revision_number DESC, effective_from DESC`,
+        'config_revisions',
       );
       if (revisions.length >= 1) {
         const rev = revisions[0];
@@ -132,7 +139,7 @@ async function main() {
           ambiguous: revisions.length > 1,
         };
         resolvedParameterCount = scalar(
-          await query(`SELECT COUNT(*) AS c FROM frms_config_parameters WHERE revision_id = '${rev.id}'`),
+          await query(`SELECT COUNT(*) AS c FROM frms_config_parameters WHERE revision_id = '${rev.id}'`, 'config_parameter_count'),
         );
       }
     }

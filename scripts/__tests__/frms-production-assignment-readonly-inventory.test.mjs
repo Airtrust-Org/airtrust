@@ -114,3 +114,13 @@ test('script proves the profile decision only from the tenant own single active 
   assert.match(s, /writes:\s*0/);
   assert.match(s, /readOnly:\s*true/);
 });
+
+test('read-only inventory surfaces only fixed error phases and safe classifications', () => {
+  const script = read(SCRIPT);
+  assert.match(script, /classifyFrmsD1Error\(response.status, payload\)/);
+  assert.match(script, /validatedPhase\(phase\)/);
+  assert.match(script, /Number.isSafeInteger\(code\)/);
+  for (const phase of ['active_tenants','active_assignments','regulatory_profiles','config_revisions','config_parameter_count']) {
+    assert.match(script, new RegExp(phase));
+  }
+});
