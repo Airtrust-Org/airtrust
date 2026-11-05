@@ -83,6 +83,8 @@ import {
   readMatriculaForCourseList,
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
+import { registerPptxEvidenceRoutes } from './lms-pptx-evidence';
+import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaTracked } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
@@ -94,6 +96,7 @@ import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
+registerPptxEvidenceRoutes(app);
 app.route('/convites', lmsMatriculasConvitesRoutes);
 registerLmsScormEditionHandoffRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
@@ -1847,10 +1850,8 @@ app.post('/:id/finalizar', async (c) => {
   }
 
   if (
-    requiresServerValidatedNonScormEvidence(
-      matricula.tipo_conteudo,
-      matricula.gerar_qualificacao_ao_concluir,
-    )
+    requiresServerValidatedNonScormEvidence(matricula.tipo_conteudo, matricula.gerar_qualificacao_ao_concluir) &&
+    !(matricula.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
   ) {
     return c.json(
       {
@@ -2149,10 +2150,8 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     }
 
     if (
-      requiresServerValidatedNonScormEvidence(
-        existing.tipo_conteudo,
-        existing.gerar_qualificacao_ao_concluir,
-      )
+      requiresServerValidatedNonScormEvidence(existing.tipo_conteudo, existing.gerar_qualificacao_ao_concluir) &&
+      !(existing.tipo_conteudo === 'pptx' && await hasPptxEvidenceForCompletion(db, c.env.BUCKET, empresaId, matriculaId))
     ) {
       return c.json(
         {

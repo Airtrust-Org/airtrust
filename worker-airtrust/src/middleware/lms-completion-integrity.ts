@@ -20,6 +20,7 @@ import {
 } from '../services/lms-enrollment-completion-decision';
 import { loadScormManifestClosureEvidence } from '../services/lms-scorm-completion-context';
 import { describeLmsCompletionBlocker } from '../services/lms-completion-blockers';
+import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -386,8 +387,11 @@ async function guardManualFinalize(
     Number(row.progresso_pct ?? 0) >= 100;
   // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
   // Other manual finalizations remain in the non-SCORM, fail-closed policy.
+  const validatedPptx = normalizeStatus(row.tipo_conteudo) === 'pptx' &&
+    await hasPptxEvidenceForCompletion(c.env.DB, c.env.BUCKET, empresaId, matriculaId);
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
-    explicitCompletion: isScorm ? true : storedCompletion,
+    explicitCompletion: validatedPptx || (isScorm ? true : storedCompletion),
+    serverValidatedPptxCoverage: validatedPptx,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',
@@ -465,8 +469,11 @@ async function guardAdministrativeStatus(
   // the reason, and all other enrollment and evidence checks remain in force.
   const administrativeScoreOverride = (!historicEditionCredit || authorizedAdmin99EditionCredit) && hasRole(c, 'admin') &&
     typeof incoming.observacoes === 'string' && incoming.observacoes.trim().length >= 10;
+  const validatedPptx = normalizeStatus(row.tipo_conteudo) === 'pptx' &&
+    await hasPptxEvidenceForCompletion(c.env.DB, c.env.BUCKET, empresaId, matriculaId);
   const decision = buildDecision(row, 'administrative', {}, true, {
     explicitCompletion: true,
+    serverValidatedPptxCoverage: validatedPptx,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',

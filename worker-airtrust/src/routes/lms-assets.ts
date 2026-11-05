@@ -2714,9 +2714,9 @@ app.get('/pptx/asset/:cursoId', async (c) => {
     'no-store',
   );
   if (object.httpEtag) headers.set('ETag', object.httpEtag);
+  headers.set('Access-Control-Expose-Headers', 'ETag, X-Pptx-Slide-Count');
   headers.set('Content-Disposition', 'inline');
   headers.set('X-Pptx-Slide-Count', String(curso.pptx_slide_count ?? 0));
-
   return new Response(object.body, { status: 200, headers });
 });
 
