@@ -143,7 +143,8 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       await page.goto(`${PAGES}/lms/player/pptx/${matriculaId}`,
         { waitUntil: 'domcontentloaded', timeout: 45000 });
       try {
-        await page.getByText('Slide 1 de 3').waitFor({ timeout: 25000 });
+        await page.getByText('Slide 1 de 3', { exact: true }).waitFor({ timeout: 25000 });
+        await page.getByText('AirTrust QA PPTX B — slide 1 de 3', { exact: true }).waitFor();
       } catch {
         await Promise.all(pendingConsole);
         // Sanitize the browser failure rather than logging HTML, credentials
@@ -161,9 +162,10 @@ async function browserReview(token, refreshToken, user, matriculaId, result) {
       }
       for (let index = 2; index <= 3; index++) {
         await page.getByRole('button', { name: 'Próximo' }).click();
-        await page.getByText(`Slide ${index} de 3`).waitFor();
+        await page.getByText(`Slide ${index} de 3`, { exact: true }).waitFor();
+        await page.getByText(`AirTrust QA PPTX B — slide ${index} de 3`, { exact: true }).waitFor();
       }
-      assert(await page.getByText('Slide 3 de 3').count() > 0,
+      assert(await page.getByText('Slide 3 de 3', { exact: true }).count() > 0,
         `PPTX_QA_BROWSER_${name}_DID_NOT_RENDER`);
       await context.close();
       result[`browser_${name}`] = 'PASS_COMPLETED_READONLY';
