@@ -320,6 +320,36 @@ export const MODELO_AERONAVE_EXPR = `COALESCE(
 /** Expressão canônica de vencimento — NULL = sem vencimento, sem fallback 12 */
 const VENCIMENTO_SQL = getQualificacoesVencimentoExpr();
 
+/**
+ * "Hoje" em America/Sao_Paulo (UTC-3 fixo, sem horário de verão desde 2019) como expressão SQL.
+ * Mantém filtros, ordenação e status derivado do Histórico no mesmo dia civil do Compliance
+ * (`getTodayIsoSaoPaulo`): `date('now')` é UTC e, entre 21h e 24h BRT, já é o dia seguinte.
+ * Avaliada por consulta (não congelada no carregamento do módulo). Um teste cruza esta expressão
+ * com `getTodayIsoSaoPaulo` e acusa divergência caso o fuso volte a ter horário de verão.
+ */
+export const SAO_PAULO_TODAY_SQL = "date('now','-3 hours')";
+
+/** Mesma expressão para um instante arbitrário (usado pelos testes de fronteira). */
+export function saoPauloTodaySqlAt(instantSql: string): string {
+  return `date(${instantSql},'-3 hours')`;
+}
+
+/**
+ * Predicados de vencimento do Histórico (VALIDA / VENCENDO_30 / VENCIDA), partição exata:
+ * `< hoje` vence, `hoje..hoje+30` vencendo, depois disso válida (ou sem vencimento).
+ */
+export function buildVencimentoStatusPredicates(
+  vencimentoExpr: string,
+  todayExpr: string = SAO_PAULO_TODAY_SQL,
+): { valida: string; vencendo: string; vencida: string } {
+  const in30 = `date(${todayExpr},'+30 days')`;
+  return {
+    valida: `(${vencimentoExpr} IS NULL OR ${vencimentoExpr} > ${in30})`,
+    vencendo: `${vencimentoExpr} >= ${todayExpr} AND ${vencimentoExpr} <= ${in30}`,
+    vencida: `${vencimentoExpr} < ${todayExpr}`,
+  };
+}
+
 export const SORTABLE_COLUMNS: Record<string, string> = {
   // PLANEJADA records created via integration have data_conclusao set (= data_prevista),
   // so we must check qh.status directly before falling through to date-based logic.
@@ -359,8 +389,8 @@ export const SORTABLE_COLUMNS: Record<string, string> = {
           AND (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) > datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) OR (datetime(COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao, qh_newer.updated_at, qh_newer.created_at)) = datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) AND qh_newer.id > qh.id))
       )) THEN 'RENOVADA'
       WHEN ${VENCIMENTO_SQL} IS NULL THEN 'INDEFINIDA'
-      WHEN ${VENCIMENTO_SQL} < date('now') THEN 'VENCIDA'
-      WHEN ${VENCIMENTO_SQL} <= date('now','+30 days') THEN 'VENCENDO_30'
+      WHEN ${VENCIMENTO_SQL} < ${SAO_PAULO_TODAY_SQL} THEN 'VENCIDA'
+      WHEN ${VENCIMENTO_SQL} <= date(${SAO_PAULO_TODAY_SQL},'+30 days') THEN 'VENCENDO_30'
       ELSE 'VALIDA'
     END
   )`,
@@ -410,8 +440,8 @@ export function buildOrderByClause(orderBy: string, order: string): string {
           AND UPPER(TRIM(COALESCE(NULLIF(CAST(qh_newer2.qualificacao_id AS TEXT), ''), NULLIF(qh_newer2.qualificacao_codigo, ''), NULLIF(qt_newer2.codigo, ''), NULLIF(qh_newer2.tipo, ''), NULLIF(qt_newer2.nome, '')))) = UPPER(TRIM(COALESCE(NULLIF(CAST(qh.qualificacao_id AS TEXT), ''), NULLIF(qh.qualificacao_codigo, ''), NULLIF(qt.codigo, ''), NULLIF(qh.tipo, ''), NULLIF(qt.nome, ''))))
           AND (datetime(COALESCE(qh_newer2.data_vencimento, qh_newer2.data_conclusao, qh_newer2.updated_at, qh_newer2.created_at)) > datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) OR (datetime(COALESCE(qh_newer2.data_vencimento, qh_newer2.data_conclusao, qh_newer2.updated_at, qh_newer2.created_at)) = datetime(COALESCE(qh.data_vencimento, qh.data_conclusao, qh.updated_at, qh.created_at)) AND qh_newer2.id > qh.id))
       )) THEN 5
-      WHEN ${vencimento} < date('now') THEN 2
-      WHEN ${vencimento} <= date('now','+30 days') THEN 3
+      WHEN ${vencimento} < ${SAO_PAULO_TODAY_SQL} THEN 2
+      WHEN ${vencimento} <= date(${SAO_PAULO_TODAY_SQL},'+30 days') THEN 3
       ELSE 4
     END)`;
     return `${rankExpr} ${direction}, ${vencimento} ASC`;
@@ -421,9 +451,9 @@ export function buildOrderByClause(orderBy: string, order: string): string {
     const priorityBucket = `(CASE
       WHEN COALESCE(qh.status, '') = 'PLANEJADA'
        AND qh.data_conclusao IS NOT NULL
-       AND date(qh.data_conclusao) <= date('now') THEN 0
+       AND date(qh.data_conclusao) <= ${SAO_PAULO_TODAY_SQL} THEN 0
       WHEN qh.data_conclusao IS NOT NULL
-       AND ${VENCIMENTO_SQL} < date('now') THEN 1
+       AND ${VENCIMENTO_SQL} < ${SAO_PAULO_TODAY_SQL} THEN 1
       ELSE 2
     END)`;
     return `${priorityBucket} ASC, ${column} ${direction}`;

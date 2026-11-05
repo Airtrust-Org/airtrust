@@ -205,7 +205,8 @@ describe('qualificacoes historico status sort contract', () => {
     const dataQuery = dataCall?.query || '';
     expect(dataQuery).toContain("WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1");
     expect(dataQuery).toContain("qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL");
-    expect(dataQuery).toContain("< date('now') THEN 2");
+    // "hoje" é o dia civil de São Paulo (UTC-3), não date('now') em UTC.
+    expect(dataQuery).toContain("< date('now','-3 hours') THEN 2");
     // Confirma que o fallback 12 NÃO está presente
     expect(dataQuery).not.toContain("12) || ' months'");
     expect(dataQuery).toContain("ORDER BY (CASE");

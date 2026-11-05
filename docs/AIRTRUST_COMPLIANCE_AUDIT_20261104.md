@@ -38,7 +38,7 @@
 ### Suítes executadas
 - Compliance + serviços + cron (Worker), no SHA base: **208 arquivos / 1.640 testes passando**, `tsc --noEmit` do Worker limpo.
 - Frontend `compliance` + `lms` + `qualificacoes`: **57 arquivos / 259 testes passando**.
-- **Worker completo no código final: 1.037 arquivos / 7.420 testes passando, 0 falhas.** `tsc --noEmit` do Worker limpo; `npm run lint` (inclui `guard:layer-boundaries`, `guard:route-ownership`, `guard:no-raw-fetch`, `guard:schema-contract-staleness` e demais) saiu com código 0.
+- **Worker completo no código final: 1.038 arquivos / 7.432 testes passando, 0 falhas.** `tsc --noEmit` do Worker limpo; `npm run lint` (inclui `guard:layer-boundaries`, `guard:route-ownership`, `guard:no-raw-fetch`, `guard:schema-contract-staleness` e demais) saiu com código 0.
 
 ---
 
@@ -53,6 +53,7 @@ Quatro arquivos novos em `worker-airtrust/src/__tests__/compliance/`. Cada teste
 | T2-REC-7..9 | `POST /recalculate` | `all`/omitido; `funcionario`+id; `tipo_qualificacao`+id | 200, consultas com `empresa_id` e o alvo | PASS | PASS |
 | T2-REQ-1..4 | Requisitos legados (SQL real) | POST/PUT devolvem a linha do tenant; PUT/DELETE em requisito de outro tenant → 404 e linha alheia intacta; **toda** SQL do roteador carrega `empresa_id` | idem | falha só na última | PASS |
 | T2-BRT-1..4 | Histórico de Qualificações (status da linha) | vence 2026-11-04; 20:59, 22:30, 23:59 e 00:00 BRT | `VENCENDO_30` até 23:59, `VENCIDA` às 00:00 | VENCIDA às 22:30 e 23:59 | PASS |
+| T2-BRT-SQL-1..12 | Filtros SQL do Histórico (SQLite real) | predicados reais com relógio fixado por parâmetro em 20:59, 22:30, 23:59 e 00:00 BRT; partição exata; igualdade com a classificação da linha; ordenação sem `date('now')` UTC; SQL×TS em ~700 instantes | idem | VENCIDA às 22:30 (contraste documentado) | PASS |
 | T2-BRT-5..8 | Validação pública de certificado | mesmos instantes | `VALIDA` até 23:59, `VENCIDA` às 00:00 | VENCIDA às 22:30 e 23:59 | PASS |
 | T2-BRT-9..10 | `checkConflitos` | 22:30 BRT, vencimento amanhã avisa; no próprio dia não avisa | idem | não avisava (amanhã) | PASS |
 | T2-ESC-1..4 | Escala do motor | 4.000 funcionários × 400 regras; dobrar a base; varredura de `/resumo`; determinismo | linear e dentro do orçamento | n/a | PASS |
@@ -66,10 +67,10 @@ Reexecutados e verdes no SHA atual (da 1ª rodada): oráculo de status/agregados
 ### Fechados nesta rodada
 
 **N1 — P3 — Três leituras ainda comparavam com a data UTC (CORRIGIDO).** Mesma causa do D1 em outro módulo: entre 21h e 24h BRT, um item que vence **hoje** aparecia como VENCIDO, enquanto o Compliance (após o #1916) o mostrava como VENCENDO (`dias=0`).
-- `routes/qualificacoes/historico.ts` — status derivado de cada linha da lista (`VENCIDA`/`VENCENDO_30`).
+- `routes/qualificacoes/historico.ts` — status derivado de cada linha da lista (`VENCIDA`/`VENCENDO_30`) **e** os filtros SQL VALIDA/VENCENDO_30/VENCIDA do mesmo handler, além do status/ordenação em `historico-helpers.ts` (achado do review automático da PR: com só a linha corrigida, filtro e linha divergiriam entre 21h e 24h BRT).
 - `routes/certificados/validacao.ts` — `situacao_operacional_atual` da **página pública** de validação do certificado.
 - `routes/qualificacoes/validacao.ts` — aviso "já possui esta qualificação válida".
-- **Correção:** `getTodayIsoSaoPaulo()` nos três, e a janela de 30 dias calculada em aritmética UTC sobre esse dia civil. Sem esquema, sem escrita, sem mudança de contrato.
+- **Correção:** `getTodayIsoSaoPaulo()` na linha e na validação; no SQL, a expressão única `SAO_PAULO_TODAY_SQL = date('now','-3 hours')` (avaliada por consulta, UTC-3 fixo) e o construtor `buildVencimentoStatusPredicates`. Um teste cruza essa expressão com `getTodayIsoSaoPaulo` em ~700 instantes (virada de ano e bissexto) e acusa divergência se o fuso voltar a ter horário de verão. Sem esquema, sem escrita, sem mudança de contrato.
 - **Impacto:** divergência de status entre telas e um certificado válido mostrado como vencido por até 3 h no último dia de validade.
 
 **N2 (= D7) — P3 — Recálculo com escopo restrito sem alvo recalculava tudo (CORRIGIDO).** A tela de Configurações permite deixar "entity_id" vazio. Agora o contrato exige `entity_id` inteiro positivo para `funcionario` e `tipo_qualificacao` e responde 400; entrada inválida em geral passa a ser 400 e não mais 500. A tela de Configurações já exibe a mensagem do erro (`errorData.error`), então o usuário passa a ver "entity_id obrigatório para o escopo informado" em vez de um recálculo silencioso da empresa inteira; o outro chamador (`ComplianceMatrix`) é código morto (N4). O recálculo continua exclusivo de admin.
@@ -89,6 +90,7 @@ Reexecutados e verdes no SHA atual (da 1ª rodada): oráculo de status/agregados
 - **N4 — Código morto quebrado:** `ComplianceMatrix.tsx` usa `apiFetch` sem importá-lo e chama `/compliance/recalculate` sem token nem corpo; só é reexportado em `LazyComponents.tsx`, sem importador. Inalcançável hoje; remover é limpeza, não correção.
 - **N5 — `GET /compliance-treinamentos/capabilities`** responde a qualquer autenticado (flags de prontidão de esquema). Sem dado sensível.
 - **N6 — Datas UTC remanescentes, todas no sentido permissivo ou em caminho de alto risco:** `generate-certificate.ts:365` (data de conclusão usada **só** quando o histórico não a tem), `status-codes.ts:198` e `historico-atomic-write.ts:108` (validam "não é futura", aceitam até o dia UTC), chave de cache diária em `historico.ts:1037`, `dashboardService.ts:618`. Não alterei a emissão de certificado sem staging.
+- **N7 — P3 — Contadores do Histórico usam o instante, não o dia (pré-existente, não alterado).** Os totais `vencidas/vencendo/validas` (e o rank `status` por `julianday`) comparam `julianday(vencimento)` com `julianday('now')`: um item que vence **hoje** conta como vencido desde a 00:00 UTC do dia do vencimento, enquanto a linha e os filtros o tratam como `VENCENDO_30` até o fim do dia. Mudar os totais altera números de cabeçalho da tela; fica como decisão de produto.
 - O corte `resolveRealizedCutoff` do motor (aceita a data UTC como "não futura") **permanece** necessário: os gravadores de Histórico/Certificados ainda gravam UTC (N6). Só o LMS foi migrado.
 
 ---
@@ -124,8 +126,8 @@ O motor puro não é gargalo. O custo de carregar funcionários, regras e evidê
 ## F. Entrega técnica
 
 - **Branch:** `audit/compliance-integral-2-20261104`, a partir de `ccc5bf2c9`.
-- **Produção (5 arquivos):** `routes/compliance-recalculate.ts`, `routes/compliance-requisitos.ts`, `routes/qualificacoes/historico.ts`, `routes/qualificacoes/validacao.ts`, `routes/certificados/validacao.ts`. Sem esquema, sem migration, sem mudança de contrato além do 400 do recálculo.
-- **Testes novos (4 arquivos):** `compliance-recalculate-scope`, `compliance-requisitos-tenant.sqlite`, `qualificacoes-certificados-brt-consistency`, `compliance-engine-scale`.
+- **Produção (6 arquivos):** `routes/compliance-recalculate.ts`, `routes/compliance-requisitos.ts`, `routes/qualificacoes/historico.ts`, `services/qualificacoes/historico-helpers.ts`, `routes/qualificacoes/validacao.ts`, `routes/certificados/validacao.ts`. Sem esquema, sem migration, sem mudança de contrato além do 400 do recálculo.
+- **Testes novos (5 arquivos):** `compliance-recalculate-scope`, `compliance-requisitos-tenant.sqlite`, `qualificacoes-certificados-brt-consistency`, `qualificacoes-historico-sql-brt.sqlite`, `compliance-engine-scale`. Três testes antigos que casavam o texto exato `date('now')` foram atualizados para a nova expressão (mesma regra protegida).
 - **Verificações locais:** as da seção A (Worker 7.420/7.420, `tsc`, `lint` + guards). Os oito gates oficiais são os da CI da PR e não são substituídos por execução local.
 - **Staging:** **não executado.** O workflow `staging-training-compliance-qa.yml` exige que o SHA implantado em staging seja ancestral da `main`; staging está em `a610629` (branch `test/frms-four-case-disposable-sqlite-20261105`), que difere da `main` só por um arquivo de teste FRMS e **não** é ancestral. Reimplantar staging sobrescreveria o deploy de outra frente. O código de compliance em staging é idêntico ao da `main`.
 - **Produção:** nada publicado nesta rodada. Publicar exige autorização para SHA/artefato/escopo exatos (Worker-only).

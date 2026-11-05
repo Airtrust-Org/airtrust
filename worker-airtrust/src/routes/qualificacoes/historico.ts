@@ -20,7 +20,7 @@ import {
 } from '../../middleware/employee-sector-access';
 import { forbidden } from '../../middleware/error-handler';
 import { safe } from './safe-handler';
-import { buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr } from '../../services/qualificacoes/historico-helpers';
+import { buildVencimentoStatusPredicates, buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr } from '../../services/qualificacoes/historico-helpers';
 import {
   CANCELLED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -476,22 +476,24 @@ export const getHistoricoListHandler = safe(async (c) => {
       conditions.push('qh.deleted_at IS NULL');
     } else {
       const statusConditions: string[] = [];
+      // Mesmo dia civil (São Paulo) do status derivado da linha: filtro e linha nunca divergem.
+      const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);
 
       for (const selectedStatus of selectedStatuses) {
         switch (selectedStatus) {
           case 'VALIDA':
             statusConditions.push(
-              `(${operationalCurrentQualificationPredicate} AND (${vencimentoExpr} IS NULL OR ${vencimentoExpr} > date('now','+30 days')))`,
+              `(${operationalCurrentQualificationPredicate} AND ${vencimentoPredicates.valida})`,
             );
             break;
           case 'VENCIDA':
             statusConditions.push(
-              `(${operationalCurrentQualificationPredicate} AND ${vencimentoExpr} < date('now'))`,
+              `(${operationalCurrentQualificationPredicate} AND ${vencimentoPredicates.vencida})`,
             );
             break;
           case 'VENCENDO_30':
             statusConditions.push(
-              `(${operationalCurrentQualificationPredicate} AND ${vencimentoExpr} >= date('now') AND ${vencimentoExpr} <= date('now','+30 days'))`,
+              `(${operationalCurrentQualificationPredicate} AND ${vencimentoPredicates.vencendo})`,
             );
             break;
           case 'RENOVADA':
