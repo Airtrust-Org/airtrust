@@ -154,14 +154,13 @@ async function main() {
     const categories = requireOk(await request(admin.token, '/api/categorias'),
       200, 'qualification categories');
     assert(Array.isArray(categories), 'PPTX_QA_CATEGORIES_INVALID');
-    const ead = categories.filter((entry) =>
-      String(entry.nome).trim().toUpperCase() === 'EAD' && entry.ativo === true);
-    assert(ead.length <= 1, 'PPTX_QA_CANONICAL_EAD_AMBIGUOUS');
-    const categoryId = ead.length === 1
-      ? requireId(ead[0].id, 'QA EAD category')
-      : requireId(requireOk(await request(admin.token, '/api/categorias', 'POST',
-        { nome: 'EAD', codigo: 'EAD', descricao: 'Categoria de testes staging LMS',
-          dominio_codigo: 'OPERACOES', ativo: true }), 201, 'QA EAD category').id, 'QA EAD category');
+    // A category called EAD is not necessarily the tenant's canonical LMS
+    // category. Since Schema V2 0457, only lms_integrada=1 authorizes LMS
+    // qualification binding. Never create/activate a category in live QA.
+    const integrated = categories.filter((entry) =>
+      entry.ativo === true && entry.lms_integrada === true);
+    assert(integrated.length === 1, 'PPTX_QA_CANONICAL_LMS_CATEGORY_NOT_UNIQUE');
+    const categoryId = requireId(integrated[0].id, 'QA canonical LMS category');
 
     // A qualifying PPTX must reference a real, current tenant EAD qualification
     // model. Creating an EAD course with gerar_qualificacao=1 but no type ID
