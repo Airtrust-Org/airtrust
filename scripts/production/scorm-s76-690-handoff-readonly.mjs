@@ -63,7 +63,7 @@ function info(scorm) {
     wrapper_ledger_count: Array.isArray(slides) && slides.every(Number.isSafeInteger)
       ? new Set(slides).size : null,
     lesson_location: typeof cmi?.['cmi.core.lesson_location'] === 'string' &&
-      /^\\d{1,3}\\/\\d{1,3}$/.test(cmi['cmi.core.lesson_location'])
+      /^\d{1,3}\/\d{1,3}$/.test(cmi['cmi.core.lesson_location'])
       ? cmi['cmi.core.lesson_location'] : null,
   };
 }
