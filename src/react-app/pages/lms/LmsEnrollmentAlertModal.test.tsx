@@ -147,7 +147,7 @@ describe('LmsEnrollmentAlertModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
     await waitFor(() => expect(screen.getByText(/Já houve alertas aceitos/)).toBeInTheDocument());
     expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('checkbox', { name: /Reenviar também os alertas/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Reenviar apenas os alertas/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar envio' }));
     await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
     const body = JSON.parse(String(fetchWithAuthMock.mock.calls[1][1].body));
@@ -167,7 +167,7 @@ describe('LmsEnrollmentAlertModal', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
-    const checkbox = await screen.findByRole('checkbox', { name: /Reenviar também os alertas/ });
+    const checkbox = await screen.findByRole('checkbox', { name: /Reenviar apenas os alertas/ });
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
 
@@ -183,8 +183,22 @@ describe('LmsEnrollmentAlertModal', () => {
     fireEvent.click(start);
     await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
     expect(fetchWithAuthMock.mock.calls[1][0]).toBe('/api/lms/matriculas/convites/lote/preview');
-    const newResend = await screen.findByRole('checkbox', { name: /Reenviar também os alertas/ });
+    const newResend = await screen.findByRole('checkbox', { name: /Reenviar apenas os alertas/ });
     expect(newResend).not.toBeChecked();
+  });
+
+  it('exibe auditoria pendente sem oferecer reenviar o canal indeterminado', async () => {
+    fetchWithAuthMock.mockResolvedValueOnce(ok({
+      selecionados: 1, processados: 1, email_ja_alertado: 1, whatsapp_ja_alertado: 0,
+      email_pendente_historico: 1, whatsapp_pendente_historico: 0,
+    }));
+    render(<LmsEnrollmentAlertModal
+      isOpen onClose={vi.fn()} targets={[targets[0]]} cursoTitulo="CRM"
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
+    await screen.findByText(/têm auditoria pendente e ficarão bloqueados/);
+    expect(screen.queryByRole('checkbox', { name: /Reenviar apenas os alertas/ }))
+      .not.toBeInTheDocument();
   });
 
   it('considera alertáveis apenas matrículas não iniciadas ou em andamento', () => {
