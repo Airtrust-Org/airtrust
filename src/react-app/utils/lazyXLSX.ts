@@ -9,12 +9,12 @@
 import type { Workbook, Worksheet } from 'exceljs';
 import { importWithRetry } from '@/react-app/utils/lazyWithRetry';
 
-let excelModule: typeof import('exceljs/dist/es5/exceljs.browser.js') | null = null;
+let excelModule: typeof import('exceljs/dist/exceljs.min.js') | null = null;
 
 async function loadExcelJS() {
   if (!excelModule) {
     excelModule = await importWithRetry(
-      () => import('exceljs/dist/es5/exceljs.browser.js'),
+      () => import('exceljs/dist/exceljs.min.js'),
       'exceljs-module',
       { reloadOnChunkError: false, maxAttempts: 2 },
     );
