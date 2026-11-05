@@ -52,6 +52,11 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
           if (q.includes('PRAGMA TABLE_INFO')) {
             return { results: [{ name: 'tipo_dispositivo' }, { name: 'aeronave_id' }, { name: 'is_instrutor' }] };
           }
+          if (q.includes('SELECT ID FROM FUNCIONARIOS') && q.includes('EMPRESA_ID = ?')) {
+            // All five synthetic participants belong to tenant 123. The pre-write
+            // fail-closed guard must not prematurely end the N+1 characterization.
+            return { results: Array.from({ length: 5 }, (_, i) => ({ id: i + 1 })) };
+          }
           if (q.includes('FROM SESSOES_PARTICIPANTES')) {
             return { results: [] }; // no old participants
           }
