@@ -218,16 +218,17 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
   await expect(page.getByText('Não foi possível atualizar os casos.')).toHaveCount(0);
   await captureMain(page, '02-casos-frms-qa', 'Casos');
 
-  const expectedCaseIds = [1, 2, 3, 4].map((n) => 'qa-frms-ux-case-' + n).sort();
+  // Independent F0B cohort. The four legacy alerts remain unchanged and intentionally excluded.
+  const expectedCaseIds = [1, 2, 3, 4].map((n) => 'qa-frms-f0b-case-' + n).sort();
   // Soft assertions keep 4/4 a HARD final acceptance failure, but let the
   // read-only browser collect independent Reports/Maintenance evidence first.
   // Zero cases must never be converted into a passing operational acceptance.
-  expect.soft(casesPayload.total, 'FRMS_QA_CASES_NOT_VISIBLE: seed antigo nao prova ciclo de casos')
+  expect.soft(casesPayload.total, 'FRMS_F0B_NEW_CASES_NOT_VISIBLE: four independent synthetic cases required')
     .toBe(expectedCaseIds.length);
   expect.soft((casesPayload.data ?? []).map((row) => row.id).sort()).toEqual(expectedCaseIds);
   expect.soft(casesPayload.data?.every((row) =>
     row.nome_tripulante?.startsWith('QA Tripulante ') &&
-    row.jornada_id?.startsWith('qa-frms-ux-j-') &&
+    row.jornada_id?.startsWith('qa-frms-f0b-j-') &&
     Boolean(row.data_jornada?.match(/^2026-\d\d-\d\d$/)) &&
     row.resolvido === 0,
   )).toBe(true);
