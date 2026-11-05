@@ -123,7 +123,7 @@ export function getCacheTtlMs(env: Env): number {
 export async function invalidateMaterializedStats(db: D1Database) {
   try {
     await db
-      .prepare("DELETE FROM qualificacoes_historico_stats_daily WHERE day = date('now')")
+      .prepare(`DELETE FROM qualificacoes_historico_stats_daily WHERE day = ${SAO_PAULO_TODAY_SQL}`)
       .run();
   } catch (e) {
     console.error('[invalidateMaterializedStats] erro', e);

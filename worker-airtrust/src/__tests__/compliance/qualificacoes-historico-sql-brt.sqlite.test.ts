@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import {
   SAO_PAULO_TODAY_SQL,
+  invalidateMaterializedStats,
   buildOrderByClause,
   buildVencimentoStatusPredicates,
   saoPauloTodaySqlAt,
@@ -142,6 +143,22 @@ describe('contadores agregados e filtros partilham a classificação por dia civ
     };
     expect(counts).toEqual(expected);
     expect(counts.validas + counts.vencendo + counts.vencidas).toBe(VENCIMENTOS.length);
+  });
+});
+
+describe('invalidação da estatística materializada', () => {
+  it('usa a mesma data civil de São Paulo da gravação e das contagens', async () => {
+    const statements: string[] = [];
+    const stubDb = {
+      prepare: (statement: string) => {
+        statements.push(statement);
+        return { run: async () => ({ success: true }) };
+      },
+    } as unknown as D1Database;
+    await invalidateMaterializedStats(stubDb);
+    expect(statements).toEqual([
+      `DELETE FROM qualificacoes_historico_stats_daily WHERE day = ${SAO_PAULO_TODAY_SQL}`,
+    ]);
   });
 });
 
