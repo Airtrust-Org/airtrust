@@ -50,10 +50,37 @@ export async function resolvePlatformAccessState(
     };
   }
 
-  const [hasPlatformRolesTable, hasSupportGrantsTable] = await Promise.all([
-    hasSchemaTable(db, 'user_platform_roles'),
-    hasSchemaTable(db, 'support_access_grants'),
-  ]);
+  return readPersistedPlatformStateWithRetry(db, normalizedUserId);
+}
+
+/**
+ * Só repete consultas de leitura quando o D1 apresenta falha transitória
+ * reconhecível. Erros de schema, autorização e falha persistente continuam
+ * propagados à autenticação (503 fail-closed); nunca há fallback para o JWT.
+ */
+function isTransientPlatformAccessReadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /SQLITE_BUSY|SQLITE_LOCKED|database is locked|timed? out|timeout|deadline exceeded|temporarily unavailable|rate.?limit|too many requests|connection reset|network error/i.test(message);
+}
+
+async function readPersistedPlatformStateWithRetry(
+  db: D1Database,
+  userId: number,
+): Promise<PlatformAccessState> {
+  try {
+    return await readPersistedPlatformState(db, userId);
+  } catch (error) {
+    if (!isTransientPlatformAccessReadError(error)) throw error;
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    return readPersistedPlatformState(db, userId);
+  }
+}
+
+async function readPersistedPlatformState(
+  db: D1Database,
+  normalizedUserId: number,
+): Promise<PlatformAccessState> {
+  const hasPlatformRolesTable = await hasSchemaTable(db, 'user_platform_roles');
 
   const roleRows = hasPlatformRolesTable
     ? await db
@@ -70,6 +97,14 @@ export async function resolvePlatformAccessState(
         .all<RoleRow>()
     : { results: [] as RoleRow[] };
 
+  const activeRoles = new Set((roleRows.results || []).map((row) => row.role_code));
+  // Nenhuma concessão de suporte é autorizada apenas por ter uma linha de
+  // grant. Sem role de suporte persistida, consultar a tabela de grants não
+  // acrescenta privilégio e só aumenta carga/leitura no D1 por request.
+  const needsSupportGrants = activeRoles.has('support_read_only') ||
+    activeRoles.has('support_elevated');
+  const hasSupportGrantsTable = needsSupportGrants &&
+    await hasSchemaTable(db, 'support_access_grants');
   const supportGrantRows = hasSupportGrantsTable
     ? await db
         .prepare(
@@ -85,7 +120,6 @@ export async function resolvePlatformAccessState(
         .all<SupportGrantRow>()
     : { results: [] as SupportGrantRow[] };
 
-  const activeRoles = new Set((roleRows.results || []).map((row) => row.role_code));
   const supportGrants = (supportGrantRows.results || []).map((row) => ({
     empresaId: Number(row.empresa_id),
     accessLevel: row.access_level,
