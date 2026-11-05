@@ -265,8 +265,6 @@ app.get('/minhas', async (c) => {
   const limit = Math.min(parsePositiveInt(c.req.query('limit'), 100), 200);
   const offset = (page - 1) * limit;
 
-  // Gestão sem vínculo funcional continua disponível; a visão explicitamente
-  // pessoal nunca deve mascarar falta de vínculo com HTTP 200 + lista vazia.
   if (!funcionarioId && hasRole(c, 'admin', 'manager') && c.req.query('strict_link') !== '1') {
     return c.json({ success: true, data: [], pagination: { page, limit, total: 0 } });
   }
