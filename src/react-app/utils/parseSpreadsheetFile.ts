@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs/dist/es5/exceljs.browser.js';
+import ExcelJS from 'exceljs/dist/exceljs.min.js';
 
 export const MAX_SPREADSHEET_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_SPREADSHEET_ROWS = 20_000;

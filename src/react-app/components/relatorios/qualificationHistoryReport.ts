@@ -288,7 +288,7 @@ export async function exportQualificationHistoryExcel(
   source: HistoricoQualificacao[],
   context: QualificationHistoryReportContext = {},
 ): Promise<void> {
-  const ExcelJS = await import('exceljs');
+  const { default: ExcelJS } = await import('exceljs/dist/exceljs.min.js');
   const workbook = new ExcelJS.Workbook();
   const rows = buildQualificationHistoryReportRows(source);
   const stats = summarize(rows);
