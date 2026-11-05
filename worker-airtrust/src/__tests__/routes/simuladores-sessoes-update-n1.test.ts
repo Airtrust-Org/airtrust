@@ -52,6 +52,11 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
           if (q.includes('PRAGMA TABLE_INFO')) {
             return { results: [{ name: 'tipo_dispositivo' }, { name: 'aeronave_id' }, { name: 'is_instrutor' }] };
           }
+          if (q.includes('SELECT ID FROM FUNCIONARIOS') && q.includes('EMPRESA_ID = ?')) {
+            // All five synthetic participants belong to tenant 123. The pre-write
+            // fail-closed guard must not prematurely end the N+1 characterization.
+            return { results: Array.from({ length: 5 }, (_, i) => ({ id: i + 1 })) };
+          }
           if (q.includes('FROM SESSOES_PARTICIPANTES')) {
             return { results: [] }; // no old participants
           }
@@ -81,6 +86,19 @@ describe('Simuladores Sessoes Update N+1 Characterization', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('rejects a foreign employee before any session or ficha write', async () => {
+    const res = await app.request('/sessoes/1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantes: [{ funcionario_id: 201, funcao: 'PIC' }] }),
+    }, { DB: { prepare: prepareSpy } as any } as Env);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ success: false });
+    const writes = prepareSpy.mock.calls.filter(([sql]: [string]) => /^\s*(UPDATE|INSERT|DELETE)\b/i.test(sql));
+    expect(writes).toHaveLength(0);
   });
 
   it('characterizes query count for PUT /sessoes/:id with participants', async () => {
