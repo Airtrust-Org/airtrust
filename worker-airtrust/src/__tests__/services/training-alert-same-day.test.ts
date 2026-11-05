@@ -31,6 +31,7 @@ describe('same-day training alert deduplication', () => {
   it('recognizes a successful late-evening BRT LMS alert as already sent on the preceding UTC day', () => {
     const history = new SameDayTrainingAlerts([base], '2026-11-05');
     expect(history.wasSent(identity, 'EMAIL')).toBe(true);
+    expect(history.isPending(identity, 'EMAIL')).toBe(false);
     expect(history.wasSent(identity, 'WHATSAPP')).toBe(false);
     expect(history.wasSent({ ...identity, funcionario_id: 102 }, 'EMAIL')).toBe(false);
     expect(history.wasSent({ ...identity, qualificacao_tipo_id: 43 }, 'EMAIL')).toBe(false);
@@ -63,6 +64,7 @@ describe('same-day training alert deduplication', () => {
     ], '2026-11-05');
     expect(history.wasSent(identity, 'EMAIL')).toBe(true);
     expect(history.wasSent(identity, 'WHATSAPP')).toBe(false);
+    expect(history.isPending(identity, 'EMAIL')).toBe(true);
   });
 
   it('pending intention from the prior BRT day is not an all-day block', () => {
