@@ -154,6 +154,39 @@ describe('LmsEnrollmentAlertModal', () => {
     expect(body.reenviar_hoje).toBe(true);
   });
 
+  it('clears resend consent after cancellation and checks the new selection again', async () => {
+    fetchWithAuthMock.mockResolvedValueOnce(ok({
+      selecionados: 1, processados: 1, email_ja_alertado: 1, whatsapp_ja_alertado: 0,
+    })).mockResolvedValueOnce(ok({
+      selecionados: 1, processados: 1, email_ja_alertado: 1, whatsapp_ja_alertado: 0,
+    }));
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <LmsEnrollmentAlertModal
+        isOpen onClose={onClose} targets={[targets[0]]} cursoTitulo="CRM"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' }));
+    const checkbox = await screen.findByRole('checkbox', { name: /Reenviar também os alertas/ });
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    rerender(<LmsEnrollmentAlertModal
+      isOpen={false} onClose={onClose} targets={[]} cursoTitulo="CRM"
+    />);
+    rerender(<LmsEnrollmentAlertModal
+      isOpen onClose={onClose} targets={[targets[1]]} cursoTitulo="AVSEC"
+    />);
+    const start = screen.getByRole('button', { name: 'Verificar e enviar 1 alerta(s)' });
+    fireEvent.click(start);
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledTimes(2));
+    expect(fetchWithAuthMock.mock.calls[1][0]).toBe('/api/lms/matriculas/convites/lote/preview');
+    const newResend = await screen.findByRole('checkbox', { name: /Reenviar também os alertas/ });
+    expect(newResend).not.toBeChecked();
+  });
+
   it('considera alertáveis apenas matrículas não iniciadas ou em andamento', () => {
     expect(isLmsEnrollmentAlertable({ status: 'NAO_INICIADO' })).toBe(true);
     expect(isLmsEnrollmentAlertable({ status: 'EM_ANDAMENTO' })).toBe(true);
