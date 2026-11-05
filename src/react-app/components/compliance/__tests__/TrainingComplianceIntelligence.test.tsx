@@ -191,12 +191,12 @@ describe('TrainingComplianceIntelligence', () => {
     );
     expect(screen.getByText('WhatsApp')).toBeInTheDocument();
     expect(screen.getByText('E-mail')).toBeInTheDocument();
-    const resend = await screen.findByRole('checkbox', { name: /Reenviar explicitamente os avisos/ });
+    const resend = await screen.findByRole('checkbox', { name: /Reenviar explicitamente apenas avisos/ });
     fireEvent.click(resend);
     expect(resend).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reenviar aviso' }));
-    const reopened = await screen.findByRole('checkbox', { name: /Reenviar explicitamente os avisos/ });
+    const reopened = await screen.findByRole('checkbox', { name: /Reenviar explicitamente apenas avisos/ });
     expect(reopened).not.toBeChecked();
   });
 
