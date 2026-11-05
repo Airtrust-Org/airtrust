@@ -83,6 +83,18 @@ describe('planLmsHistoricoReconciliation — planner read-only', () => {
     });
   });
 
+  it('não associa histórico único com data divergente à matrícula concluída', async () => {
+    const { db } = makeDb({
+      unlinked: [{ id: 42, funcionario_id: 10, qualificacao_codigo: 'QUAL-A', data_conclusao: '2026-09-14' }],
+      historicosByFuncCodigo: { '10:QUAL-A': [{ id: 901, data_conclusao: '2026-06-19' }] },
+    });
+
+    const manifest = await planLmsHistoricoReconciliation(db, 6);
+    expect(manifest.candidates).toHaveLength(0);
+    expect(manifest.ambiguities).toHaveLength(0);
+    expect(manifest.total_unlinked_matriculas).toBe(1);
+  });
+
   it('matrícula sem data_conclusao mas com Histórico ativo único: MOST_RECENT_ACTIVE', async () => {
     const { db } = makeDb({
       unlinked: [{ id: 2, funcionario_id: 20, qualificacao_codigo: 'QUAL-B', data_conclusao: null }],

@@ -582,12 +582,27 @@ function evaluateContract(contract: SchemaContract, snapshot: StructuralSnapshot
 }
 
 function execWranglerJson<T>(workerDir: string, args: string[]): SnapshotCommandResult<T>[] {
-  const output = execFileSync('npx', args, {
-    cwd: workerDir,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  return parseWranglerExecuteOutput<T>(output);
+  // This function is only reached by allowlisted remote, read-only schema queries.
+  // Cloudflare's D1 API may transiently reject one of the many PRAGMA reads.
+  // Retry the individual query, never a migration or the whole release, and
+  // preserve fail-closed behavior after the final attempt.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const output = execFileSync('npx', args, {
+        cwd: workerDir,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return parseWranglerExecuteOutput<T>(output);
+    } catch (error) {
+      if (attempt === maxAttempts) throw error;
+      process.stderr.write(`SCHEMA_READONLY_QUERY_RETRY attempt=${attempt} of ${maxAttempts}\n`);
+      // Bounded synchronous backoff keeps the existing synchronous API intact.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 1500);
+    }
+  }
+  throw new Error('SCHEMA_READONLY_QUERY_RETRIES_EXHAUSTED');
 }
 
 function sanitizeTableName(tableName: string): string {

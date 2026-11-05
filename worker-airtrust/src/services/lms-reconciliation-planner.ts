@@ -134,9 +134,12 @@ export async function planLmsHistoricoReconciliation(
       continue;
     }
 
-    // Sem data_conclusao na matrícula, ou nenhum match exato: só resolve se
-    // houver exatamente UM Histórico ativo para esta combinação — qualquer
-    // pluralidade é ambiguidade, nunca "o mais recente" adivinhado.
+    // Uma matrícula com conclusão registrada exige correspondência EXATA de data.
+    // Nunca vincule histórico de outro ciclo só porque é o único candidato.
+    if (matricula.data_conclusao) continue;
+
+    // Sem data_conclusao na matrícula, só resolve se houver exatamente UM
+    // Histórico ativo; pluralidade é ambiguidade, não adivinhação de ciclo.
     if (rows.length === 1) {
       const entryHash = await sha256Hex(`${matricula.id}:${rows[0].id}:MOST_RECENT_ACTIVE`);
       candidates.push({
