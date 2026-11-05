@@ -72,7 +72,9 @@ export function sanitize(row) {
   valid(Number.isSafeInteger(row.handoff_id) && row.handoff_id > 0, 'HANDOFF_INVALID');
   valid(Number.isSafeInteger(row.ciclo_id) && row.ciclo_id > 0, 'CYCLE_INVALID');
   valid(/^[a-f0-9]{64}$/.test(row.active_package_sha || ''), 'ACTIVE_SHA_INVALID');
-  valid(row.active_package_sha === row.target_package_sha256, 'ACTIVE_PACKAGE_CHANGED');
+  // A replacement may have occurred after the archived handoff. Read-only
+  // inspection must report that divergence, not conceal the archive. Nothing
+  // here can authorize credit or change package identity.
   const prior = object(row.previous_enrollment_json);
   const oldScorm = object(row.previous_scorm_json);
   const plan = object(row.resume_plan_json);
@@ -96,7 +98,7 @@ export function sanitize(row) {
     enrollment_status: row.current_status,
     previous_package_sha_present: oldShaValid,
     previous_differs_from_active: oldShaValid ? oldSha !== row.active_package_sha : null,
-    active_sha_matches_handoff: true,
+    active_sha_matches_handoff: row.active_package_sha === row.target_package_sha256,
     handoff_plan: {
       status: plan.status ?? null,
       active_total: a, target_position: b,
