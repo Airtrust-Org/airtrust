@@ -38,6 +38,24 @@ UPDATE usuarios
    )
 `;
 
+/** Read-only guard uses exactly the same WHERE predicate as the atomic update. */
+export const LINK_USER_EMPLOYEE_ELIGIBLE_SQL =
+  LINK_USER_EMPLOYEE_CAS_SQL.replace(
+    /^\s*UPDATE usuarios\s+SET funcionario_id = \?, updated_at = datetime\('now'\)\s+WHERE\s+/i,
+    'SELECT COUNT(*) AS n FROM usuarios WHERE ',
+  );
+
+export async function eligibleAtomicUserEmployeeLink(
+  db: D1Database,
+  input: Pick<LinkIdentityInput, 'empresaId' | 'userId' | 'employeeId'>,
+): Promise<boolean> {
+  const { empresaId, userId, employeeId } = input;
+  const query = await db.prepare(LINK_USER_EMPLOYEE_ELIGIBLE_SQL)
+    .bind(userId, empresaId, employeeId, empresaId, employeeId)
+    .first<{ n: number }>();
+  return Number(query?.n ?? 0) === 1;
+}
+
 export const LINK_USER_EMPLOYEE_AUDIT_SQL = `
 INSERT INTO audit_logs
   (empresa_id, usuario_id, acao, tabela, registro_id, detalhes, created_at)
