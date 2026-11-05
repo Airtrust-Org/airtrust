@@ -19,11 +19,25 @@ app.use('*', auth(), requireRole('admin'));
 // SCHEMA DE VALIDAÇÃO
 // ========================================
 
-const recalculateSchema = z.object({
-  scope: z.enum(['all', 'funcionario', 'tipo_qualificacao']).default('all'),
-  entity_id: z.number().optional(),
-  dry_run: z.boolean().default(false),
-});
+const recalculateSchema = z
+  .object({
+    scope: z.enum(['all', 'funcionario', 'tipo_qualificacao']).default('all'),
+    entity_id: z.number().optional(),
+    dry_run: z.boolean().default(false),
+  })
+  .superRefine((value, ctx) => {
+    // Escopo restrito sem alvo válido recalcularia a empresa inteira em silêncio.
+    if (
+      value.scope !== 'all' &&
+      !(Number.isSafeInteger(value.entity_id) && (value.entity_id ?? 0) > 0)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['entity_id'],
+        message: 'entity_id obrigatório para o escopo informado',
+      });
+    }
+  });
 
 // ========================================
 // TIPOS
@@ -68,8 +82,18 @@ app.post('/recalculate', async (c: Context<AppEnv>) => {
   try {
     // Validar corpo da requisição
     const body = await c.req.json();
-    const validatedData = recalculateSchema.parse(body);
-    const { scope, entity_id, dry_run } = validatedData;
+    const parsedBody = recalculateSchema.safeParse(body);
+    if (!parsedBody.success) {
+      return c.json(
+        {
+          success: false,
+          message: 'Parâmetros de recálculo inválidos',
+          error: parsedBody.error.issues[0]?.message ?? 'Dados inválidos',
+        } satisfies RecalculateResponse,
+        400,
+      );
+    }
+    const { scope, entity_id, dry_run } = parsedBody.data;
 
     const db = c.env.DB;
     const logger = createLogger(c, 'ComplianceRecalculate');
