@@ -245,7 +245,7 @@ async function handleRematriculation(
       contentType: edition?.tipo_conteudo,
       activePrefix: edition?.scorm_package_r2_prefix,
       empresaId,
-      cursoId: existing.curso_id,
+      cursoId: existing.curso_id, matriculaId,
       cmiJson: edition?.cmi_json,
       suspendData: edition?.suspend_data,
       db: c.env.DB, enrollmentStartedAt: existing.data_inicio,
