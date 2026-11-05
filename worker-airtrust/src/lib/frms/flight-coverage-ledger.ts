@@ -6,7 +6,22 @@
  * Reuses the tenant-scoped SIGVOOS event table (migration 0387): no new D1
  * schema or claims that old, pre-attestation syncs verified a zero-flight day.
  */
-import type { SigvoosSyncSummary } from '../../services/sigvoos-frms';
+// Structural contract owned by the FRMS consumer: no reverse coupling from
+// FRMS to the SIGVOOS service (canonical SIGVOOS -> Controle de Voos -> FRMS).
+export interface FrmsCoverageSyncSummary {
+  periodo: { from: string; to: string };
+  sourceWindowVerified?: boolean;
+  totalErros: number;
+  totalRegistrosBrutos: number;
+  totalRegistrosNormalizados: number;
+  importacoes: ReadonlyArray<{ tripulante_id: string | null; erros: number }>;
+  controleVoosImport?: {
+    status: 'DISABLED' | 'OK' | 'ERROR';
+    rawRecords: number;
+    conflictRecords: number;
+    failedPayloads: number;
+  };
+}
 import type { RollingFlightCoverageEvidence } from './regulatory-compliance';
 import { addDaysIso } from './iso-date';
 
@@ -39,7 +54,7 @@ export function isApprovedCoverageTenant(empresaId: number, csv: string | undefi
   );
 }
 
-export function isVerifiedCvSigvoosSync(summary: SigvoosSyncSummary): boolean {
+export function isVerifiedCvSigvoosSync(summary: FrmsCoverageSyncSummary): boolean {
   const cv = summary.controleVoosImport;
   const nonNegativeInt = (n: number) => Number.isSafeInteger(n) && n >= 0;
   if (!cv || cv.status !== 'OK' || summary.sourceWindowVerified !== true) return false;
@@ -73,7 +88,7 @@ export async function persistClosedDayCoverage(params: {
   periodFrom: string;
   periodTo: string;
   operationalDate: string;
-  summary: SigvoosSyncSummary;
+  summary: FrmsCoverageSyncSummary;
   /** Must be operator-reviewed: the API credentials cover all relevant flights. */
   authoritativeSourceApproved: boolean;
   verifiedAt?: string;
