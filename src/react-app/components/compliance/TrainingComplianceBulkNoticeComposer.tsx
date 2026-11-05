@@ -63,6 +63,8 @@ type SendResult = {
   whatsapp_falha: number;
   sem_email: number;
   sem_whatsapp: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
 };
 
 const STATUS_OPTIONS: Array<{ status: NoticeStatus; label: string }> = [
@@ -255,6 +257,29 @@ export function TrainingComplianceBulkNoticeComposer({
   const withEmail = selectedRows.filter((row) => row.tem_email).length;
   const withWhatsApp = selectedRows.filter((row) => row.tem_whatsapp).length;
 
+  const priorAlerts = useQuery({
+    queryKey: ['training-compliance', 'bulk-notice-prior', targets],
+    enabled: open && targets.length > 0,
+    queryFn: async () => {
+      let email = 0;
+      let whatsapp = 0;
+      for (const batch of chunkTargets(targets, 200)) {
+        const result = await readJson<{ email_ja_alertado: number; whatsapp_ja_alertado: number }>(
+          await fetchWithAuth('/api/compliance-treinamentos/avisos/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targets: batch }),
+          }),
+        );
+        email += result.email_ja_alertado || 0;
+        whatsapp += result.whatsapp_ja_alertado || 0;
+      }
+      return { email, whatsapp };
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
+  });
+
   const addScope = () => {
     if (scopes.length >= 50) {
       showToast.error('Limite de 50 seleções por envio múltiplo.');
@@ -341,6 +366,8 @@ export function TrainingComplianceBulkNoticeComposer({
         whatsapp_falha: 0,
         sem_email: 0,
         sem_whatsapp: 0,
+        email_ja_alertado: 0,
+        whatsapp_ja_alertado: 0,
       };
 
       for (const batch of chunkTargets(targets, 200)) {
@@ -359,7 +386,7 @@ export function TrainingComplianceBulkNoticeComposer({
     },
     onSuccess: async (result) => {
       showToast.success(
-        `${result.selecionados} alerta(s) processado(s): ${result.email_sucesso} e-mail(s) e ${result.whatsapp_sucesso} WhatsApp(s) enviados.`,
+        `${result.selecionados} alerta(s) processado(s): ${result.email_sucesso} e-mail(s), ${result.whatsapp_sucesso} WhatsApp(s); ${(result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0)} reenvio(s) evitado(s).`,
       );
       setOpen(false);
       setScopes([]);
@@ -640,6 +667,17 @@ export function TrainingComplianceBulkNoticeComposer({
                       <strong>{peopleCount}</strong> pessoa(s), envolvendo{' '}
                       <strong>{trainingCount}</strong> treinamento(s). Sobreposições entre curso,
                       pessoa, cargo e setor não geram envio duplicado.
+                      {priorAlerts.isLoading ? (
+                        <p className="mt-2">Verificando alertas já enviados hoje…</p>
+                      ) : priorAlerts.isError ? (
+                        <p role="alert" className="mt-2 text-red-700">Não foi possível validar o histórico. Envio bloqueado.</p>
+                      ) : (
+                        <p className="mt-2 text-amber-800">
+                          Já alertados hoje (excluídos automaticamente):
+                          {' '}{channels.email ? priorAlerts.data?.email || 0 : 0} e-mail(s) e
+                          {' '}{channels.whatsapp ? priorAlerts.data?.whatsapp || 0 : 0} WhatsApp(s).
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
@@ -661,6 +699,8 @@ export function TrainingComplianceBulkNoticeComposer({
                   preview.isLoading ||
                   preview.isError ||
                   send.isPending ||
+                  priorAlerts.isLoading ||
+                  priorAlerts.isError ||
                   !targets.length ||
                   (!channels.email && !channels.whatsapp)
                 }
