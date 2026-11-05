@@ -81,10 +81,10 @@ async function exercise(engine,name,port,viewport){
   assert.equal(after.calls.filter(x=>x==='finish').length,1);
   assert.equal((await get()).courseCompleted,true);
   assert.ok(indices.every(i=>Number.isInteger(i)&&i>=0&&i<29));
-  const reviewMeta=await sco.locator('body').evaluate(i=>({requested:i,total:window.COURSE_DATA.slides.length,mode:window.__AIRTRUST_PLAYER_TEST__.getState().mode}),indices[0]);
+  const reviewMeta=await sco.locator('body').evaluate((_,i)=>({requested:i,total:window.COURSE_DATA.slides.length,mode:window.__AIRTRUST_PLAYER_TEST__.getState().mode}),indices[0]);
   assert.equal(reviewMeta.requested,indices[0]);
   assert.equal(reviewMeta.total,29);
-  await sco.locator('body').evaluate(i=>window.__AIRTRUST_PLAYER_TEST__.show(Number(i)),indices[0]);
+  await sco.locator('body').evaluate((_,i)=>window.__AIRTRUST_PLAYER_TEST__.show(Number(i)),indices[0]);
   await sco.locator('[data-opt="1"]').first().click();
   assert.equal((await get()).scenario[missing[0].id],0,'completed review cannot mutate evidence');
   assert.deepEqual(errors,[]);await page.close();
