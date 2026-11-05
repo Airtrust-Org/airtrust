@@ -121,8 +121,7 @@ export function createTrainingComplianceIntelligenceRoutes({
         last_status: string | null;
       }
     >();
-    if (!(await tableExists(db, 'notificacoes_log'))) return map;
-    try {
+    if (await tableExists(db, 'notificacoes_log')) try {
       const rows = await db
         .prepare(
           `WITH parsed AS (
@@ -172,7 +171,63 @@ export function createTrainingComplianceIntelligenceRoutes({
         });
       }
     } catch {
-      return map;
+      // Histórico LMS pode continuar disponível mesmo sem logs de Compliance.
+    }
+
+    if (await tableExists(db, 'audit_logs')) try {
+      const logs = await db.prepare(`
+        WITH events AS (
+          SELECT CAST(json_extract(a.new_values, '$.funcionario_id') AS INTEGER) AS funcionario_id,
+                 c.qualificacao_tipo_id,
+                 a.created_at AS event_at,
+                 (CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO' THEN 1 ELSE 0 END
+                  + CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO' THEN 1 ELSE 0 END) AS sent_count,
+                 CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') IS NOT NULL
+                      THEN 'WHATSAPP' ELSE 'EMAIL' END AS channel,
+                 CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO'
+                      THEN 'enviada'
+                      WHEN json_extract(a.new_values, '$.email_resultado') = 'FALHA'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'FALHA'
+                      THEN 'erro' ELSE 'sem_contato' END AS status
+            FROM audit_logs a
+            JOIN lms_cursos c ON c.empresa_id = a.empresa_id
+              AND c.id = CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER)
+           WHERE a.empresa_id = ? AND a.action = 'LMS_MATRICULA_ALERTA'
+             AND a.entity_type = 'lms_matriculas' AND json_valid(a.new_values) = 1
+             AND c.qualificacao_tipo_id IS NOT NULL
+        ), ranked AS (
+          SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY funcionario_id, qualificacao_tipo_id
+            ORDER BY event_at DESC
+          ) AS rn FROM events WHERE funcionario_id > 0
+        )
+        SELECT funcionario_id, qualificacao_tipo_id, SUM(sent_count) AS sent_count,
+               MAX(CASE WHEN rn=1 THEN event_at END) AS last_at,
+               MAX(CASE WHEN rn=1 THEN channel END) AS last_channel,
+               MAX(CASE WHEN rn=1 THEN status END) AS last_status
+          FROM ranked GROUP BY funcionario_id, qualificacao_tipo_id
+      `).bind(empresaId).all<{
+        funcionario_id: number;
+        qualificacao_tipo_id: number;
+        sent_count: number;
+        last_at: string | null;
+        last_channel: string | null;
+        last_status: string | null;
+      }>();
+      for (const log of logs.results || []) {
+        const key = `${Number(log.funcionario_id)}:${Number(log.qualificacao_tipo_id)}`;
+        const existing = map.get(key);
+        const later = !existing?.last_at || (log.last_at || '') > existing.last_at;
+        map.set(key, {
+          count: (existing?.count || 0) + Number(log.sent_count || 0),
+          last_at: later ? log.last_at : existing?.last_at || null,
+          last_channel: later ? log.last_channel : existing?.last_channel || null,
+          last_status: later ? log.last_status : existing?.last_status || null,
+        });
+      }
+    } catch {
+      // Falha de consulta histórica não deve apagar estatísticas comprovadas.
     }
     return map;
   }
