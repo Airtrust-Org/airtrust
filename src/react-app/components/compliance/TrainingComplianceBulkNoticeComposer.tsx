@@ -263,8 +263,13 @@ export function TrainingComplianceBulkNoticeComposer({
     queryFn: async () => {
       let email = 0;
       let whatsapp = 0;
+      let emailPending = 0;
+      let whatsappPending = 0;
       for (const batch of chunkTargets(targets, 200)) {
-        const result = await readJson<{ email_ja_alertado: number; whatsapp_ja_alertado: number }>(
+        const result = await readJson<{
+          email_ja_alertado: number; whatsapp_ja_alertado: number;
+          email_pendente_historico?: number; whatsapp_pendente_historico?: number;
+        }>(
           await fetchWithAuth('/api/compliance-treinamentos/avisos/preview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -273,8 +278,10 @@ export function TrainingComplianceBulkNoticeComposer({
         );
         email += result.email_ja_alertado || 0;
         whatsapp += result.whatsapp_ja_alertado || 0;
+        emailPending += result.email_pendente_historico || 0;
+        whatsappPending += result.whatsapp_pendente_historico || 0;
       }
-      return { email, whatsapp };
+      return { email, whatsapp, emailPending, whatsappPending };
     },
     staleTime: 0,
     refetchOnWindowFocus: 'always',
@@ -672,11 +679,19 @@ export function TrainingComplianceBulkNoticeComposer({
                       ) : priorAlerts.isError ? (
                         <p role="alert" className="mt-2 text-red-700">Não foi possível validar o histórico. Envio bloqueado.</p>
                       ) : (
-                        <p className="mt-2 text-amber-800">
+                        <div className="mt-2 text-amber-800">
                           Já alertados hoje (excluídos automaticamente):
                           {' '}{channels.email ? priorAlerts.data?.email || 0 : 0} e-mail(s) e
                           {' '}{channels.whatsapp ? priorAlerts.data?.whatsapp || 0 : 0} WhatsApp(s).
-                        </p>
+                          {(channels.email && priorAlerts.data?.emailPending ||
+                            channels.whatsapp && priorAlerts.data?.whatsappPending) ? (
+                            <p role="alert" className="mt-2 text-red-800">
+                              Auditoria pendente: {channels.email ? priorAlerts.data?.emailPending || 0 : 0} e-mail(s),
+                              {' '}{channels.whatsapp ? priorAlerts.data?.whatsappPending || 0 : 0} WhatsApp(s).
+                              Esses canais não serão reenviados até reconciliação.
+                            </p>
+                          ) : null}
+                        </div>
                       )}
                     </>
                   )}
