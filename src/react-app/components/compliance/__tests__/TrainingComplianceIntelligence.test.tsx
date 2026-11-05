@@ -29,7 +29,7 @@ function renderWithClient(node: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
 }
 
 const pending = {
@@ -106,7 +106,7 @@ describe('TrainingComplianceIntelligence', () => {
       } as Response;
     });
 
-    renderWithClient(<TrainingComplianceIntelligence mode="comunicacoes" {...props} />);
+    const { rerender, client } = renderWithClient(<TrainingComplianceIntelligence mode="comunicacoes" {...props} />);
     await screen.findByText('CRM Gestores');
     expect(screen.getByText('Alerta LMS')).toBeInTheDocument();
     expect(screen.getAllByText('Aceito para envio').length).toBeGreaterThanOrEqual(2);
@@ -139,6 +139,23 @@ describe('TrainingComplianceIntelligence', () => {
       expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).includes('offset=100')))
         .toBe(true)
     );
+    fetchWithAuthMock.mockClear();
+    rerender(
+      <QueryClientProvider client={client}>
+        <TrainingComplianceIntelligence mode="comunicacoes" {...props}
+          search="Pessoa" setorId={null} funcaoId={2} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.map(([url]) => String(url));
+      expect(calls.some((url) =>
+        url.includes('funcionario_q=Pessoa') &&
+        url.includes('funcao_id=2') &&
+        url.includes('offset=0') &&
+        !url.includes('setor_id=1')
+      )).toBe(true);
+    });
+    expect(screen.getByText('CRM Gestores')).toBeInTheDocument();
   });
 
   it('shows actionable never-done pending items and previews resend channels', async () => {
