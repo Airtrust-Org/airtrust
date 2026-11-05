@@ -13,6 +13,7 @@ import {
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
+import { listTrainingCommunications } from '../services/training-communication-history';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -120,8 +121,7 @@ export function createTrainingComplianceIntelligenceRoutes({
         last_status: string | null;
       }
     >();
-    if (!(await tableExists(db, 'notificacoes_log'))) return map;
-    try {
+    if (await tableExists(db, 'notificacoes_log')) try {
       const rows = await db
         .prepare(
           `WITH parsed AS (
@@ -171,21 +171,65 @@ export function createTrainingComplianceIntelligenceRoutes({
         });
       }
     } catch {
-      return map;
+      // Histórico LMS pode continuar disponível mesmo sem logs de Compliance.
+    }
+
+    if (await tableExists(db, 'audit_logs')) try {
+      const logs = await db.prepare(`
+        WITH events AS (
+          SELECT CAST(json_extract(a.new_values, '$.funcionario_id') AS INTEGER) AS funcionario_id,
+                 c.qualificacao_tipo_id,
+                 a.created_at AS event_at,
+                 (CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO' THEN 1 ELSE 0 END
+                  + CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO' THEN 1 ELSE 0 END) AS sent_count,
+                 CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') IS NOT NULL
+                      THEN 'WHATSAPP' ELSE 'EMAIL' END AS channel,
+                 CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO'
+                      THEN 'enviada'
+                      WHEN json_extract(a.new_values, '$.email_resultado') = 'FALHA'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'FALHA'
+                      THEN 'erro' ELSE 'sem_contato' END AS status
+            FROM audit_logs a
+            JOIN lms_cursos c ON c.empresa_id = a.empresa_id
+              AND c.id = CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER)
+           WHERE a.empresa_id = ? AND a.action = 'LMS_MATRICULA_ALERTA'
+             AND a.entity_type = 'lms_matriculas' AND json_valid(a.new_values) = 1
+             AND c.qualificacao_tipo_id IS NOT NULL
+        ), ranked AS (
+          SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY funcionario_id, qualificacao_tipo_id
+            ORDER BY event_at DESC
+          ) AS rn FROM events WHERE funcionario_id > 0
+        )
+        SELECT funcionario_id, qualificacao_tipo_id, SUM(sent_count) AS sent_count,
+               MAX(CASE WHEN rn=1 THEN event_at END) AS last_at,
+               MAX(CASE WHEN rn=1 THEN channel END) AS last_channel,
+               MAX(CASE WHEN rn=1 THEN status END) AS last_status
+          FROM ranked GROUP BY funcionario_id, qualificacao_tipo_id
+      `).bind(empresaId).all<{
+        funcionario_id: number;
+        qualificacao_tipo_id: number;
+        sent_count: number;
+        last_at: string | null;
+        last_channel: string | null;
+        last_status: string | null;
+      }>();
+      for (const log of logs.results || []) {
+        const key = `${Number(log.funcionario_id)}:${Number(log.qualificacao_tipo_id)}`;
+        const existing = map.get(key);
+        const later = !existing?.last_at || (log.last_at || '') > existing.last_at;
+        map.set(key, {
+          count: (existing?.count || 0) + Number(log.sent_count || 0),
+          last_at: later ? log.last_at : existing?.last_at || null,
+          last_channel: later ? log.last_channel : existing?.last_channel || null,
+          last_status: later ? log.last_status : existing?.last_status || null,
+        });
+      }
+    } catch {
+      // Falha de consulta histórica não deve apagar estatísticas comprovadas.
     }
     return map;
-  }
-
-  function maskNotificationDestination(value: unknown): string | null {
-    const raw = String(value || '').trim();
-    if (!raw) return null;
-    if (raw.includes('@')) {
-      const [local, domain] = raw.split('@');
-      return `${local?.slice(0, 1) || '*'}***@${domain || '***'}`;
-    }
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length >= 4) return `***${digits.slice(-4)}`;
-    return '***';
   }
 
   app.get('/configuracao-alertas', requireRole('admin', 'manager'), async (c) => {
@@ -483,75 +527,56 @@ export function createTrainingComplianceIntelligenceRoutes({
   app.get('/comunicacoes', requireRole('admin', 'manager'), async (c) => {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
-    const q = normalizeSearchText(c.req.query('q'));
-    const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
-    const limit = Math.min(300, Math.max(1, Number(c.req.query('limit') || 100)));
-    if (!(await tableExists(c.env.DB, 'notificacoes_log')))
-      return c.json({ success: true, data: [] });
-    const rows = await c.env.DB.prepare(
-      `SELECT id, tipo, destinatario, assunto, corpo, status, erro_mensagem,
-                COALESCE(enviado_em, created_at) AS event_at
-           FROM notificacoes_log
-          WHERE empresa_id = ?
-            AND (assunto LIKE '[COMPLIANCE_TREINAMENTO:%' OR assunto LIKE '[COMPLIANCE_GESTOR:%')
-          ORDER BY COALESCE(enviado_em, created_at) DESC
-          LIMIT ?`,
-    )
-      .bind(empresaId, limit * 4)
-      .all<{
-        id: number;
-        tipo: string | null;
-        destinatario: string | null;
-        assunto: string | null;
-        corpo: string | null;
-        status: string | null;
-        erro_mensagem: string | null;
-        event_at: string | null;
-      }>();
-    const data = [] as Array<Record<string, unknown>>;
-    for (const row of rows.results || []) {
-      let body: Record<string, unknown> = {};
-      try {
-        body = row.corpo ? (JSON.parse(row.corpo) as Record<string, unknown>) : {};
-      } catch {
-        body = {};
-      }
-      const funcionarioId = Number(body.funcionario_id || 0);
-      const person = peopleById.get(funcionarioId);
-      if (!funcionarioId || !person) continue;
-      if (funcionarioQ && !normalizeSearchText(person.nome).includes(funcionarioQ)) continue;
-      if (
-        q &&
-        ![
-          body.funcionario_nome,
-          body.setor_nome,
-          body.qualificacao_nome,
-          row.destinatario,
-          row.tipo,
-        ].some((value) => normalizeSearchText(value).includes(q))
-      ) {
-        continue;
-      }
-      data.push({
-        id: row.id,
-        funcionario_id: funcionarioId,
-        funcionario_nome: body.funcionario_nome || null,
-        setor_nome: body.setor_nome || null,
-        qualificacao_tipo_id: Number(body.qualificacao_tipo_id || 0) || null,
-        qualificacao_nome: body.qualificacao_nome || null,
-        status_compliance: body.status_compliance || null,
-        tipo: row.tipo,
-        destinatario: maskNotificationDestination(row.destinatario),
-        status_envio: row.status,
-        erro: row.erro_mensagem || null,
-        enviado_em: row.event_at,
-        gestor: String(row.assunto || '').startsWith('[COMPLIANCE_GESTOR:'),
-      });
-      if (data.length >= limit) break;
+    const rawLimit = Number(c.req.query('limit') || 100);
+    const rawOffset = Number(c.req.query('offset') || 0);
+    const validDate = (value: string | undefined) =>
+      !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const inicio = c.req.query('inicio');
+    const fim = c.req.query('fim');
+    if (!validDate(inicio) || !validDate(fim) || (inicio && fim && inicio > fim)) {
+      throw new ApiError('Período de comunicações inválido', 400);
     }
-    return c.json({ success: true, data });
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 ||
+        !Number.isInteger(rawOffset) || rawOffset < 0) {
+      throw new ApiError('Paginação de comunicações inválida', 400);
+    }
+    const canal = c.req.query('canal');
+    const origem = c.req.query('origem');
+    const resultado = c.req.query('resultado');
+    if ((canal && !['EMAIL', 'WHATSAPP'].includes(canal)) ||
+        (origem && !['COMPLIANCE', 'LMS_ALERTA', 'LMS_CONVITE'].includes(origem)) ||
+        (resultado && !['enviada', 'erro', 'sem_contato'].includes(resultado))) {
+      throw new ApiError('Filtro de comunicações inválido', 400);
+    }
+    const limit = Math.min(200, rawLimit);
+    const offset = rawOffset;
+    const history = await listTrainingCommunications(
+      c.env.DB,
+      empresaId,
+      access,
+      {
+        notifications: await tableExists(c.env.DB, 'notificacoes_log'),
+        audit: await tableExists(c.env.DB, 'audit_logs'),
+      },
+      {
+        funcionario_q: c.req.query('funcionario_q'),
+        treinamento_q: c.req.query('treinamento_q') || c.req.query('q'),
+        canal: canal as 'EMAIL' | 'WHATSAPP' | undefined,
+        origem: origem as 'COMPLIANCE' | 'LMS_ALERTA' | 'LMS_CONVITE' | undefined,
+        resultado: resultado as 'enviada' | 'erro' | 'sem_contato' | undefined,
+        inicio,
+        fim,
+        setor_id: asPositiveInt(c.req.query('setor_id')) || undefined,
+        funcao_id: asPositiveInt(c.req.query('funcao_id')) || undefined,
+        limit,
+        offset,
+      },
+    );
+    return c.json({
+      success: true,
+      data: history.rows,
+      pagination: { limit, offset, has_more: history.has_more },
+    });
   });
 
   app.get('/relatorios/automacao', requireRole('admin', 'manager'), async (c) => {
