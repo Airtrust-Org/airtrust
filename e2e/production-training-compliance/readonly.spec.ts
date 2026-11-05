@@ -25,8 +25,19 @@ function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promi
 }
 
 async function payload(response: PlaywrightResponse) {
-  expect(response.ok(), `${response.url()} HTTP ${response.status()}`).toBeTruthy();
-  const json = await response.json();
+  const json = await response.json().catch(() => null);
+  // Fail closed on 5xx while retaining only non-sensitive diagnostic fields:
+  // HTTP status, stable error code and request ID. Never log response bodies
+  // or authorization headers from the real production tenant.
+  const code = typeof json?.code === 'string' && /^[A-Z0-9_]{1,80}$/.test(json.code)
+    ? json.code : 'UNAVAILABLE';
+  const requestId = typeof json?.requestId === 'string' &&
+    /^[A-Za-z0-9-]{1,128}$/.test(json.requestId)
+    ? json.requestId : 'UNAVAILABLE';
+  expect(
+    response.ok(),
+    `${new URL(response.url()).pathname} HTTP ${response.status()} code=${code} requestId=${requestId}`,
+  ).toBeTruthy();
   expect(json?.success).toBe(true);
   return json;
 }
