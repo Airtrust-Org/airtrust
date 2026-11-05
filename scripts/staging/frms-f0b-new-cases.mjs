@@ -122,28 +122,38 @@ function fixedEnvironment(){
     !e.CLOUDFLARE_API_TOKEN||!e.CLOUDFLARE_ACCOUNT_ID)
     throw Error('STAGING_ONLY_GOVERNED_SCOPE_REQUIRED');
 }
-async function main(){
-  const mode=process.argv[2]||'--inspect';
-  if(!['--inspect','--apply','--rollback'].includes(mode)||process.argv.length>3)throw Error('QA_F0B_MODE_INVALID');
-  fixedEnvironment();
-  const before=inspect();
-  if(mode==='--inspect'){
-    console.log('FRMS_F0B_INSPECT_READONLY='+ (before.complete?'NEW_4_OF_4_VALID':'NEW_FIXTURE_ABSENT') +'; legacy_untouched=true');
-    return;
-  }
-  if(process.env.FRMS_F0B_RECOVERY_VERIFIED!=='true'||
-     process.env.FRMS_F0B_CONFIRM!==CONFIRM_STAGING_F0B[mode])
+// Testable orchestration with a strictly private CLI boundary: actual D1 calls
+// still require fixedEnvironment() before this function is reached remotely.
+export function runQaF0bMode(mode,{inspectFn=inspect,writeFn=remote,env=process.env}={}){
+  if(!['--inspect','--apply','--rollback'].includes(mode))throw Error('QA_F0B_MODE_INVALID');
+  const before=inspectFn();
+  if(mode==='--inspect')
+    return {result:before.complete?'INSPECT_4_OF_4_VALID':'INSPECT_FIXTURE_ABSENT',written:false};
+  const normalized=mode.slice(2);
+  if(env.FRMS_F0B_RECOVERY_VERIFIED!=='true'||
+     env.FRMS_F0B_CONFIRM!==CONFIRM_STAGING_F0B[normalized])
     throw Error('QA_F0B_WRITE_CONFIRMATION_OR_RECOVERY_MISSING');
-  if(mode==='--apply'&&!before.complete)remote(buildApplySql(),{write:true});
+  if(mode==='--apply'&&!before.complete)writeFn(buildApplySql(),{write:true});
   if(mode==='--rollback'){
-    if(!before.complete||!before.rollbackSafe)throw Error('QA_F0B_ROLLBACK_REQUIRES_COMPLETE_UNMODIFIED_FIXTURE');
-    remote(buildRollbackSql(),{write:true});
+    if(!before.complete||!before.rollbackSafe)
+      throw Error('QA_F0B_ROLLBACK_REQUIRES_COMPLETE_UNMODIFIED_FIXTURE');
+    writeFn(buildRollbackSql(),{write:true});
   }
-  const after=inspect();
+  const after=inspectFn();
   if(after.complete!==(mode==='--apply')||after.oldHash!==before.oldHash)
     throw Error('QA_F0B_POSTCONDITION_OR_LEGACY_HASH_MISMATCH');
-  console.log('FRMS_F0B_'+(mode==='--apply'?'NEW_CASES_4_OF_4_VALID':'NEW_CASES_REMOVED')+
-    '; tenant=999013; legacy_hash_unchanged=true; production_writes=0');
+  return {result:mode==='--apply'?'NEW_CASES_4_OF_4_VALID':'NEW_CASES_REMOVED',written:mode==='--rollback'||!before.complete};
 }
+async function main(){
+  const mode=process.argv[2]||'--inspect';
+  if(process.argv.length>3)throw Error('QA_F0B_MODE_INVALID');
+  fixedEnvironment();
+  const outcome=runQaF0bMode(mode);
+  if(mode==='--inspect')
+    console.log('FRMS_F0B_'+outcome.result+'; tenant=999013; production_writes=0');
+  else
+    console.log('FRMS_F0B_'+outcome.result+'; tenant=999013; legacy_hash_unchanged=true; production_writes=0');
+}
+
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
   main().catch(e=>{console.error('FRMS_F0B_STOP:'+e.message);process.exitCode=1;});

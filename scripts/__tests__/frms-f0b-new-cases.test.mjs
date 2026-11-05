@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {buildApplySql,buildRollbackSql,CASES,TARGET,assertNewCases} from '../staging/frms-f0b-new-cases.mjs';
+import {buildApplySql,buildRollbackSql,CASES,TARGET,assertNewCases,runQaF0bMode} from '../staging/frms-f0b-new-cases.mjs';
 
 function fixture(){
   const db=new DatabaseSync(':memory:');
@@ -75,4 +75,62 @@ test('no legacy DML, no production target, and four distinct crew-date journey l
   assert.equal(new Set(CASES.map(x=>x.id)).size,4);
   assert.equal(new Set(CASES.map(x=>x.journey)).size,4);
   assert.equal(TARGET.db,'airtrust-db-staging-baseline-20260701');
+});
+
+test('CLI write-mode entry path accepts exact apply token and invokes only the new-row SQL',()=>{
+  const writes=[];
+  let reads=0;
+  const result=runQaF0bMode('--apply',{
+    env:{FRMS_F0B_RECOVERY_VERIFIED:'true',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_APPLY'},
+    inspectFn:()=>reads++===0?{complete:false,oldHash:'legacy-preimage'}:{complete:true,oldHash:'legacy-preimage',rollbackSafe:true},
+    writeFn:(sql,options)=>writes.push({sql,options}),
+  });
+  assert.equal(reads,2);
+  assert.deepEqual(result,{result:'NEW_CASES_4_OF_4_VALID',written:true});
+  assert.equal(writes.length,1);
+  assert.equal(writes[0].sql,buildApplySql());
+  assert.deepEqual(writes[0].options,{write:true});
+});
+test('CLI write-mode entry path accepts exact rollback token and compensates only new rows',()=>{
+  const writes=[];
+  let reads=0;
+  const result=runQaF0bMode('--rollback',{
+    env:{FRMS_F0B_RECOVERY_VERIFIED:'true',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_ROLLBACK'},
+    inspectFn:()=>reads++===0?{complete:true,rollbackSafe:true,oldHash:'legacy-preimage'}:{complete:false,oldHash:'legacy-preimage'},
+    writeFn:(sql,options)=>writes.push({sql,options}),
+  });
+  assert.equal(reads,2);
+  assert.deepEqual(result,{result:'NEW_CASES_REMOVED',written:true});
+  assert.equal(writes.length,1);
+  assert.equal(writes[0].sql,buildRollbackSql());
+  assert.deepEqual(writes[0].options,{write:true});
+});
+test('CLI write modes refuse missing recovery, mismatched confirmation, or modified rollback fixture',()=>{
+  for(const mode of ['--apply','--rollback']){
+    for(const env of [
+      {FRMS_F0B_RECOVERY_VERIFIED:'false',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_'+mode.slice(2).toUpperCase()},
+      {FRMS_F0B_RECOVERY_VERIFIED:'true',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_INSPECT'},
+    ]){
+      const writes=[];
+      assert.throws(()=>runQaF0bMode(mode,{
+        env,inspectFn:()=>({complete:mode==='--rollback',rollbackSafe:true,oldHash:'h'}),
+        writeFn:(sql)=>writes.push(sql),
+      }),/QA_F0B_WRITE_CONFIRMATION_OR_RECOVERY_MISSING/);
+      assert.equal(writes.length,0);
+    }
+  }
+  assert.throws(()=>runQaF0bMode('--rollback',{
+    env:{FRMS_F0B_RECOVERY_VERIFIED:'true',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_ROLLBACK'},
+    inspectFn:()=>({complete:true,rollbackSafe:false,oldHash:'legacy'}),
+    writeFn:()=>{throw Error('WRITE_SHOULD_NOT_HAPPEN');}
+  }),/QA_F0B_ROLLBACK_REQUIRES_COMPLETE_UNMODIFIED_FIXTURE/);
+});
+test('CLI mocked postcondition rejects legacy changes even after successful new-case write',()=>{
+  let count=0, writes=0;
+  assert.throws(()=>runQaF0bMode('--apply',{
+    env:{FRMS_F0B_RECOVERY_VERIFIED:'true',FRMS_F0B_CONFIRM:'AIRTRUST_STAGING_FRMS_F0B_APPLY'},
+    inspectFn:()=>count++===0?{complete:false,oldHash:'OLD'}:{complete:true,oldHash:'CHANGED'},
+    writeFn:()=>{writes++;},
+  }),/QA_F0B_POSTCONDITION_OR_LEGACY_HASH_MISMATCH/);
+  assert.equal(writes,1);
 });
