@@ -120,8 +120,8 @@ async function browserReview(token, user, matriculaId, result) {
         // Only surface the synthetic page path and bounded, redacted UI text.
         const path = new URL(page.url()).pathname.slice(0, 140);
         const visible = (await page.locator('body').innerText().catch(() => ''))
-          .replace(/\\b[\\w.+-]+@[\\w.-]+\\b/g, '[synthetic-email]')
-          .replace(/\\s+/g, ' ').slice(0, 420);
+          .replace(/\b[\w.+-]+@[\w.-]+\b/g, '[synthetic-email]')
+          .replace(/\s+/g, ' ').slice(0, 420);
         throw new Error(`PPTX_QA_BROWSER_${name}_SLIDE_MISSING path=${path} visible=${visible}`);
       }
       for (let index = 2; index <= 3; index++) {
