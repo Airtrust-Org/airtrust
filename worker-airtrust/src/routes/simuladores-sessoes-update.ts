@@ -9,25 +9,39 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import {
-  isCompletedStatus,
   PLANNED_QUALIFICATION_STATUS_VALUES,
   QUALIFICACAO_STATUS,
   sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
-import { publishDomainEvent } from '../shared/domainEvents';
 import { removeManagedEscalaEvents } from '../shared/syncEscalaEventosExternos';
-import { enviarEmailFichaSessao } from '../lib/fichaEmails';
-import {
-  loadSimulatorSessionNotificationData,
-  sendSimulatorSessionEmailNotifications,
-  shouldNotifySimulatorSessionUpdate,
-} from '../services/simuladores-session-notifications';
+import { loadSimulatorSessionNotificationData, sendSimulatorSessionEmailNotifications } from '../services/simuladores-session-notifications';
 import { requireAdminForDelete } from './simuladores-admin-guard';
-import { timeToMinutes, syncSessaoEscalaEventos, findSessaoConflict, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, resolveTemplateIdSessao, normalizeChecksSessao, criarQualificacoesPlanejadas, listarParticipantesDaSessaoParaQualificacao, sincronizarQualificacoesDaSessaoConcluida, instrutorEstaEntreParticipantes } from '../services/simuladores/shared';
+import { syncSessaoEscalaEventos, audit, getSimuladorModeloAeronave, normalizeModeloAeronave, normalizeChecksSessao } from '../services/simuladores/shared';
 import { getTenantContext } from '../middleware/tenant';
-import { buildOperationalFichaManobras, type FichaManobraBase } from '../constants/notechs';
-import { getSchemaColumns } from '../utils/db-schema';
 import { validateInstrutorAssignment } from '../services/simuladores/instrutor-assignment';
+import { syncExaminadorChecks, syncFichasEspeciais } from '../services/simuladores/session-examiner-checks';
+import {
+  applySessaoScheduleUpdate,
+  findConflitoDeAgendamento,
+  planSessaoSchedule,
+} from '../services/simuladores/session-schedule-update';
+import { ensureQualificacoesPlanejadas } from '../services/simuladores/session-planejadas';
+import {
+  avisarInstrutorFichasPendentes,
+  enfileirarEmailDeAtualizacao,
+  publicarEventosDaSessao,
+  sessaoVirouConcluida,
+  sincronizarQualificacoesAoConcluir,
+} from '../services/simuladores/session-completion';
+import {
+  applyParticipantes,
+  planParticipantes,
+  type ParticipanteInput,
+} from '../services/simuladores/session-participants';
+import {
+  findSessaoAtual,
+  listParticipantesAtivos,
+} from '../repositories/simuladores/session-participants-repository';
 import {
   requireOperationalAccess,
   } from '../middleware/operational-domain-access';
@@ -51,10 +65,66 @@ function getContextUserId(c: { get: (k: string) => unknown }): string {
   return String(c.get('userId') || 'system');
 }
 
-/** Shape of a participante item as received in the PUT /sessoes/:id request body. */
-interface SessaoParticipanteInput {
-  funcionario_id?: string | number;
-  funcao?: string;
+/**
+ * Devolve a pendente o fluxo das fichas da sessão que ainda estão em andamento.
+ *
+ * Ficha com qualquer assinatura (aluno ou instrutor) ou data de conclusão é
+ * documento assinado/concluído: NÃO é resetada, nem as suas manobras. Editar a
+ * sessão (ex.: só uma observação) nunca pode apagar uma avaliação já assinada.
+ */
+const FICHA_ASSINADA_OU_CONCLUIDA_SQL = `(
+  assinatura_aluno_timestamp IS NOT NULL
+  OR assinatura_instrutor_timestamp IS NOT NULL
+  OR COALESCE(assinatura_aluno_completa, 0) = 1
+  OR COALESCE(assinatura_instrutor_completa, 0) = 1
+  OR data_conclusao IS NOT NULL
+)`;
+
+async function resetFluxoFichasEmAndamento(db: D1Database, sessaoId: number | string) {
+  await db
+    .prepare(
+      `UPDATE fichas_sessao
+       SET status = 'AVALIACAO_PENDENTE',
+           resultado_final = 'PENDENTE',
+           aprovado = NULL,
+           observacoes = NULL,
+           observacoes_gerais = NULL,
+           assinatura_aluno_ip = NULL,
+           assinatura_aluno_timestamp = NULL,
+           assinatura_aluno_imagem = NULL,
+           assinatura_instrutor_ip = NULL,
+           assinatura_instrutor_timestamp = NULL,
+           assinatura_instrutor_imagem = NULL,
+           assinatura_tripulante = 0,
+           assinatura_instrutor = 0,
+           assinatura_aluno_completa = 0,
+           assinatura_instrutor_completa = 0,
+           data_conclusao = NULL,
+           updated_at = datetime('now')
+       WHERE agendamento_slot_id = ?
+         AND deleted_at IS NULL
+         AND NOT ${FICHA_ASSINADA_OU_CONCLUIDA_SQL}`,
+    )
+    .bind(sessaoId)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE fichas_sessao_manobras
+       SET resultado = NULL,
+           observacoes = '',
+           updated_at = datetime('now')
+       WHERE ficha_id IN (
+         SELECT id
+         FROM fichas_sessao
+         WHERE agendamento_slot_id = ?
+           AND deleted_at IS NULL
+           AND NOT ${FICHA_ASSINADA_OU_CONCLUIDA_SQL}
+       )
+         AND deleted_at IS NULL`,
+    )
+    .bind(sessaoId)
+    .run();
 }
 
 /** Columns of simulador_agendamentos actually read after the UPDATE (select-all query below). */
@@ -128,306 +198,32 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       return c.json({ success: false, error: 'Checks inválidos' }, 400);
     }
 
-    // ============================
-    // CHECKS COM EXAMINADORES
-    // - Se examinador_id informado: is_check=1
-    // - Se examinador_id removido: is_check=0 e soft-delete vínculos
-    // - Atualiza vínculos em sessoes_checks
-    // ============================
-
-    const examinadorIdBodyRaw =
-      b.examinador_id === undefined
-        ? undefined
-        : b.examinador_id === null
-          ? null
-          : Number(b.examinador_id);
-    const wantsCheck = examinadorIdBodyRaw ? 1 : 0;
-    const shouldUpdateCheckFields = b.examinador_id !== undefined || b.checks !== undefined;
-
-    if (shouldUpdateCheckFields) {
-      // Validar examinador quando presente
-      if (examinadorIdBodyRaw) {
-        const funcionarioColumns = await getSchemaColumns(c.env.DB, 'funcionarios');
-        const hasIsExaminador = funcionarioColumns.has('is_examinador');
-        const hasIsChecador = funcionarioColumns.has('is_checador');
-        const examinadorFlagExpr =
-          hasIsExaminador && hasIsChecador
-            ? '(COALESCE(is_examinador, 0) = 1 OR COALESCE(is_checador, 0) = 1)'
-            : hasIsExaminador
-              ? 'COALESCE(is_examinador, 0) = 1'
-              : hasIsChecador
-                ? 'COALESCE(is_checador, 0) = 1'
-                : '0 = 1';
-        const examinador = await c.env.DB.prepare(
-          `SELECT id
-           FROM funcionarios
-             WHERE id = ?
-               AND ${examinadorFlagExpr}
-               AND empresa_id = ?
-               AND deleted_at IS NULL`,
-        )
-          .bind(examinadorIdBodyRaw, empresaId)
-          .first();
-        if (!examinador) {
-          return c.json({ success: false, error: 'Examinador inválido' }, 400);
-        }
-      }
-
-      // Se tiver examinador, exige checks (pelo menos 1)
-      if (examinadorIdBodyRaw && checksNormalizados.length === 0) {
-        return c.json(
-          { success: false, error: 'Selecione pelo menos 1 check ao informar examinador' },
-          400,
-        );
-      }
-
-      // Atualizar campos na sessão
-      await c.env.DB.prepare(
-        "UPDATE simulador_agendamentos SET examinador_id=?, is_check=?, updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
-      )
-        .bind(examinadorIdBodyRaw || null, wantsCheck, id, empresaId)
-        .run();
-
-      // Soft delete vínculos existentes
-      const scOld = await c.env.DB.prepare(
-        `SELECT id
-         FROM sessoes_checks
-         WHERE sessao_id = ? AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .all();
-
-      if (scOld.results && scOld.results.length > 0) {
-        const ids = scOld.results.map((r: any) => r.id).filter((v: any) => v !== undefined);
-
-        await c.env.DB.prepare(
-          "UPDATE sessoes_checks SET deleted_at=datetime('now'), updated_at=datetime('now') WHERE sessao_id=? AND deleted_at IS NULL",
-        )
-          .bind(id)
-          .run();
-
-        // Soft delete resultados vinculados aos sessao_check antigos
-        for (const scId of ids) {
-          await c.env.DB.prepare(
-            "UPDATE sessoes_checks_resultados SET deleted_at=datetime('now'), updated_at=datetime('now') WHERE sessao_check_id=? AND deleted_at IS NULL",
-          )
-            .bind(scId)
-            .run();
-        }
-      }
-
-      // Inserir vínculos novos (se for check)
-      if (wantsCheck && checksNormalizados.length > 0) {
-        for (const qualificacao_tipo_id of checksNormalizados) {
-          await c.env.DB.prepare(
-            `INSERT INTO sessoes_checks (sessao_id, qualificacao_tipo_id, created_at, updated_at)
-             VALUES (?, ?, datetime('now'), datetime('now'))`,
-          )
-            .bind(id, qualificacao_tipo_id)
-            .run();
-        }
-      }
-
-      await audit(c.env.DB, {
-        tabela: 'simulador_agendamentos',
-        acao: 'UPDATE_CHECK_FIELDS',
-        registro_id: id,
-        dados_anteriores: {
-          examinador_id: (a as any).examinador_id,
-          is_check: (a as any).is_check,
-        },
-        dados_novos: {
-          examinador_id: examinadorIdBodyRaw || null,
-          is_check: wantsCheck,
-          checks: checksNormalizados,
-        },
-      });
+    // Examinador + checks (vínculos, is_check, auditoria) e fichas especiais CRED-EXA.
+    const checksSync = await syncExaminadorChecks(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      checksNormalizados,
+    });
+    if (!checksSync.ok) {
+      return c.json({ success: false, error: checksSync.error }, checksSync.status);
     }
+    await syncFichasEspeciais(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      examinadorIdBodyRaw: checksSync.examinadorIdBodyRaw,
+    });
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // FICHAS ESPECIAIS: TREINAMENTO DE INSTRUTOR / CREDENCIAMENTO DE EXAMINADOR
-    // Executado independentemente do bloco shouldUpdateCheckFields.
-    // Condições (OR):
-    //   1. Flag explícita no body: gerar_ficha_examinador
-    //   2. Codes FAP13 presentes nos checks atuais da sessão
-    // ─────────────────────────────────────────────────────────────────────────
-    {
-      const instrutorEspecial =
-        b.instrutor_id !== undefined ? b.instrutor_id : (a as any).instrutor_id;
-      if (instrutorEspecial) {
-        // Buscar códigos dos checks atuais da sessão
-        const codRes = await c.env.DB.prepare(
-          `SELECT qt.codigo FROM sessoes_checks sc
-           JOIN qualificacoes_tipos qt ON sc.qualificacao_tipo_id = qt.id
-           WHERE sc.sessao_id = ? AND sc.deleted_at IS NULL AND qt.deleted_at IS NULL`,
-        )
-          .bind(id)
-          .all();
-        const codsAtuais = (codRes.results || []).map((r: any) =>
-          String(r.codigo || '').toUpperCase(),
-        );
-
-        // Buscar template_ids dos modelos especiais
-        const tplRes = await c.env.DB.prepare(
-          `SELECT id, codigo FROM modelos_sessao
-           WHERE codigo IN ('CRED-EXA') AND empresa_id = ? AND deleted_at IS NULL`,
-        )
-          .bind(empresaId)
-          .all();
-        const tplMap = new Map(
-          (tplRes.results || []).map((r: any) => [String(r.codigo), r.id as number]),
-        );
-
-        // Inferir tipo_aeronave das fichas existentes
-        let tipoAeronaveEsp = b.tipo_aeronave || null;
-        if (!tipoAeronaveEsp) {
-          const fichaRef = await c.env.DB.prepare(
-            `SELECT tipo_aeronave FROM fichas_sessao
-             WHERE agendamento_slot_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
-          )
-            .bind(id, empresaId)
-            .first();
-          tipoAeronaveEsp = (fichaRef as any)?.tipo_aeronave || null;
-        }
-        const dataEsp = b.data || (a as any).data;
-        const examinadorEsp =
-          examinadorIdBodyRaw !== undefined
-            ? examinadorIdBodyRaw
-            : ((a as any).examinador_id ?? null);
-
-        const fichasEsp = [
-          {
-            modelo: 'CRED-EXA',
-            ativo:
-              b.gerar_ficha_examinador === true || codsAtuais.some((c) => c.startsWith('FAP13')),
-          },
-        ];
-
-        for (const esp of fichasEsp) {
-          const existe = await c.env.DB.prepare(
-            `SELECT id,
-                    status,
-                    assinatura_aluno_timestamp,
-                    assinatura_instrutor_timestamp,
-                    assinatura_aluno_imagem,
-                    assinatura_instrutor_imagem,
-                    data_conclusao
-             FROM fichas_sessao
-             WHERE agendamento_slot_id = ? AND colaborador_id_aluno = ?
-               AND tipo_sessao = ? AND empresa_id = ? AND deleted_at IS NULL`,
-          )
-            .bind(id, instrutorEspecial, esp.modelo, empresaId)
-            .first();
-
-          if (!esp.ativo) {
-            if (existe) {
-              const fichaExistente = existe as any;
-              const fichaJaUtilizada = Boolean(
-                fichaExistente.assinatura_aluno_timestamp ||
-                fichaExistente.assinatura_instrutor_timestamp ||
-                fichaExistente.assinatura_aluno_imagem ||
-                fichaExistente.assinatura_instrutor_imagem ||
-                fichaExistente.data_conclusao ||
-                (fichaExistente.status && fichaExistente.status !== 'AVALIACAO_PENDENTE'),
-              );
-
-              if (!fichaJaUtilizada) {
-                await c.env.DB.prepare(
-                  `UPDATE fichas_sessao
-                   SET deleted_at = datetime('now')
-                   WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
-                )
-                  .bind(fichaExistente.id, empresaId)
-                  .run();
-
-                await c.env.DB.prepare(
-                  `UPDATE fichas_sessao_manobras
-                   SET deleted_at = datetime('now')
-                   WHERE ficha_id = ? AND deleted_at IS NULL`,
-                )
-                  .bind(fichaExistente.id)
-                  .run();
-              }
-            }
-
-            continue;
-          }
-
-          if (!existe) {
-            await c.env.DB.prepare(
-              `INSERT INTO fichas_sessao
-                 (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id,
-                  tipo_sessao, tipo_aeronave, data_sessao, status, template_id, empresa_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?, ?)`,
-            )
-              .bind(
-                crypto.randomUUID(),
-                id,
-                instrutorEspecial,
-                examinadorEsp || instrutorEspecial,
-                esp.modelo,
-                tipoAeronaveEsp,
-                dataEsp,
-                tplMap.get(esp.modelo) ?? null,
-                empresaId,
-              )
-              .run();
-          }
-        }
-      }
+    const schedule = planSessaoSchedule(b, a);
+    if (!schedule.ok) {
+      return c.json({ success: false, error: schedule.error }, schedule.status);
     }
-
-    // Determinar tipo_dispositivo final
-    const tipoDispositivoFinal: 'SIMULADOR' | 'AERONAVE' =
-      b.tipo_dispositivo === 'AERONAVE'
-        ? 'AERONAVE'
-        : (a as any).tipo_dispositivo === 'AERONAVE'
-          ? 'AERONAVE'
-          : 'SIMULADOR';
-
-    // Validação de horário + conflito (apenas para simuladores)
-    const simuladorIdFinal = Number(b.simulador_id ?? a.simulador_id);
-    const dataFinal = String(b.data ?? a.data);
-    const inicioStr = b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio;
-    const fimStr = b.horario_fim !== undefined ? b.horario_fim : a.hora_fim;
-
-    if (!inicioStr || !fimStr) {
-      return c.json({ success: false, error: 'Horário de início e fim são obrigatórios' }, 400);
-    }
-
-    const inicioMin = timeToMinutes(inicioStr);
-    const fimMin = timeToMinutes(fimStr);
-    if (inicioMin === null || fimMin === null) {
-      return c.json({ success: false, error: 'Horários inválidos (use HH:MM)' }, 400);
-    }
-    if (fimMin === inicioMin) {
-      return c.json(
-        { success: false, error: 'Horário final deve ser diferente do horário inicial' },
-        400,
-      );
-    }
-
-    if (tipoDispositivoFinal === 'SIMULADOR' && simuladorIdFinal) {
-      const conflito = await findSessaoConflict(c.env.DB, {
-        simuladorId: simuladorIdFinal,
-        data: dataFinal,
-        inicioMin,
-        fimMin,
-        excludeId: id,
-      });
-      if (conflito) {
-        const hi =
-          typeof conflito.hora_inicio === 'string' ? conflito.hora_inicio.substring(0, 5) : '';
-        const hf = typeof conflito.hora_fim === 'string' ? conflito.hora_fim.substring(0, 5) : '';
-        return c.json(
-          {
-            success: false,
-            code: 'SCHEDULE_CONFLICT',
-            error: `Conflito de agendamento: já existe uma sessão neste simulador de ${hi} a ${hf}. Escolha outro horário.`,
-          },
-          409,
-        );
-      }
+    const conflito = await findConflitoDeAgendamento(c.env.DB, schedule.plan, id);
+    if (conflito) {
+      return c.json({ success: false, code: 'SCHEDULE_CONFLICT', error: conflito }, 409);
     }
 
     console.log('[PUT /sessoes] ANTES:', { id, tipo_sessao: a.tipo_sessao, nome: a.nome });
@@ -436,174 +232,27 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       tema_sessao: b.tema_sessao,
     });
 
-    const templateIdFinal = await resolveTemplateIdSessao(c.env.DB, {
+    const { simuladorIdFinal, dataFinal } = schedule.plan;
+    const { templateIdFinal } = await applySessaoScheduleUpdate(c.env.DB, {
       empresaId,
-      templateId: templateIdBody !== undefined ? templateIdBody : (a as any).template_id,
-      temaSessao: b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-      tipoSessaoCodigo: b.tipo_sessao !== undefined ? b.tipo_sessao : a.tipo_sessao,
-      modeloAeronave: modeloAeronaveSessao,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      templateIdBody,
+      modeloAeronaveSessao,
+      tipoDispositivoFinal: schedule.plan.tipoDispositivoFinal,
     });
 
-    // Verificar se as colunas tipo_dispositivo e aeronave_id existem (migration 0364)
-    const agendamentoColumns = await getSchemaColumns(c.env.DB, 'simulador_agendamentos');
-    const hasTipoDispositivoUpd = agendamentoColumns.has('tipo_dispositivo');
-    const hasAeronaveIdUpd = agendamentoColumns.has('aeronave_id');
-
-    const updateFields = hasTipoDispositivoUpd && hasAeronaveIdUpd
-      ? "UPDATE simulador_agendamentos SET simulador_id=?,aeronave_id=?,tipo_dispositivo=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?"
-      : "UPDATE simulador_agendamentos SET simulador_id=?,data=?,hora_inicio=?,hora_fim=?,duracao_minutos=?,instrutor_id=?,tipo_sessao=?,template_id=?,status=?,observacoes=?,nome=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?";
-
-    const updateBinds = hasTipoDispositivoUpd && hasAeronaveIdUpd
-      ? [
-          b.simulador_id !== undefined ? b.simulador_id : a.simulador_id,
-          b.aeronave_id !== undefined ? b.aeronave_id : (a as any).aeronave_id,
-          tipoDispositivoFinal,
-          b.data || a.data,
-          b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio,
-          b.horario_fim !== undefined ? b.horario_fim : a.hora_fim,
-          b.duracao_minutos !== undefined ? b.duracao_minutos : a.duracao_minutos,
-          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
-          b.tipo_sessao || a.tipo_sessao,
-          templateIdFinal,
-          b.status || a.status,
-          b.observacoes !== undefined ? b.observacoes : a.observacoes,
-          b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-          id,
-          empresaId,
-        ]
-      : [
-          b.simulador_id || a.simulador_id,
-          b.data || a.data,
-          b.horario_inicio !== undefined ? b.horario_inicio : a.hora_inicio,
-          b.horario_fim !== undefined ? b.horario_fim : a.hora_fim,
-          b.duracao_minutos !== undefined ? b.duracao_minutos : a.duracao_minutos,
-          b.instrutor_id !== undefined ? b.instrutor_id : a.instrutor_id,
-          b.tipo_sessao || a.tipo_sessao,
-          templateIdFinal,
-          b.status || a.status,
-          b.observacoes !== undefined ? b.observacoes : a.observacoes,
-          b.tema_sessao !== undefined ? b.tema_sessao : a.nome,
-          id,
-          empresaId,
-        ];
-
-    // UPDATE: incluindo hora_inicio, hora_fim, nome (tema_sessao), tipo_dispositivo, aeronave_id
-    await c.env.DB.prepare(updateFields)
-      .bind(...updateBinds)
-      .run();
-
-    // Sincronizar data_conclusao nas qualificações PLANEJADAS vinculadas (se a data mudou)
-    if (b.data && b.data !== (a as any).data) {
-      await c.env.DB.prepare(
-        `UPDATE qualificacoes_historico
-         SET data_conclusao=?, updated_at=datetime('now')
-         WHERE sessao_id=?
-           AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
-           AND deleted_at IS NULL`,
-      )
-        .bind(b.data, id)
-        .run();
-    }
-
     // Criar qualificações PLANEJADAS se a sessão ainda não as tiver (ex: sessão criada antes do deploy)
-    const diag: Record<string, unknown> = {};
     let scaleIntegrationError: string | null = null;
-    const hasPlanejadas = await c.env.DB.prepare(
-      `SELECT 1 FROM qualificacoes_historico
-       WHERE sessao_id=?
-         AND ${sqlStatusEqualsAny('status', PLANNED_QUALIFICATION_STATUS_VALUES, QUALIFICACAO_STATUS.PLANEJADA)}
-         AND deleted_at IS NULL
-       LIMIT 1`,
-    )
-      .bind(id)
-      .first();
-    diag.hasPlanejadas = !!hasPlanejadas;
-    if (!hasPlanejadas) {
-      const tipoSessaoPut = (b.tipo_sessao || (a as any).tipo_sessao || '').toString();
-      let modeloIdPut = Number(templateIdFinal || (a as any).template_id || 0) || null;
-      diag.tipoSessao = tipoSessaoPut;
-      diag.modeloIdInicial = modeloIdPut;
-      diag.templateIdFinal = templateIdFinal;
-
-      // Robust model fallback: prioritize gera_qualificacao=1, then name match
-      if (!modeloIdPut && tipoSessaoPut) {
-        const upperNome = String(b.tema_sessao || (a as any).nome || '').trim().toUpperCase();
-
-        // Priority 1: model with gera_qualificacao=1 matching tipo_sessao + modelo_aeronave
-        let fallbackModelo = await c.env.DB.prepare(
-          `SELECT ms.id, ms.nome
-           FROM modelos_sessao ms
-           INNER JOIN tipos_sessao ts
-             ON ms.tipo_sessao_id = ts.id
-            AND ts.empresa_id = ?
-            AND ts.deleted_at IS NULL
-           WHERE ts.codigo = ?
-             AND ms.modelo_aeronave = ?
-             AND ms.deleted_at IS NULL
-             AND ms.empresa_id = ?
-             AND ms.gera_qualificacao = 1
-           ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
-           LIMIT 1`,
-        )
-          .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
-          .first<{ id: number; nome: string }>();
-
-        // Priority 2: any model matching tipo_sessao + modelo_aeronave (prefer name match)
-        if (!fallbackModelo) {
-          fallbackModelo = await c.env.DB.prepare(
-            `SELECT ms.id, ms.nome
-             FROM modelos_sessao ms
-             INNER JOIN tipos_sessao ts
-               ON ms.tipo_sessao_id = ts.id
-              AND ts.empresa_id = ?
-              AND ts.deleted_at IS NULL
-             WHERE ts.codigo = ?
-               AND ms.modelo_aeronave = ?
-               AND ms.deleted_at IS NULL
-               AND ms.empresa_id = ?
-             ORDER BY CASE WHEN UPPER(ms.nome) = ? THEN 0 ELSE 1 END, ms.id DESC
-             LIMIT 1`,
-          )
-            .bind(empresaId, tipoSessaoPut, modeloAeronaveSessao, empresaId, upperNome)
-            .first<{ id: number; nome: string }>();
-        }
-
-        diag.fallbackModelo = fallbackModelo?.id ?? null;
-        if (fallbackModelo) modeloIdPut = fallbackModelo.id;
-      }
-      diag.modeloIdFinal = modeloIdPut;
-
-      if (modeloIdPut) {
-        const participantesRows = await listarParticipantesDaSessaoParaQualificacao(c.env.DB, id);
-        diag.numParticipantes = participantesRows.length;
-        if (participantesRows.length > 0) {
-          try {
-            const res = await criarQualificacoesPlanejadas(c.env.DB, {
-              sessaoId: Number(id),
-              modeloId: modeloIdPut,
-              tipoSessao: tipoSessaoPut,
-              data: b.data || (a as any).data,
-              participantes: participantesRows,
-              empresaId,
-            });
-            diag.resultado = res.criadas > 0 ? 'criadas' : 'sem_novas';
-            diag.criadas = res.criadas;
-            diag.puladas = res.puladas;
-            diag.conflitosUniques = res.conflitosUniques;
-            diag.bloqueadasDataPassada = res.bloqueadasDataPassada;
-          } catch (err: any) {
-            diag.resultado = 'erro';
-            diag.erro = err?.message || String(err);
-          }
-        } else {
-          diag.resultado = 'sem_participantes';
-        }
-      } else {
-        diag.resultado = 'sem_modelo';
-      }
-    } else {
-      diag.resultado = 'ja_tem_planejadas';
-    }
+    const diag = await ensureQualificacoesPlanejadas(c.env.DB, {
+      empresaId,
+      sessaoId: id,
+      sessao: a,
+      body: b,
+      templateIdFinal,
+      modeloAeronaveSessao,
+    });
 
     // ──────────────────────────────────────────────────────────────────────────
     // SINCRONIZAR instrutor_id nas fichas quando o instrutor da sessão muda.
@@ -637,76 +286,24 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
     }
 
     if (resetarFluxoFichas) {
-      await c.env.DB.prepare(
-        `UPDATE fichas_sessao
-         SET status = 'AVALIACAO_PENDENTE',
-             resultado_final = 'PENDENTE',
-             aprovado = NULL,
-             observacoes = NULL,
-             observacoes_gerais = NULL,
-             assinatura_aluno_ip = NULL,
-             assinatura_aluno_timestamp = NULL,
-             assinatura_aluno_imagem = NULL,
-             assinatura_instrutor_ip = NULL,
-             assinatura_instrutor_timestamp = NULL,
-             assinatura_instrutor_imagem = NULL,
-             assinatura_tripulante = 0,
-             assinatura_instrutor = 0,
-             assinatura_aluno_completa = 0,
-             assinatura_instrutor_completa = 0,
-             data_conclusao = NULL,
-             updated_at = datetime('now')
-         WHERE agendamento_slot_id = ?
-           AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .run();
-
-      await c.env.DB.prepare(
-        `UPDATE fichas_sessao_manobras
-         SET resultado = NULL,
-             observacoes = '',
-             updated_at = datetime('now')
-         WHERE ficha_id IN (
-           SELECT id
-           FROM fichas_sessao
-           WHERE agendamento_slot_id = ?
-             AND deleted_at IS NULL
-         )
-           AND deleted_at IS NULL`,
-      )
-        .bind(id)
-        .run();
+      await resetFluxoFichasEmAndamento(c.env.DB, id);
     }
 
     // ATUALIZAR PARTICIPANTES + SINCRONIZAR FICHAS
     if (b.participantes && Array.isArray(b.participantes)) {
-      const sessaoAtual = await c.env.DB.prepare(
-        'SELECT * FROM simulador_agendamentos WHERE id=? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .first();
-
-      // IDs dos participantes que estão na sessão atualmente
-      const partAntigosRows = await c.env.DB.prepare(
-        'SELECT funcionario_id, funcao FROM sessoes_participantes WHERE sessao_id=? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .all();
-      const idsAntigos = new Set(
-        (partAntigosRows.results || []).map((r: any) => Number(r.funcionario_id)),
-      );
-
-      // IDs novos enviados pelo frontend
-      const novosValidos = (b.participantes as SessaoParticipanteInput[]).filter(
-        (p): p is SessaoParticipanteInput & { funcionario_id: string | number } =>
-          Boolean(p.funcionario_id),
-      );
+      const sessaoAtual = await findSessaoAtual(c.env.DB, id);
+      const partAntigos = await listParticipantesAtivos(c.env.DB, id);
 
       // ── Bloqueio de autoavaliação: instrutor não pode ser participante ────
-      const instrutorEfetivo =
-        b.instrutor_id !== undefined ? b.instrutor_id : (a as any)?.instrutor_id;
-      if (instrutorEstaEntreParticipantes(instrutorEfetivo, novosValidos)) {
+      const plan = planParticipantes({
+        atuais: partAntigos,
+        enviados: b.participantes as ParticipanteInput[],
+        instrutorEfetivo:
+          b.instrutor_id !== undefined
+            ? b.instrutor_id
+            : (a as { instrutor_id?: unknown } | null)?.instrutor_id,
+      });
+      if (plan.instrutorEntreParticipantes) {
         return c.json(
           {
             success: false,
@@ -717,244 +314,19 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       }
       // ───────────────────────────────────────────────────────────────────────
 
-      const idsNovos = new Set(novosValidos.map((p: any) => Number(p.funcionario_id)));
-      const assinaturaAntiga = (partAntigosRows.results || [])
-        .map((p: any) => `${Number(p.funcionario_id)}:${String(p.funcao || '').toUpperCase()}`)
-        .sort()
-        .join('|');
-      const assinaturaNova = novosValidos
-        .map((p: any, index: number) => {
-          const funcao = p.funcao || (index === 0 ? 'PIC' : 'SIC');
-          return `${Number(p.funcionario_id)}:${String(funcao || '').toUpperCase()}`;
-        })
-        .sort()
-        .join('|');
-      participantesParaNotificacaoAlterados = assinaturaAntiga !== assinaturaNova;
+      participantesParaNotificacaoAlterados = plan.alterados;
+      const { novosValidos, removidos } = plan;
 
-      // Participantes removidos = estavam antes, não estão mais
-      const removidos = [...idsAntigos].filter((fid) => !idsNovos.has(fid));
-
-      // Soft-delete fichas de participantes removidos
-      for (const fid of removidos) {
-        await c.env.DB.prepare(
-          "UPDATE fichas_sessao SET deleted_at=datetime('now') WHERE agendamento_slot_id=? AND colaborador_id_aluno=? AND deleted_at IS NULL",
-        )
-          .bind(id, fid)
-          .run();
-      }
-
-      // Soft-delete todos os participantes antigos
-      await c.env.DB.prepare(
-        `UPDATE sessoes_participantes AS sp
-            SET deleted_at=datetime('now')
-          WHERE sp.sessao_id=?
-            AND sp.deleted_at IS NULL
-            AND EXISTS (
-              SELECT 1
-                FROM simulador_agendamentos sa
-               WHERE sa.id = sp.sessao_id
-                 AND sa.empresa_id = ?
-                 AND sa.deleted_at IS NULL
-            )`,
-      )
-        .bind(id, empresaId)
-        .run();
-
-      // Inserir participantes novos + criar fichas para os que entraram agora
-      for (const [index, part] of novosValidos.entries()) {
-        const funcao = part.funcao || (index === 0 ? 'PIC' : 'SIC');
-        const partUuid = crypto.randomUUID();
-        await c.env.DB.prepare(
-          `INSERT INTO sessoes_participantes (uuid, sessao_id, funcionario_id, funcao, status)
-           VALUES (?, ?, ?, ?, 'CONFIRMADO')`,
-        )
-          .bind(partUuid, id, part.funcionario_id, funcao)
-          .run();
-
-        // Criar ficha para qualquer participante que ainda não a tenha (cobre retroativos)
-        const fichaExistente = await c.env.DB.prepare(
-          'SELECT id FROM fichas_sessao WHERE agendamento_slot_id=? AND colaborador_id_aluno=? AND deleted_at IS NULL',
-        )
-          .bind(id, part.funcionario_id)
-          .first();
-
-        if (!fichaExistente) {
-          const fichaUuid = crypto.randomUUID();
-          const tipoSessao = (sessaoAtual as any)?.tipo_sessao || b.tipo_sessao || 'TREINAMENTO';
-          const instrutorIdFinal =
-            b.instrutor_id !== undefined
-              ? b.instrutor_id
-              : (sessaoAtual as any)?.instrutor_id || null;
-          const dataFichaFinal =
-            b.data || (sessaoAtual as any)?.data || new Date().toISOString().split('T')[0];
-
-          // Inferir tipo_aeronave: preferir payload, senão simulador da sessão, senão ficha existente
-          let tipoAeronave: string | null = b.tipo_aeronave || null;
-          if (!tipoAeronave) {
-            const fichaRef = await c.env.DB.prepare(
-              'SELECT tipo_aeronave FROM fichas_sessao WHERE agendamento_slot_id=? AND empresa_id=? AND deleted_at IS NULL LIMIT 1',
-            )
-              .bind(id, empresaId)
-              .first();
-            tipoAeronave = (fichaRef as any)?.tipo_aeronave || null;
-          }
-          if (!tipoAeronave) {
-            tipoAeronave =
-              (await getSimuladorModeloAeronave(
-                c.env.DB,
-                (sessaoAtual as { simulador_id?: string | number | null } | null)?.simulador_id,
-                empresaId,
-              )) || null;
-          }
-
-          const resultFicha = await c.env.DB.prepare(
-            `INSERT INTO fichas_sessao (uuid, agendamento_slot_id, colaborador_id_aluno, instrutor_id, tipo_sessao, tipo_aeronave, data_sessao, status, empresa_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'AVALIACAO_PENDENTE', ?)`,
-          )
-            .bind(
-              fichaUuid,
-              id,
-              part.funcionario_id,
-              instrutorIdFinal,
-              tipoSessao,
-              tipoAeronave,
-              dataFichaFinal,
-              empresaId,
-            )
-            .run();
-
-          const fichaId = resultFicha.meta.last_row_id;
-
-          // Popular manobras automaticamente
-          const modeloIdCandidate =
-            b.modelo_sessao_id || b.template_id || (sessaoAtual as any)?.template_id || null;
-          let modeloIdFinal: number | null = null;
-
-          if (modeloIdCandidate) {
-            const modeloTenant = await c.env.DB.prepare(
-              `SELECT id
-                 FROM modelos_sessao
-                WHERE id = ?
-                  AND empresa_id = ?
-                  AND deleted_at IS NULL
-                LIMIT 1`,
-            )
-              .bind(modeloIdCandidate, empresaId)
-              .first<{ id: number }>();
-            if (modeloTenant) modeloIdFinal = Number(modeloTenant.id);
-          }
-
-          if (!modeloIdFinal) {
-            const modeloEncontrado = await c.env.DB.prepare(
-              `SELECT ms.id FROM modelos_sessao ms
-                 INNER JOIN tipos_sessao ts
-                   ON ms.tipo_sessao_id = ts.id
-                  AND ts.empresa_id = ?
-                  AND ts.deleted_at IS NULL
-                 WHERE ts.codigo = ?
-                   AND ms.modelo_aeronave = ?
-                   AND ms.empresa_id = ?
-                   AND ms.deleted_at IS NULL
-                 LIMIT 1`,
-            )
-              .bind(empresaId, tipoSessao, tipoAeronave, empresaId)
-              .first<{ id: number }>();
-            if (modeloEncontrado) modeloIdFinal = Number(modeloEncontrado.id);
-          }
-
-          if (modeloIdFinal) {
-            const manobrasModelo = await c.env.DB.prepare(
-              `SELECT m.codigo, m.nome, COALESCE(m.nome, m.descricao) AS descricao, m.categoria,
-                      msm.ordem, msm.observacoes, COALESCE(msm.tripulante, 'AB') as tripulante
-                 FROM modelos_sessao_manobras msm
-                 INNER JOIN manobras m
-                   ON m.id = msm.manobra_id
-                  AND m.empresa_id = ?
-                  AND m.deleted_at IS NULL
-                 WHERE msm.modelo_id = ? AND msm.deleted_at IS NULL
-                 ORDER BY msm.ordem ASC`,
-            )
-              .bind(empresaId, modeloIdFinal)
-              .all();
-
-            const manobras = buildOperationalFichaManobras(
-              ((manobrasModelo.results || []) as unknown) as FichaManobraBase[],
-            );
-            if (manobras.length > 0) {
-              const insertManobrasStmt = c.env.DB.prepare(
-                `INSERT INTO fichas_sessao_manobras (ficha_id, codigo, nome, descricao, categoria, ordem, tripulante, resultado, observacoes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
-              );
-              const statements = manobras.map((man) => {
-                const m = man as {
-                  codigo: string;
-                  nome: string;
-                  descricao: string;
-                  categoria: string;
-                  ordem: number;
-                  tripulante: string;
-                };
-                return insertManobrasStmt.bind(
-                  fichaId,
-                  m.codigo,
-                  m.nome || m.descricao || '',
-                  m.descricao || '',
-                  m.categoria || 'GERAL',
-                  m.ordem,
-                  m.tripulante || 'AB',
-                );
-              });
-              
-              // Executar em lotes de 100 para respeitar limites do D1
-              for (let i = 0; i < statements.length; i += 100) {
-                await c.env.DB.batch(statements.slice(i, i + 100));
-              }
-            }
-          }
-        }
-      }
+      await applyParticipantes(c.env.DB, {
+        empresaId,
+        sessaoId: id,
+        body: b,
+        sessaoAtual,
+        plan,
+      });
 
       if (resetarFluxoFichas) {
-        await c.env.DB.prepare(
-          `UPDATE fichas_sessao
-           SET status = 'AVALIACAO_PENDENTE',
-               resultado_final = 'PENDENTE',
-               aprovado = NULL,
-               observacoes = NULL,
-               observacoes_gerais = NULL,
-               assinatura_aluno_ip = NULL,
-               assinatura_aluno_timestamp = NULL,
-               assinatura_aluno_imagem = NULL,
-               assinatura_instrutor_ip = NULL,
-               assinatura_instrutor_timestamp = NULL,
-               assinatura_instrutor_imagem = NULL,
-               assinatura_tripulante = 0,
-               assinatura_instrutor = 0,
-               assinatura_aluno_completa = 0,
-               assinatura_instrutor_completa = 0,
-               data_conclusao = NULL,
-               updated_at = datetime('now')
-           WHERE agendamento_slot_id = ?
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .run();
-
-        await c.env.DB.prepare(
-          `UPDATE fichas_sessao_manobras
-           SET resultado = NULL,
-               observacoes = '',
-               updated_at = datetime('now')
-           WHERE ficha_id IN (
-             SELECT id
-             FROM fichas_sessao
-             WHERE agendamento_slot_id = ?
-               AND deleted_at IS NULL
-           )
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .run();
+        await resetFluxoFichasEmAndamento(c.env.DB, id);
       }
 
       try {
@@ -998,18 +370,17 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       .bind(id, empresaId)
       .first<SimuladorAgendamentoRow>();
 
-    const statusAnterior = String((a as any)?.status || '').toUpperCase();
-    const statusNovo = String((u as any)?.status || '').toUpperCase();
-    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
-      try {
-        const syncQualResult = await sincronizarQualificacoesDaSessaoConcluida(c.env.DB, {
-          sessaoId: Number(id),
-          empresaId,
-        });
-        diag.qualificacoesConcluidas = syncQualResult.atualizadas;
-      } catch (error: any) {
-        diag.qualificacoesConcluidasErro = error?.message || String(error);
-      }
+    const virouConcluida = sessaoVirouConcluida(
+      (a as { status?: unknown } | null)?.status,
+      u?.status,
+    );
+    if (virouConcluida) {
+      const syncQual = await sincronizarQualificacoesAoConcluir(c.env.DB, {
+        sessaoId: Number(id),
+        empresaId,
+      });
+      if ('erro' in syncQual) diag.qualificacoesConcluidasErro = syncQual.erro;
+      else diag.qualificacoesConcluidas = syncQual.atualizadas;
     }
 
     console.log('[PUT /sessoes] DEPOIS:', { tipo_sessao: u?.tipo_sessao, nome: u?.nome });
@@ -1055,86 +426,27 @@ app.put('/sessoes/:id', requireOperacoesSessao('update'), async (c) => {
       }
     }
 
-    try {
-      const eventEmpresaId = Number((u as any)?.empresa_id || empresaId);
-      const partRows = await c.env.DB.prepare(
-        'SELECT funcionario_id FROM sessoes_participantes WHERE sessao_id = ? AND deleted_at IS NULL',
-      )
-        .bind(id)
-        .all<{ funcionario_id: string | number }>();
-      if (eventEmpresaId > 0) {
-        await Promise.allSettled(
-          (partRows.results || []).map((participante) =>
-            publishDomainEvent(
-              c.env.DB,
-              'simuladores',
-              isCompletedStatus((u as any)?.status)
-                ? 'SIMULADOR_REALIZADO'
-                : 'SIMULADOR_AGENDADO',
-              {
-                funcionario_id: String(participante.funcionario_id),
-                empresa_id: eventEmpresaId,
-                origem_modulo: 'simuladores',
-                sessao_id: String(id),
-                data_sessao: (u as any)?.data || null,
-                tipo_sessao: (u as any)?.tipo_sessao || null,
-              },
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      console.error('domain_event_error', error);
-    }
+    await publicarEventosDaSessao(c.env.DB, {
+      sessaoId: id,
+      empresaIdPadrao: empresaId,
+      sessao: u,
+    });
 
-    if (shouldNotifySimulatorSessionUpdate(a as any, u as any, participantesParaNotificacaoAlterados)) {
-      const notificationEmpresaId = Number((u as any)?.empresa_id || empresaId);
-      c.executionCtx?.waitUntil(
-        sendSimulatorSessionEmailNotifications(c.env, c.env.DB, Number(id), {
-          reason: 'updated',
-          empresaId: notificationEmpresaId || undefined,
-        })
-          .then((results) => {
-            const sent = results.filter((item) => item.status === 'sent').length;
-            const skipped = results.filter((item) => item.status === 'skipped').length;
-            const failed = results.filter((item) => item.status === 'failed').length;
-            console.log('[simuladores] session update email notification queued', {
-              sessao_id: id,
-              sent,
-              skipped,
-              failed,
-            });
-          })
-          .catch((error) => {
-            console.error('[simuladores] session update email notification failed', error);
-          }),
-      );
-    }
+    enfileirarEmailDeAtualizacao({
+      env: c.env,
+      db: c.env.DB,
+      getExecutionCtx: () => c.executionCtx,
+      sessaoId: id,
+      empresaIdPadrao: empresaId,
+      antes: a,
+      depois: u as Record<string, unknown> | null,
+      participantesAlterados: participantesParaNotificacaoAlterados,
+    });
 
     // Email: when session transitions to CONCLUIDA and fichas are in AVALIACAO_PENDENTE,
     // notify instrutor to fill the evaluation.
-    if (isCompletedStatus(statusNovo) && !isCompletedStatus(statusAnterior)) {
-      try {
-        const fichasRows = await c.env.DB.prepare(
-          `SELECT id FROM fichas_sessao
-           WHERE agendamento_slot_id = ?
-             AND status = 'AVALIACAO_PENDENTE'
-             AND deleted_at IS NULL`,
-        )
-          .bind(id)
-          .all<{ id: number }>();
-
-        for (const ficha of fichasRows.results || []) {
-          enviarEmailFichaSessao(
-            c.env,
-            c.env.DB,
-            Number(ficha.id),
-            'instrutor_avaliacao_pendente',
-          ).catch((err) => console.error('[fichaEmails] fire-and-forget error:', err));
-        }
-      } catch (err) {
-        console.error('[fichaEmails] Erro ao buscar fichas para notificação:', err);
-      }
+    if (virouConcluida) {
+      await avisarInstrutorFichasPendentes(c.env, c.env.DB, id);
     }
 
     const qualificationIntegrationFailed =

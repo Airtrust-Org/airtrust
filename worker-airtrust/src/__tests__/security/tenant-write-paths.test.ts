@@ -96,6 +96,7 @@ describe('tenant-aware write paths', () => {
     const escalasStatus = compact('routes/escalas-status.ts');
     const sessoes = compact('routes/simuladores-sessoes.ts');
     const sessoesUpdate = compact('routes/simuladores-sessoes-update.ts');
+    const sessoesParticipantes = compact('repositories/simuladores/session-participants-repository.ts');
     const fichas = compact('routes/simuladores-fichas.ts');
     const modelos = compact('routes/simuladores-modelos.ts');
 
@@ -105,7 +106,7 @@ describe('tenant-aware write paths', () => {
     expect(sessoes).toMatch(/INSERT INTO simulador_agendamentos .* empresa_id/i);
     expect(sessoes).toMatch(/INSERT INTO fichas_sessao .* empresa_id/i);
     expect(sessoes).toContain('const { empresaId } = getTenantContext(c)');
-    expect(sessoesUpdate).toMatch(/INSERT INTO fichas_sessao .* empresa_id/i);
+    expect(sessoesParticipantes).toMatch(/INSERT INTO fichas_sessao .* empresa_id/i);
     expect(sessoesUpdate).toContain('WHERE id=? AND empresa_id = ? AND deleted_at IS NULL');
     expect(fichas).toMatch(/INSERT INTO fichas_sessao.*empresa_id/i);
     expect(fichas).toContain('Aluno ou instrutor fora do tenant');
