@@ -47,6 +47,7 @@ function keyFor(identity: AlertIdentity, channel: Channel): string | null {
 
 export class SameDayTrainingAlerts {
   private readonly delivered = new Set<string>();
+  private readonly pending = new Set<string>();
 
   constructor(rows: TrainingCommunication[], day: string) {
     for (const row of rows) {
@@ -62,13 +63,22 @@ export class SameDayTrainingAlerts {
           : null;
       if (!channel) continue;
       const key = keyFor(row, channel);
-      if (key) this.delivered.add(key);
+      if (key) {
+        if (row.status_envio === 'pendente') this.pending.add(key);
+        else this.delivered.add(key);
+      }
     }
   }
 
   wasSent(identity: AlertIdentity, channel: Channel): boolean {
     const key = keyFor(identity, channel);
-    return key ? this.delivered.has(key) : false;
+    return key ? this.delivered.has(key) || this.pending.has(key) : false;
+  }
+
+  /** Pendência de auditoria: pode ter sido aceita externamente, sem resultado final. */
+  isPending(identity: AlertIdentity, channel: Channel): boolean {
+    const key = keyFor(identity, channel);
+    return key ? this.pending.has(key) : false;
   }
 
   markAccepted(identity: AlertIdentity, channel: Channel): void {
