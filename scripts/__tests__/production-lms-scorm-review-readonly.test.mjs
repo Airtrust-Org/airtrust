@@ -26,6 +26,13 @@ test('active candidate can be resolved from the tenant-scoped enrollment read', 
   assert.match(script, /EXPECTED_CANDIDATE_ID\s*\|\|\s*'auto'/);
 });
 
+test('read-only asset session preserves the enrollment-issued handoff to avoid false 409', () => {
+  assert.match(script, /active_scorm_handoff_id/);
+  assert.match(script, /expected_handoff_id:\\s*handoffId/);
+  assert.match(script, /getAssetSession\\(token,\\s*enrollment\\)/);
+  assert.match(script, /ENROLLMENT_HANDOFF_ID_INVALID/);
+});
+
 test('real-player review blocks all non-read HTTP requests and never targets SCORM commit', () => {
   assert.match(script, /\/api\/lms\/assets\/session/);
   assert.match(script, /\/api\/lms\/scorm\/launch\/\$\{matricula\}/);
