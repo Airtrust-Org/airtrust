@@ -26,6 +26,13 @@ test('active candidate can be resolved from the tenant-scoped enrollment read', 
   assert.match(script, /EXPECTED_CANDIDATE_ID\s*\|\|\s*'auto'/);
 });
 
+test('read-only asset session preserves the enrollment-issued handoff to avoid false 409', () => {
+  assert.match(script, /active_scorm_handoff_id/);
+  assert.match(script, /expected_handoff_id:\s*handoffId/);
+  assert.match(script, /getAssetSession\(token,\s*enrollment\)/);
+  assert.match(script, /ENROLLMENT_HANDOFF_ID_INVALID/);
+});
+
 test('real-player review blocks all non-read HTTP requests and never targets SCORM commit', () => {
   assert.match(script, /\/api\/lms\/assets\/session/);
   assert.match(script, /\/api\/lms\/scorm\/launch\/\$\{matricula\}/);
@@ -35,6 +42,16 @@ test('real-player review blocks all non-read HTTP requests and never targets SCO
   assert.doesNotMatch(script, /\/api\/lms\/matriculas\/scorm\/commit/);
   assert.doesNotMatch(script, /LMSSetValue|LMSCommit|LMSFinish|cmi\.core\.lesson_status/);
   assert.match(script, /writes:\s*'none/);
+});
+
+test('resumed Factory V3 inspection reports only sanitized button evidence', () => {
+  assert.match(script, /scenario_answers_missing:/);
+  assert.match(script, /prior_units_complete:/);
+  assert.match(script, /scorm_initialized:/);
+  assert.match(script, /scorm_finished:/);
+  assert.match(script, /final_button_disabled:/);
+  assert.match(workflow, /Factory V3 final button disabled/);
+  assert.match(workflow, /Factory V3 scenario answers missing/);
 });
 
 test('failed launch preserves only a sanitized blocked-state report for the artifact', () => {
