@@ -610,7 +610,11 @@ app.post(
       });
       console.log('✅ [UPLOAD CERT] Certificado inserido na pasta_virtual');
 
-      const numeroCertificado = nomeArquivo.replace('.pdf', '');
+      // O código de um certificado legado é evidência de origem e não pode ser
+      // substituído silenciosamente pelo nome local do arquivo enviado.
+      // Para históricos sem código prévio, manter o comportamento anterior.
+      const numeroCertificado =
+        String(historico.numero_certificado || '').trim() || nomeArquivo.replace(/\.pdf$/i, '');
       const updateResult = await db
         .prepare(
           `UPDATE qualificacoes_historico
