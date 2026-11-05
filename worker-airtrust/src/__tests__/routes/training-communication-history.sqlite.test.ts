@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
+import { readSameDayTrainingAlerts } from '../../services/training-alert-same-day';
 import {
   listTrainingCommunications,
   maskTrainingContact,
@@ -152,6 +153,31 @@ describe('consolidated training communication history', () => {
     const allRows = await read();
     expect(allRows.rows.some((row) => row.id === 'lms:15:EMAIL')).toBe(false);
     expect(allRows.rows.some((row) => row.id === 'lms:16:EMAIL')).toBe(true);
+  });
+
+  it('bloqueia reenvio do dia quando há PREPARADO pendente; falha final não bloqueia', async () => {
+    db.database.exec(`
+      INSERT INTO audit_logs(id,empresa_id,action,entity_type,new_values,created_at)
+      VALUES
+      (20,1,'LMS_MATRICULA_ALERTA_PREPARADO','lms_matriculas',
+       '{"tentativa_id":"pending-today","funcionario_id":1000,"curso_id":30,"email_resultado":"PENDENTE"}',
+       '2026-11-05 18:00:00'),
+      (21,1,'LMS_MATRICULA_ALERTA_PREPARADO','lms_matriculas',
+       '{"tentativa_id":"failed-today","funcionario_id":1000,"curso_id":30,"whatsapp_resultado":"PENDENTE"}',
+       '2026-11-05 18:01:00'),
+      (22,1,'LMS_MATRICULA_ALERTA','lms_matriculas',
+       '{"tentativa_id":"failed-today","funcionario_id":1000,"curso_id":30,"whatsapp_resultado":"FALHA"}',
+       '2026-11-05 18:02:00');
+    `);
+    const history = await readSameDayTrainingAlerts(
+      db.asD1(), 1, all, new Date('2026-11-05T19:00:00Z'),
+    );
+    const identity = { funcionario_id: 1000, qualificacao_tipo_id: 100, curso_id: 30 };
+    expect(history.wasSent(identity, 'EMAIL')).toBe(true);
+    expect(history.wasSent(identity, 'WHATSAPP')).toBe(false);
+    expect(history.wasSent({ ...identity, funcionario_id: 1001 }, 'EMAIL')).toBe(false);
+    const pending = await read({ resultado: 'pendente', inicio: '2026-11-05' });
+    expect(pending.rows.map((row) => row.id)).toEqual(['lms:20:EMAIL']);
   });
 
   it('masks contact values and does not invent a historical LMS destination', () => {
