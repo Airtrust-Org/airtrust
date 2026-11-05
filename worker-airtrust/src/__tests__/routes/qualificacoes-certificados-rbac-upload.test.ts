@@ -373,6 +373,7 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
               data_conclusao: historico.data_conclusao,
               data_vencimento: historico.data_vencimento,
               certificado_arquivo_id: historico.certificado_arquivo_id,
+              numero_certificado: historico.numero_certificado,
               qualificacao_nome: 'Qualificação',
               codigo: 'OPC',
               funcionario_cpf: funcionario.cpf,
