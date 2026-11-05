@@ -235,8 +235,14 @@ async function main() {
     assert(initial.total_slides === 3 && initial.next_slide === 0 &&
       initial.ready_to_finalize === false, 'PPTX_QA_INITIAL_STATE_INVALID');
     const denied = await request(student.token, `/api/lms/matriculas/${matriculaId}/finalizar`, 'POST', {});
-    assert(denied.status === 409 && denied.json?.code === 'CONTENT_EVIDENCE_REQUIRED',
+    // A 409 COMPLETION_NOT_REQUESTED from the canonical integrity guard is
+    // also a valid fail-closed rejection of premature manual finalization.
+    // Accept only the two reviewed deny codes, never an arbitrary 409 or 200.
+    const deniedCode = String(denied.json?.code || '');
+    assert(denied.status === 409 &&
+      ['CONTENT_EVIDENCE_REQUIRED', 'COMPLETION_NOT_REQUESTED'].includes(deniedCode),
       `PPTX_QA_EARLY_FINALIZATION_NOT_BLOCKED_HTTP_${denied.status}_CODE_${String(denied.json?.code || 'none').replace(/[^A-Za-z0-9_]/g, '').slice(0, 60)}`);
+    result.early_finalization_rejection_code = deniedCode;
     const first = await observe(student.token, matriculaId, 0, initial.asset_etag);
     requireOk(first, 200, 'initial slide');
     const resumed = await getState(student.token, matriculaId);
