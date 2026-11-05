@@ -65,7 +65,11 @@ vi.mock('../../routes/qualificacoes/historico-write', () => ({
   default: new Hono(),
 }));
 
-vi.mock('../../services/qualificacoes/historico-helpers', () => ({
+vi.mock('../../services/qualificacoes/historico-helpers', async (importOriginal) => ({
+  // Contrato real: a rota passou a reutilizar os predicados civis nos agregados.
+  buildVencimentoStatusPredicates:
+    (await importOriginal<typeof import('../../services/qualificacoes/historico-helpers')>())
+      .buildVencimentoStatusPredicates,
   safe: <T>(handler: T) => handler,
   buildOrderByClause: () => 'qh.data_vencimento ASC',
   generateETag: () => '"test-etag"',
