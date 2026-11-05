@@ -14,6 +14,7 @@ import {
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
 import { listTrainingCommunications } from '../services/training-communication-history';
+import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -388,12 +389,17 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    const already = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);
     return c.json({
       success: true,
       data: {
         selecionados: targets.length,
         com_email: targets.filter((item) => Boolean(item.email)).length,
         sem_email: targets.filter((item) => !item.email).length,
+        email_ja_alertado: targets.filter((item) => already.wasSent(item, 'EMAIL')).length,
+        email_pendente_historico: targets.filter((item) => already.isPending(item, 'EMAIL')).length,
+        whatsapp_ja_alertado: targets.filter((item) => already.wasSent(item, 'WHATSAPP')).length,
+        whatsapp_pendente_historico: targets.filter((item) => already.isPending(item, 'WHATSAPP')).length,
         com_whatsapp: targets.filter((item) => Boolean(item.telefone)).length,
         sem_whatsapp: targets.filter((item) => !item.telefone).length,
         vencidos: targets.filter((item) => item.status_compliance === 'VENCIDO').length,
@@ -409,6 +415,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const payload = (await c.req.json().catch(() => ({}))) as {
       targets?: RequestedComplianceTarget[];
       canais?: { email?: boolean; whatsapp?: boolean };
+      reenviar_hoje?: boolean;
     };
     const requested = Array.isArray(payload.targets) ? payload.targets.slice(0, 200) : [];
     if (!requested.length) throw new ApiError('Selecione ao menos uma pendência', 400);
@@ -422,14 +429,54 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    const history = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);
+    const attempted = new SameDayTrainingAlerts([], '');
+    let emailAlready = 0;
+    let whatsappAlready = 0;
+    let emailPending = 0;
+    let whatsappPending = 0;
+    let emailMissing = 0;
+    let whatsappMissing = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
       const chunk = targets.slice(index, index + 5);
+      const queued = chunk.map((target) => {
+        const isEmailPending = channels.email && history.isPending(target, 'EMAIL');
+        const isWhatsappPending = channels.whatsapp && history.isPending(target, 'WHATSAPP');
+        const skipEmail = channels.email &&
+          (isEmailPending || attempted.wasSent(target, 'EMAIL') ||
+           (payload.reenviar_hoje !== true && history.wasSent(target, 'EMAIL')));
+        const skipWhatsapp = channels.whatsapp &&
+          (isWhatsappPending || attempted.wasSent(target, 'WHATSAPP') ||
+           (payload.reenviar_hoje !== true && history.wasSent(target, 'WHATSAPP')));
+        if (skipEmail) emailAlready++;
+        if (skipWhatsapp) whatsappAlready++;
+        if (isEmailPending) emailPending++;
+        if (isWhatsappPending) whatsappPending++;
+        if (channels.email && !skipEmail) attempted.markAccepted(target, 'EMAIL');
+        if (channels.whatsapp && !skipWhatsapp) attempted.markAccepted(target, 'WHATSAPP');
+        if (channels.email && !skipEmail && !target.email) emailMissing++;
+        if (channels.whatsapp && !skipWhatsapp && !target.telefone) whatsappMissing++;
+        return {
+          target,
+          available: {
+            email: channels.email && !skipEmail,
+            whatsapp: channels.whatsapp && !skipWhatsapp,
+          },
+        };
+      });
       results.push(
         ...(await Promise.all(
-          chunk.map((target) =>
-            sendComplianceNotification(c.env, c.env.DB, target, channels, triggerKey),
+          queued.map(({ target, available }) =>
+            available.email || available.whatsapp
+              ? sendComplianceNotification(c.env, c.env.DB, target, available, triggerKey)
+              : Promise.resolve({
+                  funcionario_id: target.funcionario_id,
+                  qualificacao_tipo_id: target.qualificacao_tipo_id,
+                  email: { attempted: false, ok: false },
+                  whatsapp: { attempted: false, ok: false },
+                }),
           ),
         )),
       );
@@ -447,6 +494,11 @@ export function createTrainingComplianceIntelligenceRoutes({
         canais: channels,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,
+        email_ja_alertado: emailAlready,
+        whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
+        reenvio_confirmado_hoje: payload.reenviar_hoje === true,
       },
       ...extrairUsuarioAuditoria(c),
     });
@@ -459,8 +511,12 @@ export function createTrainingComplianceIntelligenceRoutes({
         whatsapp_sucesso: whatsappSuccess,
         email_falha: results.filter((row) => row.email.attempted && !row.email.ok).length,
         whatsapp_falha: results.filter((row) => row.whatsapp.attempted && !row.whatsapp.ok).length,
-        sem_email: results.filter((row) => !row.email.attempted && channels.email).length,
-        sem_whatsapp: results.filter((row) => !row.whatsapp.attempted && channels.whatsapp).length,
+        sem_email: emailMissing,
+        sem_whatsapp: whatsappMissing,
+        email_ja_alertado: emailAlready,
+        whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
       },
     });
   });

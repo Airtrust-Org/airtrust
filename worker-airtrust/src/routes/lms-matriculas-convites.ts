@@ -6,6 +6,8 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { logAudit } from '../utils/db';
+import { maskTrainingContact } from '../services/training-communication-history';
+import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 import { createLogger, toError } from '../utils/logger';
@@ -38,6 +40,7 @@ export type MatriculaDeliveryOutcome = {
 const ConviteMatriculaLoteSchema = z.object({
   matricula_ids: z.array(z.number().int().positive()).min(1).max(200),
   modo: z.enum(['convite', 'alerta']).optional().default('convite'),
+  reenviar_hoje: z.boolean().optional().default(false),
   canais: z
     .object({
       email: z.boolean().optional(),
@@ -106,6 +109,7 @@ export async function sendMatriculaEmail(
     isNovoCiclo: boolean;
     modo?: MatriculaMessageMode;
     statusMatricula?: string | null;
+    onDestination?: (masked: string) => void;
   },
 ): Promise<MatriculaDeliveryStatus> {
   try {
@@ -125,6 +129,8 @@ export async function sendMatriculaEmail(
       });
       return 'SEM_EMAIL';
     }
+
+    params.onDestination?.(maskTrainingContact(funcionario.email) || '***');
 
     const cursoUrl =
       (await resolveTrainingAccessUrl(env, db, {
@@ -229,6 +235,7 @@ export async function sendMatriculaWhatsApp(
     cursoTitulo: string;
     dataExpiracao?: string | null;
     statusMatricula?: string | null;
+    onDestination?: (masked: string) => void;
   },
 ): Promise<MatriculaDeliveryStatus> {
   try {
@@ -248,6 +255,8 @@ export async function sendMatriculaWhatsApp(
       });
       return 'SEM_WHATSAPP';
     }
+
+    params.onDestination?.(maskTrainingContact(funcionario.telefone) || '***');
 
     const cursoUrl =
       (await resolveTrainingAccessUrl(env, db, {
@@ -334,6 +343,81 @@ export async function sendMatriculaWhatsApp(
   }
 }
 
+type AlertableEnrollment = {
+  id: number;
+  funcionario_id: number;
+  curso_id: number;
+  qualificacao_tipo_id: number | null;
+  data_expiracao: string | null;
+  status: string;
+  curso_titulo: string;
+  email: string | null;
+  telefone: string | null;
+};
+
+async function loadAlertableEnrollments(
+  db: D1Database,
+  empresaId: number,
+  ids: number[],
+  access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+) {
+  const placeholders = ids.map(() => '?').join(',');
+  const scope = employeeSectorSql(access, 'f');
+  return db.prepare(
+    `SELECT m.id,m.funcionario_id,m.curso_id,c.qualificacao_tipo_id,m.data_expiracao,m.status,
+            c.titulo AS curso_titulo,f.email,f.telefone
+       FROM lms_matriculas m
+       JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
+       JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+      WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
+        AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
+        AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+        AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+        AND ${scope.clause}`,
+  ).bind(empresaId, ...ids, ...scope.bindings).all<AlertableEnrollment>();
+}
+
+function alertIdentity(row: AlertableEnrollment) {
+  return {
+    funcionario_id: Number(row.funcionario_id),
+    qualificacao_tipo_id: row.qualificacao_tipo_id,
+    curso_id: Number(row.curso_id),
+  };
+}
+
+app.post('/lote/preview', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) => {
+  const parsed = ConviteMatriculaLoteSchema.safeParse(await c.req.json<unknown>());
+  if (!parsed.success) throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
+  if (parsed.data.modo !== 'alerta') throw new ApiError('Prévia disponível apenas para alertas', 400);
+  const channels = {
+    email: parsed.data.canais?.email ?? true,
+    whatsapp: parsed.data.canais?.whatsapp ?? false,
+  };
+  if (!channels.email && !channels.whatsapp) throw new ApiError('Selecione e-mail e/ou WhatsApp', 400);
+  const ids = [...new Set(parsed.data.matricula_ids)];
+  const empresaId = getEmpresaIdSafe(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const [enrollments, history] = await Promise.all([
+    loadAlertableEnrollments(c.env.DB, empresaId, ids, access),
+    readSameDayTrainingAlerts(c.env.DB, empresaId, access),
+  ]);
+  const rows = enrollments.results || [];
+  return c.json({
+    success: true,
+    data: {
+      selecionados: ids.length,
+      processados: rows.length,
+      email_ja_alertado: channels.email
+        ? rows.filter((row) => history.wasSent(alertIdentity(row), 'EMAIL')).length : 0,
+      email_pendente_historico: channels.email
+        ? rows.filter((row) => history.isPending(alertIdentity(row), 'EMAIL')).length : 0,
+      whatsapp_ja_alertado: channels.whatsapp
+        ? rows.filter((row) => history.wasSent(alertIdentity(row), 'WHATSAPP')).length : 0,
+      whatsapp_pendente_historico: channels.whatsapp
+        ? rows.filter((row) => history.isPending(alertIdentity(row), 'WHATSAPP')).length : 0,
+    },
+  });
+});
 /**
  * Registra a intenção duravelmente antes de qualquer envio externo. Se o D1
  * falhar nesse ponto, não há despacho. Se falhar após aceitação pelo provedor,
@@ -355,6 +439,7 @@ export async function sendMatriculaTracked(
     isNovoCiclo: boolean;
     modo?: MatriculaMessageMode;
     canais?: { email: boolean; whatsapp: boolean };
+    reenvioConfirmadoHoje?: boolean;
   },
 ): Promise<MatriculaDeliveryOutcome> {
   const channels = params.canais ?? { email: true, whatsapp: false };
@@ -366,6 +451,7 @@ export async function sendMatriculaTracked(
     tentativa_id: tentativaId,
     modo: mode,
     canais: channels,
+    reenvio_confirmado_hoje: params.reenvioConfirmadoHoje === true,
     curso_id: params.cursoId,
     curso_titulo: params.cursoTitulo,
     funcionario_id: params.funcionarioId,
@@ -379,6 +465,8 @@ export async function sendMatriculaTracked(
   if (!auditPrepared) {
     return { emailStatus: null, whatsappStatus: null, auditPrepared: false, auditFinal: false };
   }
+  let emailDestination: string | null = null;
+  let whatsappDestination: string | null = null;
   const emailStatus = channels.email
     ? await sendMatriculaEmail(c, env, db, {
       funcionarioId: params.funcionarioId,
@@ -389,6 +477,7 @@ export async function sendMatriculaTracked(
       isNovoCiclo: params.isNovoCiclo,
       modo: mode,
       statusMatricula: params.statusMatricula,
+      onDestination: (masked) => { emailDestination = masked; },
     })
     : null;
   const whatsappStatus = channels.whatsapp
@@ -399,10 +488,15 @@ export async function sendMatriculaTracked(
       cursoTitulo: params.cursoTitulo,
       dataExpiracao: params.dataExpiracao,
       statusMatricula: params.statusMatricula,
+      onDestination: (masked) => { whatsappDestination = masked; },
     })
     : null;
   const auditFinal = await logInviteAudit(db, c, matriculaId, action, {
     ...values, email_resultado: emailStatus, whatsapp_resultado: whatsappStatus,
+    email_destinatario_mascarado: emailStatus === 'ENVIADO' || emailStatus === 'FALHA'
+      ? emailDestination : null,
+    whatsapp_destinatario_mascarado: whatsappStatus === 'ENVIADO' || whatsappStatus === 'FALHA'
+      ? whatsappDestination : null,
   });
   return { emailStatus, whatsappStatus, auditPrepared: true, auditFinal };
 }
@@ -426,30 +520,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     throw new ApiError('WhatsApp está disponível apenas para alertas de matrículas existentes', 400);
   }
 
-  const placeholders = ids.map(() => '?').join(',');
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const scope = employeeSectorSql(access, 'f');
-  const { results } = await db
-    .prepare(
-      `SELECT m.id,m.funcionario_id,m.curso_id,m.data_expiracao,m.status,c.titulo AS curso_titulo
-         FROM lms_matriculas m
-         JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
-         JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
-        WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
-          AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
-          AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
-          AND ${scope.clause}`,
-    )
-    .bind(empresaId, ...ids, ...scope.bindings)
-    .all<{
-      id: number;
-      funcionario_id: number;
-      curso_id: number;
-      data_expiracao: string | null;
-      status: string;
-      curso_titulo: string;
-    }>();
+  const { results } = await loadAlertableEnrollments(db, empresaId, ids, access);
 
   const encontrados = new Set((results || []).map((row) => Number(row.id)));
   const summary = {
@@ -464,15 +536,53 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     sem_whatsapp: 0,
     whatsapp_falhas: 0,
     nao_encontradas: ids.filter((id) => !encontrados.has(id)).length,
+    email_ja_alertado: 0,
+    whatsapp_ja_alertado: 0,
+    email_pendente_historico: 0,
+    whatsapp_pendente_historico: 0,
     auditoria_preparo_falhas: 0,
     auditoria_resultado_pendente: 0,
   };
 
   const rows = results || [];
+  const history = mode === 'alerta'
+    ? await readSameDayTrainingAlerts(db, empresaId, access)
+    : null;
+  const attempted = new SameDayTrainingAlerts([], '');
   for (let index = 0; index < rows.length; index += 5) {
     const batch = rows.slice(index, index + 5);
+    // Reserve each logical channel before concurrent requests inside the batch.
+    // Previously accepted notices are skipped unless explicitly overridden.
+    const candidates = batch.map((row) => {
+      const identity = alertIdentity(row);
+      const emailPending = mode === 'alerta' && channels.email &&
+        Boolean(history?.isPending(identity, 'EMAIL'));
+      const whatsappPending = mode === 'alerta' && channels.whatsapp &&
+        Boolean(history?.isPending(identity, 'WHATSAPP'));
+      // Uma intenção PREPARADO sem resultado não pode ser forçada pelo checkbox.
+      // A confirmação de reenvio aplica-se apenas a aceites registrados, não a indeterminações.
+      const emailDuplicate = mode === 'alerta' && channels.email &&
+        (emailPending || attempted.wasSent(identity, 'EMAIL') ||
+          (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'EMAIL'))));
+      const whatsappDuplicate = mode === 'alerta' && channels.whatsapp &&
+        (whatsappPending || attempted.wasSent(identity, 'WHATSAPP') ||
+          (!parsed.data.reenviar_hoje && Boolean(history?.wasSent(identity, 'WHATSAPP'))));
+      if (emailDuplicate) summary.email_ja_alertado += 1;
+      if (whatsappDuplicate) summary.whatsapp_ja_alertado += 1;
+      if (emailPending) summary.email_pendente_historico += 1;
+      if (whatsappPending) summary.whatsapp_pendente_historico += 1;
+      if (channels.email && !emailDuplicate) attempted.markAccepted(identity, 'EMAIL');
+      if (channels.whatsapp && !whatsappDuplicate) attempted.markAccepted(identity, 'WHATSAPP');
+      return { row, emailDuplicate, whatsappDuplicate };
+    });
     const outcomes = await Promise.all(
-      batch.map(async (row) => {
+      candidates.map(async ({ row, emailDuplicate, whatsappDuplicate }) => {
+        const emailEnabled = channels.email && !emailDuplicate;
+        const whatsappEnabled = channels.whatsapp && !whatsappDuplicate;
+        // Nenhum novo despacho, logo não criar evento PREPARADO para os canais já aceitos.
+        if (!emailEnabled && !whatsappEnabled) {
+          return { emailStatus: null, whatsappStatus: null, auditPrepared: true, auditFinal: true };
+        }
         return sendMatriculaTracked(c, c.env, db, Number(row.id), {
           funcionarioId: Number(row.funcionario_id),
           empresaId,
@@ -482,7 +592,8 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           statusMatricula: row.status,
           isNovoCiclo: false,
           modo: mode,
-          canais: channels,
+          canais: { email: emailEnabled, whatsapp: whatsappEnabled },
+          reenvioConfirmadoHoje: mode === 'alerta' && parsed.data.reenviar_hoje,
         });
       }),
     );
