@@ -25,6 +25,7 @@ function scenario(opts = {}) {
   db.exec([
     'CREATE TABLE usuarios (id INTEGER PRIMARY KEY, nome TEXT, email TEXT, perfil TEXT, funcionario_id INTEGER, active INTEGER, deleted_at TEXT, updated_at TEXT);',
     'CREATE TABLE usuarios_empresas (usuario_id INTEGER, empresa_id INTEGER, role TEXT);',
+    'CREATE TABLE usuarios_empresas_perfis (usuario_id INTEGER, empresa_id INTEGER, perfil TEXT, ativo INTEGER);',
     'CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, email TEXT, status TEXT, ativo INTEGER, deleted_at TEXT);',
     'CREATE TABLE audit_logs (empresa_id INTEGER, usuario_id INTEGER, acao TEXT, tabela TEXT, registro_id TEXT, detalhes TEXT, created_at TEXT);',
   ].join('\n'));
@@ -32,14 +33,15 @@ function scenario(opts = {}) {
     .run('Yngrid Teste','yn@example.invalid',opts.userProfile || 'ADMIN',opts.accountEmployee ?? null);
   for (const id of memberships) db.prepare('INSERT INTO usuarios_empresas VALUES(71,?,?)')
     .run(id,opts.tenantRole || 'ADMIN');
+  for (const perfil of (opts.activeProfiles || ['ADMIN'])) db.prepare('INSERT INTO usuarios_empresas_perfis VALUES(71,6,?,1)').run(perfil);
   db.prepare('INSERT INTO funcionarios VALUES(81,6,?,?,?,?,NULL)')
     .run('Yngrid Teste',opts.employeeEmail || 'yn@example.invalid','ATIVO',opts.employeeActive ?? 1);
   if (opts.otherLinked) db.exec("INSERT INTO usuarios(id,nome,email,perfil,funcionario_id,active) VALUES(72,'Other','other@example.invalid','ALUNO',81,1)");
   return db;
 }
-function eligible(db) { return db.prepare(eligibilitySql).get(71,6,81,6,81).n; }
+function eligible(db) { return db.prepare(eligibilitySql).get(71,6,6,6,81,6,81).n; }
 function cas(db) {
-  const update = db.prepare(updateSql).run(81,71,6,81,6,81);
+  const update = db.prepare(updateSql).run(81,71,6,6,6,81,6,81);
   const audit = db.prepare(auditSql).run(6,2,71,'{"scope":"one_link"}');
   return { changed: update.changes, audited: audit.changes };
 }
@@ -70,6 +72,7 @@ test('tenant mismatch, inactive employee, email drift, role drift and link reuse
   for (const opts of [
     {memberships:[7]}, {employeeActive:0}, {employeeEmail:'different@example.invalid'},
     {otherLinked:true}, {accountEmployee:99}, {userProfile:'GESTOR'}, {tenantRole:'GESTOR'},
+    {activeProfiles:['GESTOR']}, {activeProfiles:['ADMIN','ALUNO']},
   ]) {
     const db=scenario(opts);
     assert.equal(eligible(db),0,JSON.stringify(opts));
