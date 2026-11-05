@@ -170,6 +170,8 @@ describe('TrainingComplianceIntelligence', () => {
           sem_whatsapp: 0,
           vencidos: 0,
           nunca_realizados: 1,
+          email_ja_alertado: 1,
+          whatsapp_ja_alertado: 0,
         });
       throw new Error(`unexpected ${url}`);
     });
@@ -189,6 +191,13 @@ describe('TrainingComplianceIntelligence', () => {
     );
     expect(screen.getByText('WhatsApp')).toBeInTheDocument();
     expect(screen.getByText('E-mail')).toBeInTheDocument();
+    const resend = await screen.findByRole('checkbox', { name: /Reenviar explicitamente os avisos/ });
+    fireEvent.click(resend);
+    expect(resend).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar aviso' }));
+    const reopened = await screen.findByRole('checkbox', { name: /Reenviar explicitamente os avisos/ });
+    expect(reopened).not.toBeChecked();
   });
 
   it('shows each LMS enrollment percentage without treating progress as compliance completion', async () => {
