@@ -18,6 +18,15 @@ type AlertSummary = {
   whatsapp_falhas: number;
   sem_whatsapp: number;
   nao_encontradas: number;
+  email_ja_alertado?: number;
+  whatsapp_ja_alertado?: number;
+};
+
+type AlertPreview = {
+  selecionados: number;
+  processados: number;
+  email_ja_alertado: number;
+  whatsapp_ja_alertado: number;
 };
 
 type Props = {
@@ -61,6 +70,8 @@ export function LmsEnrollmentAlertModal({
 }: Props) {
   const [channels, setChannels] = useState({ email: true, whatsapp: true });
   const [sending, setSending] = useState(false);
+  const [preview, setPreview] = useState<AlertPreview | null>(null);
+  const [reenviarHoje, setReenviarHoje] = useState(false);
 
   const statusCounts = useMemo(
     () => ({
@@ -79,6 +90,22 @@ export function LmsEnrollmentAlertModal({
 
     setSending(true);
     try {
+      if (!preview) {
+        const checkResponse = await fetchWithAuth('/api/lms/matriculas/convites/lote/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            matricula_ids: targets.map((target) => target.id),
+            modo: 'alerta',
+            canais: channels,
+          }),
+        });
+        const check = await readSummary(checkResponse) as AlertPreview;
+        setPreview(check);
+        if (check.email_ja_alertado + check.whatsapp_ja_alertado > 0) {
+          return;
+        }
+      }
       const response = await fetchWithAuth('/api/lms/matriculas/convites/lote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,6 +113,7 @@ export function LmsEnrollmentAlertModal({
           matricula_ids: targets.map((target) => target.id),
           modo: 'alerta',
           canais: channels,
+          reenviar_hoje: reenviarHoje,
         }),
       });
       const result = await readSummary(response);
@@ -100,17 +128,20 @@ export function LmsEnrollmentAlertModal({
         (channels.email ? result.email_falhas : 0) +
         (channels.whatsapp ? result.whatsapp_falhas : 0);
 
+      const skipped = (result.email_ja_alertado || 0) + (result.whatsapp_ja_alertado || 0);
       if (result.processados === 0) {
         toast.warning('Nenhuma matrícula pendente válida foi encontrada para envio.');
       } else if (failures > 0) {
         toast.warning(
-          `Alertas processados: ${pieces.join(' · ')}. ${failures} falha(s)${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}.`,
+          `Alertas processados: ${pieces.join(' · ')}. ${failures} falha(s)${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}${skipped ? ` · ${skipped} envio(s) repetido(s) evitado(s)` : ''}.`,
         );
       } else {
         toast.success(
-          `Alertas enviados: ${pieces.join(' · ')}${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}.`,
+          `Alertas processados: ${pieces.join(' · ')}${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}${skipped ? ` · ${skipped} envio(s) repetido(s) evitado(s)` : ''}.`,
         );
       }
+      setPreview(null);
+      setReenviarHoje(false);
       onSent?.();
       onClose();
     } catch (error) {
@@ -139,7 +170,7 @@ export function LmsEnrollmentAlertModal({
             loading={sending}
           >
             <Send className="h-4 w-4" />
-            Enviar {targets.length} alerta(s)
+            {preview ? 'Confirmar envio' : `Verificar e enviar ${targets.length} alerta(s)`}
           </Button>
         </>
       }
@@ -187,9 +218,11 @@ export function LmsEnrollmentAlertModal({
               <input
                 type="checkbox"
                 checked={channels.email}
-                onChange={(event) =>
-                  setChannels((current) => ({ ...current, email: event.target.checked }))
-                }
+                onChange={(event) => {
+                  setChannels((current) => ({ ...current, email: event.target.checked }));
+                  setPreview(null);
+                  setReenviarHoje(false);
+                }}
               />
               <Mail className="h-4 w-4 text-slate-500" />
               <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -200,9 +233,11 @@ export function LmsEnrollmentAlertModal({
               <input
                 type="checkbox"
                 checked={channels.whatsapp}
-                onChange={(event) =>
-                  setChannels((current) => ({ ...current, whatsapp: event.target.checked }))
-                }
+                onChange={(event) => {
+                  setChannels((current) => ({ ...current, whatsapp: event.target.checked }));
+                  setPreview(null);
+                  setReenviarHoje(false);
+                }}
               />
               <MessageCircle className="h-4 w-4 text-slate-500" />
               <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -211,6 +246,21 @@ export function LmsEnrollmentAlertModal({
             </label>
           </div>
         </div>
+
+        {preview && (preview.email_ja_alertado + preview.whatsapp_ja_alertado > 0) ? (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <strong>Já houve alertas aceitos para envio hoje.</strong>
+            <p className="mt-1">
+              {preview.email_ja_alertado} e-mail(s) e {preview.whatsapp_ja_alertado} WhatsApp(s)
+              repetido(s). Por padrão, estes envios serão ignorados.
+            </p>
+            <label className="mt-3 flex items-center gap-2">
+              <input type="checkbox" checked={reenviarHoje}
+                onChange={(event) => setReenviarHoje(event.target.checked)} />
+              Reenviar também os alertas já enviados hoje
+            </label>
+          </div>
+        ) : null}
 
         <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
           O alerta inclui o nome do treinamento, a situação da matrícula, o prazo de conclusão
