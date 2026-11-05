@@ -235,8 +235,17 @@ async function main() {
     assert(initial.total_slides === 3 && initial.next_slide === 0 &&
       initial.ready_to_finalize === false, 'PPTX_QA_INITIAL_STATE_INVALID');
     const denied = await request(student.token, `/api/lms/matriculas/${matriculaId}/finalizar`, 'POST', {});
-    assert(denied.status === 409 && denied.json?.code === 'CONTENT_EVIDENCE_REQUIRED',
-      `PPTX_QA_EARLY_FINALIZATION_NOT_BLOCKED_HTTP_${denied.status}_CODE_${String(denied.json?.code || 'none').replace(/[^A-Za-z0-9_]/g, '').slice(0, 60)}`);
+    // Integrity middleware evaluates explicit completion before the route's
+    // PPTX content-evidence check. Both 409 codes are fail-closed before any
+    // slide has been observed. A 200 or unrelated 409 remains a hard failure.
+    assert(denied.status === 409 &&
+      ['COMPLETION_NOT_REQUESTED', 'CONTENT_EVIDENCE_REQUIRED'].includes(denied.json?.code),
+    `PPTX_QA_EARLY_FINALIZATION_NOT_BLOCKED_HTTP_${denied.status}_CODE_${String(denied.json?.code || 'none').replace(/[^A-Za-z0-9_]/g, '').slice(0, 60)}`);
+    const rejectedEnrollment = requireOk(await request(student.token,
+      `/api/lms/matriculas/${matriculaId}`), 200, 'PPTX early denial readback');
+    assert(rejectedEnrollment.status !== 'CONCLUIDO' &&
+      rejectedEnrollment.qualificacao_historico_id == null,
+    'PPTX_QA_EARLY_DENIAL_MUTATED_COMPLETION_OR_QUALIFICATION');
     const first = await observe(student.token, matriculaId, 0, initial.asset_etag);
     requireOk(first, 200, 'initial slide');
     const resumed = await getState(student.token, matriculaId);
