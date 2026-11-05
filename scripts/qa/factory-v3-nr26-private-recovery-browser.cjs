@@ -3,8 +3,11 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),http=require('node:http');
 const crypto=require('node:crypto'),assert=require('node:assert/strict');
 const {execFileSync}=require('node:child_process'),{chromium,webkit}=require('playwright');
-const zip=process.env.AIRTRUST_NR26_PRIVATE_ZIP_PATH;
-const zipSha='6a354bc290b60855e4fd6834acded23372d3beafcd7f5f5581bb1c0034e3cee1';
+const packaged=Boolean(process.env.AIRTRUST_NR26_CANDIDATE_ZIP_PATH);
+const zip=packaged?process.env.AIRTRUST_NR26_CANDIDATE_ZIP_PATH:process.env.AIRTRUST_NR26_PRIVATE_ZIP_PATH;
+const zipSha=packaged
+  ?'ba6f2399257de017de4dc62b3f56b86d44238b0f3b9b9ff09e31e003e6cb9c29'
+  :'6a354bc290b60855e4fd6834acded23372d3beafcd7f5f5581bb1c0034e3cee1';
 const coreSha='abf5b151561ca6f362f98b6c12faf98ec9893de56455be8c112a064c5e8a995f';
 const core=path.resolve(__dirname,'../learning-factory/cores/AIRTRUST_FORMATIVE_V3_RECOVERY_CANDIDATE.app.js.txt');
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
@@ -13,7 +16,9 @@ assert.equal(sha(fs.readFileSync(zip)),zipSha,'PRIVATE_NR26_ZIP_SHA_MISMATCH');
 const coreBytes=fs.readFileSync(core);
 assert.equal(sha(coreBytes),coreSha,'RECOVERY_CANDIDATE_CORE_SHA_MISMATCH');
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'airtrust-nr26-recovery-')),dir=path.join(tmp,'course');
-fs.mkdirSync(dir);execFileSync('unzip',['-q',zip,'-d',dir]);fs.writeFileSync(path.join(dir,'app.js'),coreBytes);
+fs.mkdirSync(dir);execFileSync('unzip',['-q',zip,'-d',dir]);
+if(!packaged)fs.writeFileSync(path.join(dir,'app.js'),coreBytes);
+assert.equal(sha(fs.readFileSync(path.join(dir,'app.js'))),coreSha,'EXTRACTED_PACKAGE_ENGINE_MISMATCH');
 const sandbox={window:{}};vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(dir,'course-model.js'),'utf8'),sandbox);
 const model=sandbox.window.COURSE_DATA;
@@ -98,6 +103,6 @@ async function exercise(engine,name,port,viewport){
   outcomes.push(await exercise(chromium,'CHROMIUM',port,{width:1536,height:1000}));
   outcomes.push(await exercise(webkit,'WEBKIT',port,{width:1536,height:1000}));
   outcomes.push(await exercise(chromium,'CHROMIUM_MOBILE',port,{width:390,height:844}));
-  console.log(JSON.stringify({scope:'PRIVATE_LOCAL_ZIP_NO_LMS_SERVER',certified:false,zipSha256:zipSha,coreSha256:coreSha,outcomes},null,2));
+  console.log(JSON.stringify({scope:'PRIVATE_LOCAL_ZIP_NO_LMS_SERVER',certified:false,packagedCandidate:packaged,zipSha256:zipSha,coreSha256:coreSha,outcomes},null,2));
  }finally{await new Promise(r=>server.close(r));fs.rmSync(tmp,{recursive:true,force:true})}
 })().catch(e=>{console.error(e.stack);process.exitCode=1});
