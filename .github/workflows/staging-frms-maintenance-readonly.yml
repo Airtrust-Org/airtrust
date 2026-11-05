@@ -99,6 +99,19 @@ jobs:
           --esModuleInterop --types node e2e/staging-frms-maintenance.spec.ts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Initialize a deliberately empty self-authenticating browser session
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --no-deps skips auth.setup.ts; project storageState must nevertheless exist.
+          mkdir -p e2e/.auth
+          printf '{"cookies":[],"origins":[]}\n' > e2e/.auth/user.json
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const state=JSON.parse(readFileSync('e2e/.auth/user.json','utf8'));
+          if(state.cookies?.length!==0||state.origins?.length!==0) throw Error('BROWSER_STATE_NOT_EMPTY');
+          console.log('FRMS_MAINTENANCE_EMPTY_SESSION_READY');
+          NODE
       - name: Browser verifies permission and real Maintenance dashboard
         run: >-
           npx playwright test e2e/staging-frms-maintenance.spec.ts
