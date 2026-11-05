@@ -7,7 +7,14 @@ import { pathToFileURL } from 'node:url';
 
 export const REPO = 'Airtrust-Org/airtrust';
 export const PR = 1696; // Historical F5 pilot; do not silently redirect its grants.
-const ALLOWED_PR_NUMBERS = new Set(['1696', '1855']);
+const ALLOWED_PR_NUMBERS = new Set(['1696', '1855', '1977']);
+// NR-26 recovery is an exact private 6.3 MB RC5 ZIP and staging tenant/course.
+// Expanding the allowlist does NOT authorize other ZIPs or new activation paths.
+const NR26_F5_SCOPE = Object.freeze({
+  prNumber: '1977', tenantId: '6', courseId: '52',
+  packageSha256: 'ba6f2399257de017de4dc62b3f56b86d44238b0f3b9b9ff09e31e003e6cb9c29',
+  zipBytes: '6327348',
+});
 function exactReviewedPrNumber(v) {
   const value = String(v?.prNumber ?? '');
   if (!ALLOWED_PR_NUMBERS.has(value)) throw Error('F5_REVIEWED_PR_NOT_ALLOWLISTED');
@@ -23,6 +30,13 @@ const prefix = 'AIRTRUST_F5_STAGING_CANDIDATE_V1\n';
 
 export function assertConfig(v) {
   exactReviewedPrNumber(v);
+  if (String(v?.prNumber) === NR26_F5_SCOPE.prNumber &&
+      (String(v.tenantId) !== NR26_F5_SCOPE.tenantId ||
+       String(v.courseId) !== NR26_F5_SCOPE.courseId ||
+       v.packageSha256 !== NR26_F5_SCOPE.packageSha256 ||
+       String(v.zipBytes) !== NR26_F5_SCOPE.zipBytes)) {
+    throw Error('F5_NR26_RC5_EXACT_TENANT_COURSE_ZIP_SCOPE_REQUIRED');
+  }
   if (v.repo !== REPO || v.ref !== 'refs/heads/main' ||
       v.event !== 'workflow_dispatch' ||
       v.confirmation !== 'AIRTRUST_F5_STAGING_CANDIDATE' ||
