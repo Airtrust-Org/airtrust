@@ -109,7 +109,7 @@ describe('TrainingComplianceIntelligence', () => {
     renderWithClient(<TrainingComplianceIntelligence mode="comunicacoes" {...props} />);
     await screen.findByText('CRM Gestores');
     expect(screen.getByText('Alerta LMS')).toBeInTheDocument();
-    expect(screen.getByText('Aceito para envio')).toBeInTheDocument();
+    expect(screen.getAllByText('Aceito para envio').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Não registrado')).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Filtrar treinamento' }), {
