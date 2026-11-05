@@ -131,6 +131,9 @@ describe('TrainingComplianceIntelligence', () => {
       )).toBe(true);
     });
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Próxima' })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Próxima' }));
     await waitFor(() =>
       expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).includes('offset=100')))
