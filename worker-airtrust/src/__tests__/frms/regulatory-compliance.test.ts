@@ -53,6 +53,17 @@ describe('FRMS regulatory compliance evaluator', () => {
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, sourceVerified: false })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days28: { expectedDays: 8, confirmedDays: 7 } } })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 8, confirmedDays: 9 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days365: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({
+      sourceVerified: true,
+      windows: {
+        month: { expectedDays: 0, confirmedDays: 0 },
+        year: { expectedDays: 0, confirmedDays: 0 },
+        days28: { expectedDays: 0, confirmedDays: 0 },
+        days365: { expectedDays: 0, confirmedDays: 0 },
+      },
+    })).toBe(false);
     expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 1.5, confirmedDays: 1.5 } } })).toBe(false);
     expect(hasCompleteRollingFlightCoverage(completeCoverage)).toBe(true);
     const complete = evaluateRegulatoryCompliance({ ...input, rollingCoverage: completeCoverage });

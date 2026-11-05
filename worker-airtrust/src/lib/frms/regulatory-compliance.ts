@@ -73,7 +73,9 @@ export function hasCompleteRollingFlightCoverage(
   return Object.values(coverage.windows).every(({ expectedDays, confirmedDays }) =>
     Number.isSafeInteger(expectedDays) &&
     Number.isSafeInteger(confirmedDays) &&
-    expectedDays >= 0 &&
+    // Toda janela avaliada contém pelo menos a data de referência. Um ledger
+    // vazio (0/0) não é prova de cobertura e nunca autoriza COMPLIANT.
+    expectedDays > 0 &&
     confirmedDays === expectedDays,
   );
 }
