@@ -451,6 +451,7 @@ export function TrainingComplianceIntelligence({
               <option value="enviada">Aceito para envio</option>
               <option value="erro">Falha</option>
               <option value="sem_contato">Sem contato cadastrado</option>
+              <option value="pendente">Resultado não confirmado (auditoria)</option>
             </select>
           </label>
           <label className="text-xs text-slate-600">
@@ -511,7 +512,7 @@ export function TrainingComplianceIntelligence({
                           : 'bg-red-50 text-red-700'
                     }`}>
                       {row.status_envio === 'enviada' ? 'Aceito para envio'
-                        : row.status_envio === 'sem_contato' ? 'Sem contato'
+                        : row.status_envio === 'pendente' ? 'Resultado não confirmado' : row.status_envio === 'sem_contato' ? 'Sem contato'
                           : row.status_envio === 'erro' ? 'Falha' : 'Não confirmado'}
                     </span>
                     {row.erro ? <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div> : null}

@@ -84,7 +84,7 @@ import {
 } from '../repositories/lms-matricula-queries';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
-import lmsMatriculasConvitesRoutes, { sendMatriculaEmail } from './lms-matriculas-convites';
+import lmsMatriculasConvitesRoutes, { sendMatriculaTracked } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
 import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
@@ -669,7 +669,9 @@ app.post('/', async (c) => {
           resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
       if (enviar_convite_email)
-        await sendMatriculaEmail(c, c.env, db, {
+        await sendMatriculaTracked(c, c.env, db, {
+          matriculaId: existente.id,
+          canais: { email: true, whatsapp: false },
           funcionarioId: funcionario_id,
           empresaId,
           cursoId: curso_id,
@@ -774,7 +776,9 @@ app.post('/', async (c) => {
       },
     });
     if (enviar_convite_email)
-      await sendMatriculaEmail(c, c.env, db, {
+      await sendMatriculaTracked(c, c.env, db, {
+          matriculaId: matriculaId,
+          canais: { email: true, whatsapp: false },
         funcionarioId: funcionario_id,
         empresaId,
         cursoId: curso_id,
@@ -994,7 +998,9 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         });
         etapa = 'convite';
         if (enviar_convite_email)
-          await sendMatriculaEmail(c, c.env, db, {
+          await sendMatriculaTracked(c, c.env, db, {
+          matriculaId: existente.id,
+          canais: { email: true, whatsapp: false },
             funcionarioId,
             empresaId,
             cursoId: curso_id,
@@ -1063,7 +1069,9 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
       });
       etapa = 'convite';
       if (enviar_convite_email)
-        await sendMatriculaEmail(c, c.env, db, {
+        await sendMatriculaTracked(c, c.env, db, {
+          matriculaId: matriculaId,
+          canais: { email: true, whatsapp: false },
           funcionarioId,
           empresaId,
           cursoId: curso_id,

@@ -545,7 +545,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const resultado = c.req.query('resultado');
     if ((canal && !['EMAIL', 'WHATSAPP'].includes(canal)) ||
         (origem && !['COMPLIANCE', 'LMS_ALERTA', 'LMS_CONVITE'].includes(origem)) ||
-        (resultado && !['enviada', 'erro', 'sem_contato'].includes(resultado))) {
+        (resultado && !['enviada', 'erro', 'sem_contato', 'pendente'].includes(resultado))) {
       throw new ApiError('Filtro de comunicações inválido', 400);
     }
     const limit = Math.min(200, rawLimit);
@@ -563,7 +563,7 @@ export function createTrainingComplianceIntelligenceRoutes({
         treinamento_q: c.req.query('treinamento_q') || c.req.query('q'),
         canal: canal as 'EMAIL' | 'WHATSAPP' | undefined,
         origem: origem as 'COMPLIANCE' | 'LMS_ALERTA' | 'LMS_CONVITE' | undefined,
-        resultado: resultado as 'enviada' | 'erro' | 'sem_contato' | undefined,
+        resultado: resultado as 'enviada' | 'erro' | 'sem_contato' | 'pendente' | undefined,
         inicio,
         fim,
         setor_id: asPositiveInt(c.req.query('setor_id')) || undefined,

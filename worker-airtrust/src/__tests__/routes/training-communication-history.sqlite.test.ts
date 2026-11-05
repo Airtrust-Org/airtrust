@@ -127,6 +127,28 @@ describe('consolidated training communication history', () => {
     expect(empty).toEqual({ rows: [], has_more: false });
   });
 
+  it('exibe tentativas preparadas ainda sem resultado e oculta as que já possuem audit final', async () => {
+    db.database.exec(`
+      INSERT INTO audit_logs(id,empresa_id,action,entity_type,new_values,created_at)
+      VALUES
+      (14,1,'LMS_MATRICULA_ALERTA_PREPARADO','lms_matriculas',
+       '{"tentativa_id":"attempt-pending","funcionario_id":1000,"curso_id":30,"email_resultado":"PENDENTE"}',
+       '2026-11-04 16:00:00'),
+      (15,1,'LMS_MATRICULA_ALERTA_PREPARADO','lms_matriculas',
+       '{"tentativa_id":"attempt-done","funcionario_id":1000,"curso_id":30,"email_resultado":"PENDENTE"}',
+       '2026-11-04 17:00:00'),
+      (16,1,'LMS_MATRICULA_ALERTA','lms_matriculas',
+       '{"tentativa_id":"attempt-done","funcionario_id":1000,"curso_id":30,"email_resultado":"ENVIADO"}',
+       '2026-11-04 17:01:00');
+    `);
+    const report = await read({ resultado: 'pendente' });
+    expect(report.rows.map((row) => row.id)).toEqual(['lms:14:EMAIL']);
+    expect(report.rows[0]).toMatchObject({ status_envio: 'pendente', origem: 'LMS_ALERTA' });
+    const allRows = await read();
+    expect(allRows.rows.some((row) => row.id === 'lms:15:EMAIL')).toBe(false);
+    expect(allRows.rows.some((row) => row.id === 'lms:16:EMAIL')).toBe(true);
+  });
+
   it('masks contact values and does not invent a historical LMS destination', () => {
     expect(maskTrainingContact('someone@example.com')).toBe('s***@example.com');
     expect(maskTrainingContact('+55 (21) 99999-8888')).toBe('***8888');
