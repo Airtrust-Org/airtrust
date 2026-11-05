@@ -142,11 +142,9 @@ export function LmsEnrollmentAlertModal({
         (result.whatsapp_pendente_historico || 0);
       if (result.processados === 0) {
         toast.warning('Nenhuma matrícula pendente válida foi encontrada para envio.');
-      } else if (unresolved > 0) {
-        toast.warning(`${unresolved} canal(is) com auditoria pendente permaneceram bloqueados. ${pieces.join(' · ')} processado(s).`);
-      } else if (failures > 0) {
+      } else if (failures > 0 || unresolved > 0) {
         toast.warning(
-          `Alertas processados: ${pieces.join(' · ')}. ${failures} falha(s)${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}${skipped ? ` · ${skipped} envio(s) repetido(s) evitado(s)` : ''}.`,
+          `Alertas processados: ${pieces.join(' · ')}. ${failures} falha(s)${unresolved ? ` · ${unresolved} canal(is) com auditoria pendente bloqueado(s)` : ''}${missing ? ` · ${missing} canal(is) sem contato cadastrado` : ''}${skipped ? ` · ${skipped} reenvio(s) evitado(s)` : ''}.`,
         );
       } else {
         toast.success(
