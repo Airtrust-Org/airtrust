@@ -273,6 +273,34 @@ describe('frms fortnight indicator', () => {
     expect(withCredit?.score_acumulado).toBeCloseTo((withoutCredit?.score_acumulado ?? 0) - 4, 5);
   });
 
+  it('zero hora de sono real é sinal não compensável de revisão, mesmo com score baixo', () => {
+    const indicator = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01', windowEnd: '2026-05-14',
+      items: [seed('2026-05-01', 1, {
+        horas_sono: 0, kss_score: 2,
+        snapshot_status: 'OK', recovery_credit_points: 20,
+        horas_voo_minutos: 0, duracao_jornada_minutos: 120,
+      })],
+    }).get('2026-05-01::10');
+    expect(indicator?.agravantes_aplicados.map((a) => a.codigo)).toContain('SONO_INSUFICIENTE_NO_PERIODO');
+    expect(indicator?.status_quinzena).not.toBe('OK');
+    expect(indicator?.mitigacao_recomendada).toBe('INSERIR_REPOUSO');
+  });
+
+  it('KSS elevado mantém revisão de check-in apesar de créditos atenuadores', () => {
+    const indicator = buildFrmsFortnightIndicatorMap({
+      windowStart: '2026-05-01', windowEnd: '2026-05-14',
+      items: [seed('2026-05-01', 1, {
+        horas_sono: 8, kss_score: 7,
+        snapshot_status: 'OK', recovery_credit_points: 50,
+        horas_voo_minutos: 0, duracao_jornada_minutos: 120,
+      })],
+    }).get('2026-05-01::10');
+    expect(indicator?.agravantes_aplicados.map((a) => a.codigo)).toContain('KSS_ALTO_NO_PERIODO');
+    expect(indicator?.status_quinzena).not.toBe('OK');
+    expect(indicator?.mitigacao_recomendada).toBe('REVISAR_CHECKIN');
+  });
+
   it('inclui check-in pendente de dia sem fatorizacao comprovado por periodo vizinho, sem contar dias futuros', () => {
     const items = [
       seed('2026-05-01', 1),

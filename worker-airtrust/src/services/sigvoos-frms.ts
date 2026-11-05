@@ -253,6 +253,8 @@ export interface SigvoosJornadaPendente {
 
 export interface SigvoosSyncSummary {
   periodo: { from: string; to: string };
+  /** Source returned only records inside the exact requested closed-day window. */
+  sourceWindowVerified?: boolean;
   resetExecutado: boolean;
   totalRegistrosBrutos: number;
   totalRegistrosNormalizados: number;
@@ -2487,7 +2489,11 @@ export async function syncSigvoosForFrms(
     const normalized = rawRecords
       .map((item) => normalizeSigvoosRecord(item))
       .filter((item): item is SigvoosNormalizedLeg => Boolean(item));
-
+    // Do not attest source completeness when the external API returns a
+    // flight outside the requested range. This check is prospective only.
+    const sourceWindowVerified = normalized.every((item) =>
+      item.data >= input.from && item.data <= input.to,
+    );
     const groupedByDay = groupSigvoosRecordsByDay(normalized);
 
     const tripulanteGroups = new Map<string, SigvoosGroupedDay[]>();
@@ -2650,6 +2656,7 @@ export async function syncSigvoosForFrms(
 
     const summary: SigvoosSyncSummary = {
       periodo: { from: input.from, to: input.to },
+      sourceWindowVerified,
       resetExecutado: clearExistingRequested,
       totalRegistrosBrutos: rawRecords.length,
       totalRegistrosNormalizados: normalized.length,

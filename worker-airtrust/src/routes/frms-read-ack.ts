@@ -588,6 +588,7 @@ router.post('/read-ack/events/generate', async (c) => {
     empresaId,
     dataInicio: parsed.data.data_inicio,
     dataFim: parsed.data.data_fim,
+    coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
     filters: snapshotFilters,
   });
 

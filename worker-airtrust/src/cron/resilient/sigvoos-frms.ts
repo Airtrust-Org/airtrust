@@ -9,6 +9,7 @@ import {
 } from '../../lib/frms/controle-voos-shadow-comparator';
 import { isControleVoosShadowModeEnabledForEmpresa } from '../../lib/frms/controle-voos-shadow-flag';
 import { getSigvoosConfig, syncSigvoosForFrms } from '../../services/sigvoos-frms';
+import { isApprovedCoverageTenant, persistClosedDayCoverage, revokeClosedDayCoverage } from '../../lib/frms/flight-coverage-ledger';
 import {
   buildCronScopeKey,
   enqueueCronJobItem,
@@ -375,7 +376,32 @@ export async function runTenantIngestion(
             clearExisting: false,
           },
           env,
-        );
+        ).catch(async (error) => {
+          // A failed recheck invalidates any older positive attestation in
+          // the same D-3..D-1 window; it must not remain a verified zero day.
+          if (isApprovedCoverageTenant(Number(empresaId),
+              env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS)) {
+            await revokeClosedDayCoverage(db, Number(empresaId), periodFrom!, periodTo!, operationalDate);
+          }
+          throw error;
+        });
+        // Attest only fully fetched, mapped and CV-materialised closed days.
+        // Source gaps and importer conflicts remain FALHOU, never zero flights.
+        // Default-off: no coverage-ledger D1 writes for an unapproved tenant.
+        // Removing the grant also disables all positive read-side attestation.
+        if (isApprovedCoverageTenant(Number(empresaId),
+            env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS)) {
+          const coverage = await persistClosedDayCoverage({
+            db, empresaId: Number(empresaId), periodFrom, periodTo, operationalDate, summary: sync,
+            authoritativeSourceApproved: true,
+          });
+          if (coverage.unverified > 0) {
+            logger.warn('[SIGVOOS_CRON] dias sem comprovacao CV para acumulados', {
+              scope_key: scopeKey, from: periodFrom, to: periodTo,
+              unverified_days: coverage.unverified,
+            });
+          }
+        }
         totalRaw = Number(sync.totalRegistrosBrutos || 0);
         totalImportacoes = Number(sync.totalImportacoes || 0);
         await context.checkpoint({

@@ -43,6 +43,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
+import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
 import { clockToMinutes, minutesToClock, projectSleepStart } from './operational-clock';
 
 export type { MissionPeriodRow } from './mission-periods';
@@ -1003,6 +1004,8 @@ export function buildFrmsOperationalSnapshot(
 
 export interface ListFrmsOperationalSnapshotParams {
   empresaId: number;
+  /** Current operator approval, checked at read time so revocation is immediate. */
+  coverageApprovalCsv?: string;
   dataInicio: string;
   dataFim: string;
   filters?: FrmsOperationalSnapshotFilters;
@@ -1194,7 +1197,7 @@ async function loadOperationalSnapshotRows(
                 ar.hv_mes_calendario_min,
                 ar.hv_28_dias_min,
                 ar.hv_365_dias_min,
-                ar.hv_ano_calendario_min,
+                ar.hv_ano_calendario_min, ar.updated_at,
                 COALESCE(ar.repouso_anterior_min, -1) AS repouso_anterior_min,
                 COALESCE(ar.repouso_suficiente, 0) AS repouso_suficiente
            FROM frms_acumulo_rolling ar
@@ -1678,6 +1681,15 @@ export async function listFrmsOperationalSnapshot(
       ? requestedRows
       : await loadOperationalSnapshotRows(db, params.empresaId, contextStart, contextEnd);
 
+  // Data-source coverage is independent of accumulated minutes. Missing or
+  // historically inferred zero-flight days never certify compliance.
+  const confirmedFlightDays = isApprovedCoverageTenant(
+    params.empresaId, params.coverageApprovalCsv,
+  ) ? await loadConfirmedFlightDays(
+    db, params.empresaId, addDaysIso(contextStart, -364), contextEnd,
+  ) : new Map<string, string>();
+  const rollingFlightCoverageByDay = new Map<string, ReturnType<typeof buildRollingFlightCoverage>>();
+
   const rbacBcApplicable = regulatoryProfileHasDocumentedAppendix(
     { limitsJson: operationalContext.regulatoryLimitsJson },
     'B',
@@ -1729,15 +1741,23 @@ export async function listFrmsOperationalSnapshot(
         asNumber(row.has_operational_data) === 1,
       )
       .reduce((sum, row) => sum + Math.max(0, asNumber(row.duracao_jornada_minutos)), 0);
+    const rollingEvidence = rollingByKey.get(key) ?? null;
+    const coverageKey = date + '::' + (rollingEvidence?.updated_at ?? 'SEM_ATUALIZACAO');
+    let flightCoverage = rollingFlightCoverageByDay.get(coverageKey);
+    if (!flightCoverage) {
+      flightCoverage = buildRollingFlightCoverage(date, confirmedFlightDays, rollingEvidence?.updated_at);
+      rollingFlightCoverageByDay.set(coverageKey, flightCoverage);
+    }
     regulatoryComplianceByKey[key] = evaluateRegulatoryCompliance({
       empresaId: params.empresaId,
+      rollingCoverage: flightCoverage,
       profileCode: operationalContext.profileCode,
       rbacBcApplicable,
       costaDoSolActApplicable,
       dataReferencia: date,
       mission: missionEvidence,
       journeyDurationMin,
-      rolling: rollingByKey.get(key) ?? null,
+      rolling: rollingEvidence,
       work: workEvidence,
       limites,
       art42: evaluateLawArt42Madrugadas(date, art42DutiesByCrew.get(funcionarioId) ?? []),

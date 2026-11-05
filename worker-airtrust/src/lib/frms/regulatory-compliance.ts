@@ -12,6 +12,8 @@ export interface RollingRegulatoryEvidence {
   hv_ano_calendario_min: number | null;
   repouso_anterior_min: number;
   repouso_suficiente: number;
+  /** Update time of the rolling projection, required to prove data freshness. */
+  updated_at?: string | null;
 }
 
 type RawRollingRegulatoryEvidence = {
@@ -51,6 +53,7 @@ export function sanitizeRollingRegulatoryEvidence(
     hv_ano_calendario_min: hvAno != null && (hvMes == null || hvAno >= hvMes) ? hvAno : null,
     repouso_anterior_min: repouso ?? -1,
     repouso_suficiente: Number(row.repouso_suficiente) === 1 ? 1 : 0,
+    updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
   };
 }
 

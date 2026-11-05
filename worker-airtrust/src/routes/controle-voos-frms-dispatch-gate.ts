@@ -77,7 +77,9 @@ controleVoosDispatchGate.get(
       .all<FlightRowForGate>();
 
     const flights = flightsResult.results || [];
-    const snapshotIndex = await loadDispatchGateSnapshotIndex(c.env.DB, empresaId, data);
+    const snapshotIndex = await loadDispatchGateSnapshotIndex(
+      c.env.DB, empresaId, data, c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
+    );
 
     const items = await Promise.all(
       flights.map(async (voo) => {

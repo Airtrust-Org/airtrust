@@ -163,6 +163,7 @@ export async function relatorioCompliance(
   mes: string,
   empresaId?: number,
   authorizedCrewIds?: ReadonlySet<number>,
+  coverageApprovalCsv?: string,
 ): Promise<FrmsComplianceReportRow[]> {
   if (!empresaId || !Number.isInteger(empresaId) || empresaId <= 0) {
     throw new Error('FRMS_COMPLIANCE_REPORT_TENANT_REQUIRED');
@@ -178,6 +179,7 @@ export async function relatorioCompliance(
     dataInicio,
     dataFim,
     hoje: dataFim,
+    coverageApprovalCsv,
   });
   // Filtering is applied BEFORE aggregation: a manager must not receive even
   // derived counts or normative details about an out-of-scope employee.

@@ -189,7 +189,10 @@ frmsRelatoriosConfig.get(
       return frmsConfigurationUnavailable(c, error);
     }
     const crewScope = await resolveReportCrewScope(c, empresaId);
-    const result = await relatorioCompliance(c.env.DB, mes, empresaId, crewScope.ids);
+    const result = await relatorioCompliance(
+      c.env.DB, mes, empresaId, crewScope.ids,
+      c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
+    );
     return c.json({ success: true, data: result, meta: {
       ...meta, scope: crewScope.access.mode,
       coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },
