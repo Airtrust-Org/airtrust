@@ -152,6 +152,39 @@ describe('consolidated training communication history', () => {
     expect(allRows.rows.some((row) => row.id === 'lms:16:EMAIL')).toBe(true);
   });
 
+  it('mantém deduplicação indexada com mil tentativas encerradas', async () => {
+    for (const action of ['LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_ALERTA']) {
+      db.database.exec(`
+        WITH RECURSIVE seq(n) AS (
+          SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 1000
+        )
+        INSERT INTO audit_logs(empresa_id,action,entity_type,entity_id,new_values,created_at)
+        SELECT 1, '${action}', 'lms_matriculas', 10000+n,
+          json_object('tentativa_id','volume-'||n,'funcionario_id',1000,
+            'curso_id',30,'email_resultado','${action.endsWith('_PREPARADO') ? 'PENDENTE' : 'ENVIADO'}'),
+          '2026-11-04 17:00:00'
+        FROM seq
+      `);
+    }
+    const calls: string[] = [];
+    const original = db.asD1();
+    const wrapper = {
+      prepare: (sql: string) => {
+        calls.push(sql);
+        return original.prepare(sql);
+      },
+    } as unknown as D1Database;
+    const result = await listTrainingCommunications(wrapper, 1, all,
+      { notifications: false, audit: true }, { limit: 100, offset: 0 });
+    expect(result.rows).toHaveLength(100);
+    expect(result.rows.every((row) => row.status_envio === 'enviada')).toBe(true);
+    const sql = calls.find((call) => call.includes('WITH communications AS')) || '';
+    expect(sql).toContain('done.entity_id = a.entity_id');
+    const plan = db.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 101, 0) as
+      Array<{ detail: string }>;
+    expect(plan.some((row) => row.detail.includes('SEARCH done USING INDEX idx_audit_logs_entity'))).toBe(true);
+  });
+
   it('masks contact values and does not invent a historical LMS destination', () => {
     expect(maskTrainingContact('someone@example.com')).toBe('s***@example.com');
     expect(maskTrainingContact('+55 (21) 99999-8888')).toBe('***8888');
