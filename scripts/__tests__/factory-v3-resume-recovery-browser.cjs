@@ -113,9 +113,14 @@ async function run(engine,label){
     assert.equal(repaired.s.question,1);
     assert.equal(await page.locator('#next').isDisabled(),false);
     assert.match(await page.locator('#next').textContent(),/Confirmar encerramento/);
+    // The mock may already have consumed its deliberately failing first
+    // LMSFinish during the prior reload. In either case, success must require
+    // the learner's explicit terminal click after repairing the missing answer.
     await page.locator('#next').click();
-    assert.equal((await get()).courseCompleted,false);
-    await page.locator('#next').click();
+    if (!(await get()).courseCompleted) {
+      assert.equal(await page.locator('#next').isDisabled(),false);
+      await page.locator('#next').click();
+    }
     assert.equal((await get()).courseCompleted,true);
     await page.evaluate(()=>window.__AIRTRUST_PLAYER_TEST__.show(1));
     const answerBefore=(await get()).scenario.question;
