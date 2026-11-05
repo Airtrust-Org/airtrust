@@ -62,7 +62,9 @@ type NoticeResult = {
 };
 
 type Communication = {
-  id: number;
+  id: string;
+  origem: 'COMPLIANCE' | 'LMS_ALERTA' | 'LMS_CONVITE';
+  curso_id: number | null;
   funcionario_id: number;
   funcionario_nome: string | null;
   setor_nome: string | null;
@@ -75,6 +77,11 @@ type Communication = {
   erro: string | null;
   enviado_em: string | null;
   gestor: boolean;
+};
+
+type CommunicationHistoryPage = {
+  rows: Communication[];
+  pagination: { limit: number; offset: number; has_more: boolean };
 };
 
 type ComplianceTrendPoint = {
@@ -162,6 +169,19 @@ export function TrainingComplianceIntelligence({
     key: 'date',
     direction: 'desc',
   });
+  const [communicationPage, setCommunicationPage] = useState(0);
+  const [communicationFilters, setCommunicationFilters] = useState({
+    treinamento: '',
+    canal: '',
+    origem: '',
+    resultado: '',
+    inicio: '',
+    fim: '',
+  });
+  const updateCommunicationFilter = (field: keyof typeof communicationFilters, value: string) => {
+    setCommunicationFilters((current) => ({ ...current, [field]: value }));
+    setCommunicationPage(0);
+  };
 
   const params = new URLSearchParams();
   if (setorId) params.set('setor_id', String(setorId));
@@ -183,17 +203,46 @@ export function TrainingComplianceIntelligence({
   });
 
   const communications = useQuery({
-    queryKey: ['training-compliance', 'communications', search],
+    queryKey: ['training-compliance', 'communications', search, setorId, funcaoId, communicationFilters, communicationPage],
     enabled: mode === 'comunicacoes',
-    queryFn: async () => {
-      const communicationParams = new URLSearchParams({ limit: '200' });
+    queryFn: async (): Promise<CommunicationHistoryPage> => {
+      const communicationParams = new URLSearchParams({
+        limit: '100',
+        offset: String(communicationPage * 100),
+      });
       if (search.trim()) communicationParams.set('funcionario_q', search.trim());
-      return readJson<Communication[]>(
-        await fetchWithAuth(
-          `/api/compliance-treinamentos/comunicacoes?${communicationParams.toString()}`,
-        ),
+      if (setorId) communicationParams.set('setor_id', String(setorId));
+      if (funcaoId) communicationParams.set('funcao_id', String(funcaoId));
+      const filterKeys: Record<string, string> = {
+        treinamento: 'treinamento_q',
+        canal: 'canal',
+        origem: 'origem',
+        resultado: 'resultado',
+        inicio: 'inicio',
+        fim: 'fim',
+      };
+      for (const [key, value] of Object.entries(communicationFilters)) {
+        if (value.trim()) communicationParams.set(filterKeys[key], value.trim());
+      }
+      const response = await fetchWithAuth(
+        `/api/compliance-treinamentos/comunicacoes?${communicationParams.toString()}`,
       );
+      const payload = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        data?: Communication[];
+        pagination?: CommunicationHistoryPage['pagination'];
+        error?: string;
+      };
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || 'Falha ao consultar comunicações');
+      }
+      return {
+        rows: Array.isArray(payload.data) ? payload.data : [],
+        pagination: payload.pagination || { limit: 100, offset: communicationPage * 100, has_more: false },
+      };
     },
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
   });
 
   const trend = useQuery({
@@ -241,7 +290,7 @@ export function TrainingComplianceIntelligence({
   );
   const sortedCommunications = useMemo(
     () =>
-      sortComplianceRows(communications.data || [], communicationSort, (row, key) => {
+      sortComplianceRows(communications.data?.rows || [], communicationSort, (row, key) => {
         if (key === 'date') return row.enviado_em ? new Date(row.enviado_em).getTime() : null;
         if (key === 'person') return row.funcionario_nome;
         if (key === 'training') return row.qualificacao_nome;
@@ -327,117 +376,178 @@ export function TrainingComplianceIntelligence({
   );
 
   if (mode === 'comunicacoes') {
+    const currentPageSize = communications.data?.rows.length || 0;
+    const hasMore = communications.data?.pagination.has_more ?? false;
     return (
-      <div className="p-4">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="space-y-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <History className="h-4 w-4 text-primary" /> Histórico de comunicações
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Auditoria de cobranças enviadas aos funcionários e gestores.
+              Alertas e convites de LMS e cobranças de Compliance. Busque funcionários no campo superior.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => communications.refetch()}
+            onClick={() => void communications.refetch()}
             className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
             Atualizar
           </button>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="text-xs text-slate-600">
+            Treinamento
+            <input
+              aria-label="Filtrar treinamento"
+              value={communicationFilters.treinamento}
+              onChange={(event) => updateCommunicationFilter('treinamento', event.target.value)}
+              placeholder="Nome do curso ou qualificação"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-slate-600">
+            Canal
+            <select
+              aria-label="Filtrar canal"
+              value={communicationFilters.canal}
+              onChange={(event) => updateCommunicationFilter('canal', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">E-mail e WhatsApp</option>
+              <option value="EMAIL">E-mail</option>
+              <option value="WHATSAPP">WhatsApp</option>
+            </select>
+          </label>
+          <label className="text-xs text-slate-600">
+            Origem
+            <select
+              aria-label="Filtrar origem"
+              value={communicationFilters.origem}
+              onChange={(event) => updateCommunicationFilter('origem', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todas as origens</option>
+              <option value="LMS_ALERTA">Alertas LMS</option>
+              <option value="LMS_CONVITE">Convites LMS</option>
+              <option value="COMPLIANCE">Compliance</option>
+            </select>
+          </label>
+          <label className="text-xs text-slate-600">
+            Resultado
+            <select
+              aria-label="Filtrar resultado"
+              value={communicationFilters.resultado}
+              onChange={(event) => updateCommunicationFilter('resultado', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Todos os resultados</option>
+              <option value="enviada">Aceito para envio</option>
+              <option value="erro">Falha</option>
+              <option value="sem_contato">Sem contato cadastrado</option>
+            </select>
+          </label>
+          <label className="text-xs text-slate-600">
+            Data inicial
+            <input type="date" aria-label="Filtrar data inicial"
+              value={communicationFilters.inicio}
+              onChange={(event) => updateCommunicationFilter('inicio', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-slate-600">
+            Data final
+            <input type="date" aria-label="Filtrar data final"
+              value={communicationFilters.fim}
+              onChange={(event) => updateCommunicationFilter('fim', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <SortableComplianceTableHeader
-                  column="date"
-                  label="Data"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
-                <SortableComplianceTableHeader
-                  column="person"
-                  label="Pessoa"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
-                <SortableComplianceTableHeader
-                  column="training"
-                  label="Treinamento"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
-                <SortableComplianceTableHeader
-                  column="channel"
-                  label="Canal"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
-                <SortableComplianceTableHeader
-                  column="destination"
-                  label="Destino"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
-                <SortableComplianceTableHeader
-                  column="result"
-                  label="Resultado"
-                  sort={communicationSort}
-                  onSort={(key) =>
-                    setCommunicationSort((current) => nextComplianceTableSort(current, key))
-                  }
-                />
+                {([
+                  ['date', 'Data'], ['person', 'Pessoa'], ['training', 'Treinamento'],
+                  ['channel', 'Canal'], ['destination', 'Destino'], ['result', 'Resultado'],
+                ] as Array<[CommunicationSortKey, string]>).map(([key, label]) => (
+                  <SortableComplianceTableHeader key={key} column={key} label={label}
+                    sort={communicationSort}
+                    onSort={(column) => setCommunicationSort((current) =>
+                      nextComplianceTableSort(current, column))}
+                  />
+                ))}
+                <th className="px-3 py-3 text-left text-xs font-semibold">Origem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {sortedCommunications.map((row) => (
                 <tr key={row.id}>
-                  <td className="px-3 py-3 text-slate-500">{formatDateTime(row.enviado_em)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDateTime(row.enviado_em)}</td>
                   <td className="px-3 py-3">
                     <div className="font-medium text-slate-900">{row.funcionario_nome || '—'}</div>
                     <div className="text-xs text-slate-400">
-                      {row.gestor ? 'cópia/escalonamento ao gestor' : row.setor_nome || '—'}
+                      {row.gestor ? 'Cópia/escalonamento ao gestor' : row.setor_nome || '—'}
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-slate-700">{row.qualificacao_nome || '—'}</td>
+                  <td className="px-3 py-3 text-slate-700">{row.qualificacao_nome || 'Não identificado'}</td>
                   <td className="px-3 py-3 text-slate-600">
-                    {String(row.tipo || '')
-                      .replace('_COMPLIANCE', '')
-                      .replace('_GESTOR', '')}
+                    {String(row.tipo || '').replace('_COMPLIANCE', '').replace('_GESTOR', '')}
                   </td>
-                  <td className="px-3 py-3 text-slate-500">{row.destinatario || '—'}</td>
+                  <td className="px-3 py-3 text-slate-500">{row.destinatario || 'Não registrado'}</td>
                   <td className="px-3 py-3">
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-medium ${row.status_envio === 'enviada' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
-                    >
-                      {row.status_envio === 'enviada' ? 'Enviado' : 'Falha'}
+                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                      row.status_envio === 'enviada'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : row.status_envio === 'sem_contato'
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
+                    }`}>
+                      {row.status_envio === 'enviada' ? 'Aceito para envio'
+                        : row.status_envio === 'sem_contato' ? 'Sem contato'
+                          : row.status_envio === 'erro' ? 'Falha' : 'Não confirmado'}
                     </span>
-                    {row.erro ? (
-                      <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div>
-                    ) : null}
+                    {row.erro ? <div className="mt-1 max-w-xs text-xs text-red-600">{row.erro}</div> : null}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">
+                    {row.origem === 'COMPLIANCE' ? 'Compliance' : row.origem === 'LMS_ALERTA' ? 'Alerta LMS' : 'Convite LMS'}
                   </td>
                 </tr>
               ))}
-              {!communications.isLoading && !(communications.data || []).length ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    Nenhuma cobrança de compliance registrada.
-                  </td>
-                </tr>
+              {communications.isLoading ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Consultando histórico…</td></tr>
+              ) : communications.isError ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-red-700">
+                  {communications.error instanceof Error ? communications.error.message : 'Erro ao consultar histórico'}
+                </td></tr>
+              ) : !sortedCommunications.length ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  Nenhuma comunicação encontrada para os filtros selecionados.
+                </td></tr>
               ) : null}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+          <span>Registros {communicationPage * 100 + (currentPageSize ? 1 : 0)}
+            {' '}a {communicationPage * 100 + currentPageSize}
+            {' '}· O aceite do provedor não comprova entrega ou leitura.
+          </span>
+          <div className="flex gap-2">
+            <button type="button" disabled={communicationPage === 0}
+              onClick={() => setCommunicationPage((value) => Math.max(0, value - 1))}
+              className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40">
+              Anterior
+            </button>
+            <button type="button" disabled={!hasMore}
+              onClick={() => setCommunicationPage((value) => value + 1)}
+              className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40">
+              Próxima
+            </button>
+          </div>
         </div>
       </div>
     );
