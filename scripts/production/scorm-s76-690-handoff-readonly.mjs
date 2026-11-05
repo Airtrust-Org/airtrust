@@ -15,6 +15,9 @@ SELECT h.id AS handoff_id, h.ciclo_id,
  h.previous_enrollment_json, h.previous_scorm_json, h.resume_plan_json,
  h.target_package_sha256, h.target_package_prefix,
  m.progresso_pct AS current_progress, m.status AS current_status,
+ c.scorm_assessment_policy AS course_policy, c.scorm_mastery_score AS course_mastery,
+ cy.assessment_policy AS current_cycle_policy,
+ m.qualificacao_historico_id AS current_qualification_id,
  ps.suspend_data AS current_suspend, ps.cmi_json AS current_cmi,
  ps.lesson_status AS current_lesson_status,
  p.package_sha256 AS active_package_sha
@@ -89,11 +92,36 @@ export function sanitize(row) {
   const a = plan?.activeTotal, b = plan?.targetPosition;
   valid(Number.isSafeInteger(a) && a > 0 && a <= 1000 &&
         Number.isSafeInteger(b) && b >= 1 && b <= a, 'HANDOFF_PLAN_INVALID');
+  const oldCycle = object(prior?.cycle);
+  const previousScore = typeof oldScorm?.score_raw === 'number' &&
+    Number.isFinite(oldScorm.score_raw) ? oldScorm.score_raw : null;
+  const previousMax = typeof oldScorm?.score_max === 'number' &&
+    Number.isFinite(oldScorm.score_max) ? oldScorm.score_max : null;
+  const oldScorePct = previousScore !== null && previousMax !== null && previousMax > 0
+    ? (previousScore * 100) / previousMax : previousScore;
   return {
-    schema_version: 1, mode: 'read_only', writes: 0, tenant_id: COMPANY,
+    schema_version: 2, mode: 'read_only', writes: 0, tenant_id: COMPANY,
     course_id: COURSE, enrollment_id: ENROLLMENT,
     handoff_id: row.handoff_id, cycle_id: row.ciclo_id,
     original_progress_pct: oldPct,
+    archive_qualification_issued: Number.isSafeInteger(oldCycle?.qualificacao_historico_id) &&
+      oldCycle.qualificacao_historico_id > 0,
+    archive_enrollment_completed_at_present: typeof prior?.enrollment?.data_conclusao === 'string' &&
+      prior.enrollment.data_conclusao.length > 0,
+    archive_cycle_status: typeof oldCycle?.status === 'string' &&
+      ['NAO_INICIADO','EM_ANDAMENTO','CONCLUIDO','CANCELADO'].includes(oldCycle.status)
+      ? oldCycle.status : null,
+    archive_scorm_score_pct: oldScorePct !== null && Number.isFinite(oldScorePct) &&
+      oldScorePct >= 0 && oldScorePct <= 100 ? Math.round(oldScorePct * 100) / 100 : null,
+    archive_scorm_last_commit_present: typeof oldScorm?.last_commit_at === 'string' &&
+      oldScorm.last_commit_at.length > 0,
+    current_assessment_policy: row.current_cycle_policy === 'FORMATIVE' ||
+      row.current_cycle_policy === 'SCORED' ? row.current_cycle_policy : null,
+    current_course_policy: row.course_policy === 'FORMATIVE' ||
+      row.course_policy === 'SCORED' ? row.course_policy : null,
+    current_course_mastery: Number.isFinite(row.course_mastery) ? row.course_mastery : null,
+    current_qualification_issued: Number.isSafeInteger(row.current_qualification_id) &&
+      row.current_qualification_id > 0,
     current_progress_pct: row.current_progress,
     enrollment_status: row.current_status,
     previous_package_sha_present: oldShaValid,
