@@ -16,11 +16,14 @@ function fixture() {
       (101, 6, NULL), (102, 6, NULL), (201, 7, NULL), (103, 6, '2026-01-01');
   `);
   const statements: string[] = [];
+  const bindCounts: number[] = [];
   const db = {
     prepare(sql: string) {
       statements.push(sql);
       return {
         bind(...args: unknown[]) {
+          bindCounts.push(args.length);
+          if (args.length > 100) throw new RangeError('D1_BIND_PARAMETER_LIMIT_EXCEEDED');
           return {
             async all<T>() {
               return { success: true, results: sqlite.prepare(sql).all(...(args as [])) as T[] };
@@ -30,7 +33,7 @@ function fixture() {
       };
     },
   } as unknown as D1Database;
-  return { sqlite, db, statements };
+  return { sqlite, db, statements, bindCounts };
 }
 
 afterEach(() => {
@@ -71,17 +74,22 @@ describe('simulator session participant tenant guard', () => {
     expect(statements).toHaveLength(0);
   });
 
-  it('chunks large participant sets without exceeding SQL bind limits', async () => {
-    const { db, sqlite, statements } = fixture();
-    const participants = [];
-    for (let id = 1000; id < 1260; id++) {
-      sqlite.prepare('INSERT INTO funcionarios (id, empresa_id) VALUES (?, 6)').run(id);
-      participants.push({ funcionario_id: id });
+  it('respects the real D1 100-bind ceiling for 99, 100 and 260 employees', async () => {
+    for (const count of [99, 100, 260]) {
+      const { db, sqlite, statements, bindCounts } = fixture();
+      const participants = [];
+      for (let id = 1000; id < 1000 + count; id++) {
+        sqlite.prepare('INSERT INTO funcionarios (id, empresa_id) VALUES (?, 6)').run(id);
+        participants.push({ funcionario_id: id });
+      }
+      expect(await validateSessionParticipantTenant(db, 6, participants)).toBe(true);
+      expect(statements).toHaveLength(Math.ceil(count / 90));
+      expect(Math.max(...bindCounts)).toBeLessThanOrEqual(100);
+      expect(bindCounts.every((value) => value <= 91)).toBe(true);
+      const lastId = 1000 + count - 1;
+      sqlite.prepare('UPDATE funcionarios SET empresa_id = 7 WHERE id = ?').run(lastId);
+      expect(await validateSessionParticipantTenant(db, 6, participants)).toBe(false);
     }
-    expect(await validateSessionParticipantTenant(db, 6, participants)).toBe(true);
-    expect(statements).toHaveLength(2);
-    sqlite.prepare('UPDATE funcionarios SET empresa_id = 7 WHERE id = ?').run(1259);
-    expect(await validateSessionParticipantTenant(db, 6, participants)).toBe(false);
   });
 
   it('is called before the first session UPDATE in the real route', () => {
