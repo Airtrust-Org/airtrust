@@ -3,6 +3,8 @@ import { projectS76Rc3AdministrativeResume, type S76Rc3ResumeBridgeInput } from
   '../../services/lms-scorm-s76-rc3-resume-bridge';
 import type { ActiveCompletionManifest } from '../../services/lms-completion-manifest-evidence';
 import { buildScormLaunchState } from '../../services/lms-scorm-launch-state';
+import { evaluateManifestStudyCoverage } from '../../services/lms-completion-manifest-evidence';
+import { evaluateScormClosureReadiness } from '../../services/lms-matricula-runtime-domain';
 
 const sha = '9c65dc726af8e57b2ac3424b0898559b1a80d00348605b6805eb155ad6a1bb12';
 const version = 'v3.4-no-module-exams-rc2-2026-11-02';
@@ -86,6 +88,51 @@ describe('S-76 RC3 V4 administrative credit projection (launch-only)', () => {
     expect(JSON.parse(after['cmi.suspend_data']).d).toHaveLength(48);
     expect(after['cmi.core.lesson_location']).toBe('49/49');
     expect(before['cmi.core.lesson_location']).toBe('3/49');
+  });
+
+  it('keeps Worker completion gated by all 49 indexes plus user-finalize', () => {
+    const projected = projectS76Rc3AdministrativeResume(input());
+    expect(projected).not.toBeNull();
+    const cmi = JSON.parse(projected!);
+    const state = JSON.parse(cmi['cmi.suspend_data']);
+    cmi['cmi.core.lesson_status'] = 'completed'; // adversarial pre-final status
+    const partial = evaluateManifestStudyCoverage({
+      manifest, cmiJson: JSON.stringify(cmi),
+    });
+    expect(partial.verified).toBe(false);
+    const partialReadiness = evaluateScormClosureReadiness({
+      mode: 'commit',
+      commit: { lesson_status: 'completed', commit_event: 'SCORM_USER_FINALIZE' },
+      wasCompleted: false,
+      cmiJson: JSON.stringify(cmi),
+      location: { current: 49, total: 49 },
+      policy: 'FORMATIVE', masteryScore: 70, scorePct: null,
+      manifest: { coverage: partial },
+    });
+    expect(partialReadiness.eligible_for_server_verification).toBe(false);
+    expect(partialReadiness.code).toBe('PROGRESS_EVIDENCE_MISSING');
+
+    // Only the SCO's required last interaction can add index 48.
+    state.c.push(48);
+    state.d.push(48);
+    cmi['cmi.suspend_data'] = JSON.stringify(state);
+    const full = evaluateManifestStudyCoverage({
+      manifest, cmiJson: JSON.stringify(cmi),
+    });
+    expect(full.verified).toBe(true);
+    expect(full.recorded).toBe(49);
+    const args = {
+      mode: 'commit' as const,
+      commit: { lesson_status: 'completed', commit_event: 'SCORM_USER_FINALIZE' },
+      wasCompleted: false, cmiJson: JSON.stringify(cmi),
+      location: { current: 49, total: 49 },
+      policy: 'FORMATIVE' as const,
+      masteryScore: 70, scorePct: null, manifest: { coverage: full },
+    };
+    expect(evaluateScormClosureReadiness(args).eligible_for_server_verification).toBe(true);
+    expect(evaluateScormClosureReadiness({
+      ...args, commit: { lesson_status: 'completed', commit_event: 'SCORM_FINISH' },
+    }).eligible_for_server_verification).toBe(false);
   });
 
   it('rejects scope, handoff, identity, policy and completed-course mismatches', () => {
