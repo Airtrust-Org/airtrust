@@ -98,11 +98,17 @@ async function readEnrollment(token) {
   return { enrollment, candidateId };
 }
 
-async function getAssetSession(token) {
+async function getAssetSession(token, enrollment) {
+  // Edition handoff identity is issued by the authenticated enrollment read.
+  // Omitting it produces a false HTTP 409 on a valid resumed SCORM enrollment.
+  const rawHandoffId = enrollment.active_scorm_handoff_id ?? null;
+  const handoffId = rawHandoffId == null ? null : Number(rawHandoffId);
+  invariant(handoffId === null || (Number.isSafeInteger(handoffId) && handoffId > 0),
+    'ENROLLMENT_HANDOFF_ID_INVALID');
   const response = await fetch(`${api}/api/lms/assets/session`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ matricula_id: matricula }),
+    body: JSON.stringify({ matricula_id: matricula, expected_handoff_id: handoffId }),
   });
   invariant(response.ok, `ASSET_SESSION_HTTP_${response.status}`);
   const cookieHeader = response.headers.get('set-cookie') || '';
@@ -159,15 +165,48 @@ async function inspectPlayerReadOnly(cookie, candidateId) {
     invariant(frame, 'SCORM_FRAME_NOT_ATTACHED');
     await frame.waitForLoadState('domcontentloaded', { timeout: 25_000 });
     await frame.locator('body').waitFor({ state: 'attached', timeout: 10_000 });
-    const frameState = await frame.evaluate(() => ({
-      ready_state: document.readyState,
-      body_text_length: document.body?.innerText?.length || 0,
-    }));
+    const frameState = await frame.evaluate(() => {
+      // Strictly read-only, sanitized Factory V3 terminal diagnostics. The
+      // user's CMI, answers, personal data and package source never leave
+      // the browser. This distinguishes a disabled SCO button from a Worker
+      // rejection of an actual completion request.
+      const player = window.__AIRTRUST_PLAYER_TEST__?.getState?.();
+      const slides = window.COURSE_DATA?.slides;
+      const scorm = window.Scorm;
+      let factory = null;
+      if (player && Array.isArray(slides) && slides.length > 0) {
+        const completed = new Set(Array.isArray(player.done)
+          ? player.done.filter(Number.isInteger) : []);
+        const scenarios = slides.slice(0, -1).filter(s => s?.kind === 'scenario');
+        const pendingScenarios = scenarios.filter(s => player.scenario?.[s.id] == null);
+        const priorUnitsComplete = slides.slice(0, -1).every((_, i) => completed.has(i));
+        const index = Number.isInteger(player.active) ? player.active : null;
+        factory = {
+          active_index: index,
+          slide_total: slides.length,
+          completed_unit_count: completed.size,
+          at_last_unit: index === slides.length - 1,
+          prior_units_complete: priorUnitsComplete,
+          scenario_total: scenarios.length,
+          scenario_answers_missing: pendingScenarios.length,
+          scorm_initialized: scorm?.isInitialized?.() === true,
+          scorm_finished: scorm?.isFinished?.() === true,
+          final_button_disabled: document.getElementById('next')?.disabled === true,
+          mode: ['journey', 'review', 'preview'].includes(player.mode) ? player.mode : 'unknown',
+        };
+      }
+      return {
+        ready_state: document.readyState,
+        body_text_length: document.body?.innerText?.length || 0,
+        factory,
+      };
+    });
     return {
       launch_http_status: response.status(),
       frame_loaded: ['interactive', 'complete'].includes(frameState.ready_state),
       frame_candidate_matches_enrollment: frame.url().includes(`/_candidates/${candidateId}/`),
       body_text_length: frameState.body_text_length,
+      factory: frameState.factory,
       failed_scorm_asset_count: assetFailures.length,
       blocked_write_attempt_count: Object.values(blockedWrites).reduce((sum, count) => sum + count, 0),
       blocked_write_methods: blockedWrites,
@@ -189,7 +228,7 @@ async function run() {
   const { enrollment, candidateId } = await readEnrollment(token);
   const enrollmentSummary = summarizeEnrollment(enrollment);
   const closureReadiness = summarizeClosureReadiness(enrollment.closure_readiness);
-  const cookie = await getAssetSession(token);
+  const cookie = await getAssetSession(token, enrollment);
   const launch = await fetch(`${api}/api/lms/scorm/launch/${matricula}`, {
     headers: { Cookie: cookie },
   });

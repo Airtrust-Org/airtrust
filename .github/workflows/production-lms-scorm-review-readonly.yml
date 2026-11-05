@@ -89,6 +89,14 @@ jobs:
           console.log('- launch SCORM location present: `' + report.launch.initial_lesson_location_present + '`');
           console.log('- Chromium player frame loaded: `' + report.player.frame_loaded + '`');
           console.log('- blocked browser write attempts: `' + report.player.blocked_write_attempt_count + '`');
+          if (report.player.factory) {
+            const f = report.player.factory;
+            console.log('- Factory V3 last unit reached: \`' + f.at_last_unit + '\`');
+            console.log('- Factory V3 prior units complete: \`' + f.prior_units_complete + '\`');
+            console.log('- Factory V3 scenario answers missing: \`' + f.scenario_answers_missing + '\` / \`' + f.scenario_total + '\`');
+            console.log('- Factory V3 SCORM initialized/finished: \`' + f.scorm_initialized + '\` / \`' + f.scorm_finished + '\`');
+            console.log('- Factory V3 final button disabled: \`' + f.final_button_disabled + '\`');
+          }
           console.log('- writes: `' + report.writes + '`');
           NODE
 
