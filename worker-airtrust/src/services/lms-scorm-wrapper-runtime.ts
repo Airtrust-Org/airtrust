@@ -367,6 +367,57 @@ export function buildScormSessionCloseRuntimeScript(): string {
     void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
   }
 
+  // The Factory V3 SCO has its own *explicit* terminal button. Previously it
+  // called LMSFinish(), which only sends passive SCORM_FINISH; the server then
+  // correctly refused to issue a qualification without SCORM_USER_FINALIZE.
+  // Observe the actual trusted button click, not a location/score/finish event.
+  // This bridge works with already-published ZIPs and never fabricates CMI.
+  var factoryV3FinalClick = false;
+  var factoryV3ObservedDocument = null;
+  function bindFactoryV3FinalClick() {
+    try {
+      var frame = document.getElementById('scorm-frame');
+      var inner = frame && frame.contentWindow;
+      var doc = inner && inner.document;
+      var authored = inner && inner.COURSE_DATA;
+      if (!doc || !authored || typeof authored.packageVersion !== 'string' ||
+          !Array.isArray(authored.slides) || authored.slides.length < 2) return;
+      var last = authored.slides[authored.slides.length - 1];
+      if (!last || (last.kind !== 'study_end' && last.kind !== 'assessment')) return;
+      if (factoryV3ObservedDocument === doc) return;
+      factoryV3ObservedDocument = doc;
+      doc.addEventListener('click', function(event) {
+        if (event.isTrusted !== true || PREVIEW_MODE || REVIEW_MODE ||
+            completed || sessionCloseHandled || !apiInitialized) return;
+        var target = event.target;
+        var button = target && typeof target.closest === 'function'
+          ? target.closest('#next') : null;
+        if (!button || button.disabled) return;
+        var label = String(button.textContent || '').trim().replace(/\\s+/g, ' ');
+        var isEnd = last.kind === 'study_end' && label === 'Confirmar encerramento do estudo';
+        var isAssessmentEnd = last.kind === 'assessment' && label === 'Concluir curso';
+        if (!isEnd && !isAssessmentEnd) return;
+        factoryV3FinalClick = true;
+        // Only LMSFinish synchronously triggered by THIS click may consume it.
+        // A subsequent unload, timer, or scripted Finish is never user consent.
+        window.setTimeout(function() { factoryV3FinalClick = false; }, 0);
+      }, true);
+    } catch (_factoryAccessError) {
+      // Cross-origin or non-Factory SCOs retain strict passive Finish semantics.
+    }
+  }
+
+  function consumeFactoryV3ExplicitFinish() {
+    if (!factoryV3FinalClick) return false;
+    factoryV3FinalClick = false;
+    if (PREVIEW_MODE || REVIEW_MODE || completed || sessionCloseHandled || !apiInitialized) return false;
+    var status = String(cmi['cmi.core.lesson_status'] || '').toLowerCase();
+    if (status !== 'completed' && status !== 'passed') return false;
+    notifyCompletionPending('saving', 'factory-v3-explicit-user-finish');
+    void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
+    return true;
+  }
+
   // Relay the inner SCORM package's raw completion diagnostics
   // (AIRTRUST_COMPLETION_DIAGNOSTICS_V1) up to React as lms:completion-diagnostics.
   // Trust ONLY the exact scorm-frame window as the source; ignore any IDs the
