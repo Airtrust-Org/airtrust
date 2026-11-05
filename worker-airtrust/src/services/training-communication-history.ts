@@ -12,6 +12,7 @@ export type TrainingCommunication = {
   status_compliance: string | null;
   tipo: string | null;
   destinatario: string | null;
+  destinatario_fonte: 'REGISTRO_ENVIO' | 'CADASTRO_ATUAL' | null;
   status_envio: string | null;
   erro: string | null;
   enviado_em: string | null;
@@ -26,7 +27,7 @@ export type TrainingCommunicationFilters = {
   treinamento_q?: string;
   canal?: 'EMAIL' | 'WHATSAPP';
   origem?: TrainingCommunication['origem'];
-  resultado?: 'enviada' | 'erro' | 'sem_contato';
+  resultado?: 'enviada' | 'erro' | 'sem_contato' | 'pendente';
   inicio?: string;
   fim?: string;
   setor_id?: number;
@@ -92,6 +93,7 @@ export async function listTrainingCommunications(
              json_extract(n.corpo, '$.qualificacao_nome') AS qualificacao_nome,
              json_extract(n.corpo, '$.status_compliance') AS status_compliance,
              n.tipo AS tipo, n.destinatario AS destinatario,
+             'REGISTRO_ENVIO' AS destinatario_fonte,
              n.status AS status_envio, n.erro_mensagem AS erro,
              COALESCE(n.enviado_em, n.created_at) AS enviado_em,
              CASE WHEN n.assunto LIKE '[COMPLIANCE_GESTOR:%' THEN 1 ELSE 0 END AS gestor,
@@ -116,15 +118,23 @@ export async function listTrainingCommunications(
              CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER) AS curso_id,
              COALESCE(json_extract(a.new_values, '$.curso_titulo'), c.titulo) AS qualificacao_nome,
              json_extract(a.new_values, '$.status_matricula') AS status_compliance,
-             channel.canal AS tipo, NULL AS destinatario,
+             channel.canal AS tipo,
+             CASE WHEN channel.canal = 'EMAIL' THEN
+                 COALESCE(json_extract(a.new_values, '$.email_destinatario_mascarado'), f.email)
+               ELSE COALESCE(json_extract(a.new_values, '$.whatsapp_destinatario_mascarado'), f.telefone)
+             END AS destinatario,
+             CASE WHEN (channel.canal = 'EMAIL' AND json_extract(a.new_values, '$.email_destinatario_mascarado') IS NOT NULL)
+                    OR (channel.canal = 'WHATSAPP' AND json_extract(a.new_values, '$.whatsapp_destinatario_mascarado') IS NOT NULL)
+               THEN 'REGISTRO_ENVIO' ELSE 'CADASTRO_ATUAL' END AS destinatario_fonte,
              CASE json_extract(a.new_values, channel.result_path)
                WHEN 'ENVIADO' THEN 'enviada'
                WHEN 'FALHA' THEN 'erro'
+               WHEN 'PENDENTE' THEN 'pendente'
                WHEN 'SEM_EMAIL' THEN 'sem_contato'
                WHEN 'SEM_WHATSAPP' THEN 'sem_contato'
                ELSE 'desconhecido' END AS status_envio,
              NULL AS erro, a.created_at AS enviado_em, 0 AS gestor,
-             CASE WHEN a.action = 'LMS_MATRICULA_ALERTA' THEN 'LMS_ALERTA'
+             CASE WHEN a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_ALERTA_PREPARADO') THEN 'LMS_ALERTA'
                   ELSE 'LMS_CONVITE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
         FROM audit_logs a
@@ -138,7 +148,19 @@ export async function listTrainingCommunications(
           UNION ALL SELECT 'WHATSAPP', '$.whatsapp_resultado'
         ) channel ON json_extract(a.new_values, channel.result_path) IS NOT NULL
        WHERE a.empresa_id = ?
-         AND a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL')
+         AND a.action IN (
+           'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
+           'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO'
+         )
+         AND (a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
+           SELECT 1 FROM audit_logs done
+           WHERE done.empresa_id = a.empresa_id
+             AND done.action = REPLACE(a.action, '_PREPARADO', '')
+             AND done.entity_type = a.entity_type
+             AND json_valid(done.new_values) = 1
+             AND json_extract(done.new_values, '$.tentativa_id') =
+                 json_extract(a.new_values, '$.tentativa_id')
+         ))
          AND a.entity_type = 'lms_matriculas'
          AND json_valid(a.new_values) = 1
          AND ${scope.clause}`);
