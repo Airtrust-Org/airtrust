@@ -173,20 +173,30 @@ describe('platform access foundation', () => {
       String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
   });
 
-  it('rechecks a revoked platform role through an independent access resolver', async () => {
-    const roles: Array<'platform_admin' | 'support_read_only' | 'support_elevated'> = ['platform_admin'];
-    const firstInstanceDb = createDb({ roles }).db;
-    const secondInstanceDb = createDb({ roles }).db;
+  it('rechecks revoked platform roles and support grants through an independent resolver', async () => {
+    const roles: Array<'platform_admin' | 'support_read_only' | 'support_elevated'> = [
+      'platform_admin',
+      'support_elevated',
+    ];
+    const grants: Array<{ empresa_id: number; access_level: 'read_only' | 'elevated' }> = [
+      { empresa_id: 7, access_level: 'elevated' },
+    ];
+    const firstInstanceDb = createDb({ roles, grants }).db;
+    const secondInstanceDb = createDb({ roles, grants }).db;
 
     const beforeRevocation = await resolvePlatformAccessState(firstInstanceDb, 442);
     expect(isPlatformAdminAccess(beforeRevocation)).toBe(true);
+    expect(canPerformSupportMutation(beforeRevocation, 7, 'incident-2014')).toBe(true);
 
     roles.splice(0, 1);
-    const afterRevocation = await resolvePlatformAccessState(secondInstanceDb, 442);
+    const afterRoleRevocation = await resolvePlatformAccessState(secondInstanceDb, 442);
+    expect(afterRoleRevocation.hasPersistedPlatformAdmin).toBe(false);
+    expect(isPlatformAdminAccess(afterRoleRevocation)).toBe(false);
+    expect(canPerformSupportMutation(afterRoleRevocation, 7, 'incident-2014')).toBe(true);
 
-    expect(afterRevocation.source).toBe('none');
-    expect(afterRevocation.hasPersistedPlatformAdmin).toBe(false);
-    expect(isPlatformAdminAccess(afterRevocation)).toBe(false);
+    grants.splice(0, 1);
+    const afterGrantRevocation = await resolvePlatformAccessState(secondInstanceDb, 442);
+    expect(canPerformSupportMutation(afterGrantRevocation, 7, 'incident-2014')).toBe(false);
   });
 
   it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
