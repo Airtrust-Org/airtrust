@@ -440,3 +440,50 @@ describe('withD1Retry', () => {
     expect(attempts).toBe(1);
   });
 });
+
+describe('auth() — nested sub-router reuse (idempotency)', () => {
+  it('does not re-execute token verification or D1 queries when userId and platformAccessState already exist on context', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 42, perfil: 'ADMIN', active: 1 }];
+    const memberships = [{ usuarioId: 42, empresaId: 999002, role: 'admin' }];
+    const { token } = await makeToken(42, 999002, 'admin');
+    const callCounts: CallCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+    const db = createDb({ usuarios, memberships, callCounts });
+
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+
+    // Middleware global auth (simulando index.ts /api/*)
+    app.use('/api/*', auth());
+
+    // Sub-router aninhado que também monta auth() (simulando compliance-treinamentos.ts)
+    const subRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+    subRouter.use('*', auth());
+    subRouter.get('/reconciliacao', (c) =>
+      c.json({
+        success: true,
+        userId: c.get('userId'),
+        platformAccess: Boolean(c.get('platformAccessState')),
+      }),
+    );
+    app.route('/api/compliance-treinamentos', subRouter);
+
+    const response = await app.request(
+      '/api/compliance-treinamentos/reconciliacao',
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      { DB: db, JWT_SECRET, ENVIRONMENT: 'production' } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { success: boolean; userId: string | number; platformAccess: boolean };
+    expect(payload.success).toBe(true);
+    expect(String(payload.userId)).toBe('42');
+    expect(payload.platformAccess).toBe(true);
+
+    // Sem duplicação de queries ao D1: cada query executou exatamente 1 vez, não 2
+    expect(callCounts.blocklist).toBe(1);
+    expect(callCounts.userSecurity).toBe(1);
+  });
+});
+

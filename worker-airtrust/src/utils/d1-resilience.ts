@@ -20,7 +20,18 @@ export function isTransientD1Error(error: unknown): boolean {
   if (!error) return false;
   const message = error instanceof Error ? error.message : String(error);
   const errObj = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
-  const code = typeof errObj?.code === 'string' ? errObj.code : '';
+  const code =
+    typeof errObj?.code === 'string'
+      ? errObj.code
+      : typeof errObj?.code === 'number'
+      ? String(errObj.code)
+      : '';
+  const status =
+    typeof errObj?.status === 'string'
+      ? errObj.status
+      : typeof errObj?.status === 'number'
+      ? String(errObj.status)
+      : '';
   const name = typeof errObj?.name === 'string' ? errObj.name : '';
   const cause = errObj?.cause;
   const causeMessage =
@@ -30,7 +41,7 @@ export function isTransientD1Error(error: unknown): boolean {
       ? cause
       : '';
 
-  const combined = `${name} ${code} ${message} ${causeMessage}`.toLowerCase();
+  const combined = `${name} ${code} ${status} ${message} ${causeMessage}`.toLowerCase();
 
   // 1. Erros permanentes de aplicação, sintaxe ou schema: fail-closed imediato
   if (
