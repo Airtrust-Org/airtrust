@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-import { pptxRenderedPdfKey } from '../lib/lms/pptx-rendered-asset';
+import { serveAuthorizedRenderedPptx } from './lms-pptx-rendered';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
 import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from '../lib/lms/lms-scorm-asset-paths';
 export { guessMime } from '../lib/lms/lms-scorm-asset-paths';
@@ -2669,28 +2669,9 @@ app.get('/pptx/rendered/:cursoId', async (c) => {
     throw new ApiError('Escopo PPTX inválido', 400);
   }
   await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
-  const curso = await c.env.DB.prepare(
-    'SELECT pptx_r2_key, pptx_slide_count, version_tag FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND tipo_conteudo = ?'
-  ).bind(cursoId, empresaId, 'pptx').first<{
-    pptx_r2_key: string | null; pptx_slide_count: number; version_tag: string | null;
-  }>();
-  if (!curso) return c.text('Apresentação não encontrada', 404);
-  const key = pptxRenderedPdfKey(curso.pptx_r2_key, curso.version_tag);
-  if (!key || !curso.pptx_r2_key) return c.text('Representação visual indisponível', 404);
-  const original = await c.env.BUCKET.head(curso.pptx_r2_key);
-  if (!original) return c.text('Apresentação original indisponível', 404);
-  const derived = await c.env.BUCKET.get(key);
-  if (!derived) return c.text('Representação visual indisponível', 404);
-  const headers = buildAssetHeaders(
-    c.env.CORS_ORIGINS, c.req.header('Origin'), 'application/pdf', 'no-store',
-  );
-  // Required: PPTX qualifying evidence is tied to the ORIGINAL source ETag.
-  if (original.httpEtag) headers.set('ETag', original.httpEtag);
-  headers.set('Access-Control-Expose-Headers', 'ETag, X-Pptx-Slide-Count');
-  headers.set('X-Pptx-Slide-Count', String(curso.pptx_slide_count ?? 0));
-  headers.set('Content-Disposition', 'inline');
-  headers.set('X-Content-Type-Options', 'nosniff');
-  return new Response(derived.body, { status: 200, headers });
+  return serveAuthorizedRenderedPptx(c.env.DB, c.env.BUCKET, empresaId, cursoId,
+    c.env.CORS_ORIGINS, c.req.header('Origin'));
+
 });
 
 app.get('/pptx/asset/:cursoId', async (c) => {
