@@ -655,6 +655,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           reenvioConfirmadoHoje: mode === 'alerta' && parsed.data.reenviar_hoje,
         });
 
+        let reservationFinalized = true;
         if (mode === 'alerta') {
           if (emailReservationKey) {
             const emailOutcome = outcome.emailStatus === 'ENVIADO'
@@ -671,7 +672,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               notificationKey: emailReservationKey,
               outcome: emailOutcome,
               destinatarioMascarado: maskTrainingContact(row.email),
-            }).catch(() => undefined);
+            }).catch(() => { reservationFinalized = false; });
           }
           if (whatsappReservationKey) {
             const whatsappOutcome = outcome.whatsappStatus === 'ENVIADO'
@@ -688,11 +689,13 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               notificationKey: whatsappReservationKey,
               outcome: whatsappOutcome,
               destinatarioMascarado: maskTrainingContact(row.telefone),
-            }).catch(() => undefined);
+            }).catch(() => { reservationFinalized = false; });
           }
         }
 
-        return outcome;
+        // A mensagem pode ter sido aceita, mas a reserva segue pendente.
+        // Nunca reportar sucesso irrestrito se a finalização da trilha falhou.
+        return reservationFinalized ? outcome : { ...outcome, auditFinal: false };
       }),
     );
 

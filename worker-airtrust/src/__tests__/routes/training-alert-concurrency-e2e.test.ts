@@ -433,3 +433,72 @@ describe('LMS preparation audit failure after atomic reservation', () => {
     });
   }
 });
+
+describe('D1 finalization failures after provider acceptance', () => {
+  const interceptFinalization = () => {
+    const realPrepare = db.prepare.bind(db);
+    return vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+      const statement = realPrepare(sql);
+      if (!sql.includes('UPDATE notificacoes_log') ||
+          !sql.includes('notification_key = ?')) return statement;
+      return {
+        bind: (...args: unknown[]) => ({
+          run: async () => { throw new Error('D1 finalization unavailable'); },
+        }),
+      } as unknown as ReturnType<typeof db.prepare>;
+    });
+  };
+
+  it('LMS returns restricted success and keeps a pending reservation when email provider accepted', async () => {
+    const spy = interceptFinalization();
+    try {
+      const response = await makeLmsApp().fetch(new Request('http://localhost/convites/lote', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: false },
+        }),
+      }), { DB: db, FRONTEND_URL: 'https://airtrust.online' } as unknown as Env,
+      {} as ExecutionContext);
+      const result = await response.json() as {
+        success: boolean; data: Record<string, number>;
+      };
+      expect(result.success).toBe(false);
+      expect(result.data.email_enviados).toBe(1);
+      expect(result.data.auditoria_resultado_pendente).toBe(1);
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      const row = db.database.prepare(
+        "SELECT status FROM notificacoes_log WHERE notification_key LIKE 'TRAINING_ALERT:%' LIMIT 1",
+      ).get() as { status: string };
+      expect(row.status).toBe('pendente');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('Compliance returns restricted success and keeps a pending reservation when email provider accepted', async () => {
+    const spy = interceptFinalization();
+    try {
+      const response = await failClosedComplianceApp().fetch(new Request('http://localhost/avisos/enviar', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targets: [{ funcionario_id: 101, qualificacao_tipo_id: 55 }],
+          canais: { email: true, whatsapp: false },
+        }),
+      }), { DB: db, FRONTEND_URL: 'https://airtrust.online' } as unknown as Env,
+      {} as ExecutionContext);
+      const result = await response.json() as {
+        success: boolean; data: Record<string, number>;
+      };
+      expect(result.success).toBe(false);
+      expect(result.data.email_sucesso).toBe(1);
+      expect(result.data.reservas_resultado_pendente).toBe(1);
+      expect(sendEmailDetailedMock).toHaveBeenCalledTimes(1);
+      const row = db.database.prepare(
+        "SELECT status FROM notificacoes_log WHERE notification_key LIKE 'TRAINING_ALERT:%' LIMIT 1",
+      ).get() as { status: string };
+      expect(row.status).toBe('pendente');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

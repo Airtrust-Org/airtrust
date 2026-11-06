@@ -450,6 +450,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     let emailMissing = 0;
     let whatsappMissing = 0;
     let reservationFailures = 0;
+    let reservationFinalFailures = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
@@ -572,7 +573,7 @@ export function createTrainingComplianceIntelligenceRoutes({
                 outcome: emailOutcome,
                 errorMessage: notificationResult.email.error,
                 destinatarioMascarado: maskTrainingContact(target.email),
-              }).catch(() => undefined);
+              }).catch(() => { reservationFinalFailures += 1; });
             }
 
             if (whatsappReservationKey) {
@@ -587,7 +588,7 @@ export function createTrainingComplianceIntelligenceRoutes({
                 outcome: whatsappOutcome,
                 errorMessage: notificationResult.whatsapp.error,
                 destinatarioMascarado: maskTrainingContact(target.telefone),
-              }).catch(() => undefined);
+              }).catch(() => { reservationFinalFailures += 1; });
             }
 
             return notificationResult;
@@ -614,17 +615,19 @@ export function createTrainingComplianceIntelligenceRoutes({
         whatsapp_pendente_historico: whatsappPending,
         reenvio_confirmado_hoje: payload.reenviar_hoje === true,
         reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
       },
       ...extrairUsuarioAuditoria(c),
     });
     return c.json({
-      success: reservationFailures === 0,
-      ...(reservationFailures > 0 ? {
-        error: 'Falha na reserva auditável de um ou mais avisos. Nenhum canal sem reserva foi despachado. Confira o histórico antes de reenviar.',
+      success: reservationFailures === 0 && reservationFinalFailures === 0,
+      ...(reservationFailures > 0 || reservationFinalFailures > 0 ? {
+        error: 'Registro ou finalização de um ou mais avisos incompleto. Alguns envios podem ter sido aceitos; confira o histórico antes de reenviar.',
       } : {}),
       data: {
         trigger_key: triggerKey,
         reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
         selecionados: targets.length,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,
