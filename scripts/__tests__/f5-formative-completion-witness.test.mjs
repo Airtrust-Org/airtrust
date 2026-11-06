@@ -33,7 +33,7 @@ function fixture(){
     stale:{archivedCycleId:900+i,status:409,cmiBefore:C,cmiAfter:C,
       cycleBefore:H,cycleAfter:H,qualBefore:C,qualAfter:C},
     negativeAuth:{anonymous:401,foreignTenant:403,wrongSha:409,wrongEdition:409},
-    pdfBytes};
+    pdfBytes,pdfDownload:{httpStatus:200,documentId:certificateDocument.documentId}};
  });
  return {candidate:{...candidate},runtimeSha:R,runs};
 }
@@ -93,11 +93,29 @@ test('Chromium and WebKit cannot reuse enrollments, cycles, history, documents o
  f=>{for(const field of ['before','completed','replay'])f.runs[1][field].enrollmentId=101;f.runs[1].enrollmentId=101;f.runs[1].completed.certificateDocument.enrollmentId=101;},
  f=>{for(const field of ['before','completed','replay'])f.runs[1][field].cycleId=201;f.runs[1].cycleId=201;f.runs[1].completed.certificateDocument.cycleId=201;},
  f=>{for(const field of ['completed','replay'])f.runs[1][field].qualificationHistoryId=301;f.runs[1].completed.certificateDocument.qualificationHistoryId=301;},
- f=>{f.runs[1].completed.certificateDocument.documentId='doc-1';},
+ f=>{f.runs[1].completed.certificateDocument.documentId='doc-1';f.runs[1].pdfDownload.documentId='doc-1';},
  f=>{f.runs[1].pdfBytes=f.runs[0].pdfBytes;f.runs[1].completed.certificateDocument.sha256=f.runs[0].completed.certificateDocument.sha256;},
+ f=>{for(const r of f.runs)for(const k of ['completed','replay'])r[k]={...r[k],certificateDocument:{...r[k].certificateDocument,sha256:null}};f.runs[1].pdfBytes=f.runs[0].pdfBytes;},
  ];
  for(const change of changes){
   const f=fixture();change(f);
   assert.throws(()=>verify(f),/BROWSERS_NOT_INDEPENDENT/);
  }
+});
+test('D1 readback with sha256:null passes only with a bound authenticated PDF download',()=>{
+ const f=fixture();
+ for(const r of f.runs)for(const k of ['completed','replay'])r[k]={...r[k],certificateDocument:{...r[k].certificateDocument,sha256:null}};
+ assert.equal(verify(f).status,'OBSERVATION_CONTRACT_PASS');
+ const swapped=fixture();
+ for(const r of swapped.runs)for(const k of ['completed','replay'])r[k]={...r[k],certificateDocument:{...r[k].certificateDocument,sha256:null}};
+ swapped.runs[0].pdfDownload.documentId='doc-other';
+ assert.throws(()=>verify(swapped),/AUTHENTICATED_PDF_DOWNLOAD_UNBOUND/);
+ const failed=fixture();failed.runs[0].pdfDownload.httpStatus=404;
+ assert.throws(()=>verify(failed),/AUTHENTICATED_PDF_DOWNLOAD_UNBOUND/);
+ const missing=fixture();delete missing.runs[1].pdfDownload;
+ assert.throws(()=>verify(missing),/AUTHENTICATED_PDF_DOWNLOAD_UNBOUND/);
+ const nonPdf=fixture();
+ for(const r of nonPdf.runs)for(const k of ['completed','replay'])r[k]={...r[k],certificateDocument:{...r[k].certificateDocument,sha256:null}};
+ nonPdf.runs[0].pdfBytes=Buffer.from('<html>'+'x'.repeat(700));
+ assert.throws(()=>verify(nonPdf),/AUTHENTICATED_PDF_BYTES_UNPROVEN/);
 });

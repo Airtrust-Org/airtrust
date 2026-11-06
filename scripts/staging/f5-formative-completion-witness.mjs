@@ -33,7 +33,7 @@ function sameCompletion(a,b){
     a.qualificationHistoryCount===b.qualificationHistoryCount &&
     a.qualificationHistoryId===b.qualificationHistoryId &&
     a.certificateDocument?.documentId===b.certificateDocument?.documentId &&
-    a.certificateDocument?.sha256===b.certificateDocument?.sha256;
+    (a.certificateDocument?.sha256??null)===(b.certificateDocument?.sha256??null);
 }
 export function verifyF5FormativeCompletionObservations({candidate,runtimeSha,runs}){
   check(candidate?.scope==='GOVERNED_STAGING_SYNTHETIC' &&
@@ -87,16 +87,26 @@ export function verifyF5FormativeCompletionObservations({candidate,runtimeSha,ru
       doc.cycleId===run.cycleId &&
       doc.qualificationHistoryId===c.qualificationHistoryId &&
       typeof doc.documentId==='string' && doc.documentId.length>0 &&
-      HEX64.test(doc.sha256||''),'DOCUMENT_NOT_BOUND_TO_QUALIFICATION');
+      (doc.sha256===null || HEX64.test(doc.sha256||'')),
+      'DOCUMENT_NOT_BOUND_TO_QUALIFICATION');
+    // The D1 qualification row may not persist the PDF digest (sha256:null).
+    // The digest is then derived HERE from the authenticated download and is
+    // never attributed to the Worker/D1; a persisted digest must still match.
+    const dl=run.pdfDownload;
+    check(dl?.httpStatus===200 && dl.documentId===doc.documentId,
+      'AUTHENTICATED_PDF_DOWNLOAD_UNBOUND');
     check(Buffer.isBuffer(run.pdfBytes) && run.pdfBytes.length>512 &&
       run.pdfBytes.subarray(0,5).toString()==='%PDF-' &&
-      run.pdfBytes.subarray(-256).includes(Buffer.from('%%EOF')) &&
-      sha(run.pdfBytes)===doc.sha256,'AUTHENTICATED_PDF_BYTES_UNPROVEN');
+      run.pdfBytes.subarray(-256).includes(Buffer.from('%%EOF')),
+      'AUTHENTICATED_PDF_BYTES_UNPROVEN');
+    const pdfDigest=sha(run.pdfBytes);
+    check(doc.sha256===null || doc.sha256===pdfDigest,
+      'AUTHENTICATED_PDF_BYTES_UNPROVEN');
     unique.enroll.push(run.enrollmentId);
     unique.cycle.push(run.cycleId);
     unique.history.push(c.qualificationHistoryId);
     unique.document.push(doc.documentId);
-    unique.pdf.push(doc.sha256);
+    unique.pdf.push(pdfDigest);
   }
   for(const [name,ids] of Object.entries(unique))
     check(new Set(ids).size===2,'BROWSERS_NOT_INDEPENDENT_'+name.toUpperCase());
