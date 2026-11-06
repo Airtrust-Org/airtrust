@@ -370,3 +370,66 @@ describe('D1 reservation failures must never reach external providers', () => {
     });
   }
 });
+
+describe('LMS preparation audit failure after atomic reservation', () => {
+  for (const channel of ['EMAIL', 'WHATSAPP'] as const) {
+    it(`releases ${channel} reservation for safe retry when PREPARADO audit fails without dispatch`, async () => {
+      const app = makeLmsApp();
+      const env = { DB: db, FRONTEND_URL: 'https://airtrust.online' } as unknown as Env;
+      const realPrepare = db.prepare.bind(db);
+      let failPreparation = true;
+      const spy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+        const statement = realPrepare(sql);
+        if (!sql.includes('INSERT INTO audit_logs')) return statement;
+        return {
+          bind: (...values: unknown[]) => ({
+            run: async () => {
+              if (failPreparation && values[1] === 'LMS_MATRICULA_ALERTA_PREPARADO') {
+                throw new Error('D1 audit preparation failure before dispatch');
+              }
+              return statement.bind(...values).run();
+            },
+          }),
+        } as unknown as ReturnType<typeof db.prepare>;
+      });
+      const body = JSON.stringify({
+        matricula_ids: [11], modo: 'alerta',
+        canais: { email: channel === 'EMAIL', whatsapp: channel === 'WHATSAPP' },
+      });
+      const send = () => app.fetch(new Request('http://localhost/convites/lote', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body,
+      }), env, {} as ExecutionContext);
+      try {
+        const failed = await send();
+        const failedBody = await failed.json() as {
+          success: boolean; data: Record<string, number>;
+        };
+        expect(failed.status).toBe(200);
+        expect(failedBody.success).toBe(false);
+        expect(failedBody.data.auditoria_preparo_falhas).toBe(1);
+        expect(sendEmailMock).not.toHaveBeenCalled();
+        expect(sendWhatsAppMock).not.toHaveBeenCalled();
+        const reservedRow = db.database.prepare(
+          "SELECT status FROM notificacoes_log WHERE notification_key LIKE 'TRAINING_ALERT:%' LIMIT 1",
+        ).get() as { status: string };
+        expect(reservedRow.status).toBe('erro');
+
+        failPreparation = false;
+        const retry = await send();
+        const retryBody = await retry.json() as {
+          success: boolean; data: Record<string, number>;
+        };
+        expect(retry.status).toBe(200);
+        expect(retryBody.success).toBe(true);
+        const last = db.database.prepare(
+          "SELECT status, tentativas_envio FROM notificacoes_log WHERE notification_key LIKE 'TRAINING_ALERT:%' LIMIT 1",
+        ).get() as { status: string; tentativas_envio: number };
+        expect(last).toMatchObject({ status: 'enviada', tentativas_envio: 2 });
+        if (channel === 'EMAIL') expect(sendEmailMock).toHaveBeenCalledTimes(1);
+        else expect(sendWhatsAppMock).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  }
+});

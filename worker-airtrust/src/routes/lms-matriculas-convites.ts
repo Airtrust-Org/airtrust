@@ -661,9 +661,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               ? 'enviada'
               : outcome.emailStatus === 'SEM_EMAIL'
                 ? 'sem_contato'
-                : !outcome.auditFinal
-                  ? 'resultado_indeterminado'
-                  : 'erro';
+                : !outcome.auditPrepared
+                  ? 'erro' // Preparation failed before any provider call: safe to retry.
+                  : !outcome.auditFinal
+                    ? 'resultado_indeterminado'
+                    : 'erro';
             await commitTrainingAlertReservation(db, {
               empresaId,
               notificationKey: emailReservationKey,
@@ -676,9 +678,11 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
               ? 'enviada'
               : outcome.whatsappStatus === 'SEM_WHATSAPP'
                 ? 'sem_contato'
-                : !outcome.auditFinal
-                  ? 'resultado_indeterminado'
-                  : 'erro';
+                : !outcome.auditPrepared
+                  ? 'erro' // Preparation failed before any provider call: safe to retry.
+                  : !outcome.auditFinal
+                    ? 'resultado_indeterminado'
+                    : 'erro';
             await commitTrainingAlertReservation(db, {
               empresaId,
               notificationKey: whatsappReservationKey,
