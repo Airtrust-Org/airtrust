@@ -2007,4 +2007,22 @@ describe('training compliance engine', () => {
     expect(summaryBody.data.pessoas).toBe(0);
     expect(summaryBody.data.requisitos_obrigatorios).toBe(0);
   });
+
+  it('retorna HTTP 200 com resumo e arrays íntegros em /reconciliacao mesmo sob dados vazios ou erro transitório', async () => {
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/reconciliacao?setor_id=99');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data.resumo).toMatchObject({
+      matriculas_ativas: 0,
+      matriculas_alinhadas: 0,
+      gaps_matricula_acionaveis: 0,
+      matriculados_sem_requisito: 0,
+      nao_aplica_matriculados: 0,
+    });
+    expect(Array.isArray(body.data.gaps_matricula)).toBe(true);
+    expect(Array.isArray(body.data.matriculas_revisao)).toBe(true);
+    expect(Array.isArray(body.data.convites_matricula)).toBe(true);
+  });
 });
