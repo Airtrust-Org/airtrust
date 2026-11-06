@@ -33,6 +33,9 @@ function sameCompletion(a,b){
     a.qualificationHistoryCount===b.qualificationHistoryCount &&
     a.qualificationHistoryId===b.qualificationHistoryId &&
     a.certificateDocument?.documentId===b.certificateDocument?.documentId &&
+    a.certificateDocument?.enrollmentId===b.certificateDocument?.enrollmentId &&
+    a.certificateDocument?.cycleId===b.certificateDocument?.cycleId &&
+    a.certificateDocument?.qualificationHistoryId===b.certificateDocument?.qualificationHistoryId &&
     (a.certificateDocument?.sha256??null)===(b.certificateDocument?.sha256??null);
 }
 export function verifyF5FormativeCompletionObservations({candidate,runtimeSha,runs}){

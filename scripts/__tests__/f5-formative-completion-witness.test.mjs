@@ -68,6 +68,14 @@ test('reject duplicate finalization or mutated replay',()=>{
   assert.throws(()=>verify(f),/REPLAY_NOT_IDEMPOTENT/);
  }
 });
+test('replay cannot relink a certificate document to another enrollment, cycle or qualification',()=>{
+ for(const field of ['enrollmentId','cycleId','qualificationHistoryId']){
+  const f=fixture();
+  f.runs[0].replay.certificateDocument={
+   ...f.runs[0].replay.certificateDocument,[field]:999};
+  assert.throws(()=>verify(f),/REPLAY_NOT_IDEMPOTENT/);
+ }
+});
 test('reject stale cycle writes even if HTTP status is 409',()=>{
  for(const change of [{status:200},{cmiAfter:H},{cycleAfter:C},
   {qualAfter:H},{archivedCycleId:201}]){
