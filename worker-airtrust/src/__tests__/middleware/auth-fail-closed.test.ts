@@ -209,6 +209,27 @@ describe('auth() — blocklist fail-closed', () => {
     expect(callCounts.blocklist).toBe(2);
   });
 
+  it('rejects a revoked token in a second app instance after the first instance accepted it', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const blocklisted = new Set<string>();
+    const { token, jti } = await makeToken(7, 999002);
+
+    // Independent app instances share only the persisted D1 state, as separate Worker isolates do.
+    const firstInstance = buildApp(createDb({ usuarios, memberships, blocklisted }), 'auth');
+    const secondInstance = buildApp(createDb({ usuarios, memberships, blocklisted }), 'auth');
+
+    const beforeRevocation = await firstInstance({ headers: { Authorization: `Bearer ${token}` } });
+    expect(beforeRevocation.status).toBe(200);
+
+    blocklisted.add(jti);
+    const afterRevocation = await secondInstance({ headers: { Authorization: `Bearer ${token}` } });
+    const payload = (await afterRevocation.json()) as { code?: string };
+
+    expect(afterRevocation.status).toBe(401);
+    expect(payload.code).toBe('TOKEN_REVOKED');
+  });
+
   it('immediately invalidates cached token when invalidateJtiCache is called (e.g. on logout/password change)', async () => {
     const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
     const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
@@ -233,6 +254,45 @@ describe('auth() — blocklist fail-closed', () => {
     expect(callCounts.blocklist).toBe(2);
     const body = (await res2.json()) as { code?: string };
     expect(body.code).toBe('TOKEN_REVOKED');
+  });
+
+  it('revalidates user activity and tenant membership in a second app instance', async () => {
+    const usuarios: UsuarioRow[] = [
+      { id: 7, perfil: 'ALUNO', active: 1 },
+      { id: 8, perfil: 'ALUNO', active: 1 },
+    ];
+    const memberships = [
+      { usuarioId: 7, empresaId: 999002, role: 'viewer' },
+      { usuarioId: 8, empresaId: 999002, role: 'viewer' },
+    ];
+    const [{ token: removedMembershipToken }, { token: inactiveToken }] = await Promise.all([
+      makeToken(7, 999002),
+      makeToken(8, 999002),
+    ]);
+
+    const firstInstance = buildApp(createDb({ usuarios, memberships }), 'auth');
+    const secondInstance = buildApp(createDb({ usuarios, memberships }), 'auth');
+    for (const token of [removedMembershipToken, inactiveToken]) {
+      const response = await firstInstance({ headers: { Authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(200);
+    }
+
+    memberships.splice(0, 1);
+    usuarios.find((user) => user.id === 8)!.active = 0;
+
+    const removedMembership = await secondInstance({
+      headers: { Authorization: `Bearer ${removedMembershipToken}` },
+    });
+    const inactiveUser = await secondInstance({
+      headers: { Authorization: `Bearer ${inactiveToken}` },
+    });
+    const membershipPayload = (await removedMembership.json()) as { code?: string };
+    const inactivePayload = (await inactiveUser.json()) as { code?: string };
+
+    expect(removedMembership.status).toBe(401);
+    expect(membershipPayload.code).toBe('TENANT_MEMBERSHIP_INVALID');
+    expect(inactiveUser.status).toBe(401);
+    expect(inactivePayload.code).toBe('USER_INACTIVE');
   });
 
   it('bounds cache size and prunes entries when capacity is reached', async () => {
