@@ -87,30 +87,20 @@ async function resolveEffectiveUserRole(
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
-// Micro-cache em memória de JTIs verificados como NÃO-revogados (TTL 60s)
-// Evita bater no D1 para o mesmo JTI dezenas de vezes por segundo durante navegação normal.
-const _validJtiCache = new Map<string, number>();
-const VALID_JTI_CACHE_TTL_MS = 60000;
-const MAX_VALID_JTI_CACHE_SIZE = 1000;
-
-function pruneExpiredJtiCache(now: number): void {
-  for (const [key, expiresAt] of _validJtiCache.entries()) {
-    if (expiresAt <= now) {
-      _validJtiCache.delete(key);
-    }
-  }
-}
+// In-flight dedup map para consultas de blocklist (evita rajadas redundantes no D1 sob requisições concorrentes)
+// Sem manter cache positivo estático de 60s que causaria janela de revogação obsoleta entre múltiplos isolates (Issue #2014)
+const _inFlightJtiChecks = new Map<string, Promise<boolean>>();
 
 export function resetBlocklistCache(): void {
-  _validJtiCache.clear();
+  _inFlightJtiChecks.clear();
 }
 
 export function invalidateJtiCache(jti: string): void {
-  _validJtiCache.delete(jti);
+  _inFlightJtiChecks.delete(jti);
 }
 
 export function getValidJtiCacheSize(): number {
-  return _validJtiCache.size;
+  return _inFlightJtiChecks.size;
 }
 
 /**
@@ -118,44 +108,34 @@ export function getValidJtiCacheSize(): number {
  * Fail-closed: qualquer erro de leitura é propagado (não engolido), para que
  * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
  * como falha de infraestrutura (503), nunca como "não bloqueado".
+ * Revalidação mutável crítica contra D1 imediata em cada requisição,
+ * coalescendo apenas requisições em trânsito simultâneas (rajadas concorrentes).
  */
 async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
-  const now = Date.now();
-  const cachedValidUntil = _validJtiCache.get(jti);
-  if (cachedValidUntil && cachedValidUntil > now) {
-    return false;
-  }
-  if (cachedValidUntil) {
-    _validJtiCache.delete(jti);
+  const inFlight = _inFlightJtiChecks.get(jti);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const row = await withD1Retry(
-    () =>
-      db
-        .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-        .bind(jti)
-        .first(),
-    7,
-    80,
-  );
-  const isBlocked = Boolean(row);
-  if (!isBlocked) {
-    if (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
-      pruneExpiredJtiCache(now);
-      while (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
-        const oldestKey = _validJtiCache.keys().next().value;
-        if (!oldestKey) break;
-        _validJtiCache.delete(oldestKey);
-      }
+  const promise = (async () => {
+    try {
+      const row = await withD1Retry(
+        () =>
+          db
+            .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+            .bind(jti)
+            .first(),
+        7,
+        80,
+      );
+      return Boolean(row);
+    } finally {
+      _inFlightJtiChecks.delete(jti);
     }
-    const maxTtl = exp && Number.isFinite(exp)
-      ? Math.min(VALID_JTI_CACHE_TTL_MS, Math.max(1000, exp * 1000 - now))
-      : VALID_JTI_CACHE_TTL_MS;
-    _validJtiCache.set(jti, now + maxTtl);
-  } else {
-    _validJtiCache.delete(jti);
-  }
-  return isBlocked;
+  })();
+
+  _inFlightJtiChecks.set(jti, promise);
+  return promise;
 }
 
 type UserSecurityState = {
@@ -165,40 +145,25 @@ type UserSecurityState = {
   hasMembership: boolean;
 };
 
-interface CachedUserSecurity {
-  expiresAt: number;
-  state: UserSecurityState;
-}
-
-// Micro-cache em memória de estado do usuário e vínculo de tenant (TTL 60s)
-// Evita bater no D1 em usuarios e usuarios_empresas dezenas de vezes por segundo durante navegação normal.
-const _userSecurityCache = new Map<string, CachedUserSecurity>();
-const USER_SECURITY_CACHE_TTL_MS = 60000;
-const MAX_USER_SECURITY_CACHE_SIZE = 1000;
-
-function pruneExpiredUserSecurityCache(now: number): void {
-  for (const [key, entry] of _userSecurityCache.entries()) {
-    if (entry.expiresAt <= now) {
-      _userSecurityCache.delete(key);
-    }
-  }
-}
+// In-flight dedup map para consultas de user security (evita rajadas redundantes no D1 sob requisições concorrentes)
+// Revalidação mutável crítica garante que desativação ou remoção de tenant tenha efeito imediato entre todos os isolates (Issue #2014)
+const _inFlightUserSecurityChecks = new Map<string, Promise<UserSecurityState>>();
 
 export function resetUserSecurityCache(): void {
-  _userSecurityCache.clear();
+  _inFlightUserSecurityChecks.clear();
 }
 
 export function invalidateUserSecurityCache(userId: number): void {
   const prefix = `${userId}:`;
-  for (const key of _userSecurityCache.keys()) {
+  for (const key of _inFlightUserSecurityChecks.keys()) {
     if (key.startsWith(prefix) || key === String(userId)) {
-      _userSecurityCache.delete(key);
+      _inFlightUserSecurityChecks.delete(key);
     }
   }
 }
 
 export function getUserSecurityCacheSize(): number {
-  return _userSecurityCache.size;
+  return _inFlightUserSecurityChecks.size;
 }
 
 /**
@@ -224,67 +189,60 @@ async function resolveUserSecurityState(
   }
 
   const cacheKey = `${uid}:${eid}`;
-  const now = Date.now();
-  const cached = _userSecurityCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return cached.state;
-  }
-  if (cached) {
-    _userSecurityCache.delete(cacheKey);
+  const inFlight = _inFlightUserSecurityChecks.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const { activeWhere } = await getUsuariosSchema(db);
-  const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
+  const promise = (async () => {
+    try {
+      const { activeWhere } = await getUsuariosSchema(db);
+      const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
 
-  const row = await withD1Retry(
-    () =>
-      scoped
-        ? db
-            .prepare(
-              `
-              SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
-              FROM usuarios u
-              LEFT JOIN usuarios_empresas ue
-                ON ue.usuario_id = u.id AND ue.empresa_id = ?
-              WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
-              LIMIT 1
-            `,
-            )
-            .bind(eid, uid)
-            .first<{ id: number; perfil: string | null; role: string | null }>()
-        : db
-            .prepare(
-              `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
-            )
-            .bind(uid)
-            .first<{ id: number; perfil: string | null; role: string | null }>(),
-    6,
-    80,
-  );
+      const row = await withD1Retry(
+        () =>
+          scoped
+            ? db
+                .prepare(
+                  `
+                  SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+                  FROM usuarios u
+                  LEFT JOIN usuarios_empresas ue
+                    ON ue.usuario_id = u.id AND ue.empresa_id = ?
+                  WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+                  LIMIT 1
+                `,
+                )
+                .bind(eid, uid)
+                .first<{ id: number; perfil: string | null; role: string | null }>()
+            : db
+                .prepare(
+                  `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+                )
+                .bind(uid)
+                .first<{ id: number; perfil: string | null; role: string | null }>(),
+        6,
+        80,
+      );
 
-  if (!row) {
-    return { found: false, active: false, role: fallback, hasMembership: false };
-  }
+      if (!row) {
+        return { found: false, active: false, role: fallback, hasMembership: false };
+      }
 
-  const hasMembership = scoped ? Boolean(row.role) : true;
-  const result: UserSecurityState = {
-    found: true,
-    active: true,
-    role: normalizeRuntimeRole(row.role || row.perfil || fallback),
-    hasMembership,
-  };
-
-  if (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
-    pruneExpiredUserSecurityCache(now);
-    while (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
-      const oldestKey = _userSecurityCache.keys().next().value;
-      if (!oldestKey) break;
-      _userSecurityCache.delete(oldestKey);
+      const hasMembership = scoped ? Boolean(row.role) : true;
+      return {
+        found: true,
+        active: true,
+        role: normalizeRuntimeRole(row.role || row.perfil || fallback),
+        hasMembership,
+      };
+    } finally {
+      _inFlightUserSecurityChecks.delete(cacheKey);
     }
-  }
-  _userSecurityCache.set(cacheKey, { expiresAt: now + USER_SECURITY_CACHE_TTL_MS, state: result });
+  })();
 
-  return result;
+  _inFlightUserSecurityChecks.set(cacheKey, promise);
+  return promise;
 }
 
 export type AccessTokenSecurityState = {

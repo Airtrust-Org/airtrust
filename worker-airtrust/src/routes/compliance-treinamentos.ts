@@ -1142,8 +1142,9 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
         gaps_matricula: gapsMatricula,
         matriculas_revisao: matriculasRevisao,
         convites_matricula: convitesMatricula,
+        meta: { reconciliation_ready: reconciliationReady, degraded: false },
       },
-      meta: { reconciliation_ready: reconciliationReady },
+      meta: { reconciliation_ready: reconciliationReady, degraded: false },
     });
   } catch (err) {
     if (err instanceof ApiError) throw err;
@@ -1168,6 +1169,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
         gaps_matricula: [],
         matriculas_revisao: [],
         convites_matricula: [],
+        meta: { reconciliation_ready: false, degraded: true },
       },
       meta: { reconciliation_ready: false, degraded: true },
     });
