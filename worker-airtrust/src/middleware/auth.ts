@@ -525,8 +525,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     // Se a requisição já foi autenticada neste ciclo de middleware (ex: middleware global em index.ts),
     // reaproveitar o contexto já validado para evitar consultas redundantes ao D1.
     const existingUserId = c.get('userId');
-    const existingPlatformAccessState = c.get('platformAccessState');
-    if (existingUserId && existingPlatformAccessState) {
+    if (existingUserId) {
       await next();
       return;
     }

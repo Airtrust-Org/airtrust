@@ -29,11 +29,13 @@ function createDb(options: {
   expiredBlocklisted?: string[];
   blocklistReadThrows?: boolean;
   transientBlocklistFailures?: number;
+  transientUserSecurityFailures?: number;
   blocklistPermanentSqlError?: string;
   userSecurityPermanentSqlError?: string;
   callCounts?: CallCounts;
 } = {}) {
   let transientFailuresRemaining = options.transientBlocklistFailures ?? 0;
+  let transientUserSecurityRemaining = options.transientUserSecurityFailures ?? 0;
   const usuarios = options.usuarios || [];
   const memberships = options.memberships || [];
   const blocklisted = new Set(options.blocklisted || []);
@@ -74,6 +76,10 @@ function createDb(options: {
             callCounts.userSecurity++;
             if (options.userSecurityPermanentSqlError) {
               throw new Error(options.userSecurityPermanentSqlError);
+            }
+            if (transientUserSecurityRemaining > 0) {
+              transientUserSecurityRemaining--;
+              throw new Error('transient D1 network connection error');
             }
             const empresaId = Number(statement.params[0]);
             const userId = Number(statement.params[1]);
@@ -484,6 +490,71 @@ describe('auth() — nested sub-router reuse (idempotency)', () => {
     // Sem duplicação de queries ao D1: cada query executou exatamente 1 vez, não 2
     expect(callCounts.blocklist).toBe(1);
     expect(callCounts.userSecurity).toBe(1);
+  });
+
+  it('does not re-execute token verification or D1 queries on nested sub-router when userId already exists on context', async () => {
+    // Usuário comum sem admin
+    const usuarios: UsuarioRow[] = [{ id: 84, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 84, empresaId: 999002, role: 'aluno' }];
+    const { token } = await makeToken(84, 999002, 'aluno');
+    const callCounts: CallCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+    const db = createDb({ usuarios, memberships, callCounts });
+
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+
+    // Middleware global auth (simulando index.ts /api/*)
+    app.use('/api/*', auth());
+
+    // Sub-router aninhado que também monta auth() (simulando compliance-treinamentos.ts)
+    const subRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+    subRouter.use('*', auth());
+    subRouter.get('/reconciliacao', (c) =>
+      c.json({
+        success: true,
+        userId: c.get('userId'),
+      }),
+    );
+    app.route('/api/compliance-treinamentos', subRouter);
+
+    const response = await app.request(
+      '/api/compliance-treinamentos/reconciliacao',
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      { DB: db, JWT_SECRET, ENVIRONMENT: 'production' } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { success: boolean; userId: string | number };
+    expect(payload.success).toBe(true);
+    expect(String(payload.userId)).toBe('84');
+
+    // Curto-circuito ativado: exatamente 1 execução no global, 0 execuções extras no sub-router
+    expect(callCounts.blocklist).toBe(1);
+    expect(callCounts.userSecurity).toBe(1);
+  });
+
+  it('recovers from transient D1 read failure on user security resolution and authenticates successfully', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 99, perfil: 'USUARIO', active: 1 }];
+    const memberships = [{ usuarioId: 99, empresaId: 999002, role: 'usuario' }];
+    const { token } = await makeToken(99, 999002, 'usuario');
+    const callCounts: CallCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+    const db = createDb({
+      usuarios,
+      memberships,
+      callCounts,
+      transientUserSecurityFailures: 1,
+    });
+
+    const response = await buildApp(
+      db,
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+
+    expect(response.status).toBe(200);
+    // 1ª tentativa falhou transitoriamente, 2ª tentativa via withD1Retry teve sucesso
+    expect(callCounts.userSecurity).toBe(2);
   });
 });
 
