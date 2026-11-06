@@ -34,7 +34,7 @@ const SAFE_REPOSITORY = 'Airtrust-Org/airtrust';
 export function eventIdentity(eventName, event, sha) {
   if (eventName === 'workflow_run')
     return 'workflow_run:' + event.workflow_run?.id + ':' + event.workflow_run?.run_attempt + ':' + event.workflow_run?.conclusion;
-  if (eventName === 'pull_request')
+  if (eventName === 'pull_request' || eventName === 'pull_request_target')
     return 'pull_request:' + event.pull_request?.number + ':' + event.pull_request?.head?.sha + ':' + event.action;
   if (eventName === 'issue_comment')
     return 'issue_comment:' + event.comment?.id;

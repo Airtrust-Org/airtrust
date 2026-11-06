@@ -31,6 +31,11 @@ describe('AirTrust read-only coordinator', () => {
     const e = { workflow_run: { id: 123, run_attempt: 2, conclusion: 'success' } };
     assert.equal(eventIdentity('workflow_run', e, 'unused'), 'workflow_run:123:2:success');
     assert.equal(eventIdentity('issue_comment', { comment: { id: 99 } }, 'unused'), 'issue_comment:99');
+    const prEvent = { action: 'synchronize', pull_request: { number: 2019, head: { sha: 'a'.repeat(40) } } };
+    assert.equal(
+      eventIdentity('pull_request_target', prEvent, 'unused'),
+      'pull_request:2019:' + 'a'.repeat(40) + ':synchronize',
+    );
   });
   it('does not confuse merged PRs with open work', () => {
     const queue = buildQueue([{ number: 500 }], []);
