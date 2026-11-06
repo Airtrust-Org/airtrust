@@ -549,6 +549,23 @@ describe('withD1Retry', () => {
     expect(attempts).toBe(4);
   });
 
+  it('does not retry a resource ceiling already exhausted in this Worker invocation', async () => {
+    for (const failure of [
+      'D1_EXEC_ERROR: subrequest limit exceeded',
+      'D1_EXEC_ERROR: resource limit reached',
+      'CPU time limit exceeded',
+    ]) {
+      let attempts = 0;
+      await expect(
+        withD1Retry(async () => {
+          attempts++;
+          throw new Error(failure);
+        }, 7, 5),
+      ).rejects.toThrow(failure);
+      expect(attempts).toBe(1);
+    }
+  });
+
   it('fails immediately on attempt 1 without any retry when encountering permanent SQL error', async () => {
     let attempts = 0;
     await expect(
