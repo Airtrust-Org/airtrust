@@ -606,6 +606,10 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             } else {
               summary.email_ja_alertado += 1;
             }
+          } else {
+            // D1 pode ter gravado a reserva antes de falhar: NUNCA despachar sem confirmação.
+            emailEnabled = false;
+            summary.auditoria_preparo_falhas += 1;
           }
         }
 
@@ -628,6 +632,9 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
             } else {
               summary.whatsapp_ja_alertado += 1;
             }
+          } else {
+            whatsappEnabled = false;
+            summary.auditoria_preparo_falhas += 1;
           }
         }
 

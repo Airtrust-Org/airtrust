@@ -145,6 +145,8 @@ export function createTrainingComplianceIntelligenceRoutes({
                FROM notificacoes_log
               WHERE empresa_id = ?
                 AND assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+                AND (assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
+                  OR status IN ('pendente', 'processando'))
                 AND json_valid(corpo) = 1
            ), ranked AS (
              SELECT *,
@@ -447,6 +449,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     let whatsappPending = 0;
     let emailMissing = 0;
     let whatsappMissing = 0;
+    let reservationFailures = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
@@ -504,6 +507,10 @@ export function createTrainingComplianceIntelligenceRoutes({
                 } else {
                   emailAlready++;
                 }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.email = false;
+                reservationFailures++;
               }
             }
 
@@ -529,6 +536,10 @@ export function createTrainingComplianceIntelligenceRoutes({
                 } else {
                   whatsappAlready++;
                 }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.whatsapp = false;
+                reservationFailures++;
               }
             }
 
@@ -602,13 +613,18 @@ export function createTrainingComplianceIntelligenceRoutes({
         email_pendente_historico: emailPending,
         whatsapp_pendente_historico: whatsappPending,
         reenvio_confirmado_hoje: payload.reenviar_hoje === true,
+        reservas_falharam: reservationFailures,
       },
       ...extrairUsuarioAuditoria(c),
     });
     return c.json({
-      success: true,
+      success: reservationFailures === 0,
+      ...(reservationFailures > 0 ? {
+        error: 'Falha na reserva auditável de um ou mais avisos. Nenhum canal sem reserva foi despachado. Confira o histórico antes de reenviar.',
+      } : {}),
       data: {
         trigger_key: triggerKey,
+        reservas_falharam: reservationFailures,
         selecionados: targets.length,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,

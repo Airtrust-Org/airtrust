@@ -235,6 +235,33 @@ describe('Training alert reservation — concurrency and atomic claim', () => {
     expect(row.tentativas_envio).toBe(2);
   });
 
+
+  it('reclaims a no-contact reservation after contact is corrected, with one atomic winner', async () => {
+    const params = {
+      empresaId: 1,
+      target: { funcionario_id: 701, qualificacao_tipo_id: 12 },
+      channel: 'EMAIL' as const,
+      diaOperacional: '2026-11-06',
+      origem: 'COMPLIANCE' as const,
+    };
+    const initial = await reserveTrainingAlert(db as never, params);
+    expect(initial.reserved).toBe(true);
+    await commitTrainingAlertReservation(db as never, {
+      empresaId: 1, notificationKey: initial.key, outcome: 'sem_contato',
+    });
+
+    const [a, b] = await Promise.all([
+      reserveTrainingAlert(db as never, { ...params, destinatarioMascarado: 'a***@example.com' }),
+      reserveTrainingAlert(db as never, { ...params, destinatarioMascarado: 'a***@example.com' }),
+    ]);
+    expect([a, b].filter((r) => r.reserved)).toHaveLength(1);
+    expect([a, b].filter((r) => !r.reserved)).toHaveLength(1);
+    const row = db.database.prepare(
+      'SELECT status, tentativas_envio FROM notificacoes_log WHERE notification_key = ?',
+    ).get(initial.key) as { status: string; tentativas_envio: number };
+    expect(row).toMatchObject({ status: 'pendente', tentativas_envio: 2 });
+  });
+
   it('maintains strict multi-tenant isolation: identical targets under different empresa_id never collide', async () => {
     const target = { funcionario_id: 700, qualificacao_tipo_id: 12 };
     const day = '2026-11-06';

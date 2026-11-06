@@ -3,8 +3,9 @@ import { Hono } from 'hono';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import type { Env } from '../../types';
 
-const { sendEmailMock, sendWhatsAppMock } = vi.hoisted(() => ({
+const { sendEmailMock, sendEmailDetailedMock, sendWhatsAppMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(async () => true),
+  sendEmailDetailedMock: vi.fn(async () => ({ ok: true, providerResponse: 'OK' })),
   sendWhatsAppMock: vi.fn(async () => ({ sid: 'SM_CONCURRENCY_TEST' })),
 }));
 
@@ -29,7 +30,7 @@ vi.mock('../../middleware/employee-sector-access', () => ({
 
 vi.mock('../../lib/email', () => ({
   sendEmail: sendEmailMock,
-  sendEmailDetailed: vi.fn(async () => ({ ok: true, providerResponse: 'OK' })),
+  sendEmailDetailed: sendEmailDetailedMock,
 }));
 
 vi.mock('../../utils/whatsapp-send', () => ({
@@ -273,4 +274,99 @@ describe('Cross-Origin Alert Concurrency — LMS vs Compliance simultaneous disp
     expect(totalEmailSent).toBe(1);
     expect(totalDuplicates).toBe(1);
   });
+});
+
+function injectReservationWriteFailure(persistThenTimeout: boolean) {
+  const realPrepare = db.prepare.bind(db);
+  return vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+    const statement = realPrepare(sql);
+    if (!sql.includes('INSERT INTO notificacoes_log')) return statement;
+    return {
+      bind: (...args: unknown[]) => ({
+        run: async () => {
+          if (persistThenTimeout) await statement.bind(...args).run();
+          throw new Error(persistThenTimeout ? 'D1 timeout after commit' : 'D1 unavailable');
+        },
+      }),
+    } as unknown as ReturnType<typeof db.prepare>;
+  });
+}
+
+function failClosedComplianceApp() {
+  return createTrainingComplianceIntelligenceRoutes({
+    buildSnapshot: async () => ({
+      people: [{
+        id: 101, nome: 'Piloto Concorrente', cpf: '12345678900',
+        email: 'piloto@example.com', telefone: '+5521999991111',
+        setor_id: 1, setor_nome: 'Operações',
+        requisitos: [{
+          qualificacao_tipo_id: 55, qualificacao_tipo_nome: 'Segurança de Voo',
+          qualificacao_tipo_codigo: 'SV', obrigatoriedade: 'OBRIGATORIA',
+          evidencia_pendente_validacao: false, status_compliance: 'VENCIDO',
+          data_validade: '2026-11-01', dias_para_vencer: -5,
+        }],
+      }],
+    }) as never,
+    tableExists: async () => true,
+  });
+}
+
+describe('D1 reservation failures must never reach external providers', () => {
+  for (const persistThenTimeout of [false, true]) {
+    it(`LMS blocks both channels when reservation ${persistThenTimeout ? 'commits then times out' : 'fails before commit'}`, async () => {
+      const app = makeLmsApp();
+      const spy = injectReservationWriteFailure(persistThenTimeout);
+      try {
+        const response = await app.fetch(new Request('http://localhost/convites/lote', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            matricula_ids: [11], modo: 'alerta',
+            canais: { email: true, whatsapp: true },
+          }),
+        }), { DB: db, FRONTEND_URL: 'https://airtrust.online' } as unknown as Env,
+        {} as ExecutionContext);
+        const result = await response.json() as { success: boolean; data: Record<string, number> };
+        expect(result.success).toBe(false);
+        expect(result.data.email_enviados).toBe(0);
+        expect(result.data.whatsapp_enviados).toBe(0);
+        expect(result.data.auditoria_preparo_falhas).toBeGreaterThanOrEqual(2);
+        expect(sendEmailMock).not.toHaveBeenCalled();
+        expect(sendWhatsAppMock).not.toHaveBeenCalled();
+        if (persistThenTimeout) {
+          const row = db.database.prepare(
+            'SELECT status FROM notificacoes_log WHERE notification_key LIKE ? LIMIT 1',
+          ).get('TRAINING_ALERT:%') as { status: string };
+          expect(row.status).toBe('pendente');
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it(`Compliance blocks both channels when reservation ${persistThenTimeout ? 'commits then times out' : 'fails before commit'}`, async () => {
+      const app = failClosedComplianceApp();
+      const spy = injectReservationWriteFailure(persistThenTimeout);
+      try {
+        const response = await app.fetch(new Request('http://localhost/avisos/enviar', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            targets: [{ funcionario_id: 101, qualificacao_tipo_id: 55 }],
+            canais: { email: true, whatsapp: true },
+          }),
+        }), { DB: db, FRONTEND_URL: 'https://airtrust.online' } as unknown as Env,
+        {} as ExecutionContext);
+        const result = await response.json() as { success: boolean; data: Record<string, number> };
+        expect(result.success).toBe(false);
+        expect(result.data.email_sucesso).toBe(0);
+        expect(result.data.whatsapp_sucesso).toBe(0);
+        expect(result.data.reservas_falharam).toBeGreaterThanOrEqual(2);
+        expect(sendEmailDetailedMock).not.toHaveBeenCalled();
+        expect(sendWhatsAppMock).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  }
 });

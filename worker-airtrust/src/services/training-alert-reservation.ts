@@ -214,8 +214,9 @@ export async function reserveTrainingAlert(
     };
   }
 
-  // 3. Status de erro anterior: permite tentativa de reenvio com lock atômico.
-  if (currentStatus === 'erro') {
+  // 3. Erro ou ausência confirmada de contato: nenhum despacho foi aceito.
+  // A atualização do contato pode permitir a primeira entrega no mesmo dia.
+  if (currentStatus === 'erro' || currentStatus === 'sem_contato') {
     const casUpdate = await db
       .prepare(
         `UPDATE notificacoes_log
@@ -224,9 +225,9 @@ export async function reserveTrainingAlert(
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
-            AND status = 'erro'`,
+            AND status = ?`,
       )
-      .bind(params.empresaId, key)
+      .bind(params.empresaId, key, currentStatus)
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {

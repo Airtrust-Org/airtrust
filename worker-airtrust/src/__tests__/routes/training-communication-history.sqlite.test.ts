@@ -40,7 +40,7 @@ beforeEach(() => {
     CREATE TABLE notificacoes_log (
       id INTEGER PRIMARY KEY,
       empresa_id INTEGER NOT NULL,
-      tipo TEXT, destinatario TEXT, assunto TEXT, corpo TEXT,
+      tipo TEXT, destinatario TEXT, assunto TEXT, corpo TEXT, notification_key TEXT,
       status TEXT, erro_mensagem TEXT, enviado_em TEXT, created_at TEXT
     );
     INSERT INTO audit_logs(id,empresa_id,action,entity_type,new_values,created_at)
@@ -100,6 +100,28 @@ describe('consolidated training communication history', () => {
       .toBe('sem_contato');
     expect(result.rows[0].destinatario).toBe('p***@example.com');
     expect(result.rows[0].destinatario_fonte).toBe('REGISTRO_ENVIO');
+  });
+
+
+  it('counts delivery once and preserves only indeterminate reservation as a separate warning', async () => {
+    db.database.exec(`
+      INSERT INTO notificacoes_log(
+        id,empresa_id,tipo,destinatario,assunto,corpo,notification_key,status,created_at
+      ) VALUES
+      (41,1,'EMAIL_COMPLIANCE','p***@example.com',
+       '[COMPLIANCE_TREINAMENTO:RESERVA:sent]',
+       '{"funcionario_id":1001,"qualificacao_tipo_id":100,"qualificacao_nome":"MGO"}',
+       'TRAINING_ALERT:2026-11-04:1001:q:100:EMAIL','enviada','2026-11-04 15:00:00'),
+      (42,1,'WHATSAPP_COMPLIANCE','***3333',
+       '[COMPLIANCE_TREINAMENTO:RESERVA:pending]',
+       '{"funcionario_id":1001,"qualificacao_tipo_id":100,"qualificacao_nome":"MGO"}',
+       'TRAINING_ALERT:2026-11-04:1001:q:100:WHATSAPP','pendente','2026-11-04 15:01:00');
+    `);
+    const sent = await read({ resultado: 'enviada' });
+    expect(sent.rows.filter((row) => row.origem === 'COMPLIANCE')).toHaveLength(1);
+    expect(sent.rows.some((row) => row.id === 'compliance:41')).toBe(false);
+    const pending = await read({ resultado: 'pendente' });
+    expect(pending.rows.map((row) => row.id)).toEqual(['compliance:42']);
   });
 
   it('filters training, employee, source, channel, outcome, date and pages on the server', async () => {

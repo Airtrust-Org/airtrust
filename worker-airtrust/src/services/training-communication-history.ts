@@ -106,6 +106,10 @@ export async function listTrainingCommunications(
          AND (n.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
               OR n.assunto LIKE '[COMPLIANCE_GESTOR:%')
          AND json_valid(n.corpo) = 1
+         -- Coordination rows are not additional deliveries; preserve indeterminate
+         -- pending reservations for operators to reconcile safely.
+         AND (n.assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
+              OR n.status IN ('pendente', 'processando'))
          AND ${scope.clause}`);
     bindings.push(empresaId, ...scope.bindings);
   }
