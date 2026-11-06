@@ -499,6 +499,35 @@ async function findStageByHash(
   );
 }
 
+async function claimResolvedConflictStageForRetry(
+  db: D1Database,
+  empresaId: number,
+  stageId: string,
+): Promise<boolean> {
+  const result = await db.prepare(
+    `UPDATE cv_sigvoos_staging
+        SET tentativas = tentativas + 1,
+            import_status = 'PENDING',
+            erro_msg = NULL,
+            updated_at = datetime('now')
+      WHERE empresa_id = ? AND id = ? AND deleted_at IS NULL
+        AND import_status = 'CONFLICT' AND cv_tripulante_id IS NULL
+        AND EXISTS (
+          SELECT 1 FROM cv_conflitos_integracao c
+           WHERE c.empresa_id = cv_sigvoos_staging.empresa_id
+             AND c.staging_id = cv_sigvoos_staging.id AND c.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM cv_conflitos_integracao c
+           WHERE c.empresa_id = cv_sigvoos_staging.empresa_id
+             AND c.staging_id = cv_sigvoos_staging.id AND c.deleted_at IS NULL
+             AND c.status <> 'RESOLVIDO'
+        )`,
+  ).bind(empresaId, stageId).run();
+
+  return Number(result.meta?.changes ?? 0) === 1;
+}
+
 async function insertStage(
   db: D1Database,
   empresaId: number,
@@ -1359,8 +1388,11 @@ export async function importSigvoosPayloadToControleVoos(
   for (const rawRecord of records) {
     const record = await normalizeSigvoosImporterRecord(rawRecord);
     const existingStage = await findStageByHash(db, empresaId, record.payloadHash);
+    const retryResolvedConflict = existingStage?.import_status === 'CONFLICT' &&
+      existingStage.cv_tripulante_id == null &&
+      await claimResolvedConflictStageForRetry(db, empresaId, existingStage.id);
 
-    if (existingStage && existingStage.import_status !== 'ERROR') {
+    if (existingStage && existingStage.import_status !== 'ERROR' && !retryResolvedConflict) {
       await markStageReused(db, existingStage.id);
       summary.reusedRecords += 1;
       summary.results.push({
@@ -1379,7 +1411,7 @@ export async function importSigvoosPayloadToControleVoos(
     const stageId = existingStage?.id ?? (await insertStage(db, empresaId, record, options));
 
     try {
-      if (existingStage?.id) {
+      if (existingStage?.id && !retryResolvedConflict) {
         await db
           .prepare(
             `UPDATE cv_sigvoos_staging
