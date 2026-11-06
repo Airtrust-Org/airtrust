@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { auth, optionalAuth, isTransientD1Error, withD1Retry } from '../../middleware/auth';
+import { auth, optionalAuth, isTransientD1Error, withD1Retry, resetBlocklistCache, invalidateJtiCache, getValidJtiCacheSize } from '../../middleware/auth';
 import { errorHandler } from '../../middleware/error-handler';
 import { generateJWT } from '../../utils/security';
 import type { Env, Variables } from '../../types';
@@ -25,7 +25,7 @@ type CallCounts = {
 function createDb(options: {
   usuarios?: UsuarioRow[];
   memberships?: Array<{ usuarioId: number; empresaId: number; role: string }>;
-  blocklisted?: string[];
+  blocklisted?: string[] | Set<string>;
   expiredBlocklisted?: string[];
   blocklistReadThrows?: boolean;
   transientBlocklistFailures?: number;
@@ -38,7 +38,7 @@ function createDb(options: {
   let transientUserSecurityRemaining = options.transientUserSecurityFailures ?? 0;
   const usuarios = options.usuarios || [];
   const memberships = options.memberships || [];
-  const blocklisted = new Set(options.blocklisted || []);
+  const blocklisted = options.blocklisted instanceof Set ? options.blocklisted : new Set(options.blocklisted || []);
   const expiredBlocklisted = new Set(options.expiredBlocklisted || []);
   const callCounts = options.callCounts || { blocklist: 0, userSecurity: 0, platformAccess: 0 };
 
@@ -139,6 +139,7 @@ function buildApp(db: D1Database, guard: 'auth' | 'optionalAuth') {
 
 beforeEach(() => {
   resetSchemaCache();
+  resetBlocklistCache();
 });
 
 describe('auth() — blocklist fail-closed', () => {
@@ -167,6 +168,73 @@ describe('auth() — blocklist fail-closed', () => {
     )({ headers: { Authorization: `Bearer ${token}` } });
 
     expect(response.status).toBe(200);
+  });
+
+  it('reuses positive non-blocklisted verification across subsequent requests within TTL', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const app = buildApp(createDb({ usuarios, memberships, callCounts }), 'auth');
+
+    // Primeira requisição: consulta D1
+    const res1 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res1.status).toBe(200);
+    expect(callCounts.blocklist).toBe(1);
+
+    // Segunda requisição com mesmo token/jti: micro-cache evita consulta ao D1
+    const res2 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res2.status).toBe(200);
+    expect(callCounts.blocklist).toBe(1);
+
+    // Reset do cache força nova consulta ao D1
+    resetBlocklistCache();
+    const res3 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res3.status).toBe(200);
+    expect(callCounts.blocklist).toBe(2);
+  });
+
+  it('immediately invalidates cached token when invalidateJtiCache is called (e.g. on logout/password change)', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token, jti } = await makeToken(7, 999002);
+    const blocklisted = new Set<string>();
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const app = buildApp(createDb({ usuarios, memberships, blocklisted, callCounts }), 'auth');
+
+    // 1. Primeira chamada: valida e popula cache
+    const res1 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res1.status).toBe(200);
+    expect(callCounts.blocklist).toBe(1);
+
+    // 2. Token é revogado (simula logout ou troca de senha)
+    blocklisted.add(jti);
+    invalidateJtiCache(jti);
+
+    // 3. Próxima requisição deve consultar o D1 imediatamente e rejeitar com 401 TOKEN_REVOKED
+    const res2 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res2.status).toBe(401);
+    expect(callCounts.blocklist).toBe(2);
+    const body = (await res2.json()) as { code?: string };
+    expect(body.code).toBe('TOKEN_REVOKED');
+  });
+
+  it('bounds cache size and prunes entries when capacity is reached', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+    const app = buildApp(createDb({ usuarios, memberships, callCounts }), 'auth');
+
+    // Gera 1050 tokens distintos para exceder o limite de 1000
+    for (let i = 0; i < 1050; i++) {
+      const { token } = await makeToken(7, 999002);
+      await app({ headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    // O tamanho do cache não deve exceder 1000
+    expect(getValidJtiCacheSize()).toBeLessThanOrEqual(1000);
   });
 
   it('fails closed (503) when the blocklist read itself errors, instead of treating it as not-blocked', async () => {

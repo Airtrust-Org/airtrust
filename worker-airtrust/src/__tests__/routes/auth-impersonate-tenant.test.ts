@@ -43,6 +43,8 @@ vi.mock('../../middleware/auth', () => ({
 
       await next();
     },
+  invalidateJtiCache: vi.fn(),
+  resetBlocklistCache: vi.fn(),
 }));
 
 vi.mock('../../middleware/tenant', () => ({
