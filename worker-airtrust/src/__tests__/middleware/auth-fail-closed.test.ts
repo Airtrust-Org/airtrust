@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { auth, optionalAuth, isTransientD1Error, withD1Retry } from '../../middleware/auth';
+import { auth, optionalAuth, isTransientD1Error, withD1Retry, resetBlocklistCache } from '../../middleware/auth';
 import { errorHandler } from '../../middleware/error-handler';
 import { generateJWT } from '../../utils/security';
 import type { Env, Variables } from '../../types';
@@ -139,6 +139,7 @@ function buildApp(db: D1Database, guard: 'auth' | 'optionalAuth') {
 
 beforeEach(() => {
   resetSchemaCache();
+  resetBlocklistCache();
 });
 
 describe('auth() — blocklist fail-closed', () => {
@@ -167,6 +168,31 @@ describe('auth() — blocklist fail-closed', () => {
     )({ headers: { Authorization: `Bearer ${token}` } });
 
     expect(response.status).toBe(200);
+  });
+
+  it('reuses positive non-blocklisted verification across subsequent requests within TTL', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const app = buildApp(createDb({ usuarios, memberships, callCounts }), 'auth');
+
+    // Primeira requisição: consulta D1
+    const res1 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res1.status).toBe(200);
+    expect(callCounts.blocklist).toBe(1);
+
+    // Segunda requisição com mesmo token/jti: micro-cache evita consulta ao D1
+    const res2 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res2.status).toBe(200);
+    expect(callCounts.blocklist).toBe(1);
+
+    // Reset do cache força nova consulta ao D1
+    resetBlocklistCache();
+    const res3 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    expect(res3.status).toBe(200);
+    expect(callCounts.blocklist).toBe(2);
   });
 
   it('fails closed (503) when the blocklist read itself errors, instead of treating it as not-blocked', async () => {

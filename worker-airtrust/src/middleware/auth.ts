@@ -81,6 +81,19 @@ async function resolveEffectiveUserRole(
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
+// Micro-cache em memória de JTIs verificados como NÃO-revogados (TTL 5s)
+// Evita bater no D1 para o mesmo JTI dezenas de vezes por segundo durante navegação normal.
+const _validJtiCache = new Map<string, number>();
+const VALID_JTI_CACHE_TTL_MS = 5000;
+
+export function resetBlocklistCache(): void {
+  _validJtiCache.clear();
+}
+
+export function invalidateJtiCache(jti: string): void {
+  _validJtiCache.delete(jti);
+}
+
 /**
  * Verifica se um JTI está na blocklist de tokens revogados (logout).
  * Fail-closed: qualquer erro de leitura é propagado (não engolido), para que
@@ -88,13 +101,28 @@ async function resolveEffectiveUserRole(
  * como falha de infraestrutura (503), nunca como "não bloqueado".
  */
 async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
-  const row = await withD1Retry(() =>
-    db
-      .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-      .bind(jti)
-      .first(),
+  const now = Date.now();
+  const cachedValidUntil = _validJtiCache.get(jti);
+  if (cachedValidUntil && cachedValidUntil > now) {
+    return false;
+  }
+
+  const row = await withD1Retry(
+    () =>
+      db
+        .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+        .bind(jti)
+        .first(),
+    6,
+    80,
   );
-  return Boolean(row);
+  const isBlocked = Boolean(row);
+  if (!isBlocked) {
+    _validJtiCache.set(jti, now + VALID_JTI_CACHE_TTL_MS);
+  } else {
+    _validJtiCache.delete(jti);
+  }
+  return isBlocked;
 }
 
 type UserSecurityState = {
