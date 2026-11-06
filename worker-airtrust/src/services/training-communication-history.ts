@@ -1,5 +1,6 @@
 import { employeeSectorSql, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { normalizeSearchText } from '../utils/text-search';
+import { withD1Retry } from '../utils/d1-resilience';
 
 export type TrainingCommunication = {
   id: string;
@@ -216,8 +217,12 @@ export async function listTrainingCommunications(
      WHERE ${where.join(' AND ')}
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
-  const result = await db.prepare(sql).bind(...bindings, ...terms, limit + 1, offset)
-    .all<Omit<TrainingCommunication, 'gestor'> & { gestor: number }>();
+  const result = await withD1Retry(() =>
+    db
+      .prepare(sql)
+      .bind(...bindings, ...terms, limit + 1, offset)
+      .all<Omit<TrainingCommunication, 'gestor'> & { gestor: number }>(),
+  );
   const raw = result.results || [];
   return {
     rows: raw.slice(0, limit).map((row) => ({
