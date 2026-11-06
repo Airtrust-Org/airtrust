@@ -203,13 +203,11 @@ export async function validateAccessTokenSecurityState(
 
   let security: UserSecurityState;
   try {
-    security = await withD1Retry(() =>
-      resolveUserSecurityState(
-        db,
-        payload.sub,
-        payload.empresa_id,
-        payload.role ?? '',
-      ),
+    security = await resolveUserSecurityState(
+      db,
+      payload.sub,
+      payload.empresa_id,
+      payload.role ?? '',
     );
   } catch (e) {
     console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
@@ -435,9 +433,7 @@ async function authenticateScopedScormCommitAsset(
     return false;
   }
 
-  const security = await withD1Retry(() =>
-    resolveUserSecurityState(c.env.DB, userId, empresaId, payload.role ?? ''),
-  );
+  const security = await resolveUserSecurityState(c.env.DB, userId, empresaId, payload.role ?? '');
   if (!security.found || !security.active) {
     return unauthorized('Usuário inativo ou não encontrado. Faça login novamente.', 'USER_INACTIVE');
   }
