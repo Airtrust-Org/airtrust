@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { auth, optionalAuth } from '../../middleware/auth';
+import { auth, optionalAuth, isTransientD1Error, withD1Retry } from '../../middleware/auth';
 import { errorHandler } from '../../middleware/error-handler';
 import { generateJWT } from '../../utils/security';
 import type { Env, Variables } from '../../types';
@@ -16,6 +16,12 @@ type UsuarioRow = {
   role?: string | null;
 };
 
+type CallCounts = {
+  blocklist: number;
+  userSecurity: number;
+  platformAccess: number;
+};
+
 function createDb(options: {
   usuarios?: UsuarioRow[];
   memberships?: Array<{ usuarioId: number; empresaId: number; role: string }>;
@@ -23,12 +29,16 @@ function createDb(options: {
   expiredBlocklisted?: string[];
   blocklistReadThrows?: boolean;
   transientBlocklistFailures?: number;
+  blocklistPermanentSqlError?: string;
+  userSecurityPermanentSqlError?: string;
+  callCounts?: CallCounts;
 } = {}) {
   let transientFailuresRemaining = options.transientBlocklistFailures ?? 0;
   const usuarios = options.usuarios || [];
   const memberships = options.memberships || [];
   const blocklisted = new Set(options.blocklisted || []);
   const expiredBlocklisted = new Set(options.expiredBlocklisted || []);
+  const callCounts = options.callCounts || { blocklist: 0, userSecurity: 0, platformAccess: 0 };
 
   return {
     prepare: (sql: string) => {
@@ -43,12 +53,16 @@ function createDb(options: {
           if (sql.includes('PRAGMA table_info')) return null as T;
 
           if (sql.includes('FROM token_blocklist')) {
+            callCounts.blocklist++;
+            if (options.blocklistPermanentSqlError) {
+              throw new Error(options.blocklistPermanentSqlError);
+            }
             if (transientFailuresRemaining > 0) {
               transientFailuresRemaining--;
               throw new Error('transient D1 network connection error');
             }
             if (options.blocklistReadThrows) {
-              throw new Error('simulated D1 outage reading token_blocklist');
+              throw new Error('database is locked');
             }
             const jti = String(statement.params[0]);
             if (blocklisted.has(jti)) return { 1: 1 } as T;
@@ -57,6 +71,10 @@ function createDb(options: {
           }
 
           if (sql.includes('LEFT JOIN usuarios_empresas ue')) {
+            callCounts.userSecurity++;
+            if (options.userSecurityPermanentSqlError) {
+              throw new Error(options.userSecurityPermanentSqlError);
+            }
             const empresaId = Number(statement.params[0]);
             const userId = Number(statement.params[1]);
             const usuario = usuarios.find((u) => u.id === userId);
@@ -66,6 +84,10 @@ function createDb(options: {
           }
 
           if (sql.includes('FROM usuarios WHERE id')) {
+            callCounts.userSecurity++;
+            if (options.userSecurityPermanentSqlError) {
+              throw new Error(options.userSecurityPermanentSqlError);
+            }
             const userId = Number(statement.params[0]);
             const usuario = usuarios.find((u) => u.id === userId);
             if (!usuario || !usuario.active) return null as T;
@@ -156,17 +178,42 @@ describe('auth() — blocklist fail-closed', () => {
     expect(payload.code).toBe('AUTH_REVOCATION_CHECK_UNAVAILABLE');
   });
 
+  it('fails closed immediately (503) without retrying when a permanent SQL/schema error occurs on blocklist', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const response = await buildApp(
+      createDb({
+        usuarios,
+        memberships,
+        blocklistPermanentSqlError: 'SQLITE_ERROR: no such table: token_blocklist',
+        callCounts,
+      }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+    const payload = (await response.json()) as { code?: string };
+
+    expect(response.status).toBe(503);
+    expect(payload.code).toBe('AUTH_REVOCATION_CHECK_UNAVAILABLE');
+    // Permanent error must NOT trigger retries: exactly 1 attempt
+    expect(callCounts.blocklist).toBe(1);
+  });
+
   it('recovers from transient D1 read failure on blocklist and authenticates successfully', async () => {
     const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
     const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
     const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
 
     const response = await buildApp(
-      createDb({ usuarios, memberships, transientBlocklistFailures: 1 }),
+      createDb({ usuarios, memberships, transientBlocklistFailures: 1, callCounts }),
       'auth',
     )({ headers: { Authorization: `Bearer ${token}` } });
 
     expect(response.status).toBe(200);
+    expect(callCounts.blocklist).toBe(2);
   });
 });
 
@@ -182,6 +229,29 @@ describe('auth() — usuário inativo e membership', () => {
 
     expect(response.status).toBe(401);
     expect(payload.code).toBe('USER_INACTIVE');
+  });
+
+  it('fails closed immediately (503) without retry when permanent SQL error occurs resolving user security state', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const response = await buildApp(
+      createDb({
+        usuarios,
+        memberships,
+        userSecurityPermanentSqlError: 'SQLITE_ERROR: no such column: deleted_at',
+        callCounts,
+      }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+    const payload = (await response.json()) as { code?: string };
+
+    expect(response.status).toBe(503);
+    expect(payload.code).toBe('AUTH_USER_STATE_CHECK_UNAVAILABLE');
+    // Permanent SQL error must NOT be retried: exactly 1 attempt
+    expect(callCounts.userSecurity).toBe(1);
   });
 
   it('rejects a valid JWT whose tenant membership no longer exists, without falling back to the JWT role', async () => {
@@ -247,5 +317,95 @@ describe('optionalAuth() — revoked token never authenticates silently', () => 
 
     expect(response.status).toBe(200);
     expect(payload.userId).toBeNull();
+  });
+});
+
+describe('isTransientD1Error', () => {
+  it('classifies recognized transient errors as true', () => {
+    expect(isTransientD1Error(new Error('D1_ERROR: SQLITE_BUSY: database is locked'))).toBe(true);
+    expect(isTransientD1Error(new Error('database is locked'))).toBe(true);
+    expect(isTransientD1Error(new Error('The operation timed out'))).toBe(true);
+    expect(isTransientD1Error(new Error('deadline exceeded'))).toBe(true);
+    expect(isTransientD1Error(new Error('service temporarily unavailable'))).toBe(true);
+    expect(isTransientD1Error(new Error('rate limit reached'))).toBe(true);
+    expect(isTransientD1Error(new Error('too many requests'))).toBe(true);
+    expect(isTransientD1Error(new Error('fetch failed'))).toBe(true);
+    expect(isTransientD1Error(new Error('connection reset by peer'))).toBe(true);
+    expect(isTransientD1Error(new Error('connection closed'))).toBe(true);
+    expect(isTransientD1Error(new Error('connection lost'))).toBe(true);
+    expect(isTransientD1Error(new Error('socket hang up'))).toBe(true);
+    expect(isTransientD1Error(new Error('network connection error'))).toBe(true);
+    expect(isTransientD1Error(new Error('ECONNRESET'))).toBe(true);
+    expect(isTransientD1Error(new Error('ETIMEDOUT'))).toBe(true);
+    expect(isTransientD1Error(new Error('internal error in D1 RPC'))).toBe(true);
+  });
+
+  it('classifies permanent SQL and schema errors as false (never transient)', () => {
+    expect(isTransientD1Error(new Error('SQLITE_ERROR: no such table: token_blocklist'))).toBe(false);
+    expect(isTransientD1Error(new Error('SQLITE_ERROR: no such column: deleted_at'))).toBe(false);
+    expect(isTransientD1Error(new Error('SQLITE_ERROR: table usuarios has no column named foo'))).toBe(false);
+    expect(isTransientD1Error(new Error('near "FROM": syntax error'))).toBe(false);
+    expect(isTransientD1Error(new Error('UNIQUE constraint failed: token_blocklist.jti'))).toBe(false);
+    expect(isTransientD1Error(new Error('CHECK constraint failed: status_check'))).toBe(false);
+    expect(isTransientD1Error(new Error('datatype mismatch'))).toBe(false);
+  });
+
+  it('classifies null, undefined, or unrelated non-transient errors as false', () => {
+    expect(isTransientD1Error(null)).toBe(false);
+    expect(isTransientD1Error(undefined)).toBe(false);
+    expect(isTransientD1Error(new Error('Invalid argument provided'))).toBe(false);
+    expect(isTransientD1Error('arbitrary string without transient cues')).toBe(false);
+  });
+});
+
+describe('withD1Retry', () => {
+  it('returns value on first attempt when operation succeeds', async () => {
+    let attempts = 0;
+    const result = await withD1Retry(async () => {
+      attempts++;
+      return 'ok';
+    }, 3, 5);
+
+    expect(result).toBe('ok');
+    expect(attempts).toBe(1);
+  });
+
+  it('retries on transient failure and succeeds on subsequent attempt', async () => {
+    let attempts = 0;
+    const result = await withD1Retry(async () => {
+      attempts++;
+      if (attempts < 2) {
+        throw new Error('D1_ERROR: SQLITE_BUSY: database is locked');
+      }
+      return 'recovered';
+    }, 3, 5);
+
+    expect(result).toBe('recovered');
+    expect(attempts).toBe(2);
+  });
+
+  it('fails after exhausting maxAttempts on persistent transient failure', async () => {
+    let attempts = 0;
+    await expect(
+      withD1Retry(async () => {
+        attempts++;
+        throw new Error('network connection error: socket hang up');
+      }, 3, 5),
+    ).rejects.toThrow('socket hang up');
+
+    expect(attempts).toBe(3);
+  });
+
+  it('fails immediately on attempt 1 without any retry when encountering permanent SQL error', async () => {
+    let attempts = 0;
+    await expect(
+      withD1Retry(async () => {
+        attempts++;
+        throw new Error('SQLITE_ERROR: no such table: token_blocklist');
+      }, 3, 5),
+    ).rejects.toThrow('no such table: token_blocklist');
+
+    // Crucial fail-closed requirement: 0 retries, exactly 1 attempt
+    expect(attempts).toBe(1);
   });
 });

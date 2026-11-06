@@ -77,9 +77,61 @@ async function resolveEffectiveUserRole(
 }
 
 /**
+ * Classifica se um erro lançado por operação D1 é tipicamente transitório
+ * (locks SQLite/D1, timeouts de execução/rede, rate limits transitórios)
+ * e, portanto, elegível a retry com backoff limitado.
+ *
+ * Erros permanentes (sintaxe SQL, tabelas/colunas inexistentes, violações
+ * de constraints UNIQUE/NOT NULL/CHECK) NUNCA são transitórios e devem falhar
+ * imediatamente na primeira tentativa para preservar fail-closed e evitar latência inútil.
+ */
+export function isTransientD1Error(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+
+  // Erros permanentes de aplicação, sintaxe ou schema: nunca tentar novamente
+  if (
+    lower.includes('syntax error') ||
+    lower.includes('no such table') ||
+    lower.includes('no such column') ||
+    lower.includes('constraint failed') ||
+    lower.includes('has no column named') ||
+    lower.includes('datatype mismatch')
+  ) {
+    return false;
+  }
+
+  // Padrões conhecidos de falhas transitórias
+  return (
+    lower.includes('busy') ||
+    lower.includes('locked') ||
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('deadline exceeded') ||
+    lower.includes('temporarily unavailable') ||
+    lower.includes('rate limit') ||
+    lower.includes('too many requests') ||
+    lower.includes('connection reset') ||
+    lower.includes('connection closed') ||
+    lower.includes('connection lost') ||
+    lower.includes('socket hang up') ||
+    lower.includes('fetch failed') ||
+    lower.includes('network') ||
+    lower.includes('econnreset') ||
+    lower.includes('etimedout') ||
+    lower.includes('d1_error') ||
+    lower.includes('internal error')
+  );
+}
+
+/**
  * Executa uma leitura no D1 com retry limitado para absorver falhas transitórias
- * de RPC/rede na Edge Cloudflare. Estritamente fail-closed: se as tentativas
- * esgotarem, a exceção é propagada e o middleware retorna 503 normalmente.
+ * (locks de banco, timeouts ou erros transitórios de rede/conexão).
+ * Não assume instabilidade estrutural de RPC Cloudflare sem telemetria comprobatória.
+ * Estritamente fail-closed: erros permanentes (sintaxe, schema, constraint) falham imediatamente
+ * na primeira tentativa sem retry. Se as tentativas transitórias esgotarem, a exceção é propagada
+ * e o chamador retorna 503 normalmente.
  */
 export async function withD1Retry<T>(
   operation: () => Promise<T>,
@@ -92,7 +144,9 @@ export async function withD1Retry<T>(
       return await operation();
     } catch (err) {
       attempt += 1;
-      if (attempt >= maxAttempts) throw err;
+      if (attempt >= maxAttempts || !isTransientD1Error(err)) {
+        throw err;
+      }
       const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 20;
       await new Promise((resolve) => setTimeout(resolve, backoff));
     }
