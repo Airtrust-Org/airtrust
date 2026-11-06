@@ -20,10 +20,16 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
-import { isPlatformAdminAccess, resolvePlatformAccessState, type PlatformAccessState } from '../lib/rbac/platform-access';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+  type PlatformAccessState,
+  resetPlatformAccessCache,
+  invalidatePlatformAccessCache,
+} from '../lib/rbac/platform-access';
 import { isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
 
-export { isTransientD1Error, withD1Retry };
+export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 
@@ -156,6 +162,42 @@ type UserSecurityState = {
   hasMembership: boolean;
 };
 
+interface CachedUserSecurity {
+  expiresAt: number;
+  state: UserSecurityState;
+}
+
+// Micro-cache em memória de estado do usuário e vínculo de tenant (TTL 5s)
+// Evita bater no D1 em usuarios e usuarios_empresas dezenas de vezes por segundo durante navegação normal.
+const _userSecurityCache = new Map<string, CachedUserSecurity>();
+const USER_SECURITY_CACHE_TTL_MS = 5000;
+const MAX_USER_SECURITY_CACHE_SIZE = 1000;
+
+function pruneExpiredUserSecurityCache(now: number): void {
+  for (const [key, entry] of _userSecurityCache.entries()) {
+    if (entry.expiresAt <= now) {
+      _userSecurityCache.delete(key);
+    }
+  }
+}
+
+export function resetUserSecurityCache(): void {
+  _userSecurityCache.clear();
+}
+
+export function invalidateUserSecurityCache(userId: number): void {
+  const prefix = `${userId}:`;
+  for (const key of _userSecurityCache.keys()) {
+    if (key.startsWith(prefix) || key === String(userId)) {
+      _userSecurityCache.delete(key);
+    }
+  }
+}
+
+export function getUserSecurityCacheSize(): number {
+  return _userSecurityCache.size;
+}
+
 /**
  * Resolve o estado de segurança do usuário autenticado: se a conta ainda
  * existe/está ativa, e se possui vínculo válido com o tenant carregado no
@@ -178,30 +220,43 @@ async function resolveUserSecurityState(
     return { found: false, active: false, role: fallback, hasMembership: false };
   }
 
+  const cacheKey = `${uid}:${eid}`;
+  const now = Date.now();
+  const cached = _userSecurityCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.state;
+  }
+  if (cached) {
+    _userSecurityCache.delete(cacheKey);
+  }
+
   const { activeWhere } = await getUsuariosSchema(db);
   const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
 
-  const row = await withD1Retry(() =>
-    scoped
-      ? db
-          .prepare(
-            `
-            SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
-            FROM usuarios u
-            LEFT JOIN usuarios_empresas ue
-              ON ue.usuario_id = u.id AND ue.empresa_id = ?
-            WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
-            LIMIT 1
-          `,
-          )
-          .bind(eid, uid)
-          .first<{ id: number; perfil: string | null; role: string | null }>()
-      : db
-          .prepare(
-            `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
-          )
-          .bind(uid)
-          .first<{ id: number; perfil: string | null; role: string | null }>(),
+  const row = await withD1Retry(
+    () =>
+      scoped
+        ? db
+            .prepare(
+              `
+              SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+              FROM usuarios u
+              LEFT JOIN usuarios_empresas ue
+                ON ue.usuario_id = u.id AND ue.empresa_id = ?
+              WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+              LIMIT 1
+            `,
+            )
+            .bind(eid, uid)
+            .first<{ id: number; perfil: string | null; role: string | null }>()
+        : db
+            .prepare(
+              `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+            )
+            .bind(uid)
+            .first<{ id: number; perfil: string | null; role: string | null }>(),
+    6,
+    80,
   );
 
   if (!row) {
@@ -209,13 +264,24 @@ async function resolveUserSecurityState(
   }
 
   const hasMembership = scoped ? Boolean(row.role) : true;
-
-  return {
+  const result: UserSecurityState = {
     found: true,
     active: true,
     role: normalizeRuntimeRole(row.role || row.perfil || fallback),
     hasMembership,
   };
+
+  if (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
+    pruneExpiredUserSecurityCache(now);
+    while (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
+      const oldestKey = _userSecurityCache.keys().next().value;
+      if (!oldestKey) break;
+      _userSecurityCache.delete(oldestKey);
+    }
+  }
+  _userSecurityCache.set(cacheKey, { expiresAt: now + USER_SECURITY_CACHE_TTL_MS, state: result });
+
+  return result;
 }
 
 export type AccessTokenSecurityState = {
@@ -282,8 +348,10 @@ export async function validateAccessTokenSecurityState(
   let platformAdmin = false;
   let platformAccessState: PlatformAccessState | undefined;
   try {
-    platformAccessState = await withD1Retry(() =>
-      resolvePlatformAccessState(db, payload.sub),
+    platformAccessState = await withD1Retry(
+      () => resolvePlatformAccessState(db, payload.sub),
+      6,
+      80,
     );
     platformAdmin = isPlatformAdminAccess(platformAccessState);
   } catch (e) {
