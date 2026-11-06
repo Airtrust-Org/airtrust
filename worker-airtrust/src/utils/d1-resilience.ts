@@ -85,6 +85,16 @@ export function isTransientD1Error(error: unknown): boolean {
     combined.includes('d1 error') ||
     combined.includes('internal error') ||
     combined.includes('server error') ||
+    combined.includes('storage error') ||
+    combined.includes('could not execute') ||
+    combined.includes('cannot execute') ||
+    combined.includes('failed to execute') ||
+    combined.includes('execution failed') ||
+    combined.includes('operation failed') ||
+    combined.includes('d1 rpc') ||
+    combined.includes('subrequest') ||
+    combined.includes('upstream') ||
+    combined.includes('resource limit') ||
     combined.includes('503') ||
     combined.includes('502') ||
     combined.includes('504') ||
@@ -107,8 +117,8 @@ export function isTransientD1Error(error: unknown): boolean {
  */
 export async function withD1Retry<T>(
   operation: () => Promise<T>,
-  maxAttempts = 5,
-  initialBackoffMs = 60,
+  maxAttempts = 7,
+  initialBackoffMs = 80,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
@@ -119,7 +129,7 @@ export async function withD1Retry<T>(
       if (attempt >= maxAttempts || !isTransientD1Error(err)) {
         throw err;
       }
-      const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 25;
+      const backoff = Math.min(1200, initialBackoffMs * Math.pow(1.8, attempt - 1)) + Math.random() * 30;
       await new Promise((resolve) => setTimeout(resolve, backoff));
     }
   }

@@ -458,6 +458,11 @@ describe('isTransientD1Error', () => {
     expect(isTransientD1Error(new Error('ECONNREFUSED'))).toBe(true);
     expect(isTransientD1Error(new Error('internal error in D1 RPC'))).toBe(true);
     expect(isTransientD1Error(new Error('internal server error'))).toBe(true);
+    expect(isTransientD1Error(new Error('storage error'))).toBe(true);
+    expect(isTransientD1Error(new Error('could not execute query'))).toBe(true);
+    expect(isTransientD1Error(new Error('failed to execute statement'))).toBe(true);
+    expect(isTransientD1Error(new Error('subrequest limit exceeded'))).toBe(true);
+    expect(isTransientD1Error(new Error('resource limit reached'))).toBe(true);
     expect(isTransientD1Error(new Error('sqlite_ioerr: disk I/O error'))).toBe(true);
     expect(isTransientD1Error(new Error('sqlite_cantopen: unable to open database file'))).toBe(true);
     expect(isTransientD1Error({ name: 'D1Error', code: 'ETIMEDOUT', message: 'failed' })).toBe(true);
