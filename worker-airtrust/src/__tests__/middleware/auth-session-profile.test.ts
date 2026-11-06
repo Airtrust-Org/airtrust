@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { auth, optionalAuth } from '../../middleware/auth';
+import { auth, optionalAuth, resetBlocklistCache, resetUserSecurityCache } from '../../middleware/auth';
+import { resetPlatformAccessCache } from '../../lib/rbac/platform-access';
 import { errorHandler } from '../../middleware/error-handler';
 import { generateJWT } from '../../utils/security';
 import {
@@ -147,6 +148,9 @@ function withCookie(role: string): RequestInit['headers'] {
 
 beforeEach(() => {
   resetSchemaCache();
+  resetBlocklistCache();
+  resetUserSecurityCache();
+  resetPlatformAccessCache();
 });
 
 describe('perfil no JWT assinado — sem cookie SameSite', () => {
