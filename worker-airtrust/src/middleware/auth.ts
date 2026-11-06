@@ -521,6 +521,16 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return next();
     }
 
+    // ===================== REUSO DE SESSÃO JÁ AUTENTICADA NESTA REQUISIÇÃO =====================
+    // Se a requisição já foi autenticada neste ciclo de middleware (ex: middleware global em index.ts),
+    // reaproveitar o contexto já validado para evitar consultas redundantes ao D1.
+    const existingUserId = c.get('userId');
+    const existingPlatformAccessState = c.get('platformAccessState');
+    if (existingUserId && existingPlatformAccessState) {
+      await next();
+      return;
+    }
+
     // ===================== AUTENTICAÇÃO JWT REAL =====================
     const authHeader = c.req.header('Authorization');
 
