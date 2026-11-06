@@ -461,8 +461,14 @@ describe('isTransientD1Error', () => {
     expect(isTransientD1Error(new Error('storage error'))).toBe(true);
     expect(isTransientD1Error(new Error('could not execute query'))).toBe(true);
     expect(isTransientD1Error(new Error('failed to execute statement'))).toBe(true);
-    expect(isTransientD1Error(new Error('subrequest limit exceeded'))).toBe(true);
-    expect(isTransientD1Error(new Error('resource limit reached'))).toBe(true);
+    expect(isTransientD1Error(new Error('subrequest limit exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('resource limit reached'))).toBe(false);
+    // Generic D1_EXEC_ERROR and other retryable wording must never override
+    // a hard Cloudflare invocation ceiling.
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: subrequest limit exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: resource limit reached'))).toBe(false);
+    expect(isTransientD1Error(new Error('maximum number of subrequests exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('CPU time limit exceeded'))).toBe(false);
     expect(isTransientD1Error(new Error('sqlite_ioerr: disk I/O error'))).toBe(true);
     expect(isTransientD1Error(new Error('sqlite_cantopen: unable to open database file'))).toBe(true);
     expect(isTransientD1Error({ name: 'D1Error', code: 'ETIMEDOUT', message: 'failed' })).toBe(true);
