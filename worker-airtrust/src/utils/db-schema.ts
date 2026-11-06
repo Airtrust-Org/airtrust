@@ -16,6 +16,13 @@ let _hasUsuariosEmpresas: boolean | null = null;
 let _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
 let _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
 let _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+let _globalTableExistenceCache = new Map<string, boolean>();
+let _globalSchemaColumnsCache = new Map<string, ReadonlySet<string>>();
+let _globalSchemaTriggerNamesCache = new Map<string, ReadonlySet<string>>();
+
+function isVitestEnvironment(): boolean {
+  return typeof process !== 'undefined' && Boolean(process.env?.VITEST);
+}
 
 interface UsuariosSchema {
   hasActive: boolean;
@@ -53,6 +60,13 @@ export async function hasSchemaTable(db: D1Database, tableName: string): Promise
   const cache = cacheForDb(_tableExistenceCacheByDb, db);
   const cached = cache.get(normalizedTableName);
   if (cached !== undefined) return cached;
+  if (!isVitestEnvironment()) {
+    const globalCached = _globalTableExistenceCache.get(normalizedTableName);
+    if (globalCached !== undefined) {
+      cache.set(normalizedTableName, globalCached);
+      return globalCached;
+    }
+  }
   const result = await withD1Retry(() =>
     db
       .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
@@ -61,6 +75,9 @@ export async function hasSchemaTable(db: D1Database, tableName: string): Promise
   );
   const exists = Boolean(result?.found);
   cache.set(normalizedTableName, exists);
+  if (!isVitestEnvironment()) {
+    _globalTableExistenceCache.set(normalizedTableName, exists);
+  }
   return exists;
 }
 
@@ -73,12 +90,24 @@ export async function getSchemaColumns(
   const cache = cacheForDb(_schemaColumnsCacheByDb, db);
   const cached = cache.get(normalizedTableName);
   if (cached) return cached;
+  if (!isVitestEnvironment()) {
+    const globalCached = _globalSchemaColumnsCache.get(normalizedTableName);
+    if (globalCached) {
+      cache.set(normalizedTableName, globalCached);
+      return globalCached;
+    }
+  }
   const escaped = normalizedTableName.replaceAll("'", "''");
-  const { results } = await db
-    .prepare(`PRAGMA table_info('${escaped}')`)
-    .all<{ name: string }>();
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(`PRAGMA table_info('${escaped}')`)
+      .all<{ name: string }>(),
+  );
   const columns = new Set((results || []).map((row) => String(row.name || '')));
   cache.set(normalizedTableName, columns);
+  if (!isVitestEnvironment()) {
+    _globalSchemaColumnsCache.set(normalizedTableName, columns);
+  }
   return columns;
 }
 
@@ -172,6 +201,9 @@ export function resetSchemaCache(): void {
   _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
   _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
   _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+  _globalTableExistenceCache.clear();
+  _globalSchemaColumnsCache.clear();
+  _globalSchemaTriggerNamesCache.clear();
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
   _hasRefreshTokensAccessTokenJti = null;
