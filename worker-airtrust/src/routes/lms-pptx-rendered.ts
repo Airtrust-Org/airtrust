@@ -7,15 +7,16 @@ export async function serveAuthorizedRenderedPptx(
   corsOrigins: string | undefined, origin: string | undefined,
 ): Promise<Response> {
   const curso = await db.prepare(
-    'SELECT pptx_r2_key, pptx_slide_count, version_tag FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND tipo_conteudo = ?'
+    'SELECT pptx_r2_key, pptx_slide_count FROM lms_cursos WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND tipo_conteudo = ?'
   ).bind(cursoId, empresaId, 'pptx').first<{
-    pptx_r2_key: string | null; pptx_slide_count: number; version_tag: string | null;
+    pptx_r2_key: string | null; pptx_slide_count: number;
   }>();
   if (!curso) return new Response('Apresentação não encontrada', { status: 404 });
-  const key = pptxRenderedPdfKey(curso.pptx_r2_key, curso.version_tag);
-  if (!key || !curso.pptx_r2_key) return new Response('Representação visual indisponível', { status: 404 });
+  if (!curso.pptx_r2_key) return new Response('Apresentação original indisponível', { status: 404 });
   const original = await bucket.head(curso.pptx_r2_key);
   if (!original) return new Response('Apresentação original indisponível', { status: 404 });
+  const key = pptxRenderedPdfKey(curso.pptx_r2_key, original.etag);
+  if (!key) return new Response('Identidade do arquivo original inválida', { status: 503 });
   const derived = await bucket.get(key);
   if (!derived) return new Response('Representação visual indisponível', { status: 404 });
   const headers = new Headers({

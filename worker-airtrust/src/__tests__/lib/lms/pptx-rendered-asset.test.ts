@@ -1,20 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { pptxRenderedPdfKey } from '../../../lib/lms/pptx-rendered-asset';
+const key = 'lms/pptx/6/22/presentation.pptx';
+const oldEtag = 'a'.repeat(32);
+const newEtag = 'b'.repeat(32);
 
-describe('PPTX faithful PDF version scope', () => {
-  it('binds source edition to immutable derivative key', () => {
-    expect(pptxRenderedPdfKey('lms/pptx/6/22/presentation.pptx', '2026-08-30T20:31:35.741Z'))
-      .toBe('lms/pptx/6/22/rendered/2026-08-30T20%3A31%3A35.741Z.pdf');
+describe('PPTX faithful PDF strictly bound to actual R2 original bytes', () => {
+  it('binds derivative to the source ETag, never catalog version_tag', () => {
+    expect(pptxRenderedPdfKey(key, oldEtag)).toBe(`lms/pptx/6/22/rendered/${oldEtag}.pdf`);
+    expect(pptxRenderedPdfKey(key, `"${oldEtag}"`)).toBe(`lms/pptx/6/22/rendered/${oldEtag}.pdf`);
   });
-  it('refuses keys outside canonical tenant/course scope or unknown edition', () => {
-    for (const key of ['pptx/presentation.pptx', 'lms/pptx/0/22/presentation.pptx',
+  it('rejects source replacement with unchanged database version', () => {
+    expect(pptxRenderedPdfKey(key, oldEtag)).not.toBe(pptxRenderedPdfKey(key, newEtag));
+  });
+  it('keeps the derivative available when only the course thumbnail version changes', () => {
+    const before = pptxRenderedPdfKey(key, oldEtag);
+    const after = pptxRenderedPdfKey(key, oldEtag);
+    expect(after).toBe(before);
+  });
+  it('refuses keys outside canonical tenant/course scope and invalid ETags', () => {
+    for (const unsafe of ['pptx/presentation.pptx', 'lms/pptx/0/22/presentation.pptx',
       'lms/pptx/6/22/other.pptx', 'lms/pptx/6/22/../presentation.pptx']) {
-      expect(pptxRenderedPdfKey(key, 'v1')).toBeNull();
+      expect(pptxRenderedPdfKey(unsafe, oldEtag)).toBeNull();
     }
-    expect(pptxRenderedPdfKey('lms/pptx/6/22/presentation.pptx', null)).toBeNull();
-  });
-  it('cannot inject path via version metadata', () => {
-    expect(pptxRenderedPdfKey('lms/pptx/6/22/presentation.pptx', '../v2'))
-      .toBe('lms/pptx/6/22/rendered/..%2Fv2.pdf');
+    for (const invalid of [null, '', '../v2', '2026-08-30T20:31:35.741Z', 'z'.repeat(32)]) {
+      expect(pptxRenderedPdfKey(key, invalid)).toBeNull();
+    }
   });
 });
