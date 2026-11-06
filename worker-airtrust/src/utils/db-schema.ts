@@ -143,25 +143,28 @@ export async function hasSchemaColumn(
 
 /**
  * Retorna se a tabela usuarios_empresas existe.
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasUsuariosEmpresasTable(db: D1Database): Promise<boolean> {
   if (_hasUsuariosEmpresas !== null) return _hasUsuariosEmpresas;
-  const result = await db.prepare(USUARIOS_EMPRESAS_SQL).first<{ found: number }>();
+  const result = await withD1Retry(() =>
+    db.prepare(USUARIOS_EMPRESAS_SQL).first<{ found: number }>(),
+  );
   _hasUsuariosEmpresas = Boolean(result?.found);
   return _hasUsuariosEmpresas;
 }
 
 /**
  * Retorna schema da tabela usuarios (quais colunas de status existem).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function getUsuariosSchema(db: D1Database): Promise<UsuariosSchema> {
   if (_usuariosSchema !== null) return _usuariosSchema;
-  const columns =
-    (await db.prepare("PRAGMA table_info('usuarios')").all<{ name: string }>()).results || [];
-  const hasActive = columns.some((col) => col.name === 'active');
-  const hasAtivo = columns.some((col) => col.name === 'ativo');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('usuarios')").all<{ name: string }>(),
+  );
+  const hasActive = (columns || []).some((col) => col.name === 'active');
+  const hasAtivo = (columns || []).some((col) => col.name === 'ativo');
   const activeWhere = hasActive ? 'AND active = 1' : hasAtivo ? 'AND ativo = 1' : '';
   _usuariosSchema = { hasActive, hasAtivo, activeWhere };
   return _usuariosSchema;
@@ -169,13 +172,14 @@ export async function getUsuariosSchema(db: D1Database): Promise<UsuariosSchema>
 
 /**
  * Retorna se refresh_tokens já possui a coluna empresa_id (migration 0461).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasRefreshTokensEmpresaIdColumn(db: D1Database): Promise<boolean> {
   if (_hasRefreshTokensEmpresaId !== null) return _hasRefreshTokensEmpresaId;
-  const columns =
-    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results || [];
-  _hasRefreshTokensEmpresaId = columns.some((col) => col.name === 'empresa_id');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>(),
+  );
+  _hasRefreshTokensEmpresaId = (columns || []).some((col) => col.name === 'empresa_id');
   return _hasRefreshTokensEmpresaId;
 }
 
@@ -183,13 +187,14 @@ let _hasRefreshTokensAccessTokenJti: boolean | null = null;
 
 /**
  * Retorna se refresh_tokens já possui a coluna access_token_jti (migration 0289).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasRefreshTokensAccessTokenJtiColumn(db: D1Database): Promise<boolean> {
   if (_hasRefreshTokensAccessTokenJti !== null) return _hasRefreshTokensAccessTokenJti;
-  const columns =
-    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results || [];
-  _hasRefreshTokensAccessTokenJti = columns.some((col) => col.name === 'access_token_jti');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>(),
+  );
+  _hasRefreshTokensAccessTokenJti = (columns || []).some((col) => col.name === 'access_token_jti');
   return _hasRefreshTokensAccessTokenJti;
 }
 
