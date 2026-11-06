@@ -159,6 +159,9 @@ export async function reserveTrainingAlert(
   }
 
   const currentStatus = String(existing.status || '').toLowerCase();
+  // Snapshot/version is part of every CAS. Status alone has an ABA race:
+  // enviada -> pendente -> enviada may happen between read and update.
+  const observedAttempts = Number(existing.tentativas_envio || 0);
 
   // 1. Intenção pendente / em processamento / indeterminada bloqueia QUALQUER despacho,
   // mesmo que o operador marque reenviar_hoje (conforme regra de ouro da #1959 e #1968).
@@ -192,9 +195,10 @@ export async function reserveTrainingAlert(
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
-            AND status = 'enviada'`,
+            AND status = 'enviada'
+            AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key)
+      .bind(params.empresaId, key, observedAttempts)
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {
@@ -225,9 +229,10 @@ export async function reserveTrainingAlert(
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
-            AND status = ?`,
+            AND status = ?
+            AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key, currentStatus)
+      .bind(params.empresaId, key, currentStatus, observedAttempts)
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {

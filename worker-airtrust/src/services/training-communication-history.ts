@@ -13,7 +13,7 @@ export type TrainingCommunication = {
   status_compliance: string | null;
   tipo: string | null;
   destinatario: string | null;
-  destinatario_fonte: 'REGISTRO_ENVIO' | 'CADASTRO_ATUAL' | null;
+  destinatario_fonte: 'REGISTRO_ENVIO' | 'REGISTRO_RESERVA' | 'CADASTRO_ATUAL' | null;
   status_envio: string | null;
   erro: string | null;
   enviado_em: string | null;
@@ -86,25 +86,39 @@ export async function listTrainingCommunications(
 
   if (tables.notifications) {
     selects.push(`
-      SELECT 'compliance:' || n.id AS id,
+      SELECT CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  THEN 'lms-reservation:' || n.id
+                  ELSE 'compliance:' || n.id END AS id,
              f.id AS funcionario_id, f.nome AS funcionario_nome,
              json_extract(n.corpo, '$.setor_nome') AS setor_nome,
              CAST(json_extract(n.corpo, '$.qualificacao_tipo_id') AS INTEGER) AS qualificacao_tipo_id,
              CAST(json_extract(n.corpo, '$.curso_id') AS INTEGER) AS curso_id,
-             json_extract(n.corpo, '$.qualificacao_nome') AS qualificacao_nome,
+             COALESCE(json_extract(n.corpo, '$.qualificacao_nome'), c.titulo) AS qualificacao_nome,
              json_extract(n.corpo, '$.status_compliance') AS status_compliance,
-             n.tipo AS tipo, n.destinatario AS destinatario,
-             'REGISTRO_ENVIO' AS destinatario_fonte,
+             CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  THEN CASE WHEN n.tipo = 'LMS_MATRICULA_ALERTA_WHATSAPP'
+                            THEN 'WHATSAPP' ELSE 'EMAIL' END
+                  ELSE n.tipo END AS tipo,
+             n.destinatario AS destinatario,
+             CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  THEN 'REGISTRO_RESERVA' ELSE 'REGISTRO_ENVIO'
+             END AS destinatario_fonte,
              n.status AS status_envio, n.erro_mensagem AS erro,
              COALESCE(n.enviado_em, n.created_at) AS enviado_em,
              CASE WHEN n.assunto LIKE '[COMPLIANCE_GESTOR:%' THEN 1 ELSE 0 END AS gestor,
-             'COMPLIANCE' AS origem, f.setor_id AS setor_id, f.funcao_id AS funcao_id
+             CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  THEN 'LMS_ALERTA' ELSE 'COMPLIANCE' END AS origem,
+             f.setor_id AS setor_id, f.funcao_id AS funcao_id
         FROM notificacoes_log n
         JOIN funcionarios f ON f.empresa_id = n.empresa_id
           AND f.id = CAST(CASE WHEN json_valid(n.corpo) THEN json_extract(n.corpo, '$.funcionario_id') END AS INTEGER)
+        LEFT JOIN lms_cursos c ON c.empresa_id = n.empresa_id
+          AND c.id = CAST(CASE WHEN json_valid(n.corpo) THEN json_extract(n.corpo, '$.curso_id') END AS INTEGER)
        WHERE n.empresa_id = ?
          AND (n.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
-              OR n.assunto LIKE '[COMPLIANCE_GESTOR:%')
+              OR n.assunto LIKE '[COMPLIANCE_GESTOR:%'
+              OR (n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  AND n.status IN ('pendente', 'processando')))
          AND json_valid(n.corpo) = 1
          -- Coordination rows are not additional deliveries; preserve indeterminate
          -- pending reservations for operators to reconcile safely.

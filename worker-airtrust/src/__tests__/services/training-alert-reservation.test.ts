@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import {
   buildTrainingAlertReservationKey,
@@ -179,6 +179,84 @@ describe('Training alert reservation — concurrency and atomic claim', () => {
     expect(resendWins[0].isResend).toBe(true);
     expect(resendBlocked).toHaveLength(1);
     expect(resendBlocked[0].reason).toBe('concurrent_conflict');
+  });
+
+
+  it('prevents ABA resend race when a stale second CAS runs after the first dispatch is finalized', async () => {
+    const params = {
+      empresaId: 1,
+      target: { funcionario_id: 402, qualificacao_tipo_id: 88 },
+      channel: 'EMAIL' as const,
+      diaOperacional: '2026-11-06',
+      origem: 'COMPLIANCE' as const,
+      reenviarHoje: true,
+    };
+    const initial = await reserveTrainingAlert(db as never, params);
+    expect(initial.reserved).toBe(true);
+    await commitTrainingAlertReservation(db as never, {
+      empresaId: 1, notificationKey: initial.key, outcome: 'enviada',
+    });
+
+    const original = db.prepare.bind(db);
+    let resumeBothReads!: () => void;
+    const bothReads = new Promise<void>((resolve) => { resumeBothReads = resolve; });
+    let releaseStaleCas!: () => void;
+    const staleCasGate = new Promise<void>((resolve) => { releaseStaleCas = resolve; });
+    let readCount = 0;
+    let casCount = 0;
+
+    const spy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+      const statement = original(sql);
+      if (sql.includes('SELECT id, status, tentativas_envio')) {
+        return {
+          bind: (...args: unknown[]) => ({
+            first: async () => {
+              const row = await statement.bind(...args).first();
+              readCount++;
+              if (readCount === 2) resumeBothReads();
+              await bothReads;
+              return row; // Both callers observed 'enviada' at attempt 1.
+            },
+          }),
+        } as unknown as ReturnType<typeof db.prepare>;
+      }
+      if (sql.includes("AND status = 'enviada'")) {
+        return {
+          bind: (...args: unknown[]) => ({
+            run: async () => {
+              casCount++;
+              if (casCount === 2) await staleCasGate;
+              return statement.bind(...args).run();
+            },
+          }),
+        } as unknown as ReturnType<typeof db.prepare>;
+      }
+      return statement;
+    });
+    try {
+      const promises = [
+        reserveTrainingAlert(db as never, params),
+        reserveTrainingAlert(db as never, params),
+      ];
+      const winner = await Promise.race(promises);
+      expect(winner.reserved).toBe(true);
+      if (!winner.reserved) throw new Error('Expected first CAS owner');
+      await commitTrainingAlertReservation(db as never, {
+        empresaId: 1, notificationKey: winner.key, outcome: 'enviada',
+      });
+      releaseStaleCas();
+      const settled = await Promise.all(promises);
+      expect(settled.filter((outcome) => outcome.reserved)).toHaveLength(1);
+      expect(settled.filter((outcome) => !outcome.reserved)).toHaveLength(1);
+      expect(casCount).toBe(2);
+      const row = db.database.prepare(
+        'SELECT status, tentativas_envio FROM notificacoes_log WHERE notification_key = ?',
+      ).get(initial.key) as { status: string; tentativas_envio: number };
+      expect(row).toMatchObject({ status: 'enviada', tentativas_envio: 2 });
+    } finally {
+      releaseStaleCas();
+      spy.mockRestore();
+    }
   });
 
   it('blocks voluntary resend if the previous attempt is still pending/indeterminate', async () => {

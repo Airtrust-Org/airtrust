@@ -124,6 +124,48 @@ describe('consolidated training communication history', () => {
     expect(pending.rows.map((row) => row.id)).toEqual(['compliance:42']);
   });
 
+
+  it('exposes only pending LMS reservation as a separate warning without inflating completed sends', async () => {
+    db.database.exec(`
+      INSERT INTO notificacoes_log (
+        id, empresa_id, tipo, destinatario, assunto, corpo, notification_key,
+        status, created_at
+      ) VALUES (
+        43, 1, 'LMS_MATRICULA_ALERTA_EMAIL', 'a***@example.com',
+        '[LMS_MATRICULA_RESERVA:TRAINING_ALERT:2026-11-04:1000:q:100:EMAIL]',
+        '{"funcionario_id":1000,"curso_id":30,"qualificacao_tipo_id":100,"origem":"LMS_ALERTA"}',
+        'TRAINING_ALERT:2026-11-04:1000:q:100:EMAIL', 'pendente', '2026-11-04 15:01:00'
+      ), (
+        44, 1, 'LMS_MATRICULA_ALERTA_WHATSAPP', '***3333',
+        '[LMS_MATRICULA_RESERVA:TRAINING_ALERT:2026-11-04:1000:q:100:WHATSAPP]',
+        '{"funcionario_id":1000,"curso_id":30,"qualificacao_tipo_id":100,"origem":"LMS_ALERTA"}',
+        'TRAINING_ALERT:2026-11-04:1000:q:100:WHATSAPP', 'enviada', '2026-11-04 15:02:00'
+      );
+    `);
+    const pending = await read({
+      resultado: 'pendente', origem: 'LMS_ALERTA', canal: 'EMAIL',
+      inicio: '2026-11-04', fim: '2026-11-04',
+    });
+    expect(pending.rows).toHaveLength(1);
+    expect(pending.rows[0]).toMatchObject({
+      id: 'lms-reservation:43', funcionario_id: 1000, curso_id: 30,
+      qualificacao_nome: 'CRM - Gestores', status_envio: 'pendente',
+      origem: 'LMS_ALERTA', tipo: 'EMAIL', destinatario_fonte: 'REGISTRO_RESERVA',
+      destinatario: 'a***@example.com',
+    });
+    const sent = await read({ resultado: 'enviada', origem: 'LMS_ALERTA' });
+    expect(sent.rows.some((row) => row.id === 'lms-reservation:44')).toBe(false);
+    const history = await readSameDayTrainingAlerts(
+      db.asD1(), 1, all, new Date('2026-11-04T18:00:00Z'),
+    );
+    const target = { funcionario_id: 1000, qualificacao_tipo_id: 100, curso_id: 30 };
+    expect(history.isPending(target, 'EMAIL')).toBe(true);
+    const restricted = await read({ resultado: 'pendente' }, {
+      mode: 'restricted', setorIds: [11], funcionarioId: null,
+    });
+    expect(restricted.rows).toHaveLength(0);
+  });
+
   it('filters training, employee, source, channel, outcome, date and pages on the server', async () => {
     const result = await read({
       treinamento_q: 'gestores',
