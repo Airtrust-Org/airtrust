@@ -39,7 +39,8 @@ vi.mock('@/react-app/pages/lms/pptxViewer', () => ({
 }));
 
 vi.mock('@/react-app/pages/lms/lmsProtectedCourseAsset', () => ({
-  fetchLmsCourseAsset: vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))),
+  fetchLmsCourseAsset: vi.fn(async (kind: string) => kind === 'pptx-rendered'
+    ? new Response(null, { status: 404 }) : new Response(new Uint8Array([1, 2, 3]))),
 }));
 
 vi.mock('@jvmr/pptx-to-html', () => ({
@@ -73,14 +74,15 @@ describe('PPTX learner content is stable across access-token rotation', () => {
   it('does not refetch or reparse 111-slide course after refreshed login token', async () => {
     const view = render(player());
     await waitFor(() => expect(pptxToHtml).toHaveBeenCalledTimes(1));
-    expect(fetchLmsCourseAsset).toHaveBeenCalledExactlyOnceWith('pptx', 22);
+    expect(fetchLmsCourseAsset).toHaveBeenCalledWith('pptx-rendered', 22);
+    expect(fetchLmsCourseAsset).toHaveBeenCalledWith('pptx', 22);
 
     mocks.auth.token = 'access-b';
     view.rerender(player());
 
     // Token refresh should not trigger an expensive whole-presentation load.
     await waitFor(() => expect(pptxToHtml).toHaveBeenCalledTimes(1));
-    expect(fetchLmsCourseAsset).toHaveBeenCalledTimes(1);
+    expect(fetchLmsCourseAsset).toHaveBeenCalledTimes(2);
     expect(mocks.finalize.mutate).not.toHaveBeenCalled();
   });
 });
