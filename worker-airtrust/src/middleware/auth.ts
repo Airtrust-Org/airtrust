@@ -91,13 +91,15 @@ async function resolveEffectiveUserRole(
 export function isTransientD1Error(error: unknown): boolean {
   if (!error) return false;
   const message = error instanceof Error ? error.message : String(error);
-  const code = typeof (error as any)?.code === 'string' ? (error as any).code : '';
-  const name = typeof (error as any)?.name === 'string' ? (error as any).name : '';
+  const errObj = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
+  const code = typeof errObj?.code === 'string' ? errObj.code : '';
+  const name = typeof errObj?.name === 'string' ? errObj.name : '';
+  const cause = errObj?.cause;
   const causeMessage =
-    (error as any)?.cause instanceof Error
-      ? (error as any).cause.message
-      : typeof (error as any)?.cause === 'string'
-      ? (error as any).cause
+    cause instanceof Error
+      ? cause.message
+      : typeof cause === 'string'
+      ? cause
       : '';
 
   const combined = `${name} ${code} ${message} ${causeMessage}`.toLowerCase();
