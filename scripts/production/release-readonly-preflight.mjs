@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { schemaV2RuntimeReadiness } from './lib/schema-v2-runtime-readiness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -166,13 +167,21 @@ async function inspectStaticSchema() {
   ).catch(() => []);
   const ledgerNames = new Set(ledgerRows.map((r) => String(r.name)));
 
+  const manifests = ['frms-checkin-kss-provenance-0573', 'lms-pptx-slide-evidence-0574']
+    .map((name) => JSON.parse(readFileSync(path.join(ROOT, 'worker-airtrust', 'schema-v2', `${name}.json`), 'utf8')));
+  const v2Objects = await query("SELECT type, name FROM sqlite_master WHERE name IN ('idx_frms_checkin_kss_provenance_scope','lms_pptx_slide_evidences','idx_lms_pptx_slide_evidences_scope','trg_lms_pptx_evidence_insert_scope','trg_lms_pptx_evidence_immutable_update','trg_lms_pptx_evidence_immutable_delete')");
+  const v2Ledger = await query("SELECT change_id, baseline_id, file_hash, plan_hash FROM airtrust_schema_changes_v2 WHERE change_id IN ('frms-checkin-kss-provenance-0573','lms-pptx-slide-evidence-0574')");
+  const v2Runtime = schemaV2RuntimeReadiness({ objects: v2Objects,
+    checkinColumns: [...await tableColumns('frms_fadiga_checkin')], ledger: v2Ledger, manifests });
+
   return {
     missingTables,
     missingIndexes,
     missingColumns,
     ledger0463: ledgerNames.has('0463_frms_iogp_schema_v2.sql') ? 'PRESENT' : 'ABSENT',
     ledger0464: ledgerNames.has('0464_frms_parameter_governance_recalc.sql') ? 'PRESENT' : 'ABSENT',
-    ready: missingTables.length === 0 && missingIndexes.length === 0 && missingColumns.length === 0,
+    v2Runtime,
+    ready: missingTables.length === 0 && missingIndexes.length === 0 && missingColumns.length === 0 && v2Runtime.ready,
   };
 }
 
