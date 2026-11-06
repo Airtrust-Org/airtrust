@@ -33,6 +33,20 @@ import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-sess
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { buildScormLaunchState, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
 import { readActiveScormHandoff } from '../services/lms-scorm-active-handoff-read';
+import { readActiveCompletionManifest } from '../services/lms-completion-manifest-evidence';
+import { projectS76Rc3AdministrativeResume, S76_RC3_IMMUTABLE_SHA256 } from '../services/lms-scorm-s76-rc3-resume-bridge';
+
+import {
+  parseScormLocationMarker,
+  parseScormLocationPair,
+  resolveScormResumeTargetSlide,
+  finiteNumberOrNull,
+  resolveProbedScormLocation,
+} from '../services/lms-scorm-location-parsers';
+export {
+  parseScormLocationMarker, parseScormLocationPair, resolveScormResumeTargetSlide,
+  finiteNumberOrNull, resolveProbedScormLocation,
+};
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -75,97 +89,6 @@ function isPrivilegedRole(rawRole: unknown): boolean {
     .trim()
     .toLowerCase();
   return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
-}
-
-export function parseScormLocationMarker(
-  location: unknown,
-): { current: number; total: number | null } | null {
-  if (typeof location !== 'string' || !location.trim()) return null;
-
-  const trimmed = location.trim();
-  let match = trimmed.match(/(\d+)\s*\/\s*(\d+)/);
-  if (!match) {
-    match = trimmed.match(/(\d+)\s*of\s*(\d+)/i);
-  }
-  if (match) {
-    const current = Number(match[1]);
-    const total = Number(match[2]);
-    if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
-      return null;
-    }
-
-    return { current, total };
-  }
-
-  const single = Number(trimmed);
-  if (Number.isFinite(single) && single > 0) {
-    return { current: single, total: null };
-  }
-
-  return null;
-}
-
-export function parseScormLocationPair(
-  location: unknown,
-): { current: number; total: number } | null {
-  const marker = parseScormLocationMarker(location);
-  if (!marker || marker.total == null) return null;
-  return { current: marker.current, total: marker.total };
-}
-
-export function resolveScormResumeTargetSlide(
-  savedLocation: unknown,
-  observedLocation: unknown,
-): number | null {
-  const saved = parseScormLocationMarker(savedLocation);
-  if (!saved || saved.current <= 1) return null;
-
-  const observed = parseScormLocationMarker(observedLocation);
-  if (observed) {
-    if (observed.current >= saved.current) return null;
-    if (observed.total != null && saved.current > observed.total) return null;
-  }
-
-  return saved.current;
-}
-
-/**
- * Parse a value to a finite number, preserving `0`. Returns null only when the
- * value is absent, non-numeric or non-finite. Replaces the `parseFloat(x) || null`
- * idiom in buildPayload(), which silently maps a legitimate `0` (score_raw,
- * score_min, score_scaled, …) to null and loses SCORM state on round-trip.
- */
-export function finiteNumberOrNull(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const n = typeof value === 'number' ? value : parseFloat(String(value));
-  return Number.isFinite(n) ? n : null;
-}
-
-/**
- * DOM-progress authority: a full explicit fraction (current/total) authored by
- * the package is authoritative (package 47/47 beats a "121/135" string on the
- * page). A bare-number authored location (no total) accepts the DOM fraction
- * only when its current matches the authored position — form numbers
- * ("005/123") or regulatory refs ("121/135") never hijack the real counter.
- */
-export function resolveProbedScormLocation(params: {
-  authored: boolean;
-  explicitLocation: unknown;
-  domLocation: unknown;
-}): { location: string | null; persist: boolean; reason: string } {
-  const explicitMarker = parseScormLocationMarker(params.explicitLocation);
-  if (params.authored && explicitMarker && explicitMarker.current >= 1 && explicitMarker.total != null) {
-    return { location: String(params.explicitLocation), persist: false, reason: 'explicit-package-location' };
-  }
-  const domMarker = parseScormLocationMarker(params.domLocation);
-  if (!domMarker) {
-    return { location: explicitMarker ? String(params.explicitLocation) : null, persist: false, reason: 'no-dom-progress' };
-  }
-  if (params.authored && explicitMarker && explicitMarker.current >= 1 && domMarker.total != null && domMarker.current !== explicitMarker.current) {
-    return { location: String(params.explicitLocation), persist: false, reason: 'dom-current-mismatch' };
-  }
-  const domLocation = domMarker.total == null ? String(domMarker.current) : String(domMarker.current) + '/' + String(domMarker.total);
-  return { location: domLocation, persist: true, reason: 'dom-fallback' };
 }
 
 // ── Helpers MIME ──────────────────────────────────────────────────────────────
@@ -1043,6 +966,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     .prepare(
       `
       SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.progresso_pct, m.data_inicio,
+        m.qualificacao_historico_id,
         c.id AS curso_id, c.titulo, c.scorm_versao,
         c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
         c.scorm_assessment_policy
@@ -1059,6 +983,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       status: string;
       progresso_pct: number | null;
       data_inicio: string | null;
+      qualificacao_historico_id: number | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1125,6 +1050,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   if (!ciclo) throw new ApiError('Ciclo ativo da matrícula não encontrado', 409);
 
   let navigationBookmark: { position: number; total: number } | null = null;
+  let verifiedHandoff: Awaited<ReturnType<typeof readActiveScormHandoff>> = null;
   if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
     const handoff = await readActiveScormHandoff({
       db, enabled: true, empresaId, matriculaId: matricula.id,
@@ -1135,6 +1061,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       claimedCycleId: Number(payload.asset_cycle_id ?? 0),
       activeCycleId: ciclo.id, activeHandoffId: handoff?.id ?? null,
     })) throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+    verifiedHandoff = handoff;
     navigationBookmark = handoff?.bookmark ?? null;
     // Never launch a blank SCO over an archived prior-edition checkpoint.
     if (handoff && Number(handoff.previousProgressPct ?? 0) > 0 &&
@@ -1155,7 +1082,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
   // FORMATIVE (F5) packages own their cursor: orphan locations and browser backups never override it.
   const formativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
-  const { initialCmiJson, hasResumeState } = buildScormLaunchState(
+  let { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
@@ -1163,6 +1090,49 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     navigationBookmark,
     { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
+
+  // Recognize the RC3 native final button only when the immutable package
+  // SHA is ACTIVE for this tenant/course (never from package-provided text).
+  let s76Rc3Active = false;
+  if (empresaId === 6 && matricula.curso_id === 39 &&
+      matricula.scorm_package_r2_prefix) {
+    const active = await db.prepare(`
+      SELECT package_sha256 AS sha FROM lms_scorm_package_versions
+      WHERE empresa_id=? AND curso_id=? AND r2_prefix=?
+        AND status='ACTIVE' LIMIT 1
+    `).bind(empresaId,matricula.curso_id,matricula.scorm_package_r2_prefix)
+      .first<{sha:string}>();
+    s76Rc3Active = active?.sha === S76_RC3_IMMUTABLE_SHA256;
+  }
+
+  // Project the same 48/49 administrative indexes only for verified handoff
+  // #30. This changes launch CMI in memory, never the underlying D1 row.
+  if (s76Rc3Active && matricula.id === 690 &&
+      ciclo.id === 889 && verifiedHandoff?.id === 30 &&
+      matricula.status === 'EM_ANDAMENTO' &&
+      matricula.qualificacao_historico_id === null &&
+      matricula.scorm_assessment_policy === 'FORMATIVE' &&
+      matricula.scorm_package_r2_prefix) {
+    const manifest = await readActiveCompletionManifest({
+      bucket:c.env.BUCKET,empresaId,cursoId:matricula.curso_id,
+      activePrefix:matricula.scorm_package_r2_prefix,
+    });
+    const projection = projectS76Rc3AdministrativeResume({
+      empresaId,cursoId:matricula.curso_id,matriculaId:matricula.id,
+      cicloId:ciclo.id,handoffId:verifiedHandoff.id,
+      handoffPreviousProgressPct:verifiedHandoff.previousProgressPct,
+      handoffBookmark:verifiedHandoff.bookmark,
+      activePackageSha256:S76_RC3_IMMUTABLE_SHA256,
+      assessmentPolicy:matricula.scorm_assessment_policy,
+      enrollmentStatus:matricula.status,
+      qualificationHistoryId:matricula.qualificacao_historico_id,
+      manifest,initialCmiJson,
+    });
+    if (projection !== null) {
+      initialCmiJson = projection;
+      hasResumeState = true;
+    }
+  }
 
   const html = buildLaunchPage({
     matriculaId: matricula.id,
@@ -1178,6 +1148,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
     reviewMode: matricula.status === 'CONCLUIDO',
+    legacyS76Rc3FinalButton: s76Rc3Active,
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
@@ -1274,6 +1245,7 @@ interface LaunchPageConfig {
   previewMode?: boolean;
   assetCacheBuster?: string;
   reviewMode?: boolean;
+  legacyS76Rc3FinalButton?: boolean;
 }
 
 export function buildLaunchPage(cfg: LaunchPageConfig): string {
@@ -1291,6 +1263,7 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     previewMode,
     assetCacheBuster,
     reviewMode,
+    legacyS76Rc3FinalButton = false,
   } = cfg;
 
   const launchUrlWithCacheBuster = assetCacheBuster
@@ -1398,6 +1371,7 @@ ${buildScormLocationHelpersScript()}
   var IS_2004 = ${isScorm2004 ? 'true' : 'false'};
   var PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
   var REVIEW_MODE = ${reviewMode ? 'true' : 'false'};
+  var S76_LEGACY_RC3_FINAL = ${legacyS76Rc3FinalButton ? 'true' : 'false'};
   var cmi = (function() {
     try {
       var parsed = JSON.parse(${JSON.stringify(initialCmiJson)});
