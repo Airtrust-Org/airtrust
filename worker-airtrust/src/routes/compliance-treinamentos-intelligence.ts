@@ -18,13 +18,18 @@ import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/tr
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
+  type ComplianceDailySnapshot,
 } from '../services/training-compliance-snapshots';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../middleware/employee-sector-access';
-import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
+import type {
+  TrainingComplianceSnapshot,
+  TrainingComplianceTargetFilter,
+} from '../services/training-compliance-snapshot-builder';
 import {
   buildTrainingComplianceReportRows,
   getComplianceReportAutomationPolicy,
@@ -40,6 +45,7 @@ type IntelligenceDeps = {
     db: D1Database,
     empresaId: number,
     access: EmployeeSectorAccess,
+    targetFilter?: TrainingComplianceTargetFilter,
   ) => Promise<TrainingComplianceSnapshot>;
   tableExists: (db: D1Database, tableName: string) => Promise<boolean>;
 };
@@ -543,23 +549,45 @@ export function createTrainingComplianceIntelligenceRoutes({
         .map((id) => ({ setor_id: id, funcao_id: requestedFuncaoId || 0 }));
     }
 
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+    const targetFilter = requestedSetorId || requestedFuncaoId
+      ? { setorId: requestedSetorId, funcaoId: requestedFuncaoId }
+      : undefined;
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, targetFilter);
     const currentPeople = snapshot.people.filter(
       (person) =>
         (!requestedSetorId || person.setor_id === requestedSetorId) &&
         (!requestedFuncaoId || person.funcao_id === requestedFuncaoId),
     );
-    const currentBase = buildDailyComplianceSnapshots(currentPeople)[0];
+    const currentBase = buildDailyComplianceSnapshots(currentPeople)[0] || {
+      snapshot_date: getTodayIsoSaoPaulo(),
+      setor_id: requestedSetorId || 0,
+      funcao_id: requestedFuncaoId || 0,
+      pessoas: currentPeople.length,
+      pessoas_com_pendencia: 0,
+      requisitos_obrigatorios: 0,
+      conformes: 0,
+      vencendo: 0,
+      vencidos: 0,
+      nao_realizados: 0,
+      em_andamento: 0,
+      compliance_pct: null,
+    };
     const current = {
       ...currentBase,
       setor_id: requestedSetorId || (access.mode === 'all' ? 0 : -1),
       funcao_id: requestedFuncaoId || 0,
     };
-    const historical = await readTrainingComplianceTrend(c.env.DB, empresaId, scopes, days);
 
-    const data = historical.data.filter((row) => row.snapshot_date !== current.snapshot_date);
+    let historical: { ready: boolean; data: ComplianceDailySnapshot[] } = { ready: false, data: [] };
+    try {
+      historical = await readTrainingComplianceTrend(c.env.DB, empresaId, scopes, days);
+    } catch (e) {
+      console.warn('[COMPLIANCE TENDENCIAS] Falha ao consultar histórico de tendências (fallback para snapshot atual):', (e as Error).message);
+    }
+
+    const data = (historical.data || []).filter((row) => row.snapshot_date !== current.snapshot_date);
     data.push(current);
-    data.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+    data.sort((a, b) => (a.snapshot_date || '').localeCompare(b.snapshot_date || ''));
 
     return c.json({
       success: true,
