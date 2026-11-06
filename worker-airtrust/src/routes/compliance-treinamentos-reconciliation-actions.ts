@@ -42,24 +42,19 @@ export async function loadReconciliationDecisions(
   empresaId: number,
 ): Promise<Map<number, ReconciliationDecision>> {
   const map = new Map<number, ReconciliationDecision>();
-  try {
-    if (!(await hasSchemaTable(db, 'treinamento_matricula_reconciliacoes'))) return map;
-    const { results } = await withD1Retry(() =>
-      db
-        .prepare(
-          `SELECT matricula_id, decisao, observacoes, updated_at
-           FROM treinamento_matricula_reconciliacoes
-          WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
-        )
-        .bind(empresaId)
-        .all<ReconciliationDecision>(),
-    );
-    for (const row of results || []) map.set(Number(row.matricula_id), row);
-    return map;
-  } catch (err) {
-    console.warn('[RECONCILIACAO] Falha ao carregar decisões de reconciliação:', (err as Error).message);
-    return map;
-  }
+  if (!(await hasSchemaTable(db, 'treinamento_matricula_reconciliacoes'))) return map;
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT matricula_id, decisao, observacoes, updated_at
+         FROM treinamento_matricula_reconciliacoes
+        WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
+      )
+      .bind(empresaId)
+      .all<ReconciliationDecision>(),
+  );
+  for (const row of results || []) map.set(Number(row.matricula_id), row);
+  return map;
 }
 
 

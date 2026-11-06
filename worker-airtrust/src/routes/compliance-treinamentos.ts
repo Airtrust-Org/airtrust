@@ -1146,6 +1146,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
       meta: { reconciliation_ready: reconciliationReady },
     });
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     console.warn('[RECONCILIACAO_HANDLER_ERROR]', {
       error: (err as Error).message,
       stack: (err as Error).stack,
@@ -1168,7 +1169,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
         matriculas_revisao: [],
         convites_matricula: [],
       },
-      meta: { reconciliation_ready: false },
+      meta: { reconciliation_ready: false, degraded: true },
     });
   }
 });
