@@ -16,6 +16,8 @@ vi.mock('../../middleware/auth', () => ({
       c.set('userRole', 'admin');
       await next();
     },
+  invalidateJtiCache: vi.fn(),
+  resetBlocklistCache: vi.fn(),
 }));
 
 import { authRoutes } from '../../routes/auth';

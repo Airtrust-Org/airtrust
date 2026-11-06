@@ -75,6 +75,8 @@ vi.mock('../../middleware/auth', () => ({
       c.set('userRole', 'ADMINISTRADOR');
       await next();
     },
+  invalidateJtiCache: vi.fn(),
+  resetBlocklistCache: vi.fn(),
 }));
 
 vi.mock('../../utils/security', () => ({
