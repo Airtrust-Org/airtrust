@@ -18,6 +18,7 @@ import { createTrainingComplianceIntelligenceRoutes } from './compliance-treinam
 import { aggregateDistinctMandatoryRequirements, createTrainingComplianceRequirementRoutes } from './compliance-treinamentos-requirements';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import { matchesSearchText, normalizeSearchText } from '../utils/text-search';
+import { withD1Retry } from '../utils/d1-resilience';
 import {
   assertFuncionarioInScope,
   filterRequestedSetorIdsByAccess,
@@ -79,9 +80,10 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
     ? "AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'"
     : '';
   const deletedFuncionario = funcionarioCols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
-  const { results } = await db
-    .prepare(
-      `SELECT m.id, m.funcionario_id, m.curso_id, c.titulo AS curso_titulo,
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT m.id, m.funcionario_id, m.curso_id, c.titulo AS curso_titulo,
               c.qualificacao_tipo_id, qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
               f.nome AS funcionario_nome, m.status,
               f.setor_id, s.nome AS setor_nome, f.funcao_id, fn.nome AS funcao_nome
@@ -96,9 +98,10 @@ async function loadLmsEnrollments(db: D1Database, empresaId: number): Promise<Lm
           AND (qt.id IS NULL OR ${trainingComplianceEligibleCategorySql('qt.categoria')})
           ${deletedFuncionario} ${activeExpr} ${statusExpr}
         ORDER BY c.titulo, f.nome, m.id`,
-    )
-    .bind(empresaId)
-    .all<LmsEnrollment>();
+      )
+      .bind(empresaId)
+      .all<LmsEnrollment>(),
+  );
   return results || [];
 }
 
@@ -108,14 +111,16 @@ async function loadActiveLmsCourses(db: D1Database, empresaId: number) {
   const cols = await columnSet(db, 'lms_cursos');
   const ativoExpr = cols.has('ativo') ? 'AND COALESCE(ativo,1)=1' : '';
   const deletedExpr = cols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
-  const { results } = await db
-    .prepare(
-      `SELECT id,titulo,qualificacao_tipo_id FROM lms_cursos
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT id,titulo,qualificacao_tipo_id FROM lms_cursos
         WHERE empresa_id=? AND qualificacao_tipo_id IS NOT NULL ${ativoExpr} ${deletedExpr}
         ORDER BY titulo`,
-    )
-    .bind(empresaId)
-    .all<{ id: number; titulo: string; qualificacao_tipo_id: number }>();
+      )
+      .bind(empresaId)
+      .all<{ id: number; titulo: string; qualificacao_tipo_id: number }>(),
+  );
   return results || [];
 }
 
@@ -610,7 +615,7 @@ app.get('/funcionarios/:id', async (c) => {
   if (!funcionarioId) throw new ApiError('Funcionário inválido', 400);
   const access = await getEmployeeSectorAccess(c, empresaId);
   await assertFuncionarioInScope(c.env.DB, empresaId, funcionarioId, access);
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { funcionarioId });
   const person = snapshot.people.find((item) => item.id === funcionarioId);
   if (!person) throw new ApiError('Funcionário não encontrado', 404);
   return c.json({
@@ -644,7 +649,7 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
     throw new ApiError('Status de compliance inválido', 400);
   }
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId });
   const data = snapshot.people
     .filter((person) => {
       const matchesRequirement =
@@ -676,7 +681,10 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const [snapshot, activeEnrollments] = await Promise.all([buildSnapshot(c.env.DB, empresaId, access), loadLmsEnrollments(c.env.DB, empresaId)]);
+  const [snapshot, activeEnrollments] = await Promise.all([
+    buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId }),
+    loadLmsEnrollments(c.env.DB, empresaId),
+  ]);
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&
@@ -1248,7 +1256,7 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId });
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&

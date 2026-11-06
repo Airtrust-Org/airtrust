@@ -1986,4 +1986,25 @@ describe('training compliance engine', () => {
     expect(body.data.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
     expect(body.data.requisitos[0].evidencia_perfil_incompativel).toBe(true);
   });
+
+  it('retorna HTTP 200 e lista vazia ao consultar treinamentos de setor sem funcionários cadastrados', async () => {
+    // Setor 99 não possui funcionários
+    sqlite.database.exec(`
+      INSERT INTO setores (id, empresa_id, nome, codigo) VALUES (99, 1, 'Setor Vazio', 'VAZIO');
+    `);
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/treinamentos?setor_id=99');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data).toEqual([]);
+
+    const summaryResponse = await app.request('/resumo?setor_id=99');
+    expect(summaryResponse.status).toBe(200);
+    const summaryBody = (await summaryResponse.json()) as any;
+    expect(summaryBody.success).toBe(true);
+    expect(summaryBody.data.pessoas).toBe(0);
+    expect(summaryBody.data.requisitos_obrigatorios).toBe(0);
+  });
 });

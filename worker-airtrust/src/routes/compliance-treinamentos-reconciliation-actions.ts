@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
@@ -42,14 +43,16 @@ export async function loadReconciliationDecisions(
 ): Promise<Map<number, ReconciliationDecision>> {
   const map = new Map<number, ReconciliationDecision>();
   if (!(await hasSchemaTable(db, 'treinamento_matricula_reconciliacoes'))) return map;
-  const { results } = await db
-    .prepare(
-      `SELECT matricula_id, decisao, observacoes, updated_at
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT matricula_id, decisao, observacoes, updated_at
          FROM treinamento_matricula_reconciliacoes
         WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
-    )
-    .bind(empresaId)
-    .all<ReconciliationDecision>();
+      )
+      .bind(empresaId)
+      .all<ReconciliationDecision>(),
+  );
   for (const row of results || []) map.set(Number(row.matricula_id), row);
   return map;
 }
