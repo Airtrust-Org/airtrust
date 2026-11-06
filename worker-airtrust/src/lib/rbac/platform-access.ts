@@ -1,5 +1,5 @@
 import { hasSchemaTable } from '../../utils/db-schema';
-import { isTransientD1Error } from '../../utils/d1-resilience';
+import { isTransientD1Error, withD1Retry } from '../../utils/d1-resilience';
 
 export type PlatformRoleCode = 'platform_admin' | 'support_read_only' | 'support_elevated';
 export type SupportAccessLevel = 'read_only' | 'elevated';
@@ -17,15 +17,18 @@ export interface PlatformAccessState {
   hasSupportElevatedRole: boolean;
   supportGrants: SupportGrant[];
   source: 'persisted' | 'none';
+  earliestExpiryMs?: number | null;
 }
 
 type RoleRow = {
   role_code: PlatformRoleCode;
+  expires_at?: string | null;
 };
 
 type SupportGrantRow = {
   empresa_id: number;
   access_level: SupportAccessLevel;
+  expires_at?: string | null;
 };
 
 function normalizeUserId(userId: number | string | null | undefined): number {
@@ -39,7 +42,7 @@ interface CachedPlatformAccess {
 }
 
 const _platformAccessCache = new Map<number, CachedPlatformAccess>();
-const PLATFORM_ACCESS_CACHE_TTL_MS = 5000;
+const PLATFORM_ACCESS_CACHE_TTL_MS = 60000;
 const MAX_PLATFORM_ACCESS_CACHE_SIZE = 1000;
 
 function pruneExpiredPlatformAccessCache(now: number): void {
@@ -99,7 +102,12 @@ export async function resolvePlatformAccessState(
       _platformAccessCache.delete(oldestKey);
     }
   }
-  _platformAccessCache.set(normalizedUserId, { expiresAt: now + PLATFORM_ACCESS_CACHE_TTL_MS, state });
+
+  let ttl = PLATFORM_ACCESS_CACHE_TTL_MS;
+  if (typeof state.earliestExpiryMs === 'number' && state.earliestExpiryMs > now) {
+    ttl = Math.min(ttl, state.earliestExpiryMs - now);
+  }
+  _platformAccessCache.set(normalizedUserId, { expiresAt: now + ttl, state });
 
   return state;
 }
@@ -117,13 +125,7 @@ async function readPersistedPlatformStateWithRetry(
   db: D1Database,
   userId: number,
 ): Promise<PlatformAccessState> {
-  try {
-    return await readPersistedPlatformState(db, userId);
-  } catch (error) {
-    if (!isTransientPlatformAccessReadError(error)) throw error;
-    await new Promise<void>((resolve) => setTimeout(resolve, 30));
-    return readPersistedPlatformState(db, userId);
-  }
+  return withD1Retry(() => readPersistedPlatformState(db, userId), 2, 30);
 }
 
 async function readPersistedPlatformState(
@@ -136,7 +138,7 @@ async function readPersistedPlatformState(
     ? await db
         .prepare(
           `
-          SELECT role_code
+          SELECT role_code, expires_at
           FROM user_platform_roles
           WHERE user_id = ?
             AND revoked_at IS NULL
@@ -146,6 +148,16 @@ async function readPersistedPlatformState(
         .bind(normalizedUserId)
         .all<RoleRow>()
     : { results: [] as RoleRow[] };
+
+  let earliestExpiryMs: number | null = null;
+  for (const row of roleRows.results || []) {
+    if (row.expires_at) {
+      const exp = Date.parse(row.expires_at);
+      if (Number.isFinite(exp)) {
+        earliestExpiryMs = earliestExpiryMs === null ? exp : Math.min(earliestExpiryMs, exp);
+      }
+    }
+  }
 
   const activeRoles = new Set((roleRows.results || []).map((row) => row.role_code));
   // Nenhuma concessão de suporte é autorizada apenas por ter uma linha de
@@ -159,7 +171,7 @@ async function readPersistedPlatformState(
     ? await db
         .prepare(
           `
-          SELECT empresa_id, access_level
+          SELECT empresa_id, access_level, expires_at
           FROM support_access_grants
           WHERE user_id = ?
             AND revoked_at IS NULL
@@ -169,6 +181,15 @@ async function readPersistedPlatformState(
         .bind(normalizedUserId)
         .all<SupportGrantRow>()
     : { results: [] as SupportGrantRow[] };
+
+  for (const row of supportGrantRows.results || []) {
+    if (row.expires_at) {
+      const exp = Date.parse(row.expires_at);
+      if (Number.isFinite(exp)) {
+        earliestExpiryMs = earliestExpiryMs === null ? exp : Math.min(earliestExpiryMs, exp);
+      }
+    }
+  }
 
   const supportGrants = (supportGrantRows.results || []).map((row) => ({
     empresaId: Number(row.empresa_id),
@@ -191,6 +212,7 @@ async function readPersistedPlatformState(
       hasPersistedPlatformAdmin || hasSupportReadOnlyRole || hasSupportElevatedRole
         ? 'persisted'
         : 'none',
+    earliestExpiryMs,
   };
 }
 

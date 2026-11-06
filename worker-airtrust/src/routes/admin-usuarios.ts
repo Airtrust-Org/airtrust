@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { auth } from '../middleware/auth';
+import { auth, invalidateUserSecurityCache } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { ApiError, badRequest, forbidden } from '../middleware/error-handler';
 import { applyAtomicUserEmployeeLink, eligibleAtomicUserEmployeeLink } from '../services/usuario-funcionario-atomic-link';
@@ -490,6 +490,7 @@ protectedAdminUsuariosRoutes.delete('/:id', async (c) => {
   // membership decision therefore observes the DELETE above, not a stale count
   // read before a concurrent request enters its own transaction.
   const batchResults = await db.batch(statements);
+  invalidateUserSecurityCache(targetUserId);
   const deactivationRow = batchResults.at(-1)?.results?.[0];
   const identityDeactivated =
     typeof deactivationRow === 'object' &&

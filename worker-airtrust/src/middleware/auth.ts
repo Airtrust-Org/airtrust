@@ -87,10 +87,10 @@ async function resolveEffectiveUserRole(
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
-// Micro-cache em memória de JTIs verificados como NÃO-revogados (TTL 5s)
+// Micro-cache em memória de JTIs verificados como NÃO-revogados (TTL 60s)
 // Evita bater no D1 para o mesmo JTI dezenas de vezes por segundo durante navegação normal.
 const _validJtiCache = new Map<string, number>();
-const VALID_JTI_CACHE_TTL_MS = 5000;
+const VALID_JTI_CACHE_TTL_MS = 60000;
 const MAX_VALID_JTI_CACHE_SIZE = 1000;
 
 function pruneExpiredJtiCache(now: number): void {
@@ -119,7 +119,7 @@ export function getValidJtiCacheSize(): number {
  * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
  * como falha de infraestrutura (503), nunca como "não bloqueado".
  */
-async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
+async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
   const now = Date.now();
   const cachedValidUntil = _validJtiCache.get(jti);
   if (cachedValidUntil && cachedValidUntil > now) {
@@ -135,7 +135,7 @@ async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
         .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
         .bind(jti)
         .first(),
-    6,
+    7,
     80,
   );
   const isBlocked = Boolean(row);
@@ -148,7 +148,10 @@ async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
         _validJtiCache.delete(oldestKey);
       }
     }
-    _validJtiCache.set(jti, now + VALID_JTI_CACHE_TTL_MS);
+    const maxTtl = exp && Number.isFinite(exp)
+      ? Math.min(VALID_JTI_CACHE_TTL_MS, Math.max(1000, exp * 1000 - now))
+      : VALID_JTI_CACHE_TTL_MS;
+    _validJtiCache.set(jti, now + maxTtl);
   } else {
     _validJtiCache.delete(jti);
   }
@@ -167,10 +170,10 @@ interface CachedUserSecurity {
   state: UserSecurityState;
 }
 
-// Micro-cache em memória de estado do usuário e vínculo de tenant (TTL 5s)
+// Micro-cache em memória de estado do usuário e vínculo de tenant (TTL 60s)
 // Evita bater no D1 em usuarios e usuarios_empresas dezenas de vezes por segundo durante navegação normal.
 const _userSecurityCache = new Map<string, CachedUserSecurity>();
-const USER_SECURITY_CACHE_TTL_MS = 5000;
+const USER_SECURITY_CACHE_TTL_MS = 60000;
 const MAX_USER_SECURITY_CACHE_SIZE = 1000;
 
 function pruneExpiredUserSecurityCache(now: number): void {
@@ -306,7 +309,7 @@ export async function validateAccessTokenSecurityState(
   if (payload.jti) {
     let blocked: boolean;
     try {
-      blocked = await isJtiBlocklisted(db, payload.jti);
+      blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
     } catch (e) {
       console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
       return serviceUnavailable(
@@ -350,7 +353,7 @@ export async function validateAccessTokenSecurityState(
   try {
     platformAccessState = await withD1Retry(
       () => resolvePlatformAccessState(db, payload.sub),
-      6,
+      7,
       80,
     );
     platformAdmin = isPlatformAdminAccess(platformAccessState);
