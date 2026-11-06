@@ -22,7 +22,9 @@ function createDb(options: {
   blocklisted?: string[];
   expiredBlocklisted?: string[];
   blocklistReadThrows?: boolean;
+  transientBlocklistFailures?: number;
 } = {}) {
+  let transientFailuresRemaining = options.transientBlocklistFailures ?? 0;
   const usuarios = options.usuarios || [];
   const memberships = options.memberships || [];
   const blocklisted = new Set(options.blocklisted || []);
@@ -41,6 +43,10 @@ function createDb(options: {
           if (sql.includes('PRAGMA table_info')) return null as T;
 
           if (sql.includes('FROM token_blocklist')) {
+            if (transientFailuresRemaining > 0) {
+              transientFailuresRemaining--;
+              throw new Error('transient D1 network connection error');
+            }
             if (options.blocklistReadThrows) {
               throw new Error('simulated D1 outage reading token_blocklist');
             }
@@ -148,6 +154,19 @@ describe('auth() — blocklist fail-closed', () => {
 
     expect(response.status).toBe(503);
     expect(payload.code).toBe('AUTH_REVOCATION_CHECK_UNAVAILABLE');
+  });
+
+  it('recovers from transient D1 read failure on blocklist and authenticates successfully', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+
+    const response = await buildApp(
+      createDb({ usuarios, memberships, transientBlocklistFailures: 1 }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+
+    expect(response.status).toBe(200);
   });
 });
 

@@ -235,7 +235,8 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     const userId = c.get('userId');
     const empresaIdFromJwt = c.get('empresaId');
     const userRoleFromJwt = c.get('userRole');
-    const platformAccessState = await resolvePlatformAccessState(c.env.DB, userId);
+    const platformAccessState =
+      c.get('platformAccessState') ?? (await resolvePlatformAccessState(c.env.DB, userId));
     c.set('platformAccessState', platformAccessState);
 
     if (!empresaIdFromJwt) {
