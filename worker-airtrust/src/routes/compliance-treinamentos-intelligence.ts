@@ -13,8 +13,12 @@ import {
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
-import { listTrainingCommunications } from '../services/training-communication-history';
+import { listTrainingCommunications, maskTrainingContact } from '../services/training-communication-history';
 import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
+import {
+  reserveTrainingAlert,
+  commitTrainingAlertReservation,
+} from '../services/training-alert-reservation';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -474,16 +478,109 @@ export function createTrainingComplianceIntelligenceRoutes({
       });
       results.push(
         ...(await Promise.all(
-          queued.map(({ target, available }) =>
-            available.email || available.whatsapp
-              ? sendComplianceNotification(c.env, c.env.DB, target, available, triggerKey)
-              : Promise.resolve({
+          queued.map(async ({ target, available }) => {
+            let emailReservationKey: string | null = null;
+            let whatsappReservationKey: string | null = null;
+
+            if (available.email) {
+              const emailRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
                   funcionario_id: target.funcionario_id,
                   qualificacao_tipo_id: target.qualificacao_tipo_id,
-                  email: { attempted: false, ok: false },
-                  whatsapp: { attempted: false, ok: false },
-                }),
-          ),
+                },
+                channel: 'EMAIL',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.email),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (emailRes?.reserved) {
+                emailReservationKey = emailRes.key;
+              } else if (emailRes) {
+                available.email = false;
+                if (emailRes.reason === 'pending_indeterminate') {
+                  emailPending++;
+                } else {
+                  emailAlready++;
+                }
+              }
+            }
+
+            if (available.whatsapp) {
+              const whatsappRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
+                  funcionario_id: target.funcionario_id,
+                  qualificacao_tipo_id: target.qualificacao_tipo_id,
+                },
+                channel: 'WHATSAPP',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (whatsappRes?.reserved) {
+                whatsappReservationKey = whatsappRes.key;
+              } else if (whatsappRes) {
+                available.whatsapp = false;
+                if (whatsappRes.reason === 'pending_indeterminate') {
+                  whatsappPending++;
+                } else {
+                  whatsappAlready++;
+                }
+              }
+            }
+
+            if (!available.email && !available.whatsapp) {
+              return {
+                funcionario_id: target.funcionario_id,
+                qualificacao_tipo_id: target.qualificacao_tipo_id,
+                email: { attempted: false, ok: false },
+                whatsapp: { attempted: false, ok: false },
+              };
+            }
+
+            const notificationResult = await sendComplianceNotification(
+              c.env,
+              c.env.DB,
+              target,
+              available,
+              triggerKey,
+            );
+
+            if (emailReservationKey) {
+              const emailOutcome = notificationResult.email.ok
+                ? 'enviada'
+                : !target.email
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: emailReservationKey,
+                outcome: emailOutcome,
+                errorMessage: notificationResult.email.error,
+                destinatarioMascarado: maskTrainingContact(target.email),
+              }).catch(() => undefined);
+            }
+
+            if (whatsappReservationKey) {
+              const whatsappOutcome = notificationResult.whatsapp.ok
+                ? 'enviada'
+                : !target.telefone
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: whatsappReservationKey,
+                outcome: whatsappOutcome,
+                errorMessage: notificationResult.whatsapp.error,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+              }).catch(() => undefined);
+            }
+
+            return notificationResult;
+          }),
         )),
       );
     }
