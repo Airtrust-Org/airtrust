@@ -85,6 +85,15 @@ async function resolveEffectiveUserRole(
 // Evita bater no D1 para o mesmo JTI dezenas de vezes por segundo durante navegação normal.
 const _validJtiCache = new Map<string, number>();
 const VALID_JTI_CACHE_TTL_MS = 5000;
+const MAX_VALID_JTI_CACHE_SIZE = 1000;
+
+function pruneExpiredJtiCache(now: number): void {
+  for (const [key, expiresAt] of _validJtiCache.entries()) {
+    if (expiresAt <= now) {
+      _validJtiCache.delete(key);
+    }
+  }
+}
 
 export function resetBlocklistCache(): void {
   _validJtiCache.clear();
@@ -92,6 +101,10 @@ export function resetBlocklistCache(): void {
 
 export function invalidateJtiCache(jti: string): void {
   _validJtiCache.delete(jti);
+}
+
+export function getValidJtiCacheSize(): number {
+  return _validJtiCache.size;
 }
 
 /**
@@ -106,6 +119,9 @@ async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
   if (cachedValidUntil && cachedValidUntil > now) {
     return false;
   }
+  if (cachedValidUntil) {
+    _validJtiCache.delete(jti);
+  }
 
   const row = await withD1Retry(
     () =>
@@ -118,6 +134,14 @@ async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
   );
   const isBlocked = Boolean(row);
   if (!isBlocked) {
+    if (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
+      pruneExpiredJtiCache(now);
+      while (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
+        const oldestKey = _validJtiCache.keys().next().value;
+        if (!oldestKey) break;
+        _validJtiCache.delete(oldestKey);
+      }
+    }
     _validJtiCache.set(jti, now + VALID_JTI_CACHE_TTL_MS);
   } else {
     _validJtiCache.delete(jti);
