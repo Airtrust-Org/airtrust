@@ -2,6 +2,7 @@ import { trainingComplianceHistoryIdentitySql, trainingComplianceHistoricalModal
 import { CANCELLED_STATUS_VALUES, PLANNED_QUALIFICATION_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
 import { type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { normalizeAircraftModel, parseLegacyAircraftModels, resolveEmployeeAircraftModels } from './training-compliance-aircraft';
 import {
@@ -123,9 +124,10 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
   const statusExpr = cols.has('status') ? "UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'" : '1 = 1';
   const ativoExpr = cols.has('ativo') ? 'AND COALESCE(f.ativo, 1) = 1' : '';
   const deletedExpr = cols.has('deleted_at') ? 'AND f.deleted_at IS NULL' : '';
-  const { results } = await db
-    .prepare(
-      `SELECT f.id, f.nome,
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT f.id, f.nome,
               ${cols.has('cpf') ? 'f.cpf' : 'NULL'} AS cpf,
               ${cols.has('matricula') ? 'f.matricula' : 'NULL'} AS matricula,
               ${cols.has('email') ? 'f.email' : 'NULL'} AS email,
@@ -143,9 +145,10 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
           ${ativoExpr}
           ${deletedExpr}
         ORDER BY f.nome ASC`,
-    )
-    .bind(empresaId)
-    .all<Omit<Employee, 'aeronaves_modelos'> & { aeronave_legacy: string | null }>();
+      )
+      .bind(empresaId)
+      .all<Omit<Employee, 'aeronaves_modelos'> & { aeronave_legacy: string | null }>(),
+  );
 
   const legacyAircraftByEmployee = new Map<number, string[]>();
   const employees: Employee[] = (results || []).map((row) => {
@@ -173,9 +176,10 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
     ? "AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))"
     : '';
   const aircraftDeletedExpr = aircraftCols.has('deleted_at') ? 'AND a.deleted_at IS NULL' : '';
-  const modelRows = await db
-    .prepare(
-      `SELECT DISTINCT CAST(fa.funcionario_id AS INTEGER) AS funcionario_id,
+  const modelRows = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT DISTINCT CAST(fa.funcionario_id AS INTEGER) AS funcionario_id,
               UPPER(TRIM(a.modelo)) AS modelo
          FROM funcionarios_aeronaves fa
          JOIN aeronaves a ON a.id = fa.aeronave_id AND a.empresa_id = ?
@@ -185,9 +189,10 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
           ${faStartExpr}
           ${faEndExpr}
           ${aircraftDeletedExpr}`,
-    )
-    .bind(empresaId)
-    .all<{ funcionario_id: number; modelo: string }>();
+      )
+      .bind(empresaId)
+      .all<{ funcionario_id: number; modelo: string }>(),
+  );
   const byId = new Map(employees.map((employee) => [employee.id, employee]));
   for (const row of modelRows.results || []) {
     const employee = byId.get(Number(row.funcionario_id));
@@ -210,16 +215,18 @@ export async function loadAircraftModelsCatalog(db: D1Database, empresaId: numbe
   const cols = await columnSet(db, 'aeronaves');
   if (!cols.has('modelo')) return [] as Array<{ modelo: string; aeronaves: number }>;
   const deletedExpr = cols.has('deleted_at') ? 'AND deleted_at IS NULL' : '';
-  const { results } = await db
-    .prepare(
-      `SELECT UPPER(TRIM(modelo)) AS modelo, COUNT(*) AS aeronaves
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT UPPER(TRIM(modelo)) AS modelo, COUNT(*) AS aeronaves
          FROM aeronaves
         WHERE empresa_id=? AND TRIM(COALESCE(modelo,''))<>'' ${deletedExpr}
         GROUP BY UPPER(TRIM(modelo))
         ORDER BY UPPER(TRIM(modelo))`,
-    )
-    .bind(empresaId)
-    .all<{ modelo: string; aeronaves: number }>();
+      )
+      .bind(empresaId)
+      .all<{ modelo: string; aeronaves: number }>(),
+  );
   return (results || [])
     .map((row) => ({
       modelo: normalizeAircraftModel(row.modelo) || '',
@@ -238,9 +245,10 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
       : 'NULL';
   if (!hasV2) {
     if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
-    const { results } = await db
-      .prepare(
-        `SELECT m.id, m.empresa_id, m.qualificacao_tipo_id,
+    const { results } = await withD1Retry(() =>
+      db
+        .prepare(
+          `SELECT m.id, m.empresa_id, m.qualificacao_tipo_id,
                 qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
                 ${validadeExpr} AS validade_meses,
                 'FUNCAO' AS escopo, NULL AS setor_id, NULL AS setor_nome,
@@ -263,9 +271,10 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
           WHERE m.empresa_id = ? AND m.ativo = 1 AND m.deleted_at IS NULL
             AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
           ORDER BY qt.nome ASC, m.id ASC`,
-      )
-      .bind(empresaId)
-      .all<Rule>();
+        )
+        .bind(empresaId)
+        .all<Rule>(),
+    );
     return (results || []).map((rule) => ({ ...rule, aeronave_modelo: null }));
   }
 
@@ -283,9 +292,10 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
     : 'NULL';
   const foundationItemExpr = ruleCols.has('fundamento_item') ? 'tr.fundamento_item' : 'NULL';
   const validitySourceExpr = ruleCols.has('validade_fonte') ? 'tr.validade_fonte' : "'EVIDENCIA'";
-  const { results } = await db
-    .prepare(
-      `SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
               qt.nome AS qualificacao_tipo_nome,
               qt.codigo AS qualificacao_tipo_codigo,
               ${validadeExpr} AS validade_meses,
@@ -326,9 +336,10 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
         ORDER BY qt.nome ASC, tr.id ASC`,
-    )
-    .bind(empresaId)
-    .all<Rule>();
+      )
+      .bind(empresaId)
+      .all<Rule>(),
+  );
   return (results || []).map((rule) => ({
     ...rule,
     aeronave_modelo: normalizeAircraftModel(rule.aeronave_modelo),
@@ -370,9 +381,10 @@ export async function loadQualificationEvidence(
   );
   const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
-  const { results } = await db
-    .prepare(
-      `SELECT qh.id, qh.funcionario_id, ${resolvedTipoSelect} AS tipo_id,
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT qh.id, qh.funcionario_id, ${resolvedTipoSelect} AS tipo_id,
               qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
               ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
          FROM qualificacoes_historico qh
@@ -385,17 +397,18 @@ export async function loadQualificationEvidence(
           AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
         ORDER BY qh.funcionario_id, ${resolvedTipoSelect},
                  datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC`,
-    )
-    .bind(empresaId)
-    .all<{
-      id: number;
-      funcionario_id: number;
-      tipo_id: number;
-      data_realizacao: string | null;
-      data_vencimento: string | null;
-      modalidade: string | null;
-      perfil_competencia: string | null;
-    }>();
+      )
+      .bind(empresaId)
+      .all<{
+        id: number;
+        funcionario_id: number;
+        tipo_id: number;
+        data_realizacao: string | null;
+        data_vencimento: string | null;
+        modalidade: string | null;
+        perfil_competencia: string | null;
+      }>(),
+  );
 
   for (const row of results || []) {
     const key = `${row.funcionario_id}:${row.tipo_id}`;
@@ -426,9 +439,10 @@ export async function loadLmsEvidence(
   const matriculaCols = await columnSet(db, 'lms_matriculas');
   const hasProfile = matriculaCols.has('perfil_competencia');
   const profileSelect = hasProfile ? 'm.perfil_competencia' : 'NULL';
-  const { results } = await db
-    .prepare(
-      `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
               m.status, m.progresso_pct, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade,
               ${profileSelect} AS perfil_competencia
          FROM lms_matriculas m
@@ -442,19 +456,20 @@ export async function loadLmsEvidence(
           AND UPPER(COALESCE(m.status, '')) <> 'CANCELADO'
         ORDER BY m.funcionario_id, c.qualificacao_tipo_id,
                  datetime(COALESCE(m.data_conclusao, m.updated_at, m.created_at)) DESC, m.id DESC`,
-    )
-    .bind(empresaId)
-    .all<{
-      id: number;
-      funcionario_id: number;
-      tipo_id: number;
-      status: string;
-      progresso_pct: number | null;
-      data_conclusao: string | null;
-      titulo: string | null;
-      modalidade: string | null;
-      perfil_competencia: string | null;
-    }>();
+      )
+      .bind(empresaId)
+      .all<{
+        id: number;
+        funcionario_id: number;
+        tipo_id: number;
+        status: string;
+        progresso_pct: number | null;
+        data_conclusao: string | null;
+        titulo: string | null;
+        modalidade: string | null;
+        perfil_competencia: string | null;
+      }>(),
+  );
   for (const row of results || []) {
     const key = `${row.funcionario_id}:${row.tipo_id}`;
     const bucket = map.get(key) || [];
@@ -674,10 +689,17 @@ export function filterEmployeesByAccess(employees: Employee[], access: EmployeeS
   );
 }
 
+export type TrainingComplianceTargetFilter = {
+  setorId?: number | null;
+  funcaoId?: number | null;
+  funcionarioId?: number | null;
+};
+
 export async function buildSnapshot(
   db: D1Database,
   empresaId: number,
   access: EmployeeSectorAccess,
+  targetFilter?: TrainingComplianceTargetFilter,
 ) {
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
     loadEmployees(db, empresaId),
@@ -685,7 +707,16 @@ export async function buildSnapshot(
     loadQualificationEvidence(db, empresaId),
     loadLmsEvidence(db, empresaId),
   ]);
-  const employees = filterEmployeesByAccess(allEmployees, access);
+  let employees = filterEmployeesByAccess(allEmployees, access);
+  if (targetFilter?.setorId != null) {
+    employees = employees.filter((employee) => employee.setor_id === targetFilter.setorId);
+  }
+  if (targetFilter?.funcaoId != null) {
+    employees = employees.filter((employee) => employee.funcao_id === targetFilter.funcaoId);
+  }
+  if (targetFilter?.funcionarioId != null) {
+    employees = employees.filter((employee) => employee.id === targetFilter.funcionarioId);
+  }
   // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
   const today = getTodayIsoSaoPaulo();
   const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today) };
