@@ -23,6 +23,7 @@ import { pptxToHtml } from '@jvmr/pptx-to-html';
 import { fetchPptxViewerSession, type PptxViewerSession } from './pptxViewer';
 import { sanitizePptxSlideHtml } from './pptxSanitization';
 import { observePptxSlideLayout } from './pptxViewport';
+import { PptxPdfCanvas, openPptxPdf, type PptxPdfDocument } from './PptxPdfCanvas';
 
 type PptxEvidence = {
   total_slides: number;
@@ -61,6 +62,8 @@ export default function LmsPlayerPptx() {
 
   const [viewerSession, setViewerSession] = useState<PptxViewerSession | null>(null);
   const [slides, setSlides] = useState<string[] | null>(null);
+  const [pdfDocument, setPdfDocument] = useState<PptxPdfDocument | null>(null);
+  const [paintedPdfIndex, setPaintedPdfIndex] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPptx, setLoadingPptx] = useState(true);
   const [iframeLoaded, setIframeLoaded] = useState(false);
@@ -98,6 +101,20 @@ export default function LmsPlayerPptx() {
 
   const loadRenderedSlides = useCallback(
     async (cursoId: number) => {
+      // Prefer an authenticated, version-scoped faithful PDF render. The original
+      // PPTX remains the canonical asset for qualification evidence/ETag.
+      const pdfResponse = await fetchLmsCourseAsset('pptx-rendered', cursoId);
+      if (pdfResponse.ok) {
+        const assetEtag = pdfResponse.headers.get('ETag')?.trim().replace(/^\"|\"$/g, '') ?? null;
+        const pdf = await openPptxPdf(await pdfResponse.arrayBuffer());
+        const advertised = Number(pdfResponse.headers.get('X-Pptx-Slide-Count') || 0);
+        if (advertised > 0 && pdf.numPages !== advertised) {
+          await pdf.destroy();
+          throw new Error('A versão visual dos slides não corresponde à apresentação original.');
+        }
+        return { rendered: Array.from({ length: pdf.numPages }, () => '<div></div>'), assetEtag, pdf };
+      }
+      if (pdfResponse.status !== 404) throw new Error(`Falha ao carregar slides fiéis (${pdfResponse.status})`);
       const resp = await fetchLmsCourseAsset('pptx', cursoId);
       if (!resp.ok) throw new Error(`Falha ao carregar apresentação (${resp.status})`);
       const assetEtag = resp.headers.get('ETag')?.trim().replace(/^"|"$/g, '') ?? null;
@@ -108,7 +125,7 @@ export default function LmsPlayerPptx() {
         scaleToFit: true,
         letterbox: true,
       });
-      return { rendered, assetEtag };
+      return { rendered, assetEtag, pdf: null };
     },
     [], // Asset transport refreshes its own credentials; token rotation must not reparse the entire PPTX.
   );
@@ -123,6 +140,8 @@ export default function LmsPlayerPptx() {
         setLoadingPptx(true);
         setLoadError(null);
         setSlides(null);
+        setPdfDocument(null);
+        setPaintedPdfIndex(null);
         setLoadedAssetEtag(null);
         setServerEvidence(null);
         setAssetVersionStale(false);
@@ -142,7 +161,8 @@ export default function LmsPlayerPptx() {
         const result = await loadRenderedSlides(activeCursoId);
         if (!cancelled) {
           setLoadedAssetEtag(result.assetEtag);
-          setSlides(result.rendered.map(sanitizePptxSlideHtml));
+          setPdfDocument(result.pdf);
+          setSlides(result.pdf ? result.rendered : result.rendered.map(sanitizePptxSlideHtml));
         }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Falha ao carregar PPTX');
@@ -156,6 +176,11 @@ export default function LmsPlayerPptx() {
       cancelled = true;
     };
   }, [loadRenderedSlides, matricula?.curso_id, assetReload]);
+
+  useEffect(() => () => { if (pdfDocument) void pdfDocument.destroy(); }, [pdfDocument]);
+
+  const markPdfPageReady = useCallback((index: number) => setPaintedPdfIndex(index), []);
+  const reportPdfError = useCallback(() => setLoadError('Erro na renderização visual do slide. Recarregue o curso.'), []);
 
   // The qualifying enrollment resumes from persisted server evidence only.
   useEffect(() => {
@@ -246,7 +271,8 @@ export default function LmsPlayerPptx() {
   // Server persistence is required for each slide; the browser marker never
   // authorizes a qualifying completion. Only submit a visible slide after dwell.
   useEffect(() => {
-    if (!slides || !qualifyingPptx || !serverEvidence || alreadyConcluded || assetVersionStale) return;
+    if (!slides || !qualifyingPptx || !serverEvidence || alreadyConcluded || assetVersionStale ||
+        (pdfDocument && paintedPdfIndex !== currentSlide)) return;
     if (!loadedAssetEtag || serverEvidence.asset_etag !== loadedAssetEtag) {
       setAssetVersionStale(true);
       setEvidenceError('A versão da apresentação mudou. Recarregue o arquivo.');
@@ -289,7 +315,7 @@ export default function LmsPlayerPptx() {
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, [slides, qualifyingPptx, serverEvidence, currentSlide, alreadyConcluded, id, evidenceRetry,
-      loadedAssetEtag, assetVersionStale]);
+      loadedAssetEtag, assetVersionStale, pdfDocument, paintedPdfIndex]);
 
   useEffect(() => {
     if (!qualifyingPptx) return;
@@ -323,7 +349,7 @@ export default function LmsPlayerPptx() {
   }, [flushLatestProgress]);
 
   useEffect(() => {
-    if (!slideHtml) return;
+    if (!slideHtml || pdfDocument) return;
 
     const measure = () => {
       const frame = slideFrameRef.current;
@@ -346,7 +372,7 @@ export default function LmsPlayerPptx() {
       slideFrameRef.current,
       slideContentRef.current?.firstElementChild ?? null,
     ]);
-  }, [slideHtml]);
+  }, [slideHtml, pdfDocument]);
 
   const goToSlide = useCallback(
     (index: number) => {
@@ -582,6 +608,10 @@ export default function LmsPlayerPptx() {
                 className="relative aspect-video w-full overflow-hidden bg-white"
               >
                 <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white">
+                  {pdfDocument ? (
+                    <PptxPdfCanvas document={pdfDocument} index={currentSlide}
+                      onReady={markPdfPageReady} onError={reportPdfError} />
+                  ) : (
                   <div
                     style={{
                       width: `${slideViewport.width}px`,
@@ -596,6 +626,7 @@ export default function LmsPlayerPptx() {
                       dangerouslySetInnerHTML={{ __html: slideHtml }}
                     />
                   </div>
+                  )}
                 </div>
               </div>
 

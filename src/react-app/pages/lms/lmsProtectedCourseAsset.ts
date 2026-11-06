@@ -6,19 +6,20 @@
  */
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 
-export type LmsProtectedAssetKind = 'pdf' | 'pptx';
+export type LmsProtectedAssetKind = 'pdf' | 'pptx' | 'pptx-rendered';
 
 export async function fetchLmsCourseAsset(
   kind: LmsProtectedAssetKind,
   cursoId: number,
 ): Promise<Response> {
-  if ((kind !== 'pdf' && kind !== 'pptx') ||
+  if ((kind !== 'pdf' && kind !== 'pptx' && kind !== 'pptx-rendered') ||
       !Number.isSafeInteger(cursoId) || cursoId <= 0) {
     throw new Error('LMS_PROTECTED_ASSET_INVALID_SCOPE');
   }
   // fetchWithAuth handles an expired access token and 401 exactly once;
   // do not forward a cached bearer token that would override its refresh.
-  return fetchWithAuth(`${API_BASE_URL}/lms/${kind}/asset/${cursoId}`, {
+  const endpoint = kind === 'pptx-rendered' ? 'pptx/rendered' : `${kind}/asset`;
+  return fetchWithAuth(`${API_BASE_URL}/lms/${endpoint}/${cursoId}`, {
     method: 'GET',
     cache: 'no-store',
   });
