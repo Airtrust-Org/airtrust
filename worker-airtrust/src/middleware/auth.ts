@@ -32,7 +32,7 @@ function isDevAuthBypassEnabled(env: Env): boolean {
 }
 
 async function hasTable(db: D1Database, sql: string): Promise<boolean> {
-  const result = await db.prepare(sql).first<{ found: number }>();
+  const result = await withD1Retry(() => db.prepare(sql).first<{ found: number }>());
   return Boolean(result?.found);
 }
 
@@ -57,28 +57,31 @@ async function resolveEffectiveUserRole(
   if (!Number.isFinite(eid) || eid <= 0) return fallback;
   if (!(await hasUsuariosEmpresasTable(db))) return fallback;
 
-  const roleRow = await db
-    .prepare(
-      `
-      SELECT ue.role, u.perfil
-      FROM usuarios u
-      LEFT JOIN usuarios_empresas ue
-        ON ue.usuario_id = u.id
-       AND ue.empresa_id = ?
-      WHERE u.id = ?
-        AND u.deleted_at IS NULL
-      LIMIT 1
-    `,
-    )
-    .bind(eid, uid)
-    .first<{ role: string | null; perfil: string | null }>();
+  const roleRow = await withD1Retry(() =>
+    db
+      .prepare(
+        `
+        SELECT ue.role, u.perfil
+        FROM usuarios u
+        LEFT JOIN usuarios_empresas ue
+          ON ue.usuario_id = u.id
+         AND ue.empresa_id = ?
+        WHERE u.id = ?
+          AND u.deleted_at IS NULL
+        LIMIT 1
+      `,
+      )
+      .bind(eid, uid)
+      .first<{ role: string | null; perfil: string | null }>(),
+  );
 
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
 /**
  * Classifica se um erro lançado por operação D1 é tipicamente transitório
- * (locks SQLite/D1, timeouts de execução/rede, rate limits transitórios)
+ * (locks SQLite/D1, timeouts de execução/rede, rate limits transitórios,
+ * erros temporários de RPC Cloudflare ou indisponibilidade de serviço D1)
  * e, portanto, elegível a retry com backoff limitado.
  *
  * Erros permanentes (sintaxe SQL, tabelas/colunas inexistentes, violações
@@ -88,40 +91,70 @@ async function resolveEffectiveUserRole(
 export function isTransientD1Error(error: unknown): boolean {
   if (!error) return false;
   const message = error instanceof Error ? error.message : String(error);
-  const lower = message.toLowerCase();
+  const errObj = typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
+  const code = typeof errObj?.code === 'string' ? errObj.code : '';
+  const name = typeof errObj?.name === 'string' ? errObj.name : '';
+  const cause = errObj?.cause;
+  const causeMessage =
+    cause instanceof Error
+      ? cause.message
+      : typeof cause === 'string'
+      ? cause
+      : '';
 
-  // Erros permanentes de aplicação, sintaxe ou schema: nunca tentar novamente
+  const combined = `${name} ${code} ${message} ${causeMessage}`.toLowerCase();
+
+  // 1. Erros permanentes de aplicação, sintaxe ou schema: fail-closed imediato
   if (
-    lower.includes('syntax error') ||
-    lower.includes('no such table') ||
-    lower.includes('no such column') ||
-    lower.includes('constraint failed') ||
-    lower.includes('has no column named') ||
-    lower.includes('datatype mismatch')
+    combined.includes('syntax error') ||
+    combined.includes('no such table') ||
+    combined.includes('no such column') ||
+    combined.includes('constraint failed') ||
+    combined.includes('has no column named') ||
+    combined.includes('datatype mismatch') ||
+    combined.includes('sqlite_corrupt') ||
+    combined.includes('malformed') ||
+    combined.includes('not authorized') ||
+    combined.includes('permission denied')
   ) {
     return false;
   }
 
-  // Padrões conhecidos de falhas transitórias
+  // 2. Padrões conhecidos de falhas transitórias
   return (
-    lower.includes('busy') ||
-    lower.includes('locked') ||
-    lower.includes('timeout') ||
-    lower.includes('timed out') ||
-    lower.includes('deadline exceeded') ||
-    lower.includes('temporarily unavailable') ||
-    lower.includes('rate limit') ||
-    lower.includes('too many requests') ||
-    lower.includes('connection reset') ||
-    lower.includes('connection closed') ||
-    lower.includes('connection lost') ||
-    lower.includes('socket hang up') ||
-    lower.includes('fetch failed') ||
-    lower.includes('network') ||
-    lower.includes('econnreset') ||
-    lower.includes('etimedout') ||
-    lower.includes('d1_error') ||
-    lower.includes('internal error')
+    combined.includes('busy') ||
+    combined.includes('locked') ||
+    combined.includes('timeout') ||
+    combined.includes('timed out') ||
+    combined.includes('deadline exceeded') ||
+    combined.includes('unavailable') ||
+    combined.includes('rate limit') ||
+    combined.includes('too many requests') ||
+    combined.includes('connection reset') ||
+    combined.includes('connection closed') ||
+    combined.includes('connection lost') ||
+    combined.includes('connection aborted') ||
+    combined.includes('socket hang up') ||
+    combined.includes('fetch failed') ||
+    combined.includes('failed to fetch') ||
+    combined.includes('network') ||
+    combined.includes('econnreset') ||
+    combined.includes('etimedout') ||
+    combined.includes('econnaborted') ||
+    combined.includes('econnrefused') ||
+    combined.includes('d1_') ||
+    combined.includes('d1 error') ||
+    combined.includes('internal error') ||
+    combined.includes('server error') ||
+    combined.includes('503') ||
+    combined.includes('502') ||
+    combined.includes('504') ||
+    combined.includes('bad gateway') ||
+    combined.includes('gateway timeout') ||
+    combined.includes('overload') ||
+    combined.includes('sqlite_ioerr') ||
+    combined.includes('sqlite_cantopen') ||
+    combined.includes('broken pipe')
   );
 }
 
@@ -135,8 +168,8 @@ export function isTransientD1Error(error: unknown): boolean {
  */
 export async function withD1Retry<T>(
   operation: () => Promise<T>,
-  maxAttempts = 3,
-  initialBackoffMs = 40,
+  maxAttempts = 4,
+  initialBackoffMs = 50,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
@@ -147,7 +180,7 @@ export async function withD1Retry<T>(
       if (attempt >= maxAttempts || !isTransientD1Error(err)) {
         throw err;
       }
-      const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 20;
+      const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 25;
       await new Promise((resolve) => setTimeout(resolve, backoff));
     }
   }
@@ -357,9 +390,10 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
   const usuariosExists = await hasTable(db, USUARIOS_TABLE_SQL);
 
   if (usuariosExists) {
-    const fallbackEmpresa = await db
-      .prepare(
-        `
+    const fallbackEmpresa = await withD1Retry(() =>
+      db
+        .prepare(
+          `
         SELECT COALESCE(f.empresa_id, e.id) AS empresa_id
         FROM usuarios u
         LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
@@ -374,18 +408,20 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
           COALESCE(f.empresa_id, e.id) ASC
         LIMIT 1
       `,
-      )
-      .bind(userId)
-      .first<{ empresa_id: number }>();
+        )
+        .bind(userId)
+        .first<{ empresa_id: number }>(),
+    );
 
     if (fallbackEmpresa?.empresa_id) {
       return fallbackEmpresa.empresa_id;
     }
   }
 
-  const empresaAtiva = await db
-    .prepare(
-      `
+  const empresaAtiva = await withD1Retry(() =>
+    db
+      .prepare(
+        `
       SELECT e.id AS empresa_id
       FROM empresas e
       WHERE e.deleted_at IS NULL
@@ -398,8 +434,9 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
         e.id ASC
       LIMIT 1
     `,
-    )
-    .first<{ empresa_id: number }>();
+      )
+      .first<{ empresa_id: number }>(),
+  );
 
   return empresaAtiva?.empresa_id ?? null;
 }

@@ -327,27 +327,44 @@ describe('isTransientD1Error', () => {
     expect(isTransientD1Error(new Error('The operation timed out'))).toBe(true);
     expect(isTransientD1Error(new Error('deadline exceeded'))).toBe(true);
     expect(isTransientD1Error(new Error('service temporarily unavailable'))).toBe(true);
+    expect(isTransientD1Error(new Error('Service Unavailable'))).toBe(true);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: Error in D1: 503 Service Unavailable'))).toBe(true);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: Network connection lost'))).toBe(true);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: upstream request failed: 502 Bad Gateway'))).toBe(true);
     expect(isTransientD1Error(new Error('rate limit reached'))).toBe(true);
     expect(isTransientD1Error(new Error('too many requests'))).toBe(true);
     expect(isTransientD1Error(new Error('fetch failed'))).toBe(true);
+    expect(isTransientD1Error(new Error('failed to fetch'))).toBe(true);
     expect(isTransientD1Error(new Error('connection reset by peer'))).toBe(true);
     expect(isTransientD1Error(new Error('connection closed'))).toBe(true);
     expect(isTransientD1Error(new Error('connection lost'))).toBe(true);
+    expect(isTransientD1Error(new Error('connection aborted'))).toBe(true);
     expect(isTransientD1Error(new Error('socket hang up'))).toBe(true);
     expect(isTransientD1Error(new Error('network connection error'))).toBe(true);
     expect(isTransientD1Error(new Error('ECONNRESET'))).toBe(true);
     expect(isTransientD1Error(new Error('ETIMEDOUT'))).toBe(true);
+    expect(isTransientD1Error(new Error('ECONNABORTED'))).toBe(true);
+    expect(isTransientD1Error(new Error('ECONNREFUSED'))).toBe(true);
     expect(isTransientD1Error(new Error('internal error in D1 RPC'))).toBe(true);
+    expect(isTransientD1Error(new Error('internal server error'))).toBe(true);
+    expect(isTransientD1Error(new Error('sqlite_ioerr: disk I/O error'))).toBe(true);
+    expect(isTransientD1Error(new Error('sqlite_cantopen: unable to open database file'))).toBe(true);
+    expect(isTransientD1Error({ name: 'D1Error', code: 'ETIMEDOUT', message: 'failed' })).toBe(true);
+    expect(isTransientD1Error(new Error('wrapped error', { cause: new Error('connection lost') }))).toBe(true);
   });
 
   it('classifies permanent SQL and schema errors as false (never transient)', () => {
     expect(isTransientD1Error(new Error('SQLITE_ERROR: no such table: token_blocklist'))).toBe(false);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: no such table: token_blocklist'))).toBe(false);
     expect(isTransientD1Error(new Error('SQLITE_ERROR: no such column: deleted_at'))).toBe(false);
     expect(isTransientD1Error(new Error('SQLITE_ERROR: table usuarios has no column named foo'))).toBe(false);
     expect(isTransientD1Error(new Error('near "FROM": syntax error'))).toBe(false);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: near "FROM": syntax error'))).toBe(false);
     expect(isTransientD1Error(new Error('UNIQUE constraint failed: token_blocklist.jti'))).toBe(false);
     expect(isTransientD1Error(new Error('CHECK constraint failed: status_check'))).toBe(false);
     expect(isTransientD1Error(new Error('datatype mismatch'))).toBe(false);
+    expect(isTransientD1Error(new Error('sqlite_corrupt: database disk image is malformed'))).toBe(false);
+    expect(isTransientD1Error(new Error('User not authorized to access tenant'))).toBe(false);
   });
 
   it('classifies null, undefined, or unrelated non-transient errors as false', () => {
@@ -364,7 +381,7 @@ describe('withD1Retry', () => {
     const result = await withD1Retry(async () => {
       attempts++;
       return 'ok';
-    }, 3, 5);
+    }, 4, 5);
 
     expect(result).toBe('ok');
     expect(attempts).toBe(1);
@@ -378,10 +395,24 @@ describe('withD1Retry', () => {
         throw new Error('D1_ERROR: SQLITE_BUSY: database is locked');
       }
       return 'recovered';
-    }, 3, 5);
+    }, 4, 5);
 
     expect(result).toBe('recovered');
     expect(attempts).toBe(2);
+  });
+
+  it('retries on D1_EXEC_ERROR 503 and succeeds on 3rd attempt', async () => {
+    let attempts = 0;
+    const result = await withD1Retry(async () => {
+      attempts++;
+      if (attempts < 3) {
+        throw new Error('D1_EXEC_ERROR: Error in D1: 503 Service Unavailable');
+      }
+      return 'recovered-503';
+    }, 4, 5);
+
+    expect(result).toBe('recovered-503');
+    expect(attempts).toBe(3);
   });
 
   it('fails after exhausting maxAttempts on persistent transient failure', async () => {
@@ -390,10 +421,10 @@ describe('withD1Retry', () => {
       withD1Retry(async () => {
         attempts++;
         throw new Error('network connection error: socket hang up');
-      }, 3, 5),
+      }, 4, 5),
     ).rejects.toThrow('socket hang up');
 
-    expect(attempts).toBe(3);
+    expect(attempts).toBe(4);
   });
 
   it('fails immediately on attempt 1 without any retry when encountering permanent SQL error', async () => {
@@ -402,7 +433,7 @@ describe('withD1Retry', () => {
       withD1Retry(async () => {
         attempts++;
         throw new Error('SQLITE_ERROR: no such table: token_blocklist');
-      }, 3, 5),
+      }, 4, 5),
     ).rejects.toThrow('no such table: token_blocklist');
 
     // Crucial fail-closed requirement: 0 retries, exactly 1 attempt
