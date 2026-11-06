@@ -66,9 +66,9 @@ vi.mock('../../services/generate-certificate', async (importOriginal) => {
   };
 });
 
-vi.mock('../../routes/qualificacoes-certificados-helpers', async (importOriginal) => {
+vi.mock('../../services/qualificacoes/certificados-helpers', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../routes/qualificacoes-certificados-helpers')>();
+    await importOriginal<typeof import('../../services/qualificacoes/certificados-helpers')>();
   return {
     ...actual,
     getCertificadosStorageColumns: vi.fn().mockResolvedValue({

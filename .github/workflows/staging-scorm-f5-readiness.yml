@@ -12,13 +12,14 @@ on:
         required: true
         type: string
       pr_number:
-        description: 'Reviewed intake PR: 1696 original pilot or 1855 MGM (must match F0 grant)'
+        description: 'Reviewed intake PR: 1696 pilot, 1855 MGM or 1977 NR26 RC5 (must match exact F0 grant)'
         required: true
         type: choice
         default: '1696'
         options:
           - '1696'
           - '1855'
+          - '1977'
       grant_id:
         description: 'Fresh, unedited single-candidate F0 authorization comment ID from issue 776'
         required: true

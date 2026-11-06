@@ -13,7 +13,7 @@ import {
   hasCompleteScormSlideCoverage,
   mergeScormRuntimeState,
   resolveLmsEffectiveProgress,
-} from '../../services/lms-progress-guardrails';
+} from '../../lib/lms/lms-progress-guardrails';
 
 describe('SCORM CMI merge: visited-slide evidence survives partial autosaves', () => {
   const snapshot = (slides: number[], total = 3, location = '2/3') => JSON.stringify({

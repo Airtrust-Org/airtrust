@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { hashSignableEdbPayload } from '../../services/edb/canonicalization';
+import { hashSignableEdbPayload } from '../../lib/edb/canonicalization';
 import {
   createEmptyEdbFlightRecord,
   type EdbSignatureProof,
   type EdbSignatureType,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import {
   verifyAllStoredEdbSignatureBindings,
   verifyEdbSignaturePayloadBinding,

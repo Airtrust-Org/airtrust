@@ -17,11 +17,11 @@ import {
   normalizeLmsArchivePath,
   type LmsStructuredContentType,
 } from '../lib/lms/lms-package-validator';
-import { getLmsSchemaSnapshot } from '../lib/lms/lms-schema-state';
+import { getLmsSchemaSnapshot } from '../middleware/lms-schema-snapshot';
 import { ApiError } from '../middleware/error-handler';
-import { requirePermission } from '../middleware/rbac';
+import { requirePermission, requireRole } from '../middleware/rbac';
 import type { Env } from '../types';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { requireOperacoesCurso } from './lms-cursos-rbac';
 import {
   activateScormPackageVersion,
@@ -40,6 +40,7 @@ import {
   rollbackScormPackageVersion,
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
+import { preflightDirectFormativeReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
   authorizeF5IntakeOperation,
@@ -310,6 +311,58 @@ app.post(
     });
   },
 );
+
+app.post('/:id/scorm-replace',
+  requireRole('admin'), requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+    if (c.req.query('confirm') !== 'REPLACE_AFTER_VALIDATION') {
+      throw new ApiError('Confirmação explícita de substituição obrigatória', 400, 'SCORM_REPLACE_CONFIRMATION_INVALID');
+    }
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
+    const empresaId = getEmpresaIdSafe(c), cursoId = courseIdParam(c);
+    const { bytes, arquivoNome } = await readPackageRequest(c, 'scorm');
+    const candidate = await createScormPackageCandidate({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      userId: actorId(c), bytes, arquivoNome,
+    });
+    if (candidate.status === 'ACTIVE') {
+      // Idempotent exact-SHA resubmission after the first request completed.
+      // Do not re-run activation, invalidate snapshots or change enrollments.
+      const receipt = await readAlreadyActiveFormativeReplacement({
+        db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+        packageId: candidate.packageId, packageSha256: candidate.packageSha256,
+      });
+      if (receipt) return c.json({ success: true, data: receipt });
+    }
+    if (candidate.status !== 'VALIDATED') {
+      const sections = [candidate.structural, candidate.completionManifest, candidate.diagnostics];
+      const reasons = sections.flatMap(section => section?.errors ?? [])
+        .filter((reason): reason is string => typeof reason === 'string')
+        .slice(0, 2).join('; ').slice(0, 240);
+      const explanation = candidate.status === 'ACTIVE'
+        ? 'Este SHA já consta como edição ativa; atualize a página antes de tentar novamente'
+        : reasons || 'O candidato deste SHA não foi aprovado nos gates atuais';
+      throw new ApiError(
+        `ZIP recusado pela validação automática; treinamento atual preservado. Motivo: ${explanation}`,
+        409, 'SCORM_REPLACE_STATIC_GATE_FAILED',
+      );
+    }
+    // Clicking the unambiguous replacement button acknowledges that any open
+    // enrollment uses the incoming course policy; the server supplies its own
+    // contemporaneous count and retains CAS protection on policy+active SHA.
+    const preflight = await preflightDirectFormativeReplacement({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      packageId: candidate.packageId, userId: actorId(c),
+    });
+    const data = await replaceValidatedFormativeScorm({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      packageId: candidate.packageId, userId: actorId(c),
+      confirm: {
+        cursoId, packageSha256: candidate.packageSha256,
+        acknowledgeInProgress: preflight.impact.inProgress,
+      },
+    });
+    return c.json({ success: true, data });
+  });
 
 app.get('/:id/scorm-package-versions', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = Number(c.req.param('id'));
@@ -632,6 +685,23 @@ function courseIdParam(c: Context<{ Bindings: Env }>): number {
   return cursoId;
 }
 
+// Default administrator flow: server-validated formative ZIP, no external
+// attestation upload or review ceremony. Full scored/exam route stays governed.
+app.post('/:id/scorm-package-versions/:packageId/replace-direct',
+  requireRole('admin'), requirePermission('lms', 'editar', 'admin'), requireOperacoesCurso('update'), async (c) => {
+    if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
+    const body = ActivateSchema.safeParse(await readSmallJson(c, 2_048, 'Confirmação de substituição'));
+    if (!body.success || !body.data.confirm) {
+      throw new ApiError('Confirmação do curso e SHA do pacote obrigatória', 400, 'SCORM_REPLACE_CONFIRMATION_INVALID');
+    }
+    const data = await replaceValidatedFormativeScorm({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId: getEmpresaIdSafe(c),
+      cursoId: courseIdParam(c), packageId: c.req.param('packageId'),
+      userId: actorId(c), confirm: body.data.confirm,
+    });
+    return c.json({ success: true, data });
+  });
+
 app.post('/:id/scorm-package-versions/:packageId/activate', requirePermission('lms', 'editar', 'admin', 'manager'), requireOperacoesCurso('update'), async (c) => {
   const cursoId = courseIdParam(c);
   const body = ActivateSchema.safeParse(await readSmallJson(c, 2_048, 'Confirmação de ativação'));
@@ -653,6 +723,7 @@ app.get('/:id/scorm-package-versions/:packageId/activation-preflight',
       packageId: c.req.param('packageId'),
       attestationSecret: c.env.SCORM_QA_ATTESTATION_SECRET, runtimeSha: c.env.AIRTRUST_SOURCE_SHA,
     });
+    void _row;
     c.header('Cache-Control', 'private, no-store');
     return c.json({ success: true, data });
   });

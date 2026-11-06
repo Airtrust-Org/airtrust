@@ -13,7 +13,7 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: (...args: unknown[]) => getEmployeeSectorAccessMock(...args),
 }));
 
@@ -21,8 +21,8 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId') || 0),
 }));
 
-vi.mock('../../routes/simuladores-shared', async () => {
-  const actual = await vi.importActual('../../routes/simuladores-shared');
+vi.mock('../../services/simuladores/shared', async () => {
+  const actual = await vi.importActual('../../services/simuladores/shared');
   return {
     ...actual,
     audit: vi.fn(async () => undefined),

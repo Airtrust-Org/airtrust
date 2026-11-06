@@ -3,11 +3,11 @@ import { z } from 'zod';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { extrairUsuarioAuditoria, registrarAuditoria } from '../utils/auditoria';
 import type { Env } from '../types';
 import { parseHorasToMinutes } from './horas-voo.types';
-import { assertFuncionarioInScope, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { assertFuncionarioInScope, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 
 const app = new Hono<{ Bindings: Env }>();
 

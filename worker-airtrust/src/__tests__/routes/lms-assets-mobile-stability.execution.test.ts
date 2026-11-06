@@ -244,6 +244,104 @@ describe('Wrapper SCORM real (execução em jsdom) — dedup de commit e resume 
     expect(cmi['airtrust.viewed_slides']).not.toContain(5);
   });
 
+  it('pacote em pré-visualização não grava o contador do DOM como bookmark (evita pular telas não concluídas)', async () => {
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911,
+      titulo: 'Curso F5',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({ 'cmi.core.lesson_mode': 'normal', 'cmi.core.credit': 'credit' }),
+      hasResumeState: false,
+    });
+    new Function(extractWrapperScript(html))();
+    const frame = g.document.getElementById('scorm-frame') as unknown as { contentWindow: { document: { body: { innerHTML: string } } }; dispatchEvent: (event: unknown) => void };
+    frame.contentWindow!.document.body.innerHTML =
+      '<div class="preview-banner">PRÉ-VISUALIZAÇÃO</div><div id="counterText">14/90</div>' +
+      '<div id="gateStatus">Pré-visualização — sem progresso</div>';
+    frame.dispatchEvent(new g.Event('load'));
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSCommit('');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const cmi = JSON.parse(JSON.parse(String(fetchMock.mock.calls[0][1].body)).cmi_json);
+    expect(cmi['cmi.core.lesson_location']).toBeUndefined();
+    expect(cmi['airtrust.viewed_slides'] ?? []).not.toContain(14);
+  });
+
+  it('backup local à frente do cursor v4 do pacote não reabre telas nunca concluídas', async () => {
+    const store: Record<string, string> = {};
+    const gl = g as unknown as { localStorage?: unknown };
+    gl.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = String(v); },
+      removeItem: (k: string) => { delete store[k]; },
+      clear: () => { Object.keys(store).forEach(k => delete store[k]); },
+    };
+    store['airtrust:scorm:resume:911:7'] = JSON.stringify({
+      schema_version: 2, matricula_id: 911, ciclo_id: 7, numero_ciclo: 1, location: '59/59',
+      progress_pct: 100, updated_at: new Date().toISOString(), total_slides: 59, reason: 'test',
+    });
+    const fetchMock = mockOkFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    const html = buildLaunchPage({
+      matriculaId: 911, cicloId: 7, numeroCiclo: 1,
+      titulo: 'Curso F5',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({
+        'cmi.core.lesson_location': '3/59',
+        'cmi.suspend_data': JSON.stringify({ v: 4, p: 'PKG', a: 2, d: [0, 1, 3], c: false }),
+        'airtrust.total_slides': 59,
+      }),
+      hasResumeState: true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSInitialize('');
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe('3/59');
+    delete gl.localStorage;
+  });
+
+  it.each([
+    [true, ''],
+    [false, '59/59'],
+  ])('backup local sem suspend_data do pacote: curso formativo=%s', async (strictCursor, expected) => {
+    const store: Record<string, string> = {};
+    const gl = g as unknown as { localStorage?: unknown };
+    gl.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = String(v); },
+      removeItem: (k: string) => { delete store[k]; },
+      clear: () => { Object.keys(store).forEach(k => delete store[k]); },
+    };
+    store['airtrust:scorm:resume:912:7'] = JSON.stringify({
+      schema_version: 2, matricula_id: 912, ciclo_id: 7, numero_ciclo: 1, location: '59/59',
+      progress_pct: 100, updated_at: new Date().toISOString(), total_slides: 59, reason: 'test',
+    });
+    vi.stubGlobal('fetch', mockOkFetch());
+    const html = buildLaunchPage({
+      matriculaId: 912, cicloId: 7, numeroCiclo: 1,
+      titulo: 'Curso F5',
+      launchUrl: 'https://api.airtrust.online/lms/scorm/assets/6/57/pkg/index.html',
+      commitUrl: 'https://api.airtrust.online/api/lms/matriculas/scorm/commit',
+      token: 'test-token',
+      isScorm2004: false,
+      initialCmiJson: JSON.stringify({ 'airtrust.total_slides': 59 }),
+      hasResumeState: false,
+      strictCursor,
+    });
+    new Function(extractWrapperScript(html))();
+    const api = g.window.API as Record<string, (...args: unknown[]) => unknown>;
+    api.LMSInitialize('');
+    expect(api.LMSGetValue('cmi.core.lesson_location')).toBe(expected);
+    delete gl.localStorage;
+  });
+
   it('mudança apenas de session_time não dispara novo commit (fingerprint ignora campos de tempo)', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);

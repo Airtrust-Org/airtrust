@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { requireRole } from '../middleware/rbac';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 // ─────────────────────────────────────────────────────────────────────────────
 // DÍVIDA TÉCNICA — LMS Integration (Bloco 7 / Auditoria LMS-2026-04)
 //

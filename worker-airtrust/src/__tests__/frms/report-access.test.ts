@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEmployeeSectorAccess } from '../../services/employee-sector-access';
+import { resolveEmployeeSectorAccess } from '../../middleware/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../../lib/frms/report-access';
 import { aggregateAuthorizedComplianceReport, summarizeReportRestEvidence } from '../../lib/frms/db-service-relatorios';
 import type { FrmsOperationalSnapshotItem } from '../../lib/frms/operational-snapshot';

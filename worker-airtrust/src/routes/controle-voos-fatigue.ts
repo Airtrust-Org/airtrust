@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe, getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from '../lib/frms/operational-snapshot';
 
 type CrewRow = { funcionario_id: number; nome: string; funcao: string };
@@ -88,6 +89,7 @@ export async function getFlightFatigueHandler(c: Context<{ Bindings: Env }>) {
   // Never convert missing FRMS evidence or unavailable configuration into "OK".
   const snapshot = await listFrmsOperationalSnapshot(c.env.DB, {
     empresaId, dataInicio: date, dataFim: date,
+    coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
     filters: { include_inconsistencies: true },
   });
   return c.json({

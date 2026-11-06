@@ -6,6 +6,7 @@
  */
 
 import type { Env } from '../../types';
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
 
 // ===== TIPOS =====
 export interface ValidacaoResult {
@@ -145,7 +146,7 @@ export async function checkConflitos(
 
     if (existing) {
       const dataVencimento = (existing as any).data_vencimento;
-      const hoje = new Date().toISOString().substring(0, 10);
+      const hoje = getTodayIsoSaoPaulo();
 
       if (dataVencimento > hoje) {
         avisos.push(`Funcionário já possui esta qualificação válida até ${dataVencimento}`);

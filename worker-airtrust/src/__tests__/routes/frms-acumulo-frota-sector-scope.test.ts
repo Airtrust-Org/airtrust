@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Env } from '../../types';
-import type { EmployeeSectorAccess } from '../../services/employee-sector-access';
+import type { EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 /**
  * P1-FRMS-003 — GET /api/frms/acumulo-frota ignored self/setor scoping,
@@ -36,9 +36,9 @@ vi.mock('../../routes/frms-shared', async (importOriginal) => {
   };
 });
 
-vi.mock('../../services/employee-sector-access', async (importOriginal) => {
+vi.mock('../../middleware/employee-sector-access', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../services/employee-sector-access')>();
+    await importOriginal<typeof import('../../middleware/employee-sector-access')>();
   return {
     ...actual,
     getEmployeeSectorAccess: vi.fn(async () => accessBox.value),
@@ -75,7 +75,7 @@ vi.mock('../../lib/frms/db-service', async (importOriginal) => {
 });
 
 import frmsRoutes from '../../routes/frms';
-import { buildFuncionarioScopeWhere } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere } from '../../middleware/employee-sector-access';
 
 const fakeDb = {} as unknown as Env['DB'];
 

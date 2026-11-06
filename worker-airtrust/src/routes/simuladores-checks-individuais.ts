@@ -8,7 +8,7 @@ import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { hasSchemaTable, getSchemaTriggerNames } from '../utils/db-schema';
 import { getTenantContext } from '../middleware/tenant';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import { gerarQualificacaoDaFicha } from './simuladores-fichas-helpers';
 import { normalizeValidityMonths, calculateQualificationExpiry } from '../services/qualification-history-atomic';
 

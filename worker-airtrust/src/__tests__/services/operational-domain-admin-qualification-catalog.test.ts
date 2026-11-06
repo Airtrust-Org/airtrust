@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { errorHandler } from '../../middleware/error-handler';
-import { requireOperationalAccess } from '../../services/operational-domain-access';
+import { requireOperationalAccess } from '../../middleware/operational-domain-access';
 
 function createDb(flag: unknown = 1): D1Database {
   return {

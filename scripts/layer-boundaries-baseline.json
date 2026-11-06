@@ -1,0 +1,4 @@
+{
+  "comment": "Known layer-boundary violations tolerated by scripts/guard-layer-boundaries.mjs. This list may only shrink.",
+  "violations": []
+}

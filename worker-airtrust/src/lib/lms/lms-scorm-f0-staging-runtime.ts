@@ -1,5 +1,5 @@
-import { ApiError } from '../../middleware/error-handler';
-import { mergeScormRuntimeState } from '../../services/lms-progress-guardrails';
+import { ApiError } from '../errors/api-error';
+import { mergeScormRuntimeState } from './lms-progress-guardrails';
 import { ScormCommitSchema } from '../../services/lms-scorm-commit-schema';
 
 const HEX64 = /^[a-f0-9]{64}$/;

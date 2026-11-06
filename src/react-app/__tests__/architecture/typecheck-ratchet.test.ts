@@ -38,7 +38,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/lib/sw-manager.tsx': 1,
   'src/react-app/components/FuncionarioCard.tsx': 5,
-  'src/react-app/components/HomeRouter.tsx': 1,
+  'src/react-app/pages/HomeRouter.tsx': 1,
   'src/react-app/components/OptimizedMainSidebar.tsx': 2,
   'src/react-app/components/admin/FuncoesManagement.tsx': 4,
   'src/react-app/components/dashboard/AlertWidget.tsx': 2,

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Button from '@/react-app/components/Button';
 import {
@@ -7,9 +8,12 @@ import {
   useImportFormativeAttestation,
   useRollbackScormPackage,
   useRunScormPackageConformance,
+  useReplaceValidatedScormDirect,
   useScormActivationPreflight,
 } from '@/react-app/hooks/useLms';
-import type { ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { lmsKeys, type ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { uploadScormInactiveProductionCandidate } from './lmsContentUpload';
+import { allowDirectScormUpload } from './lmsScormDirectUploadPolicy';
 
 const FORMATIVE = 'FORMATIVE_NO_EXAM_V1';
 const MAX_ATTESTATION_BYTES = 24_576;
@@ -70,6 +74,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const importEvidence = useImportFormativeAttestation(cursoId);
   const approve = useApproveFormativePackage(cursoId);
   const activate = useActivateScormPackageVersion(cursoId);
+  const directReplace = useReplaceValidatedScormDirect(cursoId);
   const rollback = useRollbackScormPackage(cursoId);
 
   const [note, setNote] = useState('');
@@ -88,6 +93,9 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const policyMoves = data?.incomingPolicy != null;
   const inProgress = data?.impact.inProgress ?? 0;
   const previous = versions.find((item) => item.packageId === pkg.previousActivePackageId);
+  const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
+  const awaitingApproval = pending.has('ADMIN_APPROVAL');
+  const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -107,7 +115,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   return (
     <div className="rounded-lg border p-3 text-sm" data-testid={`edition-${pkg.packageId}`}>
       <p className="font-medium">
-        {pkg.status}{pkg.status === 'ACTIVE' ? ' (edição ativa)' : ''} · SHA {sha12(sha)}
+        {pkg.status === 'ACTIVE' ? 'Conteúdo atual' : pkg.status === 'VALIDATED' ? 'Nova edição recebida' : pkg.status === 'REJECTED' ? 'ZIP recusado' : 'Edição anterior'} · SHA {sha12(sha)}
         {formative ? <span className="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-900">Formativo · sem prova final</span> : null}
         {pkg.assessmentPolicy === 'SCORED' ? <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs">Avaliativo</span> : null}
       </p>
@@ -121,17 +129,60 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
         <p key={reason} className="text-rose-600">{reason}</p>
       ))}
 
-      {validated && data ? (
+      {validated && preflight.isPending ? <p role="status">Verificando se a nova edição pode substituir a atual…</p> : null}
+      {validated && preflight.isError ? (
+        <div role="alert" className="mt-2 text-rose-700">
+          Falha ao consultar as condições da substituição. A edição atual não foi alterada.
+          <Button type="button" variant="secondary" onClick={() => void preflight.refetch()}>Tentar novamente</Button>
+        </div>
+      ) : null}
+      {validated && formative && data ? (
+        <div className="mt-3 space-y-2 rounded border border-emerald-300 bg-emerald-50 p-3 text-emerald-950">
+          <p className="font-semibold">Edição validada — substituição direta disponível</p>
+          <p className="text-xs">A validação do servidor confere estrutura, manifesto, atividades, SHA e arquivos no armazenamento antes de trocar o conteúdo. Não é necessário importar JSON ou obter homologação manual.</p>
+          {data.incomingPolicy === 'FORMATIVE' ? (
+            <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>
+          ) : null}
+          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending}
+            onClick={() => {
+              void directReplace.mutateAsync({
+                packageId: pkg.packageId,
+                confirm: { cursoId, packageSha256: sha,
+                  ...(inProgress ? { acknowledgeInProgress: inProgress } : {}) },
+              }).then(() => toast.success('Conteúdo substituído. Histórico preservado.'))
+                .catch((error: unknown) => toast.error(errorText(error)));
+            }}>
+Substituir esta edição já enviada
+          </Button>
+          {!isAdmin ? <p className="text-xs">Somente administradores podem substituir o curso.</p> : null}
+        </div>
+      ) : null}
+
+      {validated && data && !formative ? (
+        <details open={!formative} className="mt-3 rounded border p-2">
+          <summary className="cursor-pointer text-xs font-medium">{formative ? 'Detalhes técnicos (opcional)' : 'Detalhes de ativação'}</summary>
         <div className="mt-3 space-y-3">
+          <p className="font-medium" role="status">
+            {activationReady
+              ? 'Pronto para substituir o conteúdo do curso.'
+              : awaitingEvidence
+                ? 'Novo ZIP recebido. Aguardando homologação técnica assinada.'
+                : awaitingApproval
+                  ? 'Homologação recebida. Aguardando aprovação administrativa.'
+                  : 'Novo ZIP recebido. Existem verificações pendentes.'}
+          </p>
           <p className="text-xs">
             Curso <strong>#{data.course.id} · {data.course.titulo}</strong>
             {data.active ? <> · edição ativa hoje: {sha12(data.active.packageSha256)}</> : null}
           </p>
-          <ul className="space-y-1" aria-label="Pré-checagem de ativação">
-            {checks.map((check) => (
-              <Step key={check.id} ok={check.ok} label={CHECK_LABEL[check.id] ?? check.id} detail={check.ok ? undefined : check.detail} />
-            ))}
-          </ul>
+          <details className="rounded border p-2 text-xs">
+            <summary className="cursor-pointer font-medium">Ver verificações da substituição ({checks.filter((check) => check.ok).length}/{checks.length})</summary>
+            <ul className="mt-2 space-y-1" aria-label="Pré-checagem de ativação">
+              {checks.map((check) => (
+                <Step key={check.id} ok={check.ok} label={CHECK_LABEL[check.id] ?? check.id} detail={check.ok ? undefined : check.detail} />
+              ))}
+            </ul>
+          </details>
 
           {formative && (!evidenceOk || !approvalOk) ? (
             <div className="rounded border border-dashed p-2">
@@ -213,7 +264,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
               <Button
                 variant="primary"
                 loading={activate.isPending}
-                disabled={!data.canActivate || (!formative && !pkg.publishable) ||
+                disabled={!isAdmin || !activationReady ||
                   activateConfirm !== sha12(sha) || (inProgress > 0 && !ackInProgress)}
                 onClick={() => void activate
                   .mutateAsync({
@@ -223,7 +274,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
                   .then(() => toast.success('Edição ativada. Confira o resultado no curso.'))
                   .catch((error: unknown) => toast.error(errorText(error)))}
               >
-                Ativar edição
+                Substituir conteúdo do curso
               </Button>
             </div>
           ) : (
@@ -233,6 +284,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
             </div>
           )}
         </div>
+        </details>
       ) : null}
 
       {pkg.status === 'ACTIVE' ? (
@@ -266,9 +318,56 @@ export default function ScormEditionPanel({ cursoId, versions, isAdmin }: {
   versions: ScormPackageVersionRow[];
   isAdmin: boolean;
 }) {
-  if (versions.length === 0) return <p className="text-sm opacity-70">Nenhuma edição enviada ainda.</p>;
+  const qc = useQueryClient();
+  const [uploading, setUploading] = useState(false);
+  const uploadLock = useRef(false);
+  const productionUpload = typeof window !== 'undefined' && allowDirectScormUpload(isAdmin, window.location.hostname);
+
+  async function onSelectZip(file: File | undefined) {
+    if (!file || !productionUpload || uploadLock.current) return;
+    uploadLock.current = true;
+    setUploading(true);
+    try {
+      const receipt = await uploadScormInactiveProductionCandidate({
+        cursoId, file, replaceImmediately: true,
+      });
+      if (receipt.status !== 'ACTIVE') throw new Error('O Worker não confirmou a substituição da edição.');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) }),
+        qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false }),
+      ]);
+      toast.success('ZIP validado e conteúdo substituído. Histórico preservado.');
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      uploadLock.current = false;
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-2">
+      {productionUpload ? (
+        <div className="rounded-lg border p-3 text-sm">
+          <label htmlFor={`scorm-direct-upload-${cursoId}`} className="block font-medium">
+            Enviar ZIP formativo e substituir imediatamente
+          </label>
+          <p className="mt-1 mb-2 text-xs opacity-70">
+            Ao selecionar o arquivo, o Worker valida o pacote e substitui a edição ativa automaticamente.
+            Em caso de falha, a edição anterior permanece ativa. Histórico concluído é preservado.
+          </p>
+          <input id={`scorm-direct-upload-${cursoId}`} type="file" accept=".zip,application/zip"
+            aria-label="Selecionar ZIP formativo e substituir"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              void onSelectZip(file);
+            }} />
+          {uploading ? <p role="status" className="mt-2">Validando ZIP e substituindo conteúdo…</p> : null}
+        </div>
+      ) : null}
+      {versions.length === 0 ? <p className="text-sm opacity-70">Nenhuma edição enviada ainda.</p> : null}
       {versions.map((pkg) => (
         <EditionCard key={pkg.packageId} cursoId={cursoId} pkg={pkg} versions={versions} isAdmin={isAdmin} />
       ))}

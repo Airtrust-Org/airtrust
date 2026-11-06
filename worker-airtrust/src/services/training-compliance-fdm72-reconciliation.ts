@@ -1,6 +1,6 @@
 import { extrairUsuarioAuditoria } from '../utils/auditoria';
 import { reconcileTrainingComplianceRuleEnrollment } from './training-compliance-rule-enrollment';
-import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
 
 type FdmSnapshot = Pick<TrainingComplianceSnapshot, 'rules' | 'people'>;
 

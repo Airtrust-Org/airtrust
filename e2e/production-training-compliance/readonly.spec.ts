@@ -25,8 +25,19 @@ function waitApi(page: Page, path: string, query?: (url: URL) => boolean): Promi
 }
 
 async function payload(response: PlaywrightResponse) {
-  expect(response.ok(), `${response.url()} HTTP ${response.status()}`).toBeTruthy();
-  const json = await response.json();
+  const json = await response.json().catch(() => null);
+  // Fail closed on 5xx while retaining only non-sensitive diagnostic fields:
+  // HTTP status, stable error code and request ID. Never log response bodies
+  // or authorization headers from the real production tenant.
+  const code = typeof json?.code === 'string' && /^[A-Z0-9_]{1,80}$/.test(json.code)
+    ? json.code : 'UNAVAILABLE';
+  const requestId = typeof json?.requestId === 'string' &&
+    /^[A-Za-z0-9-]{1,128}$/.test(json.requestId)
+    ? json.requestId : 'UNAVAILABLE';
+  expect(
+    response.ok(),
+    `${new URL(response.url()).pathname} HTTP ${response.status()} code=${code} requestId=${requestId}`,
+  ).toBeTruthy();
   expect(json?.success).toBe(true);
   return json;
 }
@@ -339,7 +350,7 @@ test('production intelligent training compliance UI and APIs are coherent and re
   expectCount(currentTrend?.requisitos_obrigatorios ?? -1, 'trend.requisitos_obrigatorios');
   await expect(page.getByRole('heading', { name: 'Evolução do compliance — 90 dias' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gerador de relatórios' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Exportar PDF' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Gerar PDF (de requisitos|do histórico)/ })).toBeVisible();
 
   const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
   await page.getByRole('button', { name: 'Comunicações', exact: true }).click();

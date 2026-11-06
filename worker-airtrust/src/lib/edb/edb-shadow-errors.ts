@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 
 export type EdbShadowErrorStatus = 400 | 404 | 409 | 500;
 

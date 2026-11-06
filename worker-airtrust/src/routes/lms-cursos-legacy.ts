@@ -21,12 +21,12 @@ import {
   buildCourseSetorScope,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import {
   employeeSectorSql,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { assertCoursePolicyChangeAllowed } from '../lib/lms/lms-course-policy-guard';

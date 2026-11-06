@@ -1,10 +1,10 @@
-import { ApiError } from '../middleware/error-handler';
+import { ApiError } from '../lib/errors/api-error';
 import { extractProgressPctFromCmiJson } from './lms-matricula-runtime-domain';
 import {
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   parseScormLocationPair,
-} from './lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 
 export type ProgressRecoveryEnrollment = {
   id: number;

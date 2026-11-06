@@ -1,10 +1,10 @@
-import type { EdbRegulatedActor } from '../../services/edb/technical-discrepancy-ledger';
+import type { EdbRegulatedActor } from '../../lib/edb/technical-discrepancy-ledger';
 import {
   closeEdbDiaryVolume,
   openEdbDiaryVolume,
   type EdbDiaryVolume,
   type EdbVolumeBoundaryAct,
-} from '../../services/edb/diary-governance';
+} from '../../lib/edb/diary-governance';
 
 export interface EdbStoredVolumeRow {
   id: string;

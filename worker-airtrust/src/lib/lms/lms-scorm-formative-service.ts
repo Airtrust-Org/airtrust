@@ -5,7 +5,7 @@
  * approval → activation (checks everything again, atomically).
  * Nothing in this file trusts the ZIP, the browser, or a client-sent verdict.
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import {
   formativeAttestationDigest, FORMATIVE_PROFILE, verifyFormativeAttestation,
   type FormativeAttestation,

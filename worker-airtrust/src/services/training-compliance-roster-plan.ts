@@ -3,7 +3,7 @@
  * LMS execution roster. Absence of historical evidence is an enrollment reason;
  * mere applicability is not. Historical/terminal cycles are never deleted.
  */
-import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
 import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollment-policy';
 
 export type RosterCourse = {

@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
-import { badRequest, forbidden } from '../middleware/error-handler';
+import { ApiError, badRequest, forbidden } from '../middleware/error-handler';
+import { applyAtomicUserEmployeeLink, eligibleAtomicUserEmployeeLink } from '../services/usuario-funcionario-atomic-link';
 import { createLogger } from '../utils/logger';
 import { hashPassword } from '../utils/security';
 import { hasRefreshTokensAccessTokenJtiColumn } from '../utils/db-schema';
@@ -304,6 +305,78 @@ protectedAdminUsuariosRoutes.get('/', async (c) => {
       }
       return { ...user, perfis };
     }),
+  });
+});
+
+/**
+ * Governed identity link — tenant-scoped, admin-only, fail closed.
+ * Read-side eligibility and write-side CAS share the exact same SQL predicate.
+ * A concurrent administrator edit cannot overwrite a newer link.
+ *
+ * The one-off support workflow is allowlisted to tenant 6; this endpoint
+ * intentionally does not offer role promotion or arbitrary data updates.
+ */
+function getLinkTarget(c: { req: { param: (name: string) => string; query: (name: string) => string | undefined } }): number {
+  return parseTargetUserId(c.req.param('id'));
+}
+
+function parseLinkEmployeeId(raw: unknown): number {
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw badRequest('Funcionário inválido', 'INVALID_EMPLOYEE_ID');
+  }
+  return id;
+}
+
+async function validateLinkRequest(
+  db: D1Database,
+  callerRole: string,
+  tenantId: number,
+  targetUserId: number,
+): Promise<void> {
+  requireAdmin(callerRole, 'vincular identidade funcional');
+  if (tenantId !== 6) {
+    throw forbidden('Operação indisponível nesta empresa', 'LINK_TENANT_NOT_ENABLED');
+  }
+  const target = await findTargetInTenant(db, targetUserId, tenantId);
+  if (!target) {
+    throw forbidden('Usuário não pertence à empresa selecionada', 'WRONG_TENANT');
+  }
+  if (Number(target.membership_count) !== 1) {
+    throw new ApiError('Vínculo de identidade multiempresa exige reconciliação especializada', 409, 'MULTI_TENANT_LINK_BLOCKED');
+  }
+}
+
+protectedAdminUsuariosRoutes.get('/:id/employee-link-eligibility', async (c) => {
+  const tenant = getTenantContext(c).empresaId;
+  const userId = getLinkTarget(c);
+  const employeeId = parseLinkEmployeeId(c.req.query('funcionario_id'));
+  await validateLinkRequest(c.env.DB, getCallerRole(c), tenant, userId);
+  const eligible = await eligibleAtomicUserEmployeeLink(c.env.DB, {
+    empresaId: tenant, userId, employeeId,
+  });
+  return c.json({ success: true, data: { eligible, tenant_id: tenant } });
+});
+
+protectedAdminUsuariosRoutes.post('/:id/employee-link-cas', async (c) => {
+  const tenant = getTenantContext(c).empresaId;
+  const userId = getLinkTarget(c);
+  const actorId = getCallerId(c);
+  const payload = await c.req.json<{funcionario_id?: number; expected_previous_link?: null}>();
+  const employeeId = parseLinkEmployeeId(payload?.funcionario_id);
+  if (!Object.prototype.hasOwnProperty.call(payload || {}, 'expected_previous_link') ||
+      payload.expected_previous_link !== null) {
+    throw badRequest('O vínculo anterior esperado deve ser null', 'CAS_PRECONDITION_REQUIRED');
+  }
+  await validateLinkRequest(c.env.DB, getCallerRole(c), tenant, userId);
+  const outcome = await applyAtomicUserEmployeeLink(c.env.DB, {
+    empresaId: tenant, actorId, userId, employeeId,
+  });
+  if (outcome !== 'linked') {
+    throw new ApiError('Vínculo alterado ou elegibilidade revogada; operação não executada', 409, 'IDENTITY_LINK_CONFLICT');
+  }
+  return c.json({
+    success: true, data: { user_id: userId, funcionario_id: employeeId, linked: true },
   });
 });
 

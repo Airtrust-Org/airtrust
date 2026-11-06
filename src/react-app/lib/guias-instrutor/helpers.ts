@@ -1,4 +1,4 @@
-import { GuiaInstrutor } from './api';
+import type { GuiaInstrutor } from '../../types/guias-instrutor';
 
 export function formatarNomeSessaoVisivel(nomeSessao: string): string {
   if (!nomeSessao) return '';

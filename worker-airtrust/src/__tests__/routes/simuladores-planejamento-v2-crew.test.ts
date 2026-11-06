@@ -20,7 +20,7 @@ vi.mock('../../middleware/tenant', () => ({
   getTenantContext: () => ({ empresaId: 1 }),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn().mockResolvedValue({ mode: 'all', setorIds: [] }),
   buildFuncionarioScopeWhere: vi.fn().mockReturnValue({ clause: '1 = 1', bindings: [] }),
 }));

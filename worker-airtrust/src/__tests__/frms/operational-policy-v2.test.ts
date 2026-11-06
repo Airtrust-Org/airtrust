@@ -30,17 +30,22 @@ describe('FRMS Operational Policy V2', () => {
   });
   it('does not infer VMC when METAR is missing', () => expect(computeImcDelta([{legId:'1'}],p).legs[0].departure.condition).toBe('INDETERMINATE'));
   it('credits hotel/base on the first eligible day and never OFF_DUTY', () => {
-    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',absoluteRestHours:8,noWorkHours:12},p).creditPoints).toBe(4);
-    expect(computeRecoveryCredit({activityType:'STANDBY_ONSITE',absoluteRestHours:8,noWorkHours:12},p).creditPoints).toBe(1.5);
-    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',absoluteRestHours:8,noWorkHours:12,immediateCalloutRequired:true},p).creditPoints).toBe(3);
-    expect(computeRecoveryCredit({activityType:'OFF_DUTY',absoluteRestHours:8,noWorkHours:24},p).creditPoints).toBe(0);
+    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',reportedSleepHours:8,noWorkHours:12},p).creditPoints).toBe(4);
+    expect(computeRecoveryCredit({activityType:'STANDBY_ONSITE',reportedSleepHours:8,noWorkHours:12},p).creditPoints).toBe(1.5);
+    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',reportedSleepHours:8,noWorkHours:12,immediateCalloutRequired:true},p).creditPoints).toBe(3);
+    expect(computeRecoveryCredit({activityType:'OFF_DUTY',reportedSleepHours:8,noWorkHours:24},p).creditPoints).toBe(0);
   });
-  it('generates D+1 HV credit and applies it only against HV penalty', () => {
-    expect(computeFlightHoursDelta(0,0,p).generatedCreditForNextDayPoints).toBe(2);
-    expect(computeFlightHoursDelta(60,0,p).generatedCreditForNextDayPoints).toBe(1);
+  it('nunca gera crédito por HV baixo e não abate penalidade com crédito legado', () => {
+    expect(computeFlightHoursDelta(0,0,p).generatedCreditForNextDayPoints).toBe(0);
+    expect(computeFlightHoursDelta(60,0,p).generatedCreditForNextDayPoints).toBe(0);
     expect(computeFlightHoursDelta(420,0,p).netDeltaPoints).toBe(0);
     expect(computeFlightHoursDelta(480,0,p).netDeltaPoints).toBe(-2);
-    expect(computeFlightHoursDelta(480,1,p).netDeltaPoints).toBe(-1);
+    expect(computeFlightHoursDelta(480,99,p).netDeltaPoints).toBe(-2);
+    expect(computeFlightHoursDelta(480,99,p).priorDayCreditAppliedPoints).toBe(0);
     expect(computeFlightHoursDelta(540,0,p).netDeltaPoints).toBe(-4);
+  });
+  it('crédito de recuperação depende de sono real e falha fechado sem duração reportada', () => {
+    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',reportedSleepHours:null,noWorkHours:24},p).creditPoints).toBe(0);
+    expect(computeRecoveryCredit({activityType:'STANDBY_HOME_HOTEL',reportedSleepHours:4,noWorkHours:24},p).creditPoints).toBe(2);
   });
 });

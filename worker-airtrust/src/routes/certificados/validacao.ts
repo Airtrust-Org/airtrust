@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { rateLimiter, rateLimitPresets } from '../../middleware/rate-limit';
 import type { Env } from '../../types';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
 import { generateCertificateValidationHash } from '../../utils/certificate-validation-hash';
-import { tableHasColumn } from '../qualificacoes-certificados-helpers';
+import { tableHasColumn } from '../../services/qualificacoes/certificados-helpers';
 
 const validacao = new Hono<{ Bindings: Env }>();
 const CERTIFICATE_SCAN_BATCH_SIZE = 250;
@@ -124,7 +125,8 @@ async function buildValidationPayload(
 
   const situacaoOperacionalAtual: 'VALIDA' | 'VENCIDA' | 'INDETERMINADA' = !dataVencimentoAtual
     ? 'INDETERMINADA'
-    : dataVencimentoAtual < new Date().toISOString().slice(0, 10)
+    : // Dia civil de São Paulo, o mesmo do Compliance: a data UTC antecipa em 3 h o fim da validade.
+      dataVencimentoAtual < getTodayIsoSaoPaulo()
       ? 'VENCIDA'
       : 'VALIDA';
 

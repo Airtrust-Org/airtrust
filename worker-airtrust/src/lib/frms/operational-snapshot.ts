@@ -13,13 +13,16 @@ import {
   type FrmsActivitySnapshotRow,
 } from './activity-context';
 import { resolveFrmsOperationalContext, asOperationalLimitesMap } from './parameter-governance';
-import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
+import { costaDoSolAct2025_2027Applies, lawArt42EnforcementEnabled, regulatoryProfileHasDocumentedAppendix, regulatoryProfileIsReady } from './compliance-policy';
+import { buildArt42DutiesByCrew, evaluateLawArt42Madrugadas } from './law-art42-madrugadas';
 import { loadLegalWorkMonth, type LegalWorkMonthlyCrewSummary } from './legal-work-service';
 import { sumLegalWorkRollingDays } from './legal-work-time';
 import {
   evaluateRegulatoryCompliance,
+  sanitizeRollingRegulatoryEvidence,
   type CostaDoSolMissionEvidence,
   type RegulatoryComplianceResult,
+  type RegulatoryPendingFinding,
   type RollingRegulatoryEvidence,
   type WorkRegulatoryEvidence,
 } from './regulatory-compliance';
@@ -40,6 +43,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
+import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
 import { clockToMinutes, minutesToClock, projectSleepStart } from './operational-clock';
 
 export type { MissionPeriodRow } from './mission-periods';
@@ -98,6 +102,7 @@ export interface FrmsOperationalSnapshotItem {
   /** Instante UTC de envio, para exibição no fuso operacional. */
   checkin_submitted_at?: string | null;
   kss_score: number | null;
+  kss_provenance?: string | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
   hora_acordar: string | null;
@@ -146,6 +151,8 @@ export interface FrmsOperationalSnapshotItem {
     message: string;
   }>;
   compliance_unknown_reasons?: string[];
+  /** Regras legais calculadas e ainda não ativadas como bloqueio (ex.: Lei 13.475 art. 42). */
+  compliance_pending_validation?: RegulatoryPendingFinding[];
 }
 
 export interface FrmsOperationalSnapshotSummary {
@@ -225,6 +232,7 @@ interface CheckinSnapshotRow {
   submitted_at?: string | null;
   hora_apresentacao?: string | null;
   kss_score: number | null;
+  kss_provenance?: string | null;
   horas_sono: number | null;
   qualidade_sono: number | null;
   wake_time: string | null;
@@ -385,15 +393,6 @@ function appendMorningEffectivenessProjections(
     current.push(activity);
     activitiesByKey.set(activityKey, current);
   }
-  const realHvByKey = new Map<string, number>();
-  for (const jornada of rows.jornadas) {
-    const jornadaKey = `${jornada.data_operacional}::${Number(jornada.funcionario_id)}`;
-    realHvByKey.set(
-      jornadaKey,
-      (realHvByKey.get(jornadaKey) ?? 0) + Math.max(0, Number(jornada.horas_voo_minutos ?? 0)),
-    );
-  }
-
   for (const checkin of rows.checkins) {
     const key = `${checkin.data_operacional}::${Number(checkin.funcionario_id)}`;
     if (existing.has(key)) continue;
@@ -403,28 +402,13 @@ function appendMorningEffectivenessProjections(
     if (options?.v2Policy) {
       const previousDate = addDaysIso(checkin.data_operacional, -1);
       const previousKey = `${previousDate}::${Number(checkin.funcionario_id)}`;
-      const previousActivities = summarizeFrmsActivities(activitiesByKey.get(previousKey) ?? [], false);
-      const previousFrmsFlightMinutes =
-        (realHvByKey.get(previousKey) ?? 0) + previousActivities.simulator_minutes;
-      // Crédito de baixa HV é um modificador de carga de voo, não um sinônimo de
-      // descanso. Um dia com 0 h de voo pode ter 9 h de treinamento, standby ou
-      // outra atividade. Nesses casos a recuperação vem exclusivamente da
-      // evidência de recuperação governada, nunca de "HV zero".
-      const generatedCredit =
-        previousFrmsFlightMinutes > 0
-          ? computeFlightHoursDelta(
-              previousFrmsFlightMinutes,
-              0,
-              options.v2Policy,
-            ).generatedCreditForNextDayPoints
-          : 0;
       v2Adjustments = {
         policy: options.v2Policy,
         fadigaPolicy: options.fadigaPolicy,
         recoveryCreditPoints: options.recoveryCreditByKey.get(previousKey)?.points ?? 0,
         flightHours: computeFlightHoursDelta(
           activitySummary.simulator_minutes,
-          generatedCredit,
+          0,
           options.v2Policy,
         ),
       };
@@ -778,14 +762,17 @@ export function buildFrmsOperationalSnapshot(
         ? 'PENDENTE'
         : 'NAO_APLICAVEL';
 
-    const kss = checkin ? asNumber(checkin.kss_score, 0) : null;
-    const horasSonoCheckin = checkin ? Number(checkin.horas_sono ?? 0) : null;
+    const rawKss = checkin?.kss_score == null ? null : Number(checkin.kss_score);
+    const kss = checkin?.kss_provenance === 'CREW_REPORTED' &&
+      rawKss != null && Number.isInteger(rawKss) && rawKss >= 1 && rawKss <= 9
+      ? rawKss : null;
+    const horasSonoCheckin = checkin?.horas_sono == null ? null : Number(checkin.horas_sono);
 
     // Sem check-in válido não há fallback de sono de 8 h nem despertar inferido.
     // O snapshot permanece incompleto/ausente e a decisão operacional deve refletir
     // a falta de evidência, em vez de fabricar precisão.
     const sleepDataSource: FrmsOperationalSnapshotItem['sleep_data_source'] =
-      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin > 0
+      checkin && horasSonoCheckin != null && Number.isFinite(horasSonoCheckin) && horasSonoCheckin >= 0 && horasSonoCheckin <= 24
         ? 'REAL'
         : 'AUSENTE';
 
@@ -799,6 +786,7 @@ export function buildFrmsOperationalSnapshot(
     const completeDailyCheckin =
       Boolean(checkin) &&
       Boolean(checkinPresentationTime) &&
+      kss != null &&
       sleepDataSource === 'REAL' &&
       wakeDataSource === 'REAL';
 
@@ -838,7 +826,7 @@ export function buildFrmsOperationalSnapshot(
       alertas.push('DADO_INCONSISTENTE');
     }
 
-    if ((horasSono ?? 0) > 0 && (horasSono ?? 0) < 6) {
+    if (horasSono != null && horasSono < 6) {
       alertas.push('SONO_INSUFICIENTE');
     }
 
@@ -929,11 +917,12 @@ export function buildFrmsOperationalSnapshot(
       checkin_horario: normalizeText(checkin?.hora_checkin),
       checkin_submitted_at: normalizeText(checkin?.submitted_at),
       kss_score: kss,
+      kss_provenance: checkin?.kss_provenance ?? null,
       horas_sono: horasSono,
       qualidade_sono: checkin ? asNumber(checkin.qualidade_sono, 0) : null,
       hora_acordar: horaAcordar,
       fadiga_score: checkin ? asNumber(checkin.score_fadiga, 0) : null,
-      status_operacional_checkin: normalizeText(checkin?.status_operacional),
+      status_operacional_checkin: completeDailyCheckin ? normalizeText(checkin?.status_operacional) : null,
 
       effectiveness_pct: effectivenessPctNormalized,
       effectiveness_componentes:
@@ -999,6 +988,7 @@ export function buildFrmsOperationalSnapshot(
       compliance_status: compliance?.status,
       violacoes_normativas: compliance?.violations ?? [],
       compliance_unknown_reasons: compliance?.unknownReasons ?? [],
+      compliance_pending_validation: compliance?.pendingValidation ?? [],
     };
 
     items.push(item);
@@ -1014,6 +1004,8 @@ export function buildFrmsOperationalSnapshot(
 
 export interface ListFrmsOperationalSnapshotParams {
   empresaId: number;
+  /** Current operator approval, checked at read time so revocation is immediate. */
+  coverageApprovalCsv?: string;
   dataInicio: string;
   dataFim: string;
   filters?: FrmsOperationalSnapshotFilters;
@@ -1139,7 +1131,7 @@ async function loadOperationalSnapshotRows(
            ch.hora_checkin,
            ch.submitted_at,
            ch.jornada_inicio_prevista AS hora_apresentacao,
-           ch.kss_score,
+           ch.kss_score, ch.kss_provenance,
            ch.horas_sono,
            ch.qualidade_sono,
            ch.wake_time,
@@ -1201,11 +1193,11 @@ async function loadOperationalSnapshotRows(
       .prepare(
         `SELECT ar.data_referencia,
                 CAST(ar.tripulante_id AS INTEGER) AS funcionario_id,
-                COALESCE(ar.hv_dia_min, 0) AS hv_dia_min,
-                COALESCE(ar.hv_mes_calendario_min, 0) AS hv_mes_calendario_min,
-                COALESCE(ar.hv_28_dias_min, 0) AS hv_28_dias_min,
-                COALESCE(ar.hv_365_dias_min, 0) AS hv_365_dias_min,
-                ar.hv_ano_calendario_min,
+                ar.hv_dia_min,
+                ar.hv_mes_calendario_min,
+                ar.hv_28_dias_min,
+                ar.hv_365_dias_min,
+                ar.hv_ano_calendario_min, ar.updated_at,
                 COALESCE(ar.repouso_anterior_min, -1) AS repouso_anterior_min,
                 COALESCE(ar.repouso_suficiente, 0) AS repouso_suficiente
            FROM frms_acumulo_rolling ar
@@ -1668,14 +1660,16 @@ export async function listFrmsOperationalSnapshot(
   );
 
   // ------------------------------------------------------------------------
-  // Janela INTERNA de contexto: cobre todo o período embarcado que contém os
-  // dias solicitados + 6 dias anteriores para o rolling de 168h. Sem período
-  // real, mantém a janela solicitada (não fabrica contexto).
+  // Contexto de missão e janela legal independentes: Art. 42 pode exigir
+  // histórico mesmo quando não existe período embarcado resolvível. Carregar
+  // os 8 dias anteriores conforme a janela consumida pelo avaliador legal.
   // ------------------------------------------------------------------------
-  const contextStart =
+  const contextStart = minIso(
+    addDaysIso(requestedStart, -8),
     minPeriodoInicio != null
-      ? minIso(addDaysIso(minPeriodoInicio, -ROLLING_168H_CONTEXT_LEAD_DAYS), requestedStart)
-      : requestedStart;
+      ? addDaysIso(minPeriodoInicio, -ROLLING_168H_CONTEXT_LEAD_DAYS)
+      : requestedStart,
+  );
   const contextEnd = maxPeriodoFim != null ? maxIso(maxPeriodoFim, requestedEnd) : requestedEnd;
 
   // ------------------------------------------------------------------------
@@ -1686,6 +1680,15 @@ export async function listFrmsOperationalSnapshot(
     contextStart === requestedStart && contextEnd === requestedEnd
       ? requestedRows
       : await loadOperationalSnapshotRows(db, params.empresaId, contextStart, contextEnd);
+
+  // Data-source coverage is independent of accumulated minutes. Missing or
+  // historically inferred zero-flight days never certify compliance.
+  const confirmedFlightDays = isApprovedCoverageTenant(
+    params.empresaId, params.coverageApprovalCsv,
+  ) ? await loadConfirmedFlightDays(
+    db, params.empresaId, addDaysIso(contextStart, -364), contextEnd,
+  ) : new Map<string, string>();
+  const rollingFlightCoverageByDay = new Map<string, ReturnType<typeof buildRollingFlightCoverage>>();
 
   const rbacBcApplicable = regulatoryProfileHasDocumentedAppendix(
     { limitsJson: operationalContext.regulatoryLimitsJson },
@@ -1706,12 +1709,13 @@ export async function listFrmsOperationalSnapshot(
       new Map(rows.map((row) => [row.tripulante_id, row])),
     ]),
   );
-  const rollingByKey = new Map(
-    contextRows.regulatoryRolling.map((row) => [
-      `${row.data_referencia}::${Number(row.funcionario_id)}`,
-      row,
-    ]),
-  );
+  const rollingByKey = new Map<string, RollingRegulatoryEvidence>();
+  for (const row of contextRows.regulatoryRolling) {
+    const sanitized = sanitizeRollingRegulatoryEvidence(row);
+    if (sanitized) rollingByKey.set(`${row.data_referencia}::${Number(row.funcionario_id)}`, sanitized);
+  }
+  const art42Enforced = lawArt42EnforcementEnabled({ limitsJson: operationalContext.regulatoryLimitsJson });
+  const art42DutiesByCrew = buildArt42DutiesByCrew(contextRows.jornadas, contextRows.escalas, contextRows.activities);
   const regulatoryComplianceByKey: Record<string, RegulatoryComplianceResult> = {};
   const complianceKeys = new Set(collectOperationalKeys(contextRows));
   for (const key of complianceKeys) {
@@ -1737,16 +1741,27 @@ export async function listFrmsOperationalSnapshot(
         asNumber(row.has_operational_data) === 1,
       )
       .reduce((sum, row) => sum + Math.max(0, asNumber(row.duracao_jornada_minutos)), 0);
+    const rollingEvidence = rollingByKey.get(key) ?? null;
+    const coverageKey = date + '::' + (rollingEvidence?.updated_at ?? 'SEM_ATUALIZACAO');
+    let flightCoverage = rollingFlightCoverageByDay.get(coverageKey);
+    if (!flightCoverage) {
+      flightCoverage = buildRollingFlightCoverage(date, confirmedFlightDays, rollingEvidence?.updated_at);
+      rollingFlightCoverageByDay.set(coverageKey, flightCoverage);
+    }
     regulatoryComplianceByKey[key] = evaluateRegulatoryCompliance({
       empresaId: params.empresaId,
+      rollingCoverage: flightCoverage,
       profileCode: operationalContext.profileCode,
       rbacBcApplicable,
       costaDoSolActApplicable,
+      dataReferencia: date,
       mission: missionEvidence,
       journeyDurationMin,
-      rolling: rollingByKey.get(key) ?? null,
+      rolling: rollingEvidence,
       work: workEvidence,
       limites,
+      art42: evaluateLawArt42Madrugadas(date, art42DutiesByCrew.get(funcionarioId) ?? []),
+      art42Enforced,
     });
   }
 

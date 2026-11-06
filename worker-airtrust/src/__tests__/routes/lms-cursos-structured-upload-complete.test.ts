@@ -16,7 +16,7 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
-vi.mock('../../routes/escalas-shared', () => ({ getEmpresaIdSafe: () => authState.empresaId }));
+vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => authState.empresaId }));
 
 import lmsCursosRoutes from '../../routes/lms-cursos';
 

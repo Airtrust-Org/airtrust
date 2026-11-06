@@ -375,16 +375,16 @@ describe('calcularHorasSono', () => {
 });
 
 describe('calcularSono (premissa operacional)', () => {
-  it('premissa padrão de 8h', () => {
+  it('sem duração informada não fabrica 8h nem atribui fonte INFORMADO', () => {
     const r1 = calcularSono({
       horaApresentacaoMin: 480,
       minutosAntesApresentacao: 90,
       horasSonoPadrao: 8,
     });
     expect(r1.tAcordouMin).toBe(390);
-    expect(r1.sonoEfetivoMin).toBe(480);
+    expect(r1.sonoEfetivoMin).toBeNull();
     expect(r1.fonteSono).toBe('PADRAO');
-    expect(r1.tDormiuMin).toBe(-90);
+    expect(r1.tDormiuMin).toBeNull();
   });
 
   it('com hora informada cruza meia-noite corretamente', () => {
@@ -393,9 +393,64 @@ describe('calcularSono (premissa operacional)', () => {
       minutosAntesApresentacao: 90,
       horasSonoPadrao: 8,
       horaDormiu: 1380,
+      horaAcordou: 390,
     });
     expect(r2.sonoEfetivoMin).toBe(450);
     expect(r2.fonteSono).toBe('INFORMADO');
+  });
+  it('usa sono de 4h declarado mesmo sem horário em que dormiu', () => {
+    const r = calcularSono({ horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaAcordou: 240, duracaoInformadaMin: 240 });
+    expect(r.sonoEfetivoMin).toBe(240);
+    expect(r.fonteSono).toBe('INFORMADO');
+  });
+
+  it('não transforma janela de 23h30, duração zero nem só despertar em 8h', () => {
+    const base = { horaApresentacaoMin: 330, minutosAntesApresentacao: 90, horasSonoPadrao: 8, horaAcordou: 240 };
+    expect(calcularSono({ ...base, horaDormiu: 270 }).sonoEfetivoMin).toBeNull();
+    expect(calcularSono({ ...base, horaDormiu: 240 }).sonoEfetivoMin).toBeNull();
+    expect(calcularSono(base).sonoEfetivoMin).toBeNull();
+  });
+
+  it('zero horas efetivamente informadas permanece zero (não 8h)', () => {
+    const r = calcularSono({ horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaAcordou: 240, duracaoInformadaMin: 0 });
+    expect(r.sonoEfetivoMin).toBe(0);
+    expect(r.fonteSono).toBe('INFORMADO');
+  });
+
+  it('total 24h informado não comprova início de episódio nem fabrica horário para zero', () => {
+    for (const minutes of [0, 240, 720, 1440]) {
+      const result = calcularSono({
+        horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+        horasSonoPadrao: 8, horaAcordou: 240, duracaoInformadaMin: minutes,
+      });
+      expect(result.sonoEfetivoMin).toBe(minutes);
+      expect(result.tDormiuMin).toBeNull();
+      expect(result.fonteSono).toBe('INFORMADO');
+    }
+  });
+
+  it('horário explícito de episódio mantém início real separado do total 24h', () => {
+    const result = calcularSono({
+      horaApresentacaoMin: 480, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaDormiu: 1380, horaAcordou: 390,
+      // 10 h combinadas entre sono noturno e cochilos: episódio 23:00–06:30 = 7h30.
+      duracaoInformadaMin: 600,
+    });
+    expect(result.sonoEfetivoMin).toBe(600);
+    expect(result.tDormiuMin).toBe(-60);
+    expect(result.fonteSono).toBe('INFORMADO');
+  });
+
+  it('episódio impossível não produz início fictício mesmo com total 24h válido', () => {
+    const result = calcularSono({
+      horaApresentacaoMin: 330, minutosAntesApresentacao: 90,
+      horasSonoPadrao: 8, horaDormiu: 300, horaAcordou: 240,
+      duracaoInformadaMin: 240,
+    });
+    expect(result.sonoEfetivoMin).toBe(240);
+    expect(result.tDormiuMin).toBeNull();
   });
 });
 

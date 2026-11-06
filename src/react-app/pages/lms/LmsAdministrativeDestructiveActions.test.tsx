@@ -44,7 +44,7 @@ vi.mock('@/react-app/components/modals/BaseModal', () => ({
   BaseModal: ({ isOpen, children, footer }: { isOpen: boolean; children: ReactNode; footer: ReactNode }) => isOpen ? <div role="dialog">{children}{footer}</div> : null,
 }));
 vi.mock('@/react-app/components/funcionarios/FuncionarioLink', () => ({ default: ({ nome }: { nome: string }) => <span>{nome}</span> }));
-vi.mock('./lmsUi', () => ({
+vi.mock('../../components/lms/lmsUi', () => ({
   formatMinutes: () => '0 min',
   getMatriculaStatusMeta: () => ({ className: '', label: 'Publicado' }),
   LmsEmptyState: () => null,

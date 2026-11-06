@@ -268,6 +268,56 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
   }
 }
 
+/**
+ * A non-authoritative, UI-only selection hint. Direct replacement is limited
+ * to the EXACT formative/no-exam structural contract; all other ZIPs are
+ * uploaded as inactive versions for governed review and activation.
+ */
+export type ScormReplacementProfile = 'FORMATIVE' | 'GOVERNED' | 'PRIVATE';
+
+function isDirectFormativeContract(prepared: PreparedPackage): boolean {
+  const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (!file) return false;
+  try {
+    const manifest = JSON.parse(strFromU8(file.bytes)) as Record<string, unknown>;
+    const rec = (value: unknown): Record<string, unknown> | null =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    const a = rec(manifest.assessment), f = rec(manifest.formative), c = rec(manifest.completion),
+      content = rec(manifest.content), release = rec(manifest.release);
+    const validIds = (items: unknown): items is string[] =>
+      Array.isArray(items) && items.length > 0 &&
+      items.every(id => typeof id === 'string' && id.trim().length > 0) &&
+      new Set(items.map((id: string) => id.toLowerCase())).size === items.length;
+    const slides = content?.requiredSlides, activities = f?.requiredActivities;
+    const status = String(release?.status ?? '').toUpperCase();
+    return !status.startsWith('PRIVATE_') && !status.includes('DO_NOT_ACTIVATE') &&
+      a?.mode === 'NONE' && a.scoringBySCORM === false &&
+      Array.isArray(a.requiredInteractions) && a.requiredInteractions.length === 0 &&
+      !Object.prototype.hasOwnProperty.call(a, 'masteryScore') &&
+      !Object.prototype.hasOwnProperty.call(a, 'failureStatus') &&
+      (a.successStatus === undefined || a.successStatus === 'completed') &&
+      c?.strategy === 'AIRTRUST_COMPLETION_CONTRACT_V1' &&
+      c.passStatusFromSCORM === false && c.workerApprovalRequired === true &&
+      f?.scored === false && validIds(slides) && validIds(activities) &&
+      activities.every(id => slides.includes(id));
+  } catch {
+    return false;
+  }
+}
+
+export async function inspectScormReplacementProfile(file: File): Promise<ScormReplacementProfile> {
+  const prepared = await preparePackageUpload(file, 'scorm');
+  const completion = prepared.files.find(entry => entry.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (completion) {
+    try {
+      const parsed = JSON.parse(strFromU8(completion.bytes)) as { release?: { status?: unknown } };
+      const status = typeof parsed.release?.status === 'string' ? parsed.release.status.toUpperCase() : '';
+      if (status.startsWith('PRIVATE_') || status.includes('DO_NOT_ACTIVATE')) return 'PRIVATE';
+    } catch { /* Malformed contracts follow the governed path and server validation. */ }
+  }
+  return isDirectFormativeContract(prepared) ? 'FORMATIVE' : 'GOVERNED';
+}
+
 function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: string) {
   return `${tipoConteudo}:${packageHash}`;
 }
@@ -463,46 +513,67 @@ export async function uploadScormInactiveProductionCandidate(params: {
   file: File;
   onProgress?: (pct: number) => void;
   onStatus?: (status: string) => void;
-}): Promise<{ packageId: string; packageSha256: string; status: 'VALIDATED' }> {
+  replaceImmediately?: boolean;
+}): Promise<{ packageId: string; packageSha256: string; status: 'VALIDATED' | 'ACTIVE' }> {
   if (typeof window === 'undefined' || window.location.hostname !== 'airtrust.online') {
     throw new Error('Envio de candidato inativo de produção disponível apenas em airtrust.online.');
   }
-  const { cursoId, file, onProgress, onStatus } = params;
+  const { cursoId, file, onProgress, onStatus, replaceImmediately = false } = params;
   if (!Number.isSafeInteger(cursoId) || cursoId <= 0) {
     throw new Error('Curso inválido para candidato SCORM.');
   }
   onStatus?.('Validando estrutura do ZIP SCORM...');
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, 'scorm');
-  onStatus?.('Enviando versão candidata INATIVA, sem substituir conteúdo...');
+  if (replaceImmediately && !isDirectFormativeContract(prepared)) {
+    throw new Error(
+      'Este ZIP não comprova o perfil formativo sem prova. A substituição direta ' +
+      'foi bloqueada antes do upload. Envie como edição inativa para homologação; ' +
+      'o treinamento atual permanece preservado.',
+    );
+  }
+  onStatus?.(replaceImmediately
+    ? 'Validando e substituindo o conteúdo do curso...'
+    : 'Enviando versão candidata sem substituir conteúdo...');
   onProgress?.(25);
   const formData = new FormData();
   formData.append('arquivo', new Blob([prepared.packageBytes], { type: 'application/zip' }),
     file.name?.trim() || 'scorm-candidate.zip');
-  const response = await fetchWithAuth(`/api/lms/cursos/${cursoId}/scorm-upload`, {
-    method: 'POST',
-    headers: { 'Idempotency-Key': buildIdempotencyKey('scorm', prepared.packageHash) },
-    body: formData,
-  });
+  const response = await fetchWithAuth(
+    `/api/lms/cursos/${cursoId}/${replaceImmediately ? 'scorm-replace?confirm=REPLACE_AFTER_VALIDATION' : 'scorm-upload'}`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': buildIdempotencyKey('scorm', prepared.packageHash),
+      },
+      body: formData,
+    },
+  );
   const candidate = await parseApiResponse<ScormQualityShape>(response);
   if (candidate.status === 'REJECTED') {
-    throw scormGateError('Pacote candidato recusado pelo Quality Gate estático; versão ativa preservada', candidate);
+    throw scormGateError(replaceImmediately
+      ? 'Pacote recusado pela validação automática; versão ativa preservada'
+      : 'Pacote candidato recusado pelo Quality Gate estático; versão ativa preservada', candidate);
   }
-  if (candidate.status === 'ACTIVE') {
-    throw new Error('Este ZIP já corresponde ao conteúdo ATIVO; nenhum candidato novo foi criado.');
-  }
-  if (candidate.status !== 'VALIDATED' ||
+  const expectedStatus = replaceImmediately ? 'ACTIVE' : 'VALIDATED';
+  if (candidate.status !== expectedStatus ||
       typeof candidate.packageId !== 'string' || !candidate.packageId ||
       typeof candidate.packageSha256 !== 'string' ||
       candidate.packageSha256 !== prepared.packageHash ||
-      candidate.structural?.status !== 'PASS' ||
-      candidate.completionManifest?.status !== 'PASS' ||
-      candidate.diagnostics?.status !== 'PASS') {
-    throw new Error('Recebimento do candidato não confirmado integralmente: estado, SHA ou gates inválidos. Não houve ativação.');
+      (!replaceImmediately && (candidate.structural?.status !== 'PASS' ||
+        candidate.completionManifest?.status !== 'PASS' ||
+        candidate.diagnostics?.status !== 'PASS'))) {
+    throw new Error(replaceImmediately
+      ? 'Não foi possível confirmar o resultado do ZIP pelo Worker. Confira o curso antes de repetir o envio.'
+      : 'Recebimento do candidato não confirmado integralmente: estado, SHA ou gates inválidos. Não houve ativação.');
   }
   onProgress?.(100);
-  onStatus?.('Candidato SCORM INATIVO recebido. Versão publicada permanece inalterada; homologação pendente.');
-  return { packageId: candidate.packageId, packageSha256: candidate.packageSha256, status: 'VALIDATED' };
+  onStatus?.(replaceImmediately
+    ? 'Conteúdo substituído com sucesso; histórico preservado.'
+    : 'Candidato SCORM INATIVO recebido. Versão publicada permanece inalterada; homologação pendente.');
+  return {
+    packageId: candidate.packageId, packageSha256: candidate.packageSha256,
+    status: expectedStatus,
+  };
 }
 
 /**

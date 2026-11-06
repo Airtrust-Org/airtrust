@@ -25,7 +25,7 @@ vi.mock('../../utils/security', () => ({
 vi.mock('../../services/lms-learner-identity', () => ({ resolveLmsFuncionarioId: currentEmployeeMock }));
 
 // Simulate a public route: no tenant middleware ran, so getEmpresaIdOptional returns undefined.
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdOptional: () => undefined,
 }));
 

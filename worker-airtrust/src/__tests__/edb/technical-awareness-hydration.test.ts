@@ -5,8 +5,8 @@ import {
   type EdbPicTechnicalAcknowledgementRow,
   type EdbTechnicalSituationRow,
 } from '../../repositories/edb/edb-technical-awareness-repository';
-import { canonicalJson } from '../../services/edb/canonicalization';
-import { createTechnicalSituationSnapshot } from '../../services/edb/technical-awareness';
+import { canonicalJson } from '../../lib/edb/canonicalization';
+import { createTechnicalSituationSnapshot } from '../../lib/edb/technical-awareness';
 
 async function rows() {
   const snapshot = await createTechnicalSituationSnapshot({

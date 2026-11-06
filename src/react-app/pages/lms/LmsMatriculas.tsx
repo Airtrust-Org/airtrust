@@ -37,9 +37,14 @@ import {
 import { useDebounce } from '@/react-app/hooks/useDebounce';
 import { useFuncionariosRQ } from '@/react-app/hooks/useFuncionarios';
 import type { LmsMatricula, MatriculaStatus, MatricularLoteResult } from '@/react-app/hooks/useLms';
+import {
+  buildUnlinkedAccountToast,
+  countWithoutLinkedAccount,
+  LMS_UNLINKED_ACCOUNT_HINT,
+} from './lmsLearnerLink';
 import type { Funcionario } from '@/react-app/hooks/useFuncionarios';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
-import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from './lmsUi';
+import { LmsMetricCard, LmsModuleTabs, LmsSurface, LmsCourseMiniMeta, LmsPageShell } from '../../components/lms/lmsUi';
 import {
   isLmsEnrollmentAlertable,
   LmsEnrollmentAlertModal,
@@ -308,6 +313,8 @@ export function ModalMatricular({
       } else {
         toast.success(summary);
       }
+      const unlinkedToast = buildUnlinkedAccountToast(countWithoutLinkedAccount(result.matriculas ?? []));
+      if (unlinkedToast) toast.warning(unlinkedToast);
       await onMatriculasChanged(result.matriculas ?? []);
       if (result.erros === 0) onClose();
     } catch {
@@ -758,7 +765,7 @@ export default function LmsMatriculas() {
   const reprovados = todasMatriculas.filter((m) => m.status === 'REPROVADO').length;
   const emAndamento = todasMatriculas.filter((m) => m.status === 'EM_ANDAMENTO').length;
   const naoIniciados = todasMatriculas.filter((m) => m.status === 'NAO_INICIADO').length;
-  const semContaVinculada = matriculas.filter((m) => m.aluno_vinculado === 0).length;
+  const semContaVinculada = countWithoutLinkedAccount(matriculas);
   const activeFuncionarioIds = new Set(
     todasMatriculas.map((matricula) => matricula.funcionario_id).filter(Number.isFinite),
   );
@@ -972,7 +979,7 @@ export default function LmsMatriculas() {
                           />
                           <div className="text-xs text-slate-400 dark:text-slate-500">Matrícula #{m.id}</div>
                           {m.aluno_vinculado === 0 && (
-                            <div className="mt-1 text-xs font-medium text-amber-700" title="Sem usuário com vínculo de funcionário e empresa para acessar este curso">
+                            <div className="mt-1 text-xs font-medium text-amber-700" title={LMS_UNLINKED_ACCOUNT_HINT}>
                               Sem conta vinculada
                             </div>
                           )}

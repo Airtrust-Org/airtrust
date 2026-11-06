@@ -24,7 +24,7 @@ import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 
 const router = new Hono<{ Bindings: Env }>();
 

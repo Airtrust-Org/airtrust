@@ -1,4 +1,4 @@
-name: Staging FRMS Check-in PVTB KSS Synthetic Lifecycle
+name: Staging FRMS Check-in Brief 60s KSS Synthetic Lifecycle
 
 # Explicitly authenticated staging-only writes, fixed synthetic tenant 999013.
 # No production access, migration, backfill or non-synthetic health data.
@@ -59,7 +59,7 @@ jobs:
           NODE
 
   synthetic-lifecycle:
-    name: Staging D1 Authenticated Synthetic Check-in, Readiness and KSS
+    name: Staging D1 Authenticated Synthetic Check-in, Brief Readiness and KSS
     needs: guard
     environment: staging
     runs-on: ubuntu-latest
@@ -100,7 +100,7 @@ jobs:
           if(String(r.bookmark??r.result?.bookmark??'').length<8)throw Error('FRMS_QA_RECOVERY_BOOKMARK_MISSING');
           console.log('FRMS_QA_STAGING_D1_RECOVERY_READY');
           NODE
-      - name: Submit exactly one synthetic PVT-B check-in and one same-day update
+      - name: Submit exactly one synthetic brief-60s check-in and one same-day update
         env:
           STAGING_QA_RECOVERY_VERIFIED: 'true'
         run: node scripts/staging/qa-frms-checkin-lifecycle.mjs
@@ -117,13 +117,13 @@ jobs:
              AND ch.deleted_at IS NULL AND ch.kss_score=4) AS checkins,
             (SELECT COUNT(*) FROM frms_readiness_assessment ra JOIN funcionarios f ON f.id=ra.funcionario_id
              WHERE ra.empresa_id=999013 AND f.matricula='QA-FRMS-UX-01'
-             AND ra.reference_date='$QA_DATE' AND ra.protocol_version='airtrust-pvtb-v2'
+             AND ra.reference_date='$QA_DATE' AND ra.protocol_version='airtrust-brief-v1'
              AND ra.deleted_at IS NULL) AS readiness,
             (SELECT COUNT(*) FROM frms_readiness_vigilance_trial t JOIN frms_readiness_assessment ra
              ON ra.id=t.assessment_id AND ra.empresa_id=t.empresa_id
              JOIN funcionarios f ON f.id=ra.funcionario_id
              WHERE t.empresa_id=999013 AND f.matricula='QA-FRMS-UX-01'
-             AND ra.reference_date='$QA_DATE' AND ra.protocol_version='airtrust-pvtb-v2'
+             AND ra.reference_date='$QA_DATE' AND ra.protocol_version='airtrust-brief-v1'
              AND ra.deleted_at IS NULL) AS trials,
             (SELECT COUNT(*) FROM frms_fadiga_evento ev JOIN frms_fadiga_checkin ch
              ON ch.id=ev.checkin_id AND ch.empresa_id=ev.empresa_id

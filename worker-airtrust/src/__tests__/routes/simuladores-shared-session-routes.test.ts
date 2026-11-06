@@ -37,8 +37,8 @@ vi.mock('../../routes/simuladores-sessoes-rbac', () => ({
 
 let mockConflict: any = null;
 
-vi.mock('../../routes/simuladores-shared', async () => {
-  const actual = await vi.importActual('../../routes/simuladores-shared');
+vi.mock('../../services/simuladores/shared', async () => {
+  const actual = await vi.importActual('../../services/simuladores/shared');
   return {
     ...actual,
     findSessaoConflict: vi.fn(async () => mockConflict),

@@ -3,10 +3,14 @@ import { hasRole } from './rbac';
 import type { Env, Variables } from '../types';
 import { assetSessionMatchesEnrollment, readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import type { LmsCompletionDecision } from '../services/lms-completion-evidence';
-import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../services/lms-progress-guardrails';
+import { extractScormLocationFromCmiJson, mergeMonotonicNumber, mergeScormRuntimeState } from '../lib/lms/lms-progress-guardrails';
 import { evaluateScormClosureReadiness, type ScormClosureReadiness } from '../services/lms-matricula-runtime-domain';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
-import { isEligibleForHistoricEditionCredit, isAuthorizedAdmin99EditionCredit } from '../lib/lms/lms-historical-edition-admin-credit';
+import {
+  isEligibleForHistoricEditionCredit,
+  isAuthorizedAdmin99EditionCredit,
+  isAuthorizedAdminEditionCredit20261103,
+} from '../lib/lms/lms-historical-edition-admin-credit';
 import {
   buildEnrollmentCompletionDecision as buildDecision,
   hasStoredRuntimeEvidence,
@@ -16,6 +20,7 @@ import {
 } from '../services/lms-enrollment-completion-decision';
 import { loadScormManifestClosureEvidence } from '../services/lms-scorm-completion-context';
 import { describeLmsCompletionBlocker } from '../services/lms-completion-blockers';
+import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 
 type LmsIntegrityContext = { Bindings: Env; Variables: Variables };
 
@@ -189,7 +194,7 @@ async function guardScormCommit(
   }
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
     cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
@@ -343,7 +348,7 @@ async function guardManualFinalize(
   if (String(row.status).toUpperCase() === 'CONCLUIDO') return null;
   const edition = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+    activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
     cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
   });
@@ -382,8 +387,11 @@ async function guardManualFinalize(
     Number(row.progresso_pct ?? 0) >= 100;
   // Only persisted, complete SCORM runtime evidence is evaluated as SCORM.
   // Other manual finalizations remain in the non-SCORM, fail-closed policy.
+  const validatedPptx = normalizeStatus(row.tipo_conteudo) === 'pptx' &&
+    await hasPptxEvidenceForCompletion(c.env.DB, c.env.BUCKET, empresaId, matriculaId);
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
-    explicitCompletion: isScorm ? true : storedCompletion,
+    explicitCompletion: validatedPptx || (isScorm ? true : storedCompletion),
+    serverValidatedPptxCoverage: validatedPptx,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',
@@ -421,7 +429,7 @@ async function guardAdministrativeStatus(
   if (String(row.status).toUpperCase() !== 'CONCLUIDO') {
     const edition = await detectLmsEditionMismatch({
       bucket: c.env.BUCKET, contentType: row.tipo_conteudo,
-      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id,
+      activePrefix: row.scorm_package_r2_prefix, empresaId, cursoId: row.curso_id, matriculaId,
       cmiJson: row.cmi_json,
     suspendData: row.suspend_data, db: c.env.DB, enrollmentStartedAt: row.data_inicio,
     });
@@ -446,7 +454,8 @@ async function guardAdministrativeStatus(
           'A conclusão administrativa não pode usar evidências de outra edição.', edition);
       }
       historicEditionCredit = true;
-      authorizedAdmin99EditionCredit = isAuthorizedAdmin99EditionCredit(historicCheck);
+      authorizedAdmin99EditionCredit = isAuthorizedAdmin99EditionCredit(historicCheck) ||
+        isAuthorizedAdminEditionCredit20261103(historicCheck);
       // Edition mismatch is the only waived condition. Continue through the
       // canonical administrative decision below: score/mastery, failure
       // precedence, authorization and content evidence MUST still pass.
@@ -460,8 +469,11 @@ async function guardAdministrativeStatus(
   // the reason, and all other enrollment and evidence checks remain in force.
   const administrativeScoreOverride = (!historicEditionCredit || authorizedAdmin99EditionCredit) && hasRole(c, 'admin') &&
     typeof incoming.observacoes === 'string' && incoming.observacoes.trim().length >= 10;
+  const validatedPptx = normalizeStatus(row.tipo_conteudo) === 'pptx' &&
+    await hasPptxEvidenceForCompletion(c.env.DB, c.env.BUCKET, empresaId, matriculaId);
   const decision = buildDecision(row, 'administrative', {}, true, {
     explicitCompletion: true,
+    serverValidatedPptxCoverage: validatedPptx,
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',

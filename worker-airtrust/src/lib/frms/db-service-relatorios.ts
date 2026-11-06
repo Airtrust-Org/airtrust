@@ -7,7 +7,7 @@ import { buscarJornadas } from './db-service-jornadas';
 import { buscarAcumuloFrota } from './db-service-acumulo';
 import { listFrmsOperationalSnapshot, type FrmsOperationalSnapshotItem } from './operational-snapshot';
 import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
-import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../services/employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../../middleware/employee-sector-access';
 
 export async function relatorioIndividual(
   db: D1Database,
@@ -60,6 +60,8 @@ export interface FrmsComplianceReportRow {
   dias_conformes: number;
   dias_violacao: number;
   dias_nao_avaliados: number;
+  /** Dias com possível desconformidade ainda dependente de validação. */
+  dias_pendente_validacao: number;
   dias_mitigacao: number;
   dias_atencao: number;
   violacoes_normativas: string[];
@@ -95,6 +97,7 @@ export function aggregateCanonicalComplianceReport(
         dias_conformes: 0,
         dias_violacao: 0,
         dias_nao_avaliados: 0,
+        dias_pendente_validacao: 0,
         dias_mitigacao: 0,
         dias_atencao: 0,
         violacoes_normativas: [],
@@ -119,6 +122,9 @@ export function aggregateCanonicalComplianceReport(
       row.dias_nao_avaliados += 1;
     }
 
+    // A pendência de parecer não deve desaparecer ao contar um dia como conforme
+    // perante as regras já decididas; os contadores são intencionalmente distintos.
+    if ((item.compliance_pending_validation?.length ?? 0) > 0) row.dias_pendente_validacao += 1;
     if (item.estado_operacional === 'MITIGACAO_NECESSARIA') row.dias_mitigacao += 1;
     if (item.estado_operacional === 'ATENCAO') row.dias_atencao += 1;
 
@@ -157,6 +163,7 @@ export async function relatorioCompliance(
   mes: string,
   empresaId?: number,
   authorizedCrewIds?: ReadonlySet<number>,
+  coverageApprovalCsv?: string,
 ): Promise<FrmsComplianceReportRow[]> {
   if (!empresaId || !Number.isInteger(empresaId) || empresaId <= 0) {
     throw new Error('FRMS_COMPLIANCE_REPORT_TENANT_REQUIRED');
@@ -172,6 +179,7 @@ export async function relatorioCompliance(
     dataInicio,
     dataFim,
     hoje: dataFim,
+    coverageApprovalCsv,
   });
   // Filtering is applied BEFORE aggregation: a manager must not receive even
   // derived counts or normative details about an out-of-scope employee.

@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest';
-import {isEligibleForHistoricEditionCredit,HISTORICAL_EDITION_CREDIT_REASON}
+import {isEligibleForHistoricEditionCredit,HISTORICAL_EDITION_CREDIT_REASON,
+ ADMIN_EDITION_CREDIT_20261103_REASON}
  from '../../lib/lms/lms-historical-edition-admin-credit';
 const base={empresaId:6,matriculaId:2106,cursoId:68,isAdmin:true,
  reason:HISTORICAL_EDITION_CREDIT_REASON+': manager attests completion of old edition',
@@ -24,5 +25,31 @@ describe('finite-scope old-edition administrative qualification credit',()=>{
    [610,43],[544,7],[624,43],[700,55],[2052,68]]){
    expect(isEligibleForHistoricEditionCredit({...base,matriculaId,cursoId})).toBe(true);
   }
+ });
+});
+describe('2026-11-03 attestation for enrollments stuck at 99-100% by platform errors',()=>{
+ const attested={...base,matriculaId:2378,cursoId:71,
+  reason:ADMIN_EDITION_CREDIT_20261103_REASON+': titular do programa atesta falha de plataforma'};
+ it('accepts exactly the three listed enrollments with their own provenance',()=>{
+  for(const [matriculaId,cursoId] of [[857,3],[1219,7],[2378,71]]){
+   expect(isEligibleForHistoricEditionCredit({...attested,matriculaId,cursoId})).toBe(true);
+  }
+ });
+ it('rejects any other enrollment, course binding, tenant, non-admin or other reason',()=>{
+  for(const change of [{matriculaId:1263,cursoId:65},{matriculaId:857,cursoId:71},{empresaId:7},
+   {isAdmin:false},{reason:'arbitrary approval'},{reason:HISTORICAL_EDITION_CREDIT_REASON+': x'},
+   {reason:ADMIN_EDITION_CREDIT_20261103_REASON}]){
+   expect(isEligibleForHistoricEditionCredit({...attested,...change})).toBe(false);
+  }
+ });
+ it('keeps every safety rule: no re-issue, no partial history, no explicit failure',()=>{
+  for(const change of [{progressoPct:99},{status:'CONCLUIDO'},{qualificationId:9},
+   {hasScormEvidence:false},{lessonStatus:'failed'},{successStatus:'failed'},{isScorm:false},
+   {currentCourseActive:false}]){
+   expect(isEligibleForHistoricEditionCredit({...attested,...change})).toBe(false);
+  }
+ });
+ it('does not widen the earlier allowlist: the new reason is invalid for it',()=>{
+  expect(isEligibleForHistoricEditionCredit({...base,reason:ADMIN_EDITION_CREDIT_20261103_REASON+': x'})).toBe(false);
  });
 });

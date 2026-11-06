@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fetchAllCommitCheckRuns, verifyReleaseGatePayloads } from './verify-release-gates.mjs';
+import { fetchAllCommitCheckRuns, githubGet, verifyReleaseGatePayloads } from './verify-release-gates.mjs';
 
 const greenChecks = [
   { name: 'lint', status: 'completed', conclusion: 'success' },
@@ -134,5 +134,69 @@ test('fails closed when GitHub claims additional check runs but the next page is
       }),
     }),
     /RELEASE_CHECK_RUNS_INCOMPLETE/,
+  );
+});
+
+
+test('retries only bounded transient GitHub API 5xx and preserves the exact request', async () => {
+  const attempts = [];
+  const sleeps = [];
+  const result = await githubGet('/repos/example/repo/commits/a/check-runs', 'secret-test', {
+    request: async (url, opts) => {
+      attempts.push({ url, authorization: opts.headers.authorization });
+      if (attempts.length < 3) return { ok: false, status: 500 };
+      return { ok: true, json: async () => ({ total_count: 0, check_runs: [] }) };
+    },
+    sleep: async (ms) => sleeps.push(ms),
+  });
+  assert.equal(attempts.length, 3);
+  assert.deepEqual(sleeps, [250, 500]);
+  assert.ok(attempts.every((item) => item.url === 'https://api.github.com/repos/example/repo/commits/a/check-runs'));
+  assert.ok(attempts.every((item) => item.authorization === 'Bearer secret-test'));
+  assert.deepEqual(result, { total_count: 0, check_runs: [] });
+});
+
+test('persistent GitHub API 5xx exhausts retry and fails closed', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    githubGet('/repos/example/repo/status', 'token', {
+      request: async () => { attempts += 1; return { ok: false, status: 503 }; },
+      sleep: async () => {},
+    }),
+    /returned HTTP 503/,
+  );
+  assert.equal(attempts, 3);
+});
+
+test('nontransient authorization failures are not retried or treated as green', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    githubGet('/repos/example/repo/status', 'token', {
+      request: async () => { attempts += 1; return { ok: false, status: 403 }; },
+      sleep: async () => { throw new Error('unexpected retry'); },
+    }),
+    /returned HTTP 403/,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('transient transport error gets one bounded retry before strict validation', async () => {
+  let attempts = 0;
+  const payload = await githubGet('/repos/example/repo/status', 'token', {
+    request: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new TypeError('network reset');
+      return { ok: true, json: async () => ({ statuses: [] }) };
+    },
+    sleep: async () => {},
+  });
+  assert.equal(attempts, 2);
+  assert.deepEqual(payload, { statuses: [] });
+  await assert.rejects(
+    githubGet('/repos/example/repo/status', 'token', {
+      request: async () => ({ ok: true, json: async () => { throw new SyntaxError('invalid JSON'); } }),
+      sleep: async () => { throw new Error('unexpected retry'); },
+    }),
+    /invalid JSON/,
   );
 });

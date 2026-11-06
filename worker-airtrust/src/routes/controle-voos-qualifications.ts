@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { getEmpresaIdSafe, getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getFlightOrThrow } from '../repositories/controle-voos/rdv-repository';
+import { getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
 import { CERTIFICATE_ELIGIBLE_QUALIFICATION_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 

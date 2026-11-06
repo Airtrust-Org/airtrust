@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { audit } from './simuladores-shared';
+import { audit } from '../services/simuladores/shared';
 import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import {
   gerarQualificacaoDaFicha,
@@ -21,7 +21,7 @@ import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
 } from '../../../src/shared/simuladores/ficha-header';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import {
   fichaInstructorMetaJoin,
   fichaInstructorMetaSelect,

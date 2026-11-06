@@ -180,7 +180,8 @@ describe('bounded cron discovery', () => {
 describe('SIGVOOS resumability', () => {
   it('avança somente um dia por execução', () => {
     expect(resolveNextSigvoosDay('2026-07-30', null, '2026-08-02')).toBe('2026-07-31');
-    expect(resolveNextSigvoosDay(null, '2026-08-01', '2026-08-02')).toBe('2026-08-02');
+    expect(resolveNextSigvoosDay(null, '2026-08-01', '2026-08-02')).toBeNull();
+    expect(resolveNextSigvoosDay(null, '2026-08-01', '2026-08-03')).toBe('2026-08-02');
     expect(resolveNextSigvoosDay('2026-08-02', null, '2026-08-02')).toBeNull();
   });
 

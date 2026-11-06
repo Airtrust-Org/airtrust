@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OperationalAccessResolution } from '../../services/operational-domain-access';
+import type { OperationalAccessResolution } from '../../middleware/operational-domain-access';
 import { resolveMaintenanceManagementPolicy } from '../../routes/me-operational-access';
 
 function access(overrides: Partial<OperationalAccessResolution> = {}): OperationalAccessResolution {

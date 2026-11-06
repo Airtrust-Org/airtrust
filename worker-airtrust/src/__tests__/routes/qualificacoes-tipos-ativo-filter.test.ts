@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ExecutionContext } from '@cloudflare/workers-types';
 import app from '../../index';
 
@@ -132,4 +136,40 @@ describe('GET /qualificacoes/tipos com filtro ativo', () => {
     await makeReq('?ativo=1');
     expect(executedBindings.some((bindings) => bindings.includes(MOCK_EMPRESA_ID))).toBe(true);
   });
+  it('executa a consulta gerada para 500 modelos em SQLite real (sem vírgula antes de FROM)', async () => {
+    const response = await makeReq('?limit=500');
+    expect(response.status).toBe(200);
+    const sql = getQueryConditions();
+    expect(sql).toContain('FROM qualificacoes_tipos qt');
+    const tempDir = mkdtempSync(join(tmpdir(), 'tipos-list-sql-'));
+    const database = join(tempDir, 'tipos.sqlite');
+    try {
+      execFileSync('sqlite3', [database, `
+        CREATE TABLE qualificacoes_tipos (
+          id INTEGER PRIMARY KEY, empresa_id INTEGER, deleted_at TEXT,
+          tipo TEXT, codigo TEXT, nome TEXT, descricao TEXT, categoria TEXT,
+          carga_horaria INTEGER, validade INTEGER, vencimento_fim_mes INTEGER,
+          observacoes TEXT, ativo INTEGER, created_at TEXT, updated_at TEXT
+        );
+        CREATE TABLE qualificacoes_categorias (
+          id INTEGER PRIMARY KEY, empresa_id INTEGER, nome TEXT, cor TEXT,
+          ativo INTEGER, deleted_at TEXT
+        );
+        INSERT INTO qualificacoes_categorias (id, empresa_id, nome, ativo)
+          VALUES (10, 1, 'CRM', 1);
+        INSERT INTO qualificacoes_tipos (id, empresa_id, tipo, codigo, nome, categoria, ativo)
+          VALUES (1, 1, 'PERIODICO', 'Q1', 'CRM Gestores', 'CRM', 1);
+      `], { encoding: 'utf8' });
+      let index = 0;
+      const bindings = [MOCK_EMPRESA_ID, 500];
+      const boundSql = sql.replace(/\?/g, () => String(bindings[index++]));
+      expect(index).toBe(bindings.length);
+      const stdout = execFileSync('sqlite3', ['-json', database, boundSql], { encoding: 'utf8' });
+      const rows = JSON.parse(stdout) as Array<{ id: number; codigo: string }>;
+      expect(rows).toEqual([expect.objectContaining({ id: 1, codigo: 'Q1' })]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
 });

@@ -376,6 +376,21 @@ export async function fetchWithAuth(
     }
   }
 
+  // ===== HANDLE 503 TRANSIENT AUTH CHECK UNAVAILABLE (GET only) =====
+  const method = (options.method || 'GET').toUpperCase();
+  if (response.status === 503 && !retry && (method === 'GET' || method === 'HEAD')) {
+    const cloned = response.clone();
+    const body = (await cloned.json().catch(() => ({}))) as { code?: string };
+    if (
+      body.code === 'AUTH_REVOCATION_CHECK_UNAVAILABLE' ||
+      body.code === 'AUTH_USER_STATE_CHECK_UNAVAILABLE' ||
+      body.code === 'PLATFORM_ACCESS_CHECK_UNAVAILABLE'
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return fetchWithAuth(url, options, true);
+    }
+  }
+
   return sanitizeLmsAuthenticatedErrorResponse(response, url);
 }
 

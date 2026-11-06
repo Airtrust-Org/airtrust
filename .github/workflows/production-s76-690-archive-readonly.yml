@@ -1,0 +1,78 @@
+name: Production S-76 Enrollment 690 Archive Readonly
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: 'Exact audited main SHA'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type AIRTRUST_S76_690_ARCHIVE_READONLY'
+        required: true
+        type: string
+permissions: {contents: read, checks: read, statuses: read}
+concurrency: {group: production-s76-690-archive-readonly, cancel-in-progress: false}
+jobs:
+  d1_evidence:
+    name: S-76 D1 enrollment archive (read-only)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Exact main SHA and explicit read-only scope
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CONFIRMATION" == AIRTRUST_S76_690_ARCHIVE_READONLY ]]
+      - name: Verify eight official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Install audited D1 client
+        run: npm --prefix worker-airtrust ci
+      - name: Inspect sealed previous-edition evidence
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_COMPANY_ID: '6'
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          node scripts/production/scorm-s76-690-handoff-readonly.mjs > "$RUNNER_TEMP/s76-690-sanitized.json"
+          test -s "$RUNNER_TEMP/s76-690-sanitized.json"
+      - name: Publish only sanitized summary
+        env:
+          REPORT_PATH: ${{ runner.temp }}/s76-690-sanitized.json
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const s = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, 'utf8'));
+          console.log('## Production S-76 prior-edition evidence — READ ONLY');
+          console.log('- Result: `' + s.mode + '`, writes: `' + s.writes + '`');
+          console.log('- Enrollment: `' + s.enrollment_id + '`, course: `' + s.course_id + '`, cycle: `' + s.cycle_id + '`');
+          console.log('- Original/current administrative progress: `' + s.original_progress_pct + '/'+ s.current_progress_pct + '`');
+          console.log('- Package SHA matches handoff: `' + s.active_sha_matches_handoff + '`');
+          console.log('- Handoff plan: `' + JSON.stringify(s.handoff_plan) + '`');
+          console.log('- Archived SCORM evidence: `' + JSON.stringify(s.archive) + '`');
+          console.log('- Current SCORM evidence: `' + JSON.stringify(s.current) + '`');
+          console.log('- No credit transfer or completion performed.');
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s76-690-sanitized-handoff-${{ github.sha }}
+          path: ${{ runner.temp }}/s76-690-sanitized.json
+          retention-days: 7
+          if-no-files-found: error

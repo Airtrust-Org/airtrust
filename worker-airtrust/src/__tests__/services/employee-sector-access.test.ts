@@ -5,7 +5,7 @@ import {
   employeeSectorSql,
   filterRequestedSetorIdsByAccess,
   resolveEmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 
 function createDb(
   options: {

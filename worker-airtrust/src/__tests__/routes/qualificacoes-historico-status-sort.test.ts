@@ -51,14 +51,14 @@ vi.mock('../../routes/qualificacoes/historico-write', () => ({
   default: new Hono(),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: employeeSectorAccessMock,
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', async () => {
-  const actual = await vi.importActual<typeof import('../../routes/qualificacoes/historico-helpers')>(
-    '../../routes/qualificacoes/historico-helpers',
+vi.mock('../../services/qualificacoes/historico-helpers', async () => {
+  const actual = await vi.importActual<typeof import('../../services/qualificacoes/historico-helpers')>(
+    '../../services/qualificacoes/historico-helpers',
   );
 
   return {
@@ -69,6 +69,7 @@ vi.mock('../../routes/qualificacoes/historico-helpers', async () => {
 });
 
 import historicoRouter from '../../routes/qualificacoes/historico';
+import { buildVencimentoStatusPredicates } from '../../services/qualificacoes/historico-helpers';
 
 function createApp(db: D1Database) {
   const app = new Hono<{ Bindings: Env }>();
@@ -155,6 +156,19 @@ function createMockDb() {
 }
 
 describe('qualificacoes historico status sort contract', () => {
+  it('usa exatamente os predicados BRT também nos contadores agregados', async () => {
+    const { db, calls } = createMockDb();
+    const response = await createApp(db).request('/historico?stats=true&limit=2&page=1');
+    expect(response.status).toBe(200);
+    const statsSql = calls.find((call) => call.method === 'first' && call.query.includes('as validas,') && call.query.includes('as vencidas,'))?.query || '';
+    expect(statsSql).not.toBe('');
+    expect(statsSql).not.toContain("julianday('now')");
+    const vencimentoExpr = "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
+    const predicates = buildVencimentoStatusPredicates(vencimentoExpr);
+    expect(statsSql).toContain(`AND ${predicates.valida} THEN 1 ELSE 0 END) as validas`);
+    expect(statsSql).toContain(`AND (${predicates.vencendo}) THEN 1 ELSE 0 END) as vencendo`);
+    expect(statsSql).toContain(`AND ${predicates.vencida} THEN 1 ELSE 0 END) as vencidas`);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     histCacheMock.cache = null;
@@ -165,6 +179,21 @@ describe('qualificacoes historico status sort contract', () => {
       setorIds: [],
       funcionarioId: null,
     });
+  });
+
+  it.each([
+    '/historico/stats',
+    '/historico/stats-extended?extended=true',
+  ])('%s: totalizadores e categorias não usam vencimento por instante UTC', async (endpoint) => {
+    const { db, calls } = createMockDb();
+    const response = await createApp(db).request(endpoint);
+    expect(response.status).toBe(200);
+    const countQueries = calls.filter((call) => call.query.includes('as validas') && call.query.includes('as vencidas'));
+    expect(countQueries.length).toBeGreaterThan(0);
+    for (const call of countQueries) {
+      expect(call.query).not.toContain("julianday('now')");
+      expect(call.query).toContain("date('now','-3 hours')");
+    }
   });
 
   it('usa rank server-side para status e preserva filtro planejada com paginação', async () => {
@@ -205,7 +234,8 @@ describe('qualificacoes historico status sort contract', () => {
     const dataQuery = dataCall?.query || '';
     expect(dataQuery).toContain("WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1");
     expect(dataQuery).toContain("qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL");
-    expect(dataQuery).toContain("< date('now') THEN 2");
+    // "hoje" é o dia civil de São Paulo (UTC-3), não date('now') em UTC.
+    expect(dataQuery).toContain("< date('now','-3 hours') THEN 2");
     // Confirma que o fallback 12 NÃO está presente
     expect(dataQuery).not.toContain("12) || ' months'");
     expect(dataQuery).toContain("ORDER BY (CASE");

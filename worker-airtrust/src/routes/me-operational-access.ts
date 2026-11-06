@@ -13,11 +13,11 @@ import type { Env } from '../types';
 import {
   resolveOperationalAccess,
   type OperationalAccessResolution,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 import {
   isManagerRole,
   resolveEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { needsFirefighterAviationProfile, resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
 import { FRMS_FIREFIGHTER_AVIATION_PROFILE } from '../lib/frms/parameter-governance';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';

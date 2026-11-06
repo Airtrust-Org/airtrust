@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage } from './lmsContentUpload';
+import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
@@ -78,7 +78,7 @@ import {
   LmsModuleTabs,
   LmsPageShell,
   LmsStatPill,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
@@ -92,7 +92,26 @@ import {
 
 // ── Types & helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Non-manager accounts (including COMPLIANCE/USUARIO) can still be learners.
+ * Managers only query their own enrollments while explicitly in learner mode.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function shouldLoadPersonalEnrollments(canManage: boolean, studentMode: boolean): boolean {
+  return !canManage || studentMode;
+}
+
 type TabId = 'meus' | 'catalogo';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function resolveLmsCatalogStudentMode(
+  canManage: boolean,
+  restrictToEnrolledCourses: boolean,
+  tab: TabId,
+): boolean {
+  return restrictToEnrolledCourses || (canManage && tab === 'meus');
+}
+
 
 const DEFAULT_CATEGORIES = [
   'EAD',
@@ -695,8 +714,8 @@ function CourseDrawer({
     form: CreateCursoDTO,
     assets: { contentFile: File | null; thumbnailFile: File | null; skipPurge: boolean },
   ) => Promise<void>;
-  onProductionCandidateUpload: (cursoId: number, file: File) => Promise<{
-    packageId: string; packageSha256: string; status: 'VALIDATED';
+  onProductionCandidateUpload: (cursoId: number, file: File, replaceImmediately: boolean) => Promise<{
+    packageId: string; packageSha256: string; status: 'VALIDATED' | 'ACTIVE';
   }>;
   onQaCandidateUpload: (cursoId: number, file: File) => Promise<{
     packageId: string; packageSha256: string; status: 'VALIDATED'; zipBytes: number;
@@ -706,15 +725,20 @@ function CourseDrawer({
   uploadStatus: string;
   availableAreas: { id: number; nome: string; codigo?: string | null }[];
 }) {
+  const navigate = useNavigate();
+  const { isAdmin } = usePermissions();
   const { tipos: qualTipos } = useQualificacaoTipos(true, 500);
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
   const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
   const [contentFile, setContentFile] = useState<File | null>(null);
+  const [scormProfile, setScormProfile] = useState<ScormReplacementProfile | 'CHECKING'>('CHECKING');
   const [qaCandidateReceipt, setQaCandidateReceipt] = useState<{
     packageId: string; packageSha256: string; status: 'VALIDATED';
   } | null>(null);
+  const [isCandidateUploading, setIsCandidateUploading] = useState(false);
+  const candidateUploadLock = useRef(false);
   const [skipPurge, setSkipPurge] = useState(false);
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [thumbPreview, setThumbPreview] = useState<string | null>(storedThumbPreview);
@@ -725,6 +749,19 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
+  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile === 'FORMATIVE';
+  useEffect(() => {
+    if (!canUploadInactiveProduction || !contentFile) {
+      setScormProfile('CHECKING');
+      return;
+    }
+    let current = true;
+    setScormProfile('CHECKING');
+    void inspectScormReplacementProfile(contentFile)
+      .then(profile => { if (current) setScormProfile(profile); })
+      .catch(() => { if (current) setScormProfile('GOVERNED'); });
+    return () => { current = false; };
+  }, [canUploadInactiveProduction, contentFile]);
   const candidateFirstScorm = shouldSaveScormMetadataWithoutZip({
     isEditing, storedTipoConteudo: initial?.tipo_conteudo,
     tipoConteudo: form.tipo_conteudo, hostname: window.location.hostname,
@@ -766,6 +803,39 @@ function CourseDrawer({
     return () => URL.revokeObjectURL(url);
   }, [storedThumbPreview, thumbFile]);
 
+  async function handleCandidateUpload() {
+    const courseId = initial?.id;
+    if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
+    if (!canUploadInactiveProduction && !canUploadStagingQa) return;
+    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
+    candidateUploadLock.current = true;
+    setIsCandidateUploading(true);
+    setQaCandidateReceipt(null);
+    try {
+      const receipt = canUploadInactiveProduction
+        ? await onProductionCandidateUpload(courseId, contentFile, directReplacement)
+        : await onQaCandidateUpload(courseId, contentFile);
+      setQaCandidateReceipt(receipt.status === 'VALIDATED' ? { packageId: receipt.packageId, packageSha256: receipt.packageSha256, status: 'VALIDATED' } : null);
+      toast.success(
+        receipt.status === 'ACTIVE'
+          ? 'Conteúdo substituído. Matrículas e históricos foram preservados.'
+          : canUploadInactiveProduction
+          ? 'Edição inativa recebida. O conteúdo publicado não foi alterado; homologue antes de ativar.'
+          : 'SCORM recebido pelo Worker como nova edição para homologação.',
+      );
+      if (canUploadInactiveProduction) {
+        // The version GET is the backend authority; the ZIP receipt is not activation.
+        onClose();
+        navigate(`/lms/cursos/${courseId}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM');
+    } finally {
+      candidateUploadLock.current = false;
+      setIsCandidateUploading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (blocksUnsafeScormTypeConversion({
@@ -802,7 +872,7 @@ function CourseDrawer({
   const contentMeta = getTypeMeta(form.tipo_conteudo);
   const publicationMeta = getMatriculaStatusMeta(form.publicado === 1 ? 'PUBLICADO' : 'RASCUNHO');
   const safeClose = () => {
-    if (isSaving) return;
+    if (isSaving || isCandidateUploading) return;
     onClose();
   };
 
@@ -1200,29 +1270,26 @@ function CourseDrawer({
                                 ? 'PPTX até 200 MB.'
                                 : 'Pacote .zip SCORM.'
                         }
-                        disabled={isSaving}
+                        disabled={isSaving || isCandidateUploading}
                       />
                       {canUploadInactiveProduction ? (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                          <p className="font-semibold">1. Enviar ZIP para homologação (sem publicar)</p>
-                          <p className="mt-1">Somente armazena e valida o ZIP, sem substituir o curso publicado, alterar matrículas, concluir treinamentos ou emitir certificados. A ativação exige homologação independente.</p>
-                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
-                            onClick={() => {
-                              if (!contentFile || !initial?.id) return;
-                              void onProductionCandidateUpload(initial.id, contentFile).then((receipt) => {
-                                setQaCandidateReceipt(receipt);
-                                toast.success('SCORM armazenado como candidato INATIVO. Conteúdo publicado preservado.');
-                              }).catch((error: unknown) => {
-                                toast.error(error instanceof Error ? error.message : 'Falha no recebimento do candidato inativo');
-                              });
-                            }}>
-                            Enviar ZIP como candidato INATIVO (sem publicar)
-                          </Button>
+                          <p className="font-semibold">Trocar o conteúdo deste curso</p>
+                          <p className="mt-1">{directReplacement
+                            ? 'Perfil formativo sem prova identificado. O Worker revalidará os gates antes de substituir a edição. Históricos e conclusões anteriores permanecem preservados.'
+                            : scormProfile === 'PRIVATE'
+                              ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
+                              : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
                               SHA-256: {qaCandidateReceipt.packageSha256}.
                               A versão usada pelos alunos NÃO foi alterada; certificação funcional pendente.
+                              <div className="mt-3">
+                                <Link to={`/lms/cursos/${initial?.id}`} className="font-semibold text-emerald-800 underline hover:text-emerald-950">
+                                  Etapa 2: conferir homologação e ativar a edição aprovada em “Edições do pacote SCORM”
+                                </Link>
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -1232,16 +1299,9 @@ function CourseDrawer({
                           <p className="font-semibold">1. Enviar ZIP para homologação em staging (sem publicar)</p>
                           <p className="mt-1">Este envio usa o grant F5 exato da edição e não altera o conteúdo publicado,
                             matrículas, notas ou certificados. Não executa ativação nem certificação.</p>
-                          <Button type="button" variant="primary" disabled={!contentFile || isSaving}
-                            onClick={() => {
-                              if (!contentFile || !initial?.id) return;
-                              void onQaCandidateUpload(initial.id, contentFile).then((receipt) => {
-                                setQaCandidateReceipt(receipt);
-                                toast.success('SCORM recebido pelo Worker como candidato inativo.');
-                              }).catch((error: unknown) => {
-                                toast.error(error instanceof Error ? error.message : 'Falha ao enviar candidato de QA');
-                              });
-                            }}>
+                          <Button type="button" variant="primary" disabled={!contentFile || isSaving || isCandidateUploading}
+                            loading={isCandidateUploading}
+                            onClick={() => void handleCandidateUpload()}>
                             Carregar somente candidato inativo (QA)
                           </Button>
                           {qaCandidateReceipt ? (
@@ -1255,13 +1315,13 @@ function CourseDrawer({
                       ) : null}
                       {isReplacingExistingContent ? (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                          <p className="font-semibold">{candidateFirstScorm ? 'Versão atual preservada durante a homologação' : 'Substituindo conteúdo atual'}</p>
+                          <p className="font-semibold">{candidateFirstScorm ? 'Versão anterior preservada até a troca' : 'Substituindo conteúdo atual'}</p>
                           <p className="mt-1 text-amber-800">
                             Atual: {storedContentLabel ?? 'conteúdo já publicado'}
                           </p>
                           <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
-                            <p className="mt-2 font-medium">Use o botão “Enviar ZIP para homologação” acima. Para editar os dados do curso, primeiro remova o ZIP selecionado. Nenhum envio ativa o curso automaticamente.</p>
+                            <p className="mt-2 font-medium">Use o botão de substituição no rodapé. Não repita o envio sem conferir o resultado.</p>
                           ) : null}
                           {!candidateFirstScorm && (form.tipo_conteudo === 'scorm' || form.tipo_conteudo === 'h5p') ? (
                             <label className="mt-3 flex cursor-pointer items-center gap-2 text-amber-900">
@@ -1454,10 +1514,22 @@ function CourseDrawer({
             </div>
             <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving}>
+                <Button variant="secondary" type="button" onClick={safeClose} disabled={isSaving || isCandidateUploading}>
                   Cancelar
                 </Button>
-                <Button variant="primary" type="submit" loading={isSaving} disabled={candidateFirstScorm && Boolean(contentFile)}>
+                {canUploadInactiveProduction && contentFile ? (
+                  <Button
+                    variant="primary"
+                    type="button"
+                    onClick={() => void handleCandidateUpload()}
+                    loading={isCandidateUploading}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
+                  >
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                  </Button>
+                ) : null}
+                {!(candidateFirstScorm && contentFile) ? (
+                <Button variant="primary" type="submit" loading={isSaving}>
                   {isEditing
                     ? candidateFirstScorm && contentFile
                       ? 'Salvar dados (remova o ZIP)'
@@ -1466,6 +1538,7 @@ function CourseDrawer({
                         : 'Salvar alterações'
                     : 'Criar curso'}
                 </Button>
+                ) : null}
               </div>
             </div>
           </form>
@@ -1788,16 +1861,16 @@ export default function LmsCatalogo() {
   const operationalAccess = useOperationalAccess();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
   const canManage = isAdmin || isGestor;
-  const restrictToEnrolledCourses = isAluno || isInstrutor;
+  // Management role takes precedence when the same account also has learner permissions.
+  const restrictToEnrolledCourses = !canManage && (isAluno || isInstrutor);
   const roleView = resolveLmsCatalogRoleView({ canManage, restrictToEnrolledCourses });
   const showAdministrativeFilters = roleView.showAdministrativeFilters;
 
   const [tab, setTab] = useState<TabId>(restrictToEnrolledCourses ? 'meus' : 'catalogo');
 
-  // Gestores também podem atuar como alunos: na aba "Meus cursos" têm acesso ao
-  // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
-  const gestorStudentMode = isGestor && tab === 'meus';
-  const studentMode = restrictToEnrolledCourses || gestorStudentMode;
+  // Gestores E administradores podem ser alunos sem perder permissões de gestão.
+  // O backend consulta sempre o vínculo funcional persistido, nunca só o JWT.
+  const studentMode = resolveLmsCatalogStudentMode(canManage, restrictToEnrolledCourses, tab);
   // Reuse the canonical training-compliance query once for the whole admin catalog.
   const { data: complianceRows } = useLmsCourseCompliance(canManage && !studentMode);
   const [search, setSearch] = useState('');
@@ -1828,7 +1901,11 @@ export default function LmsCatalogo() {
     },
     { enabled: canManage },
   );
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas();
+  // The admin catalog does not need an employee link, but all non-manager roles
+  // (including COMPLIANCE and USUARIO) still need their personal enrollments.
+  const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);
+  const { data: matriculas, isLoading: loadingMatriculas, isError: personalEnrollmentError } =
+    useMinhasMatriculas(loadPersonalEnrollments, canManage && studentMode);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
@@ -1854,7 +1931,8 @@ export default function LmsCatalogo() {
   const loadingCourses = canManage
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
-  const myMatriculas = matriculas ?? [];
+  // Disabled queries may still expose stale React Query cache; never use personal rows in admin mode.
+  const myMatriculas = loadPersonalEnrollments ? (matriculas ?? []) : [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
   const enrolledIds = new Set(
     myMatriculas.filter((m) => m.status !== 'CANCELADO').map((m) => m.curso_id),
@@ -2005,13 +2083,14 @@ export default function LmsCatalogo() {
     }
   }
 
-  async function handleProductionCandidateUpload(cursoId: number, file: File) {
+  async function handleProductionCandidateUpload(cursoId: number, file: File, replaceImmediately: boolean) {
     setIsSavingCourse(true);
     setUploadProgress(0);
-    setUploadStatus('Iniciando recebimento inativo em produção...');
+    setUploadStatus(replaceImmediately ? 'Validando substituição formativa no Worker...' : 'Enviando edição inativa para homologação...');
     try {
       return await uploadScormInactiveProductionCandidate({
-        cursoId, file, onProgress: setUploadProgress, onStatus: setUploadStatus,
+        cursoId, file, replaceImmediately,
+        onProgress: setUploadProgress, onStatus: setUploadStatus,
       });
     } finally {
       setIsSavingCourse(false);
@@ -2247,7 +2326,7 @@ export default function LmsCatalogo() {
           title={studentMode && canManage ? 'Meus treinamentos' : roleView.title}
           subtitle={statsBar}
           actions={
-            isGestor ? (
+            canManage ? (
               <div className="flex flex-wrap items-center gap-2">
                 {gestorModeToggle}
                 {tab === 'catalogo' ? managementActions : null}
@@ -2325,7 +2404,11 @@ export default function LmsCatalogo() {
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
-            {loadingCourses || loadingMatriculas ? (
+            {studentMode && personalEnrollmentError ? (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                Não foi possível carregar suas matrículas pessoais. Verifique o vínculo da conta com um funcionário ativo desta empresa e tente novamente.
+              </div>
+            ) : loadingCourses || loadingMatriculas ? (
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                   <CourseCardSkeleton key={i} />

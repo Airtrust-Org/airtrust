@@ -81,6 +81,9 @@ binding = "CF_VERSION_METADATA"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+# Staging-only validation of the globally authorized SCORM edition handoff.
+# Schema V2 0566 was verified in staging by the official 39888195384 run.
+LMS_SCORM_EDITION_HANDOFF_ENABLED = "true"
 # Staging invite URLs resolve to staging Pages (never the Worker API or production).
 FRONTEND_URL = "https://staging.airtrust.pages.dev"
 CORS_ORIGINS = "https://staging.airtrust.pages.dev,https://airtrust-staging.pages.dev,https://airtrust-api-staging.airtrust.workers.dev"
@@ -198,6 +201,11 @@ CONHECIMENTO_ATIVO_ENABLED_TENANTS = "6"
 # leg-level do Operational Load V1. Idempotente, falha isolada (não afeta o FRMS).
 # Allowlist explícita (empresa_id=6 Costa do Sol); `all` só após canário.
 CONTROLE_VOOS_FRMS_IMPORT_TENANTS = "6"
+# SCORM edition handoff (schema V2 0566): the learner (or an admin) preserves the
+# prior edition's evidence in an immutable archive and resumes the active
+# package. Activated 2026-11-02 AFTER the governed apply of 0566; no score or
+# completion is ever transferred. Rollback = remove this line and redeploy.
+LMS_SCORM_EDITION_HANDOFF_ENABLED = "true"
 # One-off EAD incident executor. The endpoint remains fail-closed after its
 # single reviewed run; this non-secret flag only permits the official executor.
 ENABLE_EAD_CATEGORY_RECONCILIATION_EXECUTOR = "true"

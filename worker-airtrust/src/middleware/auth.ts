@@ -20,7 +20,7 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
-import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
+import { isPlatformAdminAccess, resolvePlatformAccessState, type PlatformAccessState } from '../lib/rbac/platform-access';
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 
@@ -77,16 +77,41 @@ async function resolveEffectiveUserRole(
 }
 
 /**
+ * Executa uma leitura no D1 com retry limitado para absorver falhas transitórias
+ * de RPC/rede na Edge Cloudflare. Estritamente fail-closed: se as tentativas
+ * esgotarem, a exceção é propagada e o middleware retorna 503 normalmente.
+ */
+export async function withD1Retry<T>(
+  operation: () => Promise<T>,
+  maxAttempts = 3,
+  initialBackoffMs = 40,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (err) {
+      attempt += 1;
+      if (attempt >= maxAttempts) throw err;
+      const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 20;
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+}
+
+/**
  * Verifica se um JTI está na blocklist de tokens revogados (logout).
  * Fail-closed: qualquer erro de leitura é propagado (não engolido), para que
  * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
  * como falha de infraestrutura (503), nunca como "não bloqueado".
  */
 async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
-  const row = await db
-    .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-    .bind(jti)
-    .first();
+  const row = await withD1Retry(() =>
+    db
+      .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+      .bind(jti)
+      .first(),
+  );
   return Boolean(row);
 }
 
@@ -122,26 +147,28 @@ async function resolveUserSecurityState(
   const { activeWhere } = await getUsuariosSchema(db);
   const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
 
-  const row = scoped
-    ? await db
-        .prepare(
-          `
-          SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
-          FROM usuarios u
-          LEFT JOIN usuarios_empresas ue
-            ON ue.usuario_id = u.id AND ue.empresa_id = ?
-          WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
-          LIMIT 1
-        `,
-        )
-        .bind(eid, uid)
-        .first<{ id: number; perfil: string | null; role: string | null }>()
-    : await db
-        .prepare(
-          `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
-        )
-        .bind(uid)
-        .first<{ id: number; perfil: string | null; role: string | null }>();
+  const row = await withD1Retry(() =>
+    scoped
+      ? db
+          .prepare(
+            `
+            SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+            FROM usuarios u
+            LEFT JOIN usuarios_empresas ue
+              ON ue.usuario_id = u.id AND ue.empresa_id = ?
+            WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+            LIMIT 1
+          `,
+          )
+          .bind(eid, uid)
+          .first<{ id: number; perfil: string | null; role: string | null }>()
+      : db
+          .prepare(
+            `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+          )
+          .bind(uid)
+          .first<{ id: number; perfil: string | null; role: string | null }>(),
+  );
 
   if (!row) {
     return { found: false, active: false, role: fallback, hasMembership: false };
@@ -159,6 +186,7 @@ async function resolveUserSecurityState(
 
 export type AccessTokenSecurityState = {
   role: string;
+  platformAccessState?: PlatformAccessState;
 };
 
 /**
@@ -218,10 +246,12 @@ export async function validateAccessTokenSecurityState(
   // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
   // O tenantMiddleware valida a existência e atividade da empresa selecionada.
   let platformAdmin = false;
+  let platformAccessState: PlatformAccessState | undefined;
   try {
-    platformAdmin = isPlatformAdminAccess(
-      await resolvePlatformAccessState(db, payload.sub),
+    platformAccessState = await withD1Retry(() =>
+      resolvePlatformAccessState(db, payload.sub),
     );
+    platformAdmin = isPlatformAdminAccess(platformAccessState);
   } catch (e) {
     console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
     return serviceUnavailable(
@@ -237,7 +267,10 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  return { role: platformAdmin ? 'ADMINISTRADOR' : security.role };
+  return {
+    role: platformAdmin ? 'ADMINISTRADOR' : security.role,
+    platformAccessState,
+  };
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
@@ -546,6 +579,9 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     c.set('userRole', security.role);
     c.set('canonicalTenantRole', security.role);
     c.set('funcionarioId', payload.funcionario_id ?? null);
+    if (security.platformAccessState) {
+      c.set('platformAccessState', security.platformAccessState);
+    }
 
     // ============ PERFIL ATIVO DE SESSÃO (multi-perfil) ============
     // A role canônica acima (usuarios_empresas.role) permanece a fonte de

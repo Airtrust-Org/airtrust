@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateRegulatoryCompliance } from '../../lib/frms/regulatory-compliance';
+import { evaluateRegulatoryCompliance, hasCompleteRollingFlightCoverage, sanitizeRollingRegulatoryEvidence, type RollingFlightCoverageEvidence } from '../../lib/frms/regulatory-compliance';
+import { evaluateLawArt42Madrugadas } from '../../lib/frms/law-art42-madrugadas';
 
 const limites = {
   FDP_MAXIMO_HORAS: 11,
@@ -28,7 +29,57 @@ const work = {
   completeThroughDate: true,
   incompleteReasons: [],
 };
+const completeCoverage: RollingFlightCoverageEvidence = {
+  sourceVerified: true,
+  windows: {
+    month: { expectedDays: 8, confirmedDays: 8 },
+    year: { expectedDays: 70, confirmedDays: 70 },
+    days28: { expectedDays: 8, confirmedDays: 8 },
+    days365: { expectedDays: 70, confirmedDays: 70 },
+  },
+};
+
 describe('FRMS regulatory compliance evaluator', () => {
+  it('does not mistake numeric flight totals without source-backed day coverage for compliance', () => {
+    const input = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 0, rolling, work, limites,
+    };
+    const unverified = evaluateRegulatoryCompliance(input);
+    expect(unverified.status).toBe('UNKNOWN');
+    expect(unverified.unknownReasons).toContain('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+    expect(unverified.violations).toEqual([]);
+
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, sourceVerified: false })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days28: { expectedDays: 8, confirmedDays: 7 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 8, confirmedDays: 9 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, days365: { expectedDays: 0, confirmedDays: 0 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({
+      sourceVerified: true,
+      windows: {
+        month: { expectedDays: 0, confirmedDays: 0 },
+        year: { expectedDays: 0, confirmedDays: 0 },
+        days28: { expectedDays: 0, confirmedDays: 0 },
+        days365: { expectedDays: 0, confirmedDays: 0 },
+      },
+    })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage({ ...completeCoverage, windows: { ...completeCoverage.windows, month: { expectedDays: 1.5, confirmedDays: 1.5 } } })).toBe(false);
+    expect(hasCompleteRollingFlightCoverage(completeCoverage)).toBe(true);
+    const complete = evaluateRegulatoryCompliance({ ...input, rollingCoverage: completeCoverage });
+    expect(complete.status).toBe('COMPLIANT');
+  });
+
+  it('keeps proven flight-hour limit violations even when import coverage is unknown', () => {
+    const result = evaluateRegulatoryCompliance({
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 0, rolling: { ...rolling, hv_dia_min: 481 }, work, limites,
+    });
+    expect(result.status).toBe('VIOLATION');
+    expect(result.violations.map((v) => v.code)).toContain('LAW_HELI_FLIGHT_DAY_8H');
+    expect(result.unknownReasons).toContain('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+  });
+
   it('does not flag values exactly at the legal limit', () => {
     const result = evaluateRegulatoryCompliance({
       empresaId: 6,
@@ -42,6 +93,7 @@ describe('FRMS regulatory compliance evaluator', () => {
         hv_ano_calendario_min: 930 * 60,
       },
       work: { ...work, monthWorkToDateMin: 176 * 60 },
+      rollingCoverage: completeCoverage,
       limites,
     });
     expect(result.status).toBe('COMPLIANT');
@@ -161,7 +213,7 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     });
     expect(result.status).toBe('VIOLATION');
     expect(result.violations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'ACT_CDS_POST_MISSION_REST', source: 'ACT', limitMin: 15 * 24 * 60 }),
+      expect.objectContaining({ code: 'ACT_CDS_POST_MISSION_REST', source: 'LAW', limitMin: 15 * 24 * 60 }),
     ]));
   });
 
@@ -209,5 +261,163 @@ describe('Costa do Sol ACT mission compliance in canonical evaluator', () => {
     expect(result.unknownReasons).toEqual(expect.arrayContaining([
       'ACT_CDS_EFFECTIVE_DAYS_AT_LOCATION_EVIDENCE_INCOMPLETE', 'ACTIVITY_INTERVAL_MISSING',
     ]));
+  });
+
+  describe('Lei 13.475 art. 42 (madrugadas)', () => {
+    const thirdEarlyStart = evaluateLawArt42Madrugadas('2026-09-26', [
+      { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      { data: '2026-09-25', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+    ]);
+    const base = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      journeyDurationMin: 8 * 60, rolling, rollingCoverage: completeCoverage, work, limites,
+    };
+
+    it('sem ativação no perfil, expõe o achado como pendente de validação sem mudar o status', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, art42: thirdEarlyStart });
+      expect(result.status).toBe('COMPLIANT');
+      expect(result.pendingValidation).toEqual([
+        expect.objectContaining({ code: 'LAW_ART42_CONSECUTIVE', actual: 3, limit: 2, source: 'LAW' }),
+      ]);
+    });
+
+    it('não presume conformidade quando art. 42 está ativado mas falta horário de madrugada intermediária', () => {
+      const evidence = evaluateLawArt42Madrugadas('2026-09-26', [
+        { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-25', hora_apresentacao: null, hora_termino: null },
+        { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      ]);
+      expect(evidence.incompleteDuties).toBe(1);
+      const result = evaluateRegulatoryCompliance({ ...base, art42: evidence, art42Enforced: true });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.unknownReasons).toContain('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+      expect(result.violations).toHaveLength(0);
+    });
+
+    it('mantém a violação comprovada mesmo com jornada adicional sem horário no histórico', () => {
+      const evidence = evaluateLawArt42Madrugadas('2026-09-26', [
+        { data: '2026-09-23', hora_apresentacao: null, hora_termino: null },
+        { data: '2026-09-24', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-25', hora_apresentacao: '05:30', hora_termino: '14:00' },
+        { data: '2026-09-26', hora_apresentacao: '05:30', hora_termino: '14:00' },
+      ]);
+      const result = evaluateRegulatoryCompliance({ ...base, art42: evidence, art42Enforced: true });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((violation) => violation.code)).toContain('LAW_ART42_CONSECUTIVE');
+      expect(result.unknownReasons).toContain('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+    });
+
+    it('com ativação validada no perfil, a terceira madrugada consecutiva é violação legal', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, art42: thirdEarlyStart, art42Enforced: true });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('LAW_ART42_CONSECUTIVE');
+      expect(result.pendingValidation).toBeUndefined();
+    });
+  });
+
+  describe('lei como fonte, ACT só na vigência e piso legal de jornada', () => {
+    const missionViolation = {
+      inMission: true, missionDay: 22, effectiveWorkDaysAtOperation: 18,
+      effectiveWorkEvidenceComplete: true, incompleteReasons: [],
+    };
+    const base = {
+      empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+      costaDoSolActApplicable: true, journeyDurationMin: 8 * 60, rolling, rollingCoverage: completeCoverage, work, limites,
+    };
+
+    it('art. 41 §§2º–3º são LAW e citam o ACT dentro da vigência', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, dataReferencia: '2026-09-26', mission: missionViolation });
+      const codes = result.violations.filter((v) => v.code.startsWith('ACT_CDS_'));
+      expect(codes.map((v) => v.source)).toEqual(['LAW', 'LAW']);
+      expect(codes[0].reference).toBe('Lei 13.475/2017 art. 41 §2º; ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput');
+    });
+
+    it('antes de 01/12/2025 o ACT 2025/2027 não é citado', () => {
+      const result = evaluateRegulatoryCompliance({ ...base, dataReferencia: '2025-11-30', mission: missionViolation });
+      const references = result.violations.map((v) => v.reference);
+      expect(references).toContain('Lei 13.475/2017 art. 41 §2º');
+      expect(references.some((r) => r.includes('ACT'))).toBe(false);
+    });
+
+    it('jornada acima de 18 h viola o art. 37 em qualquer composição', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 18 * 60 + 1, limites: { ...limites, FDP_MAXIMO_HORAS: 20 },
+      });
+      expect(result.violations.map((v) => v.code)).toContain('LAW_DUTY_18H');
+    });
+
+    it('perfil acima de 11 h não declara conformidade legal para jornada de 12 h', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 12 * 60, limites: { ...limites, FDP_MAXIMO_HORAS: 14 },
+      });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.unknownReasons).toContain('LAW_DUTY_CREW_COMPOSITION_UNKNOWN');
+    });
+
+    it('jornada de exatamente 11 h com perfil de 14 h permanece conforme', () => {
+      const result = evaluateRegulatoryCompliance({
+        ...base, journeyDurationMin: 11 * 60, limites: { ...limites, FDP_MAXIMO_HORAS: 14 },
+      });
+      expect(result.status).toBe('COMPLIANT');
+    });
+  });
+
+  describe('sanitizeRollingRegulatoryEvidence', () => {
+    const raw = { ...rolling };
+    it('janela individual nula permanece ausente, preservando as demais leituras', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({ ...raw, hv_28_dias_min: null });
+      expect(partial?.hv_28_dias_min).toBeNull();
+      expect(partial?.hv_dia_min).toBe(raw.hv_dia_min);
+    });
+    it('violação diária demonstrada prevalece mesmo quando a janela de 28 dias falta', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: 8 * 60 + 1, hv_28_dias_min: null,
+      });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('LAW_HELI_FLIGHT_DAY_8H');
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('violação de 28 dias B/C demonstrada prevalece mesmo quando o dia falta', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: null, hv_28_dias_min: 93 * 60 + 1,
+      });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: true,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('VIOLATION');
+      expect(result.violations.map((v) => v.code)).toContain('RBAC117_BC_FLIGHT_28D_93H');
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('janela parcial abaixo dos limites nunca é declarada conforme', () => {
+      const partial = sanitizeRollingRegulatoryEvidence({ ...raw, hv_mes_calendario_min: null });
+      const result = evaluateRegulatoryCompliance({
+        empresaId: 6, profileCode: 'HELICOPTER_OFFSHORE', rbacBcApplicable: false,
+        journeyDurationMin: 0, rolling: partial, work, limites,
+      });
+      expect(result.status).toBe('UNKNOWN');
+      expect(result.violations).toHaveLength(0);
+      expect(result.unknownReasons).toContain('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    });
+    it('linha inteiramente sem acumulados de voo continua sem evidência', () => {
+      expect(sanitizeRollingRegulatoryEvidence({
+        ...raw, hv_dia_min: null, hv_mes_calendario_min: null,
+        hv_28_dias_min: null, hv_365_dias_min: null, hv_ano_calendario_min: null,
+      })).toBeNull();
+    });
+    it('ano civil menor que o mês denuncia linha legada e vira ausente só no ano', () => {
+      const result = sanitizeRollingRegulatoryEvidence({ ...raw, hv_mes_calendario_min: 600, hv_ano_calendario_min: 0 });
+      expect(result?.hv_ano_calendario_min).toBeNull();
+      expect(result?.hv_mes_calendario_min).toBe(600);
+    });
+    it('repouso nulo falha fechado', () => {
+      const result = sanitizeRollingRegulatoryEvidence({ ...raw, repouso_anterior_min: null, repouso_suficiente: null });
+      expect(result).toMatchObject({ repouso_anterior_min: -1, repouso_suficiente: 0 });
+    });
   });
 });
