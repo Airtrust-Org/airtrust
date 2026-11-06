@@ -13,7 +13,7 @@ import {
   fetchQualificationHistoryReport,
   type QualificationHistoryReportFilters,
   type QualificationReportStatus,
-} from './qualificationHistoryReport';
+} from '../../components/relatorios/qualificationHistoryReport';
 
 type Setor = { id: number; nome: string; ativo?: number | boolean };
 
@@ -37,6 +37,7 @@ export default function QualificationHistoryReportPanel() {
     'VENCIDA',
     'VENCENDO_30',
     'VALIDA',
+    'RENOVADA',
   ]);
   const [setorId, setSetorId] = useState('');
   const [funcionarioId, setFuncionarioId] = useState('');

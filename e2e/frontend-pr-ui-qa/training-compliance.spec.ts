@@ -48,17 +48,19 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(page.getByRole('combobox', { name: 'Filtrar por função' })).toContainText(
     'Todas as funções',
   );
-  await expect(
-    page.getByRole('heading', { name: 'Situação das obrigações individuais' }),
-  ).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
-
+  // O painel de indicadores só é montado após GET /resumo. Aguardar e validar
+  // o contrato HTTP primeiro evita um falso negativo de 5 s e, se o backend
+  // falhar, exibe explicitamente o status e o endpoint responsáveis.
   const [capabilities, catalogs, summary, pendings] = await Promise.all([
     capabilitiesP.then(payload),
     catalogsP.then(payload),
     summaryP.then(payload),
     pendingsP.then(payload),
   ]);
+  await expect(
+    page.getByRole('heading', { name: 'Situação das obrigações individuais' }),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
   expect(capabilities.data.schema_ready).toBe(true);
   expect(capabilities.data.reconciliation_ready).toBe(true);
   expect(capabilities.data.scopes).toEqual(
@@ -166,7 +168,7 @@ test('training compliance intelligent staging flow is live and read-only', async
   expect(trend.data.at(-1)?.snapshot_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   await expect(page.getByRole('heading', { name: 'Evolução do compliance — 90 dias' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gerador de relatórios' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Exportar PDF' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Gerar PDF (de requisitos|do histórico)/ })).toBeVisible();
 
   const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
   await page.getByRole('button', { name: 'Comunicações', exact: true }).click();

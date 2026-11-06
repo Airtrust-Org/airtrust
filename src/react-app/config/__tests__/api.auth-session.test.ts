@@ -163,4 +163,31 @@ describe('auth session storage', () => {
     await Promise.all([first, second]);
     expect(module.getRefreshToken()).toBe('refresh-rotated');
   });
+
+  it('retries GET requests once on 503 AUTH_REVOCATION_CHECK_UNAVAILABLE and succeeds', async () => {
+    const module = await import('../api');
+    module.setTokens(makeJwt(3600), 'refresh-token');
+
+    apiFetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Não foi possível verificar a revogação do token. Tente novamente.',
+            code: 'AUTH_REVOCATION_CHECK_UNAVAILABLE',
+          }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: true, data: { status: 'reconciled' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    const res = await module.fetchWithAuth('/api/compliance-treinamentos/reconciliacao');
+    expect(res.status).toBe(200);
+    expect(apiFetchMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -1,5 +1,5 @@
-import { ApiError } from '../../middleware/error-handler';
-import { mergeScormRuntimeState } from '../../services/lms-progress-guardrails';
+import { ApiError } from '../errors/api-error';
+import { mergeScormRuntimeState } from './lms-progress-guardrails';
 import { ScormCommitSchema } from '../../services/lms-scorm-commit-schema';
 
 const HEX64 = /^[a-f0-9]{64}$/;
@@ -31,12 +31,14 @@ export async function readF0CandidateRuntimeState(db: D1Database, scope: F0Scope
     id:string; ciclo_id:number; run_id:string; launched_package_sha256:string|null;
     last_committed_package_sha256:string|null; cmi_json:string|null;
     suspend_data:string|null; session_count:number|null;
+    sc_row_present:number; last_commit_at:string|null;
   } | null;
   try {
     row = await db.prepare(
       `SELECT b.id,b.ciclo_id,b.run_id,b.launched_package_sha256,
               b.last_committed_package_sha256,
-              sc.cmi_json,sc.suspend_data,sc.session_count
+              CASE WHEN sc.matricula_id IS NULL THEN 0 ELSE 1 END AS sc_row_present,
+              sc.cmi_json,sc.suspend_data,sc.session_count,sc.last_commit_at
          FROM lms_scorm_qa_evidence_bindings b
          JOIN lms_scorm_package_versions p ON p.id=b.package_id
            AND p.empresa_id=b.empresa_id AND p.curso_id=b.curso_id
@@ -69,15 +71,27 @@ export async function readF0CandidateRuntimeState(db: D1Database, scope: F0Scope
       (row.launched_package_sha256 !== null && row.launched_package_sha256 !== scope.packageSha256) ||
       (row.last_committed_package_sha256 !== null &&
         (row.launched_package_sha256 !== scope.packageSha256 ||
-         row.last_committed_package_sha256 !== scope.packageSha256)) ||
-      ((row.cmi_json !== null || row.suspend_data !== null || Number(row.session_count ?? 0)>0) &&
-       row.last_committed_package_sha256 !== scope.packageSha256)) {
+         row.last_committed_package_sha256 !== scope.packageSha256))) {
     throw new ApiError('SCORM_F0_RUNTIME_BINDING_OR_EDITION_INVALID', 409);
+  }
+  // A missing progress row is the only unambiguous prelaunch zero. A
+  // persisted row with a malformed counter, orphan CMI or timestamp-only
+  // commit cannot be normalized to zero or reused for a fresh F0 commit.
+  if (row.sc_row_present === 1 && (
+      typeof row.session_count !== 'number' ||
+      !Number.isSafeInteger(row.session_count) || row.session_count < 0 ||
+      (row.session_count === 0 &&
+       (row.cmi_json !== null || row.suspend_data !== null)) ||
+      (row.session_count > 0 && !row.last_commit_at) ||
+      ((row.cmi_json !== null || row.suspend_data !== null ||
+        row.session_count > 0 || row.last_commit_at !== null) &&
+       row.last_committed_package_sha256 !== scope.packageSha256))) {
+    throw new ApiError('SCORM_F0_RUNTIME_SESSION_STATE_UNPROVEN', 409);
   }
   return {
     id: row.id, cycleId:row.ciclo_id, runId:row.run_id,
     cmiJson:row.cmi_json, suspendData:row.suspend_data,
-    sessionCount:Number(row.session_count ?? 0),
+    sessionCount:row.session_count ?? 0,
     launchedSha:row.launched_package_sha256,
     committedSha:row.last_committed_package_sha256,
   };
@@ -326,9 +340,10 @@ export async function recoverF0CandidateFixture(
     throw new ApiError('SCORM_F0_RECOVERY_SCOPE_INVALID', 400);
   }
   type State = {
-    binding_id: string; binding_status: string; run_id: string; ciclo_id: number;
+    binding_id: string; binding_status: string; run_id: string; ciclo_id: number; sc_row_present: number;
     package_sha256: string; runtime_sha: string; enrollment_status: string;
     progresso_pct: number | null; data_inicio: string | null; score_final: number | null;
+    enrollment_qualification_history_id: number | null; enrollment_attempts: number | null;
     history_id: number | null; cycle_status: string; cmi_json: string | null;
     suspend_data: string | null; lesson_status: string | null;
     completion_status: string | null; success_status: string | null;
@@ -341,8 +356,11 @@ export async function recoverF0CandidateFixture(
       `SELECT b.id AS binding_id,b.status AS binding_status,b.run_id,b.ciclo_id,
               b.package_sha256,b.staging_runtime_sha AS runtime_sha,
               m.status AS enrollment_status,m.progresso_pct,m.data_inicio,m.score_final,
+              m.qualificacao_historico_id AS enrollment_qualification_history_id,
+              m.tentativas AS enrollment_attempts,
               q.id AS history_id,cy.status AS cycle_status,
-              sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
+              CASE WHEN sc.matricula_id IS NULL THEN 0 ELSE 1 END AS sc_row_present,
+               sc.cmi_json,sc.suspend_data,sc.lesson_status,sc.completion_status,
               sc.success_status,sc.score_raw,sc.score_max,sc.score_min,
               sc.score_scaled,sc.session_count
          FROM lms_scorm_qa_evidence_bindings b
@@ -363,7 +381,7 @@ export async function recoverF0CandidateFixture(
          LEFT JOIN lms_progresso_scorm sc ON sc.empresa_id=b.empresa_id
            AND sc.matricula_id=b.matricula_id
          LEFT JOIN qualificacoes_historico q ON q.empresa_id=b.empresa_id
-           AND q.lms_matricula_id=b.matricula_id AND q.deleted_at IS NULL
+           AND q.lms_matricula_id=b.matricula_id
         WHERE b.empresa_id=? AND b.curso_id=? AND b.package_id=?
           AND b.package_sha256=? AND b.matricula_id=? AND b.ciclo_id=?
           AND b.run_id=? AND b.staging_runtime_sha=? AND b.synthetic=1
@@ -378,13 +396,16 @@ export async function recoverF0CandidateFixture(
       state.ciclo_id!==scope.cycleId || !['ACTIVE','REVOKED'].includes(state.binding_status) ||
       !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.enrollment_status) ||
       !['NAO_INICIADO','EM_ANDAMENTO'].includes(state.cycle_status) ||
-      state.progresso_pct===null || state.progresso_pct>1 || state.score_final!==null ||
+      state.progresso_pct===null || !Number.isFinite(state.progresso_pct) ||
+      state.progresso_pct<0 || state.progresso_pct>1 || state.score_final!==null ||
+      state.enrollment_qualification_history_id!==null ||
+      !Number.isSafeInteger(state.enrollment_attempts) || state.enrollment_attempts!==0 ||
       state.history_id!==null || (state.lesson_status!==null && state.lesson_status!=='incomplete') ||
       (state.completion_status!==null && state.completion_status!=='incomplete') ||
       (state.success_status!==null && state.success_status!=='unknown') ||
       [state.score_raw,state.score_max,state.score_min,state.score_scaled].some(value=>value!==null) ||
       (state.binding_status==='REVOKED' &&
-       (state.enrollment_status!=='NAO_INICIADO' || state.cycle_status!=='NAO_INICIADO' ||
+       (state.sc_row_present!==0 || state.enrollment_status!=='NAO_INICIADO' || state.cycle_status!=='NAO_INICIADO' ||
         state.progresso_pct!==0 || state.data_inicio!==null || state.cmi_json!==null ||
         state.suspend_data!==null || state.session_count!==null))) {
     throw new ApiError('SCORM_F0_RECOVERY_PREIMAGE_OR_TERMINAL_STATE_INVALID', 409);
@@ -398,8 +419,9 @@ export async function recoverF0CandidateFixture(
           AND matricula_id=? AND ciclo_id=? AND run_id=? AND staging_runtime_sha=?
           AND synthetic=1 AND status='ACTIVE'`).bind(...args),
       db.prepare(`DELETE FROM lms_progresso_scorm WHERE empresa_id=? AND matricula_id=?
-        AND lesson_status IN ('incomplete',NULL) AND completion_status IN ('incomplete',NULL)
-        AND success_status IN ('unknown',NULL) AND score_raw IS NULL AND score_max IS NULL
+        AND (lesson_status='incomplete' OR lesson_status IS NULL)
+        AND (completion_status='incomplete' OR completion_status IS NULL)
+        AND (success_status='unknown' OR success_status IS NULL) AND score_raw IS NULL AND score_max IS NULL
         AND score_min IS NULL AND score_scaled IS NULL AND EXISTS(
           SELECT 1 FROM lms_scorm_qa_evidence_bindings b WHERE b.empresa_id=?
             AND b.curso_id=? AND b.package_id=? AND b.package_sha256=?
@@ -409,10 +431,11 @@ export async function recoverF0CandidateFixture(
           data_inicio=NULL,updated_at=datetime('now')
         WHERE id=? AND empresa_id=? AND curso_id=? AND deleted_at IS NULL
           AND observacoes=? AND status IN ('NAO_INICIADO','EM_ANDAMENTO')
-          AND score_final IS NULL AND COALESCE(progresso_pct,0)<=1
+          AND score_final IS NULL AND qualificacao_historico_id IS NULL
+          AND tentativas=0 AND progresso_pct BETWEEN 0 AND 1
           AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
             WHERE q.empresa_id=lms_matriculas.empresa_id
-              AND q.lms_matricula_id=lms_matriculas.id AND q.deleted_at IS NULL)
+              AND q.lms_matricula_id=lms_matriculas.id)
           AND EXISTS(SELECT 1 FROM lms_scorm_qa_evidence_bindings b
             WHERE b.empresa_id=lms_matriculas.empresa_id AND b.curso_id=lms_matriculas.curso_id
               AND b.package_id=? AND b.package_sha256=? AND b.matricula_id=lms_matriculas.id
@@ -445,12 +468,13 @@ export async function recoverF0CandidateFixture(
               AND b.matricula_id=? AND b.ciclo_id=? AND b.run_id=? AND b.status='REVOKED'
               AND b.synthetic=1 AND m.status='NAO_INICIADO' AND m.progresso_pct=0
               AND m.data_inicio IS NULL AND m.score_final IS NULL
+              AND m.qualificacao_historico_id IS NULL AND m.tentativas=0
               AND cy.status='NAO_INICIADO' AND cy.ciclo_atual=1
               AND NOT EXISTS(SELECT 1 FROM lms_progresso_scorm sc
                 WHERE sc.empresa_id=b.empresa_id AND sc.matricula_id=b.matricula_id)
               AND NOT EXISTS(SELECT 1 FROM qualificacoes_historico q
                 WHERE q.empresa_id=b.empresa_id AND q.lms_matricula_id=b.matricula_id
-                  AND q.deleted_at IS NULL))
+                  ))
           THEN 1 ELSE json_extract('INVALID_JSON_F0_RECOVERY_SENTINEL','$.impossible') END AS verified`)
         .bind(scope.tenantId,scope.courseId,scope.packageId,scope.packageSha256,
           scope.enrollmentId,scope.cycleId,scope.runId),

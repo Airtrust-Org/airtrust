@@ -149,6 +149,19 @@ export function buildScormVisitTrackingScript(): string {
  */
 export function buildScormProgressParsersScript(): string {
   return `
+  // A package in preview/review of an unreleased screen shows a counter ("14/90")
+  // that is a visit, not progress. The DOM counter must never become the bookmark
+  // there: the next launch would jump the package past screens never completed.
+  function isPackagePreviewDocument(doc) {
+    try {
+      if (!doc) return false;
+      if (doc.querySelector('.preview-banner')) return true;
+      var gate = doc.getElementById('gateStatus');
+      var text = gate ? String(gate.textContent || '') : '';
+      return /pr[eé]-?visualiza/i.test(text);
+    } catch (_previewError) { return false; }
+  }
+
   function parseProgressFromText(text) {
     if (!text) return null;
     var regex = /(\\d+)\\s*\\/\\s*(\\d+)/g;
@@ -354,6 +367,84 @@ export function buildScormSessionCloseRuntimeScript(): string {
     void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
   }
 
+  // The Factory V3 SCO has its own *explicit* terminal button. Previously it
+  // called LMSFinish(), which only sends passive SCORM_FINISH; the server then
+  // correctly refused to issue a qualification without SCORM_USER_FINALIZE.
+  // Observe the actual trusted button click, not a location/score/finish event.
+  // This bridge works with already-published ZIPs and never fabricates CMI.
+  var factoryV3FinalClick = false;
+  var factoryV3ObservedDocument = null;
+  function bindFactoryV3FinalClick() {
+    try {
+      var frame = document.getElementById('scorm-frame');
+      var inner = frame && frame.contentWindow;
+      var doc = inner && inner.document;
+      // SHA-pinned exception for the already-active S-76 RC3 SCO:
+      // its terminal control is #nextUnit, not Factory V3's #next.
+      if (S76_LEGACY_RC3_FINAL) {
+        var legacyModel = inner && inner.AIRTRUST_COURSE_MODEL;
+        if (!doc || !legacyModel ||
+            legacyModel.courseId !== 's76c-sop-rev03' ||
+            legacyModel.packageVersion !== 'v3.4-no-module-exams-rc2-2026-11-02' ||
+            !Array.isArray(legacyModel.slides) || legacyModel.slides.length !== 49 ||
+            legacyModel.slides[48].id !== 'M6-07') return;
+        if (factoryV3ObservedDocument === doc) return;
+        factoryV3ObservedDocument = doc;
+        doc.addEventListener('click', function(event) {
+          if (event.isTrusted !== true || PREVIEW_MODE || REVIEW_MODE ||
+              completed || sessionCloseHandled || !apiInitialized) return;
+          var target = event.target;
+          var button = target && typeof target.closest === 'function'
+            ? target.closest('#nextUnit') : null;
+          if (!button || button.disabled) return;
+          var label = String(button.textContent || '').trim().replace(/\\s+/g, ' ');
+          var counter = doc.querySelector('.counter');
+          if (label !== 'Concluir treinamento' ||
+              !counter || String(counter.textContent || '').trim() !== '49/49') return;
+          factoryV3FinalClick = true;
+          window.setTimeout(function() { factoryV3FinalClick = false; }, 0);
+        }, true);
+        return;
+      }
+      var authored = inner && inner.COURSE_DATA;
+      if (!doc || !authored || typeof authored.packageVersion !== 'string' ||
+          !Array.isArray(authored.slides) || authored.slides.length < 2) return;
+      var last = authored.slides[authored.slides.length - 1];
+      if (!last || (last.kind !== 'study_end' && last.kind !== 'assessment')) return;
+      if (factoryV3ObservedDocument === doc) return;
+      factoryV3ObservedDocument = doc;
+      doc.addEventListener('click', function(event) {
+        if (event.isTrusted !== true || PREVIEW_MODE || REVIEW_MODE ||
+            completed || sessionCloseHandled || !apiInitialized) return;
+        var target = event.target;
+        var button = target && typeof target.closest === 'function'
+          ? target.closest('#next') : null;
+        if (!button || button.disabled) return;
+        var label = String(button.textContent || '').trim().replace(/\\s+/g, ' ');
+        var isEnd = last.kind === 'study_end' && label === 'Confirmar encerramento do estudo';
+        var isAssessmentEnd = last.kind === 'assessment' && label === 'Concluir curso';
+        if (!isEnd && !isAssessmentEnd) return;
+        factoryV3FinalClick = true;
+        // Only LMSFinish synchronously triggered by THIS click may consume it.
+        // A subsequent unload, timer, or scripted Finish is never user consent.
+        window.setTimeout(function() { factoryV3FinalClick = false; }, 0);
+      }, true);
+    } catch (_factoryAccessError) {
+      // Cross-origin or non-Factory SCOs retain strict passive Finish semantics.
+    }
+  }
+
+  function consumeFactoryV3ExplicitFinish() {
+    if (!factoryV3FinalClick) return false;
+    factoryV3FinalClick = false;
+    if (PREVIEW_MODE || REVIEW_MODE || completed || sessionCloseHandled || !apiInitialized) return false;
+    var status = String(cmi['cmi.core.lesson_status'] || '').toLowerCase();
+    if (status !== 'completed' && status !== 'passed') return false;
+    notifyCompletionPending('saving', 'factory-v3-explicit-user-finish');
+    void commit(buildPayload(), 0, 'SCORM_USER_FINALIZE');
+    return true;
+  }
+
   // Relay the inner SCORM package's raw completion diagnostics
   // (AIRTRUST_COMPLETION_DIAGNOSTICS_V1) up to React as lms:completion-diagnostics.
   // Trust ONLY the exact scorm-frame window as the source; ignore any IDs the
@@ -473,4 +564,64 @@ export function buildScormQueuedCommitScript(): string {
       }
     );
   }`;
+}
+
+/**
+ * #1311 terminal lock (same IIFE scope: `cmi`, `IS_2004`, `emitTelemetry`,
+ * `sanitizeTelemetryValue`). Once this cycle holds a terminal status (served
+ * from persisted evidence or reported in this session), a reopened package
+ * cannot downgrade it nor lower the best score in the CMI used for commits
+ * (including LMSFinish/unload beacons). The attempted value goes to a
+ * non-terminal audit field; GetValue keeps answering the protected value.
+ */
+export function buildScormTerminalLockScript(): string {
+  return `
+  var TERMINAL_STATUS_RANKS = {
+    'cmi.core.lesson_status': { passed: 2, completed: 1 },
+    'cmi.completion_status': { completed: 1 },
+    'cmi.success_status': { passed: 1 }
+  };
+  var BEST_SCORE_FIELDS = ['cmi.core.score.raw', 'cmi.score.raw', 'cmi.score.scaled'];
+  function terminalStatusRank(field, value) {
+    var ranks = TERMINAL_STATUS_RANKS[field];
+    var key = String(value == null ? '' : value).trim().toLowerCase();
+    return ranks && ranks[key] ? ranks[key] : 0;
+  }
+  function holdsTerminalStatus() {
+    return IS_2004
+      ? terminalStatusRank('cmi.completion_status', cmi['cmi.completion_status']) > 0 ||
+        terminalStatusRank('cmi.success_status', cmi['cmi.success_status']) > 0
+      : terminalStatusRank('cmi.core.lesson_status', cmi['cmi.core.lesson_status']) > 0;
+  }
+  function protectTerminalValue(field, value) {
+    var current = cmi[field];
+    var reason = null;
+    if (TERMINAL_STATUS_RANKS[field]) {
+      if (terminalStatusRank(field, current) > terminalStatusRank(field, value)) reason = 'terminal-status-regression';
+    } else if (field === 'cmi.suspend_data' && holdsTerminalStatus()) {
+      // A terminal snapshot is immutable even when a reopened SCO sends an
+      // equal-length or longer reset. Never log suspend_data (may contain PII).
+      if (typeof current === 'string' && current.length > 0 && String(value == null ? '' : value) !== current) {
+        reason = 'terminal-suspend-snapshot-regression';
+      }
+    } else if (BEST_SCORE_FIELDS.indexOf(field) !== -1 && holdsTerminalStatus()) {
+      var best = finiteNumberOrNull(current);
+      var next = finiteNumberOrNull(value);
+      if (best !== null && (next === null || next < best)) reason = 'best-score-regression';
+    }
+    if (!reason) return false;
+    var audit = cmi['airtrust.runtime_regression'];
+    if (!audit || typeof audit !== 'object' || Array.isArray(audit)) audit = {};
+    audit[field] = field === 'cmi.suspend_data' ? '[blocked]' : (value == null ? null : String(value));
+    cmi['airtrust.runtime_regression'] = audit;
+    emitTelemetry('SCORM_REGRESSION_BLOCKED', {
+      field: field,
+      previous_value: sanitizeTelemetryValue(field, current),
+      next_value: sanitizeTelemetryValue(field, value),
+      decision: 'blocked',
+      reason: reason,
+    });
+    return true;
+  }
+`;
 }

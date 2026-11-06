@@ -2,14 +2,14 @@ import {
   canonicalJson,
   hashSignableEdbPayload,
   sha256Hex,
-} from '../../services/edb/canonicalization';
+} from '../../lib/edb/canonicalization';
 import type {
   EdbFlightRecord,
   EdbLifecycleStatus,
   EdbSignatureMethod,
   EdbSignatureProof,
-} from '../../services/edb/contracts';
-import { isPersistedEdbFlightRecord } from '../../services/edb/persisted-record-validation';
+} from '../../lib/edb/contracts';
+import { isPersistedEdbFlightRecord } from '../../lib/edb/persisted-record-validation';
 
 interface RevisionViewRow {
   id: string;

@@ -725,4 +725,39 @@ describe('FRMS D1 read/ack events', () => {
       filters: expect.objectContaining({ funcionario_id: 11 }),
     });
   });
+
+  it('AUD-017: usuario comum nao da ciencia a evento de outro tripulante', async () => {
+    listSnapshotMock.mockResolvedValue({ items: [snapshotItem(10)], summary: {} });
+    const app = createApp();
+    const { db, dedicatedEvents } = createDb();
+    await app.request(
+      '/frms/read-ack/events/generate',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-empresa-id': '1' },
+        body: JSON.stringify({ data_inicio: '2026-05-28', data_fim: '2026-05-28' }),
+      },
+      { DB: db } as unknown as Env,
+    );
+    const eventId = dedicatedEvents[0]?.id ?? '';
+    const ackAs = (own: string) => app.request(
+      `/frms/read-ack/events/${encodeURIComponent(eventId)}/ack`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json', 'x-empresa-id': '1', 'x-role': 'user',
+          'x-own-funcionario-id': own, 'x-user-id': '77',
+        },
+        body: JSON.stringify({ ack_note: 'Ciente.' }),
+      },
+      { DB: db } as unknown as Env,
+    );
+
+    const alheio = await ackAs('11');
+    expect(alheio.status).toBe(403);
+    expect(dedicatedEvents[0]?.lifecycle_status).not.toBe('ACKED');
+
+    const proprio = await ackAs('10');
+    expect(proprio.status).toBe(200);
+  });
 });

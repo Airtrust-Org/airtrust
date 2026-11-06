@@ -107,6 +107,14 @@ function createMockDb(options?: {
             return options?.existing ?? baseExisting();
           }
 
+          if (query.includes('SELECT id') && query.includes('FROM funcionarios') && query.includes('empresa_id = ?')) {
+            return { id: Number(args[0]) };
+          }
+
+          if (query.includes('FROM escalas_mensais') && query.includes('empresa_id = ?')) {
+            return { id: String(args[0]) };
+          }
+
           if (query.includes('SELECT hora_corte_motor, data FROM (')) {
             return options?.lastCut ?? null;
           }

@@ -16,6 +16,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const ROUTES_DIR = path.resolve(__dirname, '../../routes');
+const SIMULADORES_SERVICES_DIR = path.resolve(__dirname, '../../services/simuladores');
+const QUALIFICACOES_SERVICES_DIR = path.resolve(__dirname, '../../services/qualificacoes');
 
 function readRouteFile(relPath: string): string {
   return fs.readFileSync(path.join(ROUTES_DIR, relPath), 'utf-8');
@@ -40,6 +42,9 @@ function allRouteFiles(): string[] {
     }
   }
   walk(ROUTES_DIR);
+  // Simulator domain helpers moved out of routes/ (layer boundaries); keep scanning them.
+  walk(SIMULADORES_SERVICES_DIR, '../services/simuladores');
+  walk(QUALIFICACOES_SERVICES_DIR, '../services/qualificacoes');
   return result;
 }
 
@@ -268,12 +273,12 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
       'escalas-alocacoes-helpers-internal.ts',
       'integracoes-edapp-helpers.ts',
       'sgso-next-gen-helpers.ts',
-      'qualificacoes-certificados-helpers.ts',
-      'simuladores-shared.ts',
-      'simuladores-shared-session-helpers.ts',
-      'simuladores-shared-session-fichas.ts',
+      '../services/qualificacoes/certificados-helpers.ts',
+      '../services/simuladores/shared.ts',
+      '../services/simuladores/shared-session-helpers.ts',
+      '../services/simuladores/shared-session-fichas.ts',
       'simuladores-fichas-helpers.ts',
-      'qualificacoes/historico-helpers.ts',
+      '../services/qualificacoes/historico-helpers.ts',
       'qualificacoes/shared.ts',
       // Library/validation modules (no HTTP handlers)
       'qualificacoes/validacao.ts',

@@ -1,0 +1,77 @@
+name: Production Learner Identity Readonly Preflight
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current main SHA for diagnostic
+        required: true
+        type: string
+      expected_production_sha:
+        description: Exact deployed production Worker SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PRODUCTION_READONLY_LEARNER_IDENTITY
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-learner-identity-readonly
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 12
+    steps:
+      - name: Validate immutable read-only request
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_READONLY_LEARNER_IDENTITY ]] || exit 1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Run preflight tests
+        run: node --test scripts/production/__tests__/diagnose-learner-link.test.mjs
+      - name: Diagnose Yngrid within tenant 6 (read-only)
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          TARGET_NAME: Yngrid
+          TARGET_TENANT_ID: '6'
+          EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+          IDENTITY_RESULT_FILE: ${{ runner.temp }}/learner-identity-readonly.json
+        run: node scripts/production/diagnose-learner-link.mjs
+      - name: Publish sanitized result
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.pii_emitted == false and .user_or_employee_mutated == false' "$RUNNER_TEMP/learner-identity-readonly.json" >/dev/null
+          cat "$RUNNER_TEMP/learner-identity-readonly.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Store sanitized evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: learner-identity-readonly-${{ github.sha }}
+          path: ${{ runner.temp }}/learner-identity-readonly.json
+          retention-days: 14
+          if-no-files-found: error

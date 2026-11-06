@@ -20,7 +20,16 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
-import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+  type PlatformAccessState,
+  resetPlatformAccessCache,
+  invalidatePlatformAccessCache,
+} from '../lib/rbac/platform-access';
+import { isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
+
+export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 
@@ -32,7 +41,7 @@ function isDevAuthBypassEnabled(env: Env): boolean {
 }
 
 async function hasTable(db: D1Database, sql: string): Promise<boolean> {
-  const result = await db.prepare(sql).first<{ found: number }>();
+  const result = await withD1Retry(() => db.prepare(sql).first<{ found: number }>());
   return Boolean(result?.found);
 }
 
@@ -57,23 +66,51 @@ async function resolveEffectiveUserRole(
   if (!Number.isFinite(eid) || eid <= 0) return fallback;
   if (!(await hasUsuariosEmpresasTable(db))) return fallback;
 
-  const roleRow = await db
-    .prepare(
-      `
-      SELECT ue.role, u.perfil
-      FROM usuarios u
-      LEFT JOIN usuarios_empresas ue
-        ON ue.usuario_id = u.id
-       AND ue.empresa_id = ?
-      WHERE u.id = ?
-        AND u.deleted_at IS NULL
-      LIMIT 1
-    `,
-    )
-    .bind(eid, uid)
-    .first<{ role: string | null; perfil: string | null }>();
+  const roleRow = await withD1Retry(() =>
+    db
+      .prepare(
+        `
+        SELECT ue.role, u.perfil
+        FROM usuarios u
+        LEFT JOIN usuarios_empresas ue
+          ON ue.usuario_id = u.id
+         AND ue.empresa_id = ?
+        WHERE u.id = ?
+          AND u.deleted_at IS NULL
+        LIMIT 1
+      `,
+      )
+      .bind(eid, uid)
+      .first<{ role: string | null; perfil: string | null }>(),
+  );
 
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
+}
+
+// Micro-cache em memória de JTIs verificados como NÃO-revogados (TTL 60s)
+// Evita bater no D1 para o mesmo JTI dezenas de vezes por segundo durante navegação normal.
+const _validJtiCache = new Map<string, number>();
+const VALID_JTI_CACHE_TTL_MS = 60000;
+const MAX_VALID_JTI_CACHE_SIZE = 1000;
+
+function pruneExpiredJtiCache(now: number): void {
+  for (const [key, expiresAt] of _validJtiCache.entries()) {
+    if (expiresAt <= now) {
+      _validJtiCache.delete(key);
+    }
+  }
+}
+
+export function resetBlocklistCache(): void {
+  _validJtiCache.clear();
+}
+
+export function invalidateJtiCache(jti: string): void {
+  _validJtiCache.delete(jti);
+}
+
+export function getValidJtiCacheSize(): number {
+  return _validJtiCache.size;
 }
 
 /**
@@ -82,12 +119,43 @@ async function resolveEffectiveUserRole(
  * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
  * como falha de infraestrutura (503), nunca como "não bloqueado".
  */
-async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
-  const row = await db
-    .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-    .bind(jti)
-    .first();
-  return Boolean(row);
+async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
+  const now = Date.now();
+  const cachedValidUntil = _validJtiCache.get(jti);
+  if (cachedValidUntil && cachedValidUntil > now) {
+    return false;
+  }
+  if (cachedValidUntil) {
+    _validJtiCache.delete(jti);
+  }
+
+  const row = await withD1Retry(
+    () =>
+      db
+        .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+        .bind(jti)
+        .first(),
+    7,
+    80,
+  );
+  const isBlocked = Boolean(row);
+  if (!isBlocked) {
+    if (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
+      pruneExpiredJtiCache(now);
+      while (_validJtiCache.size >= MAX_VALID_JTI_CACHE_SIZE) {
+        const oldestKey = _validJtiCache.keys().next().value;
+        if (!oldestKey) break;
+        _validJtiCache.delete(oldestKey);
+      }
+    }
+    const maxTtl = exp && Number.isFinite(exp)
+      ? Math.min(VALID_JTI_CACHE_TTL_MS, Math.max(1000, exp * 1000 - now))
+      : VALID_JTI_CACHE_TTL_MS;
+    _validJtiCache.set(jti, now + maxTtl);
+  } else {
+    _validJtiCache.delete(jti);
+  }
+  return isBlocked;
 }
 
 type UserSecurityState = {
@@ -96,6 +164,42 @@ type UserSecurityState = {
   role: string;
   hasMembership: boolean;
 };
+
+interface CachedUserSecurity {
+  expiresAt: number;
+  state: UserSecurityState;
+}
+
+// Micro-cache em memória de estado do usuário e vínculo de tenant (TTL 60s)
+// Evita bater no D1 em usuarios e usuarios_empresas dezenas de vezes por segundo durante navegação normal.
+const _userSecurityCache = new Map<string, CachedUserSecurity>();
+const USER_SECURITY_CACHE_TTL_MS = 60000;
+const MAX_USER_SECURITY_CACHE_SIZE = 1000;
+
+function pruneExpiredUserSecurityCache(now: number): void {
+  for (const [key, entry] of _userSecurityCache.entries()) {
+    if (entry.expiresAt <= now) {
+      _userSecurityCache.delete(key);
+    }
+  }
+}
+
+export function resetUserSecurityCache(): void {
+  _userSecurityCache.clear();
+}
+
+export function invalidateUserSecurityCache(userId: number): void {
+  const prefix = `${userId}:`;
+  for (const key of _userSecurityCache.keys()) {
+    if (key.startsWith(prefix) || key === String(userId)) {
+      _userSecurityCache.delete(key);
+    }
+  }
+}
+
+export function getUserSecurityCacheSize(): number {
+  return _userSecurityCache.size;
+}
 
 /**
  * Resolve o estado de segurança do usuário autenticado: se a conta ainda
@@ -119,46 +223,73 @@ async function resolveUserSecurityState(
     return { found: false, active: false, role: fallback, hasMembership: false };
   }
 
+  const cacheKey = `${uid}:${eid}`;
+  const now = Date.now();
+  const cached = _userSecurityCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.state;
+  }
+  if (cached) {
+    _userSecurityCache.delete(cacheKey);
+  }
+
   const { activeWhere } = await getUsuariosSchema(db);
   const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
 
-  const row = scoped
-    ? await db
-        .prepare(
-          `
-          SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
-          FROM usuarios u
-          LEFT JOIN usuarios_empresas ue
-            ON ue.usuario_id = u.id AND ue.empresa_id = ?
-          WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
-          LIMIT 1
-        `,
-        )
-        .bind(eid, uid)
-        .first<{ id: number; perfil: string | null; role: string | null }>()
-    : await db
-        .prepare(
-          `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
-        )
-        .bind(uid)
-        .first<{ id: number; perfil: string | null; role: string | null }>();
+  const row = await withD1Retry(
+    () =>
+      scoped
+        ? db
+            .prepare(
+              `
+              SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+              FROM usuarios u
+              LEFT JOIN usuarios_empresas ue
+                ON ue.usuario_id = u.id AND ue.empresa_id = ?
+              WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+              LIMIT 1
+            `,
+            )
+            .bind(eid, uid)
+            .first<{ id: number; perfil: string | null; role: string | null }>()
+        : db
+            .prepare(
+              `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+            )
+            .bind(uid)
+            .first<{ id: number; perfil: string | null; role: string | null }>(),
+    6,
+    80,
+  );
 
   if (!row) {
     return { found: false, active: false, role: fallback, hasMembership: false };
   }
 
   const hasMembership = scoped ? Boolean(row.role) : true;
-
-  return {
+  const result: UserSecurityState = {
     found: true,
     active: true,
     role: normalizeRuntimeRole(row.role || row.perfil || fallback),
     hasMembership,
   };
+
+  if (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
+    pruneExpiredUserSecurityCache(now);
+    while (_userSecurityCache.size >= MAX_USER_SECURITY_CACHE_SIZE) {
+      const oldestKey = _userSecurityCache.keys().next().value;
+      if (!oldestKey) break;
+      _userSecurityCache.delete(oldestKey);
+    }
+  }
+  _userSecurityCache.set(cacheKey, { expiresAt: now + USER_SECURITY_CACHE_TTL_MS, state: result });
+
+  return result;
 }
 
 export type AccessTokenSecurityState = {
   role: string;
+  platformAccessState?: PlatformAccessState;
 };
 
 /**
@@ -178,7 +309,7 @@ export async function validateAccessTokenSecurityState(
   if (payload.jti) {
     let blocked: boolean;
     try {
-      blocked = await isJtiBlocklisted(db, payload.jti);
+      blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
     } catch (e) {
       console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
       return serviceUnavailable(
@@ -218,10 +349,14 @@ export async function validateAccessTokenSecurityState(
   // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
   // O tenantMiddleware valida a existência e atividade da empresa selecionada.
   let platformAdmin = false;
+  let platformAccessState: PlatformAccessState | undefined;
   try {
-    platformAdmin = isPlatformAdminAccess(
-      await resolvePlatformAccessState(db, payload.sub),
+    platformAccessState = await withD1Retry(
+      () => resolvePlatformAccessState(db, payload.sub),
+      7,
+      80,
     );
+    platformAdmin = isPlatformAdminAccess(platformAccessState);
   } catch (e) {
     console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
     return serviceUnavailable(
@@ -237,7 +372,10 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  return { role: platformAdmin ? 'ADMINISTRADOR' : security.role };
+  return {
+    role: platformAdmin ? 'ADMINISTRADOR' : security.role,
+    platformAccessState,
+  };
 }
 
 async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<number | null> {
@@ -270,9 +408,10 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
   const usuariosExists = await hasTable(db, USUARIOS_TABLE_SQL);
 
   if (usuariosExists) {
-    const fallbackEmpresa = await db
-      .prepare(
-        `
+    const fallbackEmpresa = await withD1Retry(() =>
+      db
+        .prepare(
+          `
         SELECT COALESCE(f.empresa_id, e.id) AS empresa_id
         FROM usuarios u
         LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
@@ -287,18 +426,20 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
           COALESCE(f.empresa_id, e.id) ASC
         LIMIT 1
       `,
-      )
-      .bind(userId)
-      .first<{ empresa_id: number }>();
+        )
+        .bind(userId)
+        .first<{ empresa_id: number }>(),
+    );
 
     if (fallbackEmpresa?.empresa_id) {
       return fallbackEmpresa.empresa_id;
     }
   }
 
-  const empresaAtiva = await db
-    .prepare(
-      `
+  const empresaAtiva = await withD1Retry(() =>
+    db
+      .prepare(
+        `
       SELECT e.id AS empresa_id
       FROM empresas e
       WHERE e.deleted_at IS NULL
@@ -311,8 +452,9 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
         e.id ASC
       LIMIT 1
     `,
-    )
-    .first<{ empresa_id: number }>();
+      )
+      .first<{ empresa_id: number }>(),
+  );
 
   return empresaAtiva?.empresa_id ?? null;
 }
@@ -455,6 +597,7 @@ async function authenticateScopedScormCommitAsset(
   c.set('empresaId', empresaId);
   c.set('userEmail', payload.email);
   c.set('userRole', security.role);
+  c.set('canonicalTenantRole', security.role);
   c.set('funcionarioId', payload.funcionario_id ?? null);
   return true;
 }
@@ -501,6 +644,15 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       return next();
     }
 
+    // ===================== REUSO DE SESSÃO JÁ AUTENTICADA NESTA REQUISIÇÃO =====================
+    // Se a requisição já foi autenticada neste ciclo de middleware (ex: middleware global em index.ts),
+    // reaproveitar o contexto já validado para evitar consultas redundantes ao D1.
+    const existingUserId = c.get('userId');
+    if (existingUserId) {
+      await next();
+      return;
+    }
+
     // ===================== AUTENTICAÇÃO JWT REAL =====================
     const authHeader = c.req.header('Authorization');
 
@@ -543,7 +695,11 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
     c.set('empresaId', payload.empresa_id ?? 0);
     c.set('userEmail', payload.email);
     c.set('userRole', security.role);
+    c.set('canonicalTenantRole', security.role);
     c.set('funcionarioId', payload.funcionario_id ?? null);
+    if (security.platformAccessState) {
+      c.set('platformAccessState', security.platformAccessState);
+    }
 
     // ============ PERFIL ATIVO DE SESSÃO (multi-perfil) ============
     // A role canônica acima (usuarios_empresas.role) permanece a fonte de

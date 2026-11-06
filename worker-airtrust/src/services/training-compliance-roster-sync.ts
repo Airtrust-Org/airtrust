@@ -4,7 +4,7 @@ import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCy
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
 import { registrarAuditoria } from '../utils/auditoria';
 import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
-import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
 
 export const ROSTER_RECONCILIATION_TENANT = 6;
 export const ROSTER_RECONCILIATION_BATCH = 20;

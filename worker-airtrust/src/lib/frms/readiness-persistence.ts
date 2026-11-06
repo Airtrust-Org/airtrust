@@ -1,7 +1,6 @@
 import {
   READINESS_PROTOCOL,
   deriveReadinessAssessment,
-  isReadinessProtocolVersion,
   normalizeReadinessTrials,
   summarizeReadinessTrials,
   type ReadinessProtocolVersion,
@@ -85,6 +84,12 @@ export async function getReadinessBaselineSnapshot(
   protocolVersion: string,
   beforeReferenceDate?: string,
 ): Promise<ReadinessBaselineSnapshot> {
+  // O protocolo breve exige baseline de 10 sessões descansadas no mesmo
+  // aparelho. Como a tabela legada não registra aparelho, NÃO usar sua
+  // contagem agregada para concluir normalidade individual.
+  if (protocolVersion === READINESS_PROTOCOL.version) {
+    return { sessions: 0, medianRtMs: null, lapseRate: null };
+  }
   const sessions = await countReadinessBaselineSessions(
     db,
     empresaId,
@@ -111,7 +116,7 @@ export async function getReadinessBaselineSnapshot(
       protocolVersion,
       beforeReferenceDate || null,
       beforeReferenceDate || null,
-      READINESS_PROTOCOL.minimumBaselineSessions,
+      READINESS_PROTOCOL.historicalBaselineStatsSampleSessions,
     )
     .all<{ median_rt_ms: number | null; lapse_rate: number | null }>();
 
@@ -139,12 +144,21 @@ export async function prepareReadinessAssessmentWrites(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.referenceDate)) throw new Error('invalid_reference_date');
   if (!Number.isFinite(input.kssScore) || input.kssScore < 1 || input.kssScore > 9) throw new Error('invalid_kss');
   if (!Number.isFinite(input.sleepHours) || input.sleepHours < 0 || input.sleepHours > 24) throw new Error('invalid_sleep_hours');
-  if (!Number.isFinite(input.durationMs) || input.durationMs <= 0) throw new Error('invalid_duration');
-  if (!Array.isArray(input.trials) || input.trials.length === 0) throw new Error('readiness_trials_required');
+  if (!Number.isFinite(input.durationMs) ||
+      input.durationMs < READINESS_PROTOCOL.defaultDurationMs - READINESS_PROTOCOL.allowedDurationDriftMs ||
+      input.durationMs > READINESS_PROTOCOL.defaultDurationMs + READINESS_PROTOCOL.allowedDurationDriftMs) {
+    throw new Error('invalid_duration');
+  }
+  if (!Array.isArray(input.trials) ||
+      input.trials.length < READINESS_PROTOCOL.minimumTrials ||
+      input.trials.length > 300) throw new Error('readiness_trials_required');
 
-  const protocolVersion: ReadinessProtocolVersion = isReadinessProtocolVersion(input.protocolVersion)
-    ? input.protocolVersion
-    : READINESS_PROTOCOL.version;
+  // The legacy PVT-B protocol remains available for retrospective reading only;
+  // accepting new 60-second samples under that version would corrupt its meaning.
+  if (input.protocolVersion != null && input.protocolVersion !== READINESS_PROTOCOL.version) {
+    throw new Error('invalid_readiness_protocol');
+  }
+  const protocolVersion: ReadinessProtocolVersion = READINESS_PROTOCOL.version;
 
   const normalizedTrials = normalizeReadinessTrials(input.trials, input.durationMs, protocolVersion);
 
@@ -174,6 +188,9 @@ export async function prepareReadinessAssessmentWrites(
     sleepHours: input.sleepHours,
     summary,
     baselineSessions: baseline.sessions,
+    // No device/rested qualification is persisted yet. Historical counts are
+    // descriptive only; never authorize a "preserved" classification.
+    baselineConfirmedSameDeviceAndRested: false,
   });
   const medianRtDeltaPct =
     baseline.medianRtMs != null && baseline.medianRtMs > 0 && summary.medianRtMs != null

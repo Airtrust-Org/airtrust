@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { EdbAircraftIdentity, EdbMaintenanceSnapshot, EdbSignatureProof } from '../../services/edb/contracts';
+import type { EdbAircraftIdentity, EdbMaintenanceSnapshot, EdbSignatureProof } from '../../lib/edb/contracts';
 import {
   bindPicTechnicalAcknowledgement,
   createTechnicalSituationSnapshot,
   technicalSituationMatches,
   verifyPicTechnicalAcknowledgementBinding,
-} from '../../services/edb/technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 const aircraft: EdbAircraftIdentity = {
   aircraftId: 12,

@@ -227,9 +227,25 @@ describe('buildFortnightTimeline', () => {
 
     expect(result.summary).toMatchObject({
       low_sleep_days: 1,
-      recovery_days: 1,
-      no_flight_recovery_days: 1,
+      recovery_credit_days: 1,
+      no_flight_recovery_credit_days: 1,
       max_effectiveness_decline_streak_days: 3,
     });
+  });
+
+  it('não conta estados sem crédito positivo como dias de recuperação', () => {
+    const days = [
+      buildSnapshotItem({ data_operacional: '2026-06-16', teve_jornada: false, horas_voo_minutos: 0, recovery_state: 'NONE', recovery_credit_points: 0 }),
+      buildSnapshotItem({ data_operacional: '2026-06-17', teve_jornada: false, horas_voo_minutos: 0, recovery_state: 'UNKNOWN', recovery_credit_points: 0 }),
+      buildSnapshotItem({ data_operacional: '2026-06-18', teve_jornada: false, horas_voo_minutos: 0, recovery_state: 'FULL', recovery_credit_points: 0 }),
+      buildSnapshotItem({ data_operacional: '2026-06-19', teve_jornada: false, horas_voo_minutos: 0, recovery_state: 'PARTIAL', recovery_credit_points: 1.5 }),
+      buildSnapshotItem({ data_operacional: '2026-06-20', teve_jornada: false, horas_voo_minutos: 0, recovery_state: 'INSUFFICIENT', recovery_credit_points: 0 }),
+    ];
+    const result = buildFortnightTimeline(days, {
+      periodStart: '2026-06-16',
+      periodEnd: '2026-06-20',
+    });
+    expect(result.summary.recovery_credit_days).toBe(1);
+    expect(result.summary.no_flight_recovery_credit_days).toBe(1);
   });
 });

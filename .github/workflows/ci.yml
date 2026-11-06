@@ -57,6 +57,8 @@ jobs:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm ci
+      - name: verify R2 credential guard with synthetic format and redaction cases
+        run: node --test scripts/__tests__/r2-literal-guard.test.mjs
       - name: validate release-gate verifier and deploy wiring
         run: |
           node --test scripts/ci/verify-release-gates.test.mjs
@@ -71,6 +73,8 @@ jobs:
         run: |
           node --test scripts/__tests__/guard-package-references-scorm-source-maps.test.mjs
           node --test scripts/__tests__/scorm-duplicate-reference-inventory.test.mjs
+      - name: validate exact-ZIP formative review kit and human approval boundaries
+        run: python3 -m unittest discover -s scripts/qa -p 'test_scorm_formative_review_kit.py' -v
       - name: validate legacy qualification comparison CLI compatibility
         run: node --test scripts/__tests__/legacy-qualification-comparison-entrypoint.test.mjs
       - name: validate Pilot device gate and Schema V2 0564 contract (read-only)
@@ -93,6 +97,10 @@ jobs:
         run: node --test scripts/__tests__/staging-player3-schema-v2-pins.test.mjs
       - name: validate SCORM 0566 staging schema trusted workflow and physical guards
         run: node --test scripts/__tests__/staging-scorm-handoff-0566-workflow.test.mjs
+      - name: validate SCORM 0569 edition-policy schema pins, DDL-only scope and offline integrity
+        run: |
+          node --test scripts/__tests__/staging-scorm-edition-policy-0569-workflow.test.mjs
+          python3 scripts/__tests__/test_scorm_edition_policy_schema_0569.py
       - name: validate F5 single-candidate staging authorization guard
         run: |
           node --test scripts/__tests__/f5-candidate-approval-guard.test.mjs \
@@ -101,6 +109,8 @@ jobs:
             scripts/__tests__/f5-runner-dispatch-scope.test.mjs \
             scripts/__tests__/f5-sanitize-execution-evidence.test.mjs \
             scripts/__tests__/f5-materialize-private-zip.test.mjs \
+            scripts/__tests__/f5-private-candidate-fetch.test.mjs \
+            scripts/__tests__/f5-preflight-workflow-wiring.test.mjs \
             scripts/__tests__/f5-f0-adapters.test.mjs \
             scripts/__tests__/f5-runner-error-redaction.test.mjs
       - name: validate CI schema bootstrap provenance / staleness
@@ -112,6 +122,9 @@ jobs:
           node --test scripts/__tests__/staging-simulator-matrix-baseline-audit.test.mjs
           node --test scripts/__tests__/staging-simulator-planning-readonly-preflight.test.mjs
 
+      - name: FRMS daily team roster SQLite tenant and check-in visibility regression
+        run: node --test scripts/__tests__/frms-daily-team-roster-sqlite.test.mjs
+
       - name: validate staging FRMS schema doctor (read-only contract)
         run: node --test scripts/__tests__/staging-frms-schema-doctor.test.mjs
       - name: validate staging FRMS 0464 bootstrap repair governance
@@ -120,6 +133,11 @@ jobs:
         run: node --test scripts/__tests__/staging-frms-auth-qa.test.mjs
       - name: validate production release read-only preflight contract
         run: node --test scripts/__tests__/production-release-readonly-preflight.test.mjs
+      - name: validate HFA 0529 production Schema V2 pre/post safety
+        run: |
+          bash -n scripts/schema-v2/validate-0529-production-preflight.sh
+          bash -n scripts/schema-v2/validate-0529-production-postconditions.sh
+          node --test scripts/__tests__/production-hfa-0529-schema-v2-guards.test.mjs
       - name: validate production LMS SCORM enrollment review read-only contract
         run: |
           node --test scripts/__tests__/lms-enrollment-readonly-review-helpers.test.mjs

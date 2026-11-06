@@ -386,6 +386,8 @@ export function calcEffectiveness(
     hora_termino?: string | null;
     hora_dormiu?: string | null;
     hora_acordou?: string | null;
+    /** Duração real declarada no check-in, em minutos. */
+    sono_efetivo_min?: number | null;
     dia_periodo_embarcado?: number | null;
     total_dias_periodo?: number | null;
   },
@@ -426,10 +428,11 @@ export function calcEffectiveness(
       horasSonoPadrao: cfgSono.horasSonoPadrao,
       horaDormiu: dormiuMin,
       horaAcordou: acordouMin,
+      duracaoInformadaMin: jornada.sono_efetivo_min,
     });
     duracaoSono = sono.sonoEfetivoMin;
     horaDespertar = minutesToHhmm(sono.tAcordouMin);
-    horaInicioSono = minutesToHhmm(sono.tDormiuMin);
+    horaInicioSono = sono.tDormiuMin == null ? null : minutesToHhmm(sono.tDormiuMin);
     fonteSono = sono.fonteSono;
     despertarEstimado = sono.despertarEstimado;
     acordouNaWocl = isWithinWOCL(sono.tAcordouMin, v2?.fadigaPolicy);
@@ -483,15 +486,11 @@ export function calcEffectiveness(
   const rawEffectiveness = 100 + totalCalibrado * 100;
   const effectiveness = Math.max(0, Math.min(100, rawEffectiveness));
   const nivel = classificarEffectiveness(effectiveness, limites);
-  const tempoAbaixoLimiarMin =
-    (fatorizacao.fator_noturno_dep_pct < 0 ? 45 : 0) +
-    (fatorizacao.fator_noturno_arr_pct < 0 ? 30 : 0) +
-    (fatorRepouso < -0.05 ? 30 : 0);
-
   return {
     effectiveness_pct: Math.round(effectiveness * 10) / 10,
     nivel,
-    tempo_abaixo_limiar_pct: tempoAbaixoLimiarMin,
+    // Sem curva de efetividade minuto a minuto, duração abaixo do limiar é desconhecida.
+    tempo_abaixo_limiar_pct: null,
     fatorizacao_delta: fatorizacao.total_fatorizado_jornada,
     fator_basica_calibrado_pct: 0,
     fator_apresentacao_calibrado_pct: round4(fatorCircadiano),
@@ -554,10 +553,7 @@ function calcEffectivenessLegado(
   return {
     effectiveness_pct: Math.round(effectiveness * 10) / 10,
     nivel: classificarEffectiveness(effectiveness, limites),
-    tempo_abaixo_limiar_pct:
-      (fatorizacao.fator_noturno_dep_pct !== 0 ? 45 : 0) +
-      (fatorizacao.fator_noturno_arr_pct !== 0 ? 30 : 0) +
-      (fatorizacao.fator_repouso_pct < -0.05 ? 30 : 0),
+    tempo_abaixo_limiar_pct: null,
     fatorizacao_delta: fatorizacao.total_fatorizado_jornada,
     fator_basica_calibrado_pct: fatorizacao.fator_basica_pct,
     fator_apresentacao_calibrado_pct: fatorizacao.fator_apresentacao_pct,

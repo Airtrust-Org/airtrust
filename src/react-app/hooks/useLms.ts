@@ -5,55 +5,38 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
+import type {
+  ScormVersao,
+  ScormAssessmentPolicy,
+  TipoConteudo,
+  MatriculaStatus,
+  LmsCurso,
+  LmsMatricula,
+  LmsCompletionDiagnostic,
+  ScormStateData,
+  CreateCursoDTO,
+  MatricularDTO,
+  MatricularLoteDTO,
+  CursosFilters,
+} from '@/react-app/types/lms';
+
+// Tipos movidos para types/lms (camadas baixas não importam hooks); reexportados aqui.
+export type {
+  ScormVersao,
+  ScormAssessmentPolicy,
+  TipoConteudo,
+  MatriculaStatus,
+  LmsCurso,
+  LmsMatricula,
+  LmsCompletionDiagnostic,
+  ScormStateData,
+  CreateCursoDTO,
+  MatricularDTO,
+  MatricularLoteDTO,
+  CursosFilters,
+} from '@/react-app/types/lms';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-
-export type ScormVersao = '1.2' | '2004' | null;
-export type ScormAssessmentPolicy = 'SCORED' | 'FORMATIVE';
-export type TipoConteudo = 'scorm' | 'h5p' | 'video' | 'pdf' | 'pptx';
-export type MatriculaStatus =
-  'NAO_INICIADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'REPROVADO' | 'CANCELADO';
-
-export interface LmsCurso {
-  id: number;
-  empresa_id: number;
-  titulo: string;
-  descricao: string | null;
-  categoria: string | null;
-  carga_horaria_minutos: number | null;
-  conteudo_programatico: string | null;
-  observacoes: string | null;
-  referencias: string | null;
-  carga_horaria_inicial_horas: number | null;
-  carga_horaria_recorrente_horas: number | null;
-  thumbnail_r2_key: string | null;
-  scorm_versao: ScormVersao;
-  scorm_package_r2_prefix: string | null;
-  scorm_launch_file: string | null;
-  scorm_mastery_score: number | null;
-  scorm_assessment_policy?: ScormAssessmentPolicy;
-  conteudo_arquivo_nome?: string | null;
-  qualificacao_tipo_id: number | null;
-  qualificacao_tipo_nome?: string | null;
-  qualificacao_tipo_codigo?: string | null;
-  qualificacao_codigo?: string | null;
-  /** Domínio operacional do curso, quando o tenant usa o RBAC por domínio. */
-  dominio_codigo?: string | null;
-  tipo_conteudo: TipoConteudo;
-  gerar_qualificacao_ao_concluir: 0 | 1;
-  publicado: 0 | 1;
-  ativo: 0 | 1;
-  version_tag: string | null;
-  pdf_r2_key?: string | null;
-  pptx_r2_key?: string | null;
-  pptx_slide_count?: number;
-  h5p_conteudo_id?: number | null;
-  created_at: string;
-  updated_at: string;
-  total_matriculas?: number;
-  total_concluidos?: number;
-  setores?: { id: number; nome: string }[];
-}
 
 export interface LmsH5pConteudo {
   id: number;
@@ -78,61 +61,6 @@ export interface XapiStatement {
   created_at: string;
 }
 
-export interface LmsMatricula {
-  id: number;
-  empresa_id: number;
-  curso_id: number;
-  funcionario_id: number;
-  funcionario_nome?: string;
-  status: MatriculaStatus;
-  progresso_pct: number;
-  score_final: number | null;
-  tentativas: number;
-  data_matricula: string;
-  data_inicio: string | null;
-  data_conclusao: string | null;
-  data_expiracao: string | null;
-  qualificacao_historico_id: number | null;
-  observacoes: string | null;
-  ultimo_slide?: number | null;
-  ultima_pagina?: number | null;
-  qualificacao_tipo_id?: number | null;
-  qualificacao_tipo_nome?: string | null;
-  qualificacao_tipo_codigo?: string | null;
-  qualificacao_validade?: number | null;
-  // curso fields (join)
-  titulo?: string;
-  categoria?: string | null;
-  carga_horaria_minutos?: number | null;
-  thumbnail_r2_key?: string | null;
-  tipo_conteudo?: TipoConteudo;
-  scorm_versao?: ScormVersao;
-  scorm_launch_file?: string | null;
-  scorm_package_r2_prefix?: string | null;
-  scorm_mastery_score?: number | null;
-  gerar_qualificacao_ao_concluir?: 0 | 1;
-  publicado?: 0 | 1;
-  /** Player 2.0 persisted SCORM evidence checklist; never a certificate/approval. */
-  closure_readiness?: {
-    contract_version: 1;
-    eligible_for_server_verification: boolean;
-    code: string;
-    missing: string[];
-    last_step_reached: boolean;
-    every_slide_verified: boolean;
-    terminal_status_verified: boolean;
-    assessment_verified: boolean;
-    slide_coverage?: { total: number; recorded: number; missing_numbers: number[] } | null;
-  } | null;
-  completion_diagnostic?: LmsCompletionDiagnostic | null;
-  /** Progresso efetivo (resolveLmsEffectiveProgress) — só 100 quando status é CONCLUIDO. Preferir sobre progresso_pct bruto para exibição. */
-  progresso_efetivo?: number;
-  progresso_bruto?: number;
-  completion_state?:
-    'COMPLETED' | 'PENDING_FINAL_STEP' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FAILED' | 'CANCELLED';
-  completion_reason_code?: string;
-}
-
 export interface LmsProgresso {
   matricula_id: number;
   lesson_status: string | null;
@@ -154,32 +82,6 @@ export interface LmsCursoDetalhe extends LmsMatricula {
   scorm_progresso: LmsProgresso | null;
 }
 
-export interface LmsCompletionDiagnostic {
-  status: 'none' | 'accepted' | 'candidate' | 'rejected';
-  code:
-    | 'SCORM_COMPLETION_ACCEPTED'
-    | 'SCORM_COMPLETION_CANDIDATE'
-    | 'SCORM_COMPLETION_REJECTED'
-    | 'SCORM_FINAL_COMMIT_MISSING'
-    | 'SCORM_STATUS_INCONSISTENT'
-    | 'SCORM_NONE';
-  reasons: string[];
-  can_finalize: boolean;
-  explicit_completion: boolean;
-  explicit_failure: boolean;
-  mastery_score: number | null;
-  score_pct: number | null;
-  progresso_pct: number;
-  inferred_progress_pct: number | null;
-  location: string | null;
-  reached_final_location: boolean;
-  final_commit_observed: boolean;
-  has_runtime_evidence: boolean;
-  commit_event: string | null;
-  pending_server_confirmation?: boolean;
-  matricula_status?: string | null;
-}
-
 export interface LmsAdminStats {
   total_cursos: number;
   cursos_publicados: number;
@@ -193,27 +95,6 @@ export interface LmsUploadResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
-}
-
-export interface CreateCursoDTO {
-  titulo: string;
-  descricao?: string | null;
-  categoria?: string | null;
-  carga_horaria_minutos?: number | null;
-  conteudo_programatico?: string | null;
-  observacoes?: string | null;
-  referencias?: string | null;
-  carga_horaria_inicial_horas?: number | null;
-  carga_horaria_recorrente_horas?: number | null;
-  qualificacao_tipo_id?: number | null;
-  qualificacao_area_id?: number | null;
-  gerar_qualificacao_ao_concluir?: 0 | 1;
-  scorm_mastery_score?: number;
-  scorm_assessment_policy?: ScormAssessmentPolicy;
-  scorm_versao?: ScormVersao;
-  tipo_conteudo?: TipoConteudo;
-  publicado?: 0 | 1;
-  setor_ids?: number[];
 }
 
 export type UpdateCursoDTO = Partial<CreateCursoDTO>;
@@ -259,20 +140,6 @@ export interface ImportLmsEdappLegacyResult {
   exemplos_erros: string[];
   limit_aplicado: number;
   pendentes_importacao_restantes: number;
-}
-
-export interface MatricularDTO {
-  funcionario_id: number;
-  curso_id: number;
-  data_expiracao?: string | null;
-  observacoes?: string | null;
-}
-
-export interface MatricularLoteDTO {
-  funcionario_ids: number[];
-  curso_id: number;
-  data_expiracao?: string | null;
-  observacoes?: string | null;
 }
 
 export interface MatricularLoteResult {
@@ -601,15 +468,6 @@ export function patchCursoThumbnailListCache(
 
 // ── Catálogo (público autenticado) ────────────────────────────────────────────
 
-export interface CursosFilters {
-  q?: string;
-  categoria?: string;
-  publicados?: boolean;
-  page?: number;
-  limit?: number;
-  setor_ids?: number[];
-}
-
 export function useLmsCursos(
   filters: CursosFilters = {},
   options: {
@@ -710,10 +568,16 @@ export function useLmsStats(enabled = true) {
   });
 }
 
-export function useMinhasMatriculas() {
+export function useMinhasMatriculas(enabled = true, strictEmployeeLink = false) {
   return useQuery({
-    queryKey: lmsKeys.minhasMatriculas(),
-    queryFn: () => lmsRequest<LmsMatricula[]>('/matriculas/minhas'),
+    // Keep the strict learner result distinct from legacy management consumers.
+    queryKey: strictEmployeeLink
+      ? [...lmsKeys.minhasMatriculas(), 'strict-employee-link']
+      : lmsKeys.minhasMatriculas(),
+    queryFn: () => lmsRequest<LmsMatricula[]>(
+      strictEmployeeLink ? '/matriculas/minhas?strict_link=1' : '/matriculas/minhas',
+    ),
+    enabled,
     staleTime: 30_000,
   });
 }
@@ -976,33 +840,141 @@ export type ScormPackageVersionRow = {
   status: string;
   packageSha256?: string;
   publishable?: boolean;
+  /** Server-derived. `FORMATIVE_NO_EXAM_V1` = formative course without a final exam. */
+  certificationProfile?: 'FORMATIVE_NO_EXAM_V1' | null;
+  assessmentPolicy?: 'SCORED' | 'FORMATIVE' | null;
+  arquivoNome?: string | null;
+  active?: boolean;
+  /** Only set on the ACTIVE row: the edition a rollback would restore. */
+  previousActivePackageId?: string | null;
   structural?: { status?: string };
   functionalCertification?: { status?: 'CERTIFIED' | 'UNCERTIFIED'; missing?: string[] };
+  formativeCertification?: { status?: 'CERTIFIED'; attestationSha256?: string };
   runtime?: { status?: string; errors?: string[] };
   conformance?: { status?: string };
   completionManifest?: { errors?: string[] };
 };
 
+export type ScormActivationConfirm = {
+  cursoId: number;
+  packageSha256: string;
+  acknowledgeInProgress?: number;
+};
+
+export type ScormActivationPreflight = {
+  packageId: string;
+  packageSha256: string;
+  status: string;
+  certificationProfile: string | null;
+  assessmentPolicy: string | null;
+  course: { id: number; titulo: string; currentPolicy: string; masteryScore: number | null };
+  active: { packageId: string; packageSha256: string; policy: string | null } | null;
+  checks: Array<{ id: string; ok: boolean; detail: string }>;
+  impact: { terminalToFreeze: number; inProgress: number; notStarted: number };
+  incomingPolicy: 'SCORED' | 'FORMATIVE' | null;
+  canActivate: boolean;
+};
+
+const packageVersionsKey = (cursoId: number) => ['lms', 'cursos', cursoId, 'scorm-package-versions'] as const;
+
 /** Candidate versions are intentionally separate from the active course. */
 export function useScormPackageVersions(cursoId: number, enabled = true) {
   return useQuery({
-    queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'],
+    queryKey: packageVersionsKey(cursoId),
     queryFn: () =>
-      lmsRequest<{ data: ScormPackageVersionRow[] }>(`/cursos/${cursoId}/scorm-package-versions`),
+      lmsRequest<ScormPackageVersionRow[]>(`/cursos/${cursoId}/scorm-package-versions`),
     enabled: enabled && cursoId > 0,
+  });
+}
+
+/** The exact checklist the server enforces at activation (same function server-side). */
+export function useScormActivationPreflight(cursoId: number, packageId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...packageVersionsKey(cursoId), packageId, 'preflight'],
+    queryFn: () =>
+      lmsRequest<ScormActivationPreflight>(
+        `/cursos/${cursoId}/scorm-package-versions/${packageId}/activation-preflight`),
+    enabled: enabled && cursoId > 0 && Boolean(packageId),
+    staleTime: 0,
   });
 }
 
 export function useActivateScormPackageVersion(cursoId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (packageId: string) =>
-      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`, {
+    mutationFn: (input: string | { packageId: string; confirm?: ScormActivationConfirm }) => {
+      const { packageId, confirm } = typeof input === 'string' ? { packageId: input, confirm: undefined } : input;
+      return lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${packageId}/activate`, {
         method: 'POST',
+        body: JSON.stringify(confirm ? { confirm } : {}),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
+    },
+  });
+}
+
+/** Administrator-only replacement of server-validated formative SCORM bytes. */
+export function useReplaceValidatedScormDirect(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { packageId: string; confirm: ScormActivationConfirm }) =>
+      lmsRequest<{ packageId: string; packageSha256: string; status: 'ACTIVE' }>(
+        `/cursos/${cursoId}/scorm-package-versions/${input.packageId}/replace-direct`, {
+          method: 'POST', body: JSON.stringify({ confirm: input.confirm }),
+        }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
+      qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
+    },
+  });
+}
+
+/** Signed staging evidence produced by the governed CI signer (never typed by hand). */
+export function useImportFormativeAttestation(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { packageId: string; attestationJson: string }) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${input.packageId}/functional-attestation`, {
+        method: 'POST',
+        body: input.attestationJson,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) }),
+  });
+}
+
+export function useApproveFormativePackage(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      packageId: string; packageSha256: string; note: string; editorialReviewRef?: string | null;
+    }) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/${input.packageId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          confirm: { cursoId, packageSha256: input.packageSha256 },
+          note: input.note,
+          editorialReviewRef: input.editorialReviewRef || null,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) }),
+  });
+}
+
+export function useRollbackScormPackage(cursoId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (restorePackageId: string) =>
+      lmsRequest(`/cursos/${cursoId}/scorm-package-versions/rollback`, {
+        method: 'POST',
+        body: JSON.stringify({ confirm: { cursoId, restorePackageId } }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) });
-      qc.invalidateQueries({ queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'] });
+      qc.invalidateQueries({ queryKey: packageVersionsKey(cursoId) });
     },
   });
 }
@@ -1110,23 +1082,6 @@ export function useUploadCursoThumbnail() {
 }
 
 // ── SCORM state (para retomar) ────────────────────────────────────────────────
-
-export interface ScormStateData {
-  matricula_id: number;
-  status: string;
-  progresso: {
-    suspend_data: string | null;
-    cmi_json: string | null;
-    lesson_status: string | null;
-    completion_status: string | null;
-    success_status: string | null;
-    score_raw: number | null;
-    score_max: number | null;
-    total_time: string | null;
-    session_count: number;
-    last_commit_at: string | null;
-  } | null;
-}
 
 export function useScormState(matriculaId: number) {
   return useQuery({

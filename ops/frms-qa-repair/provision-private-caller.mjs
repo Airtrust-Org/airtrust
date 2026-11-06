@@ -26,20 +26,26 @@ const HEX64 = /^[a-f0-9]{64}$/;
 const NUM = /^[1-9][0-9]{0,15}$/;
 const RUN = /^[1-9][0-9]{7,13}$/;
 const USER = /^[a-zA-Z0-9-]{1,39}$/;
+const GATES = Object.freeze(['lint', 'build-content-gates', 'worker-typecheck',
+  'frontend-coverage', 'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e']);
 
 const fail = (code) => {
   throw Error(code || 'FRMS_QA_CALLER_PROVISION_DENIED');
 };
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
-export function exactCallerProvisionPlan({ sha, accountId, callerConfig } = {}) {
+export function exactCallerProvisionPlan({ sha, accountId, callerConfig,
+  credentialMode = 'existing_staging_worker_deploy_only' } = {}) {
   if (
     !SHA.test(sha || '') ||
     !HEX32.test(accountId || '') ||
+    !['dedicated','existing_staging_worker_deploy_only'].includes(credentialMode) ||
     typeof callerConfig !== 'string' ||
     callerConfig.length < 150 ||
     !callerConfig.includes('workers_dev = false') ||
     !callerConfig.includes('preview_urls = false') ||
+    /^(?:\s*)(?:route|routes|triggers)\s*=|^\s*\[\[(?:routes|triggers)\]\]/m.test(callerConfig) ||
+    /^\s*(?:workers_dev|preview_urls)\s*=\s*true/m.test(callerConfig) ||
     !callerConfig.includes(EXPECTED_CALLER_WORKER) ||
     !callerConfig.includes(EXPECTED_REPAIR_WORKER)
   ) {
@@ -60,7 +66,7 @@ export function exactCallerProvisionPlan({ sha, accountId, callerConfig } = {}) 
     caller_worker: EXPECTED_CALLER_WORKER,
     caller_config_sha256: digest(callerConfig),
     service_binding: EXPECTED_REPAIR_WORKER,
-    credential_mode: 'existing_staging_worker_deploy_only',
+    credential_mode: credentialMode,
     global_mutex: MUTEX,
     workflow_path: WORKFLOW,
     production_authorized: false,
@@ -89,6 +95,8 @@ export async function verifyCallerProvisionAdminGrant({
     env.GITHUB_WORKFLOW_REF !== REF ||
     env.FRMS_QA_CALLER_CONFIRM !== 'AIRTRUST_FRMS_QA_CALLER_WORKER_STAGING_DEPLOY' ||
     env.FRMS_QA_CALLER_EXPECTED_SHA !== sha ||
+    !['dedicated','existing_staging_worker_deploy_only'].includes(
+      env.FRMS_QA_CREDENTIAL_MODE) ||
     !SHA.test(sha || '') ||
     !NUM.test(grantId) ||
     !RUN.test(runId) ||
@@ -107,6 +115,7 @@ export async function verifyCallerProvisionAdminGrant({
     sha,
     accountId: env.CLOUDFLARE_ACCOUNT_ID,
     callerConfig,
+    credentialMode: env.FRMS_QA_CREDENTIAL_MODE,
   });
 
   const api = githubPrepareReadOnlyApi({ token: env.GITHUB_TOKEN, fetcher });
@@ -138,11 +147,29 @@ export async function verifyCallerProvisionAdminGrant({
     fail('FRMS_QA_CALLER_GRANT_SOURCE_MISMATCH');
   }
 
-  const creator = await api(
-    'repos/' + REPO + '/collaborators/' + encodeURIComponent(comment.user.login) + '/permission',
-  );
-  if (!['admin'].includes(creator?.permission || '')) {
-    fail('FRMS_QA_CALLER_ADMIN_REQUIRED');
+  // Authenticate both the grant issuer and dispatcher; a valid issue comment
+  // alone must never authorize the Worker/Queue deploy. Every official gate
+  // must belong to the exact release SHA and the GitHub Actions app.
+  const admins = [...new Set([comment.user.login, env.GITHUB_ACTOR])];
+  let approvals;
+  try {
+    approvals = await Promise.all([
+      ...admins.map(login =>
+        api('repos/' + REPO + '/collaborators/' + encodeURIComponent(login) + '/permission')),
+      ...GATES.map(name =>
+        api('repos/' + REPO + '/commits/' + sha + '/check-runs?check_name=' +
+          encodeURIComponent(name) + '&filter=latest&per_page=100')),
+    ]);
+  } catch {
+    fail('FRMS_QA_CALLER_ADMIN_OR_GATES_UNAVAILABLE');
+  }
+  if (!approvals.slice(0, admins.length).every(x => x?.permission === 'admin') ||
+      !approvals.slice(admins.length).every((group, i) =>
+        Array.isArray(group?.check_runs) &&
+        group.check_runs.some(check => check.name === GATES[i] &&
+          check.head_sha === sha && check.status === 'completed' &&
+          check.conclusion === 'success' && check.app?.slug === 'github-actions'))) {
+    fail('FRMS_QA_CALLER_ADMIN_OR_GATES_REQUIRED');
   }
 
   const prefix = SCHEMA + '\n';
@@ -187,11 +214,35 @@ export async function verifyCallerProvisionAdminGrant({
   });
 }
 
+/**
+ * Deployment bearer must not be used for metadata/Queue reads in dedicated
+ * mode. A deliberate existing-staging exception is allowed only by the
+ * separately reviewed exact credential-mode grant.
+ */
+export function callerProvisionReadCredentials(env = {}) {
+  const deploy = env.CLOUDFLARE_API_TOKEN;
+  const mode = env.FRMS_QA_CREDENTIAL_MODE;
+  if (typeof deploy !== 'string' || !deploy.trim() ||
+      !['dedicated', 'existing_staging_worker_deploy_only'].includes(mode)) {
+    fail('FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED');
+  }
+  const metadata = mode === 'dedicated' ?
+    env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN : deploy;
+  const queue = mode === 'dedicated' ?
+    env.CLOUDFLARE_FRMS_QA_QUEUE_READ_API_TOKEN : deploy;
+  if (typeof metadata !== 'string' || !metadata.trim() ||
+      typeof queue !== 'string' || !queue.trim() ||
+      (mode === 'dedicated' && (deploy === metadata || deploy === queue))) {
+    fail('FRMS_QA_CALLER_CREDENTIAL_SCOPE_DENIED');
+  }
+  return Object.freeze({metadata, queue});
+}
+
 export function buildCallerRuntimeSecrets({ env = {}, sha } = {}) {
   if (!HEX64.test(env.FRMS_QA_CALLER_KEY_HEX || '')) {
     fail('FRMS_QA_CALLER_KEY_HEX_REQUIRED');
   }
-  const callerSha = createHash('sha256').update(env.FRMS_QA_CALLER_KEY_HEX).digest('hex');
+  const callerSha = createHash('sha256').update(Buffer.from(env.FRMS_QA_CALLER_KEY_HEX, 'hex')).digest('hex');
   return Object.freeze({
     ENVIRONMENT: 'staging',
     D1_ID: TARGET.db_id,

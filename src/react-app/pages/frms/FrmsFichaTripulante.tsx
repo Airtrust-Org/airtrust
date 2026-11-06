@@ -682,14 +682,14 @@ export default function FrmsFichaTripulante() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Recuperação</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Crédito de recuperação calculado</p>
             <p className="mt-2 text-lg font-bold text-emerald-700">
               {formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}
             </p>
             <p className="mt-1 text-xs text-slate-600">
               {formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) ||
                 formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) ||
-                'Sem recuperação registrada'}
+                'Sem crédito ou estado informado'}
             </p>
           </div>
 
@@ -743,13 +743,14 @@ export default function FrmsFichaTripulante() {
             </div>
 
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Recuperação confirmada</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">Evidências de sono e crédito calculado</p>
               <div className="mt-2 space-y-1 text-xs text-slate-700">
-                <p>Sono/repouso: <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
+                <p>Sono (conforme fonte): <strong>{todayFortnightSnapshotItem?.horas_sono == null ? 'não informado' : `${Number(todayFortnightSnapshotItem.horas_sono).toFixed(1)} h`}</strong></p>
                 <p>KSS: <strong>{todayFortnightSnapshotItem?.kss_score ?? 'não informado'}</strong></p>
-                <p>Crédito aplicado: <strong className="text-emerald-800">{formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}</strong></p>
-                <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) || 'sem recuperação registrada'}</strong></p>
+                <p>Crédito calculado: <strong className="text-emerald-800">{formatRecoveryCredit(todayFortnightSnapshotItem?.recovery_credit_points)}</strong></p>
+                <p>Atividade: <strong>{formatRecoveryActivityType(todayFortnightSnapshotItem?.recovery_activity_type) || formatRecoveryState(todayFortnightSnapshotItem?.recovery_state) || 'sem crédito ou estado informado'}</strong></p>
               </div>
+              <p className="mt-2 text-[11px] text-slate-600">Crédito calculado não comprova sono efetivo nem recuperação fisiológica.</p>
             </div>
 
             <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">

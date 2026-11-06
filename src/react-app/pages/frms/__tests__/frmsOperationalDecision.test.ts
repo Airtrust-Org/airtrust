@@ -144,13 +144,38 @@ describe('frmsOperationalDecision', () => {
 
   it('não confunde check-in não aplicável sem missão com pendência pré-voo', () => {
     const input = item({
-      escalado: false, operacao_requer_decisao: false,
-      teve_jornada: false, hora_apresentacao: null,
+      escalado: false, operacao_requer_decisao: false, teve_atividade_frms: false,
+      teve_jornada: false, hora_apresentacao: null, na_quinzena_ativa: false,
       checkin_status: 'NAO_APLICAVEL',
     });
     const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
     expect(guidance.requiresCheckin).toBe(false);
     expect(guidance.checkinLabel).toBe('Não exigido');
+    expect(guidance.reason).toContain('Sem vínculo com a quinzena');
+    expect(guidance.action).toContain('não equivale a aptidão');
+  });
+
+  it('não dispensa check-in somente porque o indicador quinzenal está ausente', () => {
+    const input = item({
+      escalado: false, operacao_requer_decisao: false, teve_atividade_frms: false,
+      teve_jornada: false, hora_apresentacao: null, fortnight_indicator: null,
+      na_quinzena_ativa: undefined, checkin_status: 'NAO_APLICAVEL',
+    });
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(false);
+    expect(guidance.checkinLabel).toBe('Não confirmado');
+    expect(guidance.reason).toContain('não comprova dispensa');
+  });
+
+  it('escalado com decisão legada false nunca ganha dispensa por flag contraditória', () => {
+    const input = item({
+      escalado: true, operacao_requer_decisao: false, checkin_status: 'NAO_APLICAVEL',
+      na_quinzena_ativa: false, fortnight_indicator: null,
+    });
+    const guidance = resolveFrmsCoordinationGuidance(input, '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(true);
+    expect(guidance.checkinLabel).toBe('Não confirmado');
+    expect(guidance.action).toContain('Não liberar');
   });
 
   it('não exige check-in antecipado para continuar planejando voo futuro', () => {

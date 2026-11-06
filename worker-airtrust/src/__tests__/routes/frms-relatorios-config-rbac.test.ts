@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { ExecutionContext } from 'hono';
 import frmsRelatoriosConfig from '../../routes/frms-relatorios-config';
 import { LIMITES_DEFAULT } from '../../lib/frms/types';
+import { resetPlatformAccessCache } from '../../lib/rbac/platform-access';
+import { resetUserSecurityCache } from '../../middleware/auth';
 
 // Cria um mock de D1Database mínimo para o resolvePlatformAccessState
 function createMockDB(isPlatformAdmin: boolean) {
@@ -46,6 +48,11 @@ function createMockDB(isPlatformAdmin: boolean) {
 }
 
 describe('FRMS Configurações Globais RBAC', () => {
+  beforeEach(() => {
+    resetPlatformAccessCache();
+    resetUserSecurityCache();
+  });
+
   const setupApp = (isPlatformAdmin: boolean) => {
     const app = new Hono<{ Bindings: any; Variables: any }>();
     app.use('*', async (c, next) => {

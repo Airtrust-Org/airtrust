@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
 } from '../lib/frms/operational-snapshot';
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import { createLogger, toError } from '../utils/logger';
 import { isImaV3StagingPreviewEnabled, isImaV3StagingCohortStudyEnabled, isImaV3ApprovedCohortWindow } from '../lib/frms/ima-v3-preview-access';
 import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
@@ -114,12 +114,19 @@ function normalizeSnapshotItemForApi<T extends {
   recovery_state?: string | null;
   recovery_activity_type?: string | null;
 }>(item: T): T & { recovery_credit_points: number | null } {
+  const credit = item.recovery_credit_points;
   const hasRecoveryEvidence = Boolean(
     item.recovery_state?.trim() || item.recovery_activity_type?.trim(),
   );
+  // A non-zero calculated credit is evidence even when a legacy assessment has no
+  // state/activity label. Conversely, a missing credit must never become a measured
+  // zero solely because a state label exists.
   return {
     ...item,
-    recovery_credit_points: hasRecoveryEvidence ? Number(item.recovery_credit_points ?? 0) : null,
+    recovery_credit_points:
+      typeof credit === 'number' && Number.isFinite(credit) && (hasRecoveryEvidence || credit !== 0)
+        ? credit
+        : null,
   };
 }
 
@@ -177,6 +184,7 @@ router.get('/operational-snapshot', async (c) => {
       empresaId,
       dataInicio: data.data_inicio,
       dataFim: data.data_fim,
+      coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
       filters,
     });
 
@@ -272,6 +280,7 @@ router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
       empresaId,
       dataInicio: data_inicio,
       dataFim: data_fim,
+      coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
       filters: { funcionario_id, include_inconsistencies: true },
     });
     const absOffset = Math.abs(reference_utc_offset_minutes);

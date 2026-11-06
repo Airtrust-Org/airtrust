@@ -41,6 +41,9 @@ type Summary = {
   pessoas_sem_configuracao: number;
   setores_sem_matriz: number;
   cargos_sem_matriz: number;
+  funcoes_sem_regra_especifica: number;
+  setores_sem_regra_especifica: number;
+  pessoas_sem_regra_especifica_funcao: number;
   matriculas_sem_requisito: number;
   requisitos_obrigatorios: number;
   requisitos_distintos: number;
@@ -564,6 +567,12 @@ export default function ComplianceTreinamentosPage() {
     });
   };
 
+  const matrixNeedsReview = Boolean(
+    summary.data &&
+      (summary.data.pessoas_sem_configuracao > 0 ||
+        summary.data.funcoes_sem_regra_especifica > 0 ||
+        summary.data.setores_sem_regra_especifica > 0),
+  );
   const summaryRealized = realizedCount(summary.data?.conformes ?? 0, summary.data?.vencendo ?? 0);
   const summaryActionable =
     (summary.data?.nao_realizados ?? 0) +
@@ -702,9 +711,26 @@ export default function ComplianceTreinamentosPage() {
 
         {schemaReady ? (
           <>
+            {summary.isError ? (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                Não foi possível consultar os indicadores de compliance. Nenhum valor zero foi presumido.
+                <button
+                  type="button"
+                  onClick={() => void summary.refetch()}
+                  className="ml-3 font-semibold underline"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : null}
+            {summary.isPending ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                Consultando indicadores da matriz...
+              </div>
+            ) : null}
             {(
               ['pendencias', 'treinamentos', 'pessoas', 'setores', 'relatorios'] as ComplianceTab[]
-            ).includes(tab) ? (
+            ).includes(tab) && summary.data && !summary.isError ? (
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(260px,0.95fr)]">
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
@@ -832,30 +858,46 @@ export default function ComplianceTreinamentosPage() {
                     setConfigurationMode('organizacao');
                     selectTab('administracao');
                   }}
-                  className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-left shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+                  className={`rounded-2xl border p-5 text-left shadow-sm transition ${
+                    matrixNeedsReview
+                      ? 'border-amber-200 bg-amber-50/60 hover:border-amber-300 hover:bg-amber-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                        Configuração da matriz
+                      <p className={`text-xs font-semibold uppercase tracking-wide ${
+                        matrixNeedsReview ? 'text-amber-800' : 'text-slate-600'
+                      }`}>
+                        Cobertura das regras
                       </p>
                       <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950">
-                        {summary.data?.pessoas_sem_configuracao ?? 0}
+                        {summary.data.pessoas_sem_configuracao}
                       </p>
                       <p className="mt-1 text-sm font-medium text-slate-700">
-                        pessoas sem configuração
+                        pessoas sem qualquer regra aplicável
                       </p>
                     </div>
-                    <div className="rounded-xl bg-white/80 p-2.5 text-amber-700 shadow-sm">
-                      <AlertTriangle className="h-5 w-5" />
+                    <div className={`rounded-xl bg-white/80 p-2.5 ${
+                      matrixNeedsReview ? 'text-amber-700' : 'text-slate-600'
+                    }`}>
+                      {matrixNeedsReview
+                        ? <AlertTriangle className="h-5 w-5" />
+                        : <CheckCircle2 className="h-5 w-5" />}
                     </div>
                   </div>
                   <p className="mt-4 text-xs leading-5 text-slate-600">
-                    {summary.data?.cargos_sem_matriz ?? 0} funções sem matriz ·{' '}
-                    {summary.data?.setores_sem_matriz ?? 0} setor(es) sem matriz
+                    {summary.data.funcoes_sem_regra_especifica} combinações setor/função sem regra
+                    específica · {summary.data.setores_sem_regra_especifica} setores sem regra específica
                   </p>
-                  <span className="mt-4 inline-flex text-xs font-semibold text-amber-900">
-                    Revisar configuração →
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Regras gerais da empresa também se aplicam. Ausência de regra específica não
+                    significa, por si só, treinamento obrigatório faltante.
+                  </p>
+                  <span className={`mt-3 inline-flex text-xs font-semibold ${
+                    matrixNeedsReview ? 'text-amber-900' : 'text-slate-700'
+                  }`}>
+                    {matrixNeedsReview ? 'Revisar regras →' : 'Consultar regras →'}
                   </span>
                 </button>
               </div>

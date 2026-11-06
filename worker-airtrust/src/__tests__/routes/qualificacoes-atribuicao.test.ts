@@ -24,12 +24,12 @@ vi.mock('../../middleware/rbac', () => ({
     await next();
   },
 }));
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: async () => ({ mode: 'unrestricted' }),
   assertFuncionarioInScope: async () => {},
   appendEmployeeSectorFilter: (sql: string) => sql,
 }));
-vi.mock('../../services/operational-domain-access', () => ({
+vi.mock('../../middleware/operational-domain-access', () => ({
   assertQualificacaoAtribuicaoWithinOperationalScope: async () => {},
 }));
 

@@ -6,7 +6,20 @@
 import { pathToFileURL } from 'node:url';
 
 export const REPO = 'Airtrust-Org/airtrust';
-export const PR = 1696;
+export const PR = 1696; // Historical F5 pilot; do not silently redirect its grants.
+const ALLOWED_PR_NUMBERS = new Set(['1696', '1855', '1977']);
+// NR-26 recovery is an exact private 6.3 MB RC5 ZIP and staging tenant/course.
+// Expanding the allowlist does NOT authorize other ZIPs or new activation paths.
+const NR26_F5_SCOPE = Object.freeze({
+  prNumber: '1977', tenantId: '6', courseId: '52',
+  packageSha256: 'ba6f2399257de017de4dc62b3f56b86d44238b0f3b9b9ff09e31e003e6cb9c29',
+  zipBytes: '6327348',
+});
+function exactReviewedPrNumber(v) {
+  const value = String(v?.prNumber ?? '');
+  if (!ALLOWED_PR_NUMBERS.has(value)) throw Error('F5_REVIEWED_PR_NOT_ALLOWLISTED');
+  return Number(value);
+}
 export const LOCK = 'airtrust-staging-mutations-and-scorm-qa';
 export const MAX_ZIP_BYTES = 80 * 1024 * 1024;
 const hex40 = /^[a-f0-9]{40}$/;
@@ -16,6 +29,14 @@ const uuid = /^[0-9a-f-]{36}$/i;
 const prefix = 'AIRTRUST_F5_STAGING_CANDIDATE_V1\n';
 
 export function assertConfig(v) {
+  exactReviewedPrNumber(v);
+  if (String(v?.prNumber) === NR26_F5_SCOPE.prNumber &&
+      (String(v.tenantId) !== NR26_F5_SCOPE.tenantId ||
+       String(v.courseId) !== NR26_F5_SCOPE.courseId ||
+       v.packageSha256 !== NR26_F5_SCOPE.packageSha256 ||
+       String(v.zipBytes) !== NR26_F5_SCOPE.zipBytes)) {
+    throw Error('F5_NR26_RC5_EXACT_TENANT_COURSE_ZIP_SCOPE_REQUIRED');
+  }
   if (v.repo !== REPO || v.ref !== 'refs/heads/main' ||
       v.event !== 'workflow_dispatch' ||
       v.confirmation !== 'AIRTRUST_F5_STAGING_CANDIDATE' ||
@@ -33,7 +54,7 @@ export function expectedGrant(v) {
   return {
     schema: 'AIRTRUST_F5_STAGING_CANDIDATE_V1',
     repository: REPO,
-    pr: PR,
+    pr: exactReviewedPrNumber(v),
     release_sha: v.sha,
     environment: 'staging',
     tenant_id: Number(v.tenantId),
@@ -71,7 +92,10 @@ export function checkGrantBody(body, v) {
 export function checkReleaseChecks(runs, sha) {
   const required = new Set([
     'lint', 'build-content-gates', 'worker-typecheck', 'frontend-coverage',
-    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e', '🧪 Check PR'
+    // F5-specific requirement beyond the eight generic release gates:
+    // browser proof must include Chromium and WebKit on the reviewed PR head.
+    'worker-tests-1', 'worker-tests-2', 'lms-smoke', 'public-e2e',
+    'lms-scorm-browser-e2e', '🧪 Check PR'
   ]);
   if (!Array.isArray(runs)) throw Error('F5_RELEASE_GATES_UNAVAILABLE');
   for (const run of runs) {
@@ -82,10 +106,13 @@ export function checkReleaseChecks(runs, sha) {
   if (required.size) throw Error('F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN');
 }
 
-export async function verify(v, token, get, now = Date.now()) {
+export async function verify(v, token, get, now = () => Date.now()) {
   assertConfig(v);
+  // Production reads wall-clock time after each remote round trip, not only
+  // once before several GitHub requests. Numeric clocks remain test fixtures.
+  const currentTime = typeof now === 'function' ? now : () => now;
   if (!token) throw Error('F5_GITHUB_READ_TOKEN_REQUIRED');
-  const pr = await get(`pulls/${PR}`);
+  const pr = await get(`pulls/${exactReviewedPrNumber(v)}`);
   const isReviewedOpenHead = pr.state === 'open' && !pr.draft && pr.head?.sha === v.sha;
   const isMergedPr = pr.state === 'closed' && pr.merged === true &&
     hex40.test(pr.merge_commit_sha ?? '');
@@ -116,10 +143,13 @@ export async function verify(v, token, get, now = Date.now()) {
       grant.created_at !== grant.updated_at) {
     throw Error('F5_F0_GRANT_EDITED_OR_WRONG_ISSUE');
   }
-  const age = now - Date.parse(grant.created_at);
-  if (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60 * 1000) {
-    throw Error('F5_F0_GRANT_EXPIRED');
-  }
+  const requireFreshGrant = () => {
+    const age = currentTime() - Date.parse(grant.created_at);
+    if (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60 * 1000) {
+      throw Error('F5_F0_GRANT_EXPIRED');
+    }
+  };
+  requireFreshGrant();
   checkGrantBody(grant.body, v);
   for (const login of new Set([grant.user?.login, v.actor])) {
     if (!login || !/^[a-zA-Z0-9-]{1,39}$/.test(login)) {
@@ -128,6 +158,9 @@ export async function verify(v, token, get, now = Date.now()) {
     const permission = await get(`collaborators/${login}/permission`);
     if (permission.permission !== 'admin') throw Error('F5_REPOSITORY_ADMIN_REQUIRED');
   }
+  // Permission lookups can cross the 12-hour grant deadline. Never return a
+  // stale approval merely because the grant was fresh when the read began.
+  requireFreshGrant();
   return true;
 }
 
@@ -136,6 +169,7 @@ async function main() {
   const v = {
     repo: e.GITHUB_REPOSITORY, ref: e.GITHUB_REF, event: e.GITHUB_EVENT_NAME,
     actor: e.GITHUB_ACTOR, confirmation: e.F5_CONFIRMATION,
+    prNumber: e.F5_PR_NUMBER,
     sha: e.F5_RELEASE_SHA, grantId: e.F5_GRANT_ID,
     tenantId: e.F5_TENANT_ID, courseId: e.F5_COURSE_ID,
     packageSha256: e.F5_PACKAGE_SHA256, zipBytes: e.F5_ZIP_BYTES,

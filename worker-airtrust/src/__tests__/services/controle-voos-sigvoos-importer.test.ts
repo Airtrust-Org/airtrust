@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { importControleVoosFromSigvoosRaw } from '../../lib/frms/controle-voos-frms-import-bridge';
+import { isVerifiedCvSigvoosSync } from '../../lib/frms/flight-coverage-ledger';
 import {
   hashSanitizedSigvoosPayload,
   importSigvoosPayloadToControleVoos,
@@ -807,6 +809,66 @@ describe('controle-voos sigvoos importer', () => {
     expect(conflicts).toEqual([
       { justificativa: 'funcionario nao resolvido por staff.id ou staff.inscription' },
     ]);
+  });
+
+  it('keeps FRMS day UNKNOWN on replayed CV crew conflict despite valid FRMS CANAC mapping', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-staff-id-inscription-conflict.json');
+    seedPreviousStaffIdMapping(db.databasePath, 8899, 6002);
+    const params = {
+      db, empresaId: 6, rawRecords: [fixture],
+      from: '2026-06-01', to: '2026-06-30',
+      env: { CONTROLE_VOOS_FRMS_IMPORT_TENANTS: '6' },
+    };
+
+    const first = await importControleVoosFromSigvoosRaw(params);
+    const second = await importControleVoosFromSigvoosRaw(params);
+
+    expect(first.conflictRecords).toBe(1);
+    // Existing importer currently returns REUSED rather than CONFLICT on replay.
+    expect(second.reusedRecords).toBe(1);
+    expect(second.conflictRecords).toBe(0);
+    expect(second.sourceMaterialized).toBe(false);
+    expect(db.queryJson<{ import_status: string; cv_tripulante_id: number | null }>(
+      "SELECT import_status, cv_tripulante_id FROM cv_sigvoos_staging WHERE empresa_id=6",
+    )).toEqual([{ import_status: 'CONFLICT', cv_tripulante_id: null }]);
+    // Even if the independent FRMS CANAC/name resolver successfully maps
+    // the pilot, it cannot certify a missing CV tripulante/leg relation.
+    expect(isVerifiedCvSigvoosSync({
+      periodo: { from: params.from, to: params.to }, sourceWindowVerified: true,
+      totalRegistrosBrutos: 1, totalRegistrosNormalizados: 1, totalErros: 0,
+      importacoes: [{ tripulante_id: '6001', erros: 0 }],
+      controleVoosImport: second,
+    })).toBe(false);
+  });
+
+  it('certifies only full tenant-scoped CV readback, including valid idempotent replays', async () => {
+    const db = createSqliteD1();
+    const fixture = readFixture<Record<string, unknown>>('sigvoos-com-staff-id.json');
+    const params = {
+      db, empresaId: 6, rawRecords: [fixture],
+      from: '2026-06-01', to: '2026-06-30',
+      env: { CONTROLE_VOOS_FRMS_IMPORT_TENANTS: '6' },
+    };
+    const first = await importControleVoosFromSigvoosRaw(params);
+    const second = await importControleVoosFromSigvoosRaw(params);
+    expect(first.status).toBe('OK');
+    expect(first.sourceMaterialized).toBe(true);
+    expect(second.status).toBe('OK');
+    expect(second.reusedRecords).toBe(1);
+    expect(second.sourceMaterialized).toBe(true);
+
+    const stage = db.queryJson<{ id: string; cv_tripulante_id: number }>(
+      'SELECT id, cv_tripulante_id FROM cv_sigvoos_staging WHERE empresa_id = 6',
+    )[0];
+    runSql(db.databasePath,
+      `INSERT INTO cv_conflitos_integracao (
+         empresa_id, entidade_tipo, entidade_id, campo, staging_id, status
+       ) VALUES (6, 'tripulante', ${stage.cv_tripulante_id}, 'funcao', ${sqlString(stage.id)}, 'ABERTO')`,
+    );
+    const withOpenConflict = await importControleVoosFromSigvoosRaw(params);
+    expect(withOpenConflict.reusedRecords).toBe(1);
+    expect(withOpenConflict.sourceMaterialized).toBe(false);
   });
 
   it('creates an explicit conflict when staff.id and staff.inscription resolve to different employees', async () => {

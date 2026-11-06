@@ -12,7 +12,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fetchWithAuth, API_BASE_URL } from '@/react-app/config/api';
-import { useTenantQueryKey } from '@/react-app/lib/useTenantQueryKey';
+import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 
 export interface GuiasInstrutorPermissions {
   podeVisualizar: boolean;

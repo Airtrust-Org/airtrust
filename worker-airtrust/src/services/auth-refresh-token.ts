@@ -8,7 +8,7 @@
  * membership verification, and CAS-based rotation + tenant pinning) used by
  * POST /api/auth/refresh and POST /api/auth/logout.
  */
-import { unauthorized } from '../middleware/error-handler';
+import { unauthorized } from '../lib/errors/api-error';
 import { hasRefreshTokensEmpresaIdColumn, hasUsuariosEmpresasTable } from '../utils/db-schema';
 
 const MAX_ACTIVE_REFRESH_TOKENS_PER_USER = 8;

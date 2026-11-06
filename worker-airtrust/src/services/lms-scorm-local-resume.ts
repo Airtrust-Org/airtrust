@@ -9,6 +9,8 @@ export interface ResumeStorageScriptConfig {
   matriculaId: number | null;
   cicloId: number;
   numeroCiclo: number;
+  /** FORMATIVE (F5) course: without package-owned suspend_data no backup is applied. */
+  strictCursor?: boolean;
 }
 
 export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string {
@@ -16,6 +18,7 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
   var MATRICULA_ID = ${cfg.matriculaId};
   var CICLO_ID = ${cfg.cicloId};
   var NUMERO_CICLO = ${cfg.numeroCiclo};
+  var STRICT_CURSOR = ${cfg.strictCursor ? 'true' : 'false'};
   var LEGACY_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
   var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID) + ':' + String(CICLO_ID);
 
@@ -97,6 +100,16 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
     } catch (_error) {
       // Ignorar indisponibilidade de storage local.
     }
+  }
+
+  function readSuspendCursorCap() {
+    try {
+      var raw = cmi['cmi.suspend_data'];
+      if (typeof raw !== 'string' || !raw) return STRICT_CURSOR ? 1 : null;
+      var state = JSON.parse(raw);
+      if (!state || state.v !== 4 || state.c === true || !Number.isInteger(state.a) || state.a < 0) return null;
+      return state.a + 1;
+    } catch (_capError) { return null; }
   }
 
   function writeLocalResumeBackup(reason) {

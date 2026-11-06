@@ -149,7 +149,8 @@ function isScormCompletion(body: JsonRecord): boolean {
     ['passed', 'completed', 'complete'].includes(lesson) ||
     ['completed', 'complete'].includes(completion) ||
     success === 'passed' ||
-    body.completion_candidate === true
+    body.completion_candidate === true ||
+    normalizeStatus(body.commit_event).toUpperCase() === 'SCORM_USER_FINALIZE'
   );
 }
 
@@ -189,6 +190,14 @@ export async function enforcePersistedLmsProgressEvidence(
   const body = await readJsonClone(c);
   const completionRequested = isScorm ? isScormCompletion(body) : isXapiCompletion(body);
   if (!completionRequested) return null;
+  // Player 2.0: a passive SCORM terminal report (Finish/unload/candidate) is
+  // EVIDENCE to be stored, not a request to complete. Rejecting it here threw
+  // the terminal commit away (report §3.2). Only the explicit user finalization
+  // is a completion request; the Worker's server-side finalization re-applies
+  // this same prior-progress rule before it may conclude anything.
+  if (isScorm && normalizeStatus(body.commit_event).toUpperCase() !== 'SCORM_USER_FINALIZE') {
+    return null;
+  }
 
   if (isXapi) {
     const verb = getXapiVerbId(body);

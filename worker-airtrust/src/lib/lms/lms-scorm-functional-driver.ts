@@ -95,10 +95,14 @@ function driveFactoryCourse() {
   };
   type DriverWindow = {
     COURSE_DATA?: { slides?: DriverSlide[]; packageVersion?: string };
+    AIRTRUST_CONTENT?: {
+      edition?: string;
+      slides?: Array<{ id?: string; layout?: string; isEnd?: boolean; required?: boolean; gate?: boolean }>;
+    };
     AIRTRUST_COURSE_MODEL?: AirTrustCourseModel;
     __AIRTRUST_PLAYER_TEST__?: { getState?: () => DriverState };
     document?: {
-      querySelector: (selector: string) => { disabled?: boolean; textContent?: string | null; click: () => void } | null;
+      querySelector: (selector: string) => { disabled?: boolean; value?: string; textContent?: string | null; click: () => void } | null;
       querySelectorAll: (selector: string) => ArrayLike<{
         disabled?: boolean;
         dataset?: Record<string, string | undefined>;
@@ -116,6 +120,117 @@ function driveFactoryCourse() {
     };
   };
   const w = globalThis as DriverWindow;
+
+  // SCORE F5/R22: the authored course is formative and has no final exam.
+  // Unlike legacy Factory packages this SCO exposes progress through CMI V2
+  // and a learner-controlled "completeStudy" action. Drive only real DOM
+  // controls. No test code writes score, status, suspend data, or completion.
+  const scoreContent = w.AIRTRUST_CONTENT;
+  if (scoreContent && typeof scoreContent.edition === 'string' &&
+      /^AIRTRUST-F5-/.test(scoreContent.edition) &&
+      scoreContent.slides === w.COURSE_DATA?.slides &&
+      Array.isArray(scoreContent.slides)) {
+    return (async () => {
+      const doc = w.document;
+      const slides = scoreContent.slides!;
+      const api = w.API;
+      const fail = (reason: string, steps: number) =>
+        ({ supported: true, completed: false, steps, reason });
+      const read = (key: string) => {
+        try { return String(api?.LMSGetValue?.(key) ?? ''); }
+        catch { return ''; }
+      };
+      const get = (selector: string) => doc?.querySelector(selector) ?? null;
+      const all = (selector: string) => Array.from(doc?.querySelectorAll(selector) ?? []);
+      const click = (selector: string) => {
+        const control = get(selector);
+        if (!control || control.disabled) return false;
+        control.click();
+        return true;
+      };
+      if (!doc || !api?.LMSGetValue || slides.length < 2 || slides.length > 1000 ||
+          slides.some(slide => !slide.id) ||
+          !slides[slides.length - 1]?.isEnd ||
+          !get('#counter') || !get('#next') || !get('#stage')) {
+        return fail('SCORE_F5_CONTRACT_INVALID', 0);
+      }
+      const limit = Math.min(4000, slides.length * 24);
+      for (let step = 0; step < limit; step++) {
+        const counter = get('#counter')?.textContent?.trim() ?? '';
+        const match = counter.match(/^(\d+)\s*\/\s*(\d+)$/);
+        const index = match ? Number(match[1]) - 1 : -1;
+        if (index < 0 || index >= slides.length ||
+            Number(match?.[2]) !== slides.length) {
+          return fail('SCORE_F5_POSITION_INVALID', step);
+        }
+        if (index === slides.length - 1) {
+          if (read('cmi.core.lesson_status').toLowerCase() === 'completed') {
+            return fail('SCORE_F5_PREMATURE_COMPLETION', step);
+          }
+          if (!click('#completeStudy')) {
+            return fail('SCORE_F5_EXPLICIT_END_MISSING', step);
+          }
+          if (read('cmi.core.lesson_status').toLowerCase() !== 'completed') {
+            return fail('SCORE_F5_COMPLETION_NOT_COMMITTED', step);
+          }
+          let persisted: { p?: unknown; d?: unknown; f?: unknown } | null = null;
+          try { persisted = JSON.parse(read('cmi.suspend_data')); }
+          catch { return fail('SCORE_F5_SUSPEND_INVALID', step); }
+          const visited = persisted?.d;
+          const resolved = persisted?.f;
+          if (persisted?.p !== scoreContent.edition ||
+              !Array.isArray(visited) || visited.length !== slides.length ||
+              !visited.every((n, i) => n === i) || !Array.isArray(resolved) ||
+              slides.some((slide, i) =>
+                (slide.layout === 'scenario' || slide.required === true ||
+                  slide.gate === true) && !resolved!.includes(i))) {
+            return fail('SCORE_F5_COVERAGE_NOT_PROVEN', step);
+          }
+          return { supported: true, completed: true, steps: step + 1, reason: null };
+        }
+        // Required disclosure panels gate navigation. Their toggle events
+        // are asynchronous DOM events, so let them settle naturally.
+        if (get('#next')?.disabled) {
+          const summaries = all('#stage details[data-required] summary');
+          for (const summary of summaries) {
+            summary.click();
+            await new Promise<void>(resolve => setTimeout(resolve, 10));
+          }
+        }
+        if (get('#next')?.disabled && get('#reflectionAnswer')) {
+          const answer = get('#reflectionAnswer');
+          if (!answer) return fail('SCORE_F5_REFLECTION_MISSING', step);
+          answer.value = 'Antes da decisão, verificar o procedimento vigente, autoridade e rastreabilidade.';
+          if (!click('#reflectionReveal')) {
+            return fail('SCORE_F5_REFLECTION_GATE_MISSING', step);
+          }
+          const optionCount = all('#stage button[data-answer]').length;
+          if (!optionCount || optionCount > 12) {
+            return fail('SCORE_F5_OPTIONS_INVALID', step);
+          }
+          // Do not inspect answer keys. Attempt actual visible feedback
+          // controls until the author's own navigation gate unlocks.
+          for (let option = 0; option < optionCount && get('#next')?.disabled; option++) {
+            const choices = all('#stage button[data-answer]');
+            if (choices.length !== optionCount || choices[option]?.disabled) {
+              return fail('SCORE_F5_OPTION_CONTROL_INVALID', step);
+            }
+            choices[option]!.click();
+          }
+        }
+        if (get('#next')?.disabled) {
+          return fail('SCORE_F5_REQUIRED_ACTIVITY_UNRESOLVED', step);
+        }
+        if (!click('#next') ||
+            (get('#counter')?.textContent?.trim() ?? '') !==
+              String(index + 2) + ' / ' + String(slides.length)) {
+          return fail('SCORE_F5_NAVIGATION_UNVERIFIED', step);
+        }
+      }
+      return fail('SCORE_F5_MAX_STEPS_EXCEEDED', limit);
+    })();
+  }
+
   const authoredModel = w.AIRTRUST_COURSE_MODEL;
   if (authoredModel?.schema === 'AIRTRUST_TRAINING_MODEL_M8' &&
       authoredModel.navigationGate === 'module-assessment') {

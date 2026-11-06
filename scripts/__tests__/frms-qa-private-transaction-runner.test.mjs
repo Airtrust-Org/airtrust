@@ -14,7 +14,8 @@ function source({queues=[
   {queue_name:PREPARE,queue_id:P},
   {queue_name:RESULTS,queue_id:R},
 ],status=200,success=true,redirected=false,total=queues.length,
-  badConsumer=false,longRetention=false}={}){
+  badConsumer=false,longRetention=false,omitConsumerQueueName=false,
+  foreignConsumerQueueName=false}={}){
   const calls=[];
   const base='https://api.cloudflare.com/client/v4/accounts/'+ACCOUNT+'/queues';
   const fetcher=async(uri,request)=>{
@@ -30,12 +31,15 @@ function source({queues=[
     return {status,redirected,json:async()=>({success,result:{
       ...item,settings:{message_retention_period:longRetention?345600:900},
       consumers:[item.queue_name===PREPARE?{
-        queue_name:PREPARE,type:'worker',
+        queue_name:omitConsumerQueueName?undefined:
+          foreignConsumerQueueName?'foreign-queue':PREPARE,type:'worker',
         script_name:badConsumer?'untrusted-worker':
           'airtrust-frms-qa-caller-staging-private',
         settings:{batch_size:1},
       }:{
-        queue_name:RESULTS,type:badConsumer?'worker':'http_pull',
+        queue_name:omitConsumerQueueName?undefined:
+          foreignConsumerQueueName?'foreign-queue':RESULTS,
+        type:badConsumer?'worker':'http_pull',
         settings:{batch_size:1,visibility_timeout_ms:30000},
       }],
     }})};
@@ -52,6 +56,20 @@ test('pin exactly two distinct private queue IDs from GET-only inventory',async(
   assert.equal(JSON.stringify(resolved).includes(TOKEN),false);
   assert.equal(JSON.stringify(resolved).includes(ACCOUNT),false);
 });
+test('embedded consumer name is optional when enclosing Queue ID/name are verified',async()=>{
+  const f=source({omitConsumerQueueName:true});
+  const result=await resolvePrivateTransactionQueues({
+    accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher});
+  assert.equal(result.privateConsumersVerified,true);
+  assert.equal(f.calls.length,3);
+});
+test('foreign embedded consumer name still fails closed',async()=>{
+  const f=source({foreignConsumerQueueName:true});
+  await assert.rejects(resolvePrivateTransactionQueues({
+    accountId:ACCOUNT,token:TOKEN,fetcher:f.fetcher}),
+    /FRMS_QA_TRANSACTION_RUNNER_DENIED/);
+});
+
 test('missing, duplicate, swapped, malformed or ambiguous queues fail closed',async()=>{
   for(const queues of [
     [],[{queue_name:PREPARE,queue_id:P}],

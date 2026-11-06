@@ -127,6 +127,7 @@ describe('migration governance', () => {
     // 0525 normalizes the governed tenant-6 organizational structure; 0526 aligns the reviewed training matrix.
     // 0527 bootstraps a missing tenant-6 LOFT model without rewriting the reviewed 0526 change.
     // 0528 separates sector Compliance alert responsibility from operational sector access.
+    // 0529 adds the tenant-scoped HFA bridge; remote schema apply remains pending.
     // 0530 adds the governed placeholder qualification models for planned EAD packages.
     // 0531 repairs the reviewed tenant-6 NR-20 HIBRIDO requirement modality after 0526.
     // 0533 adds governed metadata; 0534 aligns the final matrix; 0535 repairs INTEGRA; 0536 adds reviewed FDM audiences; 0537 reconciles source-backed metadata; 0538 adds Gestor/NR-05 policy; 0539 repairs Doutrinação; 0540 restores missing Maintenance manual identities.
@@ -142,7 +143,13 @@ describe('migration governance', () => {
     // 0557 adds the reviewed LMS per-cycle evidence archive. It is
     // a local migration mirror of the separately governed Schema V2 change.
     expect(files).toContain('0557_lms_cycle_evidence_archive.sql');
-    const expectedLatest = 557;
+    // 0569 adds SCORM edition-pinned assessment policy + append-only package approvals.
+    // Like 0557 it is a byte-identical local mirror of the Schema V2 change (hash-pinned in
+    // scripts/ci/ci-schema-bootstrap-contract.json) so the disposable lms-smoke DB has the columns.
+    expect(files).toContain('0569_lms_scorm_edition_policy_approvals.sql');
+    // 0570 appends immutable, scope-checked formative approval renewals.
+    expect(files).toContain('0570_lms_scorm_formative_approval_renewals.sql');
+    const expectedLatest = 570;
     expect(Math.max(...regularPrefixes.map(Number))).toBe(expectedLatest);
 
     const highSentinels = files.filter(

@@ -4,7 +4,7 @@ import {
   ensureModelosAeronaveModeloColumn,
   generateETag,
   SORTABLE_COLUMNS,
-} from '../../routes/qualificacoes/historico-helpers';
+} from '../../services/qualificacoes/historico-helpers';
 
 describe('qualificacoes historico helper memoization', () => {
   it('memoiza o PRAGMA de modelos_aeronave e nao executa DML em runtime', async () => {
@@ -46,7 +46,8 @@ describe('qualificacoes historico helper memoization', () => {
 
   it('buildOrderByClause status ASC coloca PLANEJADA (rank 1) antes de VENCIDA (rank 2)', () => {
     const clause = buildOrderByClause('status', 'ASC');
-    const vencidaMatch = clause.match(/date\('now'\) THEN (\d+)/);
+    // "hoje" é o dia civil de São Paulo: date('now','-3 hours'), não date('now') em UTC.
+    const vencidaMatch = clause.match(/< date\('now','-3 hours'\) THEN (\d+)/);
     expect(vencidaMatch).not.toBeNull();
     const vencidaRank = Number(vencidaMatch![1]);
     const planejadaMatch = clause.match(/IN \('PLANEJADA','PLANEJADO'\)[^)]*THEN (\d+)/);

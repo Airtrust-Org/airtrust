@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyEdbFlightRecord } from '../../services/edb/contracts';
-import { isPersistedEdbFlightRecord } from '../../services/edb/persisted-record-validation';
+import { createEmptyEdbFlightRecord } from '../../lib/edb/contracts';
+import { isPersistedEdbFlightRecord } from '../../lib/edb/persisted-record-validation';
 
 function record() {
   return createEmptyEdbFlightRecord({

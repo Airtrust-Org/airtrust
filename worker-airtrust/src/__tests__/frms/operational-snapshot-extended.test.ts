@@ -98,7 +98,7 @@ describe('FRMS operational snapshot extended decision fields', () => {
       funcionario_id: 10,
       hora_checkin: '06:30',
       hora_apresentacao: '08:00',
-      kss_score: 5,
+      kss_score: 5, kss_provenance: 'CREW_REPORTED',
       horas_sono: 6.5,
       qualidade_sono: 3,
       wake_time: '06:00',
@@ -118,5 +118,13 @@ describe('FRMS operational snapshot extended decision fields', () => {
     expect(item.natureza_dado).toBe('JORNADA_REALIZADA');
     expect(item.snapshot_status).toBe('CRITICO');
     expect(item.decisao).toBe('EXIGE_OVERRIDE');
+
+    // A legacy check-in with identical numbers but no verified KSS origin
+    // must not reuse the earlier critical/fit calculation as reliable.
+    input.rows.checkins[0].kss_provenance = null;
+    const historical = buildFrmsOperationalSnapshot(input).items[0];
+    expect(historical.kss_score).toBeNull();
+    expect(historical.snapshot_status).toBe('INCOMPLETO');
+    expect(historical.alertas).toContain('DADO_INCONSISTENTE');
   });
 });

@@ -63,6 +63,15 @@ vi.mock('../../middleware/rbac', () => ({
     async (_c: any, next: () => Promise<void>) => {
       await next();
     },
+  // Simula a política de papel: só os papéis listados passam (AUD-016).
+  requirePermission:
+    (_modulo: string, _acao: string, ...roles: string[]) =>
+    async (c: any, next: () => Promise<void>) => {
+      if (!roles.includes(String(c.get('userRole') || '').toLowerCase())) {
+        return c.json({ success: false, code: 'RBAC_FORBIDDEN' }, 403);
+      }
+      await next();
+    },
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -267,6 +276,11 @@ async function timelineRequest(opts: { empresaId: number; tripulanteId: string }
 describe('FIRA upload-multipagina tenant isolation (BUG-004)', () => {
   beforeEach(() => {
     capturedEmpresaId = null;
+  });
+
+  it('AUD-016: usuário sem papel de gestão não importa FIRA', async () => {
+    const res = await uploadFiraRequest({ userId: 5, empresaId: 6, role: 'piloto' });
+    expect(res.status).toBe(403);
   });
 
   it('Upload multipágina com operador sem funcionário → usa tenant do JWT, não empresa 1', async () => {

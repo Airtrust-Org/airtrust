@@ -23,6 +23,7 @@ import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import sgsoNextGenRoutes from './sgso-next-gen';
 import sgsoAuditoriasNcsRoutes from './sgso-auditorias-ncs';
+import sgsoHfaIntegrationRoutes from './sgso-hfa-integration';
 import type { Context } from 'hono';
 import { createLogger, toError } from '../utils/logger';
 import { getSchemaColumns } from '../utils/db-schema';
@@ -33,6 +34,7 @@ const sgso = new Hono<{ Bindings: Env; Variables: { userId?: string } }>();
 sgso.use('*', auth());
 sgso.route('/', sgsoNextGenRoutes);
 sgso.route('/', sgsoAuditoriasNcsRoutes);
+sgso.route('/hfa', sgsoHfaIntegrationRoutes);
 
 // ─────────────────────────────────────────────────────────────
 // Helpers

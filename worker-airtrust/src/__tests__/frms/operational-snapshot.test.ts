@@ -102,7 +102,7 @@ describe('check-in timestamp coherence', () => {
       hora_checkin: '12:34',
       submitted_at: '2026-10-13 12:34:00',
       hora_apresentacao: '09:00',
-      kss_score: 3, horas_sono: 8, qualidade_sono: 4,
+      kss_score: 3, kss_provenance: 'CREW_REPORTED', horas_sono: 8, qualidade_sono: 4,
       wake_time: '07:00', score_fadiga: 15, nivel_fadiga: 'NORMAL',
       status_operacional: 'APTO', computed_risk_level: 'LOW',
     }];
@@ -119,7 +119,7 @@ describe('effectiveness threshold governance', () => {
     input.limites = { FDP_MAXIMO_HORAS: 11, HV_DIARIA_HORAS: 8, EFFECTIV_VERMELHO_MAX: 72 };
     input.rows.checkins = [{
       data_operacional: '2026-09-26', funcionario_id: 10, hora_checkin: '06:30',
-      hora_apresentacao: '07:00', kss_score: 3, horas_sono: 7, qualidade_sono: 4,
+      hora_apresentacao: '07:00', kss_score: 3, kss_provenance: 'CREW_REPORTED', horas_sono: 7, qualidade_sono: 4,
       wake_time: '05:30', score_fadiga: 0, nivel_fadiga: 'NORMAL',
       status_operacional: 'APTO', computed_risk_level: 'LOW',
     }];
@@ -188,10 +188,10 @@ function makeSnapshotDb(data: SnapshotDbData) {
   } as never;
 }
 
-function mockFrmsOperationalContext() {
+function mockFrmsOperationalContext(profileCode = 'LEGACY_GENERAL') {
   vi.spyOn(parameterGovernanceModule, 'resolveFrmsOperationalContext').mockResolvedValue({
     empresaId: 77,
-    profileCode: 'LEGACY_GENERAL',
+    profileCode,
     regulatoryProfileId: 'profile-1',
     configRevisionId: 'rev-1',
     modelVersion: 'FRMS_CONFIG_V1_TEST',
@@ -255,7 +255,7 @@ describe('D1 bind budget do snapshot operacional', () => {
     }));
     const checkins = funcionarios.map((funcionario) => ({
       data_operacional: '2026-09-28', funcionario_id: funcionario.id,
-      hora_checkin: '06:00', hora_apresentacao: '07:00', kss_score: 3,
+      hora_checkin: '06:00', hora_apresentacao: '07:00', kss_score: 3, kss_provenance: 'CREW_REPORTED',
       horas_sono: 8, qualidade_sono: 4, wake_time: '05:30', score_fadiga: 10,
       nivel_fadiga: 'VERDE', status_operacional: 'APTO', computed_risk_level: 'normal',
     }));
@@ -504,7 +504,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 10,
       hora_checkin: '06:45',
       hora_apresentacao: '08:00',
-      kss_score: 4,
+      kss_score: 4, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7,
       qualidade_sono: 4,
       wake_time: '06:10',
@@ -588,7 +588,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 11,
       hora_checkin: '06:10',
       hora_apresentacao: '08:00',
-      kss_score: 5,
+      kss_score: 5, kss_provenance: 'CREW_REPORTED',
       horas_sono: 6.5,
       qualidade_sono: 3,
       wake_time: '05:40',
@@ -625,7 +625,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 10,
       hora_checkin: '05:30',
       hora_apresentacao: '06:00',
-      kss_score: 4,
+      kss_score: 4, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7,
       qualidade_sono: 4,
       wake_time: '04:30',
@@ -665,7 +665,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 10,
       hora_checkin: '06:30',
       hora_apresentacao: '08:00',
-      kss_score: 4,
+      kss_score: 4, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7.2,
       qualidade_sono: 4,
       wake_time: '05:55',
@@ -696,6 +696,22 @@ describe('frms operational snapshot builder', () => {
     expect(estimatedSleep?.wake_data_source).toBe('AUSENTE');
     expect(estimatedSleep?.horas_sono).toBeNull();
     expect(estimatedSleep?.alertas).not.toContain('SONO_ESTIMADO');
+  });
+
+  it('sono real de zero hora não é confundido com dado ausente e gera alerta', () => {
+    const input = createBaseInput();
+    input.rows.checkins.push({
+      data_operacional: '2026-05-28', funcionario_id: 10,
+      hora_checkin: '06:30', hora_apresentacao: '08:00',
+      kss_score: 9, kss_provenance: 'CREW_REPORTED', horas_sono: 0, qualidade_sono: null, wake_time: '05:55',
+      score_fadiga: 100, nivel_fadiga: 'VERMELHO',
+      status_operacional: 'RESTRITO', computed_risk_level: 'critical',
+    });
+    const item = getByKey(buildFrmsOperationalSnapshot(input).items, '2026-05-28', 10);
+    expect(item?.horas_sono).toBe(0);
+    expect(item?.sleep_data_source).toBe('REAL');
+    expect(item?.alertas).toContain('SONO_INSUFICIENTE');
+    expect(item?.alertas).toContain('KSS_ALTO');
   });
 
   it('6) jornada sem effectiveness_pct gera JORNADA_SEM_FATORIZACAO', () => {
@@ -749,7 +765,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 10,
       hora_checkin: '06:30',
       hora_apresentacao: '09:00',
-      kss_score: 4,
+      kss_score: 4, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7.5,
       qualidade_sono: 4,
       wake_time: '07:15',
@@ -816,7 +832,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 10,
       hora_checkin: '06:30',
       hora_apresentacao: null,
-      kss_score: 4,
+      kss_score: 4, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7,
       qualidade_sono: 4,
       wake_time: '05:55',
@@ -895,7 +911,7 @@ describe('frms operational snapshot builder', () => {
           funcionario_id: 10,
           hora_checkin: '05:40',
       hora_apresentacao: '08:00',
-          kss_score: 8,
+          kss_score: 8, kss_provenance: 'CREW_REPORTED',
           horas_sono: 5,
           qualidade_sono: 4,
           wake_time: '05:10',
@@ -928,6 +944,34 @@ describe('frms operational snapshot builder', () => {
   });
 
   describe('janela de contexto do Compliance quinzenal', () => {
+    it('art. 42 recupera madrugadas anteriores mesmo sem período embarcado identificável', async () => {
+      mockFrmsOperationalContext('HELICOPTER_OFFSHORE');
+      vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+      const db = makeSnapshotDb({
+        funcionarios: [FUNCIONARIO_10],
+        jornadas: ['01', '02', '03'].map((day) =>
+          jornadaRow(`2026-11-${day}`, 10, {
+            hora_apresentacao: '05:30',
+            hora_termino: '14:00',
+          }),
+        ),
+      });
+
+      const result = await listFrmsOperationalSnapshot(db, {
+        empresaId: 77,
+        dataInicio: '2026-11-03',
+        dataFim: '2026-11-03',
+      });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].data_operacional).toBe('2026-11-03');
+      expect(result.items[0].compliance_pending_validation).toEqual(
+        expect.arrayContaining([expect.objectContaining({
+          code: 'LAW_ART42_CONSECUTIVE',
+          actual: 3,
+        })]),
+      );
+    });
+
     it('Caso 1 — consulta de um dia dentro de um período embarcado calcula o Compliance com dados reais', async () => {
       mockFrmsOperationalContext();
       // Âncora vem da fatorização persistida; ciclo não precisa resolver nada.
@@ -1024,7 +1068,7 @@ describe('frms operational snapshot builder', () => {
             funcionario_id: 10,
             hora_checkin: '05:40',
       hora_apresentacao: '08:00',
-            kss_score: 6,
+            kss_score: 6, kss_provenance: 'CREW_REPORTED',
             horas_sono: 6,
             qualidade_sono: 3,
             wake_time: '05:10',
@@ -1104,7 +1148,7 @@ describe('frms operational snapshot builder', () => {
             funcionario_id: 10,
             hora_checkin: '06:30',
       hora_apresentacao: '08:00',
-            kss_score: 3,
+            kss_score: 3, kss_provenance: 'CREW_REPORTED',
             horas_sono: 7,
             qualidade_sono: 4,
             wake_time: '05:55',
@@ -1167,7 +1211,7 @@ describe('frms operational snapshot builder', () => {
       funcionario_id: 12,
       hora_checkin: '07:10',
       hora_apresentacao: '08:00',
-      kss_score: 3,
+      kss_score: 3, kss_provenance: 'CREW_REPORTED',
       horas_sono: 7,
       qualidade_sono: 4,
       wake_time: '06:15',
@@ -1233,7 +1277,7 @@ describe('operational snapshot — mandatory compliance wiring', () => {
     const input = createBaseInput();
     input.rows.checkins.push({
       data_operacional: '2026-09-26', funcionario_id: 10, hora_checkin: '06:00',
-      hora_apresentacao: '08:00', kss_score: 3, horas_sono: 8, qualidade_sono: 4,
+      hora_apresentacao: '08:00', kss_score: 3, kss_provenance: 'CREW_REPORTED', horas_sono: 8, qualidade_sono: 4,
       wake_time: '06:00', score_fadiga: 10, nivel_fadiga: 'VERDE',
       status_operacional: 'APTO', computed_risk_level: 'normal',
     });

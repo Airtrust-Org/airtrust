@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
 import type { Env } from '../../types';
 
-const { authState, persistReadinessAssessmentMock, countReadinessBaselineSessionsMock } = vi.hoisted(() => ({
+const { authState, persistReadinessAssessmentMock, countReadinessBaselineSessionsMock, sectorAccessMock } = vi.hoisted(() => ({
   authState: { role: 'tripulante' },
   persistReadinessAssessmentMock: vi.fn(),
   countReadinessBaselineSessionsMock: vi.fn(),
+  sectorAccessMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -15,6 +17,11 @@ vi.mock('../../middleware/auth', () => ({
     c.set('funcionarioId', 70);
     await next();
   },
+}));
+
+vi.mock('../../lib/frms/operational-date', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/frms/operational-date')>()),
+  frmsOperationalTodayIso: () => '2026-08-27',
 }));
 
 vi.mock('../../middleware/tenant', async (importOriginal) => {
@@ -30,6 +37,11 @@ vi.mock('../../lib/frms/readiness-persistence', () => ({
   persistReadinessAssessment: (...args: unknown[]) => persistReadinessAssessmentMock(...args),
 }));
 
+vi.mock('../../middleware/employee-sector-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../middleware/employee-sector-access')>()),
+  getEmployeeSectorAccess: (...args: unknown[]) => sectorAccessMock(...args),
+}));
+
 const { default: frmsReadinessRoutes } = await import('../../routes/frms-readiness');
 
 type MockStatement = {
@@ -39,7 +51,7 @@ type MockStatement = {
 };
 
 function createDb(
-  checkin: { id: string; kss_score: number; horas_sono: number } | null = null,
+  checkin: { id: string; kss_score: number; kss_provenance?: string | null; horas_sono: number | null; jornada_inicio_prevista?: string | null } | null = null,
   readinessRows: Array<Record<string, unknown>> = [],
   recoveryReadError?: Error,
 ) {
@@ -60,7 +72,7 @@ function createDb(
           if (normalized.includes('FROM funcionarios') && normalized.includes('WHERE id = ?')) {
             return { id: 70 } as T;
           }
-          if (normalized.includes('FROM frms_fadiga_checkin')) return checkin as T | null;
+          if (normalized.includes('FROM frms_fadiga_checkin')) return checkin ? { jornada_inicio_prevista: '23:59', ...checkin } as T : null;
           // No prior recovery activity is normal. Do not simulate an unexpected
           // SQL failure just because the readiness route rechecks that date.
           if (normalized.includes('FROM frms_recovery_activity_day')) {
@@ -124,9 +136,12 @@ const readinessRow = {
 
 describe('FRMS readiness route', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-27T12:00:00Z'));
     vi.clearAllMocks();
     authState.role = 'tripulante';
     countReadinessBaselineSessionsMock.mockResolvedValue(0);
+    sectorAccessMock.mockResolvedValue({ mode: 'restricted', setorIds: [3], funcionarioId: null });
     persistReadinessAssessmentMock.mockResolvedValue({
       assessmentId: 'assessment-1',
       classification: 'baseline_building',
@@ -139,6 +154,58 @@ describe('FRMS readiness route', () => {
       warningSignals: [],
       criticalSignals: [],
     });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('never exposes an unverified historical baseline as ready, regardless of count', async () => {
+    countReadinessBaselineSessionsMock.mockResolvedValue(30);
+    const { db } = createDb(null);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/baseline?date=2026-08-27&protocol=airtrust-pvtb-v2'),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { sessions: 30, minimum_sessions: 10, ready: false, protocol_version: 'airtrust-pvtb-v2' },
+    });
+  });
+
+
+  it('rejects historical objective readiness even if a historical check-in exists', async () => {
+    const { db, statements } = createDb({
+      id: 'prior-checkin', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8,
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-26', duration_ms: 60000, trials: validTrials }),
+      }), { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'retrospective_readiness_not_allowed' });
+    expect(statements.some((query) => query.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects a standalone objective test after the crew presentation without persistence', async () => {
+    const { db } = createDb({
+      id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8,
+      jornada_inicio_prevista: '08:00',
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'post_presentation_readiness_not_allowed' });
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
   });
 
   it('requires the tenant-scoped daily check-in before persisting objective trials', async () => {
@@ -160,8 +227,41 @@ describe('FRMS readiness route', () => {
     expect(checkinQuery?.binds).toEqual([7, 70, '2026-08-27']);
   });
 
+  it('rejeita KSS legado sem proveniência verificada antes de persistir testes', async () => {
+    const { db } = createDb({
+      id: 'checkin-legacy', kss_score: 5, kss_provenance: null, horas_sono: 8,
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'KSS_PROVENANCE_UNVERIFIED' });
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+  });
+
+  it('does not convert missing reported sleep to zero before readiness persistence', async () => {
+    const { db } = createDb({
+      id: 'checkin-no-sleep', kss_provenance: 'CREW_REPORTED', kss_score: 4, horas_sono: null,
+    });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_date: '2026-08-27', duration_ms: 60000, trials: validTrials }),
+      }),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'SLEEP_EVIDENCE_MISSING' });
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+  });
+
   it('uses KSS and sleep from the saved check-in instead of accepting client subjective values', async () => {
-    const { db } = createDb({ id: 'checkin-7-70', kss_score: 8, horas_sono: 4.5 });
+    const { db } = createDb({ id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 8, horas_sono: 4.5 });
     const response = await frmsReadinessRoutes.fetch(
       new Request('http://localhost/', {
         method: 'POST',
@@ -194,7 +294,7 @@ describe('FRMS readiness route', () => {
 
   it('fails closed on a real recovery database error after readiness persistence', async () => {
     const { db } = createDb(
-      { id: 'checkin-7-70', kss_score: 8, horas_sono: 4.5 },
+      { id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 8, horas_sono: 4.5 },
       [],
       new Error('D1_ERROR: database is locked'),
     );
@@ -213,8 +313,27 @@ describe('FRMS readiness route', () => {
     expect(persistReadinessAssessmentMock).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    { reference_date: '2026-08-27', duration_ms: 60_000, trials: validTrials, protocol_version: 'airtrust-pvtb-v2' },
+    { reference_date: '2099-01-01', duration_ms: 60_000, trials: validTrials, protocol_version: 'airtrust-brief-v1' },
+    { reference_date: '2026-02-30', duration_ms: 60_000, trials: validTrials },
+  ])('blocks legacy protocol or invalid date before reading check-in', async (payload) => {
+    const { db, statements } = createDb({ id: 'checkin', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 7 });
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(400);
+    expect(persistReadinessAssessmentMock).not.toHaveBeenCalled();
+    expect(statements.some((q) => q.sql.includes('FROM frms_fadiga_checkin'))).toBe(false);
+  });
+
   it('rejects malformed trial payloads before any readiness persistence', async () => {
-    const { db, statements } = createDb({ id: 'checkin-7-70', kss_score: 3, horas_sono: 8 });
+    const { db, statements } = createDb({ id: 'checkin-7-70', kss_provenance: 'CREW_REPORTED', kss_score: 3, horas_sono: 8 });
     const response = await frmsReadinessRoutes.fetch(
       new Request('http://localhost/', {
         method: 'POST',
@@ -250,18 +369,41 @@ describe('FRMS readiness route', () => {
       meta: { scope: 'team' },
     });
     const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
-    expect(readinessQuery?.binds).toEqual([
-      'airtrust-pvtb-v2',
-      5,
-      'airtrust-pvtb-v2',
-      'airtrust-pvtb-v2',
-      5,
-      7,
-      '2026-08-27',
-    ]);
+    expect(readinessQuery?.binds).toEqual([7, '2026-08-27', 3]);
     expect(readinessQuery?.sql).toContain('WHERE ch.empresa_id = ?');
-    expect(readinessQuery?.sql).toContain("THEN 'baseline_building'");
+    expect(readinessQuery?.sql).toContain('f.empresa_id = ch.empresa_id');
+    expect(readinessQuery?.sql).toContain('f.setor_id IN (?)');
+    expect(readinessQuery?.sql).toContain("'baseline_building'");
     expect(readinessQuery?.sql).toContain('assessment_missing');
+  });
+
+  it('fails closed for manager without active sector assignment', async () => {
+    authState.role = 'manager';
+    sectorAccessMock.mockResolvedValue({ mode: 'restricted', setorIds: [], funcionarioId: null });
+    const { db, statements } = createDb(null, []);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const query = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(query?.sql).toContain('AND 1 = 0');
+    expect(query?.binds).toEqual([7, '2026-08-27']);
+  });
+
+  it('allows an admin to see only the active company without sector filtering', async () => {
+    authState.role = 'admin';
+    sectorAccessMock.mockResolvedValue({ mode: 'all', setorIds: [], funcionarioId: null });
+    const { db, statements } = createDb(null, [readinessRow]);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const query = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(query?.sql).toContain('f.empresa_id = ch.empresa_id');
+    expect(query?.sql).not.toContain('f.setor_id IN');
+    expect(query?.binds).toEqual([7, '2026-08-27']);
   });
 
   it('forces non-team roles to their own readiness assessment', async () => {
@@ -280,11 +422,6 @@ describe('FRMS readiness route', () => {
     });
     const readinessQuery = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
     expect(readinessQuery?.binds).toEqual([
-      'airtrust-pvtb-v2',
-      5,
-      'airtrust-pvtb-v2',
-      'airtrust-pvtb-v2',
-      5,
       7,
       '2026-08-27',
       70,
@@ -303,5 +440,50 @@ describe('FRMS readiness route', () => {
 
     expect(response.status).toBe(400);
     expect((db.prepare as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it('executes the real team SQL without exposing another sector or company', async () => {
+    authState.role = 'manager';
+    sectorAccessMock.mockResolvedValue({ mode: 'restricted', setorIds: [3], funcionarioId: null });
+    const { db, statements } = createDb(null);
+    const response = await frmsReadinessRoutes.fetch(
+      new Request('http://localhost/team?date=2026-08-27'),
+      { DB: db } as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const query = statements.find((item) => item.sql.includes('FROM frms_fadiga_checkin ch'));
+    expect(query).toBeDefined();
+
+    // Vite cannot statically resolve node:sqlite; use the existing test-suite pattern.
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+    const sqlite = new DatabaseSync(':memory:');
+    try {
+      sqlite.exec(`
+        CREATE TABLE funcionarios (
+          id INTEGER, empresa_id INTEGER, setor_id INTEGER, deleted_at TEXT
+        );
+        CREATE TABLE frms_fadiga_checkin (
+          funcionario_id INTEGER, empresa_id INTEGER, data_checkin TEXT,
+          deleted_at TEXT, created_at TEXT
+        );
+        CREATE TABLE frms_readiness_assessment (
+          id TEXT, funcionario_id INTEGER, empresa_id INTEGER, reference_date TEXT,
+          deleted_at TEXT, classification TEXT, baseline_sessions INTEGER,
+          baseline_ready INTEGER, median_rt_delta_pct REAL, lapse_rate_delta REAL,
+          warning_signals_json TEXT, critical_signals_json TEXT, created_at TEXT
+        );
+        INSERT INTO funcionarios VALUES
+          (70, 7, 3, NULL), (71, 7, 4, NULL), (80, 8, 3, NULL);
+        INSERT INTO frms_fadiga_checkin VALUES
+          (70, 7, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (71, 7, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (80, 8, '2026-08-27', NULL, '2026-08-27 09:00:00'),
+          (80, 7, '2026-08-27', NULL, '2026-08-27 09:00:00');
+      `);
+      const rows = sqlite.prepare(query!.sql).all(...query!.binds);
+      expect(rows.map((row: { funcionario_id: number }) => row.funcionario_id)).toEqual([70]);
+    } finally {
+      sqlite.close();
+    }
   });
 });

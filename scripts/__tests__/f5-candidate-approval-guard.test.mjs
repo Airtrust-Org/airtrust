@@ -11,7 +11,7 @@ const zipSha = 'b'.repeat(64);
 const base = {
   repo: REPO, ref: 'refs/heads/main', event: 'workflow_dispatch',
   actor: 'owner-user', confirmation: 'AIRTRUST_F5_STAGING_CANDIDATE',
-  sha, grantId: '12345', tenantId: '9001', courseId: '7101',
+  prNumber: String(PR), sha, grantId: '12345', tenantId: '9001', courseId: '7101',
   packageSha256: zipSha, zipBytes: '1000', operationId: '123e4567-e89b-12d3-a456-426614174000'
 };
 const grantBody = v => 'AIRTRUST_F5_STAGING_CANDIDATE_V1\n' + JSON.stringify(expectedGrant(v));
@@ -35,7 +35,8 @@ test('rejects changed SHA/scope, extra grants, and missing confirmation fail-clo
   for (const patch of [
     { sha: 'bad' }, { tenantId: '0' }, { courseId: 'bad' },
     { packageSha256: 'bad' }, { zipBytes: String(MAX_ZIP_BYTES + 1) },
-    { operationId: 'not-a-uuid' }, { confirmation: '' }
+    { operationId: 'not-a-uuid' }, { confirmation: '' },
+    { prNumber: '1856' }, { prNumber: '01696' }, { prNumber: '' }
   ]) assert.throws(() => assertConfig({ ...base, ...patch }));
   for (const change of [
     { release_sha: 'c'.repeat(40) }, { tenant_id: 9002 }, { course_id: 7102 },
@@ -48,15 +49,69 @@ test('rejects changed SHA/scope, extra grants, and missing confirmation fail-clo
   }
 });
 
+test('MGM 1855 uses an explicit, independently scoped F0 grant and cannot reuse pilot 1696 authorization', async () => {
+  const mgm = { ...base, prNumber: '1855', tenantId: '6', courseId: '26',
+    packageSha256: 'da0a36e661a1b592c47867e162841e3fc91b56d09e1e2feb7ea4c39f3c50f0ae',
+    zipBytes: '419132' };
+  assert.doesNotThrow(() => assertConfig(mgm));
+  assert.equal(expectedGrant(mgm).pr, 1855);
+  assert.equal(expectedGrant(mgm).candidate_status, 'INACTIVE');
+  assert.equal(expectedGrant(mgm).activation, 'PROHIBITED');
+  assert.throws(() => checkGrantBody(grantBody(base), mgm), /F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.throws(() => checkGrantBody(grantBody(mgm), base), /F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+
+  const now = Date.now();
+  const checks = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
+  const get = async path => {
+    if (path === 'pulls/1855') return { state: 'open', draft: false, base: { ref: 'main' },
+      head: { sha, repo: { full_name: REPO, fork: false } } };
+    if (path === `commits/${sha}/check-runs?per_page=100`) return { check_runs: checks.map(name =>
+      ({ name, head_sha: sha, status: 'completed', conclusion: 'success' })) };
+    if (path === 'issues/comments/12345') return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(now - 1000).toISOString(),
+      updated_at: new Date(now - 1000).toISOString(),
+      body: grantBody(mgm), user: { login: 'owner-user' }
+    };
+    if (path.startsWith('collaborators/')) return { permission: 'admin' };
+    throw Error('unexpected GET ' + path);
+  };
+  assert.equal(await verify(mgm, 'read-token', get, now), true);
+});
+
+test('NR26 RC5 grant is pinned to only tenant 6/course 52/physical ZIP hash and bytes', () => {
+  const target={ ...base,prNumber:'1977',tenantId:'6',courseId:'52',
+    packageSha256:'ba6f2399257de017de4dc62b3f56b86d44238b0f3b9b9ff09e31e003e6cb9c29',
+    zipBytes:'6327348' };
+  assert.doesNotThrow(()=>assertConfig(target));
+  assert.equal(expectedGrant(target).pr,1977);
+  assert.equal(expectedGrant(target).candidate_status,'INACTIVE');
+  assert.equal(expectedGrant(target).activation,'PROHIBITED');
+  assert.equal(expectedGrant(target).certification,'PROHIBITED');
+  for(const patch of [
+    {tenantId:'7'}, {courseId:'51'}, {packageSha256:'f'.repeat(64)},
+    {zipBytes:'6327347'}, {zipBytes:'6327349'}
+  ]) assert.throws(()=>assertConfig({...target,...patch}),/F5_NR26_RC5_EXACT_TENANT_COURSE_ZIP_SCOPE_REQUIRED/);
+  assert.throws(()=>checkGrantBody(grantBody(base),target),/F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.throws(()=>checkGrantBody(grantBody(target),base),/F5_F0_GRANT_SCOPE_OR_SHA_MISMATCH/);
+  assert.match(readFileSync('.github/workflows/staging-scorm-f5-readiness.yml','utf8'),
+    /- '1977'/);
+});
+
 test('requires all official release gates on the exact candidate SHA', () => {
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const runs = names.map(name => ({ name, head_sha: sha, status: 'completed', conclusion: 'success' }));
   assert.doesNotThrow(() => checkReleaseChecks(runs, sha));
   assert.throws(() => checkReleaseChecks(runs.map(x => ({ ...x, head_sha: 'c'.repeat(40) })), sha),
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
   assert.throws(() => checkReleaseChecks(runs.slice(1), sha),
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
+  assert.throws(() => checkReleaseChecks(
+    runs.filter(run => run.name !== 'lms-scorm-browser-e2e'), sha),
+    /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/,
+    'F5 cannot authorize staging without its Chromium/WebKit browser gate');
 });
 
 test('verifies open exact PR, fresh immutable issue grant and both repository admins using GET-only adapter', async () => {
@@ -67,7 +122,7 @@ test('verifies open exact PR, fresh immutable issue grant and both repository ad
     body: grantBody(base), user: { login: 'owner-user' }
   };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const calls = [];
   const get = async path => {
     calls.push(path);
@@ -91,7 +146,7 @@ test('accepts exact merged release SHA using required gates on the associated PR
   const reviewedHeadSha = 'e'.repeat(40);
   const merged = { ...base, sha: mergeSha };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const calls = [];
   const get = async path => {
     calls.push(path);
@@ -122,7 +177,7 @@ test('accepts newer main release only with authenticated ancestry from original 
   const reviewedHeadSha = 'e'.repeat(40);
   const current = { ...base, sha: releaseSha };
   const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'];
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
   const request = `compare/${mergeSha}...${releaseSha}`;
   const get = async (path) => {
     if (path === `pulls/${PR}`) return {
@@ -168,7 +223,7 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
     };
     if (path === `commits/${reviewedHeadSha}/check-runs?per_page=100`) return {
       check_runs: ['lint','build-content-gates','worker-typecheck','frontend-coverage',
-        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'].map(name => ({
+        'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'].map(name => ({
         name, head_sha: checkSha, status: 'completed', conclusion: 'success'
       }))
     };
@@ -191,6 +246,38 @@ test('rejects a merged SHA not associated to the PR or checks from a different P
     /F5_EIGHT_RELEASE_GATES_AND_PR_CHECK_NOT_GREEN/);
 });
 
+test('rejects F0 grant expiring during remote admin permission verification', async () => {
+  const created = Date.now();
+  let clock = created + 11 * 60 * 60 * 1000;
+  const names = ['lint','build-content-gates','worker-typecheck','frontend-coverage',
+    'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'];
+  const get = async path => {
+    if (path === `pulls/${PR}`) return {
+      state: 'open', draft: false, base: { ref: 'main' },
+      head: { sha, repo: { full_name: REPO, fork: false } }
+    };
+    if (path === `commits/${sha}/check-runs?per_page=100`) return {
+      check_runs: names.map(name => ({
+        name, head_sha: sha, status: 'completed', conclusion: 'success'
+      }))
+    };
+    if (path === 'issues/comments/12345') return {
+      issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
+      created_at: new Date(created).toISOString(),
+      updated_at: new Date(created).toISOString(),
+      body: grantBody(base), user: { login: 'owner-user' }
+    };
+    if (path === 'collaborators/owner-user/permission') {
+      clock = created + 13 * 60 * 60 * 1000;
+      return { permission: 'admin' };
+    }
+    throw Error(`unexpected request ${path}`);
+  };
+  await assert.rejects(verify(base, 'read-token', get, () => clock),
+    /F5_F0_GRANT_EXPIRED/,
+    'authorization must be fresh when all remote reads have completed');
+});
+
 test('rejects edited/wrong issue, stale authorization, draft PR and non-admin actor', async () => {
   const now = Date.now();
   const setup = overrides => async path => {
@@ -200,7 +287,7 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
     };
     if (path.startsWith(`commits/${sha}/check-runs`)) return { check_runs: [
       'lint','build-content-gates','worker-typecheck','frontend-coverage',
-      'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','🧪 Check PR'
+      'worker-tests-1','worker-tests-2','lms-smoke','public-e2e','lms-scorm-browser-e2e','🧪 Check PR'
     ].map(name => ({ name, head_sha: sha, status: 'completed', conclusion: 'success' })) };
     if (path === 'issues/comments/12345') return {
       issue_url: `https://api.github.com/repos/${REPO}/issues/776`,
@@ -219,7 +306,7 @@ test('rejects edited/wrong issue, stale authorization, draft PR and non-admin ac
 test('readiness workflow invokes the pinned F0 executor only after exact grant and provenance guards', () => {
   const workflow = readFileSync('.github/workflows/staging-scorm-f5-readiness.yml', 'utf8');
   const guard = readFileSync('scripts/staging/f5-candidate-approval-guard.mjs', 'utf8');
-  for (const required of ['grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
+  for (const required of ['pr_number:', 'F5_PR_NUMBER:', 'grant_id:', 'tenant_id:', 'course_id:', 'package_sha256:',
     'zip_bytes:', 'operation_id:', 'f5-candidate-approval-guard.mjs',
     'run-f5-inactive-candidate.mjs', 'F5_F0_ADAPTER_MODULE',
     'F5_F0_ADAPTER_SHA256', 'SCORM_QA_ACCESS_TOKEN',

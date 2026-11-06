@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import { resolveScormLaunchFileHref, resolveScormVersion } from './scorm-manifest-parser';
 
 export type LmsStructuredContentType = 'scorm' | 'h5p';

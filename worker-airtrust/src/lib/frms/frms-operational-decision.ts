@@ -112,6 +112,8 @@ const ALERT_PRIORIDADE: FrmsOperationalSnapshotAlertCode[] = [
 const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   ROLLING_REGULATORY_EVIDENCE_MISSING:
     'Histórico móvel de voo e jornada ainda incompleto para a avaliação regulatória',
+  ROLLING_FLIGHT_COVERAGE_INCOMPLETE:
+    'Nem todos os dias esperados dos acumulados têm origem operacional confirmada; os totais podem estar subestimados',
   CALENDAR_YEAR_FLIGHT_EVIDENCE_MISSING:
     'Horas de voo do ano-calendário ainda incompletas para a avaliação regulatória',
   REST_EVIDENCE_UNKNOWN:
@@ -138,6 +140,10 @@ const COMPLIANCE_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze
     'Regra de contabilização da atividade ainda não pôde ser confirmada',
   DUTY_INTERVAL_MISSING:
     'Horário de início ou fim da jornada ainda não foi informado',
+  LAW_ART42_DUTY_TIMES_INCOMPLETE:
+    'Histórico das madrugadas possui jornadas sem horários para verificar o art. 42',
+  LAW_DUTY_CREW_COMPOSITION_UNKNOWN:
+    'Jornada acima de 11 h: a composição da tripulação não foi informada para confirmar o limite legal',
   MISSION_WORK_CONTEXT_INCOMPLETE:
     'Histórico do período operacional ainda está incompleto',
   POST_MISSION_WORK_CONTEXT_INCOMPLETE:

@@ -1,0 +1,137 @@
+name: Staging FRMS F0B New Synthetic Cases (No Legacy Repair)
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact gated main SHA deployed on staging Worker and Pages
+        required: true
+        type: string
+      mode:
+        required: true
+        type: choice
+        options: [inspect, apply, rollback]
+      confirmation:
+        description: AIRTRUST_STAGING_FRMS_F0B_INSPECT/APPLY/ROLLBACK
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+jobs:
+  guard:
+    name: Verify protected SHA, gates and staging provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm exact main, scope and mode
+        env:
+          EXPECTED: ${{ inputs.expected_main_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == Airtrust-Org/airtrust && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ && "$EXPECTED" == "$GITHUB_SHA" ]]
+          [[ "$MODE" == inspect || "$MODE" == apply || "$MODE" == rollback ]]
+          [[ "$CONFIRM" == "AIRTRUST_STAGING_FRMS_F0B_${MODE^^}" ]]
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$EXPECTED" ]]
+      - name: Eight mandatory release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.expected_main_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Exact Worker and Pages source SHA
+        env:
+          EXPECTED: ${{ inputs.expected_main_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          const s=process.env.EXPECTED;
+          const r=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version',{headers:{'Cache-Control':'no-cache'}});
+          if(!r.ok)throw Error('FRMS_STAGING_WORKER_UNAVAILABLE');
+          const v=(await r.json())?.data;
+          if(v?.sourceSha!==s||v?.environment!=='staging')throw Error('FRMS_STAGING_WORKER_SHA_MISMATCH');
+          const p=await fetch('https://staging.airtrust.pages.dev/',{headers:{'Cache-Control':'no-cache'}});
+          if(!p.ok||!(await p.text()).includes(s.slice(0,7)))throw Error('FRMS_STAGING_PAGES_SHA_MISMATCH');
+          console.log('FRMS_F0B_STAGING_PROVENANCE_PASS');
+          NODE
+  qa-cases:
+    name: Pinned D1 QA fixture and guarded pre/postconditions
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      FRMS_F0B_EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      FRMS_F0B_CONFIRM: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned Worker tooling
+        run: npm --prefix worker-airtrust ci
+      - name: Run focused SQLite contract and old-row preservation tests
+        run: node --test scripts/__tests__/frms-f0b-new-cases.test.mjs
+      - name: Pin actual staging D1 UUID
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          cd worker-airtrust
+          npx wrangler d1 info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-f0b-d1.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const d=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/frms-f0b-d1.json','utf8'));
+          const id=String(d.uuid??d.database_id??d.id??d.result?.uuid??'');
+          if(id!=='bf9963f4-eb12-439b-a830-20bbf577ac22')throw Error('FRMS_F0B_D1_UUID_MISMATCH');
+          console.log('FRMS_F0B_STAGING_DB_PINNED');
+          NODE
+      - name: Inspect synthetic tenant and legacy snapshot (SELECT only)
+        run: node scripts/staging/frms-f0b-new-cases.mjs --inspect
+      - name: Capture D1 Time Travel recovery bookmark before writing
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd worker-airtrust
+          npx wrangler d1 time-travel info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-f0b-recovery.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          const r=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/frms-f0b-recovery.json','utf8'));
+          const b=String(r.bookmark??r.result?.bookmark??'');
+          if(b.length<8)throw Error('FRMS_F0B_RECOVERY_POINT_MISSING');
+          appendFileSync(process.env.GITHUB_ENV,'FRMS_F0B_RECOVERY_VERIFIED=true\n');
+          console.log('FRMS_F0B_RECOVERY_BOOKMARK_CAPTURED');
+          NODE
+      - name: Apply or compensate only the eight NEW synthetic rows
+        if: ${{ inputs.mode != 'inspect' }}
+        env:
+          MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == apply ]]; then
+            node scripts/staging/frms-f0b-new-cases.mjs --apply
+          elif [[ "$MODE" == rollback ]]; then
+            node scripts/staging/frms-f0b-new-cases.mjs --rollback
+          else
+            exit 1
+          fi
+      - name: Report bounded result
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          echo "Staging-only F0B: $MODE; synthetic tenant 999013, eight historic rows preserved." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production writes; browser acceptance and maintenance RBAC remain independent gates." >> "$GITHUB_STEP_SUMMARY"

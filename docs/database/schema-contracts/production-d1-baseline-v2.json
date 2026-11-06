@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-10-24",
-    "last_reconciled_against": "0564 Pilot supplier identity review-only, 0568 SCORM F5 staging-only applied, 0566 SCORM handoff pending apply",
-    "schema_v2_digest": "673bea714daec7d57dac49ca46e26e749adeaed7a9f91e2bd9b87985bc6400e1",
+    "last_reconciled_at": "2026-11-05",
+    "last_reconciled_against": "0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
+    "schema_v2_digest": "410664b87d4070261ed34e095d16a7dc2851caca58b557587e128e44fa68dcab",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1273,6 +1273,21 @@
       "note": "0528 is an additive tenant-scoped responsibility registry. It separates Training Compliance alert recipients from operational setor access, enforces cross-tenant guards, rewrites no existing RBAC/user/training data, and preserves legacy recipients only as a runtime fallback until each sector is explicitly configured. Remote apply requires staging validation, a recovery point, ledger verification and exact-SHA production authorization."
     },
     {
+      "change_file": "0529_hfa_integration_bridge.sql",
+      "change_id": "hfa-integration-bridge-0529",
+      "sha256": "09d17ed2551b6d63ccd01677eb47cd7bb758c295784df4f1afaead06e1dc62f4",
+      "targets": [
+        "integracoes_hfa_config",
+        "integracoes_hfa_eventos"
+      ],
+      "domain": "SGSO / external HFA Safety integration bridge",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "hfa-integration-bridge-0529.json",
+      "evidence": "worker-airtrust/schema-v2/plans/hfa-integration-bridge-0529.md",
+      "note": "0529 is an additive tenant-scoped integration boundary. It stores only encrypted HFA connection configuration and RELPREV-to-HFA link/status metadata, exports no event automatically, starts no HFA analysis, consumes no HFA credit, and rewrites no existing SGSO record. Remote apply requires staging validation, recovery point, ledger verification and exact-SHA production authorization."
+    },
+    {
       "change_file": "0530_training_qualification_catalog_placeholders.sql",
       "change_id": "training-qualification-catalog-placeholders-0530",
       "sha256": "20c203e9e7976ca4b1376ee44c3a6a81328a11fe6a6c585ecca1f0ba61679d9b",
@@ -1677,6 +1692,64 @@
       "reviewed_manifest": "lms-scorm-edition-handoff-0566.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-handoff-0566.md",
       "note": "DDL only, no archive/reset/user write. Writer default-off until governed schema, authenticated handoff and end-to-end browser validation."
+    },
+    {
+      "change_file": "0569_lms_scorm_edition_policy_approvals.sql",
+      "change_id": "lms-scorm-edition-policy-approvals-0569",
+      "sha256": "171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad",
+      "targets": [
+        "lms_matricula_ciclos",
+        "lms_scorm_package_approvals",
+        "lms_scorm_package_versions"
+      ],
+      "domain": "LMS SCORM: edition-pinned assessment policy + append-only administrative package approvals",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-edition-policy-approvals-0569.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-edition-policy-approvals-0569.md",
+      "note": "DDL only, zero backfill, no write to scores/completions/qualifications/certificates. Schema must be applied BEFORE the Worker that reads these columns."
+    },
+    {
+      "change_file": "0570_lms_scorm_formative_approval_renewals.sql",
+      "change_id": "lms-scorm-formative-approval-renewals-0570",
+      "sha256": "209204d75995b90f650e36b6bd64ebfdce202758f8b7cf5e871d53d9535eb90f",
+      "targets": [
+        "lms_scorm_package_approval_renewals"
+      ],
+      "domain": "LMS SCORM: immutable, scope-checked formative approval renewal chain",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-scorm-formative-approval-renewals-0570.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-scorm-formative-approval-renewals-0570.md",
+      "note": "DDL-only, zero backfill. Staging Schema 0569 is prerequisite; initial approvals, enrollments, progress, qualifications and certificates remain untouched."
+    },
+    {
+      "change_file": "0573_frms_checkin_kss_provenance.sql",
+      "change_id": "frms-checkin-kss-provenance-0573",
+      "sha256": "06fa491147a5898b334abbe12610befc58f2f483ac6d1eecb03b957adc8ec34d",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS FAD-003: nullable row-level KSS provenance, source-verified daily screening and legacy UNKNOWN preservation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-checkin-kss-provenance-0573.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-checkin-kss-provenance-0573.md",
+      "note": "Review-only Schema V2 candidate. The 13 scoped production snapshot tables do not include frms_fadiga_checkin; this is repository DDL only, not staging/production proof. No historical backfill; Worker using kss_provenance must not deploy before governed schema apply."
+    },
+    {
+      "change_file": "0574_lms_pptx_slide_evidence.sql",
+      "change_id": "lms-pptx-slide-evidence-0574",
+      "sha256": "65919384fc508a02975890f114230b8c958d44450079c8a97d2e75f28904ecbd",
+      "targets": [
+        "lms_pptx_slide_evidences"
+      ],
+      "domain": "LMS: immutable tenant/cycle/asset-bound PPTX slide observations for qualifying completion",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-pptx-slide-evidence-0574.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
+      "note": "Additive only, no backfill, no session grants or retroactive qualifications. Must apply Schema V2 in staging/production before enabling new Worker endpoints."
     }
   ]
 }

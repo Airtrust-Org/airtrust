@@ -1,14 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, XCircle, Download } from 'lucide-react';
+import type { ValidationResult } from '@/react-app/types/import-validation';
 
-export interface ValidationResult {
-  linha: number;
-  tipo: 'erro' | 'aviso' | 'sucesso';
-  campo: string;
-  mensagem: string;
-  valorOriginal: any;
-  valorSugerido?: any;
-}
+export type { ValidationResult } from '@/react-app/types/import-validation';
 
 interface ImportValidatorProps {
   dados: any[];
@@ -154,11 +148,11 @@ export function ImportValidator({ dados, onValidationComplete, validationRules, 
                     <td className="px-4 py-2 text-gray-600">{v.mensagem}</td>
                     <td className="px-4 py-2">
                       <span className="text-sm text-gray-700">{String(v.valorOriginal || '-')}</span>
-                      {v.valorSugerido && (
+                      {v.valorSugerido ? (
                         <span className="block text-sm text-green-600 mt-1">
                           → Sugestão: {String(v.valorSugerido)}
                         </span>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 ))}

@@ -4,21 +4,33 @@ import {
   canStartSupportReadOnlySession,
   isPlatformAdminAccess,
   resolvePlatformAccessState,
+  resetPlatformAccessCache,
+  getPlatformAccessCacheSize,
 } from '../../lib/rbac/platform-access';
 import { resetSchemaCache } from '../../utils/db-schema';
+
+beforeEach(() => {
+  resetSchemaCache();
+  resetPlatformAccessCache();
+});
 
 function createDb(options: {
   hasPlatformRolesTable?: boolean;
   hasSupportGrantsTable?: boolean;
   roles?: Array<'platform_admin' | 'support_read_only' | 'support_elevated'>;
   grants?: Array<{ empresa_id: number; access_level: 'read_only' | 'elevated' }>;
+  roleReadFailures?: number;
+  roleReadError?: string;
 } = {}) {
   const {
     hasPlatformRolesTable = true,
     hasSupportGrantsTable = true,
     roles = [],
     grants = [],
+    roleReadFailures = 0,
+    roleReadError = 'D1_ERROR: SQLITE_BUSY: database is locked',
   } = options;
+  let failuresLeft = roleReadFailures;
 
   const prepare = vi.fn((query: string) => ({
     bind: vi.fn((...args: unknown[]) => ({
@@ -33,6 +45,10 @@ function createDb(options: {
       }),
       all: vi.fn(async () => {
         if (query.includes('FROM user_platform_roles')) {
+          if (failuresLeft > 0) {
+            failuresLeft -= 1;
+            throw new Error(roleReadError);
+          }
           return { results: roles.map((role_code) => ({ role_code })) };
         }
         if (query.includes('FROM support_access_grants')) {
@@ -109,6 +125,82 @@ describe('platform access foundation', () => {
     await resolvePlatformAccessState(db, 11);
 
     const schemaProbes = prepare.mock.calls.filter(([query]) => String(query).includes('sqlite_master'));
-    expect(schemaProbes).toHaveLength(2);
+    expect(schemaProbes).toHaveLength(1);
+  });
+
+  it('não consulta concessões de suporte sem role persistida de suporte', async () => {
+    const { db, prepare } = createDb({
+      roles: ['platform_admin'],
+      grants: [{ empresa_id: 7, access_level: 'read_only' }],
+    });
+    const state = await resolvePlatformAccessState(db, 44);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(state.supportGrants).toEqual([]);
+    expect(prepare.mock.calls.some(([query]) =>
+      String(query).includes('FROM support_access_grants'))).toBe(false);
+  });
+
+  it('repete apenas uma vez uma leitura transitória e preserva papel persistido', async () => {
+    const { db, prepare } = createDb({
+      roles: ['platform_admin'],
+      roleReadFailures: 1,
+    });
+    const state = await resolvePlatformAccessState(db, 44);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+  });
+
+  it('repete e recupera de erros D1_EXEC_ERROR 503 e connection lost preservando fail-closed', async () => {
+    const { db, prepare } = createDb({
+      roles: ['platform_admin'],
+      roleReadFailures: 1,
+      roleReadError: 'D1_EXEC_ERROR: Error in D1: 503 Service Unavailable',
+    });
+    const state = await resolvePlatformAccessState(db, 44);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+  });
+
+  it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
+    const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 2 });
+    await expect(resolvePlatformAccessState(transient.db, 44)).rejects.toThrow('SQLITE_BUSY');
+    resetSchemaCache();
+    const schema = createDb({
+      roles: ['platform_admin'], roleReadFailures: 1,
+      roleReadError: 'D1_ERROR: no such column: expires_at',
+    });
+    await expect(resolvePlatformAccessState(schema.db, 44)).rejects.toThrow('no such column');
+    expect(schema.prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(1);
+  });
+
+  it('reutiliza o micro-cache positivo em chamadas subsequentes dentro do TTL', async () => {
+    const { db, prepare } = createDb({ roles: ['platform_admin'] });
+
+    const state1 = await resolvePlatformAccessState(db, 44);
+    expect(state1.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsFirst = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsFirst).toBe(1);
+
+    // Segunda chamada com mesmo userId reaproveita o cache e não consulta D1
+    const state2 = await resolvePlatformAccessState(db, 44);
+    expect(state2.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsSecond = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsSecond).toBe(1);
+
+    // Reset do cache força nova consulta ao D1
+    resetPlatformAccessCache();
+    const state3 = await resolvePlatformAccessState(db, 44);
+    expect(state3.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsThird = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsThird).toBe(2);
   });
 });

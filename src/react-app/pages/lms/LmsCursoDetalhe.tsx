@@ -16,8 +16,9 @@ import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { useActivateScormPackageVersion, useLmsCurso, useMinhasMatriculas, useMatricularCurso, useRunScormPackageConformance, useScormPackageVersions } from '@/react-app/hooks/useLms';
-import type { LmsMatricula, ScormPackageVersionRow } from '@/react-app/hooks/useLms';
+import { useLmsCurso, useMinhasMatriculas, useMatricularCurso, useScormPackageVersions } from '@/react-app/hooks/useLms';
+import type { LmsMatricula } from '@/react-app/hooks/useLms';
+import ScormEditionPanel from './ScormEditionPanel';
 import {
   formatMinutes,
   getMatriculaStatusMeta,
@@ -28,8 +29,9 @@ import {
   LmsPageShell,
   LmsStatPill,
   LmsSurface,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 import { getAdminCoursePreviewPath, supportsAdminCoursePreview } from './lmsAdminPreview';
+import { getCourseAvailability } from './lmsCourseAvailability';
 
 export default function LmsCursoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -38,18 +40,20 @@ export default function LmsCursoDetalhe() {
   const { isAdmin, isGestor } = usePermissions();
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
+  const canManage = isAdmin || isGestor;
   const { data: curso, isLoading } = useLmsCurso(Number(id));
-  const { data: matriculas } = useMinhasMatriculas();
+  const { data: matriculas } = useMinhasMatriculas(!canManage);
   const matricular = useMatricularCurso();
 
-  const matricula: LmsMatricula | undefined = matriculas?.find((m) => m.curso_id === Number(id));
-  const canManage = isAdmin || isGestor;
+  const matricula: LmsMatricula | undefined = canManage
+    ? undefined
+    : matriculas?.find((m) => m.curso_id === Number(id));
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const canPreview = Boolean(previewPath);
   const hasContent = supportsAdminCoursePreview(curso);
   const packageVersions = useScormPackageVersions(Number(id), canManage && curso?.tipo_conteudo === 'scorm');
-  const runConformance = useRunScormPackageConformance(Number(id));
-  const activatePackage = useActivateScormPackageVersion(Number(id));
+  const activePackage = packageVersions.data?.find((pkg) => pkg.status === 'ACTIVE' || pkg.active);
+  const availability = curso ? getCourseAvailability(curso, hasContent, activePackage) : null;
 
   const learningGoals = useMemo(() => {
     if (!curso) return [];
@@ -63,14 +67,12 @@ export default function LmsCursoDetalhe() {
             : curso.tipo_conteudo === 'pptx'
               ? 'Percorrer todos os slides da apresentação para concluir o treinamento e gerar a evidência operacional.'
               : 'Consumir o conteúdo publicado e registrar sua evolução na trilha de aprendizagem.',
-      curso.scorm_mastery_score
-        ? `Alcançar pelo menos ${curso.scorm_mastery_score}% na avaliação para concluir o treinamento.`
-        : 'Concluir todos os passos definidos no conteúdo para avançar.',
+      availability!.objective,
       curso.gerar_qualificacao_ao_concluir === 1
         ? 'Gerar automaticamente a qualificação vinculada ao finalizar o curso.'
         : 'Salvar o histórico de conclusão no módulo LMS para acompanhamento da empresa.',
     ];
-  }, [curso]);
+  }, [curso, availability?.objective]);
 
   function navigatePlayer(matriculaId: number, review?: boolean) {
     if (!curso) return;
@@ -180,7 +182,9 @@ export default function LmsCursoDetalhe() {
           title={curso.titulo}
           subtitle={
             canManage
-              ? 'Detalhes do curso com acesso direto ao player de teste e à gestão.'
+              ? hasContent
+                ? 'Detalhes do curso com acesso direto ao player de teste e à gestão.'
+                : 'Detalhes administrativos do curso. O player depende do envio de conteúdo válido.'
               : 'Detalhe do treinamento com progresso, objetivos e acesso direto ao player.'
           }
           actions={
@@ -229,9 +233,7 @@ export default function LmsCursoDetalhe() {
                   {curso.scorm_versao ? `SCORM ${curso.scorm_versao}` : 'Conteúdo publicado'}
                 </LmsInfoChip>
                 <LmsInfoChip icon={<Award className="h-3.5 w-3.5" />}>
-                  {curso.scorm_mastery_score
-                    ? `Meta mínima ${curso.scorm_mastery_score}%`
-                    : 'Sem nota mínima definida'}
+                  {availability?.criterion}
                 </LmsInfoChip>
                 <LmsInfoChip icon={<Sparkles className="h-3.5 w-3.5" />}>
                   {curso.gerar_qualificacao_ao_concluir === 1
@@ -347,7 +349,9 @@ export default function LmsCursoDetalhe() {
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Disponibilidade</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.publicado
-                    ? 'Publicado no catálogo atual.'
+                    ? hasContent
+                      ? 'Publicado no catálogo e disponível para execução.'
+                      : 'Publicado no catálogo, mas indisponível para execução até receber um pacote válido.'
                     : 'Ainda em rascunho; visível apenas para gestão.'}
                 </p>
               </div>
@@ -355,7 +359,9 @@ export default function LmsCursoDetalhe() {
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tipo de conteúdo</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {curso.tipo_conteudo === 'scorm'
-                    ? 'Executado no player SCORM protegido, com persistência de progresso.'
+                    ? hasContent
+                      ? 'Executado no player SCORM protegido, com persistência de progresso.'
+                      : 'SCORM configurado, aguardando pacote executável.'
                     : curso.tipo_conteudo === 'h5p'
                       ? 'Executado via player H5P com eventos xAPI.'
                       : 'Conteúdo em formato de vídeo ou mídia linear.'}
@@ -385,7 +391,22 @@ export default function LmsCursoDetalhe() {
             </div>
           </LmsSurface>
         </div>
-        {canManage && curso.tipo_conteudo === 'scorm' ? <LmsSurface title="Quality Gate SCORM" description="Candidatos só substituem o pacote ativo após os gates."><div className="space-y-2">{(packageVersions.data?.data ?? []).map((pkg: ScormPackageVersionRow) => <div key={pkg.packageId} className="rounded-lg border p-3 text-sm"><p className="font-medium">{pkg.status} · SHA {String(pkg.packageSha256 ?? '').slice(0, 12)}</p><p>Estático: {pkg.structural?.status ?? '—'} · Runtime: {pkg.runtime?.status ?? pkg.conformance?.status ?? 'PENDENTE'} · Certificação funcional: {pkg.functionalCertification?.status === 'CERTIFIED' ? 'certificada' : 'pendente'} · Publicável: {pkg.publishable ? 'sim' : 'não'}</p>{(pkg.runtime?.errors ?? pkg.completionManifest?.errors ?? []).map((reason: string) => <p key={reason} className="text-rose-600">{reason}</p>)}<div className="mt-2 flex gap-2"><Button variant="secondary" loading={runConformance.isPending} onClick={() => void runConformance.mutateAsync(pkg.packageId)}>Executar conformance</Button><Button variant="primary" disabled={!pkg.publishable} loading={activatePackage.isPending} onClick={() => void activatePackage.mutateAsync(pkg.packageId)}>Ativar versão</Button></div></div>)}</div></LmsSurface> : null}
+        {canManage && curso.tipo_conteudo === 'scorm' ? (
+          <LmsSurface title="Edições do pacote SCORM" description="Para ZIPs formativos válidos, selecionar o arquivo substitui automaticamente a edição atual. ZIPs avaliativos mantêm seus controles de certificação.">
+            {packageVersions.isPending ? (
+              <p role="status" className="text-sm text-slate-500">Consultando edições SCORM…</p>
+            ) : packageVersions.isError ? (
+              <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-rose-700">
+                <span>Não foi possível consultar as edições do pacote. O envio não deve ser repetido sem verificar o recibo.</span>
+                <Button variant="secondary" type="button" onClick={() => void packageVersions.refetch()}>
+                  Tentar novamente
+                </Button>
+              </div>
+            ) : (
+              <ScormEditionPanel cursoId={Number(id)} versions={packageVersions.data ?? []} isAdmin={isAdmin} />
+            )}
+          </LmsSurface>
+        ) : null}
         {curso.conteudo_programatico ? (
           <LmsSurface
             title="Conteúdo programático"

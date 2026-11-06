@@ -87,6 +87,9 @@ export interface Env {
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
   // Default seguro (ausente/vazio) = desativado. 'all' = todas as empresas. Ou lista de ids separada por vírgula.
   CONTROLE_VOOS_FRMS_SHADOW_MODE_TENANTS?: string;
+  // Confirmed authoritative SIGVOOS scope + CV bridge acceptance per tenant.
+  // Do not use 'all'; absent = no source-day COMPLIANT attestation.
+  FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS?: string;
   // Experimental FRMS V3 preview: staging-only, explicit tenant CSV, never 'all'; absent = off.
   FRMS_V3_SHADOW_PREVIEW_TENANTS?: string;
   // Independent staging-only cohort research allowlist; default disabled, never 'all'.
@@ -158,6 +161,8 @@ export interface Env {
   // Feature flag for guarded Controle de Voos SIGVOOS shadow compare in staging.
   CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED?: string;
   SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
+  // Dedicated key for encrypting HFA integration tokens. No fallback key is accepted.
+  HFA_INTEGRATION_ENCRYPTION_KEY?: string;
   SIGVOOS_REAL_API_BASE_URL?: string;
   SIGVOOS_REAL_API_USERNAME?: string;
   SIGVOOS_REAL_API_PASSWORD?: string;
@@ -369,6 +374,7 @@ export interface Variables {
   empresaId: number;
   userEmail: string;
   userRole: string;
+  canonicalTenantRole?: string;
   funcionarioId?: number | null;
   platformAccessState?: PlatformAccessState;
   tenantContext: {

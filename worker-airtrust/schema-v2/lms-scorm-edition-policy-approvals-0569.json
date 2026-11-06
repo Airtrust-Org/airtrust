@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-scorm-edition-policy-approvals-0569",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0569_lms_scorm_edition_policy_approvals.sql",
+  "fileHash": "171edad097fa72aa12ebb2ae20a629cfe67264c074d9deef60d3a3305dda38ad",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-scorm-edition-policy-approvals-0569.md",
+  "planHash": "b1b93390616df33ad4e88aa5e3c3c6f269dae1d11fafd09f9e0991b227ecdab8"
+}

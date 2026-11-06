@@ -2,14 +2,9 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getActorId,
-  getEmpresaIdSafe,
-  getFlightOrThrow,
-  getFuncionarioIdForUser,
-  recordFlightEvent,
-} from '../repositories/controle-voos/rdv-repository';
-import { requireAnyRdvAccess } from '../services/controle-voos/rdv-workflow';
+import { getFlightOrThrow, getFuncionarioIdForUser, recordFlightEvent } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
+import { requireAnyRdvAccess } from '../middleware/controle-voos-rdv-access';
 import {
   buildFlightRelatedStatements,
   normalizeFlightRouteIds,

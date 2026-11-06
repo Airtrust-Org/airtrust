@@ -1,8 +1,5 @@
-import type { Context, Next } from 'hono';
-
-import { ApiError } from '../../middleware/error-handler';
-import type { Env } from '../../types';
-import { createLogger, type Logger } from '../../utils/logger';
+import { ApiError } from '../errors/api-error';
+import type { Logger } from '../../utils/logger';
 
 export type SchemaPresence = 'present' | 'absent' | 'unknown';
 
@@ -16,7 +13,7 @@ export type LmsSchemaSnapshot = {
   tableInfoRows: Record<string, Array<Record<string, unknown>>>;
 };
 
-const SNAPSHOT_KEY = 'lmsSchemaSnapshot';
+export const SNAPSHOT_KEY = 'lmsSchemaSnapshot';
 
 async function detectTable(db: D1Database, tableName: string): Promise<SchemaPresence> {
   try {
@@ -205,21 +202,4 @@ export function createSchemaSnapshotDb(db: D1Database, snapshot: LmsSchemaSnapsh
       };
     },
   });
-}
-
-export function getLmsSchemaSnapshot(c: Context): LmsSchemaSnapshot {
-  const snapshot = c.get(SNAPSHOT_KEY as never) as LmsSchemaSnapshot | undefined;
-  if (!snapshot) throw new ApiError('Snapshot de schema LMS não inicializado', 500);
-  return snapshot;
-}
-
-export async function installLmsSchemaSnapshot(c: Context<{ Bindings: Env }>, next: Next) {
-  const originalDb = c.env.DB;
-  const snapshot = await detectLmsSchemaSnapshot(originalDb);
-  const requestId = String(c.get('requestId' as never) ?? c.req.header('x-request-id') ?? '');
-  assertLmsSchemaKnown(snapshot, requestId || undefined, createLogger(c, 'LmsSchemaState'));
-
-  c.set(SNAPSHOT_KEY as never, snapshot as never);
-  c.env.DB = createSchemaSnapshotDb(originalDb, snapshot);
-  await next();
 }

@@ -12,6 +12,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {unzipSync} from 'fflate';
 import {chromium,webkit,expect} from '@playwright/test';
+import {scormGovernedDriverLimits} from './scorm-governed-driver-limits.mjs';
 
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const SHA=/^[a-f0-9]{64}$/;
@@ -98,7 +99,9 @@ export function validateIndependentDriver(driver,sha,files){
       'UNSUPPORTED_ACTION');
     if(a.op!=='click')check(typeof a.value==='string','ACTION_VALUE_MISSING');
   }
-  check(actions.length<=120&&driver.requiredContent.length<=120,'DRIVER_TOO_LARGE');
+  const limits=scormGovernedDriverLimits(files);
+  check(actions.length<=limits.maxActions&&
+    driver.requiredContent.length<=limits.maxContent,'DRIVER_TOO_LARGE');
   for(const entry of driver.requiredContent){
     check(typeof entry.selector==='string'&&entry.selector.length>0,'CONTENT_SELECTOR_MISSING');
   }

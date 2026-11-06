@@ -22,7 +22,7 @@ import { formatFrmsCheckinTime } from './frmsCheckinTime';
  *     mostramos "Não avaliado" (cinza).
  */
 import type { FrmsOperationalSnapshotItem } from '@/react-app/hooks/useFrmsOperationalSnapshot';
-import { trustedEffectiveness } from './frmsOperationalDecision';
+import { resolveFrmsCoordinationGuidance, trustedEffectiveness } from './frmsOperationalDecision';
 
 export type FrmsSignalTone = 'ok' | 'info' | 'warning' | 'critical' | 'unknown';
 
@@ -105,9 +105,19 @@ export function resolveDailyFatigueSignal(
       return { ...base, value: 'Pendente', tone: 'critical', detail };
     case 'AUSENTE':
       return { ...base, value: 'Não realizada', tone: 'critical', detail };
-    case 'NAO_APLICAVEL':
+    case 'NAO_APLICAVEL': {
+      const guidance = resolveFrmsCoordinationGuidance(item, item.data_operacional);
+      return {
+        ...base,
+        value: guidance.checkinLabel,
+        tone: guidance.requiresCheckin ? 'critical' : 'unknown',
+        detail: guidance.requiresCheckin
+          ? 'Escala, atividade ou quinzena exige check-in, mas o registro indica não aplicável. Confirmar a coleta; não autoriza liberação.'
+          : guidance.reason + ' Este status não comprova aptidão.',
+      };
+    }
     default:
-      return { ...base, value: 'N/A', tone: 'unknown' };
+      return { ...base, value: 'Não confirmado', tone: 'unknown' };
   }
 }
 

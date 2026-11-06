@@ -1,8 +1,8 @@
 import {
   hashSignableEdbPayload,
   type EdbFinalRecordSignatureType,
-} from './canonicalization';
-import type { EdbFlightRecord, EdbSignatureProof } from './contracts';
+} from '../../lib/edb/canonicalization';
+import type { EdbFlightRecord, EdbSignatureProof } from '../../lib/edb/contracts';
 
 export interface EdbSignatureBindingResult {
   type: EdbFinalRecordSignatureType;

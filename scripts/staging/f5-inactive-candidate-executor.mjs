@@ -19,6 +19,9 @@ export const F5_EXECUTOR_LIMITS = Object.freeze({
 const HEX64 = /^[a-f0-9]{64}$/;
 const HEX40 = /^[a-f0-9]{40}$/;
 const UUID = /^[0-9a-f-]{36}$/i;
+// F0 is a deliberately incomplete synthetic exercise: never accept a final,
+// unknown or missing enrollment status as proof of safe non-certification.
+const INCOMPLETE_SCORM_STATUSES = new Set(['NAO_INICIADO', 'EM_ANDAMENTO']);
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const fail = code => { throw new Error(`F5_EXECUTOR_${code}`); };
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -26,6 +29,7 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function validateF5ExecutionPlan(plan) {
   const c = plan?.candidate;
   const fixture = plan?.syntheticFixture;
+  const expiresAt = Date.parse(fixture?.expiresAt ?? '');
   if (plan?.schemaVersion !== 1 || plan?.scope !== 'ONE_INACTIVE_CANDIDATE' ||
       !HEX40.test(plan.releaseSha ?? '') || !HEX40.test(plan.harnessSha ?? '') ||
       plan?.mutex !== F5_EXECUTOR_LIMITS.mutex ||
@@ -39,7 +43,8 @@ export function validateF5ExecutionPlan(plan) {
       !HEX64.test(fixture?.provisioningReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.recoveryReceiptSha256 ?? '') ||
       !HEX64.test(fixture?.cleanupContractSha256 ?? '') ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(fixture?.expiresAt ?? '')) {
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(fixture?.expiresAt ?? '') ||
+      !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     fail('PLAN_OR_F0_RECEIPT_INVALID');
   }
   return plan;
@@ -106,7 +111,7 @@ function verifyQaEvidence(row, plan, candidate, phase) {
       row.enrollmentId !== fixture.enrollmentId || row.cycleId !== fixture.cycleId ||
       row.runId !== fixture.runId || row.approvalReceiptSha256 !== fixture.approvalReceiptSha256 ||
       row.qualificationHistoryCount !== 0 || row.certificateDocument !== null ||
-      row.completionStatus === 'CONCLUIDO' ||
+      !INCOMPLETE_SCORM_STATUSES.has(row.completionStatus) ||
       !Number.isSafeInteger(row.sessionCount) || row.sessionCount < 0 ||
       row.scormScoreRaw !== null ||
       (row.cmiSha256 !== null && !HEX64.test(row.cmiSha256 ?? '')) ||
@@ -125,7 +130,7 @@ function verifyExecutionEvidence(evidence, plan, candidate) {
       evidence.runId !== fixture.runId || evidence.servedPackageSha256 !== plan.candidate.packageSha256 ||
       evidence.committedPackageSha256 !== plan.candidate.packageSha256 ||
       !HEX64.test(evidence.cmiSha256 ?? '') || !HEX64.test(evidence.suspendSha256 ?? '') ||
-      !positive(evidence.sessionCount) || evidence.completionStatus === 'CONCLUIDO' ||
+      !positive(evidence.sessionCount) || !INCOMPLETE_SCORM_STATUSES.has(evidence.completionStatus) ||
       evidence.qualificationHistoryCount !== 0 || evidence.certificateDocument !== null ||
       evidence.runtimeVersion !== candidate.scormVersion || evidence.locationPersisted !== true ||
       evidence.suspendDataPersisted !== true || evidence.resumeVerified !== true ||
@@ -155,16 +160,31 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   if (!adapters || required.some(name => typeof adapters[name] !== 'function')) fail('ADAPTERS_INCOMPLETE');
 
   // Every precondition is proven before the first Worker write.
-  const authorized = await adapters.verifyAuthorization(plan);
-  if (authorized !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
-  const runtime = await adapters.readRuntimeProvenance();
-  if (runtime?.workerSha !== plan.releaseSha || runtime?.pagesSha !== plan.releaseSha.slice(0, 7) ||
-      runtime?.harnessSha !== plan.harnessSha) {
-    fail('STAGING_RUNTIME_SHA_MISMATCH');
-  }
+  const requireFreshAuthorization = async () => {
+    if (await adapters.verifyAuthorization(plan) !== true) fail('F0_AUTHORIZATION_NOT_VERIFIED');
+    // GitHub grant verification is asynchronous: the synthetic lease may
+    // expire while the remote authorization check is still in progress.
+    validateF5ExecutionPlan(plan);
+  };
+  await requireFreshAuthorization();
+  const requirePinnedRuntime = async () => {
+    const runtime = await adapters.readRuntimeProvenance();
+    if (runtime?.workerSha !== plan.releaseSha ||
+        runtime?.pagesSha !== plan.releaseSha.slice(0, 7) ||
+        runtime?.harnessSha !== plan.harnessSha) {
+      fail('STAGING_RUNTIME_SHA_MISMATCH');
+    }
+  };
+  await requirePinnedRuntime();
   if (await adapters.verifyF0Receipts(plan) !== true) fail('F0_RECEIPTS_NOT_VERIFIED');
   const sourceIdentity = await hashSource(source, c.zipBytes);
   if (sourceIdentity.sha256 !== c.packageSha256) fail('ORIGINAL_ZIP_SHA_MISMATCH');
+  // A long private ZIP hash may outlive the fixture lease. Recheck immediately
+  // before any side-effecting Worker request, not just at initial preflight.
+  validateF5ExecutionPlan(plan);
+  // A private ZIP hash can outlive or invalidate the grant. Recheck the
+  // immutable GitHub F0 authorization before the first Worker mutation.
+  await requireFreshAuthorization();
 
   let intakeStarted = false;
   let completionAttempted = false;
@@ -188,21 +208,35 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       const bytes = await source.read(offset, length);
       if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) fail('PRIVATE_SOURCE_SHORT_READ');
       uploadHash.update(bytes);
+      // A multipart transfer can outlive the synthetic fixture lease.
+      // Recheck both the synthetic fixture and F0 grant after each source
+      // read: a long multipart transfer can outlive either authorization.
+      validateF5ExecutionPlan(plan);
+      await requireFreshAuthorization();
+      validateF5ExecutionPlan(plan);
       await adapters.putIntakePart({
         tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
         partNumber: index + 1, contentLength: length, bytes,
       });
     }
     if (uploadHash.digest('hex') !== c.packageSha256) fail('PRIVATE_SOURCE_CHANGED_DURING_UPLOAD');
+    // Completion finalizes an intake even if the grant was revoked after
+    // the last part. Check again before the final side-effect.
+    validateF5ExecutionPlan(plan);
+    await requireFreshAuthorization();
+    validateF5ExecutionPlan(plan);
     completionAttempted = true;
     const uploaded = await adapters.completeIntake({
       tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
     });
-    completionAttempted = false;
-    intakeStarted = false;
+    // HTTP 200 can still contain an incomplete or untrusted candidate receipt.
+    // Keep the operation ambiguous until ownership and static gates are proven;
+    // compensation must resolve it by operation ID before deciding what to remove.
     if (uploaded?.createdByOperation === true &&
         uploaded?.alreadyExisted === false) candidate = uploaded;
     candidate = verifyInactiveQualityGate(uploaded, plan);
+    completionAttempted = false;
+    intakeStarted = false;
 
     const d1Candidate = await adapters.readCandidateD1({ tenantId: c.tenantId,
       courseId: c.courseId, packageId: candidate.packageId, packageSha256: c.packageSha256 });
@@ -214,25 +248,47 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
     if (r2Candidate?.source !== 'WORKER_R2_CANDIDATE_ASSET_READBACK' ||
         r2Candidate.packageId !== candidate.packageId || r2Candidate.packageSha256 !== c.packageSha256 ||
         r2Candidate.assetSha256 !== candidate.r2Readback.launchAssetSha256 ||
-        r2Candidate.active === true) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
+        r2Candidate.active !== false) fail('R2_CANDIDATE_ASSET_READBACK_MISMATCH');
 
+    // Intake and R2 readback may take minutes. A staging release that changes
+    // after preflight must not receive a synthetic enrollment or browser QA.
+    // Compensate the operation-owned inactive candidate on provenance drift.
+    validateF5ExecutionPlan(plan);
+    await requirePinnedRuntime();
+    validateF5ExecutionPlan(plan);
+    // Intake/readback can be lengthy. A revoked or expired F0 grant must
+    // not authorize a new synthetic binding after those operations.
+    await requireFreshAuthorization();
     syntheticTouched = true;
     const before = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'BEFORE',
     }), plan, candidate, 'BEFORE');
+    validateF5ExecutionPlan(plan);
+    // Binding/readback may also cross the grant expiry or a revocation.
+    // Compensation remains available even when this check fails.
+    await requireFreshAuthorization();
+    // The BEFORE readback can span a staging rollout. Do not start browser QA
+    // against a different Worker/Pages/harness than the authorized release.
+    await requirePinnedRuntime();
+    validateF5ExecutionPlan(plan);
     const execution = verifyExecutionEvidence(await adapters.runSyntheticCandidate({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       packageSha256: c.packageSha256, scormVersion: candidate.scormVersion,
       enrollmentId: f.enrollmentId,
       cycleId: f.cycleId, runId: f.runId,
     }), plan, candidate);
+    // A rollout during browser execution invalidates attribution of the CMI
+    // and suspend/resume receipts to the pinned release; recover synthetics.
+    validateF5ExecutionPlan(plan);
+    await requirePinnedRuntime();
     const after = verifyQaEvidence(await adapters.readQaEvidence({
       tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,
       enrollmentId: f.enrollmentId, packageSha256: c.packageSha256, phase: 'AFTER',
     }), plan, candidate, 'AFTER');
     if (after.cmiSha256 !== execution.cmiSha256 || after.suspendSha256 !== execution.suspendSha256 ||
-        after.sessionCount < before.sessionCount + 1 || after.servedPackageSha256 !== c.packageSha256 ||
+        after.sessionCount < before.sessionCount + 1 || after.sessionCount < execution.sessionCount ||
+        after.servedPackageSha256 !== c.packageSha256 ||
         after.committedPackageSha256 !== c.packageSha256) fail('D1_EXECUTION_EVIDENCE_NOT_PERSISTED');
 
     const cleanupReceipt = await adapters.cleanupSyntheticCandidate({
@@ -268,7 +324,14 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
   } catch (error) {
     primaryError = error;
     const recoveryErrors = [];
+    // Do not remove a package while its synthetic enrollment/cycle may still
+    // reference it. A failed recovery requires operator reconciliation first.
+    let syntheticRecoveryVerified = !syntheticTouched;
     if (completionAttempted) {
+      // The complete response may be HTTP 200 yet fail its quality/ownership
+      // gate. Never delete by an unverified packageId from that response.
+      // Only an operation-scoped Worker resolution can establish ownership.
+      candidate = null;
       try {
         const resolution = await adapters.resolveAmbiguousIntake({
           tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
@@ -282,6 +345,9 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
         if (resolution.state === 'CANDIDATE_PRESENT') {
           if (!UUID.test(resolution.candidate?.packageId ?? '') ||
               resolution.candidate?.packageSha256 !== c.packageSha256 ||
+              // Even a verified operation status cannot authorize deleting an
+              // active package. Require the inactive boolean in this core gate.
+              resolution.candidate?.active !== false ||
               resolution.candidate?.createdByOperation !== true ||
               resolution.candidate?.alreadyExisted !== false) fail('AMBIGUOUS_CANDIDATE_OWNERSHIP_UNPROVEN');
           candidate = resolution.candidate;
@@ -289,8 +355,17 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
       } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
     if (intakeStarted) {
-      try { await adapters.abortIntake({ tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId }); }
-      catch (recoveryError) { recoveryErrors.push(recoveryError); }
+      try {
+        const abort = await adapters.abortIntake({
+          tenantId: c.tenantId, courseId: c.courseId, operationId: c.operationId,
+        });
+        // A successful HTTP envelope alone does not prove multipart teardown.
+        // The Worker must attest abort for this exact operation (including an
+        // idempotent already-clean response), or require manual recovery.
+        if (abort?.aborted !== true || abort?.operationId !== c.operationId) {
+          fail('INTAKE_ABORT_RECEIPT_INVALID');
+        }
+      } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
     if (syntheticTouched) {
       try {
@@ -303,9 +378,13 @@ export async function executeF5InactiveCandidate({ plan, source, adapters }) {
             !HEX64.test(recovery?.receiptSha256 ?? '')) {
           fail('RECOVERY_RECEIPT_INVALID');
         }
+        syntheticRecoveryVerified = true;
       } catch (recoveryError) { recoveryErrors.push(recoveryError); }
     }
-    if (candidate?.createdByOperation === true && candidate?.alreadyExisted === false) {
+    // No destructive compensation until both ownership and synthetic recovery
+    // are proven. Leave unresolved candidates intact for governed F0 recovery.
+    if (syntheticRecoveryVerified && candidate?.active === false &&
+        candidate?.createdByOperation === true && candidate?.alreadyExisted === false) {
       try {
         const cleanup = await adapters.removeFailedCandidate({
           tenantId: c.tenantId, courseId: c.courseId, packageId: candidate.packageId,

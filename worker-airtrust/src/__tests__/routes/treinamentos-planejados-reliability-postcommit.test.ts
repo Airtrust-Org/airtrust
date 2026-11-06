@@ -62,7 +62,7 @@ vi.mock('../../services/treinamentos-planejados-integration', () => ({
   syncTreinamentoPlanejadoIntegration: syncTreinamentoPlanejadoIntegrationMock,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: async () => ({ mode: 'all', setorIds: [], funcionarioId: null }),
   filterRequestedSetorIdsByAccess: (requested: number[]) => requested,
 }));
