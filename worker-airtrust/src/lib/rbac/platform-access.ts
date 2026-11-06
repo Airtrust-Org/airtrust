@@ -1,4 +1,5 @@
 import { hasSchemaTable } from '../../utils/db-schema';
+import { isTransientD1Error } from '../../utils/d1-resilience';
 
 export type PlatformRoleCode = 'platform_admin' | 'support_read_only' | 'support_elevated';
 export type SupportAccessLevel = 'read_only' | 'elevated';
@@ -59,8 +60,7 @@ export async function resolvePlatformAccessState(
  * propagados à autenticação (503 fail-closed); nunca há fallback para o JWT.
  */
 function isTransientPlatformAccessReadError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /SQLITE_BUSY|SQLITE_LOCKED|database is locked|timed? out|timeout|deadline exceeded|temporarily unavailable|rate.?limit|too many requests|connection reset|network error/i.test(message);
+  return isTransientD1Error(error);
 }
 
 async function readPersistedPlatformStateWithRetry(

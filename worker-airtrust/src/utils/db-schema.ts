@@ -8,6 +8,8 @@
  * binding evitam round-trips; bindings diferentes nunca compartilham metadados.
  */
 
+import { withD1Retry } from './d1-resilience';
+
 // ===== CACHE DE MÓDULO =====
 // Cada worker instance mantém cache por objeto de binding; reset explícito é usado em testes.
 let _hasUsuariosEmpresas: boolean | null = null;
@@ -51,10 +53,12 @@ export async function hasSchemaTable(db: D1Database, tableName: string): Promise
   const cache = cacheForDb(_tableExistenceCacheByDb, db);
   const cached = cache.get(normalizedTableName);
   if (cached !== undefined) return cached;
-  const result = await db
-    .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
-    .bind(normalizedTableName)
-    .first<{ found: number }>();
+  const result = await withD1Retry(() =>
+    db
+      .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+      .bind(normalizedTableName)
+      .first<{ found: number }>(),
+  );
   const exists = Boolean(result?.found);
   cache.set(normalizedTableName, exists);
   return exists;
