@@ -144,6 +144,18 @@ describe('platform access foundation', () => {
       String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
   });
 
+  it('repete e recupera de erros D1_EXEC_ERROR 503 e connection lost preservando fail-closed', async () => {
+    const { db, prepare } = createDb({
+      roles: ['platform_admin'],
+      roleReadFailures: 1,
+      roleReadError: 'D1_EXEC_ERROR: Error in D1: 503 Service Unavailable',
+    });
+    const state = await resolvePlatformAccessState(db, 44);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+  });
+
   it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
     const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 2 });
     await expect(resolvePlatformAccessState(transient.db, 44)).rejects.toThrow('SQLITE_BUSY');
