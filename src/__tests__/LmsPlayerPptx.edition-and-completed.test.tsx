@@ -39,9 +39,11 @@ vi.mock('@/react-app/pages/lms/pptxViewport', () => ({
   observePptxSlideLayout: () => () => {},
 }));
 vi.mock('@/react-app/pages/lms/lmsProtectedCourseAsset', () => ({
-  fetchLmsCourseAsset: vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
-    status: 200, headers: { ETag: '"' + mocks.assetEtag + '"' },
-  })),
+  fetchLmsCourseAsset: vi.fn(async (kind: string) => kind === 'pptx-rendered'
+    ? new Response(null, { status: 404 })
+    : new Response(new Uint8Array([1, 2, 3]), {
+      status: 200, headers: { ETag: '"' + mocks.assetEtag + '"' },
+    })),
 }));
 vi.mock('@jvmr/pptx-to-html', () => ({
   pptxToHtml: vi.fn(async () => Array.from({ length: 3 },
@@ -94,7 +96,7 @@ describe('PPTX learner edition and completed navigation', () => {
     expect((screen.getByRole('button', { name: 'Próximo' }) as HTMLButtonElement).disabled).toBe(true);
     mocks.assetEtag = 'new-asset';
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
-    await waitFor(() => expect(fetchLmsCourseAsset).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchLmsCourseAsset).toHaveBeenCalledTimes(4));
     await waitFor(() => expect(pptxToHtml).toHaveBeenCalledTimes(2));
     expect(mocks.finalize.mutate).not.toHaveBeenCalled();
     view.unmount();
