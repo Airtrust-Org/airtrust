@@ -33,6 +33,10 @@ vi.mock('../../middleware/auth', () => ({
     },
   invalidateJtiCache: vi.fn(),
   resetBlocklistCache: vi.fn(),
+  resetUserSecurityCache: vi.fn(),
+  invalidateUserSecurityCache: vi.fn(),
+  resetPlatformAccessCache: vi.fn(),
+  invalidatePlatformAccessCache: vi.fn(),
 }));
 
 vi.mock('../../lib/rbac/platform-access', () => ({

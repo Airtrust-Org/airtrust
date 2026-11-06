@@ -33,6 +33,35 @@ function normalizeUserId(userId: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+interface CachedPlatformAccess {
+  expiresAt: number;
+  state: PlatformAccessState;
+}
+
+const _platformAccessCache = new Map<number, CachedPlatformAccess>();
+const PLATFORM_ACCESS_CACHE_TTL_MS = 5000;
+const MAX_PLATFORM_ACCESS_CACHE_SIZE = 1000;
+
+function pruneExpiredPlatformAccessCache(now: number): void {
+  for (const [key, entry] of _platformAccessCache.entries()) {
+    if (entry.expiresAt <= now) {
+      _platformAccessCache.delete(key);
+    }
+  }
+}
+
+export function resetPlatformAccessCache(): void {
+  _platformAccessCache.clear();
+}
+
+export function invalidatePlatformAccessCache(userId: number): void {
+  _platformAccessCache.delete(userId);
+}
+
+export function getPlatformAccessCacheSize(): number {
+  return _platformAccessCache.size;
+}
+
 export async function resolvePlatformAccessState(
   db: D1Database,
   userId: number | string | null | undefined,
@@ -51,7 +80,28 @@ export async function resolvePlatformAccessState(
     };
   }
 
-  return readPersistedPlatformStateWithRetry(db, normalizedUserId);
+  const now = Date.now();
+  const cached = _platformAccessCache.get(normalizedUserId);
+  if (cached && cached.expiresAt > now) {
+    return cached.state;
+  }
+  if (cached) {
+    _platformAccessCache.delete(normalizedUserId);
+  }
+
+  const state = await readPersistedPlatformStateWithRetry(db, normalizedUserId);
+
+  if (_platformAccessCache.size >= MAX_PLATFORM_ACCESS_CACHE_SIZE) {
+    pruneExpiredPlatformAccessCache(now);
+    while (_platformAccessCache.size >= MAX_PLATFORM_ACCESS_CACHE_SIZE) {
+      const oldestKey = _platformAccessCache.keys().next().value;
+      if (!oldestKey) break;
+      _platformAccessCache.delete(oldestKey);
+    }
+  }
+  _platformAccessCache.set(normalizedUserId, { expiresAt: now + PLATFORM_ACCESS_CACHE_TTL_MS, state });
+
+  return state;
 }
 
 /**

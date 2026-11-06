@@ -4,8 +4,15 @@ import {
   canStartSupportReadOnlySession,
   isPlatformAdminAccess,
   resolvePlatformAccessState,
+  resetPlatformAccessCache,
+  getPlatformAccessCacheSize,
 } from '../../lib/rbac/platform-access';
 import { resetSchemaCache } from '../../utils/db-schema';
+
+beforeEach(() => {
+  resetSchemaCache();
+  resetPlatformAccessCache();
+});
 
 function createDb(options: {
   hasPlatformRolesTable?: boolean;
@@ -167,5 +174,33 @@ describe('platform access foundation', () => {
     await expect(resolvePlatformAccessState(schema.db, 44)).rejects.toThrow('no such column');
     expect(schema.prepare.mock.calls.filter(([query]) =>
       String(query).includes('FROM user_platform_roles'))).toHaveLength(1);
+  });
+
+  it('reutiliza o micro-cache positivo em chamadas subsequentes dentro do TTL', async () => {
+    const { db, prepare } = createDb({ roles: ['platform_admin'] });
+
+    const state1 = await resolvePlatformAccessState(db, 44);
+    expect(state1.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsFirst = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsFirst).toBe(1);
+
+    // Segunda chamada com mesmo userId reaproveita o cache e não consulta D1
+    const state2 = await resolvePlatformAccessState(db, 44);
+    expect(state2.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsSecond = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsSecond).toBe(1);
+
+    // Reset do cache força nova consulta ao D1
+    resetPlatformAccessCache();
+    const state3 = await resolvePlatformAccessState(db, 44);
+    expect(state3.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsThird = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsThird).toBe(2);
   });
 });
