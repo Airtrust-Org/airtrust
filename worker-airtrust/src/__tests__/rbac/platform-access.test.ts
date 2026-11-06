@@ -173,6 +173,22 @@ describe('platform access foundation', () => {
       String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
   });
 
+  it('rechecks a revoked platform role through an independent access resolver', async () => {
+    const roles: Array<'platform_admin' | 'support_read_only' | 'support_elevated'> = ['platform_admin'];
+    const firstInstanceDb = createDb({ roles }).db;
+    const secondInstanceDb = createDb({ roles }).db;
+
+    const beforeRevocation = await resolvePlatformAccessState(firstInstanceDb, 442);
+    expect(isPlatformAdminAccess(beforeRevocation)).toBe(true);
+
+    roles.splice(0, 1);
+    const afterRevocation = await resolvePlatformAccessState(secondInstanceDb, 442);
+
+    expect(afterRevocation.source).toBe('none');
+    expect(afterRevocation.hasPersistedPlatformAdmin).toBe(false);
+    expect(isPlatformAdminAccess(afterRevocation)).toBe(false);
+  });
+
   it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
     const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 2 });
     await expect(resolvePlatformAccessState(transient.db, 44)).rejects.toThrow('SQLITE_BUSY');
