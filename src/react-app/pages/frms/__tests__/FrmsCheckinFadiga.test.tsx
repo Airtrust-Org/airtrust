@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
   isFadigaCheckinSubmitReady,
   isValidWakeTime,
@@ -364,6 +364,9 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
 
 describe('FrmsCheckinFadiga UI', () => {
   beforeEach(() => {
+    // Most existing UI cases exercise the normal pre-presentation contract.
+    // Only the targeted late-flow tests use a later clock.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T08:00:00Z'));
     mutateAsyncMock.mockReset();
     readinessMutateAsyncMock.mockReset();
     refetchMock.mockReset();
@@ -407,6 +410,10 @@ describe('FrmsCheckinFadiga UI', () => {
       isFetching: false,
     });
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'INSTRUTOR' });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   function enableStandbyContext() {
@@ -459,7 +466,8 @@ describe('FrmsCheckinFadiga UI', () => {
       render(<FrmsCheckinFadiga />);
       expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
       preencherFormularioValido();
-      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
       expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
         reference_date: '2026-10-27',
         data_checkin: '2026-10-27',
@@ -475,12 +483,44 @@ describe('FrmsCheckinFadiga UI', () => {
       vi.setSystemTime(new Date('2026-10-28T02:59:00Z')); // 27/10 23:59 Brasília
       render(<FrmsCheckinFadiga />);
       preencherFormularioValido();
+      fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
       vi.setSystemTime(new Date('2026-10-28T03:01:00Z')); // 28/10 00:01 Brasília
-      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
       expect(mutateAsyncMock).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('permite registro tardio explícito sem enviar PVT como evidência pré-jornada', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T15:13:00Z')); // 12:13 Brasília
+    render(<FrmsCheckinFadiga />);
+    preencherFormularioValido();
+    expect(screen.getByText(/A apresentação informada já começou/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-vigilance-test')).not.toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' });
+    expect(button).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+    fireEvent.click(button);
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('readiness');
+    expect(payload).toMatchObject({ fit_for_duty: true, aceite_termos: true, aceite_privacidade: true });
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+  });
+
+  it('nunca reenvia PVT pré-jornada se a hora de apresentação passou com o formulário aberto', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T08:00:00Z')); // 05:00
+    render(<FrmsCheckinFadiga />);
+    preencherFormularioValido(); // apresentação 06:30
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeEnabled();
+    clock.mockReturnValue(Date.parse('2026-11-07T15:13:00Z')); // atravessou a apresentação
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(mutateAsyncMock.mock.calls[0][0]).not.toHaveProperty('readiness');
   });
 
   it('renderiza KSS com titulo claro e descritores', () => {
