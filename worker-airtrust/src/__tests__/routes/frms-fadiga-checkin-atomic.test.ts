@@ -377,6 +377,36 @@ describe('daily check-in atomic commit', () => {
     expect(syncMock).not.toHaveBeenCalled();
   });
 
+  it('logs only a sanitized database category before commit without exposing D1 SQL', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { db } = fakeDb({ batchReject: true });
+      const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+      expect(response.status).toBe(500);
+      const event = spy.mock.calls.find(([label]) => label === '[FRMS_CHECKIN_FAILURE]');
+      expect(event?.[1]).toEqual({ phase: 'PRE_COMMIT', category: 'D1' });
+      expect(JSON.stringify(event)).not.toMatch(/D1_ERROR|CHECK constraint|horas_sono|kss_score/i);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('logs post-commit failures without an employee id, PVT values or raw exception', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { db } = fakeDb();
+      syncMock.mockRejectedValueOnce(new Error('sensitive incident context should not be logged'));
+      const response = await router.fetch(request({ duration_ms: 60000, trials: trials() }),
+        { DB: db } as Env, {} as ExecutionContext);
+      expect(response.status).toBe(500);
+      const event = spy.mock.calls.find(([label]) => label === '[FRMS_CHECKIN_FAILURE]');
+      expect(event?.[1]).toEqual({ phase: 'POST_COMMIT', category: 'OTHER' });
+      expect(JSON.stringify(event)).not.toMatch(/sensitive incident context|funcionario_id|trial|KSS|sono|70/i);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('distinguishes post-commit sync failure from an unsaved submission', async () => {
     const { db, batch } = fakeDb();
     syncMock.mockRejectedValueOnce(new Error('synthetic downstream outage'));
