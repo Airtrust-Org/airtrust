@@ -49,9 +49,26 @@ async function sendExam(page: Page) {
 test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> certificado -> reabertura', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  // O shell do front consulta /api/public/translate na propria origem estatica (sem backend aqui);
-  // resposta vazia same-origin evita ruido de CORS no WebKit sem tocar no fluxo testado.
-  await page.route('**/api/public/translate**', (r) => r.fulfill({ status: 404, contentType: 'application/json', body: '{"success":false}' }));
+  // The i18n fallback is unrelated to SCORM/exam behavior. In this synthetic
+  // browser test the frontend runs on :3000 and the API URL is :8787:
+  // fulfilling a cross-origin request without ACAO causes a WebKit pageerror.
+  // Supply a deterministic, CORS-valid response without outbound translation.
+  await page.route('**/api/public/translate**', (route) => {
+    const headers = {
+      'Access-Control-Allow-Origin': 'http://127.0.0.1:3000',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    };
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers });
+    }
+    return route.fulfill({
+      status: 200,
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: '{"success":true,"data":{"translatedText":""}}',
+    });
+  });
   const password = await reset(page);
 
   // 0) estado inicial: nada emitido
