@@ -34,7 +34,7 @@ function src(relPath: string): string {
 describe('SEC-02: funcionario ownership checks use strict empresa_id = ?', () => {
   const FILES_HARDENED = [
     'routes/escalas-alocacoes.ts',
-    'routes/escalas-alocacoes-helpers-internal.ts',
+    'services/escalas/alocacao-helpers.ts',
     'routes/escalas-evd.ts',
     'routes/escalas-situacoes.ts',
     'routes/frms-fadiga-acumulada.ts',
