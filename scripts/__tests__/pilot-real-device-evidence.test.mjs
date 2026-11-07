@@ -39,8 +39,14 @@ test('PR-only physical gate binds prior staged code to later evidence without se
   'git diff --name-only "$RELEASE_SHA" "$PR_HEAD"',
   'PILOT_RUNTIME_DELTA_AFTER_STAGING_DENIED',
   'node scripts/ci/pilot-real-device-evidence.mjs --release-sha',
-  'PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS'])
+  'PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS',
+  "String(worker?.environment??'').toLowerCase()!=='staging'",
+  "String(worker?.sourceSha??worker?.source_sha??'').toLowerCase()!==sha",
+  'PILOT_STAGING_PAGES_BUILD_VERSION_MISMATCH',
+  "buildVersion.endsWith('-'+sha.slice(0,7))"])
    assert.ok(workflow.includes(marker),'missing gate: '+marker);
+ assert.doesNotMatch(workflow,/await v\.text\(\)\)\.includes\(sha\)/,
+  'worker provenance must compare the parsed exact SHA and environment');
  assert.doesNotMatch(workflow,/pull_request_target:|workflow_dispatch:/);
 });
 

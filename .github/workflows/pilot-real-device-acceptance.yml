@@ -80,6 +80,7 @@ jobs:
           import { createHash } from 'node:crypto';
           import { execFileSync } from 'node:child_process';
           import { readFileSync } from 'node:fs';
+          import { extractBuildVersion } from './scripts/ci/assert-pages-build-version.mjs';
           const sha=process.env.RELEASE_SHA;
           const evidence=JSON.parse(readFileSync('docs/pilot/PILOT_REAL_DEVICE_ACCEPTANCE_EVIDENCE.json','utf8'));
           const pages=new URL(evidence.staging_pages_url);
@@ -88,7 +89,17 @@ jobs:
               pages.username || pages.password || pages.search || pages.hash ||
               pages.pathname !== '/') throw Error('PILOT_STAGING_TARGET_INVALID');
           const v=await fetch(process.env.STAGING_WORKER_VERSION_URL,{signal:AbortSignal.timeout(12000)});
-          if (!v.ok || !(await v.text()).includes(sha)) throw Error('PILOT_STAGING_WORKER_SHA_MISMATCH');
+          if (!v.ok) throw Error('PILOT_STAGING_WORKER_VERSION_UNAVAILABLE');
+          const versionPayload=await v.json();
+          const worker=versionPayload?.data && typeof versionPayload.data==='object' ? versionPayload.data : versionPayload;
+          if (String(worker?.environment??'').toLowerCase()!=='staging' ||
+              String(worker?.sourceSha??worker?.source_sha??'').toLowerCase()!==sha)
+            throw Error('PILOT_STAGING_WORKER_SHA_MISMATCH');
+          const landing=await fetch(pages,{signal:AbortSignal.timeout(12000)});
+          if(!landing.ok)throw Error('PILOT_STAGING_PAGES_UNAVAILABLE');
+          const buildVersion=extractBuildVersion(await landing.text());
+          if(!buildVersion || !buildVersion.startsWith('staging-') || !buildVersion.endsWith('-'+sha.slice(0,7)))
+            throw Error('PILOT_STAGING_PAGES_BUILD_VERSION_MISMATCH');
           // The Pages asset must be byte-identical to the exact candidate.
           execFileSync('git',['fetch','--quiet','origin',sha],{timeout:30000});
           const paths=execFileSync('git',['ls-tree','-r','--name-only',sha,'public/pilot']).toString().trim().split('\n');
@@ -105,5 +116,5 @@ jobs:
             const live=Buffer.from(await response.arrayBuffer());
             if(blob(source)!==blob(live))throw Error('PILOT_STAGING_PAGES_SOURCE_SHA_MISMATCH:'+path);
           }
-          console.log('PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS '+sha+' assets='+paths.length);
+          console.log('PILOT_STAGING_WORKER_AND_PAGES_PROVENANCE_PASS '+sha+' build='+buildVersion+' assets='+paths.length);
           NODE
