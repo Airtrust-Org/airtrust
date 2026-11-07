@@ -149,9 +149,13 @@ export function safeFadigaVisibleErrorMessage(
       return 'Não foi possível carregar os check-ins da equipe.';
     case 'daily-checkin-submit':
       if (_technicalDetail instanceof Error) {
+        const incidentId = (_technicalDetail as Error & { incidentId?: string }).incidentId;
+        const reference = typeof incidentId === 'string' && /^[a-f0-9-]{36}$/i.test(incidentId)
+          ? ` Referência: ${incidentId.slice(0, 8)}.`
+          : '';
         const code = _technicalDetail.message;
         if (code === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
-          return 'O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.';
+          return `O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.${reference}`;
         }
         // A rejection before the D1 batch is not a transient connection failure:
         // repeating the same PVT payload cannot make it valid as pre-flight evidence.
@@ -167,8 +171,9 @@ export function safeFadigaVisibleErrorMessage(
         if (['invalid_trial_sequence', 'invalid_trial_timing', 'invalid_duration', 'readiness_trials_required'].includes(code)) {
           return 'Os dados do teste de atenção não passaram na validação. O check-in não foi registrado. Atualize o AirTrust e refaça o teste antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
         }
+        return `Não foi possível confirmar o registro do check-in. Consulte seu Histórico antes de reenviar e informe à coordenação.${reference}`;
       }
-      return 'Não foi possível confirmar o registro do check-in. Verifique seu Histórico antes de tentar novamente. Se persistir, informe a coordenação.';
+      return 'Não foi possível confirmar o registro do check-in. Consulte seu Histórico antes de reenviar e informe à coordenação.';
   }
 }
 
@@ -293,9 +298,16 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     ...init,
   });
-  const json = (await response.json()) as { success: boolean; data?: T; error?: string };
+  const json = (await response.json()) as {
+    success: boolean; data?: T; error?: unknown; incident_id?: unknown;
+  };
   if (!response.ok || !json.success) {
-    throw new Error(json.error || `Erro HTTP ${response.status}`);
+    const error = new Error(typeof json.error === 'string' ? json.error : `Erro HTTP ${response.status}`)
+      as Error & { incidentId?: string };
+    if (typeof json.incident_id === 'string' && /^[a-f0-9-]{36}$/i.test(json.incident_id)) {
+      error.incidentId = json.incident_id;
+    }
+    throw error;
   }
   return json.data as T;
 }
