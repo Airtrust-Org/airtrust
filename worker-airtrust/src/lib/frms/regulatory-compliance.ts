@@ -143,7 +143,7 @@ export interface RegulatoryComplianceInput {
 /** Regra legal calculada, ainda sem validação jurídica para bloquear o status. */
 export interface RegulatoryPendingFinding {
   code: string;
-  source: 'LAW';
+  source: 'LAW' | 'PROFILE';
   reference: string;
   actual: number;
   limit: number;
@@ -192,6 +192,15 @@ export function evaluateRegulatoryCompliance(
   const violations: RegulatoryViolation[] = [];
   const unknownReasons = new Set<string>();
   const isHelicopter = input.profileCode === 'HELICOPTER_OFFSHORE';
+
+  // Entradas numéricas inválidas (NaN, negativas) nunca podem resultar em
+  // conformidade: toda comparação com NaN é falsa e esconderia uma violação.
+  if (!Number.isFinite(input.journeyDurationMin) || input.journeyDurationMin < 0) {
+    unknownReasons.add('JOURNEY_DURATION_EVIDENCE_INVALID');
+  }
+  if (!Number.isFinite(input.limites.FDP_MAXIMO_HORAS) || input.limites.FDP_MAXIMO_HORAS <= 0) {
+    unknownReasons.add('PROFILE_FDP_LIMIT_INVALID');
+  }
 
   if (!isHelicopter) {
     unknownReasons.add('HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE');
@@ -414,6 +423,23 @@ export function evaluateRegulatoryCompliance(
         });
       } else {
         pendingValidation.push(finding);
+      }
+    }
+  }
+  // Limites 28d/365d do perfil fora de RBAC B/C: visíveis, mas sem alterar o
+  // status até decisão do proprietário/jurídico (defaults 93/930 são de B/C).
+  if (isHelicopter && !input.rbacBcApplicable && input.rolling) {
+    const profileRolling = [
+      { code: 'PROFILE_FLIGHT_28D_LIMIT', actual: input.rolling.hv_28_dias_min, limitH: input.limites.HV_28_DIAS_HORAS, label: '28 dias' },
+      { code: 'PROFILE_FLIGHT_365D_LIMIT', actual: input.rolling.hv_365_dias_min, limitH: input.limites.HV_365_DIAS_HORAS, label: '365 dias' },
+    ];
+    for (const r of profileRolling) {
+      if (r.actual != null && Number.isFinite(r.actual) && r.limitH > 0 && r.actual > r.limitH * 60) {
+        pendingValidation.push({
+          code: r.code, source: 'PROFILE', reference: 'Perfil FRMS governado / limite rolante',
+          actual: r.actual, limit: r.limitH * 60,
+          message: `Horas de voo em ${r.label} acima do limite do perfil; aplicabilidade pendente de validação`,
+        });
       }
     }
   }
