@@ -193,6 +193,15 @@ export function evaluateRegulatoryCompliance(
   const unknownReasons = new Set<string>();
   const isHelicopter = input.profileCode === 'HELICOPTER_OFFSHORE';
 
+  // Entradas numéricas inválidas (NaN, negativas) nunca podem resultar em
+  // conformidade: toda comparação com NaN é falsa e esconderia uma violação.
+  if (!Number.isFinite(input.journeyDurationMin) || input.journeyDurationMin < 0) {
+    unknownReasons.add('JOURNEY_DURATION_EVIDENCE_INVALID');
+  }
+  if (!Number.isFinite(input.limites.FDP_MAXIMO_HORAS) || input.limites.FDP_MAXIMO_HORAS <= 0) {
+    unknownReasons.add('PROFILE_FDP_LIMIT_INVALID');
+  }
+
   if (!isHelicopter) {
     unknownReasons.add('HELICOPTER_LIMITS_NOT_APPLICABLE_TO_PROFILE');
   } else if (!input.rolling) {
