@@ -1,0 +1,4141 @@
+{
+  "sourceSha": "b4b83438bcdbb213c00f5a275c616ad3b7168776",
+  "trackedFiles": 7636,
+  "hashFormat": "Git blob SHA-1 object ID (exact tracked blob identity)",
+  "categories": {
+    "image": {
+      "files": 429,
+      "bytes": 104444164
+    },
+    "media": {
+      "files": 77,
+      "bytes": 176659876
+    },
+    "pdf": {
+      "files": 14,
+      "bytes": 16679957
+    },
+    "powerpoint": {
+      "files": 2,
+      "bytes": 60391
+    },
+    "scorm_archive": {
+      "files": 0,
+      "bytes": 0
+    },
+    "scorm_content": {
+      "files": 557,
+      "bytes": 296576182
+    },
+    "source_map": {
+      "files": 0,
+      "bytes": 0
+    }
+  },
+  "scormManifests": 4,
+  "missingManifestReferences": [],
+  "encodedLiteralManifestReferences": [
+    {
+      "manifest": "Arquivos - EAD/Emergências Gerais/imsmanifest.xml",
+      "file": "Arquivos - EAD/Emergências Gerais/fit_content_assets/Sem_títulosds_qihroh.png",
+      "literalFile": "Arquivos - EAD/Emergências Gerais/fit_content_assets/Sem_t%C3%ADtulosds_qihroh.png",
+      "runtimeVerified": false,
+      "safeToDelete": false
+    }
+  ],
+  "duplicateGroups": [
+    {
+      "gitBlobSha1": "c269c4d49599824e8dc9ffb0abfce647b4aef8a1",
+      "copies": 2,
+      "bytesPerCopy": 6082395,
+      "logicalDuplicateBytes": 6082395,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/1009_1_ffcd8r.mp4",
+          "bytes": 6082395,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/1009_1_ffcd8r.mp4",
+          "bytes": 6082395,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "bcc48d1787b6b3c05d5a0d60a9c4dabf4794f0ca",
+      "copies": 4,
+      "bytesPerCopy": 1588897,
+      "logicalDuplicateBytes": 4766691,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/modules.473fbbfd66fb5923.js",
+          "bytes": 1588897,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/modules.473fbbfd66fb5923.js",
+          "bytes": 1588897,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/modules.473fbbfd66fb5923.js",
+          "bytes": 1588897,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/modules.473fbbfd66fb5923.js",
+          "bytes": 1588897,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "fa83f396f2de2d6ff78ffd99c18a305903631244",
+      "copies": 4,
+      "bytesPerCopy": 559707,
+      "logicalDuplicateBytes": 1679121,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/video/example.mp4",
+          "bytes": 559707,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/video/example.mp4",
+          "bytes": 559707,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/video/example.mp4",
+          "bytes": 559707,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/video/example.mp4",
+          "bytes": 559707,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "8bd573b1122a61fe88845da19fd4bffc248e68af",
+      "copies": 3,
+      "bytesPerCopy": 506782,
+      "logicalDuplicateBytes": 1013564,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/iStock-172269202_nqnd5q.jpg",
+          "bytes": 506782,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/iStock-172269202_rrd02v.jpg",
+          "bytes": 506782,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/iStock-172269202_nqnd5q.jpg",
+          "bytes": 506782,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "52f93b96c60c92f0824877224c5ed2e22a3ad9cb",
+      "copies": 4,
+      "bytesPerCopy": 307332,
+      "logicalDuplicateBytes": 921996,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/NotoSans-Italic.f322611529c721d3.woff",
+          "bytes": 307332,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/NotoSans-Italic.f322611529c721d3.woff",
+          "bytes": 307332,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/NotoSans-Italic.f322611529c721d3.woff",
+          "bytes": 307332,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/NotoSans-Italic.f322611529c721d3.woff",
+          "bytes": 307332,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "15e083c18f97381ef0ae638dcbdf28b8319c705a",
+      "copies": 4,
+      "bytesPerCopy": 306360,
+      "logicalDuplicateBytes": 919080,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/NotoSans-SemiBold.53a4b677893d7a69.woff",
+          "bytes": 306360,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/NotoSans-SemiBold.53a4b677893d7a69.woff",
+          "bytes": 306360,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/NotoSans-SemiBold.53a4b677893d7a69.woff",
+          "bytes": 306360,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/NotoSans-SemiBold.53a4b677893d7a69.woff",
+          "bytes": 306360,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "4f0abd94af6316cccdc2dd7f4d9ec3877a6199f4",
+      "copies": 4,
+      "bytesPerCopy": 299524,
+      "logicalDuplicateBytes": 898572,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/NotoSans-Regular.d443fda2a79a3b67.woff",
+          "bytes": 299524,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/NotoSans-Regular.d443fda2a79a3b67.woff",
+          "bytes": 299524,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/NotoSans-Regular.d443fda2a79a3b67.woff",
+          "bytes": 299524,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/NotoSans-Regular.d443fda2a79a3b67.woff",
+          "bytes": 299524,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "477d2084c76594b6eb655b0dfeea393838dff245",
+      "copies": 2,
+      "bytesPerCopy": 887653,
+      "logicalDuplicateBytes": 887653,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/hk139_cdhdz6.png",
+          "bytes": 887653,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/hk139_cdhdz6.png",
+          "bytes": 887653,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "548ab42f6a2930fe1cced658e4354697d7495b1c",
+      "copies": 4,
+      "bytesPerCopy": 248536,
+      "logicalDuplicateBytes": 745608,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/vendors.9d8f217301be500e.js",
+          "bytes": 248536,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/vendors.9d8f217301be500e.js",
+          "bytes": 248536,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/vendors.9d8f217301be500e.js",
+          "bytes": 248536,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/vendors.9d8f217301be500e.js",
+          "bytes": 248536,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "67a750a205825d570a204a2ce84deeaf6508981f",
+      "copies": 2,
+      "bytesPerCopy": 664855,
+      "logicalDuplicateBytes": 664855,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/111DSC_6631_wyazj3.jpg",
+          "bytes": 664855,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/111DSC_6631_wyazj3.jpg",
+          "bytes": 664855,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "23de59312c05679aa8d32931af37b7559155a230",
+      "copies": 2,
+      "bytesPerCopy": 616404,
+      "logicalDuplicateBytes": 616404,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/CHI_6.562fcc072b30e_eblajf.jpg",
+          "bytes": 616404,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/CHI_6.562fcc072b30e_eblajf.jpg",
+          "bytes": 616404,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "abf2e8f1f501fc1f26cb1c2fd75c7653ab143f86",
+      "copies": 4,
+      "bytesPerCopy": 191641,
+      "logicalDuplicateBytes": 574923,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/game-music-slow.mp3",
+          "bytes": 191641,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/game-music-slow.mp3",
+          "bytes": 191641,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/game-music-slow.mp3",
+          "bytes": 191641,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/game-music-slow.mp3",
+          "bytes": 191641,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "f1231d183069f30f82daace6a3fe3420286014ce",
+      "copies": 4,
+      "bytesPerCopy": 190802,
+      "logicalDuplicateBytes": 572406,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/parallax-3.png",
+          "bytes": 190802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/parallax-3.png",
+          "bytes": 190802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/parallax-3.png",
+          "bytes": 190802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/parallax-3.png",
+          "bytes": 190802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "0a88eece355e74cbb9a784a1bb2a805850fb8d9b",
+      "copies": 4,
+      "bytesPerCopy": 188456,
+      "logicalDuplicateBytes": 565368,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/parallax-2.png",
+          "bytes": 188456,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/parallax-2.png",
+          "bytes": 188456,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/parallax-2.png",
+          "bytes": 188456,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/parallax-2.png",
+          "bytes": 188456,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "70814227fae7c31a38d9565246ab9429c8d38144",
+      "copies": 2,
+      "bytesPerCopy": 537281,
+      "logicalDuplicateBytes": 537281,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Screenshot_2024-11-04_173801_kcn2sd.png",
+          "bytes": 537281,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Screenshot_2024-11-04_173801_sbek0g.png",
+          "bytes": 537281,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "bcd753fb1338b26f4a7868fc0074cf7770db180d",
+      "copies": 4,
+      "bytesPerCopy": 178705,
+      "logicalDuplicateBytes": 536115,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/app.cc0d588970e1f88e.css",
+          "bytes": 178705,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/app.cc0d588970e1f88e.css",
+          "bytes": 178705,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/app.cc0d588970e1f88e.css",
+          "bytes": 178705,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/app.cc0d588970e1f88e.css",
+          "bytes": 178705,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "c9d829727871c8c457083d7485bd2a23f3be7895",
+      "copies": 4,
+      "bytesPerCopy": 154922,
+      "logicalDuplicateBytes": 464766,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-phone.png",
+          "bytes": 154922,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-phone.png",
+          "bytes": 154922,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-phone.png",
+          "bytes": 154922,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-phone.png",
+          "bytes": 154922,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "393ed33be6edf4341688e5f71af2756eebbcfe83",
+      "copies": 2,
+      "bytesPerCopy": 433932,
+      "logicalDuplicateBytes": 433932,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/2020fsfsd-07-28_v9hszi.jpg",
+          "bytes": 433932,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/2020fsfsd-07-28_v9hszi.jpg",
+          "bytes": 433932,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "b84f72fa763c83f708a05070f820bccc92c2d847",
+      "copies": 2,
+      "bytesPerCopy": 406523,
+      "logicalDuplicateBytes": 406523,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/FirstAidCourse_ij5yr7.jpg",
+          "bytes": 406523,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/FirstAidCourse_ij5yr7.jpg",
+          "bytes": 406523,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "99030593985ce41edc5b773d5f39fb8db2ecc1ff",
+      "copies": 2,
+      "bytesPerCopy": 361159,
+      "logicalDuplicateBytes": 361159,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/surviving-the-slump-in-the-offshore-helicopter-market-3_zcuwmk.jpg",
+          "bytes": 361159,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/surviving-the-slump-in-the-offshore-helicopter-market-3_zcuwmk.jpg",
+          "bytes": 361159,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "70b67600146371177e0cfbe79372b27d028ee0da",
+      "copies": 4,
+      "bytesPerCopy": 99963,
+      "logicalDuplicateBytes": 299889,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-tablet.png",
+          "bytes": 99963,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-tablet.png",
+          "bytes": 99963,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-tablet.png",
+          "bytes": 99963,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-tablet.png",
+          "bytes": 99963,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "40af7f1e152354413daf527749d8a2a9ff950c55",
+      "copies": 4,
+      "bytesPerCopy": 97988,
+      "logicalDuplicateBytes": 293964,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/09AIRBORNE_1_pup7yi.jpg",
+          "bytes": 97988,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/09AIRBORNE_d9so8c.jpg",
+          "bytes": 97988,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/09AIRBORNE_1_pup7yi.jpg",
+          "bytes": 97988,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/09AIRBORNE_d9so8c.jpg",
+          "bytes": 97988,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "1a150938126d836cccaaa187040cb761dd5f061d",
+      "copies": 4,
+      "bytesPerCopy": 82404,
+      "logicalDuplicateBytes": 247212,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/spin-success.mp3",
+          "bytes": 82404,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/spin-success.mp3",
+          "bytes": 82404,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/spin-success.mp3",
+          "bytes": 82404,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/spin-success.mp3",
+          "bytes": 82404,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "ce6cf496b3a5c009799ffd0e5ec064996dfd59b4",
+      "copies": 2,
+      "bytesPerCopy": 241247,
+      "logicalDuplicateBytes": 241247,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/dunk_hele_slu-34_nm00zq.jpg",
+          "bytes": 241247,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/dunk_hele_slu-34_nm00zq.jpg",
+          "bytes": 241247,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "deb8fa44de9082a1bb3e34eaa3a75742f9fb2810",
+      "copies": 2,
+      "bytesPerCopy": 228339,
+      "logicalDuplicateBytes": 228339,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/7751080658_b98b90e892_b_mtcx4z.jpg",
+          "bytes": 228339,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/7751080658_b98b90e892_b_icqmsf.jpg",
+          "bytes": 228339,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "51decf4d10159a6be24238a93b35d6295d116ad8",
+      "copies": 4,
+      "bytesPerCopy": 64799,
+      "logicalDuplicateBytes": 194397,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-laptop.png",
+          "bytes": 64799,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-laptop.png",
+          "bytes": 64799,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-laptop.png",
+          "bytes": 64799,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-laptop.png",
+          "bytes": 64799,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "be8e5047d4cf8be39a8d81502a5b705c22d07d39",
+      "copies": 2,
+      "bytesPerCopy": 189648,
+      "logicalDuplicateBytes": 189648,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/Sem_t%C3%ADtulosds_qihroh.png",
+          "bytes": 189648,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "manifest-not-referenced; runtime-reference-unknown",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/sem_titulosds_qihroh.png",
+          "bytes": 189648,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "manifest-not-referenced; runtime-reference-unknown",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "cbf1a40ac9476d610fec953039c287b49efeb127",
+      "copies": 4,
+      "bytesPerCopy": 62095,
+      "logicalDuplicateBytes": 186285,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/_45495862_super_puma_scene_466282_ujj1ga.jpg",
+          "bytes": 62095,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/_45495862_super_puma_scene_466282_wyo8q9.jpg",
+          "bytes": 62095,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/_45495862_super_puma_scene_466282_ujj1ga.jpg",
+          "bytes": 62095,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/_45495862_super_puma_scene_466282_wyo8q9.jpg",
+          "bytes": 62095,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "2bcacef7878e8d8686a70d92dccf6a770db4744e",
+      "copies": 2,
+      "bytesPerCopy": 175318,
+      "logicalDuplicateBytes": 175318,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/Screenshot_2024-11-07_183756_hucce2.png",
+          "bytes": 175318,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/Screenshot_2024-11-07_183756_iilmw1.png",
+          "bytes": 175318,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "b5169ed98138470e253779f5880b90792c377568",
+      "copies": 8,
+      "bytesPerCopy": 24991,
+      "logicalDuplicateBytes": 174937,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/expand-icon.48a012d165f293b4.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/expand-icon.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/expand-icon.48a012d165f293b4.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/expand-icon.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/expand-icon.48a012d165f293b4.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/expand-icon.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/expand-icon.48a012d165f293b4.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/expand-icon.png",
+          "bytes": 24991,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "a56e7f6117a596f788ee813225339821ba5a6eed",
+      "copies": 2,
+      "bytesPerCopy": 171349,
+      "logicalDuplicateBytes": 171349,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/Sea_Survival_htsk7j.jpg",
+          "bytes": 171349,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Sea_Survival_htsk7j.jpg",
+          "bytes": 171349,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "fcc39fae90968be638785d9522552fcc9bc683e6",
+      "copies": 4,
+      "bytesPerCopy": 47661,
+      "logicalDuplicateBytes": 142983,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/achievement.mp3",
+          "bytes": 47661,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/achievement.mp3",
+          "bytes": 47661,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/achievement.mp3",
+          "bytes": 47661,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/achievement.mp3",
+          "bytes": 47661,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "c00138c662676175a64ef98e578a7d3f96b24789",
+      "copies": 4,
+      "bytesPerCopy": 45914,
+      "logicalDuplicateBytes": 137742,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/modules.a5b0990ec50f29b5.css",
+          "bytes": 45914,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/modules.a5b0990ec50f29b5.css",
+          "bytes": 45914,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/modules.a5b0990ec50f29b5.css",
+          "bytes": 45914,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/modules.a5b0990ec50f29b5.css",
+          "bytes": 45914,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "c27917fe24ac180662aaded6440fcbfb2a3acc98",
+      "copies": 2,
+      "bytesPerCopy": 132029,
+      "logicalDuplicateBytes": 132029,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/8_e8xzd6.jpg",
+          "bytes": 132029,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/8_e8xzd6.jpg",
+          "bytes": 132029,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "44dd589d88575112bcec3c02e29d183cde70041f",
+      "copies": 4,
+      "bytesPerCopy": 43905,
+      "logicalDuplicateBytes": 131715,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/spin-fail.mp3",
+          "bytes": 43905,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/spin-fail.mp3",
+          "bytes": 43905,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/spin-fail.mp3",
+          "bytes": 43905,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/spin-fail.mp3",
+          "bytes": 43905,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "eb86919aa2a6a7b7dd00df651252a9c6d2f453e4",
+      "copies": 2,
+      "bytesPerCopy": 119046,
+      "logicalDuplicateBytes": 119046,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/1111HUET-3_2_vfgyfw.jpg",
+          "bytes": 119046,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/1111HUET-3_2_vfgyfw.jpg",
+          "bytes": 119046,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "90f5eb214f75c12d07a2f8f2ecde00e3fc0ed348",
+      "copies": 4,
+      "bytesPerCopy": 39523,
+      "logicalDuplicateBytes": 118569,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/correct.mp3",
+          "bytes": 39523,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/correct.mp3",
+          "bytes": 39523,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/correct.mp3",
+          "bytes": 39523,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/correct.mp3",
+          "bytes": 39523,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "77b9c28ca661c6a45034e6e7c2121ca8eb491205",
+      "copies": 4,
+      "bytesPerCopy": 39019,
+      "logicalDuplicateBytes": 117057,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/_63701078_super_puma_oct3_aejuxx.jpg",
+          "bytes": 39019,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/_63701078_super_puma_oct3_teqoyc.jpg",
+          "bytes": 39019,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/_63701078_super_puma_oct3_aejuxx.jpg",
+          "bytes": 39019,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/_63701078_super_puma_oct3_teqoyc.jpg",
+          "bytes": 39019,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "fda98e2a3fc9d5546b4e9f6abb39d147865a1175",
+      "copies": 4,
+      "bytesPerCopy": 36080,
+      "logicalDuplicateBytes": 108240,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/welcome.mp3",
+          "bytes": 36080,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/welcome.mp3",
+          "bytes": 36080,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/welcome.mp3",
+          "bytes": 36080,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/welcome.mp3",
+          "bytes": 36080,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "cef27da310e475c1b5e6cc372ac5611faed45922",
+      "copies": 3,
+      "bytesPerCopy": 50165,
+      "logicalDuplicateBytes": 100330,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/FIN00458_0_ok7r4j.jpg",
+          "bytes": 50165,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/FIN00458_0_qeh7v2.jpg",
+          "bytes": 50165,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/FIN00458_0_ok7r4j.jpg",
+          "bytes": 50165,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "608020d1ca3d5aa800ac13ceefe38bf41726536f",
+      "copies": 4,
+      "bytesPerCopy": 32637,
+      "logicalDuplicateBytes": 97911,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/spin-win.mp3",
+          "bytes": 32637,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/spin-win.mp3",
+          "bytes": 32637,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/spin-win.mp3",
+          "bytes": 32637,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/spin-win.mp3",
+          "bytes": 32637,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "57711b211df048965b46989a96f8ebb6796af0fc",
+      "copies": 4,
+      "bytesPerCopy": 29539,
+      "logicalDuplicateBytes": 88617,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-1-xl.png",
+          "bytes": 29539,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-1-xl.png",
+          "bytes": 29539,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-1-xl.png",
+          "bytes": 29539,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-1-xl.png",
+          "bytes": 29539,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "76af234f321de49449ccc9b60ed575a812aef9fa",
+      "copies": 2,
+      "bytesPerCopy": 81774,
+      "logicalDuplicateBytes": 81774,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/new-project3-w800_z8i3oc.jpg",
+          "bytes": 81774,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/new-project3-w800_z8i3oc.jpg",
+          "bytes": 81774,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "dd2e73098a78f0bda043c7e01d0bd605f8c03571",
+      "copies": 2,
+      "bytesPerCopy": 73802,
+      "logicalDuplicateBytes": 73802,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/eXZBL_kknndk.jpg",
+          "bytes": 73802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/eXZBL_y1hqoj.jpg",
+          "bytes": 73802,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "e13ebc5a1f4c383537b325afcea70f62bc9f03a4",
+      "copies": 8,
+      "bytesPerCopy": 10542,
+      "logicalDuplicateBytes": 73794,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/loader.7afc5dbc230dd2de.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/templates/loader.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/loader.7afc5dbc230dd2de.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/templates/loader.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/loader.7afc5dbc230dd2de.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/templates/loader.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/loader.7afc5dbc230dd2de.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/templates/loader.gif",
+          "bytes": 10542,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "7cd745f9540efbd516feb997f600cf97f4e9ddf2",
+      "copies": 4,
+      "bytesPerCopy": 23873,
+      "logicalDuplicateBytes": 71619,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/new-star.mp3",
+          "bytes": 23873,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/new-star.mp3",
+          "bytes": 23873,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/new-star.mp3",
+          "bytes": 23873,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/new-star.mp3",
+          "bytes": 23873,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "99bb356c6bc6ac0c5533a73a432fa193782c8d67",
+      "copies": 4,
+      "bytesPerCopy": 22196,
+      "logicalDuplicateBytes": 66588,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/imsmd_rootv1p2p1.xsd",
+          "bytes": 22196,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/imsmd_rootv1p2p1.xsd",
+          "bytes": 22196,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/imsmd_rootv1p2p1.xsd",
+          "bytes": 22196,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/imsmd_rootv1p2p1.xsd",
+          "bytes": 22196,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "14885f6a182d1aaaee83295386f358cec26713a4",
+      "copies": 2,
+      "bytesPerCopy": 66541,
+      "logicalDuplicateBytes": 66541,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/Survival-at-Sea_ptb7fp.jpg",
+          "bytes": 66541,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Survival-at-Sea_ptb7fp.jpg",
+          "bytes": 66541,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "890aef89899b8c64bff6308d74adb5e3206f547b",
+      "copies": 4,
+      "bytesPerCopy": 21369,
+      "logicalDuplicateBytes": 64107,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/incorrect.mp3",
+          "bytes": 21369,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/incorrect.mp3",
+          "bytes": 21369,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/incorrect.mp3",
+          "bytes": 21369,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/incorrect.mp3",
+          "bytes": 21369,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "3731526583fe150a06e9e7750404222c7b683681",
+      "copies": 2,
+      "bytesPerCopy": 56325,
+      "logicalDuplicateBytes": 56325,
+      "paths": [
+        {
+          "path": "public/airtrust-icon.svg",
+          "bytes": 56325,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/favicon.svg",
+          "bytes": 56325,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "ddfccc1dfc096cbd02086b149226f84374c0012d",
+      "copies": 4,
+      "bytesPerCopy": 17892,
+      "logicalDuplicateBytes": 53676,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/parallax-1.png",
+          "bytes": 17892,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/parallax-1.png",
+          "bytes": 17892,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/parallax-1.png",
+          "bytes": 17892,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/parallax-1.png",
+          "bytes": 17892,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "b6c7023df440c2ccbd21386d25f75c86723a8cfd",
+      "copies": 2,
+      "bytesPerCopy": 52153,
+      "logicalDuplicateBytes": 52153,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/Screenshot_2023-12-13_161357_bwh6jb.png",
+          "bytes": 52153,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/Screenshot_2023-12-13_161357_scoex5.png",
+          "bytes": 52153,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "1d1c40d81fbe8f04a99698ba855bf25c20194aba",
+      "copies": 4,
+      "bytesPerCopy": 16340,
+      "logicalDuplicateBytes": 49020,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/flow-2.png",
+          "bytes": 16340,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/flow-2.png",
+          "bytes": 16340,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/flow-2.png",
+          "bytes": 16340,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/flow-2.png",
+          "bytes": 16340,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "0ff179d6d8122681b52f1f144654b23e79cab5c1",
+      "copies": 4,
+      "bytesPerCopy": 15708,
+      "logicalDuplicateBytes": 47124,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/flow-1.png",
+          "bytes": 15708,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/flow-1.png",
+          "bytes": 15708,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/flow-1.png",
+          "bytes": 15708,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/flow-1.png",
+          "bytes": 15708,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "54d7047f16c9a515fb818ef13686001e78091291",
+      "copies": 4,
+      "bytesPerCopy": 15104,
+      "logicalDuplicateBytes": 45312,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-2.png",
+          "bytes": 15104,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-2.png",
+          "bytes": 15104,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-2.png",
+          "bytes": 15104,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-2.png",
+          "bytes": 15104,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "aee1ca6d0f6db983bd22502ef83c1cb2371e44dd",
+      "copies": 2,
+      "bytesPerCopy": 44684,
+      "logicalDuplicateBytes": 44684,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/1592113738476_at3eey.jpg",
+          "bytes": 44684,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/1592113738476_xcgypp.jpg",
+          "bytes": 44684,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "3fd0125842cb55edfc8074a0d906a27c836c41e3",
+      "copies": 4,
+      "bytesPerCopy": 14642,
+      "logicalDuplicateBytes": 43926,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-3.png",
+          "bytes": 14642,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-3.png",
+          "bytes": 14642,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-3.png",
+          "bytes": 14642,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-3.png",
+          "bytes": 14642,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "911a7f86b7c13e744055189c5ee6fa0efd9d11b3",
+      "copies": 4,
+      "bytesPerCopy": 14560,
+      "logicalDuplicateBytes": 43680,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/imscp_rootv1p1p2.xsd",
+          "bytes": 14560,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/imscp_rootv1p1p2.xsd",
+          "bytes": 14560,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/imscp_rootv1p1p2.xsd",
+          "bytes": 14560,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/imscp_rootv1p1p2.xsd",
+          "bytes": 14560,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "30e535fa232bbb1b583bd1d3761a5651acaa7219",
+      "copies": 2,
+      "bytesPerCopy": 42118,
+      "logicalDuplicateBytes": 42118,
+      "paths": [
+        {
+          "path": "public/airtrust-brand-icon-20260915-512.png",
+          "bytes": 42118,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/airtrust-site-logo-20260830-512.png",
+          "bytes": 42118,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "5fea5aaf89df1b9ffdfd3ee9bfb7eca244ce627a",
+      "copies": 2,
+      "bytesPerCopy": 40431,
+      "logicalDuplicateBytes": 40431,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/i340076_rlge2i.jpg",
+          "bytes": 40431,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/i340076_ldyvz3.jpg",
+          "bytes": 40431,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "f392e5c2c712e6176fe273f36bef2766839e9ff6",
+      "copies": 4,
+      "bytesPerCopy": 12605,
+      "logicalDuplicateBytes": 37815,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/spin-stop.mp3",
+          "bytes": 12605,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/spin-stop.mp3",
+          "bytes": 12605,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/spin-stop.mp3",
+          "bytes": 12605,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/spin-stop.mp3",
+          "bytes": 12605,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "314336a3b9f34cd9fda690f4731d727bef883999",
+      "copies": 2,
+      "bytesPerCopy": 32691,
+      "logicalDuplicateBytes": 32691,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Figura-2-750x500_gkne1i.jpg",
+          "bytes": 32691,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/Figura-2-750x500_s1omgm.jpg",
+          "bytes": 32691,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "cf9dbf658732efe7723c857136af10fa2a002c6c",
+      "copies": 4,
+      "bytesPerCopy": 9979,
+      "logicalDuplicateBytes": 29937,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/templates/loader-light.gif",
+          "bytes": 9979,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/templates/loader-light.gif",
+          "bytes": 9979,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/templates/loader-light.gif",
+          "bytes": 9979,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/templates/loader-light.gif",
+          "bytes": 9979,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "914a19785a7df5fa6b543c990d8c928ac5c93636",
+      "copies": 4,
+      "bytesPerCopy": 9512,
+      "logicalDuplicateBytes": 28536,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/examples/product-1.png",
+          "bytes": 9512,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/examples/product-1.png",
+          "bytes": 9512,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/examples/product-1.png",
+          "bytes": 9512,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/examples/product-1.png",
+          "bytes": 9512,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "b9452a7a6f74270e6ff216ce0701f2c08df3e21a",
+      "copies": 4,
+      "bytesPerCopy": 8657,
+      "logicalDuplicateBytes": 25971,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/0001-1676870055140806134_ssebai.png",
+          "bytes": 8657,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/0001-1676870055140806134_ssebai.png",
+          "bytes": 8657,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/0001-1676870055140806134_ssebai.png",
+          "bytes": 8657,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/0001-1676870055140806134_ssebai.png",
+          "bytes": 8657,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "c98203b48683f19d4bb440c5c32dfce91afcb0b5",
+      "copies": 4,
+      "bytesPerCopy": 8204,
+      "logicalDuplicateBytes": 24612,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/icons.44f5cb81fb0dba41.woff",
+          "bytes": 8204,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/icons.44f5cb81fb0dba41.woff",
+          "bytes": 8204,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/icons.44f5cb81fb0dba41.woff",
+          "bytes": 8204,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/icons.44f5cb81fb0dba41.woff",
+          "bytes": 8204,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "47034189332ace39a066599a44fc081fd29510f2",
+      "copies": 4,
+      "bytesPerCopy": 7863,
+      "logicalDuplicateBytes": 23589,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/scorm.2aa5f200ece6542d.js",
+          "bytes": 7863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/scorm.2aa5f200ece6542d.js",
+          "bytes": 7863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/scorm.2aa5f200ece6542d.js",
+          "bytes": 7863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/scorm.2aa5f200ece6542d.js",
+          "bytes": 7863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "0b8618cb3c958da0c3e023fdf0402c6c95c3e999",
+      "copies": 4,
+      "bytesPerCopy": 6658,
+      "logicalDuplicateBytes": 19974,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/ready.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/ready.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/ready.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/ready.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "9af56fab4df1c091e0a63d8f363d3d6eac9950ef",
+      "copies": 4,
+      "bytesPerCopy": 6658,
+      "logicalDuplicateBytes": 19974,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/spinning.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/spinning.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/spinning.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/spinning.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "a9e3fec294e762adce971abd84b71117af819086",
+      "copies": 4,
+      "bytesPerCopy": 6658,
+      "logicalDuplicateBytes": 19974,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/tally-score.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/tally-score.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/tally-score.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/tally-score.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "aa79df17313e0a7f861c2beff3427e785d86e100",
+      "copies": 4,
+      "bytesPerCopy": 6658,
+      "logicalDuplicateBytes": 19974,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/audio/go.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/audio/go.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/audio/go.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/audio/go.mp3",
+          "bytes": 6658,
+          "categories": [
+            "scorm_content",
+            "media"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "318092a2846dbe59d893651311b155b9d3ebe0d9",
+      "copies": 2,
+      "bytesPerCopy": 14291,
+      "logicalDuplicateBytes": 14291,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/nevoeiro-4055654_1_kb2wnn.jpg",
+          "bytes": 14291,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/fit_content_assets/nevoeiro-4055654_hym1iv.jpg",
+          "bytes": 14291,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "f9306906981ed191ab0e8726767e85e447079c83",
+      "copies": 4,
+      "bytesPerCopy": 4398,
+      "logicalDuplicateBytes": 13194,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/adlcp_rootv1p2.xsd",
+          "bytes": 4398,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/adlcp_rootv1p2.xsd",
+          "bytes": 4398,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/adlcp_rootv1p2.xsd",
+          "bytes": 4398,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/adlcp_rootv1p2.xsd",
+          "bytes": 4398,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "f4dfacfca79d75dee97161721fa2277ca0336bd5",
+      "copies": 2,
+      "bytesPerCopy": 12208,
+      "logicalDuplicateBytes": 12208,
+      "paths": [
+        {
+          "path": "public/airtrust-pwa-icon-20260830-512.png",
+          "bytes": 12208,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/android-chrome-512x512.png",
+          "bytes": 12208,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "b12beb108cfc8cd8c38cda67cdd52d34954917ef",
+      "copies": 2,
+      "bytesPerCopy": 11083,
+      "logicalDuplicateBytes": 11083,
+      "paths": [
+        {
+          "path": "public/airtrust-brand-icon-20260915-192.png",
+          "bytes": 11083,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/airtrust-site-logo-20260830-192.png",
+          "bytes": 11083,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "fcdd8d0ad534413eff07c03ccb73f18bded23e35",
+      "copies": 8,
+      "bytesPerCopy": 1454,
+      "logicalDuplicateBytes": 10178,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/assets/rotate-device.6f802beb1090241b.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/rotate-device.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/assets/rotate-device.6f802beb1090241b.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/rotate-device.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/assets/rotate-device.6f802beb1090241b.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/rotate-device.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/assets/rotate-device.6f802beb1090241b.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/rotate-device.png",
+          "bytes": 1454,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "47af236acddfae49fd3e3d9bc5b25176d001b470",
+      "copies": 2,
+      "bytesPerCopy": 10073,
+      "logicalDuplicateBytes": 10073,
+      "paths": [
+        {
+          "path": "public/airtrust-brand-icon-20260915-180.png",
+          "bytes": 10073,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/airtrust-site-logo-apple-20260830.png",
+          "bytes": 10073,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "c8d210c9af00f319ae8b9741cb0391f18e95fa94",
+      "copies": 4,
+      "bytesPerCopy": 3211,
+      "logicalDuplicateBytes": 9633,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/templates/star-earned.png",
+          "bytes": 3211,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/templates/star-earned.png",
+          "bytes": 3211,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/templates/star-earned.png",
+          "bytes": 3211,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/templates/star-earned.png",
+          "bytes": 3211,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "e085ac39b50cacceb3e22bf47fe0159daa6b7054",
+      "copies": 2,
+      "bytesPerCopy": 9311,
+      "logicalDuplicateBytes": 9311,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/images_10_kj5ebh.jpg",
+          "bytes": 9311,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/images_10_p2lfqh.jpg",
+          "bytes": 9311,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "25aadfb31c735fbf2197e8fbc9485143e34e451e",
+      "copies": 2,
+      "bytesPerCopy": 7412,
+      "logicalDuplicateBytes": 7412,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/unnamed_ezreno.gif",
+          "bytes": 7412,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/fit_content_assets/unnamed_tgohnm.gif",
+          "bytes": 7412,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "3450e292a9ab97184a84fab571556ecc8a806a20",
+      "copies": 2,
+      "bytesPerCopy": 6341,
+      "logicalDuplicateBytes": 6341,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/fit_content_assets/images_qoyz67.jpg",
+          "bytes": 6341,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/fit_content_assets/images_qoyz67.jpg",
+          "bytes": 6341,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "740fdbba20118a4f167d89dd772c1e126a131b69",
+      "copies": 4,
+      "bytesPerCopy": 1763,
+      "logicalDuplicateBytes": 5289,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/runtime.670f4cabae4eeec9.js",
+          "bytes": 1763,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/runtime.670f4cabae4eeec9.js",
+          "bytes": 1763,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/runtime.670f4cabae4eeec9.js",
+          "bytes": 1763,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/runtime.670f4cabae4eeec9.js",
+          "bytes": 1763,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "40f30b771536bd69de13e2c454dec989ee9014c9",
+      "copies": 2,
+      "bytesPerCopy": 4087,
+      "logicalDuplicateBytes": 4087,
+      "paths": [
+        {
+          "path": "public/airtrust-pwa-icon-20260830-192.png",
+          "bytes": 4087,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/android-chrome-192x192.png",
+          "bytes": 4087,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "83049330ae8719ebfa9c1defd13582116da2515f",
+      "copies": 2,
+      "bytesPerCopy": 3796,
+      "logicalDuplicateBytes": 3796,
+      "paths": [
+        {
+          "path": "public/airtrust-apple-touch-icon-20260830.png",
+          "bytes": 3796,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        },
+        {
+          "path": "public/apple-touch-icon.png",
+          "bytes": 3796,
+          "categories": [
+            "image"
+          ],
+          "directManifestReference": false,
+          "referenceStatus": "runtime-reference-not-audited",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "20e73057402daa0006da47aea8681df11468b789",
+      "copies": 4,
+      "bytesPerCopy": 1213,
+      "logicalDuplicateBytes": 3639,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/ims_xml.xsd",
+          "bytes": 1213,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/ims_xml.xsd",
+          "bytes": 1213,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/ims_xml.xsd",
+          "bytes": 1213,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/ims_xml.xsd",
+          "bytes": 1213,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "f96185b8f5522b11dcdfeba40889a40e7d2bd06f",
+      "copies": 4,
+      "bytesPerCopy": 1017,
+      "logicalDuplicateBytes": 3051,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/expand-browser.png",
+          "bytes": 1017,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/expand-browser.png",
+          "bytes": 1017,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/expand-browser.png",
+          "bytes": 1017,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/expand-browser.png",
+          "bytes": 1017,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "31c533c1cd2de30adfd346e61af09d8ff69d36e0",
+      "copies": 4,
+      "bytesPerCopy": 450,
+      "logicalDuplicateBytes": 1350,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/templates/star-light.png",
+          "bytes": 450,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/templates/star-light.png",
+          "bytes": 450,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/templates/star-light.png",
+          "bytes": 450,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/templates/star-light.png",
+          "bytes": 450,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "d645aa8c0a4ec7dc34d3f0278add1daefe5198b8",
+      "copies": 4,
+      "bytesPerCopy": 428,
+      "logicalDuplicateBytes": 1284,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/templates/star-default.png",
+          "bytes": 428,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/templates/star-default.png",
+          "bytes": 428,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/templates/star-default.png",
+          "bytes": 428,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/templates/star-default.png",
+          "bytes": 428,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "95ea34e5bf88569412ef67108cef7b68fbd4eb4b",
+      "copies": 2,
+      "bytesPerCopy": 866,
+      "logicalDuplicateBytes": 866,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/player.html",
+          "bytes": 866,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/player.html",
+          "bytes": 866,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "88dad4442c27f46eb32eff251801df7a85f9e7d7",
+      "copies": 2,
+      "bytesPerCopy": 863,
+      "logicalDuplicateBytes": 863,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/index.html",
+          "bytes": 863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/index.html",
+          "bytes": 863,
+          "categories": [
+            "scorm_content"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    },
+    {
+      "gitBlobSha1": "e32226bacc73dcad441bcdfa3c48a7219d533b61",
+      "copies": 4,
+      "bytesPerCopy": 81,
+      "logicalDuplicateBytes": 243,
+      "paths": [
+        {
+          "path": "Arquivos - EAD/CGA - Conhecimentos Gerais de Aeronaves/img/video/empty.png",
+          "bytes": 81,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Emergências Gerais/img/video/empty.png",
+          "bytes": 81,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações Offshore/img/video/empty.png",
+          "bytes": 81,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        },
+        {
+          "path": "Arquivos - EAD/Operações PBN/img/video/empty.png",
+          "bytes": 81,
+          "categories": [
+            "scorm_content",
+            "image"
+          ],
+          "directManifestReference": true,
+          "referenceStatus": "manifest-referenced",
+          "safeToDelete": false
+        }
+      ],
+      "safeToDelete": false
+    }
+  ],
+  "duplicateCopies": 213,
+  "logicalDuplicateBytes": 28773149,
+  "deletionAuthorized": false,
+  "note": "Manifest checks cover direct imsmanifest.xml paths only. Other runtime, URL, import, course, and release references are not proven absent; no deletion is authorized."
+}
