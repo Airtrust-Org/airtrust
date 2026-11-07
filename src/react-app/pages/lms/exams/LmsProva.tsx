@@ -147,7 +147,7 @@ export default function LmsProva(): React.ReactElement {
       const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'CERTIFICATE_RETRY_FAILED');
-      setStatus('Solicitação processada. Consulte seus certificados; se ainda não aparecer, contate a Gerência de Treinamento.');
+      setStatus('Solicitação recebida. A emissão só é tentada para matrículas com qualificação EAD elegível e vinculada; esta resposta não confirma emissão. Consulte seus certificados e, se estiver ausente, contate a Gerência de Treinamento.');
     } catch {
       setError('Não foi possível solicitar uma nova tentativa de emissão do certificado. Tente novamente mais tarde.');
     } finally { setBusy(false); }
@@ -175,6 +175,7 @@ export default function LmsProva(): React.ReactElement {
           {exam.state === 'COMPLETED' ? (
             <>
               <p className="mb-3">Treinamento já concluído.</p>
+              <p className="mb-3 text-sm">Solicite uma nova tentativa apenas se este treinamento gera certificado EAD e o documento ainda não aparece. A solicitação não garante emissão.</p>
               <button type="button" className={secondary} disabled={busy} onClick={() => void retryCertificate()}>
                 Solicitar nova tentativa de emissão do certificado
               </button>
