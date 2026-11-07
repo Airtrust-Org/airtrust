@@ -20,7 +20,7 @@ describe('Compliance designation auto-enrollment contract', () => {
 
   it('preserves valid evidence and active enrollment before creating a new cycle', () => {
     expect(source).toContain('skipped_valid_evidence');
-    expect(source).toContain("date(qh.data_vencimento)>=date('now')");
+    expect(source).toContain("date(qh.data_vencimento)>=date('now','-3 hours')");
     expect(source).toContain('hasActiveMatriculaCycle(existing)');
     expect(source).toContain("origin:'AUTO_DESIGNACAO'");
   });

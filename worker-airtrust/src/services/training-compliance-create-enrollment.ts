@@ -27,8 +27,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
          WHERE fcc.empresa_id=f.empresa_id AND fcc.funcionario_id=f.id
            AND fcc.condicao_id=${alias}.condicao_id AND fcc.ativo=1
            AND fcc.deleted_at IS NULL
-           AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now'))
-           AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now'))))`
+           AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now','-3 hours'))
+           AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now','-3 hours'))))`
       : `AND ${alias}.condicao_id IS NULL`
     : '';
   const aircraftGuard=(alias:string)=> hasAircraft
@@ -40,8 +40,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           WHERE fa.funcionario_id=f.id
             ${aircraftAssignmentTenantGuard}
             AND fa.ativo=1 AND fa.deleted_at IS NULL
-            AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
-            AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))
+            AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now','-3 hours'))
+            AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now','-3 hours'))
             AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=
                 UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ',''))))`
       : `AND (${alias}.aeronave_modelo IS NULL OR TRIM(${alias}.aeronave_modelo)='')`
@@ -76,8 +76,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           AND tr.qualificacao_tipo_id=c.qualificacao_tipo_id AND tr.ativo=1 AND tr.deleted_at IS NULL
           AND tr.obrigatoriedade='OBRIGATORIA' AND tr.auto_matricular_ead=1
           AND tr.modalidade_requerida='EAD'
-          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now'))
-          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now'))
+          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now','-3 hours'))
+          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now','-3 hours'))
           ${conditionGuard('tr')}
           ${aircraftGuard('tr')}
         WHERE 1=(SELECT COUNT(*) FROM lms_cursos c2
@@ -93,8 +93,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
              WHERE higher.empresa_id=tr.empresa_id
                AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
                AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
-               AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=date('now'))
-               AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=date('now'))
+               AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=date('now','-3 hours'))
+               AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=date('now','-3 hours'))
                AND ${applies('higher')}
                ${conditionGuard('higher')}
                ${aircraftGuard('higher')}

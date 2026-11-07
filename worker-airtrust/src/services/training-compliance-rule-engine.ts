@@ -194,16 +194,16 @@ export function trainingComplianceRuleApplicabilitySql(
          AND fcc.funcionario_id=${employeeAlias}.id
          AND fcc.condicao_id=${ruleAlias}.condicao_id
          AND fcc.ativo=1 AND fcc.deleted_at IS NULL
-         AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now'))
-         AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now'))
+         AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now','-3 hours'))
+         AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now','-3 hours'))
     ))
     AND (${ruleAlias}.aeronave_modelo IS NULL OR TRIM(${ruleAlias}.aeronave_modelo)='' OR EXISTS (
       SELECT 1 FROM funcionarios_aeronaves fa JOIN aeronaves a
         ON a.id=fa.aeronave_id AND a.empresa_id=${ruleAlias}.empresa_id AND a.deleted_at IS NULL
        WHERE fa.funcionario_id=${employeeAlias}.id
          AND fa.deleted_at IS NULL AND COALESCE(fa.ativo,1)=1
-         AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
-         AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))
+         AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now','-3 hours'))
+         AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now','-3 hours'))
          AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=UPPER(REPLACE(TRIM(${ruleAlias}.aeronave_modelo),' ',''))
     ) OR (NOT EXISTS (
       SELECT 1 FROM funcionarios_aeronaves fax
@@ -225,8 +225,8 @@ export async function hydrateTrainingComplianceConditions<
       .prepare(
         `SELECT funcionario_id, condicao_id FROM funcionarios_compliance_condicoes
       WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL
-        AND (data_inicio IS NULL OR date(data_inicio)<=date('now'))
-        AND (data_fim IS NULL OR date(data_fim)>=date('now'))`,
+        AND (data_inicio IS NULL OR date(data_inicio)<=date('now','-3 hours'))
+        AND (data_fim IS NULL OR date(data_fim)>=date('now','-3 hours'))`,
       )
       .bind(empresaId)
       .all<{ funcionario_id: number; condicao_id: number }>(),
@@ -285,16 +285,16 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
         AND ${special}.ativo=1 AND ${special}.deleted_at IS NULL
         AND ${special}.obrigatoriedade='OBRIGATORIA'
         AND SUBSTR(UPPER(TRIM(COALESCE(${special}.perfil_competencia,''))),1,6)='AVSEC_'
-        AND (${special}.vigencia_inicio IS NULL OR date(${special}.vigencia_inicio)<=date('now'))
-        AND (${special}.vigencia_fim IS NULL OR date(${special}.vigencia_fim)>=date('now'))
+        AND (${special}.vigencia_inicio IS NULL OR date(${special}.vigencia_inicio)<=date('now','-3 hours'))
+        AND (${special}.vigencia_fim IS NULL OR date(${special}.vigencia_fim)>=date('now','-3 hours'))
         AND ${trainingComplianceRuleApplicabilitySql(special, f)}
         AND NOT EXISTS (
           SELECT 1 FROM treinamento_requisitos ${other}
           WHERE ${other}.empresa_id=${special}.empresa_id
             AND ${other}.qualificacao_tipo_id=${special}.qualificacao_tipo_id
             AND ${other}.ativo=1 AND ${other}.deleted_at IS NULL
-            AND (${other}.vigencia_inicio IS NULL OR date(${other}.vigencia_inicio)<=date('now'))
-            AND (${other}.vigencia_fim IS NULL OR date(${other}.vigencia_fim)>=date('now'))
+            AND (${other}.vigencia_inicio IS NULL OR date(${other}.vigencia_inicio)<=date('now','-3 hours'))
+            AND (${other}.vigencia_fim IS NULL OR date(${other}.vigencia_fim)>=date('now','-3 hours'))
             AND (${other}.perfil_competencia IS NULL
                  OR UPPER(TRIM(${other}.perfil_competencia))=UPPER(TRIM(${special}.perfil_competencia)))
             AND ${trainingComplianceRuleApplicabilitySql(other, f)}
@@ -309,8 +309,8 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
      AND ${tr}.ativo=1 AND ${tr}.deleted_at IS NULL
       ${categoryFilter}
      AND ${corporateNotSuperseded}
-     AND (${tr}.vigencia_inicio IS NULL OR date(${tr}.vigencia_inicio)<=date('now'))
-     AND (${tr}.vigencia_fim IS NULL OR date(${tr}.vigencia_fim)>=date('now'))
+     AND (${tr}.vigencia_inicio IS NULL OR date(${tr}.vigencia_inicio)<=date('now','-3 hours'))
+     AND (${tr}.vigencia_fim IS NULL OR date(${tr}.vigencia_fim)>=date('now','-3 hours'))
      AND ${trainingComplianceRuleApplicabilitySql(tr, f)}
    ORDER BY ${trainingComplianceRulePrioritySql(tr)} DESC, ${tr}.id DESC LIMIT 1),0)=1`;
 }
