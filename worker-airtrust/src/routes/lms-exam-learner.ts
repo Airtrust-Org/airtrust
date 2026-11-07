@@ -77,11 +77,12 @@ routes.get('/matriculas/:matriculaId/prova',async c=>{
   let certificate:'ISSUED'|'MISSING'|'NOT_APPLICABLE'|undefined;
   if(gate.state==='COMPLETED'){
     const row=await c.env.DB.prepare(
-      'SELECT qh.certificado_arquivo_id AS arq FROM lms_matriculas m '+
-      'LEFT JOIN qualificacoes_historico qh ON qh.id=m.qualificacao_historico_id AND qh.deleted_at IS NULL '+
+      'SELECT qh.id AS qualification_id, qh.certificado_arquivo_id AS arq FROM lms_matriculas m '+
+      'LEFT JOIN qualificacoes_historico qh ON qh.id=m.qualificacao_historico_id '+
+      'AND qh.empresa_id=m.empresa_id AND qh.deleted_at IS NULL '+
       'WHERE m.id=? AND m.empresa_id=? AND m.deleted_at IS NULL LIMIT 1'
-    ).bind(gateIds.matriculaId,gateIds.empresaId).first<{arq:number|null}>();
-    certificate=row?.arq?'ISSUED':row?'MISSING':'NOT_APPLICABLE';
+    ).bind(gateIds.matriculaId,gateIds.empresaId).first<{qualification_id:number|null;arq:number|null}>();
+    certificate=row?.qualification_id?(row.arq?'ISSUED':'MISSING'):'NOT_APPLICABLE';
   }
   return c.json({success:true,data:{
     state:gate.state,missing:gate.missing,attemptsUsed:gate.attemptsUsed,
