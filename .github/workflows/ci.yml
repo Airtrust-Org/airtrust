@@ -67,6 +67,8 @@ jobs:
           node --test scripts/ci/check-frontend-entry-chunks.test.mjs
       - name: validate Native Player 3 F5 QA approval gate
         run: node --test scripts/__tests__/player3-native-qa-approval-gate.test.mjs
+      - name: validate review-only Native V3 course inventory
+        run: node --test scripts/__tests__/native-v3-course-inventory.test.mjs
       - name: validate Player3 independent synthetic learner workflow
         run: node --test scripts/__tests__/player3-qa-learners.test.mjs
       - name: validate SCORM package and duplicate inventory contracts
