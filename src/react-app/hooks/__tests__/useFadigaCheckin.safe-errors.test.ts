@@ -18,6 +18,27 @@ describe('flight fatigue visible errors', () => {
     }
   });
 
+  it('explica rejeição de PVT após a apresentação sem sugerir reenvio ou alterar horário', () => {
+    const message = safeFadigaVisibleErrorMessage(
+      'daily-checkin-submit',
+      new Error('post_presentation_readiness_not_allowed'),
+    );
+    expect(message).toMatch(/hora de apresentação.*já passou/i);
+    expect(message).toMatch(/check-in não foi registrado/i);
+    expect(message).toMatch(/coordenação/i);
+    expect(message).not.toMatch(/tente novamente|post_presentation_readiness_not_allowed/i);
+  });
+
+  it('diferencia PVT retrospectivo e protocolo incompatível sem expor códigos internos', () => {
+    const past = safeFadigaVisibleErrorMessage('daily-checkin-submit',
+      new Error('retrospective_readiness_not_allowed'));
+    const outdated = safeFadigaVisibleErrorMessage('daily-checkin-submit',
+      new Error('invalid_readiness_protocol'));
+    expect(past).toMatch(/dia anterior/i);
+    expect(outdated).toMatch(/atualize o AirTrust/i);
+    expect([past, outdated].join(' ')).not.toMatch(/readiness_not_allowed|invalid_readiness_protocol/);
+  });
+
   it('informa que a gravação ocorreu quando somente o pós-processamento falhou', () => {
     const message = safeFadigaVisibleErrorMessage(
       'daily-checkin-submit',
