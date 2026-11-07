@@ -148,8 +148,25 @@ export function safeFadigaVisibleErrorMessage(
     case 'team-checkins-load':
       return 'Não foi possível carregar os check-ins da equipe.';
     case 'daily-checkin-submit':
-      if (_technicalDetail instanceof Error && _technicalDetail.message === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
-        return 'O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.';
+      if (_technicalDetail instanceof Error) {
+        const code = _technicalDetail.message;
+        if (code === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
+          return 'O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.';
+        }
+        // A rejection before the D1 batch is not a transient connection failure:
+        // repeating the same PVT payload cannot make it valid as pre-flight evidence.
+        if (code === 'post_presentation_readiness_not_allowed') {
+          return 'A hora de apresentação informada já passou. O teste de atenção feito agora não pode ser aceito como avaliação pré-jornada. O check-in não foi registrado; procure a coordenação para regularizar o registro tardio. Não altere o horário de apresentação para contornar a regra.';
+        }
+        if (code === 'retrospective_readiness_not_allowed') {
+          return 'O teste de atenção de hoje não pode ser usado como avaliação de um dia anterior. O check-in não foi registrado; procure a coordenação para orientar o registro retrospectivo.';
+        }
+        if (code === 'invalid_readiness_protocol') {
+          return 'A versão do teste de atenção não é compatível com o protocolo atual. Atualize o AirTrust e refaça o teste somente antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
+        }
+        if (['invalid_trial_sequence', 'invalid_trial_timing', 'invalid_duration', 'readiness_trials_required'].includes(code)) {
+          return 'Os dados do teste de atenção não passaram na validação. O check-in não foi registrado. Atualize o AirTrust e refaça o teste antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
+        }
       }
       return 'Não foi possível registrar o check-in de fadiga. Tente novamente.';
   }
