@@ -44,7 +44,15 @@ async function reset(opts: { viewed?: number[] } = {}) {
   const db = finalizeCertificateDb({ viewed: opts.viewed });
   addAuthTables(db);
   // Tabelas auxiliares lidas por GET /matriculas/:id (conteudo H5P/handoff); vazias e sinteticas.
-  db.exec(`ALTER TABLE lms_cursos ADD COLUMN scorm_versao TEXT; ALTER TABLE lms_cursos ADD COLUMN scorm_launch_file TEXT;`);
+  // The learner's /matriculas/minhas-ead query selects these real LMS
+  // catalogue columns. The synthetic finalization fixture intentionally omits
+  // them; without this adapter the browser smoke logs SQLite 500s while a
+  // narrower UI assertion can still pass (false green).
+  db.exec(`ALTER TABLE lms_cursos ADD COLUMN scorm_versao TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN scorm_launch_file TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN categoria TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN carga_horaria_minutos INTEGER;
+    ALTER TABLE lms_cursos ADD COLUMN thumbnail_r2_key TEXT;`);
   db.exec(`CREATE TABLE lms_h5p_conteudos(id INTEGER PRIMARY KEY, empresa_id INTEGER, r2_key TEXT, deleted_at TEXT);`);
   await publishExam(db as unknown as ExamSqliteD1);
   state = { db, r2: memoryBucket(), renders: 0 };
