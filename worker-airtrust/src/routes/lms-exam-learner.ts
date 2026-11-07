@@ -71,10 +71,21 @@ async function currentAttemptLearner(
 }
 
 routes.get('/matriculas/:matriculaId/prova',async c=>{
-  const gate=await loadExamGate(c.env,ids(c,c.req.param('matriculaId')));
+  const gateIds=ids(c,c.req.param('matriculaId'));
+  const gate=await loadExamGate(c.env,gateIds);
+  // Read-only readback: lets the UI offer certificate retry only when it is actually missing.
+  let certificate:'ISSUED'|'MISSING'|'NOT_APPLICABLE'|undefined;
+  if(gate.state==='COMPLETED'){
+    const row=await c.env.DB.prepare(
+      'SELECT qh.certificado_arquivo_id AS arq FROM lms_matriculas m '+
+      'LEFT JOIN qualificacoes_historico qh ON qh.id=m.qualificacao_historico_id AND qh.deleted_at IS NULL '+
+      'WHERE m.id=? AND m.empresa_id=? AND m.deleted_at IS NULL LIMIT 1'
+    ).bind(gateIds.matriculaId,gateIds.empresaId).first<{arq:number|null}>();
+    certificate=row?.arq?'ISSUED':row?'MISSING':'NOT_APPLICABLE';
+  }
   return c.json({success:true,data:{
     state:gate.state,missing:gate.missing,attemptsUsed:gate.attemptsUsed,
-    hasOpenAttempt:gate.hasOpenAttempt,
+    hasOpenAttempt:gate.hasOpenAttempt,...(certificate?{certificate}:{}),
     // After a pass the learner finalizes through the canonical endpoint.
     finalizeRequired:gate.state==='PASSED',
   }});
