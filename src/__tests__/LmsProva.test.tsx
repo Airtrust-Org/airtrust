@@ -45,6 +45,48 @@ describe('Prova final do aluno', () => {
     expect(screen.queryByRole('button', { name: /Iniciar prova/ })).toBeNull();
   });
 
+  it('matrícula concluída permite solicitar recuperação do certificado sem reabrir a prova', async () => {
+    mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
+    expect(screen.queryByRole('button', { name: /Iniciar prova|Concluir treinamento/ })).toBeNull();
+    expect(screen.getByText(/Solicite uma nova tentativa apenas se este treinamento gera certificado EAD/)).toBeTruthy();
+    mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/A emissão só é tentada para matrículas com qualificação EAD elegível/));
+    expect(screen.getByRole('status').textContent).toMatch(/não confirma emissão/);
+    expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
+    expect(screen.queryByTestId('where')).toBeNull();
+  });
+
+  it('certificado já emitido ou não aplicável não oferece reenvio', async () => {
+    for (const cert of ['ISSUED', 'NOT_APPLICABLE']) {
+      mocked.mockReset();
+      mocked.mockResolvedValueOnce(ok({ ...state('COMPLETED'), certificate: cert }));
+      renderPage();
+      expect(await screen.findByText('Treinamento já concluído.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('certificado ausente (MISSING) oferece o reenvio', async () => {
+    mocked.mockResolvedValueOnce(ok({ ...state('COMPLETED'), certificate: 'MISSING' }));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' })).toBeTruthy();
+  });
+
+  it('falha no reenvio do certificado não afirma que o treinamento deixou de estar concluído', async () => {
+    mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
+    mocked.mockResolvedValueOnce(fail('ERROR', 500));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/nova tentativa de emissão do certificado/));
+    expect(screen.getByText('Treinamento já concluído.')).toBeTruthy();
+    expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
+  });
+
   it('ambiente sem a prova ativada mostra mensagem clara', async () => {
     mocked.mockResolvedValueOnce(fail('EXAM_RUNTIME_NOT_ACTIVATED', 503));
     renderPage();
