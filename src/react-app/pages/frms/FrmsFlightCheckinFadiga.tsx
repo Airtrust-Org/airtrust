@@ -495,7 +495,10 @@ function TriStateButtons({
 export default function FrmsFlightCheckinFadiga() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = frmsBrazilOperationalTodayIso();
+  // A check-in and its PVT are bound to the operational day on which the
+  // form was opened. The 15 s timer must never silently relabel that evidence
+  // after midnight Brasília or copy it into a different day's draft.
+  const [today] = useState(() => frmsBrazilOperationalTodayIso());
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -641,7 +644,9 @@ export default function FrmsFlightCheckinFadiga() {
   const isLateCheckin = presentationTimeValid &&
     isAtOrAfterFrmsPresentationBrasilia(new Date(nowMs), presentationTimeNormalized);
   const lateAcknowledged = isLateCheckin && lateAcknowledgedPresentation === presentationTimeNormalized;
-  const canSubmitWithReadiness = canSubmit && (isLateCheckin ? lateAcknowledged : vigilanceResult !== null);
+  const dateRolledOver = frmsBrazilOperationalTodayIso(new Date(nowMs)) !== today;
+  const canSubmitWithReadiness = !dateRolledOver && canSubmit &&
+    (isLateCheckin ? lateAcknowledged : vigilanceResult !== null);
   const presentationTimeShowInvalid =
     (presentationTimeTouched || submitAttempted) && presentationTimeHasValue && !presentationTimeValid;
   const wakeTimeHasValue = wakeTime.trim().length > 0;
@@ -851,6 +856,13 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900">
               Data operacional do check-in: {today.slice(8, 10)}/{today.slice(5, 7)}/{today.slice(0, 4)} (Brasília)
             </div>
+            {dateRolledOver && (
+              <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
+                A data operacional mudou enquanto o formulário estava aberto. Por segurança,
+                as respostas e o teste de atenção anteriores não podem ser usados no novo dia.
+                Atualize a página e realize um novo check-in antes de enviar.
+              </div>
+            )}
 
             {existente && (
               <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
