@@ -270,7 +270,7 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
     extractBrowserLmsPackageMock.mockReturnValue(f.entries);
     await expect(uploadScormInactiveProductionCandidate({
       cursoId: 62, file: scormFile(f.zip), replaceImmediately: true,
-    })).rejects.toThrow(/não comprova o perfil formativo/);
+    })).rejects.toThrow(/não comprova perfil formativo ou prova externa/);
     expect(fetchWithAuthMock).not.toHaveBeenCalled();
   });
 
