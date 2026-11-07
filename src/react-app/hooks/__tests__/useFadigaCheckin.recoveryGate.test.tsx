@@ -105,6 +105,26 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves an anonymous incident reference on generic server failures', async () => {
+    recoveryMock.mockResolvedValue(null);
+    apiFetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        success: false,
+        error: 'Erro ao registrar check-in de fadiga',
+        incident_id: '12345678-1234-1234-1234-123456789abc',
+      }),
+    });
+    const { result } = renderHook(() => useSubmitCheckin(), { wrapper: createWrapper() });
+    await act(async () => {
+      await expect(result.current.mutateAsync(SYNTHETIC_FORM)).rejects.toThrow(
+        /consulte seu Histórico.*Referência: 12345678/i,
+      );
+    });
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry a committed check-in after downstream processing fails', async () => {
     recoveryMock.mockResolvedValue(null);
     apiFetchMock.mockResolvedValue({
