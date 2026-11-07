@@ -127,6 +127,19 @@ describe('E2E sintetico - publicacao, vinculo a edicao e estudo', () => {
   });
 });
 
+describe('E2E sintetico - readback de certificado em matricula concluida', () => {
+  it('COMPLETED expoe certificate MISSING -> ISSUED conforme o arquivo vinculado', async () => {
+    const db = freshDb(); await publishExam(db);
+    db.exec('ALTER TABLE lms_matriculas ADD COLUMN qualificacao_historico_id INTEGER');
+    db.exec("CREATE TABLE IF NOT EXISTS qualificacoes_historico (id INTEGER PRIMARY KEY, certificado_arquivo_id INTEGER, deleted_at TEXT)");
+    db.exec("INSERT INTO qualificacoes_historico (id, certificado_arquivo_id) VALUES (900, NULL)");
+    db.exec("UPDATE lms_matriculas SET status='CONCLUIDO', qualificacao_historico_id=900 WHERE id=10");
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'MISSING' });
+    db.exec('UPDATE qualificacoes_historico SET certificado_arquivo_id=55 WHERE id=900');
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'ISSUED' });
+  });
+});
+
 describe('E2E sintetico - gabarito, reprova e aprovacao', () => {
   it('nunca vaza gabarito/explicacao ao aluno, inclusive apos enviar', async () => {
     const db = freshDb(); await publishExam(db);
