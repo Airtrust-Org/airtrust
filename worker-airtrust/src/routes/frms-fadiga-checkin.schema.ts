@@ -47,6 +47,9 @@ export const CheckinCreateSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     late_submission_reason: z.enum(LATE_CREW_CHECKIN_REASONS).optional(),
+    // Explicit UI acknowledgement for a restricted post-presentation declaration.
+    // Never trust the device clock: the Worker independently verifies timing.
+    late_submission_acknowledged: z.literal(true).optional(),
     hora_dormiu: z
       .string()
       .regex(/^\d{2}:\d{2}$/)
