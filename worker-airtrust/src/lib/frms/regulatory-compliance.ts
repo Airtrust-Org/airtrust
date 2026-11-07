@@ -1,15 +1,88 @@
 import type { LimitesMap } from './types';
+import type { Art42Evaluation } from './law-art42-madrugadas';
+import { costaDoSolAct2025_2027InForce } from './compliance-policy';
 
 export interface RollingRegulatoryEvidence {
   data_referencia: string;
   funcionario_id: number;
-  hv_dia_min: number;
-  hv_mes_calendario_min: number;
-  hv_28_dias_min: number;
-  hv_365_dias_min: number;
+  hv_dia_min: number | null;
+  hv_mes_calendario_min: number | null;
+  hv_28_dias_min: number | null;
+  hv_365_dias_min: number | null;
   hv_ano_calendario_min: number | null;
   repouso_anterior_min: number;
   repouso_suficiente: number;
+  /** Update time of the rolling projection, required to prove data freshness. */
+  updated_at?: string | null;
+}
+
+type RawRollingRegulatoryEvidence = {
+  [K in keyof RollingRegulatoryEvidence]: RollingRegulatoryEvidence[K] | number | string | null | undefined;
+};
+
+function nonNegativeMinutes(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Acumulado nulo ou incoerente é evidência ausente, nunca zero. O ano civil
+ * menor que o mês civil denuncia linha anterior à coluna anual (default 0 da
+ * migration 0498) e é descartado apenas nessa dimensão.
+ */
+export function sanitizeRollingRegulatoryEvidence(
+  row: RawRollingRegulatoryEvidence,
+): RollingRegulatoryEvidence | null {
+  const hvDia = nonNegativeMinutes(row.hv_dia_min);
+  const hvMes = nonNegativeMinutes(row.hv_mes_calendario_min);
+  const hv28 = nonNegativeMinutes(row.hv_28_dias_min);
+  const hv365 = nonNegativeMinutes(row.hv_365_dias_min);
+  // Não descarte uma violação já comprovada só porque outra janela é
+  // desconhecida. Descarte apenas linhas sem nenhuma leitura de voo válida.
+  if ([hvDia, hvMes, hv28, hv365, nonNegativeMinutes(row.hv_ano_calendario_min)].every((v) => v == null)) return null;
+  const hvAno = nonNegativeMinutes(row.hv_ano_calendario_min);
+  const repouso = nonNegativeMinutes(row.repouso_anterior_min);
+  return {
+    data_referencia: String(row.data_referencia),
+    funcionario_id: Number(row.funcionario_id),
+    hv_dia_min: hvDia,
+    hv_mes_calendario_min: hvMes,
+    hv_28_dias_min: hv28,
+    hv_365_dias_min: hv365,
+    hv_ano_calendario_min: hvAno != null && (hvMes == null || hvAno >= hvMes) ? hvAno : null,
+    repouso_anterior_min: repouso ?? -1,
+    repouso_suficiente: Number(row.repouso_suficiente) === 1 ? 1 : 0,
+    updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+  };
+}
+
+/** Source-confirmed operational coverage for each rolling flight-hour window.
+ * Counts alone never certify completeness unless a tenant-scoped source ledger
+ * verified every expected operational day; unavailable is UNKNOWN, not zero.
+ */
+export interface RollingFlightCoverageEvidence {
+  sourceVerified: boolean;
+  windows: {
+    month: { expectedDays: number; confirmedDays: number };
+    year: { expectedDays: number; confirmedDays: number };
+    days28: { expectedDays: number; confirmedDays: number };
+    days365: { expectedDays: number; confirmedDays: number };
+  };
+}
+
+export function hasCompleteRollingFlightCoverage(
+  coverage: RollingFlightCoverageEvidence | null | undefined,
+): boolean {
+  if (!coverage?.sourceVerified) return false;
+  return Object.values(coverage.windows).every(({ expectedDays, confirmedDays }) =>
+    Number.isSafeInteger(expectedDays) &&
+    Number.isSafeInteger(confirmedDays) &&
+    // Toda janela avaliada contém pelo menos a data de referência. Um ledger
+    // vazio (0/0) não é prova de cobertura e nunca autoriza COMPLIANT.
+    expectedDays > 0 &&
+    confirmedDays === expectedDays,
+  );
 }
 
 export interface WorkRegulatoryEvidence {
@@ -46,20 +119,61 @@ export interface RegulatoryComplianceInput {
   profileCode: string;
   rbacBcApplicable: boolean;
   costaDoSolActApplicable?: boolean;
+  /** Data avaliada; o ACT só é citado dentro da vigência (cl. 1ª). */
+  dataReferencia?: string;
   mission?: CostaDoSolMissionEvidence | null;
   journeyDurationMin: number;
   rolling: RollingRegulatoryEvidence | null;
+  /** Must come from a verified tenant/day status ledger, never inferred from totals. */
+  rollingCoverage?: RollingFlightCoverageEvidence | null;
   work: WorkRegulatoryEvidence | null;
   limites: Pick<
     LimitesMap,
     'FDP_MAXIMO_HORAS' | 'HV_DIARIA_HORAS' | 'HV_MES_HORAS' | 'HV_28_DIAS_HORAS' | 'HV_365_DIAS_HORAS'
   >;
+  /** Lei 13.475 art. 42 calculado sobre as jornadas com horário da base. */
+  art42?: Art42Evaluation | null;
+  /**
+   * Só o perfil regulatório validado ativa o art. 42 como violação. Sem isso o
+   * achado é exibido como pendente de validação, sem alterar o status.
+   */
+  art42Enforced?: boolean;
+}
+
+/** Regra legal calculada, ainda sem validação jurídica para bloquear o status. */
+export interface RegulatoryPendingFinding {
+  code: string;
+  source: 'LAW';
+  reference: string;
+  actual: number;
+  limit: number;
+  message: string;
 }
 
 export interface RegulatoryComplianceResult {
   status: 'COMPLIANT' | 'VIOLATION' | 'UNKNOWN';
   violations: RegulatoryViolation[];
   unknownReasons: string[];
+  pendingValidation?: RegulatoryPendingFinding[];
+}
+
+function art42Findings(art42: Art42Evaluation): RegulatoryPendingFinding[] {
+  const out: RegulatoryPendingFinding[] = [];
+  if (art42.violations.includes('LAW_ART42_CONSECUTIVE')) {
+    out.push({
+      code: 'LAW_ART42_CONSECUTIVE', source: 'LAW', reference: 'Lei 13.475/2017 art. 42 caput e §4º',
+      actual: art42.consecutiveMadrugadas, limit: 2,
+      message: `${art42.consecutiveMadrugadas} madrugadas consecutivas de trabalho > limite de 2`,
+    });
+  }
+  if (art42.violations.includes('LAW_ART42_168H')) {
+    out.push({
+      code: 'LAW_ART42_168H', source: 'LAW', reference: 'Lei 13.475/2017 art. 42 caput, §§2º e 4º',
+      actual: art42.madrugadasIn168h, limit: 4,
+      message: `${art42.madrugadasIn168h} madrugadas em 168 h > limite de 4`,
+    });
+  }
+  return out;
 }
 
 function pushMaxViolation(
@@ -84,7 +198,14 @@ export function evaluateRegulatoryCompliance(
   } else if (!input.rolling) {
     unknownReasons.add('ROLLING_REGULATORY_EVIDENCE_MISSING');
   } else {
-    pushMaxViolation(violations, {
+    if (!hasCompleteRollingFlightCoverage(input.rollingCoverage)) {
+      unknownReasons.add('ROLLING_FLIGHT_COVERAGE_INCOMPLETE');
+    }
+    if ([input.rolling.hv_dia_min, input.rolling.hv_mes_calendario_min,
+      input.rolling.hv_28_dias_min, input.rolling.hv_365_dias_min].some((v) => v == null)) {
+      unknownReasons.add('ROLLING_REGULATORY_EVIDENCE_MISSING');
+    }
+    if (input.rolling.hv_dia_min != null) pushMaxViolation(violations, {
       code: 'LAW_HELI_FLIGHT_DAY_8H',
       source: 'LAW',
       reference: 'Lei 13.475/2017 art. 32 IV',
@@ -92,7 +213,7 @@ export function evaluateRegulatoryCompliance(
       limitMin: 8 * 60,
       label: 'Horas de voo em 24h',
     });
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_mes_calendario_min != null) pushMaxViolation(violations, {
       code: 'LAW_HELI_FLIGHT_MONTH_90H',
       source: 'LAW',
       reference: 'Lei 13.475/2017 art. 33 IV',
@@ -100,7 +221,8 @@ export function evaluateRegulatoryCompliance(
       limitMin: 90 * 60,
       label: 'Horas de voo no mês calendário',
     });
-    if (input.limites.HV_DIARIA_HORAS > 0 && input.limites.HV_DIARIA_HORAS < 8) {
+    if (input.rolling.hv_dia_min != null &&
+      input.limites.HV_DIARIA_HORAS > 0 && input.limites.HV_DIARIA_HORAS < 8) {
       pushMaxViolation(violations, {
         code: 'PROFILE_FLIGHT_DAY_LIMIT', source: 'PROFILE',
         reference: 'Perfil FRMS governado / HV_DIARIA_HORAS',
@@ -109,7 +231,8 @@ export function evaluateRegulatoryCompliance(
         label: 'Limite diário de voo do perfil',
       });
     }
-    if (input.limites.HV_MES_HORAS > 0 && input.limites.HV_MES_HORAS < 90) {
+    if (input.rolling.hv_mes_calendario_min != null &&
+      input.limites.HV_MES_HORAS > 0 && input.limites.HV_MES_HORAS < 90) {
       pushMaxViolation(violations, {
         code: 'PROFILE_FLIGHT_MONTH_LIMIT', source: 'PROFILE',
         reference: 'Perfil FRMS governado / HV_MES_HORAS',
@@ -155,6 +278,32 @@ export function evaluateRegulatoryCompliance(
       label: 'Jornada/FDP diário',
     });
   }
+  // Lei 13.475 art. 37 (serviços II–V): 11 h simples, 14 h composta, 18 h revezamento.
+  // A composição da tripulação não está no snapshot: acima de 18 h é violação
+  // em qualquer composição; entre 11 h e 18 h, com perfil mais permissivo que
+  // 11 h, a conformidade legal não é verificável.
+  if (isHelicopter && input.journeyDurationMin > 18 * 60) {
+    pushMaxViolation(violations, {
+      code: 'LAW_DUTY_18H', source: 'LAW',
+      reference: 'Lei 13.475/2017 art. 37 III',
+      actualMin: input.journeyDurationMin, limitMin: 18 * 60,
+      label: 'Jornada acima do maior limite legal (revezamento)',
+    });
+  } else if (
+    isHelicopter &&
+    input.journeyDurationMin > 11 * 60 &&
+    input.limites.FDP_MAXIMO_HORAS * 60 > 11 * 60
+  ) {
+    unknownReasons.add('LAW_DUTY_CREW_COMPOSITION_UNKNOWN');
+  }
+
+  // Os limites de missão e trabalho estão na Lei 13.475 (art. 41); o ACT é
+  // citado como instrumento adicional apenas na sua vigência.
+  const actInForce = Boolean(input.costaDoSolActApplicable) &&
+    (input.dataReferencia == null || costaDoSolAct2025_2027InForce(input.dataReferencia));
+  const withAct = (law: string, clause: string) =>
+    actInForce ? `${law}; ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, ${clause}` : law;
+
   const workLimitApplies = isHelicopter || input.rbacBcApplicable;
   if (workLimitApplies) {
     if (!input.work) {
@@ -162,10 +311,8 @@ export function evaluateRegulatoryCompliance(
     } else {
       pushMaxViolation(violations, {
         code: 'WORK_MONTH_176H',
-        source: input.costaDoSolActApplicable ? 'ACT' : 'LAW',
-        reference: input.costaDoSolActApplicable
-          ? 'Lei 13.475/2017 art. 41; ACT Costa do Sol 2025/2027 cláusula 8ª'
-          : 'Lei 13.475/2017 art. 41',
+        source: 'LAW',
+        reference: withAct('Lei 13.475/2017 art. 41 caput', 'cláusula 8ª'),
         actualMin: input.work.monthWorkToDateMin,
         limitMin: 176 * 60,
         label: 'Tempo de trabalho no mês',
@@ -183,8 +330,8 @@ export function evaluateRegulatoryCompliance(
         unknownReasons.add('ACT_CDS_MISSION_DAY_EVIDENCE_MISSING');
       } else if (missionDay > 21) {
         violations.push({
-          code: 'ACT_CDS_MISSION_21D', source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          code: 'ACT_CDS_MISSION_21D', source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §2º', 'cláusula 9ª caput'),
           actualMin: missionDay * 24 * 60, limitMin: 21 * 24 * 60,
           message: `Missão com ${missionDay} dias > limite de 21 dias`,
         });
@@ -193,8 +340,8 @@ export function evaluateRegulatoryCompliance(
       const effective = input.mission.effectiveWorkDaysAtOperation;
       if (effective != null && Number.isFinite(effective) && effective > 17) {
         violations.push({
-          code: 'ACT_CDS_EFFECTIVE_17D', source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª caput',
+          code: 'ACT_CDS_EFFECTIVE_17D', source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §3º', 'cláusula 9ª caput'),
           actualMin: effective * 24 * 60, limitMin: 17 * 24 * 60,
           message: `Trabalho efetivo no local da operação em ${effective} dias > limite de 17 dias`,
         });
@@ -213,8 +360,8 @@ export function evaluateRegulatoryCompliance(
       } else if (completed < required) {
         violations.push({
           code: 'ACT_CDS_POST_MISSION_REST',
-          source: 'ACT',
-          reference: 'ACT Costa do Sol Táxi Aéreo S.A. 2025/2027, cláusula 9ª, parágrafo 1º',
+          source: 'LAW',
+          reference: withAct('Lei 13.475/2017 art. 41 §4º', 'cláusula 9ª, parágrafo 1º'),
           actualMin: completed * 24 * 60,
           limitMin: required * 24 * 60,
           message: `Folga pós-missão: ${completed} de ${required} dias completos antes de nova atividade`,
@@ -224,13 +371,13 @@ export function evaluateRegulatoryCompliance(
   }
 
   if (input.rbacBcApplicable && input.rolling) {
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_28_dias_min != null) pushMaxViolation(violations, {
       code: 'RBAC117_BC_FLIGHT_28D_93H', source: 'ANAC',
       reference: 'RBAC 117 EMD 01 B117.25/C117.25',
       actualMin: input.rolling.hv_28_dias_min, limitMin: 93 * 60,
       label: 'Horas de voo em 28 dias consecutivos',
     });
-    pushMaxViolation(violations, {
+    if (input.rolling.hv_365_dias_min != null) pushMaxViolation(violations, {
       code: 'RBAC117_BC_FLIGHT_365D_930H', source: 'ANAC',
       reference: 'RBAC 117 EMD 01 B117.25/C117.25',
       actualMin: input.rolling.hv_365_dias_min, limitMin: 930 * 60,
@@ -252,11 +399,31 @@ export function evaluateRegulatoryCompliance(
     });
   }
 
+  const pendingValidation: RegulatoryPendingFinding[] = [];
+  if (isHelicopter && input.art42 && input.art42Enforced && input.art42.incompleteDuties > 0) {
+    // Missing historical duty times may conceal a consecutive madrugada or 48h reset.
+    // Proven violations still take precedence over incomplete evidence.
+    unknownReasons.add('LAW_ART42_DUTY_TIMES_INCOMPLETE');
+  }
+  if (isHelicopter && input.art42) {
+    for (const finding of art42Findings(input.art42)) {
+      if (input.art42Enforced) {
+        violations.push({
+          code: finding.code, source: 'LAW', reference: finding.reference,
+          actualMin: finding.actual, limitMin: finding.limit, message: finding.message,
+        });
+      } else {
+        pendingValidation.push(finding);
+      }
+    }
+  }
+  const pending = pendingValidation.length > 0 ? { pendingValidation } : {};
+
   if (violations.length > 0) {
-    return { status: 'VIOLATION', violations, unknownReasons: [...unknownReasons] };
+    return { status: 'VIOLATION', violations, unknownReasons: [...unknownReasons], ...pending };
   }
   if (unknownReasons.size > 0) {
-    return { status: 'UNKNOWN', violations: [], unknownReasons: [...unknownReasons] };
+    return { status: 'UNKNOWN', violations: [], unknownReasons: [...unknownReasons], ...pending };
   }
-  return { status: 'COMPLIANT', violations: [], unknownReasons: [] };
+  return { status: 'COMPLIANT', violations: [], unknownReasons: [], ...pending };
 }

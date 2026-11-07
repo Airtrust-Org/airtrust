@@ -16,7 +16,7 @@ import { createLogger, toError } from '../utils/logger';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,

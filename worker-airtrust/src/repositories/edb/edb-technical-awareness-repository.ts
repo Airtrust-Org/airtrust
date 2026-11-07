@@ -1,16 +1,16 @@
-import { canonicalJson } from '../../services/edb/canonicalization';
+import { canonicalJson } from '../../lib/edb/canonicalization';
 import type {
   EdbAircraftIdentity,
   EdbMaintenanceSnapshot,
   EdbSignatureMethod,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import {
   hashTechnicalSituationContent,
   hashTechnicalSituationSnapshot,
   verifyPicTechnicalAcknowledgementBinding,
   type EdbPicTechnicalAcknowledgement,
   type EdbTechnicalSituationSnapshot,
-} from '../../services/edb/technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 export async function persistEdbTechnicalSituation(params: {
   db: D1Database;

@@ -230,14 +230,14 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
   });
 
   it('never directly replaces a private candidate or unproven/invalid manifest', async () => {
-    for (const manifest of [
+    for (const [index, manifest] of [
       { ...noExamContract(), release: { status: 'PRIVATE_CANDIDATE_NOT_CERTIFIED_DO_NOT_ACTIVATE' } },
       { ...noExamContract(), formative: { requiredActivities: [], scored: false } },
       { ...noExamContract(), completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1' } },
-    ]) {
+    ].entries()) {
       const f = scormZipWithCompletionContract(manifest);
       extractBrowserLmsPackageMock.mockReturnValue(f.entries);
-      expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('GOVERNED');
+      expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe(index === 0 ? 'PRIVATE' : 'GOVERNED');
     }
     const f = scormZip();
     extractBrowserLmsPackageMock.mockReturnValue(f.entries);

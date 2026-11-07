@@ -78,7 +78,7 @@ import {
   LmsModuleTabs,
   LmsPageShell,
   LmsStatPill,
-} from './lmsUi';
+} from '../../components/lms/lmsUi';
 import {
   getAdminCoursePreviewPath,
   supportsAdminCoursePreview as supportsContentPreview,
@@ -101,8 +101,17 @@ export function shouldLoadPersonalEnrollments(canManage: boolean, studentMode: b
   return !canManage || studentMode;
 }
 
-
 type TabId = 'meus' | 'catalogo';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function resolveLmsCatalogStudentMode(
+  canManage: boolean,
+  restrictToEnrolledCourses: boolean,
+  tab: TabId,
+): boolean {
+  return restrictToEnrolledCourses || (canManage && tab === 'meus');
+}
+
 
 const DEFAULT_CATEGORIES = [
   'EAD',
@@ -798,7 +807,7 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
-    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
+    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
@@ -1268,7 +1277,9 @@ function CourseDrawer({
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
                           <p className="mt-1">{directReplacement
                             ? 'Perfil formativo sem prova identificado. O Worker revalidará os gates antes de substituir a edição. Históricos e conclusões anteriores permanecem preservados.'
-                            : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
+                            : scormProfile === 'PRIVATE'
+                              ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
+                              : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1512,9 +1523,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
@@ -1857,10 +1868,9 @@ export default function LmsCatalogo() {
 
   const [tab, setTab] = useState<TabId>(restrictToEnrolledCourses ? 'meus' : 'catalogo');
 
-  // Gestores também podem atuar como alunos: na aba "Meus cursos" têm acesso ao
-  // fluxo de aluno (iniciar/continuar/concluir), mantendo a gestão na aba "Catálogo".
-  const gestorStudentMode = isGestor && tab === 'meus';
-  const studentMode = restrictToEnrolledCourses || gestorStudentMode;
+  // Gestores E administradores podem ser alunos sem perder permissões de gestão.
+  // O backend consulta sempre o vínculo funcional persistido, nunca só o JWT.
+  const studentMode = resolveLmsCatalogStudentMode(canManage, restrictToEnrolledCourses, tab);
   // Reuse the canonical training-compliance query once for the whole admin catalog.
   const { data: complianceRows } = useLmsCourseCompliance(canManage && !studentMode);
   const [search, setSearch] = useState('');
@@ -1894,7 +1904,8 @@ export default function LmsCatalogo() {
   // The admin catalog does not need an employee link, but all non-manager roles
   // (including COMPLIANCE and USUARIO) still need their personal enrollments.
   const loadPersonalEnrollments = shouldLoadPersonalEnrollments(canManage, studentMode);
-  const { data: matriculas, isLoading: loadingMatriculas } = useMinhasMatriculas(loadPersonalEnrollments);
+  const { data: matriculas, isLoading: loadingMatriculas, isError: personalEnrollmentError } =
+    useMinhasMatriculas(loadPersonalEnrollments, canManage && studentMode);
   const matricular = useMatricularCurso();
   const createCurso = useCreateCurso();
   const updateCurso = useUpdateCurso();
@@ -2315,7 +2326,7 @@ export default function LmsCatalogo() {
           title={studentMode && canManage ? 'Meus treinamentos' : roleView.title}
           subtitle={statsBar}
           actions={
-            isGestor ? (
+            canManage ? (
               <div className="flex flex-wrap items-center gap-2">
                 {gestorModeToggle}
                 {tab === 'catalogo' ? managementActions : null}
@@ -2393,7 +2404,11 @@ export default function LmsCatalogo() {
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
-            {loadingCourses || loadingMatriculas ? (
+            {studentMode && personalEnrollmentError ? (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                Não foi possível carregar suas matrículas pessoais. Verifique o vínculo da conta com um funcionário ativo desta empresa e tente novamente.
+              </div>
+            ) : loadingCourses || loadingMatriculas ? (
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                   <CourseCardSkeleton key={i} />

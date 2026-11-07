@@ -1,7 +1,7 @@
 import type { Context, Next } from 'hono';
 import type { Env } from '../types';
 import { processarEventosParaModulo } from '../shared/handlers';
-import { getEmpresaIdOptional } from '../routes/escalas-shared';
+import { getEmpresaIdOptional } from '../utils/tenant-resolution';
 
 export function processarEventosMiddleware() {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {

@@ -13,16 +13,27 @@ import {
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
+import { listTrainingCommunications, maskTrainingContact } from '../services/training-communication-history';
+import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
+import {
+  reserveTrainingAlert,
+  commitTrainingAlertReservation,
+} from '../services/training-alert-reservation';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
+  type ComplianceDailySnapshot,
 } from '../services/training-compliance-snapshots';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+} from '../middleware/employee-sector-access';
+import type {
+  TrainingComplianceSnapshot,
+  TrainingComplianceTargetFilter,
+} from '../services/training-compliance-snapshot-builder';
 import {
   buildTrainingComplianceReportRows,
   getComplianceReportAutomationPolicy,
@@ -38,6 +49,7 @@ type IntelligenceDeps = {
     db: D1Database,
     empresaId: number,
     access: EmployeeSectorAccess,
+    targetFilter?: TrainingComplianceTargetFilter,
   ) => Promise<TrainingComplianceSnapshot>;
   tableExists: (db: D1Database, tableName: string) => Promise<boolean>;
 };
@@ -120,8 +132,7 @@ export function createTrainingComplianceIntelligenceRoutes({
         last_status: string | null;
       }
     >();
-    if (!(await tableExists(db, 'notificacoes_log'))) return map;
-    try {
+    if (await tableExists(db, 'notificacoes_log')) try {
       const rows = await db
         .prepare(
           `WITH parsed AS (
@@ -134,6 +145,8 @@ export function createTrainingComplianceIntelligenceRoutes({
                FROM notificacoes_log
               WHERE empresa_id = ?
                 AND assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+                AND (assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
+                  OR status IN ('pendente', 'processando'))
                 AND json_valid(corpo) = 1
            ), ranked AS (
              SELECT *,
@@ -171,21 +184,65 @@ export function createTrainingComplianceIntelligenceRoutes({
         });
       }
     } catch {
-      return map;
+      // Histórico LMS pode continuar disponível mesmo sem logs de Compliance.
+    }
+
+    if (await tableExists(db, 'audit_logs')) try {
+      const logs = await db.prepare(`
+        WITH events AS (
+          SELECT CAST(json_extract(a.new_values, '$.funcionario_id') AS INTEGER) AS funcionario_id,
+                 c.qualificacao_tipo_id,
+                 a.created_at AS event_at,
+                 (CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO' THEN 1 ELSE 0 END
+                  + CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO' THEN 1 ELSE 0 END) AS sent_count,
+                 CASE WHEN json_extract(a.new_values, '$.whatsapp_resultado') IS NOT NULL
+                      THEN 'WHATSAPP' ELSE 'EMAIL' END AS channel,
+                 CASE WHEN json_extract(a.new_values, '$.email_resultado') = 'ENVIADO'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'ENVIADO'
+                      THEN 'enviada'
+                      WHEN json_extract(a.new_values, '$.email_resultado') = 'FALHA'
+                          OR json_extract(a.new_values, '$.whatsapp_resultado') = 'FALHA'
+                      THEN 'erro' ELSE 'sem_contato' END AS status
+            FROM audit_logs a
+            JOIN lms_cursos c ON c.empresa_id = a.empresa_id
+              AND c.id = CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER)
+           WHERE a.empresa_id = ? AND a.action = 'LMS_MATRICULA_ALERTA'
+             AND a.entity_type = 'lms_matriculas' AND json_valid(a.new_values) = 1
+             AND c.qualificacao_tipo_id IS NOT NULL
+        ), ranked AS (
+          SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY funcionario_id, qualificacao_tipo_id
+            ORDER BY event_at DESC
+          ) AS rn FROM events WHERE funcionario_id > 0
+        )
+        SELECT funcionario_id, qualificacao_tipo_id, SUM(sent_count) AS sent_count,
+               MAX(CASE WHEN rn=1 THEN event_at END) AS last_at,
+               MAX(CASE WHEN rn=1 THEN channel END) AS last_channel,
+               MAX(CASE WHEN rn=1 THEN status END) AS last_status
+          FROM ranked GROUP BY funcionario_id, qualificacao_tipo_id
+      `).bind(empresaId).all<{
+        funcionario_id: number;
+        qualificacao_tipo_id: number;
+        sent_count: number;
+        last_at: string | null;
+        last_channel: string | null;
+        last_status: string | null;
+      }>();
+      for (const log of logs.results || []) {
+        const key = `${Number(log.funcionario_id)}:${Number(log.qualificacao_tipo_id)}`;
+        const existing = map.get(key);
+        const later = !existing?.last_at || (log.last_at || '') > existing.last_at;
+        map.set(key, {
+          count: (existing?.count || 0) + Number(log.sent_count || 0),
+          last_at: later ? log.last_at : existing?.last_at || null,
+          last_channel: later ? log.last_channel : existing?.last_channel || null,
+          last_status: later ? log.last_status : existing?.last_status || null,
+        });
+      }
+    } catch {
+      // Falha de consulta histórica não deve apagar estatísticas comprovadas.
     }
     return map;
-  }
-
-  function maskNotificationDestination(value: unknown): string | null {
-    const raw = String(value || '').trim();
-    if (!raw) return null;
-    if (raw.includes('@')) {
-      const [local, domain] = raw.split('@');
-      return `${local?.slice(0, 1) || '*'}***@${domain || '***'}`;
-    }
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length >= 4) return `***${digits.slice(-4)}`;
-    return '***';
   }
 
   app.get('/configuracao-alertas', requireRole('admin', 'manager'), async (c) => {
@@ -344,12 +401,17 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    const already = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);
     return c.json({
       success: true,
       data: {
         selecionados: targets.length,
         com_email: targets.filter((item) => Boolean(item.email)).length,
         sem_email: targets.filter((item) => !item.email).length,
+        email_ja_alertado: targets.filter((item) => already.wasSent(item, 'EMAIL')).length,
+        email_pendente_historico: targets.filter((item) => already.isPending(item, 'EMAIL')).length,
+        whatsapp_ja_alertado: targets.filter((item) => already.wasSent(item, 'WHATSAPP')).length,
+        whatsapp_pendente_historico: targets.filter((item) => already.isPending(item, 'WHATSAPP')).length,
         com_whatsapp: targets.filter((item) => Boolean(item.telefone)).length,
         sem_whatsapp: targets.filter((item) => !item.telefone).length,
         vencidos: targets.filter((item) => item.status_compliance === 'VENCIDO').length,
@@ -365,6 +427,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const payload = (await c.req.json().catch(() => ({}))) as {
       targets?: RequestedComplianceTarget[];
       canais?: { email?: boolean; whatsapp?: boolean };
+      reenviar_hoje?: boolean;
     };
     const requested = Array.isArray(payload.targets) ? payload.targets.slice(0, 200) : [];
     if (!requested.length) throw new ApiError('Selecione ao menos uma pendência', 400);
@@ -378,15 +441,158 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targets = selectedComplianceTargets(empresaId, snapshot, requested);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
+    const history = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);
+    const attempted = new SameDayTrainingAlerts([], '');
+    let emailAlready = 0;
+    let whatsappAlready = 0;
+    let emailPending = 0;
+    let whatsappPending = 0;
+    let emailMissing = 0;
+    let whatsappMissing = 0;
+    let reservationFailures = 0;
+    let reservationFinalFailures = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
       const chunk = targets.slice(index, index + 5);
+      const queued = chunk.map((target) => {
+        const isEmailPending = channels.email && history.isPending(target, 'EMAIL');
+        const isWhatsappPending = channels.whatsapp && history.isPending(target, 'WHATSAPP');
+        const skipEmail = channels.email &&
+          (isEmailPending || attempted.wasSent(target, 'EMAIL') ||
+           (payload.reenviar_hoje !== true && history.wasSent(target, 'EMAIL')));
+        const skipWhatsapp = channels.whatsapp &&
+          (isWhatsappPending || attempted.wasSent(target, 'WHATSAPP') ||
+           (payload.reenviar_hoje !== true && history.wasSent(target, 'WHATSAPP')));
+        if (skipEmail) emailAlready++;
+        if (skipWhatsapp) whatsappAlready++;
+        if (isEmailPending) emailPending++;
+        if (isWhatsappPending) whatsappPending++;
+        if (channels.email && !skipEmail) attempted.markAccepted(target, 'EMAIL');
+        if (channels.whatsapp && !skipWhatsapp) attempted.markAccepted(target, 'WHATSAPP');
+        if (channels.email && !skipEmail && !target.email) emailMissing++;
+        if (channels.whatsapp && !skipWhatsapp && !target.telefone) whatsappMissing++;
+        return {
+          target,
+          available: {
+            email: channels.email && !skipEmail,
+            whatsapp: channels.whatsapp && !skipWhatsapp,
+          },
+        };
+      });
       results.push(
         ...(await Promise.all(
-          chunk.map((target) =>
-            sendComplianceNotification(c.env, c.env.DB, target, channels, triggerKey),
-          ),
+          queued.map(async ({ target, available }) => {
+            let emailReservationKey: string | null = null;
+            let whatsappReservationKey: string | null = null;
+
+            if (available.email) {
+              const emailRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
+                  funcionario_id: target.funcionario_id,
+                  qualificacao_tipo_id: target.qualificacao_tipo_id,
+                },
+                channel: 'EMAIL',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.email),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (emailRes?.reserved) {
+                emailReservationKey = emailRes.key;
+              } else if (emailRes) {
+                available.email = false;
+                if (emailRes.reason === 'pending_indeterminate') {
+                  emailPending++;
+                } else {
+                  emailAlready++;
+                }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.email = false;
+                reservationFailures++;
+              }
+            }
+
+            if (available.whatsapp) {
+              const whatsappRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
+                  funcionario_id: target.funcionario_id,
+                  qualificacao_tipo_id: target.qualificacao_tipo_id,
+                },
+                channel: 'WHATSAPP',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (whatsappRes?.reserved) {
+                whatsappReservationKey = whatsappRes.key;
+              } else if (whatsappRes) {
+                available.whatsapp = false;
+                if (whatsappRes.reason === 'pending_indeterminate') {
+                  whatsappPending++;
+                } else {
+                  whatsappAlready++;
+                }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.whatsapp = false;
+                reservationFailures++;
+              }
+            }
+
+            if (!available.email && !available.whatsapp) {
+              return {
+                funcionario_id: target.funcionario_id,
+                qualificacao_tipo_id: target.qualificacao_tipo_id,
+                email: { attempted: false, ok: false },
+                whatsapp: { attempted: false, ok: false },
+              };
+            }
+
+            const notificationResult = await sendComplianceNotification(
+              c.env,
+              c.env.DB,
+              target,
+              available,
+              triggerKey,
+            );
+
+            if (emailReservationKey) {
+              const emailOutcome = notificationResult.email.ok
+                ? 'enviada'
+                : !target.email
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: emailReservationKey,
+                outcome: emailOutcome,
+                errorMessage: notificationResult.email.error,
+                destinatarioMascarado: maskTrainingContact(target.email),
+              }).catch(() => { reservationFinalFailures += 1; });
+            }
+
+            if (whatsappReservationKey) {
+              const whatsappOutcome = notificationResult.whatsapp.ok
+                ? 'enviada'
+                : !target.telefone
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: whatsappReservationKey,
+                outcome: whatsappOutcome,
+                errorMessage: notificationResult.whatsapp.error,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+              }).catch(() => { reservationFinalFailures += 1; });
+            }
+
+            return notificationResult;
+          }),
         )),
       );
     }
@@ -403,20 +609,36 @@ export function createTrainingComplianceIntelligenceRoutes({
         canais: channels,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,
+        email_ja_alertado: emailAlready,
+        whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
+        reenvio_confirmado_hoje: payload.reenviar_hoje === true,
+        reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
       },
       ...extrairUsuarioAuditoria(c),
     });
     return c.json({
-      success: true,
+      success: reservationFailures === 0 && reservationFinalFailures === 0,
+      ...(reservationFailures > 0 || reservationFinalFailures > 0 ? {
+        error: 'Registro ou finalização de um ou mais avisos incompleto. Alguns envios podem ter sido aceitos; confira o histórico antes de reenviar.',
+      } : {}),
       data: {
         trigger_key: triggerKey,
+        reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
         selecionados: targets.length,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,
         email_falha: results.filter((row) => row.email.attempted && !row.email.ok).length,
         whatsapp_falha: results.filter((row) => row.whatsapp.attempted && !row.whatsapp.ok).length,
-        sem_email: results.filter((row) => !row.email.attempted && channels.email).length,
-        sem_whatsapp: results.filter((row) => !row.whatsapp.attempted && channels.whatsapp).length,
+        sem_email: emailMissing,
+        sem_whatsapp: whatsappMissing,
+        email_ja_alertado: emailAlready,
+        whatsapp_ja_alertado: whatsappAlready,
+        email_pendente_historico: emailPending,
+        whatsapp_pendente_historico: whatsappPending,
       },
     });
   });
@@ -443,23 +665,45 @@ export function createTrainingComplianceIntelligenceRoutes({
         .map((id) => ({ setor_id: id, funcao_id: requestedFuncaoId || 0 }));
     }
 
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+    const targetFilter = requestedSetorId || requestedFuncaoId
+      ? { setorId: requestedSetorId, funcaoId: requestedFuncaoId }
+      : undefined;
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, targetFilter);
     const currentPeople = snapshot.people.filter(
       (person) =>
         (!requestedSetorId || person.setor_id === requestedSetorId) &&
         (!requestedFuncaoId || person.funcao_id === requestedFuncaoId),
     );
-    const currentBase = buildDailyComplianceSnapshots(currentPeople)[0];
+    const currentBase = buildDailyComplianceSnapshots(currentPeople)[0] || {
+      snapshot_date: getTodayIsoSaoPaulo(),
+      setor_id: requestedSetorId || 0,
+      funcao_id: requestedFuncaoId || 0,
+      pessoas: currentPeople.length,
+      pessoas_com_pendencia: 0,
+      requisitos_obrigatorios: 0,
+      conformes: 0,
+      vencendo: 0,
+      vencidos: 0,
+      nao_realizados: 0,
+      em_andamento: 0,
+      compliance_pct: null,
+    };
     const current = {
       ...currentBase,
       setor_id: requestedSetorId || (access.mode === 'all' ? 0 : -1),
       funcao_id: requestedFuncaoId || 0,
     };
-    const historical = await readTrainingComplianceTrend(c.env.DB, empresaId, scopes, days);
 
-    const data = historical.data.filter((row) => row.snapshot_date !== current.snapshot_date);
+    let historical: { ready: boolean; data: ComplianceDailySnapshot[] } = { ready: false, data: [] };
+    try {
+      historical = await readTrainingComplianceTrend(c.env.DB, empresaId, scopes, days);
+    } catch (e) {
+      console.warn('[COMPLIANCE TENDENCIAS] Falha ao consultar histórico de tendências (fallback para snapshot atual):', (e as Error).message);
+    }
+
+    const data = (historical.data || []).filter((row) => row.snapshot_date !== current.snapshot_date);
     data.push(current);
-    data.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+    data.sort((a, b) => (a.snapshot_date || '').localeCompare(b.snapshot_date || ''));
 
     return c.json({
       success: true,
@@ -483,75 +727,56 @@ export function createTrainingComplianceIntelligenceRoutes({
   app.get('/comunicacoes', requireRole('admin', 'manager'), async (c) => {
     const empresaId = getEmpresaId(c);
     const access = await getEmployeeSectorAccess(c, empresaId);
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
-    const q = normalizeSearchText(c.req.query('q'));
-    const funcionarioQ = normalizeSearchText(c.req.query('funcionario_q'));
-    const limit = Math.min(300, Math.max(1, Number(c.req.query('limit') || 100)));
-    if (!(await tableExists(c.env.DB, 'notificacoes_log')))
-      return c.json({ success: true, data: [] });
-    const rows = await c.env.DB.prepare(
-      `SELECT id, tipo, destinatario, assunto, corpo, status, erro_mensagem,
-                COALESCE(enviado_em, created_at) AS event_at
-           FROM notificacoes_log
-          WHERE empresa_id = ?
-            AND (assunto LIKE '[COMPLIANCE_TREINAMENTO:%' OR assunto LIKE '[COMPLIANCE_GESTOR:%')
-          ORDER BY COALESCE(enviado_em, created_at) DESC
-          LIMIT ?`,
-    )
-      .bind(empresaId, limit * 4)
-      .all<{
-        id: number;
-        tipo: string | null;
-        destinatario: string | null;
-        assunto: string | null;
-        corpo: string | null;
-        status: string | null;
-        erro_mensagem: string | null;
-        event_at: string | null;
-      }>();
-    const data = [] as Array<Record<string, unknown>>;
-    for (const row of rows.results || []) {
-      let body: Record<string, unknown> = {};
-      try {
-        body = row.corpo ? (JSON.parse(row.corpo) as Record<string, unknown>) : {};
-      } catch {
-        body = {};
-      }
-      const funcionarioId = Number(body.funcionario_id || 0);
-      const person = peopleById.get(funcionarioId);
-      if (!funcionarioId || !person) continue;
-      if (funcionarioQ && !normalizeSearchText(person.nome).includes(funcionarioQ)) continue;
-      if (
-        q &&
-        ![
-          body.funcionario_nome,
-          body.setor_nome,
-          body.qualificacao_nome,
-          row.destinatario,
-          row.tipo,
-        ].some((value) => normalizeSearchText(value).includes(q))
-      ) {
-        continue;
-      }
-      data.push({
-        id: row.id,
-        funcionario_id: funcionarioId,
-        funcionario_nome: body.funcionario_nome || null,
-        setor_nome: body.setor_nome || null,
-        qualificacao_tipo_id: Number(body.qualificacao_tipo_id || 0) || null,
-        qualificacao_nome: body.qualificacao_nome || null,
-        status_compliance: body.status_compliance || null,
-        tipo: row.tipo,
-        destinatario: maskNotificationDestination(row.destinatario),
-        status_envio: row.status,
-        erro: row.erro_mensagem || null,
-        enviado_em: row.event_at,
-        gestor: String(row.assunto || '').startsWith('[COMPLIANCE_GESTOR:'),
-      });
-      if (data.length >= limit) break;
+    const rawLimit = Number(c.req.query('limit') || 100);
+    const rawOffset = Number(c.req.query('offset') || 0);
+    const validDate = (value: string | undefined) =>
+      !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const inicio = c.req.query('inicio');
+    const fim = c.req.query('fim');
+    if (!validDate(inicio) || !validDate(fim) || (inicio && fim && inicio > fim)) {
+      throw new ApiError('Período de comunicações inválido', 400);
     }
-    return c.json({ success: true, data });
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 ||
+        !Number.isInteger(rawOffset) || rawOffset < 0) {
+      throw new ApiError('Paginação de comunicações inválida', 400);
+    }
+    const canal = c.req.query('canal');
+    const origem = c.req.query('origem');
+    const resultado = c.req.query('resultado');
+    if ((canal && !['EMAIL', 'WHATSAPP'].includes(canal)) ||
+        (origem && !['COMPLIANCE', 'LMS_ALERTA', 'LMS_CONVITE'].includes(origem)) ||
+        (resultado && !['enviada', 'erro', 'sem_contato', 'pendente'].includes(resultado))) {
+      throw new ApiError('Filtro de comunicações inválido', 400);
+    }
+    const limit = Math.min(200, rawLimit);
+    const offset = rawOffset;
+    const history = await listTrainingCommunications(
+      c.env.DB,
+      empresaId,
+      access,
+      {
+        notifications: await tableExists(c.env.DB, 'notificacoes_log'),
+        audit: await tableExists(c.env.DB, 'audit_logs'),
+      },
+      {
+        funcionario_q: c.req.query('funcionario_q'),
+        treinamento_q: c.req.query('treinamento_q') || c.req.query('q'),
+        canal: canal as 'EMAIL' | 'WHATSAPP' | undefined,
+        origem: origem as 'COMPLIANCE' | 'LMS_ALERTA' | 'LMS_CONVITE' | undefined,
+        resultado: resultado as 'enviada' | 'erro' | 'sem_contato' | 'pendente' | undefined,
+        inicio,
+        fim,
+        setor_id: asPositiveInt(c.req.query('setor_id')) || undefined,
+        funcao_id: asPositiveInt(c.req.query('funcao_id')) || undefined,
+        limit,
+        offset,
+      },
+    );
+    return c.json({
+      success: true,
+      data: history.rows,
+      pagination: { limit, offset, has_more: history.has_more },
+    });
   });
 
   app.get('/relatorios/automacao', requireRole('admin', 'manager'), async (c) => {

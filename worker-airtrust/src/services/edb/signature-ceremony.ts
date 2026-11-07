@@ -4,7 +4,7 @@ import type {
   EdbSignatureProof,
   EdbSignatureTargetType,
   EdbSignatureType,
-} from './contracts';
+} from '../../lib/edb/contracts';
 
 export type EdbSignerAuthenticationMethod =
   | 'UNIQUE_CREDENTIALS_PLUS_MFA'

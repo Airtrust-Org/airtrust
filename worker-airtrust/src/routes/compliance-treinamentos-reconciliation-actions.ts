@@ -1,17 +1,18 @@
 import { Hono } from 'hono';
 import { hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
 import type { Env } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
-import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { trainingComplianceNeedsEnrollment } from '../services/training-compliance-enrollment-policy';
 import { readTrainingRosterPlan, applyTrainingRosterPlan } from '../services/training-compliance-roster-sync';
 import { canReuseMatriculaCycle, ensureMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle, syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { createComplianceEnrollmentAtomic } from '../services/training-compliance-create-enrollment';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
-import type { TrainingComplianceSnapshot } from './compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
 
 export type LmsEnrollment = {
   id: number;
@@ -42,14 +43,16 @@ export async function loadReconciliationDecisions(
 ): Promise<Map<number, ReconciliationDecision>> {
   const map = new Map<number, ReconciliationDecision>();
   if (!(await hasSchemaTable(db, 'treinamento_matricula_reconciliacoes'))) return map;
-  const { results } = await db
-    .prepare(
-      `SELECT matricula_id, decisao, observacoes, updated_at
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT matricula_id, decisao, observacoes, updated_at
          FROM treinamento_matricula_reconciliacoes
         WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL`,
-    )
-    .bind(empresaId)
-    .all<ReconciliationDecision>();
+      )
+      .bind(empresaId)
+      .all<ReconciliationDecision>(),
+  );
   for (const row of results || []) map.set(Number(row.matricula_id), row);
   return map;
 }

@@ -1,4 +1,4 @@
-import type { EdbFlightRecord } from './contracts';
+import type { EdbFlightRecord } from '../../lib/edb/contracts';
 import type { EdbExplicitRegulatoryStageData } from './operational-regulatory-source';
 import {
   projectRdvToEdbShadow,

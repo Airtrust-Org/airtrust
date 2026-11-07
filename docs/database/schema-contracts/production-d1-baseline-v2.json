@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-02",
-    "last_reconciled_against": "0572 LMS exam attempts classified, schema pending governed staging apply; prior classifications preserved",
-    "schema_v2_digest": "006ff11fcd8dfd063ed2df65c01649f4836f665b0b90f2e93847b13b8f75c15d",
+    "last_reconciled_at": "2026-11-05",
+    "last_reconciled_against": "0571/0572 LMS exam bank+attempts reconciled with main; 0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
+    "schema_v2_digest": "46f7930d8e9ba7f74cf68d5df8b7f4f45d810d5e0369685f1eb4d40f35a9fd1d",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1740,6 +1740,34 @@
       "reviewed_manifest": "lms-exam-attempts-0572.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-exam-attempts-0572.md",
       "note": "DDL-only, zero backfill, storage only: a passed attempt is evidence for the canonical completion writer, never a completion. Requires 0569 and 0571 applied first."
+    },
+    {
+      "change_file": "0573_frms_checkin_kss_provenance.sql",
+      "change_id": "frms-checkin-kss-provenance-0573",
+      "sha256": "06fa491147a5898b334abbe12610befc58f2f483ac6d1eecb03b957adc8ec34d",
+      "targets": [
+        "frms_fadiga_checkin"
+      ],
+      "domain": "FRMS FAD-003: nullable row-level KSS provenance, source-verified daily screening and legacy UNKNOWN preservation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "frms-checkin-kss-provenance-0573.json",
+      "evidence": "worker-airtrust/schema-v2/plans/frms-checkin-kss-provenance-0573.md",
+      "note": "Review-only Schema V2 candidate. The 13 scoped production snapshot tables do not include frms_fadiga_checkin; this is repository DDL only, not staging/production proof. No historical backfill; Worker using kss_provenance must not deploy before governed schema apply."
+    },
+    {
+      "change_file": "0574_lms_pptx_slide_evidence.sql",
+      "change_id": "lms-pptx-slide-evidence-0574",
+      "sha256": "65919384fc508a02975890f114230b8c958d44450079c8a97d2e75f28904ecbd",
+      "targets": [
+        "lms_pptx_slide_evidences"
+      ],
+      "domain": "LMS: immutable tenant/cycle/asset-bound PPTX slide observations for qualifying completion",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-pptx-slide-evidence-0574.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
+      "note": "Additive only, no backfill, no session grants or retroactive qualifications. Must apply Schema V2 in staging/production before enabling new Worker endpoints."
     }
   ]
 }

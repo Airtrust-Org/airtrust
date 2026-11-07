@@ -11,8 +11,9 @@ import { auth } from '../middleware/auth';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
 import { hasRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
-import { getEmpresaIdSafe } from './escalas-shared';
+import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { activeXapiAll } from '../services/lms-active-xapi-read';
@@ -20,7 +21,7 @@ import {
   mergeMonotonicMatriculaStatus,
   mergeMonotonicNumber,
   resolveLmsEffectiveProgress,
-} from '../services/lms-progress-guardrails';
+} from '../lib/lms/lms-progress-guardrails';
 import { logAudit } from '../utils/db';
 import { createLogger } from '../utils/logger';
 import type { Env } from '../types';
@@ -341,7 +342,7 @@ app.post('/xapi/statements', async (c) => {
   let statusFinal = novoStatus;
 
   if (isNewCompletion) {
-    const dataConclusaoQualificacao = new Date().toISOString().slice(0, 10);
+    const dataConclusaoQualificacao = getTodayIsoSaoPaulo();
     const mergedScore = mergeMonotonicNumber(
       matricula.score_final as number | null | undefined,
       scoreRaw ?? null,
@@ -392,7 +393,7 @@ app.post('/xapi/statements', async (c) => {
     // REPROVADO, ou já CONCLUIDO antes): mantém a atualização direta.
     const dataConclusao =
       statusFinal === 'CONCLUIDO' || statusFinal === 'REPROVADO'
-        ? new Date().toISOString().slice(0, 10)
+        ? getTodayIsoSaoPaulo()
         : null;
     await db
       .prepare(

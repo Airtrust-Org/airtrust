@@ -54,7 +54,7 @@ describe('qualificacoes-g1-sem', () => {
   it('prioriza o tipo G1-SEM da mesma empresa do funcionario', async () => {
     const { db, calls } = createMockDb([
       [
-        'PRAGMA table_info(qualificacoes_tipos)',
+        "PRAGMA table_info('qualificacoes_tipos')",
         { all: () => ({ results: [{ name: 'empresa_id' }] }) },
       ],
       [
@@ -132,7 +132,7 @@ describe('qualificacoes-g1-sem', () => {
   it('marca G1-SEM mais antigo como renovado ao reutilizar um registro existente', async () => {
     const { db, calls } = createMockDb([
       [
-        'PRAGMA table_info(qualificacoes_tipos)',
+        "PRAGMA table_info('qualificacoes_tipos')",
         { all: () => ({ results: [{ name: 'empresa_id' }] }) },
       ],
       [

@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
 } from '../lib/frms/operational-snapshot';
 import { FrmsParameterResolutionError } from '../lib/frms/parameter-governance';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import { createLogger, toError } from '../utils/logger';
 import { isImaV3StagingPreviewEnabled, isImaV3StagingCohortStudyEnabled, isImaV3ApprovedCohortWindow } from '../lib/frms/ima-v3-preview-access';
 import { bridgeImaOperationalSnapshot } from '../lib/frms/ima-v3-operational-snapshot-bridge';
@@ -184,6 +184,7 @@ router.get('/operational-snapshot', async (c) => {
       empresaId,
       dataInicio: data.data_inicio,
       dataFim: data.data_fim,
+      coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
       filters,
     });
 
@@ -279,6 +280,7 @@ router.get('/ima-v3/schedule-exposure-shadow', async (c) => {
       empresaId,
       dataInicio: data_inicio,
       dataFim: data_fim,
+      coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
       filters: { funcionario_id, include_inconsistencies: true },
     });
     const absOffset = Math.abs(reference_utc_offset_minutes);

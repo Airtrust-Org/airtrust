@@ -3,6 +3,7 @@
  */
 
 import { LIMITES_DEFAULT, type FrmsJornada, type LimitesMap, type FrmsFatorizacao } from './types';
+import { ENGAGED_CASE_SQL, alertsNotCoveredByCases, type PreservedCaseAlert } from './alert-case-preservation';
 import {
   calcFatorizacao,
   calcEffectiveness,
@@ -200,7 +201,7 @@ interface DailyCheckinEvidence {
   sleepHours24h: number;
 }
 
-async function loadDailyCheckinEvidence(
+export async function loadDailyCheckinEvidence(
   db: D1Database,
   empresaId: number,
   funcionarioId: number,
@@ -229,8 +230,11 @@ async function loadDailyCheckinEvidence(
     }>();
 
   if (!row?.id || !row.jornada_inicio_prevista || !row.wake_time) return null;
+  // 0 h relatadas são evidência de privação de sono, não dado ausente.
+  // Number(null) seria 0: verificar a presença ANTES da conversão.
+  if (row.horas_sono == null) return null;
   const sleepHours = Number(row.horas_sono);
-  if (!Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
+  if (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24) return null;
   if (hhmmToMinutes(row.jornada_inicio_prevista) < 0 || hhmmToMinutes(row.wake_time) < 0) return null;
   return {
     checkinId: row.id,
@@ -240,18 +244,14 @@ async function loadDailyCheckinEvidence(
   };
 }
 
-function deriveSleepStartFromCheckin(wakeTime: string, sleepHours24h: number): string {
-  const wakeMinutes = hhmmToMinutes(wakeTime);
-  const sleepMinutes = Math.max(0, Math.min(24 * 60, Math.round(sleepHours24h * 60)));
-  return minutesToHhmm(wakeMinutes - sleepMinutes);
-}
-
-
 export async function recalcularPipeline(
   db: D1Database,
   jornada: FrmsJornada,
   limites: LimitesMap,
   provenance?: { configRevisionId: string; modelVersion: string },
+  /** Somente a rota com declaração explícita pode fornecer o início de episódio.
+   * Valores pré-existentes em frms_jornada não têm proveniência suficiente. */
+  explicitSleepEpisode?: { source: 'CREW_REPORTED'; horaDormiu: string },
 ): Promise<{
   fatorizacao: FatorizacaoRow;
   acumulo: AcumuloRollingResult;
@@ -379,13 +379,6 @@ export async function recalcularPipeline(
       jornada.duracao_jornada_minutos = boundary.durationMinutes;
       dutyBoundarySource = 'REAL';
 
-      if (checkinEvidence) {
-        jornada.hora_dormiu = deriveSleepStartFromCheckin(
-          checkinEvidence.wakeTime,
-          checkinEvidence.sleepHours24h,
-        );
-      }
-
       await db
         .prepare(
           `UPDATE frms_jornada
@@ -410,15 +403,13 @@ export async function recalcularPipeline(
         await db
           .prepare(
             `UPDATE frms_jornada
-                SET hora_dormiu = ?,
-                    hora_acordou = ?,
+                SET hora_acordou = ?,
                     sono_efetivo_min = ?,
                     fonte_sono = 'INFORMADO',
                     updated_at = ?
               WHERE id = ? AND deleted_at IS NULL`,
           )
           .bind(
-            jornada.hora_dormiu,
             checkinEvidence.wakeTime,
             Math.round(checkinEvidence.sleepHours24h * 60),
             now(),
@@ -522,17 +513,8 @@ export async function recalcularPipeline(
   let v2Daily = null;
   if (v2Policy) {
     const previousDate = previousIsoDate(jornada.data);
-    const priorHvMinutes = historico
-      .filter((item) => item.data === previousDate && shouldUseForRolling(item))
-      .reduce((sum, item) => sum + Math.max(0, item.horas_voo_minutos ?? 0), 0);
-    // Crédito D+1 de baixa HV só existe quando houve carga de voo real no dia
-    // anterior. Zero HV não significa repouso: pode representar treinamento,
-    // standby, deslocamento ou outra atividade sem voo.
-    const priorDayGenerated =
-      priorHvMinutes > 0
-        ? computeFlightHoursDelta(priorHvMinutes, 0, v2Policy).generatedCreditForNextDayPoints
-        : 0;
-    const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, priorDayGenerated, v2Policy);
+    // Redução de HV anterior não é evidência de repouso: proibir crédito D+1.
+    const flightHours = computeFlightHoursDelta(jornada.horas_voo_minutos ?? 0, 0, v2Policy);
     const recoveryCreditPoints = await readPriorRecoveryCreditPoints(db, jornada.tripulante_id, previousDate);
     v2Daily = {
       policy: v2Policy,
@@ -555,8 +537,16 @@ export async function recalcularPipeline(
       hora_ultimo_pouso: jornada.hora_ultimo_pouso,
       hora_corte_motor: jornada.hora_corte_motor,
       hora_termino: jornada.hora_termino,
-      hora_dormiu: canUseEffectiveness ? jornada.hora_dormiu ?? null : null,
+      // Campo histórico hora_dormiu pode ter sido derivado do total 24h.
+      // Confiar apenas em um episódio explicitamente declarado nesta requisição
+      // autenticada, nunca no valor legado persistido nem no total de 24h.
+      hora_dormiu: canUseEffectiveness && explicitSleepEpisode?.source === 'CREW_REPORTED'
+        ? explicitSleepEpisode.horaDormiu
+        : null,
       hora_acordou: canUseEffectiveness ? checkinEvidence?.wakeTime ?? null : null,
+      sono_efetivo_min: canUseEffectiveness && checkinEvidence?.sleepHours24h != null
+        ? Math.round(checkinEvidence.sleepHours24h * 60)
+        : null,
       dia_periodo_embarcado: periodoEmbarcado?.dia ?? null,
       total_dias_periodo: periodoEmbarcado?.total ?? null,
     },
@@ -779,15 +769,24 @@ export async function recalcularPipeline(
     limites,
   });
 
-  // 8. Persistir alertas
+  // 8. Persistir alertas — casos com ciência, tratamento ou encerramento são
+  // preservados; só alertas ainda não trabalhados são substituídos.
   await db
     .prepare(
-      'UPDATE frms_alerta SET deleted_at = ?, updated_at = ? WHERE jornada_id = ? AND deleted_at IS NULL',
+      `UPDATE frms_alerta SET deleted_at = ?, updated_at = ?
+        WHERE jornada_id = ? AND deleted_at IS NULL AND NOT ${ENGAGED_CASE_SQL}`,
     )
     .bind(timestamp, timestamp, jornada.id)
     .run();
+  const casosPreservados = await db
+    .prepare(
+      `SELECT tipo_limite, nivel FROM frms_alerta
+        WHERE jornada_id = ? AND deleted_at IS NULL AND ${ENGAGED_CASE_SQL}`,
+    )
+    .bind(jornada.id)
+    .all<PreservedCaseAlert>();
 
-  for (const a of alertas) {
+  for (const a of alertsNotCoveredByCases(alertas, casosPreservados.results ?? [])) {
     await persistirAlerta(db, a);
   }
 

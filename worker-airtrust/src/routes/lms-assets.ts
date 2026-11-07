@@ -8,9 +8,10 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { serveAuthorizedRenderedPptx } from './lms-pptx-rendered';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
-import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from './lms-scorm-asset-paths';
-export { guessMime } from './lms-scorm-asset-paths';
+import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from '../lib/lms/lms-scorm-asset-paths';
+export { guessMime } from '../lib/lms/lms-scorm-asset-paths';
 import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
@@ -25,13 +26,28 @@ import {
   buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
-import { getEmpresaIdOptional } from './escalas-shared';
+import { getEmpresaIdOptional } from '../utils/tenant-resolution';
 import type { Env, JwtPayload } from '../types';
 import { buildLmsContentSecurityPolicy } from '../lib/lms/security-headers';
 import { LMS_ASSET_TOKEN_COOKIE } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 import { resolveLmsFuncionarioId } from '../services/lms-learner-identity';
-import { buildScormLaunchState, readScormNavigationBookmark, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
+import { buildScormLaunchState, type PersistedScormEvidence } from '../services/lms-scorm-launch-state';
+import { readActiveScormHandoff } from '../services/lms-scorm-active-handoff-read';
+import { readActiveCompletionManifest } from '../services/lms-completion-manifest-evidence';
+import { projectS76Rc3AdministrativeResume, S76_RC3_IMMUTABLE_SHA256 } from '../services/lms-scorm-s76-rc3-resume-bridge';
+
+import {
+  parseScormLocationMarker,
+  parseScormLocationPair,
+  resolveScormResumeTargetSlide,
+  finiteNumberOrNull,
+  resolveProbedScormLocation,
+} from '../services/lms-scorm-location-parsers';
+export {
+  parseScormLocationMarker, parseScormLocationPair, resolveScormResumeTargetSlide,
+  finiteNumberOrNull, resolveProbedScormLocation,
+};
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,97 +90,6 @@ function isPrivilegedRole(rawRole: unknown): boolean {
     .trim()
     .toLowerCase();
   return ['admin', 'administrador', 'manager', 'gestor', 'instrutor', 'instructor'].includes(role);
-}
-
-export function parseScormLocationMarker(
-  location: unknown,
-): { current: number; total: number | null } | null {
-  if (typeof location !== 'string' || !location.trim()) return null;
-
-  const trimmed = location.trim();
-  let match = trimmed.match(/(\d+)\s*\/\s*(\d+)/);
-  if (!match) {
-    match = trimmed.match(/(\d+)\s*of\s*(\d+)/i);
-  }
-  if (match) {
-    const current = Number(match[1]);
-    const total = Number(match[2]);
-    if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0 || current < 0) {
-      return null;
-    }
-
-    return { current, total };
-  }
-
-  const single = Number(trimmed);
-  if (Number.isFinite(single) && single > 0) {
-    return { current: single, total: null };
-  }
-
-  return null;
-}
-
-export function parseScormLocationPair(
-  location: unknown,
-): { current: number; total: number } | null {
-  const marker = parseScormLocationMarker(location);
-  if (!marker || marker.total == null) return null;
-  return { current: marker.current, total: marker.total };
-}
-
-export function resolveScormResumeTargetSlide(
-  savedLocation: unknown,
-  observedLocation: unknown,
-): number | null {
-  const saved = parseScormLocationMarker(savedLocation);
-  if (!saved || saved.current <= 1) return null;
-
-  const observed = parseScormLocationMarker(observedLocation);
-  if (observed) {
-    if (observed.current >= saved.current) return null;
-    if (observed.total != null && saved.current > observed.total) return null;
-  }
-
-  return saved.current;
-}
-
-/**
- * Parse a value to a finite number, preserving `0`. Returns null only when the
- * value is absent, non-numeric or non-finite. Replaces the `parseFloat(x) || null`
- * idiom in buildPayload(), which silently maps a legitimate `0` (score_raw,
- * score_min, score_scaled, …) to null and loses SCORM state on round-trip.
- */
-export function finiteNumberOrNull(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const n = typeof value === 'number' ? value : parseFloat(String(value));
-  return Number.isFinite(n) ? n : null;
-}
-
-/**
- * DOM-progress authority: a full explicit fraction (current/total) authored by
- * the package is authoritative (package 47/47 beats a "121/135" string on the
- * page). A bare-number authored location (no total) accepts the DOM fraction
- * only when its current matches the authored position — form numbers
- * ("005/123") or regulatory refs ("121/135") never hijack the real counter.
- */
-export function resolveProbedScormLocation(params: {
-  authored: boolean;
-  explicitLocation: unknown;
-  domLocation: unknown;
-}): { location: string | null; persist: boolean; reason: string } {
-  const explicitMarker = parseScormLocationMarker(params.explicitLocation);
-  if (params.authored && explicitMarker && explicitMarker.current >= 1 && explicitMarker.total != null) {
-    return { location: String(params.explicitLocation), persist: false, reason: 'explicit-package-location' };
-  }
-  const domMarker = parseScormLocationMarker(params.domLocation);
-  if (!domMarker) {
-    return { location: explicitMarker ? String(params.explicitLocation) : null, persist: false, reason: 'no-dom-progress' };
-  }
-  if (params.authored && explicitMarker && explicitMarker.current >= 1 && domMarker.total != null && domMarker.current !== explicitMarker.current) {
-    return { location: String(params.explicitLocation), persist: false, reason: 'dom-current-mismatch' };
-  }
-  const domLocation = domMarker.total == null ? String(domMarker.current) : String(domMarker.current) + '/' + String(domMarker.total);
-  return { location: domLocation, persist: true, reason: 'dom-fallback' };
 }
 
 // ── Helpers MIME ──────────────────────────────────────────────────────────────
@@ -1041,9 +966,11 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const matricula = await db
     .prepare(
       `
-      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.data_inicio,
+      SELECT m.id, m.funcionario_id, m.empresa_id, m.status, m.progresso_pct, m.data_inicio,
+        m.qualificacao_historico_id,
         c.id AS curso_id, c.titulo, c.scorm_versao,
-        c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado
+        c.scorm_package_r2_prefix, c.scorm_launch_file, c.ativo, c.publicado,
+        c.scorm_assessment_policy
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id
       WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL
@@ -1055,7 +982,9 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       funcionario_id: number;
       empresa_id: number;
       status: string;
+      progresso_pct: number | null;
       data_inicio: string | null;
+      qualificacao_historico_id: number | null;
       curso_id: number;
       titulo: string;
       scorm_versao: string | null;
@@ -1063,6 +992,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
       scorm_launch_file: string | null;
       ativo: number;
       publicado: number;
+      scorm_assessment_policy: string | null;
     }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -1121,43 +1051,89 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   if (!ciclo) throw new ApiError('Ciclo ativo da matrícula não encontrado', 409);
 
   let navigationBookmark: { position: number; total: number } | null = null;
+  let verifiedHandoff: Awaited<ReturnType<typeof readActiveScormHandoff>> = null;
   if (c.env.LMS_SCORM_EDITION_HANDOFF_ENABLED === 'true') {
-    const receipt = await db.prepare(`
-      SELECT h.id,h.resume_plan_json FROM lms_scorm_edition_handoffs h
-      JOIN lms_scorm_package_versions p ON p.empresa_id=h.empresa_id
-        AND p.curso_id=h.curso_id AND p.package_sha256=h.target_package_sha256
-        AND p.r2_prefix=h.target_package_prefix AND p.status='ACTIVE'
-      WHERE h.empresa_id=? AND h.matricula_id=? AND h.ciclo_id=?
-        AND h.target_package_prefix=? ORDER BY h.id DESC LIMIT 1`)
-      .bind(empresaId,matricula.id,ciclo.id,matricula.scorm_package_r2_prefix)
-      .first<{id:number;resume_plan_json:string}>();
-    const claimedHandoffId = Number(payload.asset_handoff_id ?? 0);
-    const claimedCycleId = Number(payload.asset_cycle_id ?? 0);
+    const handoff = await readActiveScormHandoff({
+      db, enabled: true, empresaId, matriculaId: matricula.id,
+      cycleId: ciclo.id, activePrefix: matricula.scorm_package_r2_prefix,
+    });
     if (!isScormHandoffSessionCurrent({
-      claimedHandoffId,claimedCycleId,activeCycleId:ciclo.id,
-      activeHandoffId:receipt?.id ?? null,
-    })) {
-      throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+      claimedHandoffId: Number(payload.asset_handoff_id ?? 0),
+      claimedCycleId: Number(payload.asset_cycle_id ?? 0),
+      activeCycleId: ciclo.id, activeHandoffId: handoff?.id ?? null,
+    })) throw new ApiError('A sessão SCORM está desatualizada. Reabra a matrícula.', 409);
+    verifiedHandoff = handoff;
+    navigationBookmark = handoff?.bookmark ?? null;
+    // Never launch a blank SCO over an archived prior-edition checkpoint.
+    if (handoff && Number(handoff.previousProgressPct ?? 0) > 0 &&
+        ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(matricula.status) &&
+        Number(matricula.progresso_pct ?? 0) === 0 &&
+        !progressoScorm?.cmi_json && !progressoScorm?.suspend_data) {
+      throw new ApiError('SCORM_ADMIN_CREDIT_PENDING: recupere o progresso histórico antes de iniciar', 409);
     }
-    if (receipt) navigationBookmark = readScormNavigationBookmark(receipt.resume_plan_json);
   }
 
   // Completed review also checks the edition: an old cursor is never replayed into another one.
   const mismatch = await detectLmsEditionMismatch({
     bucket: c.env.BUCKET, db, contentType: 'scorm', activePrefix: matricula.scorm_package_r2_prefix,
-    empresaId, cursoId: matricula.curso_id,
+    empresaId, cursoId: matricula.curso_id, matriculaId: matricula.id,
     cmiJson: progressoScorm?.cmi_json, suspendData: progressoScorm?.suspend_data,
     enrollmentStartedAt: matricula.data_inicio,
   });
   if (mismatch && matricula.status !== 'CONCLUIDO') throw new ApiError('LMS_NEW_EDITION_REQUIRED: Inicie um novo ciclo auditado antes de abrir esta edição.', 409);
-  const { initialCmiJson, hasResumeState } = buildScormLaunchState(
+  // FORMATIVE (F5) packages own their cursor: orphan locations and browser backups never override it.
+  const formativeCourse = matricula.scorm_assessment_policy === 'FORMATIVE';
+  let { initialCmiJson, hasResumeState } = buildScormLaunchState(
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
     matricula.status === 'CONCLUIDO',
     navigationBookmark,
-    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch) },
+    { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
+
+  // Recognize the RC3 native final button only when the immutable package
+  // SHA is ACTIVE for this tenant/course (never from package-provided text).
+  let s76Rc3Active = false;
+  if (empresaId === 6 && matricula.curso_id === 39 &&
+      matricula.scorm_package_r2_prefix) {
+    const active = await db.prepare(`
+      SELECT package_sha256 AS sha FROM lms_scorm_package_versions
+      WHERE empresa_id=? AND curso_id=? AND r2_prefix=?
+        AND status='ACTIVE' LIMIT 1
+    `).bind(empresaId,matricula.curso_id,matricula.scorm_package_r2_prefix)
+      .first<{sha:string}>();
+    s76Rc3Active = active?.sha === S76_RC3_IMMUTABLE_SHA256;
+  }
+
+  // Project the same 48/49 administrative indexes only for verified handoff
+  // #30. This changes launch CMI in memory, never the underlying D1 row.
+  if (s76Rc3Active && matricula.id === 690 &&
+      ciclo.id === 889 && verifiedHandoff?.id === 30 &&
+      matricula.status === 'EM_ANDAMENTO' &&
+      matricula.qualificacao_historico_id === null &&
+      matricula.scorm_assessment_policy === 'FORMATIVE' &&
+      matricula.scorm_package_r2_prefix) {
+    const manifest = await readActiveCompletionManifest({
+      bucket:c.env.BUCKET,empresaId,cursoId:matricula.curso_id,
+      activePrefix:matricula.scorm_package_r2_prefix,
+    });
+    const projection = projectS76Rc3AdministrativeResume({
+      empresaId,cursoId:matricula.curso_id,matriculaId:matricula.id,
+      cicloId:ciclo.id,handoffId:verifiedHandoff.id,
+      handoffPreviousProgressPct:verifiedHandoff.previousProgressPct,
+      handoffBookmark:verifiedHandoff.bookmark,
+      activePackageSha256:S76_RC3_IMMUTABLE_SHA256,
+      assessmentPolicy:matricula.scorm_assessment_policy,
+      enrollmentStatus:matricula.status,
+      qualificationHistoryId:matricula.qualificacao_historico_id,
+      manifest,initialCmiJson,
+    });
+    if (projection !== null) {
+      initialCmiJson = projection;
+      hasResumeState = true;
+    }
+  }
 
   const html = buildLaunchPage({
     matriculaId: matricula.id,
@@ -1170,8 +1146,10 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     isScorm2004,
     initialCmiJson,
     hasResumeState,
+    strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
     reviewMode: matricula.status === 'CONCLUIDO',
+    legacyS76Rc3FinalButton: s76Rc3Active,
   });
 
   const headers = buildProtectedLaunchHeaders(c.env.CORS_ORIGINS, c.req.header('Origin'));
@@ -1264,9 +1242,11 @@ interface LaunchPageConfig {
   isScorm2004: boolean;
   initialCmiJson?: string;
   hasResumeState?: boolean;
+  strictCursor?: boolean;
   previewMode?: boolean;
   assetCacheBuster?: string;
   reviewMode?: boolean;
+  legacyS76Rc3FinalButton?: boolean;
 }
 
 export function buildLaunchPage(cfg: LaunchPageConfig): string {
@@ -1280,9 +1260,11 @@ export function buildLaunchPage(cfg: LaunchPageConfig): string {
     isScorm2004,
     initialCmiJson = '{}',
     hasResumeState = false,
+    strictCursor = false,
     previewMode,
     assetCacheBuster,
     reviewMode,
+    legacyS76Rc3FinalButton = false,
   } = cfg;
 
   const launchUrlWithCacheBuster = assetCacheBuster
@@ -1390,6 +1372,7 @@ ${buildScormLocationHelpersScript()}
   var IS_2004 = ${isScorm2004 ? 'true' : 'false'};
   var PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
   var REVIEW_MODE = ${reviewMode ? 'true' : 'false'};
+  var S76_LEGACY_RC3_FINAL = ${legacyS76Rc3FinalButton ? 'true' : 'false'};
   var cmi = (function() {
     try {
       var parsed = JSON.parse(${JSON.stringify(initialCmiJson)});
@@ -1433,6 +1416,7 @@ ${buildScormLocationHelpersScript()}
     matriculaId,
     cicloId,
     numeroCiclo,
+    strictCursor,
   })}
 
   var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();
@@ -1622,6 +1606,10 @@ ${buildScormPayloadFingerprintScript()}
     var currentMarker = parseLocationMarker(currentLocation);
     if (!backupMarker) return;
     if (currentMarker && currentMarker.current >= backupMarker.current) return;
+    // A v4 package keeps its own authoritative cursor (suspend_data.a). A browser
+    // backup ahead of it would re-open the screens the learner never completed.
+    var cursorCap = readSuspendCursorCap();
+    if (cursorCap !== null && backupMarker.current > cursorCap) return;
 
     setScormLocation(String(backup.location));
     if (IS_2004) {
@@ -1892,6 +1880,11 @@ ${buildScormNativeResumeOwnershipScript()}
               : existingParsed.total != null && existingParsed.current >= existingParsed.total,
           });
         }
+        return;
+      }
+
+      if (isPackagePreviewDocument(doc)) {
+        diag(' PROBE_LOCATION_SKIPPED reason=package-preview');
         return;
       }
 
@@ -2407,7 +2400,7 @@ ${buildScormSessionCloseRuntimeScript()}
       probeFrameProgress(); diag(' LMSFinish_CALLED loc=' + (getScormLocation() || 'null'));
       // A governed parent close already persisted SCORM_FINISH before invoking
       // the SCORM API termination. Do not start another save after its ACK.
-      if (!sessionCloseHandled) commit(buildPayload(), 0, 'SCORM_FINISH');
+      if (!sessionCloseHandled && !consumeFactoryV3ExplicitFinish()) commit(buildPayload(), 0, 'SCORM_FINISH');
       setStatus('Sessão encerrada', false);
       return 'true';
     },
@@ -2592,7 +2585,7 @@ ${buildScormSessionCloseRuntimeScript()}
 
   document.getElementById('scorm-frame').addEventListener('load', function() {
     setStatus('Conteúdo carregado', true);
-    bindFrameProgressTracking();
+    bindFrameProgressTracking(); bindFactoryV3FinalClick();
     if (!resumeAppliedThisLoad && !userNavigatedManually) {
       resumeAppliedThisLoad = true;
       restoreResumeLocation(12);
@@ -2665,6 +2658,22 @@ app.get('/pdf/asset/:cursoId', async (c) => {
 });
 
 // ── Servir arquivo PPTX do R2 ────────────────────────────────────────────────
+/** Authenticated, version-scoped visual derivative. Never changes enrollment evidence. */
+app.get('/pptx/rendered/:cursoId', async (c) => {
+  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw, {
+    allowScopedQuery: false,
+  })) as JwtPayload;
+  const cursoId = Number(c.req.param('cursoId'));
+  const empresaId = Number(payload.empresa_id ?? 0);
+  if (!Number.isSafeInteger(cursoId) || cursoId <= 0 || empresaId <= 0) {
+    throw new ApiError('Escopo PPTX inválido', 400);
+  }
+  await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
+  return serveAuthorizedRenderedPptx(c.env.DB, c.env.BUCKET, empresaId, cursoId,
+    c.env.CORS_ORIGINS, c.req.header('Origin'));
+
+});
+
 app.get('/pptx/asset/:cursoId', async (c) => {
   const db = c.env.DB;
   const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw, {
@@ -2696,9 +2705,9 @@ app.get('/pptx/asset/:cursoId', async (c) => {
     'no-store',
   );
   if (object.httpEtag) headers.set('ETag', object.httpEtag);
+  headers.set('Access-Control-Expose-Headers', 'ETag, X-Pptx-Slide-Count');
   headers.set('Content-Disposition', 'inline');
   headers.set('X-Pptx-Slide-Count', String(curso.pptx_slide_count ?? 0));
-
   return new Response(object.body, { status: 200, headers });
 });
 

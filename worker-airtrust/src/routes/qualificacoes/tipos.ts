@@ -24,6 +24,7 @@ import {
   type QualificacaoTipoSnapshot,
 } from '../../services/qualificacoes-tipos-sync';
 import { invalidateMaterializedStats } from './shared';
+import { loadTipoListMetrics } from './tipos-list-metrics';
 import {
   isEadCategoria,
   reconcileImportedEdappHistory,
@@ -34,7 +35,7 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
-} from '../../services/employee-sector-access';
+} from '../../middleware/employee-sector-access';
 import {
   requireOperationalAccess,
   resolveOperationalAccess,
@@ -43,7 +44,7 @@ import {
   appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
-} from '../../services/operational-domain-access';
+} from '../../middleware/operational-domain-access';
 
 // Tipo de qualificação domain varies per row (via categoria.dominio_codigo).
 // update/delete resolve the domain dynamically from the existing row via
@@ -471,23 +472,6 @@ function buildSetoresAggregationJoin(hasQualificacoesTiposSetores: boolean): str
   `;
 }
 
-// Contagem de registros no histórico por tipo. Antes era uma subconsulta
-// correlacionada executada por linha (O(N) COUNTs), o que forçou o teto de
-// listagem para 75 linhas em d6415b53 para evitar CPU timeout no Worker.
-// Uma única agregação GROUP BY (mesmo padrão de buildSetoresAggregationJoin)
-// remove esse custo e permite um teto uniforme de 500.
-function buildHistoricoCountJoin(): string {
-  return `
-    LEFT JOIN (
-      SELECT qh.qualificacao_id AS tipo_id, COUNT(*) AS total_no_historico
-      FROM qualificacoes_historico qh
-      WHERE qh.deleted_at IS NULL
-      GROUP BY qh.qualificacao_id
-    ) qhc
-      ON qhc.tipo_id = qt.id
-  `;
-}
-
 function buildCategoriaJoin(hasCategoriaId: boolean): string {
   return `LEFT JOIN qualificacoes_categorias qc
     ON ${hasCategoriaId ? 'qc.id = qt.categoria_id' : 'qc.nome = qt.categoria'}
@@ -828,15 +812,11 @@ router.get(
             : 'NULL as conteudo_programatico'
         }, ${columnsSupport.hasReferencias ? 'qt.referencias' : 'NULL as referencias'}, qt.validade, qt.vencimento_fim_mes, qt.observacoes, qt.ativo, ${
           hasIsCheck ? 'is_check' : '0 as is_check'
-        }, qt.created_at, qt.updated_at,
-        COALESCE(qhc.total_no_historico, 0) AS total_no_historico,
-        ${buildSetoresAggregationSelect(hasQualificacoesTiposSetores)}
+        }, qt.created_at, qt.updated_at
         FROM qualificacoes_tipos qt
         ${buildCategoriaJoin(columnsSupport.hasCategoriaId)}
         ${buildAreaJoin(columnsSupport.hasAreaId)}
         ${buildFormatoJoin(columnsSupport.hasFormatoId)}
-        ${buildHistoricoCountJoin()}
-        ${buildSetoresAggregationJoin(hasQualificacoesTiposSetores)}
         WHERE ${conditions.join(' AND ')}
         ORDER BY qt.categoria, qt.nome
         LIMIT ?`,
@@ -844,10 +824,18 @@ router.get(
       .bind(...bindings, limitFinal)
       .all<TipoQualificacaoRow>();
 
+    const rows = results || [];
+    const metrics = await loadTipoListMetrics(
+      db,
+      empresaId,
+      rows.map((row) => row.id),
+      hasQualificacoesTiposSetores,
+    );
+
     return c.json({
       success: true,
-      data: (results || []).map(enrichTipoRow),
-      meta: { count: (results || []).length, limit: limitFinal },
+      data: rows.map((row) => enrichTipoRow({ ...row, ...metrics.get(String(row.id)) })),
+      meta: { count: rows.length, limit: limitFinal },
     });
   }),
 );

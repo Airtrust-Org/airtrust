@@ -6,7 +6,7 @@
  * scores, qualifications or certificates are created by this operation.
  * The existing transactional pointer/policy switch preserves terminal cycles.
  */
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import {
   assertActivationConfirmation, evaluateFormativeActivation,
 } from './lms-scorm-formative-service';

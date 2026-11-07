@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 
 /**
  * The assessment policy belongs to an EDITION, not to the course row: once

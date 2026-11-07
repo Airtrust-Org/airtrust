@@ -1,4 +1,4 @@
-declare module 'exceljs/dist/es5/exceljs.browser.js' {
+declare module 'exceljs/dist/exceljs.min.js' {
   const ExcelJS: typeof import('exceljs');
   export default ExcelJS;
 }

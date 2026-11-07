@@ -3,7 +3,8 @@ import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { requireControleVoosCoordination, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import type { Env } from '../types';
-import { getActorId, getEmpresaIdSafe, getFlightOrThrow, recordFlightEvent } from '../repositories/controle-voos/rdv-repository';
+import { getFlightOrThrow, recordFlightEvent } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
 import { enrichFlightsWithPresentation } from '../services/controle-voos/flight-presentation';
 import {
   assertStructuredFlightPlanReady,

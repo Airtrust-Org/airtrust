@@ -588,6 +588,7 @@ router.post('/read-ack/events/generate', async (c) => {
     empresaId,
     dataInicio: parsed.data.data_inicio,
     dataFim: parsed.data.data_fim,
+    coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
     filters: snapshotFilters,
   });
 
@@ -707,6 +708,10 @@ router.post('/read-ack/events/:id/ack', async (c) => {
 
   const scopedFuncionarioId = await enforceFuncionarioScope(c, empresaId, event.funcionario_id);
   if (scopedFuncionarioId instanceof Response) return scopedFuncionarioId;
+  // Fora da equipe, só o próprio tripulante dá ciência ao próprio evento.
+  if (!canSeeTeam(c) && Number(scopedFuncionarioId) !== Number(event.funcionario_id)) {
+    return c.json({ success: false, error: 'Evento de outro tripulante.', code: 'FRMS_READ_ACK_SCOPE_DENIED' }, 403);
+  }
 
   if (event.status === 'ACKED') {
     return c.json({ success: true, data: event, idempotent: true });

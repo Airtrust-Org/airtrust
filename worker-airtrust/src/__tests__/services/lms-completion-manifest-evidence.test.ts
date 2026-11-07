@@ -56,6 +56,32 @@ describe('manifest do pacote ativo — parse', () => {
 });
 
 describe('cobertura de estudo pelo manifest', () => {
+  describe('estado v1 do pacote (`{p, c}` com um flag por unidade)', () => {
+    const v1 = (c: string, p = 'PKG-V2') => JSON.stringify({ v: 1, p, j: 3, c, x: {}, s: {}, a: {} });
+    const cover = (state: string, m = manifest()) =>
+      evaluateManifestStudyCoverage({ manifest: m, cmiJson: null, suspendData: state });
+
+    it('todas as unidades marcadas provam a cobertura pelo estado do pacote', () => {
+      expect(cover(v1('1111'))).toMatchObject({ verified: true, source: 'PACKAGE_STATE', recorded: 4 });
+    });
+    it('unidades faltando não provam; o progresso parcial é contado sem verificar', () => {
+      expect(cover(v1('1101'))).toMatchObject({ verified: false, source: null, recorded: 3 });
+    });
+    it('tamanho diferente do manifesto, caracteres inválidos ou booleano (núcleo v4) não provam', () => {
+      expect(cover(v1('111'))).toMatchObject({ verified: false });
+      expect(cover(v1('11111'))).toMatchObject({ verified: false });
+      expect(cover(v1('11x1'))).toMatchObject({ verified: false });
+      expect(cover(JSON.stringify({ v: 4, p: 'PKG-V2', a: 3, d: [], c: true }))).toMatchObject({ verified: false });
+    });
+    it('a versão continua travada: edição diferente não prova, só separadores equivalentes', () => {
+      expect(cover(v1('1111', 'PKG-V1'))).toMatchObject({ verified: false });
+      const spaced = manifest({ packageVersion: 'AW139_SOP_V4_RC2_2026-11-02' });
+      expect(cover(v1('1111', 'AW139 SOP V4 RC2 2026-11-02'), spaced)).toMatchObject({ verified: true, source: 'PACKAGE_STATE' });
+      expect(cover(v1('1111', 'AW139 SOP V5 RC2 2026-11-02'), spaced)).toMatchObject({ verified: false });
+      expect(cover(v1('1111'), manifest({ packageVersion: null }))).toMatchObject({ verified: false });
+    });
+  });
+
   it('ledger completo do wrapper prova a cobertura', () => {
     expect(evaluateManifestStudyCoverage({ manifest: manifest(), cmiJson: ledger([1, 2, 3, 4]) }))
       .toMatchObject({ verified: true, source: 'WRAPPER_LEDGER', recorded: 4 });

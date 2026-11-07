@@ -57,7 +57,7 @@ function badgeNivel(nivel: string) {
 }
 
 const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
-  APTO: 'Prontidão normal',
+  APTO: 'Sem sinal automático de revisão (não equivale a liberação de voo)',
   APTO_COM_RESSALVA: 'Atenção - revisar com gestor',
   INAPTO: 'Requer revisão operacional',
   NAO_APTO: 'Requer revisão imediata',
@@ -545,7 +545,8 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceitePrivacidade, setAceitePrivacidade] = useState(restoredDraft?.aceitePrivacidade ?? false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(
-    restoredDraft?.vigilanceResult ?? null,
+    restoredDraft?.vigilanceResult?.summary.protocolVersion === 'airtrust-brief-v1'
+      ? restoredDraft.vigilanceResult : null,
   );
   const [vigilanceRunning, setVigilanceRunning] = useState(false);
   const [interruptedPvtRecovered, setInterruptedPvtRecovered] = useState(
@@ -694,7 +695,6 @@ export default function FrmsFlightCheckinFadiga() {
 
     try {
       const kss = kssScore!;
-      const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
       const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
 
       if (!vigilanceResult) {
@@ -716,8 +716,6 @@ export default function FrmsFlightCheckinFadiga() {
         oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
-        subjective_fatigue_level: subjectiveFatigueLevel,
-        sleepiness_level: subjectiveFatigueLevel,
         fit_for_duty: fitForDuty!,
         motivo_inaptidao: isNeedsCoordinatorReview ? observacao.trim() : undefined,
         free_text_notes:
@@ -1116,17 +1114,17 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="PVT diário (60 segundos): avalia atenção e reação. Complementa KSS e sono; não determina aptidão isoladamente."
+                hint="Teste breve de atenção AirTrust (60 segundos, não validado como PVT-B): avalia atenção e reação. Não determina aptidão nem libera voo."
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
-                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o PVT-B para manter a validade da medição.
+                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o teste breve de atenção para manter a validade da medição.
                   </div>
                 ) : null}
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   {readinessBaseline?.ready
                     ? `Baseline individual disponível (${readinessBaseline.sessions} sessões anteriores).`
-                    : `Baseline individual em formação (${readinessBaseline?.sessions ?? 0}/${readinessBaseline?.minimum_sessions ?? 5} sessões anteriores).`}
+                    : 'Linha de base por aparelho e sessões descansadas pendente; não interpretar como prontidão preservada.'}
                   {readinessToday ? ' Já existe uma avaliação salva hoje; um novo teste substituirá a avaliação ativa de hoje sem contar duas vezes no baseline.' : ''}
                 </div>
                 {vigilanceResult ? (

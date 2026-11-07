@@ -25,7 +25,7 @@ import {
   getTaxaConclusaoMensalMetricRows,
   getUtilizacaoSimuladoresMetricRows,
 } from '../repositories/dashboardMetricsRepository';
-import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from './employee-sector-access';
+import { buildFuncionarioScopeWhere, type EmployeeSectorAccess } from '../middleware/employee-sector-access';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,

@@ -148,6 +148,9 @@ jobs:
           line('staging current source SHA', r.stagingVersion.sourceSha || 'missing');
           line('staging matches release', r.stagingMatchesRelease ? 'YES' : 'NO');
           line('schema structural readiness', r.schema.ready ? 'PASS' : 'FAIL');
+          line('FRMS/PPTX Schema V2 readiness', r.schema.v2Runtime?.ready ? 'PASS' : 'FAIL');
+          line('missing Schema V2 objects', (r.schema.v2Runtime?.missingObjects || []).join(',') || 'none');
+          line('missing exact Schema V2 ledgers', (r.schema.v2Runtime?.missingLedger || []).join(',') || 'none');
           line('auth authority readiness', r.authAuthority.ready ? 'PASS' : 'FAIL');
           line('FRMS active tenants', r.frms.activeTenantCount);
           line('FRMS ready tenants', r.frms.readyTenantCount);

@@ -10,7 +10,7 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { ApiError } from '../middleware/error-handler';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import {
   assertScopedHistoricoAccess,
@@ -19,13 +19,13 @@ import {
   insertCertificadoNaPastaVirtual,
   backfillCertificadoAtualNaPastaVirtual,
   resolveCertificadoContext,
-} from './qualificacoes-certificados-helpers';
+} from '../services/qualificacoes/certificados-helpers';
 import {
   generateCertificateForHistorico,
   buildCertificadoR2Key,
   CertificateGenerationError,
 } from '../services/generate-certificate';
-import { requireOperationalAccess } from '../services/operational-domain-access';
+import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import {
   listTrainingComplianceEvidenceProfilesForQualification,
   normalizeTrainingComplianceEvidenceProfile,
@@ -610,7 +610,11 @@ app.post(
       });
       console.log('✅ [UPLOAD CERT] Certificado inserido na pasta_virtual');
 
-      const numeroCertificado = nomeArquivo.replace('.pdf', '');
+      // O código de um certificado legado é evidência de origem e não pode ser
+      // substituído silenciosamente pelo nome local do arquivo enviado.
+      // Para históricos sem código prévio, manter o comportamento anterior.
+      const numeroCertificado =
+        String(historico.numero_certificado || '').trim() || nomeArquivo.replace(/\.pdf$/i, '');
       const updateResult = await db
         .prepare(
           `UPDATE qualificacoes_historico

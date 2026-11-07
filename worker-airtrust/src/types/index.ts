@@ -87,6 +87,9 @@ export interface Env {
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
   // Default seguro (ausente/vazio) = desativado. 'all' = todas as empresas. Ou lista de ids separada por vírgula.
   CONTROLE_VOOS_FRMS_SHADOW_MODE_TENANTS?: string;
+  // Confirmed authoritative SIGVOOS scope + CV bridge acceptance per tenant.
+  // Do not use 'all'; absent = no source-day COMPLIANT attestation.
+  FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS?: string;
   // Experimental FRMS V3 preview: staging-only, explicit tenant CSV, never 'all'; absent = off.
   FRMS_V3_SHADOW_PREVIEW_TENANTS?: string;
   // Independent staging-only cohort research allowlist; default disabled, never 'all'.

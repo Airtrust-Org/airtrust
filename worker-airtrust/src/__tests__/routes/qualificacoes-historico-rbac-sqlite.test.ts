@@ -60,9 +60,9 @@ const { histCacheMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', async (importOriginal) => {
+vi.mock('../../services/qualificacoes/historico-helpers', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('../../routes/qualificacoes/historico-helpers')>();
+    await importOriginal<typeof import('../../services/qualificacoes/historico-helpers')>();
   return {
     ...original,
     histCache: histCacheMock,

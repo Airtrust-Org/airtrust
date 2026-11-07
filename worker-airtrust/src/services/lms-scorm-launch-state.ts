@@ -1,3 +1,4 @@
+import { parseScormLocationPair } from '../lib/lms/lms-progress-guardrails';
 /** Persisted lms_progresso_scorm evidence columns for the current enrollment cycle. */
 export type PersistedScormEvidence = Readonly<{
   lesson_status?: string|null; completion_status?: string|null; success_status?: string|null;
@@ -9,6 +10,12 @@ export type ScormLaunchStateOptions = Readonly<{
   persisted?: PersistedScormEvidence|null;
   /** Completed review of a structurally different active edition: never replay old cursor. */
   reviewEditionMismatch?: boolean;
+  /**
+   * FORMATIVE courses run on the F5 core, which never writes a location without its
+   * suspend_data. A bare location is therefore not resumable state (see
+   * `dropOrphanLocation`).
+   */
+  formativeCourse?: boolean;
 }>;
 
 const STATUS_RANK: Readonly<Record<string,Readonly<Record<string,number>>>> = {
@@ -64,6 +71,65 @@ function overlayPersistedEvidence(
   }
 }
 
+/**
+ * F5 packages (suspend_data v4) restore `active = max(a, location - 1)`. When the
+ * cursor sits past a screen never completed (`d` has a hole), that screen opens
+ * only as a preview and the learner can never finish. The cursor is rewound to
+ * the first hole and the bookmark clamped to the cursor; nothing is credited.
+ */
+function repairStrandedCursor(cmi:Record<string,unknown>):void{
+  const raw=cmi['cmi.suspend_data'];
+  if(typeof raw!=='string'||!raw.trim())return;
+  let state:Record<string,unknown>;
+  try{
+    const parsed=JSON.parse(raw) as unknown;
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return;
+    state=parsed as Record<string,unknown>;
+  }catch{return;}
+  const cursor=state.a,done=state.d;
+  if(state.v!==4||state.c===true||!Number.isInteger(cursor)||!Array.isArray(done))return;
+  const locationKeys=['cmi.core.lesson_location','cmi.location'];
+  const pairs=locationKeys.map(key=>parseScormLocationPair(String(cmi[key]??'')));
+  const declared=Number(cmi['airtrust.total_slides']);
+  const total=Number.isSafeInteger(declared)&&declared>0?declared
+    :(pairs.find(Boolean)?.total??0);
+  if(!Number.isSafeInteger(total)||total<1||total>1000)return;
+  const completed=new Set(done.filter(n=>Number.isInteger(n)&&n>=0&&n<total));
+  let firstHole=0;
+  while(firstHole<total&&completed.has(firstHole))firstHole++;
+  const target=Math.min(Number(cursor),firstHole>=total?total-1:firstHole);
+  if(target!==cursor){
+    state.a=target;
+    cmi['cmi.suspend_data']=JSON.stringify(state);
+  }
+  // Both aliases are clamped: the wrapper prefers whichever stays ahead of the cursor.
+  locationKeys.forEach((key,i)=>{
+    const pair=pairs[i];
+    if(pair&&pair.current>target+1)cmi[key]=`${target+1}/${pair.total}`;
+  });
+}
+
+/**
+ * An F5 package handed any location (`N/M`, including `1/M`) with no
+ * suspend_data cannot restore: the Factory V3 core rejects even an orphan
+ * first-screen `1/M` as an incompatible edition and locks into preview.
+ * A bare location is not proof of completed units (the package always writes
+ * suspend_data together with the cursor), so drop it only for a nonterminal
+ * formative launch. The course starts at screen 1 without crediting anything.
+ * Nothing is credited; terminal evidence and scores are untouched.
+ */
+function dropOrphanLocation(cmi:Record<string,unknown>):boolean{
+  if(typeof cmi['cmi.suspend_data']==='string'&&(cmi['cmi.suspend_data'] as string).trim())return false;
+  const locationKeys=['cmi.core.lesson_location','cmi.location'];
+  const orphan=locationKeys.some(key=>{
+    const pair=parseScormLocationPair(String(cmi[key]??''));
+    return Boolean(pair&&pair.current>=1);
+  });
+  if(!orphan)return false;
+  for(const key of [...locationKeys,'cmi.entry','cmi.core.entry'])delete cmi[key];
+  return true;
+}
+
 /** Build a fresh or resumed virtual CMI snapshot for the Player 2 wrapper. */
 export function buildScormLaunchState(
   rawCmiJson:string|null,
@@ -85,6 +151,10 @@ export function buildScormLaunchState(
   // together with the terminal evidence (not a stale regressive checkpoint).
   const snapshotWasTerminal=isTerminalCmi(cmi,isScorm2004);
   overlayPersistedEvidence(cmi,options.persisted,isScorm2004);
+  if(!completedReview){
+    repairStrandedCursor(cmi);
+    if(options.formativeCourse&&!isTerminalCmi(cmi,isScorm2004))dropOrphanLocation(cmi);
+  }
   // A verified handoff bookmark is only a UI hint (the player shows it). It is never
   // injected as `lesson_location`: F5 packages treat a location without matching
   // suspend_data as an incompatible edition and lock themselves into preview. Only the

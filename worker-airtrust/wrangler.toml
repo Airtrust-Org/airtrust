@@ -81,6 +81,9 @@ binding = "CF_VERSION_METADATA"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+# Staging-only validation of the globally authorized SCORM edition handoff.
+# Schema V2 0566 was verified in staging by the official 39888195384 run.
+LMS_SCORM_EDITION_HANDOFF_ENABLED = "true"
 # Staging invite URLs resolve to staging Pages (never the Worker API or production).
 FRONTEND_URL = "https://staging.airtrust.pages.dev"
 CORS_ORIGINS = "https://staging.airtrust.pages.dev,https://airtrust-staging.pages.dev,https://airtrust-api-staging.airtrust.workers.dev"

@@ -14,11 +14,13 @@ const {
   syncMatriculaCycleFromMatriculaMock,
   completeLmsMatriculaMock,
   logAuditMock,
+  pptxReadyMock,
 } = vi.hoisted(() => ({
   hasRoleMock: vi.fn().mockReturnValue(true),
   syncMatriculaCycleFromMatriculaMock: vi.fn(),
   completeLmsMatriculaMock: vi.fn(),
   logAuditMock: vi.fn(),
+  pptxReadyMock: vi.fn(),
 }));
 
 vi.mock('../../middleware/auth', () => ({
@@ -37,7 +39,7 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
@@ -51,6 +53,11 @@ vi.mock('../../services/lms-completion', async () => {
   };
 });
 
+vi.mock('../../services/lms-pptx-evidence', async () => ({
+  ...await vi.importActual<typeof import('../../services/lms-pptx-evidence')>('../../services/lms-pptx-evidence'),
+  hasPptxEvidenceForCompletion: pptxReadyMock,
+}));
+
 vi.mock('../../services/lms-matricula-cycle', () => ({
   ensureMatriculaCycle: vi.fn(),
   hasActiveMatriculaCycle: (r: { status?: string | null; deleted_at?: string | null } | null) =>
@@ -58,7 +65,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: vi.fn(),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
@@ -160,6 +167,7 @@ describe('PATCH /:id/status — qualification gate', () => {
       matriculaId: 200,
     });
     logAuditMock.mockResolvedValue(undefined);
+    pptxReadyMock.mockResolvedValue(false);
     hasRoleMock.mockReturnValue(true); // default: admin
   });
 
@@ -402,6 +410,37 @@ describe('PATCH /:id/status — qualification gate', () => {
       data: { matricula_id: 200, qualificacao_gerada: null },
     });
     expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia qualificacao PPTX mesmo com progresso 100 quando nao ha ledger verificado', async () => {
+    const pptx = { ...scormMatriculaWithQual, tipo_conteudo: 'pptx', scorm_mastery_score: null, progresso_pct: 100 };
+    const { db } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => pptx }],
+    ]);
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CONCLUIDO' });
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({ code: 'CONTENT_EVIDENCE_REQUIRED' });
+    expect(pptxReadyMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('conclui PPTX qualificante pelo servico canonico somente com ledger verificado', async () => {
+    pptxReadyMock.mockResolvedValue(true);
+    const pptx = { ...scormMatriculaWithQual, tipo_conteudo: 'pptx', scorm_mastery_score: null, progresso_pct: 100 };
+    const updated = { ...pptx, status: 'CONCLUIDO' };
+    const { db } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => pptx }],
+      ['SET observacoes = ?', {}],
+      ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updated }],
+    ]);
+    const res = await patchStatus(makeApp(), db, 200, {
+      status: 'CONCLUIDO', observacoes: 'Consumo de slides persistido e validado no servidor.',
+    });
+    expect(res.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledWith(
+      expect.objectContaining({ matriculaId: 200, qualificacaoTipoId: 7 }),
+    );
   });
 
   // ── 6. Manager pode alterar status não-CONCLUIDO sem gate ─────────────────

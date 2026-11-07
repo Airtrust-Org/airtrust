@@ -1,4 +1,4 @@
-import { canonicalJson } from '../../services/edb/canonical-json';
+import { canonicalJson } from '../../lib/edb/canonical-json';
 import {
   createEdbAuditEvent,
   verifyEdbAuditChain,
@@ -6,7 +6,7 @@ import {
   type EdbAuditEvent,
   type EdbAuditEventDraft,
   type EdbAuditEventType,
-} from '../../services/edb/audit-chain';
+} from '../../lib/edb/audit-chain';
 
 export interface EdbStoredAuditEventRow {
   id: string;

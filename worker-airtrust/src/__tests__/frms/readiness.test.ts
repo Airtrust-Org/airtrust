@@ -20,7 +20,7 @@ function trial(sequence: number, reactionTimeMs: number | null, outcome: Readine
 
 describe('FRMS operational readiness', () => {
   it('pins the active PVT-B response ceiling at 30 seconds', () => {
-    expect(READINESS_PROTOCOL.version).toBe('airtrust-pvtb-v2');
+    expect(READINESS_PROTOCOL.version).toBe('airtrust-brief-v1');
     expect(READINESS_PROTOCOL.responseWindowMs).toBe(30_000);
   });
 
@@ -45,6 +45,13 @@ describe('FRMS operational readiness', () => {
 
     expect(normalized.map((item) => item.outcome)).toEqual(['lapse', 'response', 'false_start', 'lapse']);
     expect(normalized.map((item) => item.reactionTimeMs)).toEqual([620, 280, 0, 30_000]);
+  });
+
+  it('new brief protocol uses >355ms while preserving old 500ms threshold', () => {
+    const brief = normalizeReadinessTrials([trial(1, 355, 'response'), trial(2, 356, 'lapse')], 60_000);
+    const legacy = normalizeReadinessTrials([trial(1, 355, 'response'), trial(2, 356, 'response')], 60_000, 'airtrust-pvtb-v2');
+    expect(brief.map((t) => t.outcome)).toEqual(['response', 'lapse']);
+    expect(legacy.map((t) => t.outcome)).toEqual(['response', 'response']);
   });
 
   it('preserves the historical v1 missed interpretation without mixing protocols', () => {
@@ -176,11 +183,62 @@ describe('FRMS operational readiness', () => {
     expect(assessment.criticalSignals).toEqual(expect.arrayContaining(['kss_high', 'sleep_short']));
   });
 
-  it('raises attention only after baseline exists and multiple warning signals are present', () => {
+  it('KSS 7 alone triggers attention with a normal 60-second test and no baseline', () => {
+    const assessment = deriveReadinessAssessment({
+      kssScore: 7,
+      sleepHours: 8,
+      baselineSessions: 0,
+      summary: summarizeReadinessTrials([trial(1, 250, 'response'), trial(2, 285, 'response')], 60_000),
+    });
+    expect(assessment.classification).toBe('attention');
+    expect(assessment.warningSignals).toContain('kss_elevated');
+    expect(assessment.baselineReady).toBe(false);
+  });
+
+  it('sleep under 6h independently triggers attention without inventing an objective deficit', () => {
+    const assessment = deriveReadinessAssessment({
+      kssScore: 4,
+      sleepHours: 5.5,
+      baselineSessions: 0,
+      summary: summarizeReadinessTrials([trial(1, 250, 'response'), trial(2, 285, 'response')], 60_000),
+    });
+    expect(assessment.classification).toBe('attention');
+    expect(assessment.warningSignals).toEqual(['sleep_reduced']);
+    expect(assessment.criticalSignals).toEqual([]);
+  });
+
+  it('never calls an unqualified legacy count a valid personal baseline', () => {
+    const summary = summarizeReadinessTrials([trial(1, 280, 'response'), trial(2, 310, 'response')], 60_000);
+    const invalid = deriveReadinessAssessment({
+      kssScore: 4,
+      sleepHours: 8,
+      baselineSessions: 50,
+      summary,
+    });
+    expect(invalid.classification).toBe('baseline_building');
+    expect(invalid.baselineReady).toBe(false);
+
+    const nine = deriveReadinessAssessment({
+      kssScore: 4, sleepHours: 8, summary,
+      baselineSessions: 9,
+      baselineConfirmedSameDeviceAndRested: true,
+    });
+    expect(nine.baselineReady).toBe(false);
+
+    const ten = deriveReadinessAssessment({
+      kssScore: 4, sleepHours: 8, summary,
+      baselineSessions: 10,
+      baselineConfirmedSameDeviceAndRested: true,
+    });
+    expect(ten.baselineReady).toBe(true);
+    expect(ten.classification).toBe('preserved');
+  });
+
+  it('raises attention on a high lapse rate even without a baseline', () => {
     const assessment = deriveReadinessAssessment({
       kssScore: 7,
       sleepHours: 5.5,
-      baselineSessions: READINESS_PROTOCOL.minimumBaselineSessions,
+      baselineSessions: 0,
       summary: summarizeReadinessTrials(
         [trial(1, 550, 'lapse'), trial(2, 560, 'lapse'), trial(3, 300, 'response')],
         180_000,
@@ -188,7 +246,7 @@ describe('FRMS operational readiness', () => {
     });
 
     expect(assessment.classification).toBe('attention');
-    expect(assessment.baselineReady).toBe(true);
+    expect(assessment.baselineReady).toBe(false);
     expect(assessment.warningSignals).toEqual(
       expect.arrayContaining(['kss_elevated', 'sleep_reduced', 'vigilance_lapses']),
     );

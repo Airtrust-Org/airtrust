@@ -15,7 +15,7 @@ vi.mock('../../middleware/auth', () => ({
   optionalAuth: () => async (_c: any, next: () => Promise<void>) => { await next(); },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({ getEmployeeSectorAccess: () => Promise.resolve({ mode: 'all', setorIds: [] }) }));
+vi.mock('../../middleware/employee-sector-access', () => ({ getEmployeeSectorAccess: () => Promise.resolve({ mode: 'all', setorIds: [] }) }));
 vi.mock('../../shared/domainEvents', () => ({ publishDomainEvent: () => Promise.resolve() }));
 vi.mock('../../shared/syncEscalaEventosExternos', () => ({ removeManagedEscalaEvents: () => Promise.resolve() }));
 

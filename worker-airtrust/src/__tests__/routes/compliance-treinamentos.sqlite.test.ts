@@ -32,13 +32,20 @@ const sectorAccessMock = vi.hoisted(() => ({
     | { mode: 'restricted'; setorIds: number[]; funcionarioId: null },
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => sectorAccessMock.access),
   filterRequestedSetorIdsByAccess: vi.fn(
     (ids: number[], access: { mode: string; setorIds: number[] }) =>
       access.mode === 'all' ? ids : ids.filter((id) => access.setorIds.includes(id)),
   ),
   assertFuncionarioInScope: vi.fn(async () => undefined),
+  employeeSectorSql: (access: { mode: string; setorIds: number[] }, alias = 'f') =>
+    access.mode === 'all'
+      ? { clause: '1 = 1', bindings: [] }
+      : {
+          clause: `${alias}.setor_id IN (${access.setorIds.map(() => '?').join(',') || 'NULL'})`,
+          bindings: access.setorIds,
+        },
 }));
 
 import complianceRouter from '../../routes/compliance-treinamentos';
@@ -390,6 +397,71 @@ describe('training compliance engine', () => {
         expect.objectContaining({ setor_nome: 'Operações', compliance_pct: null }),
       ]),
     );
+  });
+
+  it('separa regras gerais de cobertura específica de setor e função no resumo', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+    const readSummary = async (path = '/resumo') => {
+      const response = await app.request(path);
+      expect(response.status).toBe(200);
+      return ((await response.json()) as any).data;
+    };
+
+    const corporateOnly = await readSummary();
+    // A regra corporativa configura as 3 pessoas, mas não é regra específica.
+    expect(corporateOnly).toMatchObject({
+      pessoas: 3,
+      pessoas_sem_configuracao: 0,
+      funcoes_sem_regra_especifica: 2,
+      setores_sem_regra_especifica: 2,
+      pessoas_sem_regra_especifica_funcao: 3,
+      cargos_sem_matriz: 0,
+      setores_sem_matriz: 0,
+    });
+    expect(await readSummary('/resumo?setor_id=11')).toMatchObject({
+      pessoas: 1,
+      pessoas_sem_configuracao: 0,
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR_FUNCAO', 10, 1, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 1,
+      pessoas_sem_regra_especifica_funcao: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, setor_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'SETOR', 11, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 1,
+      setores_sem_regra_especifica: 0,
+      pessoas_sem_regra_especifica_funcao: 1,
+    });
+
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, funcao_id, obrigatoriedade, origem)
+      VALUES (1, 100, 'FUNCAO', 2, 'OBRIGATORIA', 'EMPRESA');
+    `);
+    expect(await readSummary()).toMatchObject({
+      funcoes_sem_regra_especifica: 0,
+      setores_sem_regra_especifica: 0,
+      pessoas_sem_regra_especifica_funcao: 0,
+    });
   });
 
   it('preserva a matriz legada por função enquanto o schema V2 ainda não foi aplicado', async () => {
@@ -1913,5 +1985,46 @@ describe('training compliance engine', () => {
     const body = (await response.json()) as any;
     expect(body.data.requisitos[0].status_compliance).toBe('NAO_REALIZADO');
     expect(body.data.requisitos[0].evidencia_perfil_incompativel).toBe(true);
+  });
+
+  it('retorna HTTP 200 e lista vazia ao consultar treinamentos de setor sem funcionários cadastrados', async () => {
+    // Setor 99 não possui funcionários
+    sqlite.database.exec(`
+      INSERT INTO setores (id, empresa_id, nome, codigo) VALUES (99, 1, 'Setor Vazio', 'VAZIO');
+    `);
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/treinamentos?setor_id=99');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data).toEqual([]);
+
+    const summaryResponse = await app.request('/resumo?setor_id=99');
+    expect(summaryResponse.status).toBe(200);
+    const summaryBody = (await summaryResponse.json()) as any;
+    expect(summaryBody.success).toBe(true);
+    expect(summaryBody.data.pessoas).toBe(0);
+    expect(summaryBody.data.requisitos_obrigatorios).toBe(0);
+  });
+
+  it('retorna HTTP 200 com resumo e arrays íntegros em /reconciliacao mesmo sob dados vazios ou erro transitório', async () => {
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/reconciliacao?setor_id=99');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.data.resumo).toMatchObject({
+      matriculas_ativas: 0,
+      matriculas_alinhadas: 0,
+      gaps_matricula_acionaveis: 0,
+      matriculados_sem_requisito: 0,
+      nao_aplica_matriculados: 0,
+    });
+    expect(Array.isArray(body.data.gaps_matricula)).toBe(true);
+    expect(Array.isArray(body.data.matriculas_revisao)).toBe(true);
+    expect(Array.isArray(body.data.convites_matricula)).toBe(true);
+    expect(body.meta?.degraded).toBe(false);
+    expect(body.data.meta?.degraded).toBe(false);
   });
 });

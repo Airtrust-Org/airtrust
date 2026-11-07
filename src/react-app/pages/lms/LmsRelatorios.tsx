@@ -20,7 +20,7 @@ import {
   useLmsScormConclusoesInconsistentes,
 } from '@/react-app/hooks/useLms';
 import { useApi } from '@/react-app/hooks/useApi';
-import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from './lmsUi';
+import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from '../../components/lms/lmsUi';
 
 function getConformidadeColor(pct: number): string {
   if (pct >= 80) return 'bg-emerald-500';

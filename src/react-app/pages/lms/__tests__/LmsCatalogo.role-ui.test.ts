@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canMutateLmsCourse, resolveLmsCatalogRoleView, shouldLoadPersonalEnrollments } from '../LmsCatalogo';
+import { canMutateLmsCourse, resolveLmsCatalogRoleView, resolveLmsCatalogStudentMode, shouldLoadPersonalEnrollments } from '../LmsCatalogo';
 
 describe('resolveLmsCatalogRoleView', () => {
   it('remove filtros administrativos e usa visão limpa para aluno', () => {
@@ -53,8 +53,12 @@ describe('personal enrollment query by catalog role', () => {
     expect(visible).toContainEqual({ curso_id: 55, status: 'EM_ANDAMENTO' });
   });
 
-  it('loads enrollments for gestores in their personal learner tab', () => {
+  it('loads enrollments for gestores and administrators in their learner tab', () => {
     expect(shouldLoadPersonalEnrollments(true, true)).toBe(true);
+    expect(resolveLmsCatalogStudentMode(true, false, 'meus')).toBe(true);
+    expect(resolveLmsCatalogStudentMode(true, false, 'catalogo')).toBe(false);
+    expect(resolveLmsCatalogStudentMode(false, true, 'meus')).toBe(true);
+    expect(resolveLmsCatalogStudentMode(false, false, 'catalogo')).toBe(false);
   });
 });
 

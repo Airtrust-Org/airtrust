@@ -33,7 +33,7 @@ import {
   getNotechsItensPorGrupo,
   getNotechsDescritores,
   splitManobrasNotechs,
-} from '../pages/simuladores/fichas/notechs';
+} from '../lib/simuladores/notechs';
 import {
   getSpecialEventSessionDefinition,
   splitSpecialTechnicalBlocks,
@@ -123,7 +123,7 @@ export function getFichaPdfTableHeaders() {
 import { getAccessToken } from '@/react-app/config/api';
 import { apiFetch } from '@/react-app/lib/apiFetch';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
-import { FICHA_AVALIACAO_FAIXAS } from '@/react-app/pages/simuladores/fichas/avaliacaoScale';
+import { FICHA_AVALIACAO_FAIXAS } from '@/react-app/lib/simuladores/avaliacaoScale';
 
 function isSafariBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;

@@ -18,7 +18,7 @@ import { LanguageProvider } from './i18n/LanguageContext';
 import { useLanguage } from './i18n/useLanguage';
 import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
-import HomeRouter from './components/HomeRouter';
+import HomeRouter from './pages/HomeRouter';
 import { resolveTrainingEntryPath } from './lib/training-entry';
 import { canonicalizeLegacyFrmsOperationalQuery } from './pages/frms/frmsLegacyOperationalQuery';
 import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
@@ -359,6 +359,16 @@ function LmsEntryRouter() {
   const role = user?.role?.toUpperCase() ?? '';
   if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') return <LmsMeusTreinamentos />;
   return <LmsDashboard />;
+}
+
+function LmsCourseEntryRouter() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  const role = user?.role?.toUpperCase() ?? '';
+  if (role === 'ALUNO' || role === 'STUDENT' || role === 'INSTRUTOR' || role === 'INSTRUCTOR') {
+    return <Navigate to="/lms" replace />;
+  }
+  return <LmsCatalogo />;
 }
 
 function TreinamentosEntryRouter() {
@@ -1128,7 +1138,7 @@ export default function App() {
                       path="/lms/cursos"
                       element={
                         <ProtectedRoute>
-                          <LmsCatalogo />
+                          <LmsCourseEntryRouter />
                         </ProtectedRoute>
                       }
                     />

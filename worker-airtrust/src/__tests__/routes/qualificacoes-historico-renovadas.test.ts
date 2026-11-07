@@ -58,7 +58,11 @@ vi.mock('../../routes/qualificacoes/historico-write', () => ({
   default: new Hono(),
 }));
 
-vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
+vi.mock('../../services/qualificacoes/historico-helpers', async (importOriginal) => ({
+  // Construtor de predicados de vencimento: implementação real (SQL puro, sem I/O).
+  buildVencimentoStatusPredicates: (
+    await importOriginal<typeof import('../../services/qualificacoes/historico-helpers')>()
+  ).buildVencimentoStatusPredicates,
   safe: <T>(handler: T) => handler,
   buildOrderByClause: () => 'qh.data_vencimento ASC',
   generateETag: () => '"test-etag"',
@@ -74,7 +78,7 @@ vi.mock('../../routes/qualificacoes/historico-helpers', () => ({
   categoriaCandidatosAtivosExpr: () => '1',
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: employeeSectorAccessMock,
   filterRequestedSetorIdsByAccess: (ids: number[]) => ids,
 }));
@@ -149,7 +153,7 @@ function createMockDb(options: {
             return { results: hasRenovacaoDe ? [{ name: 'renovacao_de' }] : [] };
           }
           if (query.includes('LIMIT ? OFFSET ?')) {
-            if (query.includes('qh.id = ?') && query.includes("date('now','+30 days')")) {
+            if (query.includes('qh.id = ?') && query.includes("date(date('now','-3 hours'),'+30 days')")) {
               if (!query.includes('AS vigente_operacional')) {
                 return { results: [] };
               }

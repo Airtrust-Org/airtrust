@@ -114,3 +114,24 @@ test('script proves the profile decision only from the tenant own single active 
   assert.match(s, /writes:\s*0/);
   assert.match(s, /readOnly:\s*true/);
 });
+
+test('read-only inventory surfaces only fixed error phases and safe classifications', () => {
+  const script = read(SCRIPT);
+  assert.match(script, /classifyFrmsD1Error\(response.status, payload\)/);
+  assert.match(script, /validatedPhase\(phase\)/);
+  assert.match(script, /Number.isSafeInteger\(code\)/);
+  for (const phase of ['active_tenants','active_assignments','regulatory_profiles','config_revisions','config_parameter_count']) {
+    assert.match(script, new RegExp(phase));
+  }
+});
+
+test('production revision inventory selects model version from actual governed policy_version column', () => {
+  const script = read(SCRIPT);
+  const schema = read('worker-airtrust/migrations/0464_frms_parameter_governance_recalc.sql');
+  const revisionTable = schema.split('CREATE TABLE frms_config_revisions (')[1].split(');')[0];
+  assert.match(revisionTable, /policy_version TEXT NOT NULL/);
+  assert.doesNotMatch(revisionTable, /\\bmodel_version\\b/);
+  assert.match(script, /SELECT id, revision_number, policy_version AS model_version, policy_version/);
+  const canonical = read('worker-airtrust/src/lib/frms/parameter-governance.ts');
+  assert.match(canonical, /modelVersion: revision\.policy_version/);
+});

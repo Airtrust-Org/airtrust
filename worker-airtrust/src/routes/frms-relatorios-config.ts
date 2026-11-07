@@ -20,7 +20,7 @@ import type { Env } from '../types';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { resolveFrmsRegulatoryProfileEvidence } from '../lib/frms/parameter-governance';
 import { requireRole } from '../middleware/rbac';
-import { getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import { loadFrmsReportCrewScope } from '../lib/frms/report-access';
 import {
   relatorioIndividual,
@@ -189,7 +189,10 @@ frmsRelatoriosConfig.get(
       return frmsConfigurationUnavailable(c, error);
     }
     const crewScope = await resolveReportCrewScope(c, empresaId);
-    const result = await relatorioCompliance(c.env.DB, mes, empresaId, crewScope.ids);
+    const result = await relatorioCompliance(
+      c.env.DB, mes, empresaId, crewScope.ids,
+      c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
+    );
     return c.json({ success: true, data: result, meta: {
       ...meta, scope: crewScope.access.mode,
       coverage: { authorized_crew: crewScope.ids.size, rows_returned: result.length, state: 'NOT_DETERMINED' },

@@ -715,7 +715,7 @@ export default function PlanejamentoSimuladores() {
   const exportExcel = async () => {
     try {
       setExporting('excel');
-      const ExcelJS = await import('exceljs');
+      const { default: ExcelJS } = await import('exceljs/dist/exceljs.min.js');
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'AirTrust';
       const summary = workbook.addWorksheet('Resumo');

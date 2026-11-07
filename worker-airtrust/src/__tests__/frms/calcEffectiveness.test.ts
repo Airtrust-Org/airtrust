@@ -5,7 +5,7 @@
  *   - Conversão total_fatorizado → effectiveness_pct
  *   - Classificação de nível (verde / atencao / amarelo / vermelho)
  *   - Cap em 0% e 100%
- *   - Cálculo de tempo_abaixo_limiar
+ *   - Ausência explícita de tempo_abaixo_limiar não mensurado
  *   - Decomposição de componentes
  *   - Testes com limites customizados
  *   - Anti-regressão: nivel nunca undefined
@@ -132,36 +132,13 @@ describe('calcEffectiveness — classificação de nível', () => {
 // ─── Tempo abaixo do limiar ─────────────────────────────────────────
 
 describe('calcEffectiveness — tempo_abaixo_limiar', () => {
-  it('sem fatores de risco → 0 min', () => {
-    const r = calcEffectiveness(makeFat(0), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(0);
-  });
-
-  it('apenas noturno_dep → +45', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_noturno_dep_pct: -5 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(45);
-  });
-
-  it('apenas noturno_arr → +30', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_noturno_arr_pct: -5 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(30);
-  });
-
-  it('repouso negativo → +30', () => {
-    const r = calcEffectiveness(makeFat(0, { fator_repouso_pct: -3 }), L);
-    expect(r.tempo_abaixo_limiar_pct).toBe(30);
-  });
-
-  it('todos os fatores de risco → 105 min', () => {
-    const r = calcEffectiveness(
-      makeFat(-0.3, {
-        fator_noturno_dep_pct: -5,
-        fator_noturno_arr_pct: -5,
-        fator_repouso_pct: -3,
-      }),
-      L,
-    );
-    expect(r.tempo_abaixo_limiar_pct).toBe(105);
+  it('não inventa minutos de risco, com ou sem fatores de fadiga (inclusive legado)', () => {
+    for (const fat of [makeFat(0), makeFat(-0.3, {
+      fator_noturno_dep_pct: -5, fator_noturno_arr_pct: -5, fator_repouso_pct: -3,
+    })]) {
+      expect(calcEffectiveness(fat, L).tempo_abaixo_limiar_pct).toBeNull();
+      expect(calcEffectiveness(fat, L, { hora_apresentacao: '06:00' }).tempo_abaixo_limiar_pct).toBeNull();
+    }
   });
 });
 
@@ -273,6 +250,7 @@ describe('calcEffectiveness — offshore sleep model', () => {
     const r = calcEffectiveness(makeFat(-0.1, { fator_repouso_pct: -0.05 }), L, {
       hora_apresentacao: '08:00',
       hora_dormiu: '23:00',
+      hora_acordou: '06:30',
     });
     expect(r.duracao_sono_efetiva_min).toBe(450);
     expect(r.hora_despertar).toBe('06:30');
@@ -280,12 +258,34 @@ describe('calcEffectiveness — offshore sleep model', () => {
     expect(r.fonte_sono).toBe('INFORMADO');
   });
 
-  it('sem horaDormiu informada → usa padrão de 8h', () => {
+  it('sem horaDormiu ou duração informada não inventa 8h', () => {
     const r = calcEffectiveness(makeFat(-0.1), L, {
       hora_apresentacao: '08:00',
     });
-    expect(r.duracao_sono_efetiva_min).toBe(480);
+    expect(r.duracao_sono_efetiva_min).toBeNull();
     expect(r.fonte_sono).toBe('PADRAO');
+  });
+
+  it('sono de 4h do check-in afeta o fator de repouso e mantém sua proveniência', () => {
+    const r = calcEffectiveness(makeFat(-0.1), L, {
+      hora_apresentacao: '05:30', hora_acordou: '04:00', sono_efetivo_min: 240,
+    });
+    expect(r.duracao_sono_efetiva_min).toBe(240);
+    expect(r.fator_repouso_calibrado_pct).toBe(-0.25);
+    expect(r.fonte_sono).toBe('INFORMADO');
+  });
+
+  it('expõe duração do sono 24h sem inventar hora_inicio_sono', () => {
+    for (const durationMinutes of [0, 240, 600]) {
+      const r = calcEffectiveness(makeFat(-0.1), L, {
+        hora_apresentacao: '05:30', hora_acordou: '04:00',
+        sono_efetivo_min: durationMinutes,
+      });
+      expect(r.duracao_sono_efetiva_min).toBe(durationMinutes);
+      expect(r.hora_despertar).toBe('04:00');
+      expect(r.hora_inicio_sono).toBeNull();
+      expect(r.fonte_sono).toBe('INFORMADO');
+    }
   });
 
   it('acordou na WOCL marca flag', () => {

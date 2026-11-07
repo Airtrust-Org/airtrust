@@ -717,7 +717,7 @@ export async function reactivateCancelledMatriculaPreservingProgress(
   // Import lazily? No: the detector is deterministic and never changes D1/R2.
   const { detectLmsEditionMismatch } = await import('./lms-edition-mismatch');
   const edition=await detectLmsEditionMismatch({
-    bucket:params.bucket,db,empresaId:params.empresaId,cursoId:row.curso_id,
+    bucket:params.bucket,db,empresaId:params.empresaId,cursoId:row.curso_id,matriculaId:row.id,
     contentType:row.tipo_conteudo,activePrefix:row.scorm_package_r2_prefix,
     cmiJson:row.cmi_json,suspendData:row.suspend_data,
     enrollmentStartedAt:row.data_inicio,

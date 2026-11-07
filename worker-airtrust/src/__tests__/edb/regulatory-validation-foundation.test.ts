@@ -4,7 +4,7 @@ import {
   type EdbFlightRecord,
   type EdbSignatureProof,
   type EdbSignatureType,
-} from '../../services/edb/contracts';
+} from '../../lib/edb/contracts';
 import {
   operatorSignatureDeadlineAt,
   operatorSignatureDeadlineDays,

@@ -1,26 +1,12 @@
 import type { Context } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getActorId,
-  getActiveRdvByFlight,
-  getEmpresaIdSafe,
-  getFlightOrThrow,
-  getFuncionarioIdForUser,
-  getRdvOrThrow,
-  buildFlightEventStatement,
-  buildRdvVersionGuardedInsert,
-  buildRdvVersionGuardedUpdate,
-  maybeRecordSystemAudit,
-} from '../repositories/controle-voos/rdv-repository';
+import { getActiveRdvByFlight, getFlightOrThrow, getFuncionarioIdForUser, getRdvOrThrow, buildFlightEventStatement, buildRdvVersionGuardedInsert, buildRdvVersionGuardedUpdate } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
 import { computeRdvAlertRules } from '../services/controle-voos/rdv-alertas';
 import { computeEtapaTempos } from '../services/controle-voos/rdv-etapas';
-import {
-  assertCasApplied,
-  assertRdvSelfScope,
-  RDV_CAPABILITIES,
-  requireExpectedRdvVersion,
-} from '../services/controle-voos/rdv-workflow';
+import { assertCasApplied, RDV_CAPABILITIES, requireExpectedRdvVersion } from '../services/controle-voos/rdv-workflow';
+import { assertRdvSelfScope } from '../middleware/controle-voos-rdv-access';
 
 
 function parseHhMmMinutes(value: string | null | undefined): number {

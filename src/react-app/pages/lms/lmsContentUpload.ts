@@ -273,7 +273,7 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
  * to the EXACT formative/no-exam structural contract; all other ZIPs are
  * uploaded as inactive versions for governed review and activation.
  */
-export type ScormReplacementProfile = 'FORMATIVE' | 'GOVERNED';
+export type ScormReplacementProfile = 'FORMATIVE' | 'GOVERNED' | 'PRIVATE';
 
 function isDirectFormativeContract(prepared: PreparedPackage): boolean {
   const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
@@ -307,6 +307,14 @@ function isDirectFormativeContract(prepared: PreparedPackage): boolean {
 
 export async function inspectScormReplacementProfile(file: File): Promise<ScormReplacementProfile> {
   const prepared = await preparePackageUpload(file, 'scorm');
+  const completion = prepared.files.find(entry => entry.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (completion) {
+    try {
+      const parsed = JSON.parse(strFromU8(completion.bytes)) as { release?: { status?: unknown } };
+      const status = typeof parsed.release?.status === 'string' ? parsed.release.status.toUpperCase() : '';
+      if (status.startsWith('PRIVATE_') || status.includes('DO_NOT_ACTIVATE')) return 'PRIVATE';
+    } catch { /* Malformed contracts follow the governed path and server validation. */ }
+  }
   return isDirectFormativeContract(prepared) ? 'FORMATIVE' : 'GOVERNED';
 }
 

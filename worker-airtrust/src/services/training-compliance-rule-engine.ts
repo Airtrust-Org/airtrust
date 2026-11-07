@@ -1,3 +1,6 @@
+import { hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
+
 export const TRAINING_COMPLIANCE_SCOPES = [
   'EMPRESA',
   'SETOR',
@@ -177,6 +180,8 @@ export function trainingComplianceRuleApplicabilitySql(
   employeeAlias = 'f',
 ): string {
   const legacyAircraft = sqlNormalizedLegacyAircraft(employeeAlias);
+  // Legacy funcionarios_aeronaves has no empresa_id: the globally unique
+  // employee ID and tenant-scoped aircraft JOIN jointly enforce isolation.
   return `(
     (${ruleAlias}.escopo='EMPRESA'
       OR (${ruleAlias}.escopo='SETOR' AND ${ruleAlias}.setor_id=${employeeAlias}.setor_id)
@@ -195,13 +200,17 @@ export function trainingComplianceRuleApplicabilitySql(
     AND (${ruleAlias}.aeronave_modelo IS NULL OR TRIM(${ruleAlias}.aeronave_modelo)='' OR EXISTS (
       SELECT 1 FROM funcionarios_aeronaves fa JOIN aeronaves a
         ON a.id=fa.aeronave_id AND a.empresa_id=${ruleAlias}.empresa_id AND a.deleted_at IS NULL
-       WHERE fa.funcionario_id=${employeeAlias}.id AND fa.empresa_id=${ruleAlias}.empresa_id
+       WHERE fa.funcionario_id=${employeeAlias}.id
          AND fa.deleted_at IS NULL AND COALESCE(fa.ativo,1)=1
          AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now'))
          AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now'))
          AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=UPPER(REPLACE(TRIM(${ruleAlias}.aeronave_modelo),' ',''))
     ) OR (NOT EXISTS (
-      SELECT 1 FROM funcionarios_aeronaves fax WHERE fax.funcionario_id=${employeeAlias}.id AND fax.empresa_id=${ruleAlias}.empresa_id AND fax.deleted_at IS NULL AND COALESCE(fax.ativo,1)=1
+      SELECT 1 FROM funcionarios_aeronaves fax
+      JOIN aeronaves ax ON ax.id=fax.aeronave_id
+        AND ax.empresa_id=${ruleAlias}.empresa_id AND ax.deleted_at IS NULL
+      WHERE fax.funcionario_id=${employeeAlias}.id
+        AND fax.deleted_at IS NULL AND COALESCE(fax.ativo,1)=1
     ) AND ('|' || ${legacyAircraft} || '|') LIKE '%|' || UPPER(REPLACE(TRIM(${ruleAlias}.aeronave_modelo),' ','')) || '|%'))
   )`;
 }
@@ -209,21 +218,19 @@ export function trainingComplianceRuleApplicabilitySql(
 export async function hydrateTrainingComplianceConditions<
   T extends TrainingComplianceEmployeeShape,
 >(db: D1Database, empresaId: number, employees: T[]): Promise<T[]> {
-  const exists = await db
-    .prepare(
-      "SELECT 1 ok FROM sqlite_master WHERE type='table' AND name='funcionarios_compliance_condicoes' LIMIT 1",
-    )
-    .first<{ ok: number }>();
-  if (!exists?.ok || employees.length === 0) return employees;
-  const { results } = await db
-    .prepare(
-      `SELECT funcionario_id, condicao_id FROM funcionarios_compliance_condicoes
+  const exists = await hasSchemaTable(db, 'funcionarios_compliance_condicoes');
+  if (!exists || employees.length === 0) return employees;
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT funcionario_id, condicao_id FROM funcionarios_compliance_condicoes
       WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL
         AND (data_inicio IS NULL OR date(data_inicio)<=date('now'))
         AND (data_fim IS NULL OR date(data_fim)>=date('now'))`,
-    )
-    .bind(empresaId)
-    .all<{ funcionario_id: number; condicao_id: number }>();
+      )
+      .bind(empresaId)
+      .all<{ funcionario_id: number; condicao_id: number }>(),
+  );
   const byId = new Map(employees.map((employee) => [employee.id, employee]));
   for (const row of results || []) {
     const employee = byId.get(Number(row.funcionario_id));

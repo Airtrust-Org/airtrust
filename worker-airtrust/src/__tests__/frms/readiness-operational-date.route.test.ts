@@ -10,7 +10,7 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 vi.mock('../../middleware/tenant', () => ({ getEmpresaId: () => 999013 }));
-vi.mock('../../lib/frms/access', () => ({ canSeeFrmsTeamScopeForContext: async () => true }));
+vi.mock('../../middleware/frms-access', () => ({ canSeeFrmsTeamScopeForContext: async () => true }));
 vi.mock('../../routes/frms-recovery', async () => {
   const { Hono } = await import('hono');
   return { default: new Hono(), refreshRecoveryAssessmentForActivityDate: vi.fn() };

@@ -5,6 +5,8 @@ const REASONS: Readonly<Record<string, string>> = {
   user_confirmation: 'a confirmação final do treinamento ainda não foi registrada',
   terminal_location: 'a última tela do treinamento ainda não foi comprovada',
   distinct_slide_coverage: 'faltam registros individuais de telas obrigatórias',
+  manifest_required_units: 'o servidor ainda não comprovou todas as unidades exigidas pelo manifesto da edição ativa',
+  verified_external_assessment: 'a avaliação externa ainda não foi comprovada pelo servidor',
   terminal_scorm_status: 'o conteúdo ainda não informou conclusão ou aprovação válida',
   course_mastery_policy: 'a nota mínima do curso precisa ser configurada pela administração',
   assessment_score: 'a nota da avaliação ainda não foi registrada',

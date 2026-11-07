@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTemplateIdSessao, normalizeChecksSessao } from '../../routes/simuladores-shared';
+import { resolveTemplateIdSessao, normalizeChecksSessao } from '../../services/simuladores/shared';
 
 /**
  * Regression coverage for a tenant-isolation gap found during the

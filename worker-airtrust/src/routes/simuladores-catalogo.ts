@@ -9,12 +9,8 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaId } from '../middleware/tenant';
 import { requirePermission } from '../middleware/rbac';
-import {
-  CategoriaSimuladoresSchema,
-  ManobraSchema,
-  requireAdminForDelete,
-  audit,
-} from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { CategoriaSimuladoresSchema, ManobraSchema, audit } from '../services/simuladores/shared';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());

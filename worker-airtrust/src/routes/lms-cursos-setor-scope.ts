@@ -2,7 +2,7 @@ import { ApiError } from '../middleware/error-handler';
 import {
   filterRequestedSetorIdsByAccess,
   type EmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { getSchemaColumns } from '../utils/db-schema';
 
 export function buildCourseSetorScope(

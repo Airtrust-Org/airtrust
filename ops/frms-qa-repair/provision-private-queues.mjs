@@ -183,14 +183,18 @@ export async function ensurePrivateQueues({accountId,token,fetcher=fetch}={}){
             batch_size:1,visibility_timeout_ms:30000,max_retries:1,
           },
         });
+        // Cloudflare's Consumer response may omit queue_name. The request
+        // already targets the verified queue ID; a supplied name must match.
         if(response.result?.type!=='http_pull'||
-           response.result.queue_name!==name)fail();
+           (response.result.queue_name!==undefined&&
+            response.result.queue_name!==name))fail();
         httpPullWrites++;
         current=await inspect(id);
       }
       if(current.consumers?.length!==1||
          current.consumers[0]?.type!=='http_pull'||
-         current.consumers[0]?.queue_name!==name||
+         (current.consumers[0]?.queue_name!==undefined&&
+          current.consumers[0]?.queue_name!==name)||
          current.consumers[0]?.settings?.batch_size!==1||
          current.consumers[0]?.settings?.visibility_timeout_ms!==30000)
         fail();
@@ -202,7 +206,8 @@ export async function ensurePrivateQueues({accountId,token,fetcher=fetch}={}){
       if(current.consumers.length===1){
         const c=current.consumers[0];
         if(c.type!=='worker'||c.script_name!=='airtrust-frms-qa-caller-staging-private'||
-           c.queue_name!==name||c.settings?.batch_size!==1)fail();
+           (c.queue_name!==undefined&&c.queue_name!==name)||
+           c.settings?.batch_size!==1)fail();
       }
     }
   }

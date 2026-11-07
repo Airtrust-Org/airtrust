@@ -30,6 +30,7 @@ import {
   type FrmsDecisionBucket,
 } from './frmsOperationalDecision';
 import { formatFrmsReason, formatSnapshotSource } from './frmsPresentation';
+import { FrmsRegulatoryCompliancePanel } from './components/FrmsRegulatoryCompliancePanel';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 import { frmsAttentionFacts, frmsOperationalEvidenceLabel } from './frmsEvidenceContext';
 
@@ -274,6 +275,7 @@ function DetailDrawer({
             </details>
           </section>
 
+          <FrmsRegulatoryCompliancePanel item={item} />
           <FrmsScoreExplanation item={item} />
           <FrmsEvidenceActions item={item} todayIso={todayIso} />
 
