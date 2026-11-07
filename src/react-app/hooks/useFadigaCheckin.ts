@@ -302,8 +302,8 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     success: boolean; data?: T; error?: unknown; incident_id?: unknown;
   };
   if (!response.ok || !json.success) {
-    const error = new Error(typeof json.error === 'string' ? json.error : `Erro HTTP ${response.status}`)
-      as Error & { incidentId?: string };
+    const error: Error & { incidentId?: string } =
+      new Error(typeof json.error === 'string' ? json.error : `Erro HTTP ${response.status}`);
     if (typeof json.incident_id === 'string' && /^[a-f0-9-]{36}$/i.test(json.incident_id)) {
       error.incidentId = json.incident_id;
     }
