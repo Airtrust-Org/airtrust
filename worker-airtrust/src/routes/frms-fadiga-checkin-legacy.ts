@@ -940,6 +940,13 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const datePolicy = evaluateCrewCheckinDate(dataCheckin, operationalToday, parsed.data.late_submission_reason);
     if (!datePolicy.valid) return c.json({ success: false, error: datePolicy.error }, 400);
     const afterPresentation = !datePolicy.retrospective && isAtOrAfterFrmsPresentation(submittedAt, input.jornadaInicioPrevista);
+    // Device clocks are not authoritative. Never treat a self-declared late
+    // check-in without PVT as valid preflight evidence when the Worker sees
+    // that the reported presentation time is still in the future.
+    if (parsed.data.late_submission_acknowledged === true &&
+        !afterPresentation && !datePolicy.retrospective) {
+      return c.json({ success: false, error: 'late_submission_not_confirmed_by_server' }, 409);
+    }
     if ((datePolicy.retrospective || afterPresentation) && parsed.data.readiness) {
       return c.json({ success: false, error: datePolicy.retrospective ? 'retrospective_readiness_not_allowed' : 'post_presentation_readiness_not_allowed' }, 409);
     }
@@ -1189,6 +1196,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
+          crew_acknowledged_late: parsed.data.late_submission_acknowledged === true,
           submission_context: datePolicy.retrospective ? { timing: 'RETROSPECTIVE_D1', reason: datePolicy.reason, preflight_evidence: false } : afterPresentation ? { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false } : { timing: 'SAME_DAY', reason: null, preflight_evidence: null },
           componentes: scoreBase.componentes,
           ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, submittedAt.toISOString()),
