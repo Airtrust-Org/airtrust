@@ -1360,7 +1360,22 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         contexto_piloto: contextoPiloto,
       },
     });
-  } catch {
+  } catch (error) {
+    // Keep production diagnostics privacy-safe: never log self-reported sleep,
+    // KSS, PVT trials, employee IDs, free-text answers, SQL or exception stacks.
+    // Distinguish failed write from committed check-in with failed downstream work.
+    const diagnosticMessage = error instanceof Error ? error.message : '';
+    const failureCategory = /D1_|SQLITE|database|constraint|no such table|no such column/i.test(diagnosticMessage)
+      ? 'D1'
+      : /timeout|abort|fetch failed|network|subrequest|resource limit/i.test(diagnosticMessage)
+        ? 'RESOURCE_OR_NETWORK'
+        : /readiness|trial|protocol/i.test(diagnosticMessage)
+          ? 'READINESS'
+          : 'OTHER';
+    console.error('[FRMS_CHECKIN_FAILURE]', {
+      phase: committedCheckinId ? 'POST_COMMIT' : 'PRE_COMMIT',
+      category: failureCategory,
+    });
     if (committedCheckinId) {
       // A transação canônica já confirmou check-in/readiness/KSS. Não induzir reenvio
       // quando sync, alertas, auditoria ou contexto operacional falharam depois.
