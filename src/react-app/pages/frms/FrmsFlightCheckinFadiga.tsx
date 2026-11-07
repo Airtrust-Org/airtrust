@@ -745,6 +745,7 @@ export default function FrmsFlightCheckinFadiga() {
         alcool_ult_12h: optionalBinaryResponseToPayload(alcoolUlt12h),
         aceite_termos: true,
         aceite_privacidade: true,
+        ...(lateAtSubmit ? { late_submission_acknowledged: true as const } : {}),
         // A post-presentation screen cannot be misrepresented as pre-flight
         // PVT evidence. The Worker persists a RESTRITO check-in requiring
         // operational review when readiness is absent after presentation.
