@@ -176,7 +176,7 @@ export default function LmsProva(): React.ReactElement {
             <>
               <p className="mb-3">Treinamento já concluído.</p>
               <button type="button" className={secondary} disabled={busy} onClick={() => void retryCertificate()}>
-                Verificar emissão do certificado
+                Solicitar nova tentativa de emissão do certificado
               </button>
             </>
           ) : null}
