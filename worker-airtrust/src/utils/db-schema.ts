@@ -8,12 +8,21 @@
  * binding evitam round-trips; bindings diferentes nunca compartilham metadados.
  */
 
+import { withD1Retry } from './d1-resilience';
+
 // ===== CACHE DE MÓDULO =====
 // Cada worker instance mantém cache por objeto de binding; reset explícito é usado em testes.
 let _hasUsuariosEmpresas: boolean | null = null;
 let _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
 let _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
 let _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+let _globalTableExistenceCache = new Map<string, boolean>();
+let _globalSchemaColumnsCache = new Map<string, ReadonlySet<string>>();
+let _globalSchemaTriggerNamesCache = new Map<string, ReadonlySet<string>>();
+
+function isVitestEnvironment(): boolean {
+  return typeof process !== 'undefined' && Boolean(process.env?.VITEST);
+}
 
 interface UsuariosSchema {
   hasActive: boolean;
@@ -51,12 +60,24 @@ export async function hasSchemaTable(db: D1Database, tableName: string): Promise
   const cache = cacheForDb(_tableExistenceCacheByDb, db);
   const cached = cache.get(normalizedTableName);
   if (cached !== undefined) return cached;
-  const result = await db
-    .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
-    .bind(normalizedTableName)
-    .first<{ found: number }>();
+  if (!isVitestEnvironment()) {
+    const globalCached = _globalTableExistenceCache.get(normalizedTableName);
+    if (globalCached !== undefined) {
+      cache.set(normalizedTableName, globalCached);
+      return globalCached;
+    }
+  }
+  const result = await withD1Retry(() =>
+    db
+      .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+      .bind(normalizedTableName)
+      .first<{ found: number }>(),
+  );
   const exists = Boolean(result?.found);
   cache.set(normalizedTableName, exists);
+  if (!isVitestEnvironment()) {
+    _globalTableExistenceCache.set(normalizedTableName, exists);
+  }
   return exists;
 }
 
@@ -69,12 +90,24 @@ export async function getSchemaColumns(
   const cache = cacheForDb(_schemaColumnsCacheByDb, db);
   const cached = cache.get(normalizedTableName);
   if (cached) return cached;
+  if (!isVitestEnvironment()) {
+    const globalCached = _globalSchemaColumnsCache.get(normalizedTableName);
+    if (globalCached) {
+      cache.set(normalizedTableName, globalCached);
+      return globalCached;
+    }
+  }
   const escaped = normalizedTableName.replaceAll("'", "''");
-  const { results } = await db
-    .prepare(`PRAGMA table_info('${escaped}')`)
-    .all<{ name: string }>();
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(`PRAGMA table_info('${escaped}')`)
+      .all<{ name: string }>(),
+  );
   const columns = new Set((results || []).map((row) => String(row.name || '')));
   cache.set(normalizedTableName, columns);
+  if (!isVitestEnvironment()) {
+    _globalSchemaColumnsCache.set(normalizedTableName, columns);
+  }
   return columns;
 }
 
@@ -110,25 +143,28 @@ export async function hasSchemaColumn(
 
 /**
  * Retorna se a tabela usuarios_empresas existe.
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasUsuariosEmpresasTable(db: D1Database): Promise<boolean> {
   if (_hasUsuariosEmpresas !== null) return _hasUsuariosEmpresas;
-  const result = await db.prepare(USUARIOS_EMPRESAS_SQL).first<{ found: number }>();
+  const result = await withD1Retry(() =>
+    db.prepare(USUARIOS_EMPRESAS_SQL).first<{ found: number }>(),
+  );
   _hasUsuariosEmpresas = Boolean(result?.found);
   return _hasUsuariosEmpresas;
 }
 
 /**
  * Retorna schema da tabela usuarios (quais colunas de status existem).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function getUsuariosSchema(db: D1Database): Promise<UsuariosSchema> {
   if (_usuariosSchema !== null) return _usuariosSchema;
-  const columns =
-    (await db.prepare("PRAGMA table_info('usuarios')").all<{ name: string }>()).results || [];
-  const hasActive = columns.some((col) => col.name === 'active');
-  const hasAtivo = columns.some((col) => col.name === 'ativo');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('usuarios')").all<{ name: string }>(),
+  );
+  const hasActive = (columns || []).some((col) => col.name === 'active');
+  const hasAtivo = (columns || []).some((col) => col.name === 'ativo');
   const activeWhere = hasActive ? 'AND active = 1' : hasAtivo ? 'AND ativo = 1' : '';
   _usuariosSchema = { hasActive, hasAtivo, activeWhere };
   return _usuariosSchema;
@@ -136,13 +172,14 @@ export async function getUsuariosSchema(db: D1Database): Promise<UsuariosSchema>
 
 /**
  * Retorna se refresh_tokens já possui a coluna empresa_id (migration 0461).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasRefreshTokensEmpresaIdColumn(db: D1Database): Promise<boolean> {
   if (_hasRefreshTokensEmpresaId !== null) return _hasRefreshTokensEmpresaId;
-  const columns =
-    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results || [];
-  _hasRefreshTokensEmpresaId = columns.some((col) => col.name === 'empresa_id');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>(),
+  );
+  _hasRefreshTokensEmpresaId = (columns || []).some((col) => col.name === 'empresa_id');
   return _hasRefreshTokensEmpresaId;
 }
 
@@ -150,13 +187,14 @@ let _hasRefreshTokensAccessTokenJti: boolean | null = null;
 
 /**
  * Retorna se refresh_tokens já possui a coluna access_token_jti (migration 0289).
- * Resultado cacheado após primeira chamada.
+ * Resultado cacheado após primeira chamada, com retry resiliente.
  */
 export async function hasRefreshTokensAccessTokenJtiColumn(db: D1Database): Promise<boolean> {
   if (_hasRefreshTokensAccessTokenJti !== null) return _hasRefreshTokensAccessTokenJti;
-  const columns =
-    (await db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>()).results || [];
-  _hasRefreshTokensAccessTokenJti = columns.some((col) => col.name === 'access_token_jti');
+  const { results: columns = [] } = await withD1Retry(() =>
+    db.prepare("PRAGMA table_info('refresh_tokens')").all<{ name: string }>(),
+  );
+  _hasRefreshTokensAccessTokenJti = (columns || []).some((col) => col.name === 'access_token_jti');
   return _hasRefreshTokensAccessTokenJti;
 }
 
@@ -168,6 +206,9 @@ export function resetSchemaCache(): void {
   _tableExistenceCacheByDb = new WeakMap<D1Database, Map<string, boolean>>();
   _schemaColumnsCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
   _schemaTriggerNamesCacheByDb = new WeakMap<D1Database, Map<string, ReadonlySet<string>>>();
+  _globalTableExistenceCache.clear();
+  _globalSchemaColumnsCache.clear();
+  _globalSchemaTriggerNamesCache.clear();
   _usuariosSchema = null;
   _hasRefreshTokensEmpresaId = null;
   _hasRefreshTokensAccessTokenJti = null;

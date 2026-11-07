@@ -48,15 +48,15 @@ describe('tenant-aware write paths', () => {
   it('qualification type imports and CRUD never rely on qualificacoes_tipos default tenant', () => {
     const tiposRoute = compact('routes/qualificacoes/tipos.ts');
     const importacao = compact('services/importacao/QualificacaoTipoImportacao.ts');
-    const importacaoRefactored = compact(
+    const importacaoAlias = compact(
       'services/importacao/QualificacaoTipoImportacaoRefactored.ts',
     );
 
     expect(tiposRoute).toMatch(/INSERT INTO qualificacoes_tipos .* empresa_id/i);
     expect(importacao).toMatch(/INSERT INTO qualificacoes_tipos .* empresa_id/i);
     expect(importacao).toContain("WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?");
-    expect(importacaoRefactored).toMatch(/INSERT INTO qualificacoes_tipos .* empresa_id/i);
-    expect(importacaoRefactored).toContain("WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?");
+    // The compatibility entrypoint must never fork the guarded SQL implementation.
+    expect(importacaoAlias).toContain("export * from './QualificacaoTipoImportacao';");
   });
 
   it('spreadsheet imports write tenant explicitly for funcionarios, historico, and tipos', () => {

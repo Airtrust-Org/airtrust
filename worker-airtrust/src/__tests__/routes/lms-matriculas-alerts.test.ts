@@ -7,7 +7,9 @@ const {
   sendWhatsAppMessageMock,
   logAuditMock,
   getLocalWhatsAppTemplateRecordMock,
+  historyRows,
 } = vi.hoisted(() => ({
+  historyRows: [] as Array<Record<string, unknown>>,
   sendEmailMock: vi.fn(async () => true),
   sendWhatsAppMessageMock: vi.fn(async () => ({ sid: 'SM123' })),
   logAuditMock: vi.fn(async () => undefined),
@@ -25,11 +27,11 @@ vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
 }));
@@ -65,6 +67,9 @@ const enrollmentRows = [
     id: 11,
     funcionario_id: 101,
     curso_id: 32,
+    qualificacao_tipo_id: null as number | null,
+    email: 'a@example.com',
+    telefone: '+5521999999991',
     data_expiracao: '2026-10-20',
     status: 'NAO_INICIADO',
     curso_titulo: 'Integração Corporativa',
@@ -73,6 +78,9 @@ const enrollmentRows = [
     id: 12,
     funcionario_id: 102,
     curso_id: 32,
+    qualificacao_tipo_id: null as number | null,
+    email: 'a@example.com',
+    telefone: '+5521999999991',
     data_expiracao: null,
     status: 'EM_ANDAMENTO',
     curso_titulo: 'Integração Corporativa',
@@ -84,8 +92,11 @@ function createDb() {
     prepare: vi.fn((query: string) => ({
       bind: (...args: unknown[]) => ({
         all: async () => {
+          if (query.includes('WITH communications AS')) {
+            return { results: historyRows };
+          }
           if (query.includes('SELECT m.id,m.funcionario_id,m.curso_id')) {
-            return { results: enrollmentRows };
+            return { results: enrollmentRows.filter((row) => args.includes(row.id)) };
           }
           return { results: [] };
         },
@@ -118,10 +129,10 @@ function makeApp() {
   return app;
 }
 
-async function post(body: object) {
+async function post(body: object, path = '/convites/lote') {
   const db = createDb();
   const response = await makeApp().fetch(
-    new Request('http://localhost/convites/lote', {
+    new Request(`http://localhost${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -138,8 +149,10 @@ async function post(body: object) {
 describe('LMS matrícula alerts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    logAuditMock.mockResolvedValue(undefined);
     sendEmailMock.mockResolvedValue(true);
     sendWhatsAppMessageMock.mockResolvedValue({ sid: 'SM123' });
+    historyRows.length = 0;
   });
 
   it('preserva o convite legado como envio somente por e-mail', async () => {
@@ -169,11 +182,123 @@ describe('LMS matrícula alerts', () => {
     expect(json.data.processados).toBe(2);
     expect(json.data.email_enviados).toBe(2);
     expect(json.data.whatsapp_enviados).toBe(2);
-    expect(logAuditMock).toHaveBeenCalledTimes(2);
+    expect(logAuditMock).toHaveBeenCalledTimes(4);
     expect(logAuditMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ action: 'LMS_MATRICULA_ALERTA' }),
     );
+  });
+
+
+  it('previews the already accepted channel without sending anything', async () => {
+    historyRows.push({
+      id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: new Date().toISOString(),
+      gestor: 0, destinatario: null,
+    });
+    const { response } = await post({
+      matricula_ids: [11, 12], modo: 'alerta',
+      canais: { email: true, whatsapp: true },
+    }, '/convites/lote/preview');
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { data: Record<string, number> };
+    expect(json.data.email_ja_alertado).toBe(1);
+    expect(json.data.whatsapp_ja_alertado).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendWhatsAppMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('skips a successful earlier e-mail but still sends missing channels', async () => {
+    historyRows.push({
+      id: 'lms:10:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'enviada', enviado_em: new Date().toISOString(),
+      gestor: 0, destinatario: null,
+    });
+    const { response } = await post({
+      matricula_ids: [11, 12], modo: 'alerta',
+      canais: { email: true, whatsapp: true },
+    });
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as { data: Record<string, number> };
+    expect(json.data.email_ja_alertado).toBe(1);
+    expect(json.data.email_enviados).toBe(1);
+    expect(json.data.whatsapp_enviados).toBe(2);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendWhatsAppMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows the resend only with explicit reenviar_hoje=true', async () => {
+    historyRows.push({
+      id: 'compliance:1', funcionario_id: 101, curso_id: null, qualificacao_tipo_id: 100,
+      tipo: 'EMAIL_COMPLIANCE', status_envio: 'enviada',
+      enviado_em: new Date().toISOString(), gestor: 0, destinatario: 'a@example.com',
+    });
+    // A linked LMS course shares the same qualification as Compliance.
+    enrollmentRows[0].qualificacao_tipo_id = 100;
+    try {
+      const { response } = await post({
+        matricula_ids: [11], modo: 'alerta', reenviar_hoje: true,
+        canais: { email: true, whatsapp: false },
+      });
+      expect(response.status).toBe(200);
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    } finally {
+      enrollmentRows[0].qualificacao_tipo_id = null;
+    }
+  });
+
+  it('não dispara provedor quando a intenção não pôde ser registrada no D1', async () => {
+    logAuditMock.mockRejectedValue(new Error('D1 indisponível'));
+    const { response } = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: true },
+    });
+    const json = (await response.json()) as { success: boolean; data: Record<string, number> };
+    expect(json.success).toBe(false);
+    expect(json.data.auditoria_preparo_falhas).toBe(1);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendWhatsAppMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('não confirma trilha completa se o provedor aceitou, mas o audit final falhou', async () => {
+    logAuditMock.mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('D1 falhou após o provedor'));
+    const { response } = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: false },
+    });
+    const json = (await response.json()) as { success: boolean; error: string; data: Record<string, number> };
+    expect(json.success).toBe(false);
+    expect(json.error).toContain('consulte o histórico');
+    expect(json.data.email_enviados).toBe(1);
+    expect(json.data.auditoria_resultado_pendente).toBe(1);
+    expect(logAuditMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      action: 'LMS_MATRICULA_ALERTA_PREPARADO',
+      newValues: expect.objectContaining({ email_resultado: 'PENDENTE' }),
+    }));
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('bloqueia a intenção PREPARADO com auditoria indeterminada mesmo com confirmação de reenvio', async () => {
+    historyRows.push({
+      id: 'lms:20:EMAIL', funcionario_id: 101, curso_id: 32, qualificacao_tipo_id: null,
+      tipo: 'EMAIL', status_envio: 'pendente', enviado_em: new Date().toISOString(),
+      gestor: 0, destinatario: null,
+    });
+    const preview = await post({
+      matricula_ids: [11], modo: 'alerta', canais: { email: true, whatsapp: false },
+    }, '/convites/lote/preview');
+    const before = (await preview.response.json()) as { data: Record<string, number> };
+    expect(before.data.email_pendente_historico).toBe(1);
+    const send = await post({
+      matricula_ids: [11], modo: 'alerta', reenviar_hoje: true,
+      canais: { email: true, whatsapp: false },
+    });
+    expect(send.response.status).toBe(200);
+    const result = (await send.response.json()) as { data: Record<string, number> };
+    expect(result.data.email_pendente_historico).toBe(1);
+    expect(result.data.email_ja_alertado).toBe(1);
+    expect(result.data.email_enviados).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(logAuditMock).not.toHaveBeenCalled();
   });
 
   it('recusa alerta sem canal selecionado', async () => {

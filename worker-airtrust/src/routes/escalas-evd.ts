@@ -28,6 +28,12 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import {
+  getRoleContext,
+  hasReliableQualificationSource,
+  hasTenantOwnedEvdReferences,
+  MSG_EVD_REFERENCE_NOT_FOUND,
+} from './escalas-evd-tenant-guards';
 import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
 import { CANCELLED_STATUS_VALUES, COMPLETED_STATUS_VALUES, TRAINING_CONFIRMED_STATUS_VALUES, TRAINING_IN_PROGRESS_STATUS_VALUES, isConfirmedTrainingStatus, isInProgressTrainingStatus, normalizeTrainingStatusForCompatibility, sqlStatusEqualsAny, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -217,11 +223,6 @@ type MonthlyAvailabilityResult = {
   conflict_code?: 'FERIAS_RH' | 'OTHER_ESCALA_OPERATIONAL' | 'OTHER_ESCALA_SITUACAO';
 };
 
-type RoleContext = {
-  funcao: string | null;
-  cargo: string | null;
-};
-
 type EvdPublicacaoItemRow = {
   id: string;
   escala_id: string | null;
@@ -369,66 +370,6 @@ async function resolveMasterAeronave(params: {
     active: isStatusAeronaveAtivo(aeronave.status),
     warnings: [],
   };
-}
-
-async function getRoleContext(
-  db: D1Database,
-  empresaId: number,
-  funcionarioId: number,
-): Promise<RoleContext | null> {
-  const row = await db
-    .prepare(
-      `SELECT funcao, cargo
-         FROM funcionarios
-        WHERE id = ?
-          AND deleted_at IS NULL
-          AND COALESCE(ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(status), ''), 'ATIVO')) = 'ATIVO'
-          AND empresa_id = ?
-        LIMIT 1`,
-    )
-    .bind(funcionarioId, empresaId)
-    .first<RoleContext>();
-  return row || null;
-}
-
-async function hasReliableQualificationSource(
-  db: D1Database,
-  funcionarioId: number,
-): Promise<boolean> {
-  const funcionario = await db
-    .prepare(
-      `SELECT modelo_aeronave_id, aeronave
-         FROM funcionarios
-        WHERE id = ?
-          AND deleted_at IS NULL
-          AND COALESCE(ativo, 1) = 1
-        LIMIT 1`,
-    )
-    .bind(funcionarioId)
-    .first<{ modelo_aeronave_id: string | null; aeronave: string | null }>();
-
-  if (!funcionario) return false;
-
-  const hasActiveAssociacao = await db
-    .prepare(
-      `SELECT 1
-         FROM funcionarios_aeronaves fa
-        WHERE CAST(fa.funcionario_id AS INTEGER) = ?
-          AND fa.deleted_at IS NULL
-          AND COALESCE(fa.ativo, 1) = 1
-          AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))
-        LIMIT 1`,
-    )
-    .bind(funcionarioId)
-    .first<{ 1: number }>();
-
-  if (hasActiveAssociacao) return true;
-
-  return (
-    String(funcionario.modelo_aeronave_id || '').trim().length > 0 ||
-    String(funcionario.aeronave || '').trim().length > 0
-  );
 }
 
 async function validateCrewAvailabilityOnMonthlyScale(params: {
@@ -652,7 +593,11 @@ async function collectOperationalWarningsAndBlocks(params: {
     const knownModel = ['AW139', 'SK76'].includes(String(aeronave.modeloNormalizado || ''));
     if (knownModel) {
       for (const crewId of crewIds) {
-        const reliableSource = await hasReliableQualificationSource(params.db, crewId);
+        const reliableSource = await hasReliableQualificationSource(
+          params.db,
+          params.empresaId,
+          crewId,
+        );
         if (!reliableSource) {
           warnings.push(
             `Habilitação de modelo não pôde ser confirmada no cadastro para tripulante ${crewId}; revisão operacional recomendada.`,
@@ -831,10 +776,10 @@ async function calcRepouso(
            AND empresa_id = ? AND data < ?
          UNION ALL
          SELECT hora_corte_motor, data FROM frms_jornada
-         WHERE CAST(tripulante_id AS INTEGER) = ? AND deleted_at IS NULL AND data < ?
+         WHERE CAST(tripulante_id AS INTEGER) = ? AND empresa_id = ? AND deleted_at IS NULL AND data < ?
        ) ORDER BY data DESC, hora_corte_motor DESC LIMIT 1`,
     )
-    .bind(pilotoId, pilotoId, empresaId, dataVoo, pilotoId, dataVoo)
+    .bind(pilotoId, pilotoId, empresaId, dataVoo, pilotoId, empresaId, dataVoo)
     .first<{ hora_corte_motor: string | null; data: string }>();
 
   if (!ultimoCorte?.hora_corte_motor) return { minutos: null, ok: null };
@@ -992,8 +937,8 @@ async function listEvdItemsByDate(params: {
           e.observacoes,
           e.aprovado_em
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ?
          AND e.data = ?
          AND e.deleted_at IS NULL
@@ -1056,6 +1001,20 @@ async function validateEvdItemForDailyPublication(params: {
 
   if (params.voo.pic_id === params.voo.sic_id) {
     return { ok: false, error: `${MSG_PIC_SIC_SAME} [voo:${params.voo.id}]`, code: 'PIC_SIC_SAME' };
+  }
+
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db: params.db,
+    empresaId: params.empresaId,
+    crewIds: [params.voo.pic_id, params.voo.sic_id],
+    escalaId: params.voo.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return {
+      ok: false,
+      error: `${MSG_EVD_REFERENCE_NOT_FOUND} [voo:${params.voo.id}]`,
+      code: 'EVD_REFERENCE_NOT_FOUND',
+    };
   }
 
   const hasConflict = await hasCrewConflict({
@@ -1222,8 +1181,8 @@ evdRoutes.get('/', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ? AND e.data = ? AND e.deleted_at IS NULL
        ORDER BY e.hora_apresentacao ASC, e.hora_decolagem_prevista ASC`,
     )
@@ -1255,8 +1214,8 @@ evdRoutes.get('/semana', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.empresa_id = ? AND e.data BETWEEN ? AND ? AND e.deleted_at IS NULL
        ORDER BY e.data ASC, e.hora_apresentacao ASC`,
     )
@@ -1376,8 +1335,8 @@ evdRoutes.get('/:id', async (c) => {
          fp.nome AS pic_nome, fp.guerra AS pic_guerra,
          fs.nome AS sic_nome, fs.guerra AS sic_guerra
        FROM escala_voo_diaria e
-       LEFT JOIN funcionarios fp ON fp.id = e.pic_id
-       LEFT JOIN funcionarios fs ON fs.id = e.sic_id
+       LEFT JOIN funcionarios fp ON fp.id = e.pic_id AND fp.empresa_id = e.empresa_id
+       LEFT JOIN funcionarios fs ON fs.id = e.sic_id AND fs.empresa_id = e.empresa_id
        WHERE e.id = ? AND e.empresa_id = ? AND e.deleted_at IS NULL`,
     )
     .bind(id, empresaId)
@@ -1600,6 +1559,16 @@ evdRoutes.post('/', requirePermission('escalas', 'criar', 'admin', 'manager'), a
   }
 
   const d = parsed.data;
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [d.pic_id, d.sic_id],
+    escalaId: d.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
+  }
+
   if (d.pic_id && d.sic_id && d.pic_id === d.sic_id) {
     return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
   }
@@ -1826,6 +1795,25 @@ evdRoutes.put('/:id', requirePermission('escalas', 'editar', 'admin', 'manager')
     tipo_missao: d.tipo_missao !== undefined ? d.tipo_missao : existing.tipo_missao,
     observacoes: d.observacoes !== undefined ? d.observacoes : existing.observacoes,
   };
+
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [candidate.pic_id, candidate.sic_id],
+    escalaId: existing.escala_id,
+    includeDeleted: true,
+  });
+  const changedCrewIsActiveInTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [
+      d.pic_id !== undefined && d.pic_id !== existing.pic_id ? candidate.pic_id : null,
+      d.sic_id !== undefined && d.sic_id !== existing.sic_id ? candidate.sic_id : null,
+    ],
+  });
+  if (!referencesBelongToTenant || !changedCrewIsActiveInTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
+  }
 
   if (
     typeof candidate.pic_id === 'number' &&
@@ -2058,6 +2046,16 @@ evdRoutes.post('/:id/publicar', requirePermission('escalas', 'editar', 'admin', 
 
   if (voo.pic_id === voo.sic_id) {
     return c.json({ success: false, error: MSG_PIC_SIC_SAME }, 400);
+  }
+
+  const referencesBelongToTenant = await hasTenantOwnedEvdReferences({
+    db,
+    empresaId,
+    crewIds: [voo.pic_id, voo.sic_id],
+    escalaId: voo.escala_id,
+  });
+  if (!referencesBelongToTenant) {
+    return c.json({ success: false, error: MSG_EVD_REFERENCE_NOT_FOUND }, 400);
   }
 
   const conflictOnPublish = await hasCrewConflict({

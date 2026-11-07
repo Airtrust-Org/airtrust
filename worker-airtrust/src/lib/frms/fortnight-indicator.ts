@@ -384,7 +384,9 @@ function buildModifiers(input: {
   const avgDuty =
     input.diasAtividadePeriodo > 0 ? input.atividadeFrmsPeriodoMin / input.diasAtividadePeriodo : 0;
   const lowSleepDays = input.scoped.filter(
-    (entry) => entry.horas_sono != null && entry.horas_sono > 0 && entry.horas_sono < input.policy.lowSleepHours,
+    // Zero horas é o sinal mais grave, não ausência de resposta.
+    (entry) => entry.horas_sono != null && Number.isFinite(entry.horas_sono) &&
+      entry.horas_sono >= 0 && entry.horas_sono < input.policy.lowSleepHours,
   ).length;
   const highKssDays = input.scoped.filter(
     (entry) => entry.kss_score != null && entry.kss_score >= input.policy.highKss,
@@ -405,7 +407,7 @@ function buildModifiers(input: {
   if (input.totalRecoveryCreditPoints > 0) {
     atenuadores.push({
       codigo: 'CREDITO_RECUPERACAO_REAL',
-      descricao: `${round1(input.totalRecoveryCreditPoints)} ponto(s) de recuperação real no período, derivados de standby/repouso absoluto.`,
+      descricao: `${round1(input.totalRecoveryCreditPoints)} ponto(s) de crédito calculado a partir de oportunidade de repouso/standby registrada; não comprova sono efetivo nem recuperação fisiológica.`,
       impacto_score: -round1(input.totalRecoveryCreditPoints),
     });
   }
@@ -542,12 +544,16 @@ function resolveStatusFromScore(input: {
   periodHasAttention: boolean;
   diasComCheckinPendente: number;
   diasComDadoEstimado: number;
+  /** KSS reportado elevado ou sono real insuficiente são sinais de revisão,
+   * jamais neutralizados por crédito de repouso, completude ou score baixo. */
+  sinalFadigaNaoCompensavel: boolean;
   policy: FrmsFortnightPolicy;
 }): FrmsFortnightStatus {
   if (input.fontePeriodo === 'INCOMPLETO') return 'INCOMPLETO';
   if (input.periodHasCritical || input.score >= input.policy.scoreCritical) return 'CRITICO';
   if (
     input.periodHasAttention ||
+    input.sinalFadigaNaoCompensavel ||
     input.diasComCheckinPendente > 0 ||
     input.diasComDadoEstimado > 0 ||
     input.score >= input.policy.scoreAttention
@@ -591,6 +597,11 @@ function resolveMitigacaoFromStatus(input: {
     )
   ) {
     return 'REDUZIR_JORNADA';
+  }
+  // Sonolência KSS relatada exige contato e revisão humana mesmo quando
+  // o score numérico legado é baixo por fatores atenuadores.
+  if (input.aggravants.some((modifier) => modifier.codigo === 'KSS_ALTO_NO_PERIODO')) {
+    return 'REVISAR_CHECKIN';
   }
   if (input.status === 'OK') return 'SEM_ACAO';
   return 'ACEITAR_COM_RESSALVA';
@@ -887,6 +898,8 @@ export function buildFrmsFortnightIndicatorMap(
       periodHasAttention,
       diasComCheckinPendente,
       diasComDadoEstimado,
+      sinalFadigaNaoCompensavel: agravantes.some((mod) =>
+        mod.codigo === 'SONO_INSUFICIENTE_NO_PERIODO' || mod.codigo === 'KSS_ALTO_NO_PERIODO'),
       policy,
     });
     const naturezaDado = resolveNaturezaDado(item, periodFullyCoveredByQuery, today);

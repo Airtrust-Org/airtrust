@@ -55,6 +55,7 @@ describe('FRMS Data Transparency - historico', () => {
           funcionario_nome: 'Trip 1',
           data_checkin: '2026-05-28',
           kss_score: 3,
+          kss_provenance: 'CREW_REPORTED',
           horas_sono: 7,
           qualidade_sono: 4,
           score_fadiga: 24,
@@ -69,6 +70,7 @@ describe('FRMS Data Transparency - historico', () => {
           funcionario_nome: 'Trip 2',
           data_checkin: '2026-05-28',
           kss_score: 6,
+          kss_provenance: 'DEFAULTED',
           horas_sono: 5,
           qualidade_sono: 2,
           score_fadiga: 68,
@@ -90,9 +92,32 @@ describe('FRMS Data Transparency - historico', () => {
 
     expect(screen.getByText('Dado informado')).toBeInTheDocument();
     expect(screen.getByText('Estimativa legada')).toBeInTheDocument();
+    expect(screen.getByText('— (origem não verificada)')).toBeInTheDocument();
+    expect(screen.getByText('KSS sem origem verificada — revisão necessária')).toBeInTheDocument();
     expect(screen.queryByText(/SAFTE-FAST validado/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^inapto$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^apto$/i)).not.toBeInTheDocument();
+  });
+
+  it('oculta VERDE e APTO históricos incompatíveis com KSS 9 informado', () => {
+    useFrmsFadigaHistoricoMock.mockReturnValue({
+      data: [{
+        id: 'legacy-risk', empresa_id: 7, funcionario_id: 70, funcionario_nome: 'Tripulante Sintético',
+        data_checkin: '2026-11-03', hora_checkin: '06:20',
+        kss_score: 9, kss_provenance: 'CREW_REPORTED',
+        horas_sono: 8, qualidade_sono: 4, score_fadiga: 10,
+        nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+        computed_risk_level: 'normal', apto: 1, requires_operational_review: 0,
+        associado_frat_avaliacao_id: null, data_source: 'crew_reported',
+      }],
+      loading: false,
+      refetch: vi.fn(),
+    });
+    render(<MemoryRouter><FrmsFadigaHistorico /></MemoryRouter>);
+    expect(screen.getByText('— (revisão)')).toBeInTheDocument();
+    expect(screen.getByText('Revisão operacional imediata — sinais críticos')).toBeInTheDocument();
+    expect(screen.queryByText(/^VERDE$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^APTO$/)).not.toBeInTheDocument();
   });
 });
 

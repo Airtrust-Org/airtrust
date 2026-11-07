@@ -33,7 +33,20 @@ export function resolveSigvoosOperationalStatus(
 ): SigvoosOperationalStatusResult {
   const configured = Boolean(config.username?.trim()) && config.password_configured;
   const lastSyncAt = config.last_sync_at ?? null;
+  const lastSyncMs = parseSigvoosTimestamp(lastSyncAt);
   const eventStatus = String(latestEvent?.status ?? '').toUpperCase();
+  const eventUpdatedAt =
+    typeof latestEvent?.updated_at === 'string' ? latestEvent.updated_at : null;
+  const eventUpdatedMs = parseSigvoosTimestamp(eventUpdatedAt);
+  const eventSupersededBySuccessfulSync =
+    eventStatus === 'ERRO' &&
+    lastSyncMs != null &&
+    eventUpdatedMs != null &&
+    // Event timestamps may be stored only to whole seconds while config
+    // timestamps retain milliseconds. Keep an error fail-closed when the
+    // apparent ordering could be explained by that precision difference.
+    eventUpdatedMs + 1_000 <= lastSyncMs;
+  const effectiveEventStatus = eventSupersededBySuccessfulSync ? '' : eventStatus;
 
   if (!configured) {
     return {
@@ -57,7 +70,7 @@ export function resolveSigvoosOperationalStatus(
     };
   }
 
-  if (eventStatus === 'ERRO') {
+  if (effectiveEventStatus === 'ERRO') {
     return {
       status: 'failed',
       configured: true,
@@ -68,7 +81,7 @@ export function resolveSigvoosOperationalStatus(
     };
   }
 
-  if (eventStatus === 'PROCESSANDO') {
+  if (effectiveEventStatus === 'PROCESSANDO') {
     return {
       status: 'partial',
       configured: true,
@@ -80,7 +93,7 @@ export function resolveSigvoosOperationalStatus(
   }
 
   let latestSummary: Record<string, unknown> | null = null;
-  if (typeof latestEvent?.resposta_json === 'string') {
+  if (typeof latestEvent?.resposta_json === 'string' && !eventSupersededBySuccessfulSync) {
     try {
       latestSummary = JSON.parse(latestEvent.resposta_json) as Record<string, unknown>;
     } catch {
@@ -102,7 +115,6 @@ export function resolveSigvoosOperationalStatus(
     };
   }
 
-  const lastSyncMs = parseSigvoosTimestamp(lastSyncAt);
   if (lastSyncMs == null) {
     return {
       status: 'awaiting_window',

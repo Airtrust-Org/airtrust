@@ -63,7 +63,7 @@ vi.mock('../../services/lms-ead-ssot', () => ({
   syncLmsCourseFromQualificacaoTipo: vi.fn(),
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   filterRequestedSetorIdsByAccess: vi.fn((ids) => ids),
   getEmployeeSectorAccess: vi.fn(async () => ({ isAdmin: true, allowedSetorIds: [] })),
 }));

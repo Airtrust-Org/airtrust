@@ -4,7 +4,7 @@ import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import { getSchemaColumns } from '../utils/db-schema';
-import { employeeSectorSql, getEmployeeSectorAccess } from '../services/employee-sector-access';
+import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employee-sector-access';
 import {
   EMAIL_CONVOCACAO_ASSINATURA_PADRAO,
   EMAIL_CONVOCACAO_ASSUNTO_PADRAO,

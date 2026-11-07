@@ -10,7 +10,7 @@ import {
   type AtomicQualificationRenewInput,
   type RequiredQualificationRelation,
 } from '../../services/qualification-history-atomic';
-import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../middleware/operational-domain-access';
 import { insertHistory, SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 
 function createInput(

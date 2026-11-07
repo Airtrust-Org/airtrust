@@ -6,6 +6,7 @@ import {
   submitPendingFrmsRecoveryActivity,
   type RecoveryContextData,
 } from '../useFrmsRecovery';
+import { resetTenantDataLayer } from '@/react-app/lib/tenant-data-layer';
 
 const { getMock, postMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
@@ -42,6 +43,90 @@ describe('FRMS final check-in guards on yesterday flight or activity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearPendingFrmsRecoveryActivity(YESTERDAY);
+  });
+
+  it('discards a staged declaration on tenant switch before another identity can submit it', async () => {
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeDefined();
+
+    resetTenantDataLayer({ reason: 'tenant-switch', tenantId: 999006, broadcast: false });
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeUndefined();
+
+    getMock.mockResolvedValue(loaded(serverContext()));
+    await expect(submitPendingFrmsRecoveryActivity(TODAY))
+      .rejects.toThrow(/informe como foi/i);
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it('clears pending activity on logout and cross-tab session invalidation', () => {
+    for (const reason of ['logout', 'cross-tab'] as const) {
+      stagePendingFrmsRecoveryActivity(YESTERDAY, {
+        reference_date: YESTERDAY,
+        activity_type: 'OFF_DUTY',
+      }, true);
+      resetTenantDataLayer({ reason, tenantId: null, broadcast: false });
+      expect(getPendingFrmsRecoveryActivity(YESTERDAY)).toBeUndefined();
+    }
+  });
+
+  it('rejects an old context response after a tenant reset without posting a new tenant draft', async () => {
+    let resolveContext!: (value: ReturnType<typeof loaded>) => void;
+    getMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveContext = resolve;
+    }));
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    const submission = submitPendingFrmsRecoveryActivity(TODAY);
+
+    resetTenantDataLayer({ reason: 'tenant-switch', tenantId: 999006, broadcast: false });
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'ADMIN_TRAINING',
+      notes: 'New tenant draft',
+      duty_start_time: '08:00',
+      duty_end_time: '17:00',
+    }, true);
+    resolveContext(loaded(serverContext()));
+
+    await expect(submission).rejects.toThrow(/Resposta descartada/);
+    expect(postMock).not.toHaveBeenCalled();
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)?.input?.activity_type).toBe('ADMIN_TRAINING');
+  });
+
+  it('does not delete a new tenant draft when an old POST completes after reset', async () => {
+    let resolvePost!: (value: unknown) => void;
+    getMock.mockResolvedValue(loaded(serverContext()));
+    postMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePost = resolve;
+    }));
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'OFF_DUTY',
+    }, true);
+    const submission = submitPendingFrmsRecoveryActivity(TODAY);
+    await vi.waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+
+    resetTenantDataLayer({ reason: 'logout', tenantId: null, broadcast: false });
+    stagePendingFrmsRecoveryActivity(YESTERDAY, {
+      reference_date: YESTERDAY,
+      activity_type: 'ADMIN_TRAINING',
+      notes: 'Next session draft',
+      duty_start_time: '08:00',
+      duty_end_time: '17:00',
+    }, true);
+    resolvePost({
+      success: true,
+      data: { success: true, data: { activity: {}, assessment: {}, flight: serverContext().flight, source_discrepancy: false } },
+    });
+
+    await expect(submission).rejects.toThrow(/Resposta descartada/);
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(getPendingFrmsRecoveryActivity(YESTERDAY)?.input?.activity_type).toBe('ADMIN_TRAINING');
   });
 
   it('rejects check-in when the server confirms no flight and the user skipped the activity', async () => {

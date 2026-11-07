@@ -13,7 +13,7 @@ schemas/
 hooks/qualificacoes/
   useFuncionariosAtivos.ts              <- cache 5min
   useTiposQualificacao.ts               <- cache 10min
-utils/handleApiError.ts                 <- toast erros
+hooks/useHandleApiError.ts               <- toast erros
 ```
 
 ## Padrões de Resposta

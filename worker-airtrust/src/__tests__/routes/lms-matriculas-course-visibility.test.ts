@@ -10,10 +10,10 @@ vi.mock('../../middleware/rbac', () => ({
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
   hasRole: () => true,
 }));
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 6,
 }));
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
 }));
@@ -33,6 +33,18 @@ function mockDb() {
   const db = {
     prepare: vi.fn((sql: string) => {
       queries.push(sql);
+      // Diagnóstico de conta vinculada (somente leitura): só o funcionário 101 tem conta.
+      if (sql.includes("PRAGMA table_info('usuarios')")) {
+        return { all: async () => ({ results: [{ name: 'id' }, { name: 'ativo' }] }) };
+      }
+      if (sql.includes("name = 'usuarios_empresas'")) return { first: async () => ({ found: 1 }) };
+      if (sql.includes('SELECT DISTINCT f.id AS funcionario_id')) {
+        return {
+          bind: (...args: unknown[]) => ({
+            all: async () => ({ results: args.includes(101) ? [{ funcionario_id: 101 }] : [] }),
+          }),
+        };
+      }
       const activeOnly = sql.includes("IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')");
       return {
         bind: (...args: unknown[]) => {
@@ -72,6 +84,7 @@ describe('LMS course roster — cancelled legacy enrollments', () => {
       pagination: { total: number };
     };
     expect(body.data.map((row) => row.id)).toEqual([11]);
+    expect(body.data.map((row) => (row as { aluno_vinculado?: number }).aluno_vinculado)).toEqual([1]);
     expect(body.pagination.total).toBe(1);
     expect(queries.filter((sql) => sql.includes('FROM lms_matriculas m')))
       .toEqual(expect.arrayContaining([expect.stringContaining("IN ('NAO_INICIADO','EM_ANDAMENTO','REPROVADO')")]));
@@ -90,6 +103,8 @@ describe('LMS course roster — cancelled legacy enrollments', () => {
       pagination: { total: number };
     };
     expect(body.data.map((row) => row.id)).toEqual([13]);
+    // Funcionário 103 não possui conta ativa vinculada: o indicador deve acusar 0.
+    expect(body.data.map((row) => (row as { aluno_vinculado?: number }).aluno_vinculado)).toEqual([0]);
     expect(body.pagination.total).toBe(1);
     expect(queries.filter((sql) => sql.includes('FROM lms_matriculas m')))
       .toEqual(expect.arrayContaining([expect.stringContaining("AND m.status = ?")]));

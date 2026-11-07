@@ -15,7 +15,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
-import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from './lmsUi';
+import { LmsModuleTabs, LmsPageShell, LmsSummaryTag } from '../../components/lms/lmsUi';
 import {
   useLmsHistoricoEdApp,
   useLmsEdappLegacySummary,

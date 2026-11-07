@@ -83,8 +83,11 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
   });
 
   it('refuses contradictory SCORM statuses even when score passes and 42/42 is recorded', async () => {
+    // A real contradiction: the SAME commit reports both status families and
+    // they disagree (1.2 passed vs 2004 incomplete).
     const { response, saved } = await submitCommit({
-      lesson_status: 'passed', score_raw: 100, score_max: 100,
+      lesson_status: 'passed', completion_status: 'incomplete',
+      score_raw: 100, score_max: 100,
       commit_event: 'SCORM_USER_FINALIZE',
       completion_candidate: true,
       cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '42/42' }),
@@ -92,6 +95,31 @@ describe('Player 2.0 structural split: evidence persistence versus approval', ()
     expect(response.status).toBe(409);
     expect(saved).toBe(false);
     expect(await response.json()).toMatchObject({ code: 'STATE_INCONSISTENT' });
+  });
+
+  it('does not strand a SCORM 1.2 learner on the stale 2004 columns left by an LMS reset (99% stuck)', async () => {
+    // courseEvidence stores completion_status='incomplete' (the LMS writes BOTH
+    // families to 'incomplete' on reversal/reset). A fresh 1.2-only `passed`
+    // must not be judged against that stale, other-family column.
+    const { response, saved } = await submitCommit({
+      lesson_status: 'passed', score_raw: 100, score_max: 100,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '42/42' }),
+    });
+    expect(response.status).toBe(200);
+    expect(saved).toBe(true);
+  });
+
+  it('a 1.2 commit that is genuinely failed is still refused despite stale 2004 columns', async () => {
+    const { response, saved } = await submitCommit({
+      lesson_status: 'failed', score_raw: 10, score_max: 100,
+      commit_event: 'SCORM_USER_FINALIZE',
+      completion_candidate: true,
+      cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '42/42' }),
+    });
+    expect(response.status).toBe(409);
+    expect(saved).toBe(false);
   });
 
   it('never accepts forged passive completion status without a tenant-bound asset session', async () => {

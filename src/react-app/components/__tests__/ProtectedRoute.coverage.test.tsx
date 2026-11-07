@@ -156,6 +156,20 @@ describe('ProtectedRoute coverage guard', () => {
     expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
   });
 
+  it('mantém o bloqueio em /lms/matriculas/67 e oferece retorno seguro ao LMS aluno', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { role: 'ALUNO' },
+      empresas: [{ id: 1, nome: 'AirTrust', modulos_ativos: null }],
+      empresaAtualId: 1,
+    });
+    renderAt('/lms/matriculas/67', { requiredRole: ['ADMIN', 'GESTOR'] });
+    expect(screen.getByText('protected.denied.title')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ir para meus treinamentos' })).toHaveAttribute('href', '/lms');
+  });
+
   it('ignora requiredRole vazio e libera a rota', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,

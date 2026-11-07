@@ -27,6 +27,7 @@ import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
 import { previousOperationalDate, useFrmsRecoveryContext, type RecoveryActivityType } from '@/react-app/hooks/useFrmsRecovery';
 import {
@@ -37,14 +38,6 @@ import {
 } from './fadigaCheckinDraft';
 
 /* eslint-disable react-refresh/only-export-components */
-
-function getTodayLocalKey(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 const NIVEL_COLOR: Record<string, string> = {
   VERDE: 'bg-emerald-100 text-emerald-800 border-emerald-200',
@@ -64,7 +57,7 @@ function badgeNivel(nivel: string) {
 }
 
 const STATUS_OPERACIONAL_LABEL: Record<string, string> = {
-  APTO: 'Prontidão normal',
+  APTO: 'Sem sinal automático de revisão (não equivale a liberação de voo)',
   APTO_COM_RESSALVA: 'Atenção - revisar com gestor',
   INAPTO: 'Requer revisão operacional',
   NAO_APTO: 'Requer revisão imediata',
@@ -252,7 +245,7 @@ export function isFadigaCheckinSubmitReady(input: {
 }
 
 function HistoricoTab({ collective }: { collective: boolean }) {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const inicio = `${hoje.slice(0, 8)}01`;
   const { data, isLoading } = useFadigaHistorico({ data_inicio: inicio, data_fim: hoje, limit: 30 });
   const rows = data?.data ?? [];
@@ -333,7 +326,7 @@ function HistoricoTab({ collective }: { collective: boolean }) {
 }
 
 function PainelGestorTab() {
-  const hoje = getTodayLocalKey();
+  const hoje = frmsBrazilOperationalTodayIso();
   const [data, setData] = useState(hoje);
   const { data: painel, isLoading, isError, error, refetch, isFetching } = useFadigaPainel(data);
   const rows = Array.isArray(painel) ? painel : [];
@@ -502,7 +495,7 @@ function TriStateButtons({
 export default function FrmsFlightCheckinFadiga() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = getTodayLocalKey();
+  const today = frmsBrazilOperationalTodayIso();
   const { isAdmin, isGestor, role } = usePermissions();
   const { user, empresaAtualId } = useAuth();
   const draftKey = useMemo(
@@ -552,14 +545,15 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceitePrivacidade, setAceitePrivacidade] = useState(restoredDraft?.aceitePrivacidade ?? false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(
-    restoredDraft?.vigilanceResult ?? null,
+    restoredDraft?.vigilanceResult?.summary.protocolVersion === 'airtrust-brief-v1'
+      ? restoredDraft.vigilanceResult : null,
   );
   const [vigilanceRunning, setVigilanceRunning] = useState(false);
   const [interruptedPvtRecovered, setInterruptedPvtRecovered] = useState(
     Boolean(restoredDraft?.vigilanceInProgress && !restoredDraft?.vigilanceResult),
   );
 
-  const { data: existente, refetch } = useCheckinHoje();
+  const { data: existente, refetch } = useCheckinHoje(today);
   const submitMutation = useSubmitCheckin();
   const { data: readinessBaseline } = useReadinessBaseline(today);
   const { data: readinessToday } = useReadinessToday(today);
@@ -669,6 +663,12 @@ export default function FrmsFlightCheckinFadiga() {
 
   const submit = async () => {
     if (submitMutation.isPending) return;
+    // A form left open across midnight must never silently submit yesterday's
+    // clinical self-report under a stale operational date.
+    if (today !== frmsBrazilOperationalTodayIso()) {
+      toast.error('A data operacional mudou. Atualize a página e confirme o check-in para o novo dia.');
+      return;
+    }
 
     setSubmitAttempted(true);
     if (!canSubmitWithReadiness) {
@@ -695,7 +695,6 @@ export default function FrmsFlightCheckinFadiga() {
 
     try {
       const kss = kssScore!;
-      const subjectiveFatigueLevel = mapKssToSubjectiveFatigue(kss);
       const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
 
       if (!vigilanceResult) {
@@ -717,8 +716,6 @@ export default function FrmsFlightCheckinFadiga() {
         oportunidade_sono_horas_24h: usesAbsoluteRestForRecovery ? (repousoHoras ?? undefined) : undefined,
         qualidade_sono: qualidadeSono!,
         kss_score: kss,
-        subjective_fatigue_level: subjectiveFatigueLevel,
-        sleepiness_level: subjectiveFatigueLevel,
         fit_for_duty: fitForDuty!,
         motivo_inaptidao: isNeedsCoordinatorReview ? observacao.trim() : undefined,
         free_text_notes:
@@ -816,6 +813,10 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
               Ferramenta de triagem operacional: este check-in gera sinalização para revisão humana.
               Não é diagnóstico médico e não determina automaticamente aptidão ou restrição operacional.
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900">
+              Data operacional do check-in: {today.slice(8, 10)}/{today.slice(5, 7)}/{today.slice(0, 4)} (Brasília)
             </div>
 
             {existente && (
@@ -1113,17 +1114,17 @@ export default function FrmsFlightCheckinFadiga() {
 
               <FormCard
                 label="Bloco 3 - Atenção e tempo de reação"
-                hint="PVT diário (60 segundos): avalia atenção e reação. Complementa KSS e sono; não determina aptidão isoladamente."
+                hint="Teste breve de atenção AirTrust (60 segundos, não validado como PVT-B): avalia atenção e reação. Não determina aptidão nem libera voo."
               >
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
-                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o PVT-B para manter a validade da medição.
+                    A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o teste breve de atenção para manter a validade da medição.
                   </div>
                 ) : null}
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   {readinessBaseline?.ready
                     ? `Baseline individual disponível (${readinessBaseline.sessions} sessões anteriores).`
-                    : `Baseline individual em formação (${readinessBaseline?.sessions ?? 0}/${readinessBaseline?.minimum_sessions ?? 5} sessões anteriores).`}
+                    : 'Linha de base por aparelho e sessões descansadas pendente; não interpretar como prontidão preservada.'}
                   {readinessToday ? ' Já existe uma avaliação salva hoje; um novo teste substituirá a avaliação ativa de hoje sem contar duas vezes no baseline.' : ''}
                 </div>
                 {vigilanceResult ? (

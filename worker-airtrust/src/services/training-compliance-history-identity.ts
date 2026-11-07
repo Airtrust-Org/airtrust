@@ -55,5 +55,9 @@ export function trainingComplianceHistoricalModalitySql(
   return `CASE WHEN ${legacy} NOT IN ('','NAO_CLASSIFICADO') THEN ${legacy}
     WHEN ${model} IN ${recognized} THEN ${model}
     WHEN ${category} IN ${recognized} THEN ${category}
+    -- This is the canonical legacy EAD category, also recognized by the LMS
+    -- enrollment/renewal services. A null historical format must not hide
+    -- the governed expiry of an LMS-issued qualification from Compliance.
+    WHEN ${category} = 'TREINAMENTO EAD' THEN 'EAD'
     ELSE ${legacy} END`;
 }

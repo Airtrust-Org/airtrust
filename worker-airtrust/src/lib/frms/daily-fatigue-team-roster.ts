@@ -34,17 +34,20 @@ export async function loadDailyFatigueTeamRoster(params: {
           fj.id AS jornada_id,
           ch.id AS checkin_id,
           ch.jornada_inicio_prevista AS checkin_apresentacao,
-          ch.hora_checkin, ch.kss_score,
+          ch.hora_checkin, ch.kss_score, ch.kss_provenance,
           ch.horas_sono,
           ch.horas_sono_48h,
           ch.wake_time,
+          ch.fit_for_duty,
           ch.score_fadiga,
           ch.nivel_fadiga,
           ch.status_operacional,
           ch.computed_risk_level,
           ch.requires_operational_review
        FROM funcionarios f
-       JOIN current_fortnight cf
+       -- Preserve assigned-quinzena team rows, but never hide a real daily check-in
+       -- or journey just because the employee's fortnight assignment is missing.
+       LEFT JOIN current_fortnight cf
          ON (
            (cf.numero = 1 AND LOWER(TRIM(COALESCE(f.quinzena, ''))) IN
              ('primeira','1','1q','q1','1ª','1a','primeira quinzena'))
@@ -54,6 +57,7 @@ export async function loadDailyFatigueTeamRoster(params: {
          )
        LEFT JOIN frms_jornada fj
          ON fj.tripulante_id = f.id
+        AND fj.empresa_id = f.empresa_id
         AND fj.data = ?
         AND fj.deleted_at IS NULL
         AND fj.status IN ('ES','TS','TV','EX','RE','SA')
@@ -68,6 +72,7 @@ export async function loadDailyFatigueTeamRoster(params: {
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
          AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
          AND ${params.sectorScope.clause}
+         AND (cf.numero IS NOT NULL OR fj.id IS NOT NULL OR ch.id IS NOT NULL)
        ORDER BY
          CASE
            WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
@@ -75,7 +80,8 @@ export async function loadDailyFatigueTeamRoster(params: {
            WHEN ch.computed_risk_level = 'attention' THEN 3
            ELSE 4
          END,
-         f.nome ASC
+         f.nome ASC,
+         f.id ASC
        LIMIT ? OFFSET ?`,
     )
     .bind(

@@ -1,3 +1,5 @@
+import { isProductionFrontendHost, isStagingFrontendHost } from '@/react-app/config/api-environment';
+
 export interface FrmsPersonLike {
   nome?: string | null;
   nome_guerra?: string | null;
@@ -34,6 +36,10 @@ export function isSyntheticFrmsFixture(person: FrmsPersonLike): boolean {
 export function shouldExposeFrmsPerson(
   person: FrmsPersonLike,
   production = import.meta.env.PROD,
+  host = typeof window !== 'undefined' ? window.location.hostname : '',
 ): boolean {
-  return !production || !isSyntheticFrmsFixture(person);
+  if (!isSyntheticFrmsFixture(person)) return true;
+  if (isStagingFrontendHost(host)) return true;
+  if (production || isProductionFrontendHost(host)) return false;
+  return true;
 }

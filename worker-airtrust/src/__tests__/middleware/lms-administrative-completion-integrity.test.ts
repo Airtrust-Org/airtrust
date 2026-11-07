@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { enforceLmsCompletionIntegrity } from '../../middleware/lms-completion-integrity';
 import type { Env } from '../../types';
 
-function dbForIncompleteScorm() {
+function dbForIncompleteScorm(overrides: Record<string, unknown> = {}) {
   return {
     prepare: vi.fn(() => {
       const result = {
@@ -34,6 +34,7 @@ function dbForIncompleteScorm() {
           suspend_data: '{"module":1}',
           cmi_json: '{"cmi.core.lesson_location":"12/55"}',
           xapi_count: 0,
+          ...overrides,
         }),
       };
       return { ...result, bind: () => result };
@@ -41,12 +42,12 @@ function dbForIncompleteScorm() {
   } as unknown as D1Database;
 }
 
-function makeApp() {
+function makeApp(role = 'ADMINISTRADOR') {
   const app = new Hono<{ Bindings: Env }>();
   app.use('*', async (c, next) => {
     c.set('empresaId' as never, 6 as never);
     c.set('userId' as never, 60 as never);
-    c.set('userRole' as never, 'ADMINISTRADOR' as never);
+    c.set('userRole' as never, role as never);
     const guarded = await enforceLmsCompletionIntegrity(c as never);
     if (guarded) return guarded;
     return next();
@@ -56,6 +57,47 @@ function makeApp() {
 }
 
 describe('LMS administrative completion integrity', () => {
+  it.each([20, 84])('allows an admin reason with %i%% progress and score zero', async (progress) => {
+    const response = await makeApp().fetch(
+      new Request('http://localhost/api/lms/matriculas/696/status', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'CONCLUIDO', observacoes: 'Administrador confirma treinamento realizado.' }),
+      }),
+      { DB: dbForIncompleteScorm({ progresso_pct: progress, score_raw: 0 }) } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it.each([
+    ['ADMINISTRADOR', 'curto'],
+    ['manager', 'Administrador confirma treinamento realizado.'],
+  ])('does not waive the score for role %s without an authorized reason', async (role, reason) => {
+    const response = await makeApp(role).fetch(
+      new Request('http://localhost/api/lms/matriculas/696/status', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'CONCLUIDO', observacoes: reason }),
+      }),
+      { DB: dbForIncompleteScorm({ progresso_pct: 20, score_raw: 0 }) } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'SCORE_BELOW_MASTERY' });
+  });
+
+  it('does not waive an explicit SCORM failure', async () => {
+    const response = await makeApp().fetch(
+      new Request('http://localhost/api/lms/matriculas/696/status', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'CONCLUIDO', observacoes: 'Administrador confirma treinamento realizado.' }),
+      }),
+      { DB: dbForIncompleteScorm({ score_raw: 0, lesson_status: 'failed' }) } as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'EXPLICIT_FAILURE' });
+  });
+
   it('accepts governed admin completion when real SCORM progress/score exist but terminal status is incomplete', async () => {
     const response = await makeApp().fetch(
       new Request('http://localhost/api/lms/matriculas/696/status', {

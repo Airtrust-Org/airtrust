@@ -31,10 +31,14 @@ const HEX40=/^[a-f0-9]{40}$/;
 const HEX64=/^[a-f0-9]{64}$/;
 const ACCOUNT=/^[a-f0-9]{32}$/;
 
-export function provisionPlan({sha,phase,configSha}){
+export function provisionPlan({sha,phase,configSha,credentialMode='dedicated'}){
   if(!HEX40.test(sha)||!PHASES.includes(phase)||!HEX64.test(configSha))
     fail('FRMS_QA_PROVISION_INPUT_DENIED');
-  return {
+  if(!['dedicated','existing_staging_worker_bucket_only','existing_staging_worker_deploy_only'].includes(credentialMode)||
+      (credentialMode==='existing_staging_worker_bucket_only'&&phase!=='bucket')||
+      (credentialMode==='existing_staging_worker_deploy_only'&&phase!=='worker'))
+    fail('FRMS_QA_CREDENTIAL_MODE_DENIED');
+  const plan={
     schema:'AIRTRUST_FRMS_QA_PROVISION_V1',
     repository:REPO,issue:776,frms_issue:1426,
     release_sha:sha,phase,tenant_id:999013,
@@ -48,13 +52,24 @@ export function provisionPlan({sha,phase,configSha}){
     rollout:'STAGING_ONLY_NO_REPAIR_APPLY',
     cleanup:'SEPARATE_F0_AUTHORIZATION_REQUIRED',
   };
+  if(credentialMode==='existing_staging_worker_bucket_only'){
+    return {...plan,schema:'AIRTRUST_FRMS_QA_PROVISION_V2',
+      credential_mode:credentialMode};
+  }
+  if(credentialMode==='existing_staging_worker_deploy_only'){
+    return {...plan,schema:'AIRTRUST_FRMS_QA_PROVISION_V3',
+      credential_mode:credentialMode};
+  }
+  return plan;
 }
 
 export function assertProvisionComment(body,plan){
-  if(typeof body!=='string'||!body.startsWith('AIRTRUST_FRMS_QA_PROVISION_V1\n'))
+  const prefix=plan.schema+'\n';
+  if(!['AIRTRUST_FRMS_QA_PROVISION_V1','AIRTRUST_FRMS_QA_PROVISION_V2','AIRTRUST_FRMS_QA_PROVISION_V3'].includes(plan.schema)||
+      typeof body!=='string'||!body.startsWith(prefix))
     fail('FRMS_QA_F0_GRANT_MISSING');
   let data;
-  try{data=JSON.parse(body.slice('AIRTRUST_FRMS_QA_PROVISION_V1\n'.length));}
+  try{data=JSON.parse(body.slice(prefix.length));}
   catch{fail('FRMS_QA_F0_GRANT_INVALID');}
   if(!data||typeof data!=='object'||Array.isArray(data)||
     Object.keys(data).sort().join('|')!==Object.keys(plan).sort().join('|')||
@@ -71,7 +86,8 @@ export async function authorize({env,api,now=Date.now(),configText}){
      !/^[1-9][0-9]{0,15}$/.test(grantId||''))
     fail('FRMS_QA_TRUSTED_MAIN_AND_GRANT_REQUIRED');
   assertPrivateConfig(configText);
-  const plan=provisionPlan({sha,phase,configSha:hash(configText)});
+  const credentialMode=env.FRMS_QA_CREDENTIAL_MODE||'dedicated';
+  const plan=provisionPlan({sha,phase,configSha:hash(configText),credentialMode});
   const main=await api('repos/'+REPO+'/branches/main');
   if(main?.commit?.sha!==sha)fail('FRMS_QA_CURRENT_MAIN_SHA_CHANGED');
   // A busy main may have >100 incidental check runs. A single unfiltered
@@ -156,9 +172,12 @@ export async function createPrivateBucket({accountId,token,readToken,fetcher=fet
 export function buildPrivateRuntimeSecrets({env,sha}){
   const approved=env.FRMS_QA_APPROVAL_PUBLIC_KEY_PEM;
   const caller=env.FRMS_QA_CALLER_KEY_HEX,preimage=env.FRMS_QA_PREIMAGE_KEY_HEX;
-  const d1read=env.FRMS_QA_D1_READ_TOKEN;
+  // Recovery is supplied through the one-use private runner proof. No
+  // Cloudflare bearer belongs in the repair Worker, including a dedicated
+  // D1 read token or an alias of an existing deploy/migration credential.
+  if(env.FRMS_QA_D1_READ_TOKEN)fail('FRMS_QA_RUNTIME_CLOUDFLARE_TOKEN_FORBIDDEN');
   if(!HEX40.test(sha||'')||!HEX64.test(caller||'')||
-     !HEX64.test(preimage||'')||!d1read||!approved||
+     !HEX64.test(preimage||'')||caller===preimage||!approved||
      !ACCOUNT.test(env.CLOUDFLARE_ACCOUNT_ID||''))
     fail('FRMS_QA_PRIVATE_RUNTIME_SECRETS_MISSING');
   let der;
@@ -173,7 +192,6 @@ export function buildPrivateRuntimeSecrets({env,sha}){
     PREIMAGE_KEY_HEX:preimage,
     CALLER_KEY_HEX:caller,
     CALLER_KEY_SHA256:hash(Buffer.from(caller,'hex')),
-    D1_READ_TOKEN:d1read,
     CLOUDFLARE_ACCOUNT_ID:env.CLOUDFLARE_ACCOUNT_ID,
     PRIVATE_STORAGE_VERIFIED:'restricted-r2-lifecycle-1d',
   };
@@ -231,11 +249,23 @@ async function main(){
     // before any external API mutation.
     if(mode!==plan.phase)fail('FRMS_QA_PHASE_MODE_MISMATCH');
     let result;
-    if(mode==='bucket')result=await createPrivateBucket({
-      accountId:env.CLOUDFLARE_ACCOUNT_ID,
-      token:env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN,
-      readToken:env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN});
-    else result=await publishPrivateWorker({env});
+    if(mode==='bucket'){
+      if(plan.credential_mode==='existing_staging_worker_bucket_only'&&
+         (!env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN||
+          env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN!==env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN))
+        fail('FRMS_QA_EXISTING_TOKEN_MISMATCH');
+      result=await createPrivateBucket({
+        accountId:env.CLOUDFLARE_ACCOUNT_ID,
+        token:env.CLOUDFLARE_FRMS_QA_R2_PROVISION_API_TOKEN,
+        readToken:env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN});
+    }
+    else {
+      if(plan.credential_mode==='existing_staging_worker_deploy_only'&&
+        (!env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN||
+         env.CLOUDFLARE_FRMS_QA_WORKER_DEPLOY_API_TOKEN!==env.CLOUDFLARE_FRMS_QA_READ_API_TOKEN))
+        fail('FRMS_QA_EXISTING_WORKER_TOKEN_MISMATCH');
+      result=await publishPrivateWorker({env});
+    }
     console.log(JSON.stringify(result));
   }catch(err){
     const code=/^FRMS_QA_[A-Z0-9_]+$/.test(err?.message||'')?

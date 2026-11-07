@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../../lib/errors/api-error';
 import type { Env } from '../../types';
 
 export const PILOT_OFFLINE_LEASE_VERSION = 1;

@@ -15,8 +15,11 @@ test('inactive candidate QA: SHA, role, tenant, scoped cookie, active isolation'
     test.setTimeout(120000);
     const fixture=JSON.parse(readFileSync(
       'worker-airtrust/.wrangler/scorm-browser-qa/fixture.json','utf8'));
-    test.skip(fixture.fixtureKind!=='LOCAL_DISPOSABLE_ZIP',
-      'This is the existing synthetic fixture; external ZIP QA has separate evidence');
+    // The existing staging preview contract must also work for a real,
+    // SHA-bound private SCORM ZIP loaded into disposable LOCAL D1/R2. This
+    // remains a read-only preview test, never a functional certification.
+    expect(['LOCAL_DISPOSABLE_ZIP','LOCAL_DISPOSABLE_REAL_ZIP'])
+      .toContain(fixture.fixtureKind);
     expect(fixture.origin).toBe('http://127.0.0.1:8787');
     const bytes=readFileSync(fixture.zipPath);
     const sha=digest(bytes);
@@ -98,7 +101,15 @@ test('inactive candidate QA: SHA, role, tenant, scoped cookie, active isolation'
       await page.setContent('<iframe id="outer" src="'+root+preview+
         '" title="Candidato inativo" style="width:100vw;height:90vh"></iframe>');
       const sco=page.frameLocator('#outer').frameLocator('#scorm-frame');
-      await expect(sco.getByRole('heading',{name:'Avaliação QA'})).toBeVisible({timeout:30000});
+      if(fixture.fixtureKind==='LOCAL_DISPOSABLE_REAL_ZIP'){
+        // Real packages need not use the synthetic fixture's title.
+        // Assert the factory's actual screen rendered through the scoped
+        // candidate asset session, without treating it as a learner commit.
+        await expect(sco.locator('#viewport .screen')).toBeVisible({timeout:30000});
+        await expect(sco.getByRole('heading',{level:1}).first()).toBeVisible();
+      }else{
+        await expect(sco.getByRole('heading',{name:'Avaliação QA'})).toBeVisible({timeout:30000});
+      }
       const after=snapshot();
       expect(after.course).toEqual(prior.course);
       expect(after.progress).toBe(prior.progress);

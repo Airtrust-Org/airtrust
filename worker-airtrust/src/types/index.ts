@@ -39,6 +39,9 @@ export interface Env {
   EDB_SHADOW_PILOT_TENANTS?: string;
   // Conhecimento Ativo: fail-closed. Use 'all' ou CSV de empresa_id após homologação técnica.
   CONHECIMENTO_ATIVO_ENABLED_TENANTS?: string;
+  // SCORM in-cycle edition handoff. Keep disabled until Schema V2 0566 is
+  // applied and exact-SHA staging acceptance is complete.
+  LMS_SCORM_EDITION_HANDOFF_ENABLED?: string;
 
   // Environment Variables (definidas em wrangler.toml)
   ENVIRONMENT: 'development' | 'staging' | 'production';
@@ -84,6 +87,9 @@ export interface Env {
   // Migração arquitetural SIGVOOS→Controle de Voos→FRMS (shadow-mode, ver docs/frms-controle-voos-migracao.md)
   // Default seguro (ausente/vazio) = desativado. 'all' = todas as empresas. Ou lista de ids separada por vírgula.
   CONTROLE_VOOS_FRMS_SHADOW_MODE_TENANTS?: string;
+  // Confirmed authoritative SIGVOOS scope + CV bridge acceptance per tenant.
+  // Do not use 'all'; absent = no source-day COMPLIANT attestation.
+  FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS?: string;
   // Experimental FRMS V3 preview: staging-only, explicit tenant CSV, never 'all'; absent = off.
   FRMS_V3_SHADOW_PREVIEW_TENANTS?: string;
   // Independent staging-only cohort research allowlist; default disabled, never 'all'.
@@ -129,6 +135,9 @@ export interface Env {
   // Shared only between governed staging QA attestation signer and Worker;
   // missing secret fails closed; never inject in browser/frontend.
   SCORM_QA_ATTESTATION_SECRET?: string;
+  // Exact, short-lived F5 staging grant. A missing or malformed grant keeps
+  // streamed large-package intake closed; it is never enabled in production.
+  SCORM_F5_STREAMED_INTAKE_GRANT?: string;
   // Dedicated F5 staging readback; never share with signer or client.
   SCORM_QA_READBACK_SECRET?: string;
   SCORM_QA_SYNTHETIC_TENANT_ID?: string;
@@ -152,6 +161,8 @@ export interface Env {
   // Feature flag for guarded Controle de Voos SIGVOOS shadow compare in staging.
   CONTROLE_VOOS_SIGVOOS_SHADOW_COMPARE_ENABLED?: string;
   SIGVOOS_CONFIG_ENCRYPTION_KEY?: string;
+  // Dedicated key for encrypting HFA integration tokens. No fallback key is accepted.
+  HFA_INTEGRATION_ENCRYPTION_KEY?: string;
   SIGVOOS_REAL_API_BASE_URL?: string;
   SIGVOOS_REAL_API_USERNAME?: string;
   SIGVOOS_REAL_API_PASSWORD?: string;
@@ -363,6 +374,7 @@ export interface Variables {
   empresaId: number;
   userEmail: string;
   userRole: string;
+  canonicalTenantRole?: string;
   funcionarioId?: number | null;
   platformAccessState?: PlatformAccessState;
   tenantContext: {
@@ -385,6 +397,8 @@ export interface JwtPayload {
   asset_scope?: 'pptx_viewer' | 'course_assets';
   asset_curso_id?: number;
   asset_matricula_id?: number;
+  asset_cycle_id?: number;
+  asset_handoff_id?: number | null;
   asset_scorm_package_prefix?: string;
   asset_qa_candidate_id?: string; // Short-lived non-production preview scope only
   asset_qa_candidate_sha256?: string; // Exact staged candidate ZIP identity

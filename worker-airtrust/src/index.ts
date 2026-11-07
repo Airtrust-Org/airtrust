@@ -278,6 +278,7 @@ app.use('/api/*', async (c, next) => {
     // asset-cookie authentication. Never open arbitrary /api/lms paths.
     pathname.startsWith('/api/lms/scorm/qa-preview/') ||
     pathname.startsWith('/api/lms/scorm/qa-assets/') ||
+    pathname.startsWith('/api/lms/scorm/qa-f0/') ||
     pathname.startsWith('/api/lms/h5p/assets/') ||
     pathname.startsWith('/api/lms/pptx/asset/') ||
     pathname === '/api/certificados/validar' ||

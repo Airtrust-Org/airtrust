@@ -46,9 +46,9 @@ export interface FortnightTimelineSummary {
   cumulative_duty_min: number;
   cumulative_flight_min: number;
   received_checkins: number;
-  recovery_days: number;
+  recovery_credit_days: number;
   low_sleep_days: number;
-  no_flight_recovery_days: number;
+  no_flight_recovery_credit_days: number;
   max_effectiveness_decline_streak_days: number;
 }
 
@@ -186,10 +186,12 @@ export function buildFortnightTimeline(
 
     if (hasActivity) jornadasDays += 1;
     if (item?.checkin_status === 'RECEBIDO') receivedCheckins += 1;
-    const hasRecovery = (item?.recovery_credit_points ?? 0) > 0 || Boolean(item?.recovery_state);
-    if (hasRecovery) recoveryDays += 1;
+    const hasRecoveryCredit = item?.recovery_credit_points != null
+      && Number.isFinite(item.recovery_credit_points)
+      && item.recovery_credit_points > 0;
+    if (hasRecoveryCredit) recoveryDays += 1;
     if (item?.alertas.includes('SONO_INSUFICIENTE')) lowSleepDays += 1;
-    if (item && vooMin === 0 && hasRecovery) noFlightRecoveryDays += 1;
+    if (item && vooMin === 0 && hasRecoveryCredit) noFlightRecoveryDays += 1;
 
     const effectiveness = item?.effectiveness_pct;
     if (effectiveness != null && Number.isFinite(effectiveness)) {
@@ -275,9 +277,9 @@ export function buildFortnightTimeline(
       cumulative_duty_min: cumulativeDuty,
       cumulative_flight_min: cumulativeFlight,
       received_checkins: receivedCheckins,
-      recovery_days: recoveryDays,
+      recovery_credit_days: recoveryDays,
       low_sleep_days: lowSleepDays,
-      no_flight_recovery_days: noFlightRecoveryDays,
+      no_flight_recovery_credit_days: noFlightRecoveryDays,
       max_effectiveness_decline_streak_days: maxEffectivenessDeclineStreakDays,
     },
   };

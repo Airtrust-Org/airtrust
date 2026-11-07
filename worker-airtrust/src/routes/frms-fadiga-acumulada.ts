@@ -17,7 +17,7 @@ import { buildCanonicalOperationalSourceSql, FRMS_OPERATIONAL_SOURCE_PRIORITY } 
 import { loadPreferredOperationalJourneys } from '../lib/frms/preferred-operational-source';
 import { loadLegalWorkMonth } from '../lib/frms/legal-work-service';
 import { asOperationalLimitesMap, resolveFrmsOperationalContext } from '../lib/frms/parameter-governance';
-import { costaDoSolAct2025_2027Applies, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
+import { costaDoSolAct2025_2027Applies, costaDoSolAct2025_2027InForce, regulatoryProfileHasDocumentedAppendix } from '../lib/frms/compliance-policy';
 
 const fadigaAcumulada = new Hono<{ Bindings: Env }>();
 
@@ -116,10 +116,11 @@ async function resolveRouteContext(db: D1Database, empresaId: number, month: str
     'B',
     'C',
   );
+  // ACT citado só quando o mês intersecta a vigência (cl. 1ª: 01/12/2025–30/11/2027).
   const costaDoSolActApplicable = costaDoSolAct2025_2027Applies({
     empresaId,
     limitsJson: context.regulatoryLimitsJson,
-  });
+  }) && (costaDoSolAct2025_2027InForce(`${month}-01`) || costaDoSolAct2025_2027InForce(lastDayOfMonth(month)));
   return {
     context,
     limits,
@@ -161,6 +162,7 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
                ON f.id = CAST(j.tripulante_id AS INTEGER)
               AND f.deleted_at IS NULL
               AND f.empresa_id = ?
+              AND j.empresa_id = f.empresa_id
             WHERE j.tripulante_id = ?
               AND j.data BETWEEN ? AND ?
               AND j.deleted_at IS NULL
@@ -173,19 +175,20 @@ fadigaAcumulada.get('/fadiga-acumulada', async (c) => {
         .prepare(
           `SELECT COUNT(*) AS total
              FROM frms_importacao_fira fira
-             LEFT JOIN funcionarios p ON p.id = CAST(fira.tripulante_id AS INTEGER)
-             LEFT JOIN funcionarios op ON op.id = CAST(fira.importado_por AS INTEGER)
+             JOIN funcionarios p
+               ON p.id = CAST(fira.tripulante_id AS INTEGER)
+              AND p.deleted_at IS NULL
+              AND p.empresa_id = ?
             WHERE fira.deleted_at IS NULL
               AND fira.ano = ?
               AND fira.mes = ?
               AND fira.tripulante_id = ?
               AND (
-                CAST(json_extract(fira.preview_json, '$.empresa_id') AS INTEGER) = ?
-                OR p.empresa_id = ?
-                OR op.empresa_id = ?
+                json_extract(fira.preview_json, '$.empresa_id') IS NULL
+                OR CAST(json_extract(fira.preview_json, '$.empresa_id') AS INTEGER) = ?
               )`,
         )
-        .bind(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), tripulanteId, empresaId, empresaId, empresaId)
+        .bind(empresaId, Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), tripulanteId, empresaId)
         .first<{ total: number }>(),
     ]);
     const legal = legalRows.find((row) => row.tripulante_id === Number(tripulanteId)) ?? null;

@@ -13,6 +13,7 @@ import {
   shouldClearExistingSigvoosData,
   isJornadaOperacionalmenteVazia,
   shouldStopSigvoosPaging,
+  fetchCompleteSigvoosWindow,
 } from '../../services/sigvoos-frms';
 
 function createSigvoosDbStub({
@@ -189,6 +190,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-1',
       tripulanteId: '33',
       tripulanteNomeFira: 'JOAO SILVA',
@@ -250,6 +252,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-short-window',
       tripulanteId: '33',
       tripulanteNomeFira: 'CREW MEMBER',
@@ -286,6 +289,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-overnight',
       tripulanteId: '33',
       tripulanteNomeFira: 'CREW MEMBER',
@@ -323,6 +327,7 @@ describe('sigvoos-frms service', () => {
 
     const preview = await buildSigvoosMonthlyPreview({
       db: dbStub,
+      empresaId: 7,
       importacaoId: 'import-inconsistent',
       tripulanteId: '33',
       tripulanteNomeFira: 'JOAO SILVA',
@@ -414,6 +419,104 @@ describe('sigvoos-frms service', () => {
     expect(shouldStopSigvoosPaging(1, 1042, 200)).toBe(true);
     expect(shouldStopSigvoosPaging(2, 200, 200)).toBe(false);
     expect(shouldStopSigvoosPaging(2, 0, 200)).toBe(true);
+  });
+
+  it('fetches every SIGVOOS page before returning records', async () => {
+    const requests: number[] = [];
+    const pages = [
+      [{ id: 'leg-1' }, { id: 'leg-2' }],
+      [{ id: 'leg-3' }, { id: 'leg-4' }],
+      [{ id: 'leg-5' }],
+    ];
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async (_endpoint: string, payload: Record<string, unknown>) => {
+        const page = Number(payload.page);
+        requests.push(page);
+        return { data: { main: pages[page - 1] ?? [] } };
+      },
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-10-30', to: '2026-10-31' }, 2, 5),
+    ).resolves.toEqual(pages.flat());
+    expect(requests).toEqual([1, 2, 3]);
+  });
+
+  it('accepts a full-month first response when SIGVOOS ignores requested page size', async () => {
+    let requests = 0;
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => {
+        requests++;
+        return { data: { main: [{ id: 1 }, { id: 2 }, { id: 3 }] } };
+      },
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 2, 1),
+    ).resolves.toHaveLength(3);
+    expect(requests).toBe(1);
+  });
+
+  it('rejects an unverified full last page instead of silently truncating flights', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async (_endpoint: string, payload: Record<string, unknown>) => ({
+        data: { main: [{ id: Number(payload.page) }] },
+      }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 1, 2),
+    ).rejects.toThrow('SIGVOOS_PAGINATION_INCOMPLETE');
+  });
+
+  it('rejects repeated full pages when the upstream ignores page without returning all records', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ data: { main: [{ id: 'same-record' }] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 1, 10),
+    ).rejects.toThrow('SIGVOOS_PAGINATION_STALLED');
+  });
+
+  it('rejects upstream errors even if they contain a syntactically empty flight array', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ status: 'ERRO', data: { main: [] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UPSTREAM_SEARCH_REJECTED');
+  });
+
+  it('does not mistake a changed upstream response format for zero flights', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ message: 'unexpected envelope' }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UNEXPECTED_RESPONSE_SHAPE');
+  });
+
+  it('rejects malformed flight arrays rather than filtering them into zero', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ data: { main: ['unexpected-string'] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).rejects.toThrow('SIGVOOS_UNEXPECTED_RESPONSE_SHAPE');
+  });
+
+  it('accepts a genuine empty SIGVOOS flight array', async () => {
+    const client = {
+      authenticate: async () => 'token',
+      postSearch: async () => ({ status: 'SUCESSO', data: { main: [] } }),
+    };
+    await expect(
+      fetchCompleteSigvoosWindow(client, { from: '2026-11-01', to: '2026-11-01' }, 100, 10),
+    ).resolves.toEqual([]);
   });
 
   it('resolves a tripulante by manual SIGVOOS mapping before other criteria', async () => {

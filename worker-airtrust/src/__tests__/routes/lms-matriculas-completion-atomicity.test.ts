@@ -44,7 +44,7 @@ vi.mock('../../middleware/rbac', () => ({
   },
 }));
 
-vi.mock('../../routes/escalas-shared', () => ({
+vi.mock('../../utils/tenant-resolution', () => ({
   getEmpresaIdSafe: () => 1,
 }));
 
@@ -64,7 +64,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
 }));
 
-vi.mock('../../services/employee-sector-access', () => ({
+vi.mock('../../middleware/employee-sector-access', () => ({
   assertFuncionarioInScope: vi.fn(),
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   getEmployeeSectorAccess: vi.fn(async () => ({ mode: 'all', setorIds: [] })),
@@ -84,19 +84,21 @@ vi.mock('../../services/ensure-certificate', () => ({
 
 import lmsMatriculasRoutes from '../../routes/lms-matriculas';
 import { LmsCompletionRejectedError } from '../../services/lms-completion';
+import { enforceLmsCompletionIntegrity } from '../../middleware/lms-completion-integrity';
 
 type QueryHandler = {
   first?: (args: unknown[]) => Promise<unknown> | unknown;
   run?: (args: unknown[]) => Promise<unknown> | unknown;
 };
 
-function makeTestEnv(handlers: Array<[string, QueryHandler]>) {
+function makeTestEnv(handlers: Array<[string, QueryHandler]>, withIntegrity = false) {
   const db = {
     prepare: vi.fn((query: string) => {
       const entry = handlers.find(([matcher]) => query.includes(matcher));
-      if (!entry) throw new Error(`Unhandled query: ${query.slice(0, 160)}`);
-
-      const handler = entry[1];
+      const handler = entry?.[1] ?? (query.includes('SELECT id FROM lms_matricula_ciclos')
+        ? { first: () => ({ id: 202 }) }
+        : undefined);
+      if (!handler) throw new Error(`Unhandled query: ${query.slice(0, 160)}`);
       return {
         bind: (...args: unknown[]) => ({
           first: async () => (handler.first ? handler.first(args) : null),
@@ -107,7 +109,17 @@ function makeTestEnv(handlers: Array<[string, QueryHandler]>) {
   } as unknown as D1Database;
 
   const app = new Hono<{ Bindings: Env }>();
-  app.route('/', lmsMatriculasRoutes);
+  if (withIntegrity) {
+    app.use('*', async (c, next) => {
+      c.set('empresaId' as never, 1 as never);
+      c.set('userId' as never, 42 as never);
+      c.set('userRole' as never, 'admin' as never);
+      const rejected = await enforceLmsCompletionIntegrity(c as never);
+      if (rejected) return rejected;
+      return next();
+    });
+  }
+  app.route(withIntegrity ? '/api/lms/matriculas' : '/', lmsMatriculasRoutes);
 
   return { app, db };
 }
@@ -136,6 +148,7 @@ function makeCommit(body: Record<string, unknown>) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      ciclo_id: 202,
       commit_event: 'SCORM_USER_FINALIZE',
       cmi_json: JSON.stringify({
         'cmi.core.lesson_location': '3/3',
@@ -463,6 +476,34 @@ describe('LMS — contrato de roteamento do serviço canônico de conclusão', (
       }),
       { DB: db } as Env, {} as ExecutionContext,
     );
+    expect(response.status).toBe(200);
+    expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
+    expect(logAuditMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      action: 'LMS_ADMINISTRATIVE_COMPLETION_OVERRIDE_ACCEPTED',
+    }));
+  });
+
+  it('passes the integrity guard and audited admin route with a zero score', async () => {
+    completeLmsMatriculaMock.mockResolvedValue({
+      outcome: 'qualification_created', qualificacaoHistoricoId: 777, matriculaId: 1,
+    });
+    const row = {
+      ...MATRICULA_EM_ANDAMENTO_BASE, curso_id: 10, tipo_conteudo: 'scorm',
+      ativo: 1, publicado: 1, scorm_package_r2_prefix: 'lms/scorm/1/10/package/',
+      scorm_launch_file: 'index.html', lesson_status: 'incomplete', completion_status: null,
+      success_status: null, score_raw: 0, score_min: 0, score_max: 100,
+      cmi_json: '{}', xapi_count: 0,
+    };
+    const { app, db } = makeTestEnv([
+      ['FROM lms_matriculas m', { first: () => row }],
+      ['FROM lms_progresso_scorm', { first: () => row }],
+      ['UPDATE lms_matriculas', { run: () => ({ meta: { changes: 1 } }) }],
+      ['SELECT * FROM lms_matriculas WHERE id', { first: () => ({ ...row, status: 'CONCLUIDO' }) }],
+    ], true);
+    const response = await app.fetch(new Request('http://localhost/api/lms/matriculas/1/status', {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'CONCLUIDO', observacoes: 'Administrador confirma treinamento realizado.' }),
+    }), { DB: db } as Env, {} as ExecutionContext);
     expect(response.status).toBe(200);
     expect(completeLmsMatriculaMock).toHaveBeenCalledTimes(1);
     expect(logAuditMock).toHaveBeenCalledWith(db, expect.objectContaining({

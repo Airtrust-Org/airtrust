@@ -140,6 +140,9 @@ describe('TrainingComplianceBulkNoticeComposer', () => {
         if (parsed.searchParams.get('setor_id') === '2') return ok(rows.sector);
         return ok([]);
       }
+      if (url === '/api/compliance-treinamentos/avisos/preview' && init?.method === 'POST') {
+        return ok({ email_ja_alertado: 1, whatsapp_ja_alertado: 2 });
+      }
       if (url === '/api/compliance-treinamentos/avisos/enviar' && init?.method === 'POST') {
         const payload = JSON.parse(String(init.body)) as { targets: unknown[] };
         return ok({
@@ -186,6 +189,7 @@ describe('TrainingComplianceBulkNoticeComposer', () => {
 
     await screen.findByRole('button', { name: 'Enviar 5 alerta(s)' });
     expect(screen.getByText(/Sobreposições entre curso/)).toBeInTheDocument();
+    expect(await screen.findByText(/Já alertados hoje/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar 5 alerta(s)' }));
 
@@ -216,6 +220,8 @@ describe('TrainingComplianceBulkNoticeComposer', () => {
   it('supports a specific sector plus role group and preserves both filters in the preview query', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.startsWith('/api/compliance-treinamentos/pendencias?')) return ok(rows.role);
+      if (url === '/api/compliance-treinamentos/avisos/preview')
+        return ok({ email_ja_alertado: 0, whatsapp_ja_alertado: 0 });
       throw new Error(`unexpected url ${url}`);
     });
 

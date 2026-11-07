@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { clearActiveSessionRole, useAuth } from '../hooks/useAuth';
-import { sessionEntryOptions, type SessionRole } from '../lib/session-entry-options';
+import { resolveSessionEntryDestination, sessionEntryOptions, type SessionRole } from '../lib/session-entry-options';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useSystemSettings } from '../hooks/useSystemSettings';
@@ -145,7 +145,7 @@ export default function LoginPage() {
         await handleProfileSelect(availableEntries[0].role);
         return;
       }
-      navigate(redirectTo, { replace: true });
+      navigate(resolveSessionEntryDestination(availableEntries[0]?.role ?? 'USUARIO', redirectTo), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.login.error'));
       logger.error('Erro no login:', err);
@@ -176,7 +176,7 @@ export default function LoginPage() {
       // Recria o AuthContext com o perfil confirmado pelo backend. Navegar
       // apenas via React manteria o usuário em memória com a role do login
       // inicial (por exemplo, GESTOR mesmo após escolher Aluno/Instrutor).
-      window.location.replace(redirectTo);
+      window.location.replace(resolveSessionEntryDestination(role, redirectTo));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível ativar o perfil selecionado.');
       logger.error('Erro ao selecionar perfil de sessão:', err);

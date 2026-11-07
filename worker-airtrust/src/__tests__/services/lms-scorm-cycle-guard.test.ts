@@ -29,9 +29,21 @@ describe('SCORM stale commit cycle guard', () => {
     });
   });
 
-  it('keeps the legacy no-cycle path without querying D1', async () => {
+  it('rejects an unscoped legacy commit before querying or writing', async () => {
     const { db, prepare } = fakeDb(202);
-    await expect(assertScormCommitCycle(db, 6, 901, undefined)).resolves.toBeUndefined();
+    await expect(assertScormCommitCycle(db, 6, 901, undefined)).rejects.toMatchObject({
+      code: 'LMS_SCORM_CYCLE_MISMATCH', statusCode: 409,
+    });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed cycle claims before querying D1', async () => {
+    const { db, prepare } = fakeDb(202);
+    for (const cycleId of [0, -1, 202.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(assertScormCommitCycle(db, 6, 901, cycleId)).rejects.toMatchObject({
+        code: 'LMS_SCORM_CYCLE_MISMATCH', statusCode: 409,
+      });
+    }
     expect(prepare).not.toHaveBeenCalled();
   });
 });

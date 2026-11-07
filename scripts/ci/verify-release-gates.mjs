@@ -56,18 +56,50 @@ export function verifyReleaseGatePayloads({ checkRuns, statuses }) {
   };
 }
 
-async function githubGet(pathname, token) {
-  const response = await fetch(`https://api.github.com${pathname}`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`${pathname} returned HTTP ${response.status}`);
+// Retry only transient transport/API failures; never weaken the actual gate
+// predicates. A non-2xx response or malformed JSON still fails closed after a
+// strictly bounded number of attempts.
+const TRANSIENT_GITHUB_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+export async function githubGet(
+  pathname,
+  token,
+  {
+    request = fetch,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  } = {},
+) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let response;
+    try {
+      response = await request(`https://api.github.com${pathname}`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: 'application/vnd.github+json',
+          'x-github-api-version': '2022-11-28',
+        },
+      });
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw new Error(`GITHUB_API_TRANSPORT_UNAVAILABLE:${pathname}`, { cause: error });
+      }
+      await sleep(250 * 2 ** (attempt - 1));
+      continue;
+    }
+
+    if (!response.ok) {
+      if (!TRANSIENT_GITHUB_STATUSES.has(response.status) || attempt === maxAttempts) {
+        throw new Error(`${pathname} returned HTTP ${response.status}`);
+      }
+      await sleep(250 * 2 ** (attempt - 1));
+      continue;
+    }
+    // A successful status with invalid JSON is not valid gate evidence.
+    // No empty/partial response may be interpreted as green.
+    return response.json();
   }
-  return response.json();
+  throw new Error('GITHUB_API_RETRY_EXHAUSTED');
 }
 
 export async function fetchAllCommitCheckRuns({ repository, sha, token, get = githubGet }) {

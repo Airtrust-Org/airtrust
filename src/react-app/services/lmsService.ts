@@ -15,7 +15,7 @@ import type {
   MatricularLoteDTO,
   MatriculaStatus,
   CursosFilters,
-} from '@/react-app/hooks/useLms';
+} from '@/react-app/types/lms';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
@@ -152,10 +152,10 @@ export const lmsService = {
   },
 
   // Salvar progresso SCORM (commit)
-  salvarProgresso(matriculaId: number, data: Record<string, unknown>): Promise<void> {
+  salvarProgresso(matriculaId: number, cicloId: number, data: Record<string, unknown>): Promise<void> {
     return req<void>(`/matriculas/scorm/commit`, {
       method: 'POST',
-      body: JSON.stringify({ matricula_id: matriculaId, ...data }),
+      body: JSON.stringify({ ...data, matricula_id: matriculaId, ciclo_id: cicloId }),
     });
   },
 };

@@ -236,12 +236,18 @@ export default function ProtectedRoute({
     const acceptedRoles = effectiveRequiredRole.map((role) => normalizeRole(role));
 
     if (!acceptedRoles.includes(currentRole)) {
+      // A role ALUNO/INSTRUTOR nunca ganha acesso à grade de gestão.
+      // Se o navegador manteve um endereço administrativo antigo, oferecer
+      // a saída funcional correta em vez de enviar o aluno a Funcionários.
+      const goToLearnerHome =
+        (currentRole === 'ALUNO' || currentRole === 'INSTRUTOR') &&
+        matchesPathPrefix(normalizePathname(location.pathname), '/lms');
       return (
         <RouteStatusScreen
           title={t('protected.denied.title')}
           description={t('protected.denied.description')}
-          backHref="/funcionarios"
-          backLabel={t('protected.denied.backHome')}
+          backHref={goToLearnerHome ? '/lms' : '/'}
+          backLabel={goToLearnerHome ? 'Ir para meus treinamentos' : t('protected.denied.backHome')}
         />
       );
     }

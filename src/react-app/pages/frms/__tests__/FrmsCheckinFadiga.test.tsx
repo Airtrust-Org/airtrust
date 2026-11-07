@@ -9,8 +9,10 @@ import FrmsCheckinFadiga, {
   optionalBinaryResponseToPayload,
 } from '../FrmsFlightCheckinFadiga';
 import { resolveFadigaPostSavePath } from '../frmsPostSaveNavigation';
+import { frmsBrazilOperationalTodayIso } from '../frmsOperationalDate';
 import {
   buildFadigaPainelRequestPath,
+  buildCheckinHojePath,
   normalizeFadigaPainelDate,
   normalizeFadigaPainelPayload,
   type FadigaPainelEquipeItem,
@@ -88,7 +90,7 @@ vi.mock('@/react-app/hooks/useFrmsRecovery', async () => {
 });
 
 vi.mock('../OperationalVigilanceTest', () => ({
-  default: ({ onComplete }: { onComplete: (result: unknown) => void }) => {
+  default: function MockOperationalVigilanceTest({ onComplete }: { onComplete: (result: unknown) => void }) {
     const completedRef = useRef(false);
     useEffect(() => {
       if (completedRef.current) return;
@@ -134,6 +136,10 @@ vi.mock('sonner', () => ({
 }));
 
 describe('FrmsCheckinFadiga helpers', () => {
+  it('usa a data operacional de Brasília nos rascunhos mesmo após a virada do dia UTC', () => {
+    expect(frmsBrazilOperationalTodayIso(new Date('2026-10-28T00:30:00Z'))).toBe('2026-10-27');
+  });
+
   it('só aceita duração personalizada finita dentro de 0–24 h', () => {
     const base = {
       sonoOpcao: 'outro' as const,
@@ -208,6 +214,11 @@ describe('FrmsCheckinFadiga helpers', () => {
     expect(optionalBinaryResponseToPayload(false)).toBe(false);
   });
 
+  it('a consulta de check-in usa a data explícita e não o relógio UTC do Worker', () => {
+    expect(buildCheckinHojePath('2026-10-27')).toBe('/frms/fadiga-checkin/me?date=2026-10-27');
+    expect(() => buildCheckinHojePath('27/10/2026')).toThrow(/FRMS_INVALID_OPERATIONAL_DATE/);
+  });
+
   it('mapeia KSS para escala subjetiva legado-compativel', () => {
     expect(mapKssToSubjectiveFatigue(1)).toBe(1);
     expect(mapKssToSubjectiveFatigue(3)).toBe(3);
@@ -272,6 +283,7 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
     status: 'normal',
     data_source: 'crew_reported',
     kss_score,
+    kss_provenance: 'CREW_REPORTED',
     sleep_hours_24h: 7,
     score_fadiga,
     nivel_fadiga: 'VERDE',
@@ -439,6 +451,37 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /As informações fornecidas são verídicas/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Aceito o uso dos dados no FRMS/i }));
   }
+
+  it('submete check-in para o dia operacional de Brasília mesmo quando UTC já virou', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-28T01:30:00Z')); // 27/10 22:30 Brasília
+      render(<FrmsCheckinFadiga />);
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
+      preencherFormularioValido();
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+        reference_date: '2026-10-27',
+        data_checkin: '2026-10-27',
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('impede que um formulário aberto antes da meia-noite envie silenciosamente no dia anterior', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-28T02:59:00Z')); // 27/10 23:59 Brasília
+      render(<FrmsCheckinFadiga />);
+      preencherFormularioValido();
+      vi.setSystemTime(new Date('2026-10-28T03:01:00Z')); // 28/10 00:01 Brasília
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      expect(mutateAsyncMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('renderiza KSS com titulo claro e descritores', () => {
     render(<FrmsCheckinFadiga />);
@@ -653,8 +696,9 @@ describe('FrmsCheckinFadiga UI', () => {
     expect(payload.fit_for_duty).toBe(true);
     expect(payload.meds_ult_12h).toBeNull();
     expect(payload.alcool_ult_12h).toBeNull();
-    expect(payload.subjective_fatigue_level).toBe(3);
-    expect(payload.sleepiness_level).toBe(3);
+    // KSS is its own validated scale, not a synthetic independent fatigue report.
+    expect(payload).not.toHaveProperty('subjective_fatigue_level');
+    expect(payload).not.toHaveProperty('sleepiness_level');
     expect(payload).not.toHaveProperty('sintomas');
     expect(payload).not.toHaveProperty('horas_sono_48h');
     expect(payload.motivo_inaptidao).toBeUndefined();
@@ -1204,8 +1248,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('restaura o rascunho do check-in após remount sem perder respostas já preenchidas', async () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 2,
@@ -1237,8 +1280,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('rascunho legado de faixa 8+ exige nova escolha exata sem perder outras respostas', () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1, sonoOpcao: 'h8', repousoHoras: 8,
@@ -1254,8 +1296,7 @@ describe('FrmsCheckinFadiga UI', () => {
   });
 
   it('preserva o formulário e exige apenas reiniciar o PVT quando houve recarga no meio do teste', () => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = frmsBrazilOperationalTodayIso();
     const key = `airtrust:frms-checkin-draft:101:6:${date}`;
     window.sessionStorage.setItem(key, JSON.stringify({
       version: 1,
@@ -1279,7 +1320,7 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const interruptedWarning = screen.getByText(/A página foi interrompida durante o teste objetivo/i);
     expect(interruptedWarning).toHaveTextContent(/respostas do check-in foram preservadas/i);
-    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o PVT-B/i);
+    expect(interruptedWarning).toHaveTextContent(/reinicie apenas o teste breve de atenção/i);
     expect(screen.getByRole('radio', { name: '7 horas' })).toBeChecked();
     expect(screen.getByLabelText('Hora de apresentação')).toHaveValue('07:00');
     expect(screen.getByLabelText('Hora em que acordou')).toHaveValue('05:45');

@@ -19,8 +19,8 @@ import {
   normalizeTipoTreinamento,
   publishQualificacaoEvent,
   resolveCargaHorariaByTipo,
-} from './historico-helpers';
-import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../services/operational-domain-access';
+} from '../../services/qualificacoes/historico-helpers';
+import { assertQualificacaoAtribuicaoWithinOperationalScope } from '../../middleware/operational-domain-access';
 import {
   calculateQualificationExpiry,
   createQualificationHistoryAtomic,

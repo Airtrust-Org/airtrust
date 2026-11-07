@@ -3,7 +3,7 @@
  * LMS execution roster. Absence of historical evidence is an enrollment reason;
  * mere applicability is not. Historical/terminal cycles are never deleted.
  */
-import type { TrainingComplianceSnapshot } from '../routes/compliance-treinamentos';
+import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
 import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollment-policy';
 
 export type RosterCourse = {
@@ -172,4 +172,44 @@ export function buildTrainingComplianceRosterPlan(
   plan.enroll.sort((a, b) => a.cursoId - b.cursoId || a.funcionarioId - b.funcionarioId);
   plan.remove.sort((a, b) => a.matriculaId - b.matriculaId);
   return plan;
+}
+
+/**
+ * Fair, bounded traversal of a fresh Compliance roster preview.
+ * Cursor orders actions only: it never grants applicability or authorization.
+ * The plan is rebuilt and policy-checked for every tick. Do not persist IDs
+ * of people outside the existing tenant-scoped cron state.
+ */
+export function selectTrainingComplianceRosterBatch(
+  plan: RosterPlan,
+  cursor: string | null,
+  limit = 8,
+): { batch: RosterPlan; cursorAfter: string | null; selectedCount: number; totalActions: number } {
+  const padded = (id: number) => String(id).padStart(16, '0');
+  const ordered = [
+    ...plan.remove.map(action => ({
+      key: `0:${padded(action.matriculaId)}`, kind: 'remove' as const, action,
+    })),
+    ...plan.enroll.map(action => ({
+      key: `1:${padded(action.cursoId)}:${padded(action.funcionarioId)}`,
+      kind: 'enroll' as const, action,
+    })),
+  ].sort((a, b) => a.key.localeCompare(b.key));
+  const validCursor = typeof cursor === 'string' &&
+    /^[01]:[0-9]{16}(?::[0-9]{16})?$/.test(cursor) ? cursor : null;
+  let start = validCursor ? ordered.findIndex(item => item.key > validCursor) : 0;
+  if (start < 0) start = 0;
+  const size = Number.isFinite(limit) ? Math.min(20, Math.max(1, Math.trunc(limit))) : 8;
+  const selected = [...ordered.slice(start), ...ordered.slice(0, start)].slice(0, size);
+  const batch: RosterPlan = { ...plan, enroll: [], remove: [] };
+  for (const item of selected) {
+    if (item.kind === 'remove') batch.remove.push(item.action);
+    else batch.enroll.push(item.action);
+  }
+  return {
+    batch,
+    cursorAfter: selected.at(-1)?.key ?? null,
+    selectedCount: selected.length,
+    totalActions: ordered.length,
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getReadinessBaselineSnapshot } from '../../lib/frms/readiness-persistence';
+import { getReadinessBaselineSnapshot, prepareReadinessAssessmentWrites } from '../../lib/frms/readiness-persistence';
 
 describe('FRMS readiness baseline persistence', () => {
   it('builds a tenant-scoped chronological snapshot from the five most recent valid prior sessions', async () => {
@@ -67,5 +67,35 @@ describe('FRMS readiness baseline persistence', () => {
 
     await getReadinessBaselineSnapshot(db, 6, 42, 'airtrust-vigilance-v1', '2026-08-27');
     expect(new Set(seen)).toEqual(new Set(['airtrust-vigilance-v1']));
+  });
+});
+
+describe('FRMS readiness upload protocol integrity', () => {
+  const input = {
+    empresaId: 7, funcionarioId: 70, userId: 9, checkinId: 'checkin-1',
+    referenceDate: '2026-11-03', kssScore: 4, sleepHours: 7,
+    durationMs: 60_000,
+    trials: Array.from({ length: 10 }, (_, index) => ({
+      sequence: index + 1, scheduledAtMs: index * 5_000,
+      stimulusAtMs: index * 5_000 + 100, responseAtMs: index * 5_000 + 350,
+      reactionTimeMs: 250, outcome: 'response' as const,
+    })),
+  };
+  const neverDb = { prepare: vi.fn() } as unknown as D1Database;
+
+  it.each(['airtrust-pvtb-v2', 'airtrust-vigilance-v1', 'custom-pvt'] as const)(
+    'rejects new uploads pretending to use historical protocol %s', async (protocolVersion) => {
+      await expect(prepareReadinessAssessmentWrites(neverDb, { ...input, protocolVersion }))
+        .rejects.toThrow('invalid_readiness_protocol');
+      expect(neverDb.prepare).not.toHaveBeenCalled();
+    },
+  );
+
+  it('requires a 60 s brief sample within allowed drift and sufficient trials', async () => {
+    await expect(prepareReadinessAssessmentWrites(neverDb, { ...input, durationMs: 180_000 }))
+      .rejects.toThrow('invalid_duration');
+    await expect(prepareReadinessAssessmentWrites(neverDb, { ...input, trials: input.trials.slice(0, 3) }))
+      .rejects.toThrow('readiness_trials_required');
+    expect(neverDb.prepare).not.toHaveBeenCalled();
   });
 });

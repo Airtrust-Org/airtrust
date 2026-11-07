@@ -4,8 +4,8 @@ import {
   appendEdbAuditEvent,
   verifyEdbAuditChain,
   type EdbAuditEvent,
-} from '../../services/edb/audit-chain';
-import { canonicalJson } from '../../services/edb/canonical-json';
+} from '../../lib/edb/audit-chain';
+import { canonicalJson } from '../../lib/edb/canonical-json';
 
 const actor = {
   actorRef: 'employee:10',

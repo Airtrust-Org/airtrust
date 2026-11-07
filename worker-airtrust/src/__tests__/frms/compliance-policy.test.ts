@@ -254,3 +254,13 @@ describe('regulatory profile state', () => {
     ).toBe(true);
   });
 });
+
+describe('Lei 13.475 art. 42 — ativação governada', () => {
+  it('só ativa com declaração explícita no perfil documentado', async () => {
+    const { lawArt42EnforcementEnabled } = await import('../../lib/frms/compliance-policy');
+    expect(lawArt42EnforcementEnabled({ limitsJson: null })).toBe(false);
+    expect(lawArt42EnforcementEnabled({ limitsJson: '{"law_art42_enforced":"true"}' })).toBe(false);
+    expect(lawArt42EnforcementEnabled({ limitsJson: '{malformado' })).toBe(false);
+    expect(lawArt42EnforcementEnabled({ limitsJson: '{"law_art42_enforced":true}' })).toBe(true);
+  });
+});

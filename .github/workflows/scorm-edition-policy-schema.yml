@@ -1,0 +1,25 @@
+name: SCORM Edition Policy Schema Contract
+on:
+  pull_request:
+    paths:
+      - 'worker-airtrust/schema-v2/changes/0569_lms_scorm_edition_policy_approvals.sql'
+      - 'worker-airtrust/schema-v2/plans/lms-scorm-edition-policy-approvals-0569.md'
+      - 'worker-airtrust/schema-v2/lms-scorm-edition-policy-approvals-0569.json'
+      - 'scripts/__tests__/test_scorm_edition_policy_schema_0569.py'
+      - 'worker-airtrust/schema-v2/changes/0570_lms_scorm_formative_approval_renewals.sql'
+      - 'worker-airtrust/schema-v2/plans/lms-scorm-formative-approval-renewals-0570.md'
+      - 'worker-airtrust/schema-v2/lms-scorm-formative-approval-renewals-0570.json'
+      - 'scripts/__tests__/test_scorm_formative_approval_renewals_0570.py'
+      - '.github/workflows/scorm-edition-policy-schema.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-policy-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact manifest and fail-closed SQLite integrity
+        run: |
+          python3 scripts/__tests__/test_scorm_edition_policy_schema_0569.py
+          python3 scripts/__tests__/test_scorm_formative_approval_renewals_0570.py

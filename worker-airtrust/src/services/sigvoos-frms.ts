@@ -1,5 +1,8 @@
 import { z } from 'zod';
+import { fetchCompleteSigvoosWindowGuard } from './sigvoos-pagination-guard';
 import { calcDuracaoMinutos } from '../lib/frms/calculos';
+import { shouldAdvanceSigvoosSyncProgress } from '../lib/frms/sigvoos-sync-progress';
+export { shouldAdvanceSigvoosSyncProgress } from '../lib/frms/sigvoos-sync-progress';
 import { LIMITES_DEFAULT } from '../lib/frms/types';
 import { confirmarImportacaoFira, enrichFiraPreviewLineIntegridade, type FiraImportacaoPreview, type FiraLinhPreview } from '../lib/frms/fira-service';
 import { classifyOperationalCrewRole } from '../lib/frms/operational-crew';
@@ -160,6 +163,7 @@ interface MatchedTripulante {
 }
 
 interface MonthlyPreviewInput {
+  empresaId: number;
   importacaoId: string;
   tripulanteId: string | null;
   tripulanteNomeFira: string;
@@ -249,6 +253,8 @@ export interface SigvoosJornadaPendente {
 
 export interface SigvoosSyncSummary {
   periodo: { from: string; to: string };
+  /** Source returned only records inside the exact requested closed-day window. */
+  sourceWindowVerified?: boolean;
   resetExecutado: boolean;
   totalRegistrosBrutos: number;
   totalRegistrosNormalizados: number;
@@ -1335,6 +1341,7 @@ export function groupSigvoosRecordsByDay(records: SigvoosNormalizedLeg[]): Sigvo
 
 async function loadExistingJornadasByDate(
   db: D1Database,
+  empresaId: number,
   tripulanteId: string | null,
   groupedDays: SigvoosGroupedDay[],
 ): Promise<Map<string, string>> {
@@ -1355,10 +1362,11 @@ async function loadExistingJornadasByDate(
          FROM frms_jornada
         WHERE deleted_at IS NULL
           AND tripulante_id = ?
+          AND empresa_id = ?
           AND data >= ?
           AND data <= ?`,
     )
-    .bind(Number(tripulanteId), firstDate, lastDate)
+    .bind(Number(tripulanteId), empresaId, firstDate, lastDate)
     .all<{ id: string; data: string }>();
 
   return new Map((rows.results || []).map((row) => [row.data, row.id]));
@@ -1369,6 +1377,7 @@ export async function buildSigvoosMonthlyPreview(
 ): Promise<SigvoosMonthlyPreview> {
   const existingJornadasByDate = await loadExistingJornadasByDate(
     input.db,
+    input.empresaId,
     input.tripulanteId,
     input.groupedDays,
   );
@@ -1406,6 +1415,7 @@ export async function buildSigvoosMonthlyPreview(
   const totalJornadaMin = lines.reduce((acc, line) => acc + line.duracao_jornada_min, 0);
 
   const preview: FiraImportacaoPreview = {
+    empresa_id: input.empresaId,
     importacao_id: input.importacaoId,
     tripulante_encontrado: Boolean(input.tripulanteId),
     tripulante_id: input.tripulanteId,
@@ -1901,6 +1911,20 @@ export function shouldStopSigvoosPaging(
   return false;
 }
 
+/** Reads the complete requested search range or rejects unsafe upstream responses. */
+export async function fetchCompleteSigvoosWindow(
+  client: SigvoosSyncClient,
+  window: { from: string; to: string },
+  pageSize: number,
+  maxPages: number,
+): Promise<Record<string, unknown>[]> {
+  return fetchCompleteSigvoosWindowGuard(client, window, pageSize, maxPages, {
+    formatBrDateFromIso,
+    getArrayPayload,
+    shouldStopSigvoosPaging,
+  });
+}
+
 export function shouldClearExistingSigvoosData(clearExisting?: boolean): boolean {
   return clearExisting === true;
 }
@@ -2124,6 +2148,7 @@ async function resolveSigvoosPendenciaByImportacao(
 
 async function enrichImportedSigvoosJornadas(
   db: D1Database,
+  empresaId: number,
   monthly: SigvoosMonthlyPreview,
 ): Promise<void> {
   if (!monthly.tripulanteId || monthly.groupedDays.length === 0) return;
@@ -2139,7 +2164,7 @@ async function enrichImportedSigvoosJornadas(
                   fonte_resolucao_sigvoos = ?,
                   updated_at = datetime('now')
             WHERE deleted_at IS NULL
-              AND tripulante_id = ?
+              AND tripulante_id = ? AND empresa_id = ?
               AND data = ?
               AND origem IN ('SIGVOOS', 'FIRA')`,
         )
@@ -2148,7 +2173,7 @@ async function enrichImportedSigvoosJornadas(
           day.tempoNoturnoMin > 0 ? minToHhmm(day.tempoNoturnoMin) : null,
           day.tempoIfrMin > 0 ? minToHhmm(day.tempoIfrMin) : null,
           monthly.fonteResolucao,
-          Number(monthly.tripulanteId),
+          Number(monthly.tripulanteId), empresaId,
           day.data,
         )
         .run();
@@ -2199,6 +2224,7 @@ export async function listSigvoosPendencias(
 
 async function relabelImportedJornadasAsSigvoos(
   db: D1Database,
+  empresaId: number,
   tripulanteId: string | null,
   duplicateDates: string[],
   syncStartedAt: string,
@@ -2220,11 +2246,11 @@ async function relabelImportedJornadasAsSigvoos(
                 updated_at = datetime('now')
           WHERE deleted_at IS NULL
             AND origem IN ('FIRA', 'APUS')
-            AND tripulante_id = ?
+            AND tripulante_id = ? AND empresa_id = ?
             AND data IN (${placeholders})
             AND datetime(created_at) >= datetime(?)`,
       )
-      .bind(Number(tripulanteId), ...uniqueDates, syncStartedAt)
+      .bind(Number(tripulanteId), empresaId, ...uniqueDates, syncStartedAt)
       .run();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
@@ -2234,7 +2260,7 @@ async function relabelImportedJornadasAsSigvoos(
   }
 }
 
-async function buildSelectedDaysForSigvoosImport(
+export async function buildSelectedDaysForSigvoosImport(
   db: D1Database,
   previewLines: FiraLinhPreview[],
   empresaId?: number | null,
@@ -2249,6 +2275,9 @@ async function buildSelectedDaysForSigvoosImport(
   const shouldReplaceByJornadaId = new Map<string, boolean>();
   const existingByJornadaId = new Map<string, JornadaDuplicataCandidate>();
   if (duplicateIds.length > 0) {
+    if (empresaId == null || !Number.isSafeInteger(empresaId) || empresaId <= 0) {
+      throw new Error('SIGVOOS_REPLACEMENT_REQUIRES_EMPRESA_ID');
+    }
     const placeholders = duplicateIds.map(() => '?').join(', ');
     const rows = await db
       .prepare(
@@ -2262,9 +2291,9 @@ async function buildSelectedDaysForSigvoosImport(
                 registrado_por,
                 observacao
            FROM frms_jornada
-          WHERE id IN (${placeholders})`,
+          WHERE id IN (${placeholders}) AND empresa_id = ?`,
       )
-      .bind(...duplicateIds)
+      .bind(...duplicateIds, empresaId)
       .all<JornadaDuplicataCandidate>();
 
     for (const row of rows.results || []) {
@@ -2336,11 +2365,22 @@ async function insertPreviewImportacao(
     .run();
 }
 
-async function persistSyncMetadata(
+export async function persistSigvoosSyncMetadata(
   db: D1Database,
   empresaId: number | null | undefined,
   summary: SigvoosSyncSummary,
 ): Promise<void> {
+  // A successful HTTP fetch is not a completed operational day when even one
+  // selected FIRA journey failed. Retain the prior high-watermark for retry.
+  if (!Number.isSafeInteger(summary.totalErros) || summary.totalErros > 0 || summary.totalErros < 0) {
+    throw new Error('SIGVOOS_PARTIAL_IMPORT_NOT_CONSOLIDATED');
+  }
+  const current = await getSigvoosConfig(db, empresaId);
+  if (!shouldAdvanceSigvoosSyncProgress(current.last_sync_to, summary.periodo.to)) {
+    // The newer completion marker remains intact; the historical sync is in
+    // integracoes_sigvoos_eventos and must not redefine chronological progress.
+    return;
+  }
   await upsertSigvoosConfig(db, 'last_sync_at', new Date().toISOString(), empresaId);
   await upsertSigvoosConfig(db, 'last_sync_from', summary.periodo.from, empresaId);
   await upsertSigvoosConfig(db, 'last_sync_to', summary.periodo.to, empresaId);
@@ -2386,6 +2426,7 @@ export async function syncSigvoosForFrms(
   deps?: SigvoosSyncDeps,
 ): Promise<SigvoosSyncSummary> {
   const resolvedEmpresaId = await resolveSigvoosEmpresaId(db, empresaId);
+  if (resolvedEmpresaId === null) throw new Error('SIGVOOS_TENANT_REQUIRED');
   await reconcileStaleSigvoosEventos(db, resolvedEmpresaId);
   const parsedInput = SyncSchema.parse(rawInput);
   const clearExistingRequested = shouldClearExistingSigvoosData(parsedInput.clearExisting);
@@ -2438,34 +2479,21 @@ export async function syncSigvoosForFrms(
     const fieldNames = new Set<string>();
 
     for (const window of buildSigvoosMonthlyWindows(input.from, input.to)) {
-      const dateStart = formatBrDateFromIso(window.from);
-      const dateFinish = formatBrDateFromIso(window.to);
-
-      for (let page = 1; page <= maxPages; page++) {
-        const payload = await client.postSearch('/relatorios/voos/tripulantes/etapas/pesquisa', {
-          date_start: dateStart,
-          date_finish: dateFinish,
-          page,
-          page_size: pageSize,
-          limit: pageSize,
-        });
-
-        const pageItems = getArrayPayload(payload.data ?? payload);
-        for (const item of pageItems) {
-          rawRecords.push(item);
-          for (const key of detectFieldNames(item)) fieldNames.add(key);
-        }
-
-        if (shouldStopSigvoosPaging(page, pageItems.length, pageSize)) {
-          break;
-        }
+      const pageItems = await fetchCompleteSigvoosWindow(client, window, pageSize, maxPages);
+      for (const item of pageItems) {
+        rawRecords.push(item);
+        for (const key of detectFieldNames(item)) fieldNames.add(key);
       }
     }
 
     const normalized = rawRecords
       .map((item) => normalizeSigvoosRecord(item))
       .filter((item): item is SigvoosNormalizedLeg => Boolean(item));
-
+    // Do not attest source completeness when the external API returns a
+    // flight outside the requested range. This check is prospective only.
+    const sourceWindowVerified = normalized.every((item) =>
+      item.data >= input.from && item.data <= input.to,
+    );
     const groupedByDay = groupSigvoosRecordsByDay(normalized);
 
     const tripulanteGroups = new Map<string, SigvoosGroupedDay[]>();
@@ -2493,6 +2521,7 @@ export async function syncSigvoosForFrms(
         monthlyPreviews.push(
           await buildSigvoosMonthlyPreview({
             db,
+            empresaId: resolvedEmpresaId,
             importacaoId: generateId(),
             tripulanteId: matchedOperational?.id || null,
             tripulanteNomeFira: first.tripulanteNome || matched?.nome || 'SIGVOOS',
@@ -2571,14 +2600,12 @@ export async function syncSigvoosForFrms(
 
         await relabelImportedJornadasAsSigvoos(
           db,
+          resolvedEmpresaId,
           monthly.preview.tripulante_id,
           relabelDates,
           syncStartedAt,
         );
-        await enrichImportedSigvoosJornadas(db, monthly);
-        if (resolvedEmpresaId === null) {
-          throw new Error('SIGVOOS_TENANT_REQUIRED');
-        }
+        await enrichImportedSigvoosJornadas(db, resolvedEmpresaId, monthly);
         await resolveSigvoosPendenciaByImportacao(
           db,
           resolvedEmpresaId,
@@ -2629,6 +2656,7 @@ export async function syncSigvoosForFrms(
 
     const summary: SigvoosSyncSummary = {
       periodo: { from: input.from, to: input.to },
+      sourceWindowVerified,
       resetExecutado: clearExistingRequested,
       totalRegistrosBrutos: rawRecords.length,
       totalRegistrosNormalizados: normalized.length,
@@ -2645,7 +2673,7 @@ export async function syncSigvoosForFrms(
       controleVoosImport,
     };
 
-    await persistSyncMetadata(db, resolvedEmpresaId, summary);
+    await persistSigvoosSyncMetadata(db, resolvedEmpresaId, summary);
     await finalizeSigvoosEvento(db, eventoId, 'SUCESSO', summary);
     return summary;
   } catch (error) {
@@ -2845,7 +2873,7 @@ export async function reprocessarPreviewsSigvoosSemTripulante(
       );
 
       if (relabelDates.length > 0) {
-        await relabelImportedJornadasAsSigvoos(db, matched.id, relabelDates, timestamp);
+        await relabelImportedJornadasAsSigvoos(db, resolvedEmpresaId, matched.id, relabelDates, timestamp);
       }
       await resolveSigvoosPendenciaByImportacao(
         db,

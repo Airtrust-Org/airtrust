@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { TENANT_ID, DB_ID, DB_NAME, validateSource } from './seed-frms-ux-30d.mjs';
-import { expectedQaCases, LEGACY_CASE_BASELINE } from './inspect-frms-ux-cases.mjs';
+import { expectedReviewedFixtureCases, LEGACY_CASE_BASELINE } from './inspect-frms-ux-cases.mjs';
 
 export const TARGET = Object.freeze({ tenant_id: TENANT_ID, db_name: DB_NAME, db_id: DB_ID });
 export const REVIEWED_SOURCE_SHA = '3f4017dd0ecdf03afbad4d39ecf8de06c05e0861';
@@ -19,8 +19,15 @@ const OLD_SYNTHETIC = 'CENARIO SINTETICO - SEM VALIDADE OPERACIONAL';
 const MSG = 'QA SINTETICO: revisar contexto e registrar providencia';
 const q = x => "'" + String(x).replaceAll("'", "''") + "'";
 
-export function buildReviewPlan(days) {
-  const expected = expectedQaCases(days);
+export function buildReviewPlan(days, {
+  sourceSha = REVIEWED_SOURCE_SHA, aggregateRunId = REVIEWED_AGGREGATE_RUN,
+} = {}) {
+  if (!/^[a-f0-9]{40}$/.test(sourceSha) || !/^[0-9]{8,14}$/.test(String(aggregateRunId))) {
+    throw new Error('QA_REVIEW_SOURCE_IDENTITY_INVALID');
+  }
+  // Never move the four immutable, already inspected 9–12 Oct synthetic cases
+  // because a newer aggregate contains additional eligible days (e.g. 13 Oct).
+  const expected = expectedReviewedFixtureCases(days);
   if (expected.length !== 4 || expected.some((x,i) => x.id !== EXPECTED_IDS[i]))
     throw new Error('EXPECTED_FOUR_CASES_ONLY');
   const operations = [];
@@ -71,8 +78,8 @@ export function buildReviewPlan(days) {
   const sha256 = createHash('sha256').update(sql).digest('hex');
   return {
     target:TARGET,
-    reviewed_aggregate_run: REVIEWED_AGGREGATE_RUN,
-    reviewed_source_sha: REVIEWED_SOURCE_SHA,
+    reviewed_aggregate_run: String(aggregateRunId),
+    reviewed_source_sha: sourceSha,
     readonly_evidence_run: READONLY_EVIDENCE_RUN,
     operations,
     sql_sha256:sha256,
@@ -100,11 +107,19 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href===import.meta.url) {
     const path=process.env.SANITIZED_AGGREGATE_PATH;
     if (!path || process.argv.slice(2).length ||
         process.env.FRMS_QA_MODE==='apply') throw new Error('REVIEW_DRYRUN_ONLY');
-    const days=validateSource(JSON.parse(readFileSync(path,'utf8')),REVIEWED_SOURCE_SHA);
-    const plan=buildReviewPlan(days);
+    const sourceSha=String(process.env.SOURCE_AGGREGATE_SHA || '');
+    const aggregateRunId=String(process.env.SOURCE_AGGREGATE_RUN_ID || '');
+    if (!/^[a-f0-9]{40}$/.test(sourceSha) || !/^[0-9]{8,14}$/.test(aggregateRunId)) {
+      throw new Error('REVIEW_SOURCE_PROVENANCE_REQUIRED');
+    }
+    const days=validateSource(JSON.parse(readFileSync(path,'utf8')),sourceSha);
+    const plan=buildReviewPlan(days,{ sourceSha, aggregateRunId });
     assertReviewPlan(plan);
     console.log(JSON.stringify({
       phase:'REVIEW_ONLY_NO_D1_ACCESS', tenant_id:plan.target.tenant_id,
+      reviewed_source_sha:plan.reviewed_source_sha,
+      reviewed_aggregate_run:plan.reviewed_aggregate_run,
+      immutable_qa_fixture:'2026-10-09_to_2026-10-12',
       operations:plan.operations.map(x=>({table:x.table,id:x.id})),
       sql_sha256:plan.sql_sha256, preimage_required:true,
       time_travel_bookmark_required:true, postcheck_required:true,

@@ -97,7 +97,7 @@ const CATALOG_META: Record<
   motivos: {
     label: 'Motivos operacionais',
     singular: 'motivo operacional',
-    description: 'Motivos de atraso, cancelamento, alternado e indisponibilidade.',
+    description: 'Motivos operacionais e modelos de observação do piloto (tipo geral, código OBS_...).',
     icon: <Ban className="h-4 w-4" />,
   },
   'empresas-abastecimento': {
@@ -393,6 +393,14 @@ export default function ControleVoosTabelas() {
                   {filteredItems.length > 300 ? `Exibindo 300 de ${filteredItems.length} resultados. Refine a busca para localizar um ponto específico.` : `${filteredItems.length} resultado(s).`}
                 </p>
               </div>
+            )}
+            {activeCatalog === 'motivos' && (
+              <p className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                Para cadastrar observações predefinidas do Pilot App, crie um motivo com
+                tipo "geral", código começando por "OBS_" e descrição contendo o texto
+                que será inserido no campo único de observações do voo. Somente a
+                Coordenação pode administrar esse catálogo.
+              </p>
             )}
             {activeCatalog === 'justificativas' && !loading && (
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">

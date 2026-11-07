@@ -9,7 +9,7 @@ import {
   type FrmsOperationalSnapshotFilters,
   type FrmsOperationalSnapshotItem,
 } from '../lib/frms/operational-snapshot';
-import { canSeeFrmsTeamScopeForContext } from '../lib/frms/access';
+import { canSeeFrmsTeamScopeForContext } from '../middleware/frms-access';
 import { buildDecisaoFields } from '../lib/frms/decision-policy';
 
 type ProjectionContext = Context<{ Bindings: Env; Variables: Partial<Variables> }>;
@@ -158,6 +158,7 @@ router.get('/projection', async (c) => {
     empresaId,
     dataInicio: parsed.data.data_inicio,
     dataFim: parsed.data.data_fim,
+    coverageApprovalCsv: c.env.FRMS_SIGVOOS_CV_COVERAGE_APPROVED_TENANTS,
     filters,
   });
 

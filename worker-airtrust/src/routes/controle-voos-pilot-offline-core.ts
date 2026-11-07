@@ -10,20 +10,10 @@ import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import {
-  getActiveRdvByFlight,
-  getActorId,
-  getEmpresaIdSafe,
-  getFlightOrThrow,
-  getFuncionarioIdForUser,
-  isCrewOnFlight,
-} from '../repositories/controle-voos/rdv-repository';
-import {
-  RDV_CAPABILITIES,
-  assertRdvSelfScope,
-  hasRdvCapability,
-  requireAnyRdvAccess,
-} from '../services/controle-voos/rdv-workflow';
+import { getActiveRdvByFlight, getFlightOrThrow, getFuncionarioIdForUser, isCrewOnFlight } from '../repositories/controle-voos/rdv-repository';
+import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
+import { RDV_CAPABILITIES } from '../services/controle-voos/rdv-workflow';
+import { assertRdvSelfScope, hasRdvCapability, requireAnyRdvAccess } from '../middleware/controle-voos-rdv-access';
 import {
   buildPilotOfflineLeaseClaims,
   signPilotOfflineLease,
@@ -426,6 +416,7 @@ pilotOffline.get(
       fuelingCompaniesResult,
       justificationCatalogResult,
       flightJustificationsResult,
+      observationTemplatesResult,
     ] = await Promise.all([
       getActiveRdvByFlight(c.env.DB, voo.id, empresaId),
       c.env.DB
@@ -599,6 +590,21 @@ pilotOffline.get(
         )
         .bind(empresaId, voo.id)
         .all<{ id: number; codigo: string; nome: string; minutos: number; observacao: string | null }>(),
+      // Reuse the tenant-scoped, Coordination-managed operational motives catalog.
+      // OBS_* entries are optional text templates, not technical discrepancy records.
+      c.env.DB
+        .prepare(
+          `SELECT codigo, nome, descricao
+             FROM cv_motivos_operacionais
+            WHERE empresa_id = ?
+              AND tipo = 'geral'
+              AND substr(UPPER(codigo), 1, 4) = 'OBS_'
+              AND ativo = 1
+              AND deleted_at IS NULL
+            ORDER BY ordem ASC, nome ASC, id ASC`,
+        )
+        .bind(empresaId)
+        .all<{ codigo: string; nome: string; descricao: string | null }>(),
     ]);
 
     const tripulantes = crewResult.results || [];
@@ -745,6 +751,7 @@ pilotOffline.get(
           naturezas_voo: naturezasResult.results || [],
           empresas_abastecimento: fuelingCompaniesResult.results || [],
           justificativas_voo: justificationCatalogResult.results || [],
+          observacoes_predefinidas: observationTemplatesResult.results || [],
         },
         justificativas: flightJustificationsResult.results || [],
         tripulantes,

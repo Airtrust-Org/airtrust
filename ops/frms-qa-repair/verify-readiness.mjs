@@ -114,21 +114,27 @@ export async function inspectPrivateStagingResources({accountId,token,fetcher=fe
     fail('QA_PRIVATE_READONLY_CREDENTIAL_MISSING');
   const base='https://api.cloudflare.com/client/v4/accounts/'+accountId;
   const bucket=encodeURIComponent(EXPECTED.bucket);
-  const get=async path=>{
-    const r=await fetcher(base+path,{method:'GET',redirect:'manual',
-      headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(10000)});
-    if(!r.ok)fail('QA_PRIVATE_CF_READ_FAILED');
-    const body=await r.json();
+  const get=async(path,label)=>{
+    let r;
+    try{
+      r=await fetcher(base+path,{method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(10000)});
+    }catch{fail('QA_PRIVATE_'+label+'_TRANSPORT_FAILED');}
+    if(!r.ok)fail('QA_PRIVATE_'+label+'_HTTP_FAILED');
+    let body;
+    try{body=await r.json();}
+    catch{fail('QA_PRIVATE_'+label+'_JSON_FAILED');}
     if(body?.success!==true||body?.result===undefined)
-      fail('QA_PRIVATE_CF_READ_FAILED');
+      fail('QA_PRIVATE_'+label+'_RESPONSE_FAILED');
     return body.result;
   };
+  // Fixed labels, never URI, response body or secrets in logs.
   const [database,bucketState,custom,managed,lifecycle]=await Promise.all([
-    get('/d1/database/'+EXPECTED.d1Id),
-    get('/r2/buckets/'+bucket),
-    get('/r2/buckets/'+bucket+'/domains/custom'),
-    get('/r2/buckets/'+bucket+'/domains/managed'),
-    get('/r2/buckets/'+bucket+'/lifecycle'),
+    get('/d1/database/'+EXPECTED.d1Id,'D1'),
+    get('/r2/buckets/'+bucket,'R2_BUCKET'),
+    get('/r2/buckets/'+bucket+'/domains/custom','R2_CUSTOM'),
+    get('/r2/buckets/'+bucket+'/domains/managed','R2_MANAGED'),
+    get('/r2/buckets/'+bucket+'/lifecycle','R2_LIFECYCLE'),
   ]);
   return assertInventory({database,bucket:bucketState,custom,managed,lifecycle});
 }

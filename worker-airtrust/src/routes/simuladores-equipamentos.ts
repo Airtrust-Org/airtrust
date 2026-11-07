@@ -18,7 +18,8 @@ type SimuladoresContext = Context<{ Bindings: Env }>;
 import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
-import { requireAdminForDelete, audit, simuladoresHasEmpresaId } from './simuladores-shared';
+import { requireAdminForDelete } from './simuladores-admin-guard';
+import { audit, simuladoresHasEmpresaId } from '../services/simuladores/shared';
 import { createLogger, toError } from '../utils/logger';
 import { getSchemaColumns } from '../utils/db-schema';
 

@@ -250,6 +250,33 @@ const reconciliationData = {
 describe('Training enrollment reconciliation', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('refreshes pending invitations after a concurrent automatic enrollment', async () => {
+    let externallyEnrolled = false;
+    let reconciliationReads = 0;
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/reconciliacao')) {
+        reconciliationReads += 1;
+        return ok({
+          ...reconciliationData,
+          convites_matricula: externallyEnrolled ? reconciliationData.convites_matricula : [],
+        });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findByText('CRM EAD');
+    expect(screen.queryByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ })).not.toBeInTheDocument();
+
+    // Simulate the enrolled rule being saved through another UI/API session.
+    // Merely changing the tab must not keep an old cached "0 convites" forever.
+    externallyEnrolled = true;
+    fireEvent.click(screen.getByRole('button', { name: /Convites/ }));
+    await screen.findByRole('button', { name: /Enviar\/re-enviar convite por e-mail/ });
+    expect(reconciliationReads).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('2 matrícula(s) ainda não iniciada(s)')).toBeInTheDocument();
+  });
+
   it('enrolls missing people and applies explicit reconciliation decisions', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.includes('/reconciliacao') && (!init?.method || init.method === 'GET')) {
@@ -406,4 +433,47 @@ describe('Training enrollment reconciliation', () => {
     expect(toastMock.success).toHaveBeenCalled();
   });
 
+  it('exibe alerta de estado degradado, mensagens distintas de vazio e bloqueia ações em lote quando meta.degraded for verdadeiro', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/compliance-treinamentos/reconciliacao')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              resumo: {
+                matriculas_ativas: 0,
+                matriculas_alinhadas: 0,
+                requisitos_sem_matricula: 0,
+                gaps_matricula_acionaveis: 0,
+                matriculados_sem_requisito: 0,
+                nao_aplica_matriculados: 0,
+                cursos_sem_modelo: 0,
+                matriculas_avulsas_reconciliadas: 0,
+              },
+              gaps_matricula: [],
+              matriculas_revisao: [],
+              convites_matricula: [],
+              meta: { reconciliation_ready: false, degraded: true },
+            },
+            meta: { reconciliation_ready: false, degraded: true },
+          }),
+        } as unknown as Response;
+      }
+      return { ok: true, json: async () => ({ success: true }) } as unknown as Response;
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findByRole('alert');
+    expect(screen.getByText('Diagnóstico de reconciliação em modo degradado')).toBeInTheDocument();
+    expect(screen.getByText(/Gaps de matrícula indisponíveis temporariamente/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum gap de matrícula acionável.')).not.toBeInTheDocument();
+
+    const analisarBtn = screen.getByRole('button', { name: /Analisar matrículas pendentes/i });
+    expect(analisarBtn).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Revisar/ }));
+    expect(screen.getByText(/Matrículas para revisão indisponíveis temporariamente/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma matrícula pendente de revisão.')).not.toBeInTheDocument();
+  });
 });

@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-pptx-slide-evidence-0574",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0574_lms_pptx_slide_evidence.sql",
+  "fileHash": "65919384fc508a02975890f114230b8c958d44450079c8a97d2e75f28904ecbd",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
+  "planHash": "e9e9bac50cd70b256b5e4c5e86c1badef568a1adfa4e02c67f1d15a976a4a525"
+}

@@ -1,4 +1,4 @@
-import { ApiError } from '../../middleware/error-handler';
+import { ApiError } from '../errors/api-error';
 import {
   extractAndValidateLmsPackage,
   LMS_PACKAGE_LIMITS,
@@ -78,11 +78,13 @@ function mimeType(path: string): string {
     gif: 'image/gif',
     svg: 'image/svg+xml',
     webp: 'image/webp',
+    avif: 'image/avif',
     mp4: 'video/mp4',
     webm: 'video/webm',
     mp3: 'audio/mpeg',
     ogg: 'audio/ogg',
     wav: 'audio/wav',
+    vtt: 'text/vtt; charset=utf-8',
     woff: 'font/woff',
     woff2: 'font/woff2',
     ttf: 'font/ttf',

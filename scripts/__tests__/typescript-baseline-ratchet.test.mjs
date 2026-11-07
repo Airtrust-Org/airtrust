@@ -323,7 +323,7 @@ describe('canonicalizeDiagnosticText', () => {
 
   it('canonicalizes real baseline-shaped messages the same way from two different checkout roots (parseTscOutput integration)', () => {
     const rawTemplate = (root) =>
-      `src/react-app/components/HomeRouter.tsx(49,52): error TS2345: Argument of type 'import("${root}/src/types/index").Funcionario' is not assignable to parameter of type 'import("${root}/src/react-app/types/index").Funcionario'. Property 'status' is missing.`;
+      `src/react-app/pages/HomeRouter.tsx(49,52): error TS2345: Argument of type 'import("${root}/src/types/index").Funcionario' is not assignable to parameter of type 'import("${root}/src/react-app/types/index").Funcionario'. Property 'status' is missing.`;
 
     const diagsA = parseTscOutput(rawTemplate('/private/tmp/airtrust-ratchet-a'), {
       cwd: '/private/tmp/airtrust-ratchet-a',

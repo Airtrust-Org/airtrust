@@ -46,14 +46,20 @@ describe('SCORM filename lifecycle wiring', () => {
     expect(source).toContain('JSON.stringify(storedResult)');
   });
 
-  it('updates the course visible filename only when the exact package becomes ACTIVE', () => {
+  it('updates the course visible filename only after an exact certified package activation', () => {
     const activateBody = source.slice(
       source.indexOf('export async function activateScormPackageVersion'),
       source.indexOf('async function candidateAssets'),
     );
-    expect(activateBody).toContain("conteudo_arquivo_nome = COALESCE(?, conteudo_arquivo_nome)");
+    const switchSource = readFileSync(
+      resolve(process.cwd(), 'src/lib/lms/lms-scorm-package-activation.ts'),
+      'utf8',
+    );
     expect(activateBody).toContain('readScormUploadFilename(quality)');
-    expect(activateBody).toContain("status = 'ACTIVE'");
+    expect(activateBody).toContain('commitCertifiedScormActivation({');
+    expect(switchSource).toContain('conteudo_arquivo_nome=COALESCE(?,conteudo_arquivo_nome)');
+    expect(switchSource).toContain("SET status='ACTIVE'");
+    expect(switchSource).toContain('AND changes()=1');
   });
 
   it('keeps exact-SHA reuploads truthful when the package is already ACTIVE', () => {

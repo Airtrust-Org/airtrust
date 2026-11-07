@@ -27,7 +27,11 @@ export const TRUSTED_DELTA_FILES=new Set([
   'scripts/staging/f0-delegated-staging-attestation.mjs',
   'scripts/__tests__/f0-delegated-staging-attestation.test.mjs',
   'scripts/staging/dispatch-f0-player3-staging-from-comment.mjs',
-  'scripts/__tests__/f0-player3-staging-issueops.test.mjs'
+  'scripts/__tests__/f0-player3-staging-issueops.test.mjs',
+  // F5 #1643: reviewed, merged, read-only Native QA policy verifier + fixtures.
+  // Explicit paths only; no Native Worker/frontend/runtime source accepted.
+  'scripts/ci/player3-native-qa-approval-gate.mjs',
+  'scripts/__tests__/player3-native-qa-approval-gate.test.mjs'
 ]);
 export function parseRequest(event,{actor,ref,repo,sha}) {
   if(repo!==REPO||ref!=='refs/heads/main')
@@ -53,6 +57,14 @@ export function assertGates(checkRuns) {
   }
 }
 export function assertReviewedDelta(comparison) {
+  // compare(F4_SHA...main) is "behind" when the PR already contains main.
+  // No commits or files from main remain to be reviewed in that case.
+  if(comparison?.status==='behind') {
+    if(comparison.ahead_by!==0 || !Array.isArray(comparison.files) ||
+       comparison.files.length!==0)
+      throw Error('F0_CLOUD_DISPATCH_UNEXPECTED_COMPARISON');
+    return;
+  }
   if(comparison?.status!=='diverged' && comparison?.status!=='ahead')
     throw Error('F0_CLOUD_DISPATCH_UNEXPECTED_COMPARISON');
   if(!Number.isInteger(comparison.ahead_by)||comparison.ahead_by<0||

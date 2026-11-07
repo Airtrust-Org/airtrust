@@ -28,7 +28,9 @@ const LARGE_FILE_LINE_CAPS = {
   'services/sigvoos-frms.ts': 2937,
   // Upload/storage logic was extracted into testable modules. The compatibility
   // router retains the prior CRUD implementation and is frozen at the old cap.
-  'routes/lms-cursos-legacy.ts': 3000,
+  // Cap raised 2026-10-28 by one line: counted 3001 (edition-policy guard on the
+  // course PUT is one call; the logic lives in lib/lms/lms-course-policy-guard.ts).
+  'routes/lms-cursos-legacy.ts': 3001,
   // Cap raised 2026-06-29: counted 2277 (pre-existing growth).
   'routes/escalas-alocacoes.ts': 2277,
   // Acknowledged growth (audit remediation A1): EVD now integrates training commitments.
@@ -58,7 +60,7 @@ const LARGE_FILE_LINE_CAPS = {
   // corrupted cross-tenant curso_id/funcionario_id/qualificacao_id can no
   // longer leak another tenant's data or feed a completion write).
   // Cap raised 2026-09-30: 0519 stamps competency-profile lineage on enrollment paths.
-  'routes/lms-matriculas.ts': 3056,
+  'routes/lms-matriculas.ts': 2949,
   // Acknowledged growth (pre-existing, logged 2026-06-29): fadiga check-in rules engine.
   // Cap raised 2026-08-22: counted 2048 (fix/frms-parameter-governance-recalc
   // — governed operational context wired into the check-in contexto-piloto
@@ -94,7 +96,6 @@ const LARGE_FILE_LINE_CAPS = {
   // Keep this cap tight; further growth should extract catalog/creation logic instead of raising it.
   // 0519 adds profile-aware evidence selection and transitional schema compatibility.
   // Keep this explicit until the Compliance router is split into smaller modules.
-  'routes/compliance-treinamentos.ts': 2070,
   // Reliability remediation added atomic ficha writes and fail-closed PDF generation.
   // Extraction remains a follow-up and is not mixed into this incident closure.
   'routes/simuladores-fichas.ts': 2500,
@@ -121,10 +122,6 @@ const SQL_PREPARE_CAPS = {
   // Acknowledged (stabilization 2026-06-06): unified planned training contract.
   // +10 prepare calls for schema introspection guards (migration-0390 compatibility).
   'routes/treinamentos-planejados.ts': 52,
-  // Cap raised 2026-07-30 (hotfix/lms-compliance-final): +1 .prepare() for the
-  // resolveLmsEffectiveProgress-enriched /minhas-ead and /curso/:id mapping
-  // plus the observações UPDATE split out of the canonical completion path.
-  'routes/lms-matriculas.ts': 48,
   // New offender 2026-08-18 (fix/qualification-writer-convergence, TRAIN-002):
   // +1 .prepare() for the renovacao_de chain-link UPDATE, split out from the
   // status-transition UPDATE so both the fresh-realization and the
@@ -144,7 +141,6 @@ const CRITICAL_SELECT_STAR_CAPS = {
   'routes/aeronaves.ts': 1,
   'routes/escalas-alocacoes.ts': 1,
   'routes/escalas-padroes.ts': 1,
-  'routes/escalas-shared.ts': 2,
   'routes/escalas-tripulacoes.ts': 4,
   'routes/frms-fadiga-checkin-legacy.ts': 3,
   // Two schema-compatible reads support import and mutation reliability guards.

@@ -13,11 +13,11 @@ import type { Env } from '../types';
 import {
   resolveOperationalAccess,
   type OperationalAccessResolution,
-} from '../services/operational-domain-access';
+} from '../middleware/operational-domain-access';
 import {
   isManagerRole,
   resolveEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import { needsFirefighterAviationProfile, resolveFrmsWorkforceProfile } from '../lib/frms/workforce-profile';
 import { FRMS_FIREFIGHTER_AVIATION_PROFILE } from '../lib/frms/parameter-governance';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
@@ -202,17 +202,48 @@ async function listTenantMaintenanceSetorIds(
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
+async function resolveEffectiveAdminRole(
+  c: Context<{ Bindings: Env }>,
+): Promise<string | unknown> {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  const userId = getUserId(c);
+  const userRole = (c.get as (key: string) => unknown)('userRole');
+  const canonicalTenantRole = (c.get as (key: string) => unknown)('canonicalTenantRole');
+
+  if (normalizeTenantRole(canonicalTenantRole) === 'admin') {
+    return 'ADMINISTRADOR';
+  }
+  if (userId > 0 && empresaId > 0 && normalizeTenantRole(userRole) !== 'admin') {
+    const row = await db
+      .prepare(
+        `SELECT role FROM usuarios_empresas
+          WHERE usuario_id = ? AND empresa_id = ?
+          LIMIT 1`,
+      )
+      .bind(userId, empresaId)
+      .first<{ role: string | null }>()
+      .catch(() => null);
+    if (normalizeTenantRole(row?.role) === 'admin') {
+      return 'ADMINISTRADOR';
+    }
+  }
+  return userRole;
+}
+
 async function resolveMaintenanceManagerScope(
   c: Context<{ Bindings: Env }>,
   access?: OperationalAccessResolution,
+  effectiveRole?: unknown,
 ): Promise<MaintenanceManagerScope> {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
   const userId = getUserId(c);
   const userRole = (c.get as (key: string) => unknown)('userRole');
+  const resolvedEffectiveRole = effectiveRole ?? (await resolveEffectiveAdminRole(c));
   const resolvedAccess =
     access || (await resolveOperationalAccess({ db, empresaId, userId, userRole }));
-  const policy = resolveMaintenanceManagementPolicy(userRole, resolvedAccess);
+  const policy = resolveMaintenanceManagementPolicy(resolvedEffectiveRole, resolvedAccess);
 
   // A gestão central de fadiga e o administrador precisam enxergar o recorte
   // completo de manutenção do próprio tenant. O escopo continua tenant-bound
@@ -295,11 +326,12 @@ router.get('/', async (c) => {
   const userId = getUserId(c);
   const funcionarioId = getFuncionarioId(c);
   const userRole = (c.get as (key: string) => unknown)('userRole');
+  const effectiveAdminRole = await resolveEffectiveAdminRole(c);
 
   const access = await resolveOperationalAccess({ db, empresaId, userId, userRole });
   const [employee, maintenanceScope, checkinOverride] = await Promise.all([
     resolveOwnFrmsEmployee(db, empresaId, userId, funcionarioId),
-    resolveMaintenanceManagerScope(c, access),
+    resolveMaintenanceManagerScope(c, access, effectiveAdminRole),
     getUserPermissionOverride(c, 'frms.checkin'),
   ]);
 
@@ -324,7 +356,7 @@ router.get('/', async (c) => {
   return c.json({
     success: true,
     data: {
-      administrative_role: userRole ?? null,
+      administrative_role: effectiveAdminRole ?? userRole ?? null,
       enabled: access.enabled,
       domains: access.domains,
       setor_ids: access.setorIds,

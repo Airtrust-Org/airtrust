@@ -54,6 +54,14 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
 
+export function isProductionFrontendHost(host: string): boolean {
+  return PRODUCTION_FRONTEND_HOSTS.has(normalizeHost(host));
+}
+
+export function isStagingFrontendHost(host: string): boolean {
+  return STAGING_FRONTEND_HOSTS.has(normalizeHost(host));
+}
+
 function isPagesPreviewHost(host: string): boolean {
   return host.endsWith('.pages.dev');
 }
@@ -94,11 +102,11 @@ export function resolveApiBase({
     return `${normalizedOrigin}/api`;
   }
 
-  if (PRODUCTION_FRONTEND_HOSTS.has(normalizedHost)) {
+  if (isProductionFrontendHost(normalizedHost)) {
     return requireCanonicalApi(configuredApi, PRODUCTION_API_BASE_URL, 'production');
   }
 
-  if (STAGING_FRONTEND_HOSTS.has(normalizedHost)) {
+  if (isStagingFrontendHost(normalizedHost)) {
     return requireCanonicalApi(configuredApi, STAGING_API_BASE_URL, 'staging');
   }
 

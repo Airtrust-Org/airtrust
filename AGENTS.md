@@ -1,121 +1,36 @@
-# AirTrust agent guidance
+# AirTrust — AGENTS.md | V7 Fast Release
 
-AirTrust is a production multi-tenant aviation SaaS. Preserve tenant isolation,
-RBAC, canonical LMS completion and real operational data. Never run production
-deploys, D1 writes or migrations without explicit, scoped authorization. Keep
-unrelated worktree changes intact; never reset, clean, stash or `git add .`.
+**Regra operacional:** `docs/ops/FAST_RELEASE_V7.md`. Corrigir e entregar com autonomia. A solicitação inicial do proprietário autoriza a preparação completa no escopo; **não** implica autorização irrestrita de produção, schema ou writes de dados reais. Não interromper para "prossiga" enquanto houver trabalho seguro e autorizado.
 
-## AirTrust Execution Contract
+## Estado e ferramentas
 
-### Authority
+- Autoridade: GitHub `Airtrust-Org/airtrust`, `main`. CI: GitHub Actions. Cloudflare: runtime. GCB: fallback de CI, nunca bypass. GitLab/CircleCI: legado.
+- Começar pelo caso real, PR/branch existente, HEAD/base, último SHA revisado, diff, testes/checks pertinentes. Issue #776 é índice, não leitura integral obrigatória. Mesmo SHA reutiliza evidências válidas.
+- GitHub-first. Acesso local/Remote Desktop apenas quando teste, build, browser, arquivos locais ou limitação da integração exigirem. Não delegar a outro agente por volume.
+- Preservar branches e worktrees de outros executores. Sem reset/clean/stash, force-push, `git add .` ou refatoração fora do escopo de modo indiscriminado.
 
-- GitHub `Airtrust-Org/airtrust` and its `main` branch are the canonical code,
-  branch, PR and merge authority.
-- GitHub Actions is the primary/official CI and owns the full eight-gate release contract.
-  GitLab and CircleCI are deprecated/legacy and are not release paths.
-- Google Cloud Build (GCB) is contingency/fallback only when GitHub Actions is unavailable
-  or materially defective. It must never be used to bypass missing required gates.
-- Cloudflare is the staging and production runtime platform.
-- GitLab is historical/legacy only. It is not a current code, merge, CI or
-  release authority.
-- CircleCI is retired and must not be used for current merge, release or
-  deployment gates.
-- Before CI-dependent work, inspect the current GitHub/GCB configuration in
-  canonical `main`; do not reconstruct pipeline state from an old worktree or
-  previous agent conversation.
-- Do not bypass branch protection, required gates, tenant isolation, RBAC,
-  migration governance or production authorization.
+## Execução
 
-### Start-of-task bootstrap
+`causa suficiente → correção em lote → teste focado → suíte afetada → oito gates → merge governado → ambiente autorizado → validação real`
 
-ChatGPT normal is the primary executor. ChatGPT Desktop may be used with
-connected Terminal/IDE context when local-machine access is useful; Codex/Work
-are optional and never prerequisites for ordinary AirTrust development.
+- Não reiniciar auditorias, inspecionar logs verdes, repetir CI sem delta ou pollar por rotina. Corrigir falhas da mesma causa em lote; após duas falhas equivalentes, mudar o método.
+- Testes proporcionais: **baixo** (texto/layout isolado) permite dispensar staging se contrato permitir; **médio** (API, matrícula/visibilidade LMS, regra de negócio) exige regressão e staging quando necessário; **alto** (auth, RBAC, tenant, conclusão LMS, certificados, D1/R2, schema, escrita crítica) exige testes negativos e controles de staging/recovery aplicáveis.
+- Os oito gates obrigatórios são `lint`, `build-content-gates`, `worker-typecheck`, `frontend-coverage`, `worker-tests-1`, `worker-tests-2`, `lms-smoke` e `public-e2e`. Não alterar baseline/ratchet nem enfraquecer branch protection.
+- Após checks/review/dependências satisfeitos, merge pelo processo governado. Desenvolvimento de outras branches pode continuar; serializar merge/deploy conflitante e mutações de schema/dados.
 
-At the start of a fresh session or resumed front, use repository/PR evidence as
-the current state instead of replaying an old conversation. For local work run
-`npm run agent:context` and `npm run agent:test-plan`. The live work-front
-index is GitHub issue #776.
+## Segurança e domínio
 
-The optimized cross-session workflow is documented in
-`docs/ops/AGENT_WORKFLOW.md`; canonical procedure navigation is in
-`docs/ops/RUNBOOK_INDEX.md`. For fronts that need a durable handoff, use
-`docs/ops/WORK_FRONT_TEMPLATE.md` in the PR body or linked issue.
+- Backend autentica e autoriza; escopo tenant/`empresa_id` (ou contrato equivalente) na consulta; SQL parametrizado; RBAC fail-closed; logs sem PII/secrets. Mudanças sensíveis testam permitido, negado e cross-tenant.
+- Frontend preserva `fetchWithAuth`, cache por tenant, retry controlado, offline/sync e service worker quando afetados.
+- LMS/SCORM preserva matrícula/ciclo, progresso, score, `lesson_status`, `suspend_data`, commit/finish, conclusão e autorização de assets. Não fabricar evidência de conclusão.
+- FRMS/EVD/SIGVOOS/Pilot App: dados ausentes não são zero, conformidade ou sincronização bem-sucedida; preservar integridade operacional e idempotência.
 
-### Staging credentials and QA identities
+## Produção e autorização única
 
-- GitHub Environment `staging` is the persistent source of truth for staging
-  secrets and synthetic QA login credentials. Worktrees, clones, shells and
-  agent conversations are never credential stores.
-- The canonical general-purpose staging QA login is
-  `qa-agent@staging.airtrust.invalid`. It is synthetic and staging-only.
-- Its durable password is `STAGING_SMOKE_PASSWORD` in GitHub Environment
-  `staging`. Existing workflows that consume `STAGING_SMOKE_EMAIL` must keep
-  that secret equal to the canonical login above.
-- Agents must never ask for a staging password merely because they changed
-  worktree or conversation. Diagnose the shared environment first.
-- Never write staging credentials to tracked files, `.env` files inside a
-  worktree, prompts, logs, artifacts or issue/PR bodies.
-- General authenticated staging smoke uses the canonical QA login and
-  `STAGING_SMOKE_PASSWORD` from Environment `staging`.
-- Examiner-training synthetic QA uses `QA_EXAMINER_ADMIN_EMAIL` and
-  `QA_EXAMINER_ADMIN_PASSWORD` from Environment `staging`. This identity is
-  intentionally separate because it belongs to the disposable synthetic QA
-  tenant and has different fixture/RBAC semantics.
-- Cloudflare/D1 staging credentials must likewise be consumed only from the
-  `staging` Environment by sanctioned workflows; never copy them into a local
-  worktree to make an agent test pass.
-- Before declaring credentials missing or invalid, run the sanctioned staging
-  identity readiness workflow and, for Cloudflare credentials, the Cloudflare
-  credential doctor. A failed readiness check is an infrastructure/config
-  blocker to fix centrally, not a reason to create a per-agent secret copy.
-- To provision/reseed/rotate the canonical general QA identity, use
-  `.github/workflows/provision-staging-standard-identity.yml`. The seed must
-  consume the central password; process-local/random fallback passwords are
-  forbidden because the next agent cannot recover them.
-- Authenticated tests that require a secret must run in a sanctioned GitHub
-  Actions/GCB job that reads the Environment secret. If an interactive browser
-  test needs the same coverage, add/extend a Playwright or equivalent staging
-  workflow rather than exposing the password to the agent.
-- See `docs/ops/STAGING_CREDENTIAL_CONTRACT.md` for the durable cross-agent
-  contract and recovery procedure.
+Aprovação de produção, quando exigida, deve estar vinculada a **SHA, artefato e escopo exatos**. Preparar tudo antes de solicitar uma única decisão final. Aprovação pelo GitHub Environment é válida somente quando houver política/identidade/escopo efetivamente verificáveis; não presumir requisitos de reviewer. Usar o workflow oficial, guardar proveniência, versionamento, health e validação do caso real. Schema V2, recovery e execução governada para qualquer migration/write remoto; nenhum script histórico ou SQL ad hoc.
 
-### Default autonomy
+## Revisão e fechamento
 
-For requests to continue, finish, resolve, fix, merge, deploy, validate or
-complete, continue through every safe, in-scope executable step to the stated
-operational end state. Intermediate evidence is not a conversation boundary.
-Do not stop merely because a browser test, upload, candidate, gate, CI, MR or
-staging authentication checkpoint completed or expired. Use sanctioned seed,
-reseed, browser restart/retry and recovery mechanisms directly.
+Revisar riscos introduzidos pelo delta (segurança, regressão, dados, corrida, resiliência), não observações cosméticas. Findings exigem linha, condição, impacto, evidência e teste proposto. Comunicar só marcos materiais. Registrar na PR causa, alteração, teste, SHA, status do ambiente e bloqueio, se houver; atualizar #776 apenas quando necessário. **PR verde não é deploy**. Não inventar execução nem aprovação.
 
-### Real blockers
-
-Return early only when further safe work is actually prevented: missing
-artifact/SHA-specific production authorization; ungoverned destructive data
-operation or migration; security, tenant or RBAC risk; unsatisfied required
-gate/branch protection; no sanctioned external identity; or technical
-impossibility after changing method following repeated failure. A blocker in
-one independent front never stops another; production QA identity absence does
-not block staging QA.
-
-### Execution and testing
-
-- After two substantially identical failures, change method.
-- Distinguish product/package failures from browser, selector, stale-session
-  and timeout failures; recover and retry reasonably before classifying failure.
-- Test in order: reproduction, focused test, affected suite, required official
-  CI. Do not rerun already-PASS evidence for the same SHA without an
-  invalidating delta.
-- For SCORM, use real runtime/UI evidence; never fabricate state. Automate
-  slides and questions where possible, preserve checkpoints as evidence and
-  complete independent validation without returning after each checkpoint.
-
-### Production and communication
-
-Production authorization is artifact/SHA/scope-specific. This contract never
-authorizes bypassing production controls, improvised D1 SQL, migration
-allowlists, operational identities or tenant/RBAC controls. Do not narrate
-every command or send routine checkpoint updates. Finish with cause/fix/tests,
-required gates and authorized merge/deploy/post-deploy evidence; never infer a
-later state from an earlier one.
+Referências técnicas sob demanda: `CLAUDE.md`, `docs/ops/AGENT_WORKFLOW.md`, `docs/ops/RUNBOOK_INDEX.md`; workflows e proteções atuais prevalecem.

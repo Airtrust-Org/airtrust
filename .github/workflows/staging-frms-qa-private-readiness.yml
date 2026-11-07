@@ -64,7 +64,10 @@ jobs:
       - name: Verify actual staging D1 UUID and private R2 domain and lifecycle using GET only
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_FRMS_QA_READ_API_TOKEN }}
+          # GET-only exception: reuse the pre-existing staging Worker token in this
+          # isolated step. No token value is copied to the private FRMS Worker.
+          # Provisioning and runtime still require their separate credential contracts.
+          CLOUDFLARE_FRMS_QA_READ_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
         run: node ops/frms-qa-repair/verify-readiness.mjs
       - name: Record strictly read-only evidence
         if: success()

@@ -277,10 +277,52 @@ export const qualificacoesService = {
   // ─────────────────────────────────────────────────────────────
 
   lookups: {
-    async funcionariosAtivos(limit = 1000): Promise<ApiResponse<FuncionarioResumo[]>> {
-      return httpClient.get<FuncionarioResumo[]>(
-        `/funcionarios?status=ativos&orderBy=nome&order=ASC&limit=${limit}`,
-      );
+    async funcionariosAtivos(limit?: number): Promise<ApiResponse<FuncionarioResumo[]>> {
+      // The employee endpoint caps each response at 100. Load every authorized
+      // page; instructors are eligible employees too and must not be filtered.
+      const pageSize = 100;
+      const maxItems =
+        typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+          ? Math.floor(limit)
+          : Number.POSITIVE_INFINITY;
+      const funcionarios: FuncionarioResumo[] = [];
+      const seen = new Set<number>();
+
+      for (let page = 1; ; page++) {
+        // Use the unique ID for stable pagination; the modal sorts names locally.
+        // httpClient wraps the complete API body in response.data.
+        const response = await httpClient.get<{
+          success: boolean;
+          data?: FuncionarioResumo[];
+        }>(
+          `/funcionarios?status=ativos&orderBy=id&order=ASC&limit=${pageSize}&page=${page}`,
+        );
+        if (!response.success) {
+          return { success: false, error: response.error || 'Falha ao carregar funcionários.' };
+        }
+        const pageBody = response.data;
+        if (!pageBody?.success || !Array.isArray(pageBody.data)) {
+          return { success: false, error: 'Resposta inválida na listagem de funcionários.' };
+        }
+        const items = pageBody.data;
+
+        let addedOnPage = 0;
+        for (const funcionario of items) {
+          if (!seen.has(funcionario.id)) {
+            seen.add(funcionario.id);
+            funcionarios.push(funcionario);
+            addedOnPage++;
+            if (funcionarios.length >= maxItems) break;
+          }
+        }
+
+        // Protect against empty, partial or repeating pages.
+        if (items.length < pageSize || addedOnPage === 0 || funcionarios.length >= maxItems) {
+          break;
+        }
+      }
+
+      return { success: true, data: funcionarios };
     },
 
     async tiposQualificacao(

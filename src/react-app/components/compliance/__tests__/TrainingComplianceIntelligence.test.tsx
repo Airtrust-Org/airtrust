@@ -29,7 +29,7 @@ function renderWithClient(node: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
 }
 
 const pending = {
@@ -76,6 +76,88 @@ const props = {
 describe('TrainingComplianceIntelligence', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('shows LMS alerts together with compliance entries and sends filters and page offset to the API', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (!url.includes('/comunicacoes')) throw new Error(`unexpected ${url}`);
+      const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset') || 0);
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{
+            id: 'lms:10:EMAIL',
+            funcionario_id: 10,
+            funcionario_nome: 'Pessoa Pendente',
+            setor_nome: null,
+            qualificacao_tipo_id: 100,
+            curso_id: 30,
+            qualificacao_nome: 'CRM Gestores',
+            status_compliance: 'NAO_INICIADO',
+            tipo: 'EMAIL',
+            destinatario: null,
+            status_envio: 'enviada',
+            erro: null,
+            enviado_em: '2026-11-04T14:20:00Z',
+            gestor: false,
+            origem: 'LMS_ALERTA',
+          }],
+          pagination: { limit: 100, offset, has_more: offset === 0 },
+        }),
+      } as Response;
+    });
+
+    const { rerender, client } = renderWithClient(<TrainingComplianceIntelligence mode="comunicacoes" {...props} />);
+    await screen.findByText('CRM Gestores');
+    expect(screen.getByText('Alerta LMS')).toBeInTheDocument();
+    expect(screen.getAllByText('Aceito para envio').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Não registrado')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filtrar treinamento' }), {
+      target: { value: 'CRM' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar canal' }), {
+      target: { value: 'EMAIL' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar origem' }), {
+      target: { value: 'LMS_ALERTA' },
+    });
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.map(([url]) => String(url));
+      expect(calls.some((url) =>
+        url.includes('treinamento_q=CRM') &&
+        url.includes('canal=EMAIL') &&
+        url.includes('origem=LMS_ALERTA') &&
+        url.includes('setor_id=1')
+      )).toBe(true);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Próxima' })).not.toBeDisabled()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima' }));
+    await waitFor(() =>
+      expect(fetchWithAuthMock.mock.calls.some(([url]) => String(url).includes('offset=100')))
+        .toBe(true)
+    );
+    fetchWithAuthMock.mockClear();
+    rerender(
+      <QueryClientProvider client={client}>
+        <TrainingComplianceIntelligence mode="comunicacoes" {...props}
+          search="Pessoa" setorId={null} funcaoId={2} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      const calls = fetchWithAuthMock.mock.calls.map(([url]) => String(url));
+      expect(calls.some((url) =>
+        url.includes('funcionario_q=Pessoa') &&
+        url.includes('funcao_id=2') &&
+        url.includes('offset=0') &&
+        !url.includes('setor_id=1')
+      )).toBe(true);
+    });
+    expect(screen.getByText('CRM Gestores')).toBeInTheDocument();
+  });
+
   it('shows actionable never-done pending items and previews resend channels', async () => {
     fetchWithAuthMock.mockImplementation(async (url: string) => {
       if (url.includes('/pendencias')) return ok([pending]);
@@ -88,6 +170,8 @@ describe('TrainingComplianceIntelligence', () => {
           sem_whatsapp: 0,
           vencidos: 0,
           nunca_realizados: 1,
+          email_ja_alertado: 1,
+          whatsapp_ja_alertado: 0,
         });
       throw new Error(`unexpected ${url}`);
     });
@@ -107,6 +191,32 @@ describe('TrainingComplianceIntelligence', () => {
     );
     expect(screen.getByText('WhatsApp')).toBeInTheDocument();
     expect(screen.getByText('E-mail')).toBeInTheDocument();
+    const resend = await screen.findByRole('checkbox', { name: /Reenviar explicitamente apenas avisos/ });
+    fireEvent.click(resend);
+    expect(resend).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar aviso' }));
+    const reopened = await screen.findByRole('checkbox', { name: /Reenviar explicitamente apenas avisos/ });
+    expect(reopened).not.toBeChecked();
+  });
+
+  it('shows each LMS enrollment percentage without treating progress as compliance completion', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/pendencias')) return ok([
+        { ...pending, funcionario_id: 11, funcionario_nome: 'Aluno A', status_compliance: 'EM_ANDAMENTO', progresso_pct: 37 },
+        { ...pending, funcionario_id: 12, funcionario_nome: 'Aluno B', status_compliance: 'EM_ANDAMENTO', progresso_pct: 82 },
+        { ...pending, funcionario_id: 13, funcionario_nome: 'Aluno C', status_compliance: 'EM_ANDAMENTO', progresso_pct: null },
+      ]);
+      throw new Error(`unexpected ${url}`);
+    });
+    renderWithClient(<TrainingComplianceIntelligence mode="pendencias" {...props} />);
+    await screen.findByText('Aluno A');
+    expect(screen.getByText('37% de progresso')).toBeInTheDocument();
+    expect(screen.getByText('82% de progresso')).toBeInTheDocument();
+    expect(screen.getByText('Progresso indisponível')).toBeInTheDocument();
+    expect(screen.getAllByText('Em andamento').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByLabelText('Progresso do treinamento: 37%')).toBeInTheDocument();
+    expect(screen.getByLabelText('Progresso do treinamento: 82%')).toBeInTheDocument();
   });
 
   it('shows deterministic report trend and recurrent pending items', async () => {

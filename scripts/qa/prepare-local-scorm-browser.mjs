@@ -98,10 +98,14 @@ async function main(){
   // A failed assessment cannot be silently erased by rematriculation. Use
   // independent synthetic learners for the eventual passing journey.
   const passEmployees={};
+  const cycleIsolationEmployees={};
   for(const browser of ['chromium','webkit-ipad']){
     passEmployees[browser]=Number(db.prepare(
       "INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES (?, ?, 1, 0, ?)",
     ).run('QA SCORM PASS '+browser,companyId,'QA-PASS-'+browser).lastInsertRowid);
+    cycleIsolationEmployees[browser]=Number(db.prepare(
+      "INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES (?, ?, 1, 0, ?)"
+    ).run('QA SCORM CYCLE ISOLATION '+browser,companyId,'QA-CYCLE-'+browser).lastInsertRowid);
   }
   db.close();
 
@@ -117,6 +121,7 @@ async function main(){
   const secondId=Number((await enrollment.json())?.data?.id);
   assert(Number.isSafeInteger(secondId)&&secondId>0&&secondId!==firstId,'LOCAL_SECOND_ENROLLMENT_INVALID');
   const passEnrollments={};
+  const cycleIsolationEnrollments={};
   for(const browser of ['chromium','webkit-ipad']){
     const response=await fetch(api+'/lms/matriculas',{method:'POST',headers:{
       Authorization:'Bearer '+token,'Content-Type':'application/json'},
@@ -127,6 +132,16 @@ async function main(){
     assert(Number.isSafeInteger(id)&&id>0&&!Object.values(passEnrollments).includes(id)&&
       id!==firstId&&id!==secondId,'LOCAL_PASS_ENROLLMENT_INVALID_'+browser);
     passEnrollments[browser]=id;
+    const cycleResponse=await fetch(api+'/lms/matriculas',{method:'POST',headers:{
+      Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({curso_id:courseId,funcionario_id:cycleIsolationEmployees[browser],
+        observacoes:'QA SCORM ciclo anterior descartavel'})});
+    assert(cycleResponse.ok,'LOCAL_CYCLE_ENROLLMENT_HTTP_'+browser+'_'+cycleResponse.status);
+    const cycleEnrollmentId=Number((await cycleResponse.json())?.data?.id);
+    assert(Number.isSafeInteger(cycleEnrollmentId)&&cycleEnrollmentId>0&&
+      !Object.values(cycleIsolationEnrollments).includes(cycleEnrollmentId),
+      'LOCAL_CYCLE_ENROLLMENT_INVALID_'+browser);
+    cycleIsolationEnrollments[browser]=cycleEnrollmentId;
   }
 
   fs.mkdirSync(fixtureRoot,{recursive:true});
@@ -140,6 +155,11 @@ async function main(){
   fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
   const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
   const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
+  const manifestBytes=files['imsmanifest.xml'];
+  assert(manifestBytes instanceof Uint8Array,'QA_MANIFEST_MISSING');
+  const manifestSha256=createHash('sha256').update(manifestBytes).digest('hex');
+  const runtimeSha=run('git',['rev-parse','HEAD']).trim();
+  assert(/^[a-f0-9]{40}$/.test(runtimeSha),'QA_RUNTIME_SHA_INVALID');
   for(const [filename,bytes] of Object.entries(files)){
     if(filename.endsWith('/'))continue; // ZIP directory entries are not R2 objects.
     const file=path.resolve(fixtureRoot,filename);
@@ -162,11 +182,13 @@ async function main(){
   }),{mode:0o600});
   fs.writeFileSync(path.join(fixtureRoot,'fixture.json'),JSON.stringify({
     origin:'http://127.0.0.1:8787',companyId,courseId,dbFile,
-    packageSha256,zipPath,fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
+    packageSha256,manifestSha256,runtimeSha,zipPath,
+    fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
     ...(externalDriver?{driverPath:path.join(fixtureRoot,'driver.json')}:{}),
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},
     passEnrollments,
+    cycleIsolationEnrollments,
     foreignTenant:{empresaId:foreignCompany,courseId:foreignCourse,matriculaId:foreignEnrollment},
   },null,2)+'\n',{mode:0o600});
   console.log('LOCAL_SCORM_BROWSER_FIXTURE_READY=2');

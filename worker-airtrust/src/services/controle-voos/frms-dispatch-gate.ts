@@ -26,6 +26,14 @@ export type DispatchFadigaNivel = 'NORMAL' | 'ATENCAO' | 'CRITICO' | 'INDISPONIV
 
 export type DispatchCheckinStatus = 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL' | 'INDISPONIVEL';
 
+/** Motivo sanitizado: check-in não é sinônimo de decisão regulatória completa. */
+export type DispatchDailyAssessmentReason =
+  | 'CHECKIN_NAO_CONFIRMADO'
+  | 'CHECKIN_OU_DADOS_INCONSISTENTES'
+  | 'EVIDENCIA_REGULATORIA_INSUFICIENTE'
+  | 'EVIDENCIA_OPERACIONAL_INSUFICIENTE'
+  | null;
+
 export type DispatchGateReasonCode =
   | 'TRIPULACAO_AUSENTE'
   | 'CHECKIN_DIARIO_PENDENTE'
@@ -103,6 +111,10 @@ export interface CrewDispatchAssessment extends DispatchGateCrewMember {
   frms_status: DispatchReadinessStatus;
   checkin_status: DispatchCheckinStatus;
   fadiga_diaria: DispatchFadigaNivel;
+  /** Indicador biológico diário do snapshot (inclui efetividade projetada), distinto da decisão regulatória. */
+  sinal_fadiga_checkin: DispatchFadigaNivel;
+  /** Explica por que a decisão operacional permanece inconclusiva, sem dados sensíveis. */
+  daily_assessment_reason: DispatchDailyAssessmentReason;
   fadiga_acumulada: DispatchFadigaNivel;
   reasons: DispatchGateReasonCode[];
   primary_reason: DispatchGateReasonCode | null;
@@ -137,6 +149,48 @@ function mapEstadoToFadigaNivel(
     default:
       return 'INDISPONIVEL';
   }
+}
+
+/**
+ * Sinal diário de fadiga, estritamente derivado de dados já classificados
+ * pelo snapshot canônico. Nunca substitui a decisão operacional consolidada.
+ * Sem check-in completo/íntegro: indisponível, não presume normalidade.
+ */
+function mapDailyCheckinSignal(item: FrmsOperationalSnapshotItem | undefined): DispatchFadigaNivel {
+  if (!item || item.checkin_status !== 'RECEBIDO' ||
+      item.snapshot_status === 'INCOMPLETO' ||
+      item.alertas.includes('DADO_INCONSISTENTE') ||
+      item.sleep_data_source !== 'REAL' || item.wake_data_source !== 'REAL') {
+    return 'INDISPONIVEL';
+  }
+  if (item.alertas.includes('CHECKIN_CRITICO') || item.alertas.includes('EFETIVIDADE_BAIXA')) {
+    return 'CRITICO';
+  }
+  const nivel = String(item.nivel_fadiga_calculado ?? '')
+    .trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  // Faixas reconhecidas pelo adaptador operacional já existente
+  // (frmsOperationalSignals.ts); desconhecidas permanecem indisponíveis.
+  if (['VERMELHO', 'CRITICO', 'BAIXA'].includes(nivel)) return 'CRITICO';
+  if (item.alertas.includes('KSS_ALTO') || item.alertas.includes('SONO_INSUFICIENTE')) return 'ATENCAO';
+  if (['AMARELO', 'ATENCAO', 'TRANSICAO', 'DEGRADADA'].includes(nivel)) return 'ATENCAO';
+  if (['VERDE', 'NORMAL', 'ALTA', 'BAIXO'].includes(nivel)) return 'NORMAL';
+  return 'INDISPONIVEL';
+}
+
+/** Só a decisão canônica conclui a avaliação; check-in recebido sozinho não libera. */
+function resolveDailyAssessmentReason(
+  item: FrmsOperationalSnapshotItem | undefined,
+): DispatchDailyAssessmentReason {
+  if (!item || item.checkin_status !== 'RECEBIDO') return 'CHECKIN_NAO_CONFIRMADO';
+  if (item.estado_operacional !== 'NAO_AVALIADO') return null;
+  if (
+    item.snapshot_status === 'INCOMPLETO' ||
+    item.alertas.includes('DADO_INCONSISTENTE') ||
+    item.sleep_data_source === 'AUSENTE' ||
+    item.wake_data_source === 'AUSENTE'
+  ) return 'CHECKIN_OU_DADOS_INCONSISTENTES';
+  if (item.compliance_status === 'UNKNOWN') return 'EVIDENCIA_REGULATORIA_INSUFICIENTE';
+  return 'EVIDENCIA_OPERACIONAL_INSUFICIENTE';
 }
 
 function mapQuinzenaToFadigaNivel(status: FrmsFortnightStatus | undefined): DispatchFadigaNivel {
@@ -219,6 +273,8 @@ export function deriveCrewDispatchAssessment(
     frms_status,
     checkin_status: item?.checkin_status ?? 'INDISPONIVEL',
     fadiga_diaria: mapEstadoToFadigaNivel(item?.estado_operacional),
+    sinal_fadiga_checkin: mapDailyCheckinSignal(item),
+    daily_assessment_reason: resolveDailyAssessmentReason(item),
     fadiga_acumulada: mapQuinzenaToFadigaNivel(item?.fortnight_indicator?.status_quinzena),
     reasons: reasonList,
     primary_reason: pickPrimaryReason(reasonList),
@@ -302,11 +358,13 @@ export async function loadDispatchGateSnapshotIndex(
   db: D1Database,
   empresaId: number,
   dataOperacional: string,
+  coverageApprovalCsv?: string,
 ): Promise<DispatchGateSnapshotIndex> {
   const result = await listFrmsOperationalSnapshot(db, {
     empresaId,
     dataInicio: dataOperacional,
     dataFim: dataOperacional,
+    coverageApprovalCsv,
   });
 
   const itemsByFuncionario = new Map<number, FrmsOperationalSnapshotItem>();

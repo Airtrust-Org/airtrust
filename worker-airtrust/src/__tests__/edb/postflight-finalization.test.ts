@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyEdbFlightRecord, type EdbFlightRecord, type EdbSignatureProof } from '../../services/edb/contracts';
+import { createEmptyEdbFlightRecord, type EdbFlightRecord, type EdbSignatureProof } from '../../lib/edb/contracts';
 import { finalizePostflightEdbRecord } from '../../services/edb/postflight-finalization';
 import {
   bindPicTechnicalAcknowledgement,
   createTechnicalSituationSnapshot,
-} from '../../services/edb/technical-awareness';
+} from '../../lib/edb/technical-awareness';
 
 function completeRecord(): EdbFlightRecord {
   const record = createEmptyEdbFlightRecord({

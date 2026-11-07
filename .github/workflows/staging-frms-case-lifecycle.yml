@@ -1,0 +1,143 @@
+name: Staging FRMS F0C Real Case Treatment Lifecycle
+on:
+  workflow_dispatch:
+    inputs:
+      expected_deployed_sha:
+        description: Exact audited Worker and Pages staging source SHA
+        required: true
+        type: string
+      confirmation:
+        description: AIRTRUST_STAGING_FRMS_F0C_LIFECYCLE
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: airtrust-staging-mutations-and-scorm-qa
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Confirm exact staging and unchanged runtime from audited deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Exact main/ref and reviewed non-runtime-only delta
+        env:
+          EXPECTED: ${{ inputs.expected_deployed_sha }}
+          CONFIRM: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == Airtrust-Org/airtrust && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$CONFIRM" == AIRTRUST_STAGING_FRMS_F0C_LIFECYCLE ]]
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(gh api repos/Airtrust-Org/airtrust/branches/main --jq .commit.sha)" == "$GITHUB_SHA" ]]
+          git merge-base --is-ancestor "$EXPECTED" "$GITHUB_SHA"
+          git diff --name-only "$EXPECTED" "$GITHUB_SHA" > "$RUNNER_TEMP/f0c-delta"
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              scripts/staging/*|scripts/__tests__/*|worker-airtrust/src/__tests__/*|src/__tests__/*|e2e/*|docs/*|.github/workflows/staging-frms-case-lifecycle.yml) ;;
+              *) echo "FRMS_F0C_UNDEPLOYED_RUNTIME_DELTA: $file" >&2; exit 1 ;;
+            esac
+          done < "$RUNNER_TEMP/f0c-delta"
+          echo FRMS_F0C_DEPLOYED_RUNTIME_DELTA_SAFE
+      - name: Verify official gates for deployed runtime and reviewed main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          EXPECTED: ${{ inputs.expected_deployed_sha }}
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="$EXPECTED" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+      - name: Check exact Worker and Pages staging provenance
+        env:
+          EXPECTED: ${{ inputs.expected_deployed_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          const expected=process.env.EXPECTED;
+          const r=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version',{headers:{'Cache-Control':'no-cache'}});
+          if(!r.ok)throw Error('FRMS_F0C_WORKER_VERSION_UNAVAILABLE');
+          const payload=await r.json();
+          if(payload?.data?.sourceSha!==expected||payload?.data?.environment!=='staging')
+            throw Error('FRMS_F0C_WORKER_NOT_PINNED_TO_STAGING');
+          const p=await fetch('https://staging.airtrust.pages.dev/',{headers:{'Cache-Control':'no-cache'}});
+          if(!p.ok || !(await p.text()).includes(expected.slice(0,7)))
+            throw Error('FRMS_F0C_PAGES_NOT_PINNED_TO_STAGING');
+          console.log('FRMS_F0C_STAGING_SHA_PAIR_PASS');
+          NODE
+
+  qa:
+    name: Governed D1 synthetic case and authenticated HTTP lifecycle
+    needs: guard
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_SMOKE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+      STAGING_D1_NAME: airtrust-db-staging-baseline-20260701
+      STAGING_D1_ID: bf9963f4-eb12-439b-a830-20bbf577ac22
+      FRMS_F0C_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+      FRMS_F0C_CONFIRM: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned Wrangler and run focused SQL contracts
+        run: |
+          # case-resolution imports zod from the repository-root dependency tree.
+          npm ci
+          npm --prefix worker-airtrust ci
+          node --test scripts/__tests__/qa-frms-case-lifecycle.test.mjs
+          cd worker-airtrust
+          npx --no-install vitest run src/__tests__/frms/case-write-lifecycle-sqlite.test.ts --reporter=dot
+      - name: Pin staging D1 UUID and capture Time Travel recovery point
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$STAGING_SMOKE_PASSWORD" ]]
+          cd worker-airtrust
+          npx wrangler d1 info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-f0c-d1-info.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const d=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/frms-f0c-d1-info.json','utf8'));
+          const id=String(d.uuid??d.database_id??d.id??d.result?.uuid??'');
+          if(id!=='bf9963f4-eb12-439b-a830-20bbf577ac22')
+            throw Error('FRMS_F0C_D1_TARGET_UUID_NOT_STAGING');
+          console.log('FRMS_F0C_STAGING_UUID_PASS');
+          NODE
+          npx wrangler d1 time-travel info airtrust-db-staging-baseline-20260701 --json > "$RUNNER_TEMP/frms-f0c-recovery.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          const data=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/frms-f0c-recovery.json','utf8'));
+          const bookmark=String(data.bookmark??data.result?.bookmark??'');
+          if(bookmark.length<8)throw Error('FRMS_F0C_D1_RECOVERY_BOOKMARK_MISSING');
+          appendFileSync(process.env.GITHUB_ENV,'FRMS_F0C_RECOVERY_VERIFIED=true\n');
+          console.log('FRMS_F0C_D1_RECOVERY_READY');
+          NODE
+      - name: Inspect fixed synthetic tenant and new-case absence (SELECT only)
+        run: node scripts/staging/qa-frms-case-lifecycle.mjs --inspect
+      - name: Exercise real authorized case API and verify audited D1 postconditions
+        run: node scripts/staging/qa-frms-case-lifecycle.mjs --apply
+      - name: Summarize bounded acceptance
+        if: always()
+        run: |
+          {
+            echo "FRMS F0C: fixed synthetic tenant 999013, case qa-frms-f0c-case-1."
+            echo "No production writes. Do not retry an ambiguous mutation; inspect D1 before any follow-up."
+            echo "Four existing F0B cases and legacy QA records must retain their preimage hash."
+          } >> "$GITHUB_STEP_SUMMARY"

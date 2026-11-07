@@ -74,8 +74,8 @@ vi.mock('../../services/generate-certificate', async (importOriginal) => {
 // own DB-driven resolution (covered independently in
 // operational-domain-access.test.ts) — here we control exactly which
 // ApiError the guard throws and assert the route maps + shapes it.
-vi.mock('../../services/operational-domain-access', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../services/operational-domain-access')>();
+vi.mock('../../middleware/operational-domain-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/operational-domain-access')>();
   return {
     ...actual,
     requireOperationalAccess: requireOperationalAccessMock,

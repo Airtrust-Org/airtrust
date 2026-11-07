@@ -15,7 +15,7 @@ import { getSchemaColumns } from '../utils/db-schema';
 import {
   buildFuncionarioScopeWhere,
   getEmployeeSectorAccess,
-} from '../services/employee-sector-access';
+} from '../middleware/employee-sector-access';
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,

@@ -111,10 +111,43 @@ describe('resolveDailyFatigueSignal', () => {
     expect(resolveDailyFatigueSignal(item({ checkin_status: 'PENDENTE' })).tone).toBe('critical');
   });
 
-  it('NAO_APLICAVEL → neutro', () => {
+  it('NAO_APLICAVEL com quinzena ativa → pendente crítico, nunca N/A neutro', () => {
     const s = resolveDailyFatigueSignal(item({ checkin_status: 'NAO_APLICAVEL' }));
+    expect(s.tone).toBe('critical');
+    expect(s.value).toBe('Pendente');
+    expect(s.detail).toContain('não autoriza liberação');
+  });
+
+  it('NAO_APLICAVEL em missão fora da quinzena → não confirmado, com ação exigida', () => {
+    const s = resolveDailyFatigueSignal(item({
+      checkin_status: 'NAO_APLICAVEL', fortnight_indicator: null,
+      na_quinzena_ativa: false, escalado: true,
+    }));
+    expect(s.tone).toBe('critical');
+    expect(s.value).toBe('Não confirmado');
+    expect(s.detail).toContain('exige check-in');
+  });
+
+  it('NAO_APLICAVEL sem escala e fora da quinzena conhecida → não exigido sem aptidão presumida', () => {
+    const s = resolveDailyFatigueSignal(item({
+      checkin_status: 'NAO_APLICAVEL', fortnight_indicator: null,
+      na_quinzena_ativa: false, escalado: false, teve_jornada: false,
+      hora_apresentacao: null, teve_atividade_frms: false,
+    }));
     expect(s.tone).toBe('unknown');
-    expect(s.value).toBe('N/A');
+    expect(s.value).toBe('Não exigido');
+    expect(s.detail).toContain('não comprova aptidão');
+  });
+
+  it('NAO_APLICAVEL com vínculo quinzenal desconhecido → não confirmado, nunca dispensa', () => {
+    const s = resolveDailyFatigueSignal(item({
+      checkin_status: 'NAO_APLICAVEL', fortnight_indicator: null,
+      na_quinzena_ativa: undefined, escalado: false, teve_jornada: false,
+      hora_apresentacao: null, teve_atividade_frms: false,
+    }));
+    expect(s.tone).toBe('unknown');
+    expect(s.value).toBe('Não confirmado');
+    expect(s.detail).toContain('não comprova dispensa');
   });
 });
 

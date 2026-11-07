@@ -45,4 +45,62 @@ describe('FRMS risk orchestration', () => {
     expect(result.automaticApprovalAllowed).toBe(false);
     expect(result.alerts).toContain('PERFIL_REGULATORIO_NAO_CONFIGURADO');
   });
+
+  const baseline = {
+    compliance: [{ status: 'COMPLIANT' as const, actualMin: 60, resolved: null }],
+    regulatoryProfileReady: true,
+    biologicalLevel: 'NORMAL' as const,
+    operational: operationalBase,
+    environmental: environmentalBase,
+  };
+
+  it('requires evaluated rules, not merely a configured profile', () => {
+    const result = orchestrateFrmsRisk({ ...baseline, compliance: [] });
+    expect(result.complianceLevel).toBe('UNKNOWN');
+    expect(result.overallLevel).toBe('UNKNOWN');
+    expect(result.automaticApprovalAllowed).toBe(false);
+    expect(result.alerts).toContain('REGULATORY_EVALUATIONS_MISSING');
+  });
+
+  it('fails closed if biological, operational or environmental evidence is unknown', () => {
+    const unknowns = [
+      { biologicalLevel: 'UNKNOWN' as const },
+      { operational: { ...operationalBase, level: 'UNKNOWN' as const } },
+      { environmental: { ...environmentalBase, level: 'UNKNOWN' as const } },
+    ];
+    for (const partial of unknowns) {
+      const result = orchestrateFrmsRisk({ ...baseline, ...partial });
+      expect(result.overallLevel).toBe('UNKNOWN');
+      expect(result.automaticApprovalAllowed).toBe(false);
+    }
+  });
+
+  it('preserves known high risk instead of masking it behind unknown evidence', () => {
+    const result = orchestrateFrmsRisk({
+      ...baseline, biologicalLevel: 'UNKNOWN',
+      operational: { ...operationalBase, level: 'HIGH' },
+    });
+    expect(result.overallLevel).toBe('HIGH');
+    expect(result.automaticApprovalAllowed).toBe(false);
+    expect(result.alerts).toContain('BIOLOGICAL_EVIDENCE_MISSING');
+  });
+
+  it('requires complete source quality, preserving the complete-evidence path', () => {
+    expect(orchestrateFrmsRisk(baseline).automaticApprovalAllowed).toBe(true);
+    const partial = orchestrateFrmsRisk({
+      ...baseline, environmental: { ...environmentalBase, dataQuality: 'PARTIAL' },
+    });
+    expect(partial.automaticApprovalAllowed).toBe(false);
+    expect(partial.alerts).toContain('ENVIRONMENTAL_DATA_LOW_CONFIDENCE');
+  });
+
+  it('never allows automatic approval for elevated or high observed risk', () => {
+    for (const level of ['MODERATE', 'HIGH'] as const) {
+      const result = orchestrateFrmsRisk({
+        ...baseline, operational: { ...operationalBase, level },
+      });
+      expect(result.overallLevel).toBe(level === 'MODERATE' ? 'ELEVATED' : 'HIGH');
+      expect(result.automaticApprovalAllowed).toBe(false);
+    }
+  });
 });
