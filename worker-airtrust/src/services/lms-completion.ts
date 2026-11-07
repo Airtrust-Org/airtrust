@@ -143,18 +143,23 @@ async function ensureEadCertificateAfterCompletion(
  * changes enrollment status, progress or qualification, never creates a
  * qualification, and never throws (the caller response must not change).
  */
-export async function recoverEadCertificateForCompletedMatricula(params: {
-  db: D1Database;
-  env?: Env;
-  empresaId: number;
-  matriculaId: number;
-  funcionarioId: number;
-  qualificacaoTipoId: number | null;
-  qualificacaoHistoricoId: number | null;
-  actorUserId?: number;
-}): Promise<void> {
-  const { db, empresaId, funcionarioId, qualificacaoTipoId, qualificacaoHistoricoId } = params;
-  if (!qualificacaoTipoId || !qualificacaoHistoricoId) return;
+export async function recoverEadCertificateForCompletedMatricula(
+  db: D1Database,
+  env: Env | undefined,
+  empresaId: number,
+  matricula: {
+    id: number;
+    funcionario_id: number;
+    gerar_qualificacao_ao_concluir: number;
+    qualificacao_tipo_id: number | null;
+    qualificacao_historico_id: number | null;
+  },
+  actorUserId?: number,
+): Promise<void> {
+  const funcionarioId = matricula.funcionario_id;
+  const qualificacaoTipoId = matricula.qualificacao_tipo_id;
+  const qualificacaoHistoricoId = matricula.qualificacao_historico_id;
+  if (matricula.gerar_qualificacao_ao_concluir !== 1 || !qualificacaoTipoId || !qualificacaoHistoricoId) return;
   try {
     const historico = await db
       .prepare(
@@ -177,10 +182,10 @@ export async function recoverEadCertificateForCompletedMatricula(params: {
     const category = await requireActiveQualificationCategoryById(db, empresaId, type.categoria_id);
     await ensureEadCertificateAfterCompletion(
       {
-        env: params.env,
+        env,
         empresaId,
-        matriculaId: params.matriculaId,
-        actorUserId: params.actorUserId,
+        matriculaId: matricula.id,
+        actorUserId,
       } as CompleteLmsMatriculaParams,
       category,
       historico.id,
@@ -189,7 +194,7 @@ export async function recoverEadCertificateForCompletedMatricula(params: {
     console.error(JSON.stringify({
       event: 'LMS_EAD_CERTIFICATE_RECOVERY_FAILED',
       empresa_id: empresaId,
-      matricula_id: params.matriculaId,
+      matricula_id: matricula.id,
       qualificacao_historico_id: qualificacaoHistoricoId,
     }));
   }

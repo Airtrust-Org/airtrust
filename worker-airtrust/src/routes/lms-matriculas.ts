@@ -14,11 +14,7 @@ import { auth } from '../middleware/auth';
 import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
-import {
-  completeLmsMatricula,
-  LmsCompletionRejectedError,
-  recoverEadCertificateForCompletedMatricula,
-} from '../services/lms-completion';
+import { completeLmsMatricula, LmsCompletionRejectedError, recoverEadCertificateForCompletedMatricula } from '../services/lms-completion';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
@@ -1802,20 +1798,7 @@ app.post('/:id/finalizar', async (c) => {
     scorm: scormAtual,
   });
   if (matricula.status === 'CONCLUIDO') {
-    // Idempotent resend: heal a missing certificate (post-commit step) without
-    // changing the completed enrollment or its qualification.
-    if (matricula.gerar_qualificacao_ao_concluir === 1) {
-      await recoverEadCertificateForCompletedMatricula({
-        db,
-        env: c.env,
-        empresaId,
-        matriculaId,
-        funcionarioId: matricula.funcionario_id,
-        qualificacaoTipoId: matricula.qualificacao_tipo_id,
-        qualificacaoHistoricoId: matricula.qualificacao_historico_id,
-        actorUserId: getCallerUserId(c),
-      });
-    }
+    await recoverEadCertificateForCompletedMatricula(db, c.env, empresaId, matricula, getCallerUserId(c));
     return c.json({
       success: true,
       data: {
