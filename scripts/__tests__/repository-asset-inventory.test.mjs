@@ -37,6 +37,16 @@ test('reports exact duplicates and direct manifest references without delete aut
   }]);
   assert.equal(report.categories.media.files, 2);
   assert.equal(report.categories.scorm_content.files, 3);
+  const uniquePdf = report.assets.find((entry) => entry.path === 'docs/guide.pdf');
+  assert.deepEqual(uniquePdf, {
+    gitBlobSha1: THIRD,
+    path: 'docs/guide.pdf',
+    bytes: 100,
+    categories: ['pdf'],
+    directManifestReference: false,
+    referenceStatus: 'runtime-reference-not-audited',
+    safeToDelete: false,
+  });
   assert.equal(report.duplicateGroups.length, 1);
   assert.equal(report.duplicateGroups[0].gitBlobSha1, SHA);
   assert.equal(report.duplicateGroups[0].paths[0].directManifestReference, true);

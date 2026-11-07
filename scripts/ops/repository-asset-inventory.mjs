@@ -35,6 +35,7 @@ export function summarizeAssets(entries, manifests = []) {
     'scorm_content', 'scorm_archive', 'pdf', 'powerpoint', 'image', 'media', 'source_map',
   ].map((category) => [category, { files: 0, bytes: 0 }]));
   const duplicateCandidates = new Map();
+  const assets = [];
   const tracked = new Set(entries.map((entry) => entry.path));
   const manifestPaths = new Set();
   const manifestIssues = findManifestPathIssues(
@@ -51,8 +52,8 @@ export function summarizeAssets(entries, manifests = []) {
       row.files++;
       row.bytes += entry.bytes;
     }
-    const group = duplicateCandidates.get(entry.gitBlobSha1) || [];
-    group.push({
+    const asset = {
+      gitBlobSha1: entry.gitBlobSha1,
       path: entry.path,
       bytes: entry.bytes,
       categories,
@@ -61,7 +62,10 @@ export function summarizeAssets(entries, manifests = []) {
         ? (manifestPaths.has(entry.path) ? 'manifest-referenced' : 'manifest-not-referenced; runtime-reference-unknown')
         : 'runtime-reference-not-audited',
       safeToDelete: false,
-    });
+    };
+    assets.push(asset);
+    const group = duplicateCandidates.get(entry.gitBlobSha1) || [];
+    group.push(asset);
     duplicateCandidates.set(entry.gitBlobSha1, group);
   }
   const duplicateGroups = [...duplicateCandidates]
@@ -79,6 +83,7 @@ export function summarizeAssets(entries, manifests = []) {
     trackedFiles: entries.length,
     hashFormat: 'Git blob SHA-1 object ID (exact tracked blob identity)',
     categories: Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b))),
+    assets,
     scormManifests: manifests.length,
     missingManifestReferences: manifestIssues.missingManifestReferences,
     encodedLiteralManifestReferences: manifestIssues.encodedLiteralManifestReferences,
@@ -91,18 +96,19 @@ export function summarizeAssets(entries, manifests = []) {
 }
 
 export function scanRepository() {
-  const entries = parseTree(execFileSync('git', ['ls-tree', '-r', '-l', '-z', 'HEAD'], {
+  const ref = process.env.ASSET_INVENTORY_REF || 'HEAD';
+  const entries = parseTree(execFileSync('git', ['ls-tree', '-r', '-l', '-z', ref], {
     cwd: ROOT, maxBuffer: 64 * 1024 * 1024,
   }));
   const manifests = entries.filter(({ path: file }) =>
     file.startsWith(EAD_ROOT) && file.toLowerCase().endsWith('/imsmanifest.xml'))
     .map(({ path: file }) => ({
       file,
-      xml: execFileSync('git', ['show', 'HEAD:' + file], {
+      xml: execFileSync('git', ['show', ref + ':' + file], {
         cwd: ROOT, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
       }),
     }));
-  return { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim(),
+  return { sourceSha: execFileSync('git', ['rev-parse', ref], { cwd: ROOT, encoding: 'utf8' }).trim(),
     ...summarizeAssets(entries, manifests) };
 }
 
