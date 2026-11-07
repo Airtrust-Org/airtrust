@@ -97,10 +97,10 @@ vi.mock('../OperationalVigilanceTest', () => ({
       completedRef.current = true;
       onComplete({
         summary: {
-          protocolVersion: 'airtrust-vigilance-v1',
-          durationMs: 180000,
-          completedTrials: 1,
-          validResponses: 1,
+          protocolVersion: 'airtrust-brief-v1',
+          durationMs: 60000,
+          completedTrials: 10,
+          validResponses: 10,
           medianReactionTimeMs: 280,
           meanReactionTimeMs: 280,
           p90ReactionTimeMs: 280,
@@ -111,16 +111,14 @@ vi.mock('../OperationalVigilanceTest', () => ({
           responseSpeedPerSecond: 3.571,
           trials: [],
         },
-        trials: [
-          {
-            sequence: 1,
-            scheduledAtMs: 1000,
-            stimulusAtMs: 1100,
-            responseAtMs: 1380,
-            reactionTimeMs: 280,
-            outcome: 'response',
-          },
-        ],
+        trials: Array.from({ length: 10 }, (_, index) => ({
+          sequence: index + 1,
+          scheduledAtMs: index * 5000 + 1000,
+          stimulusAtMs: index * 5000 + 1100,
+          responseAtMs: index * 5000 + 1380,
+          reactionTimeMs: 280,
+          outcome: 'response' as const,
+        })),
       });
     }, [onComplete]);
     return <div data-testid="mock-vigilance-test">Teste cognitivo simulado</div>;
@@ -722,8 +720,9 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
     const readinessPayload = payload.readiness as Record<string, unknown>;
-    expect(readinessPayload.duration_ms).toBe(180000);
-    expect(readinessPayload.trials).toHaveLength(1);
+    expect(readinessPayload.duration_ms).toBe(60000);
+    expect(readinessPayload.protocol_version).toBe('airtrust-brief-v1');
+    expect(readinessPayload.trials).toHaveLength(10);
 
     expect(payload.kss_score).toBe(3);
     expect(payload.horas_sono_24h).toBe(8);
