@@ -48,7 +48,7 @@ describe('Prova final do aluno', () => {
   it('matrícula concluída permite solicitar recuperação do certificado sem reabrir a prova', async () => {
     mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
     renderPage();
-    const button = await screen.findByRole('button', { name: 'Verificar emissão do certificado' });
+    const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
     expect(screen.queryByRole('button', { name: /Iniciar prova|Concluir treinamento/ })).toBeNull();
     mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
     fireEvent.click(button);
@@ -60,7 +60,7 @@ describe('Prova final do aluno', () => {
   it('falha no reenvio do certificado não afirma que o treinamento deixou de estar concluído', async () => {
     mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
     renderPage();
-    const button = await screen.findByRole('button', { name: 'Verificar emissão do certificado' });
+    const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
     mocked.mockResolvedValueOnce(fail('ERROR', 500));
     fireEvent.click(button);
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/nova tentativa de emissão do certificado/));
