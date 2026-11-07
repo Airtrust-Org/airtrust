@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
   isFadigaCheckinSubmitReady,
@@ -475,16 +475,27 @@ describe('FrmsCheckinFadiga UI', () => {
     }
   });
 
-  it('impede que um formulário aberto antes da meia-noite envie silenciosamente no dia anterior', () => {
+  it('preserva o dia de abertura e bloqueia PVT e rascunho antigos após meia-noite e tick do relógio', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-10-28T02:59:00Z')); // 27/10 23:59 Brasília
       render(<FrmsCheckinFadiga />);
       preencherFormularioValido();
       fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
+
       vi.setSystemTime(new Date('2026-10-28T03:01:00Z')); // 28/10 00:01 Brasília
-      fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
+      act(() => vi.advanceTimersByTime(15_001));
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
+      expect(screen.getByText(/A data operacional mudou enquanto o formulário estava aberto/i)).toBeInTheDocument();
+      const staleButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
+      expect(staleButton).toBeDisabled();
+      fireEvent.click(staleButton);
       expect(mutateAsyncMock).not.toHaveBeenCalled();
+
+      // Yesterday's answers/PVT are not silently transferred into today's draft.
+      const nextDayDraftKey = 'frms-checkin-draft:101:6:2026-10-28';
+      expect(window.sessionStorage.getItem(nextDayDraftKey)).toBeNull();
     } finally {
       vi.useRealTimers();
     }
