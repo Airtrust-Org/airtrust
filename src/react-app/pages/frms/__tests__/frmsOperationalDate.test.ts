@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { frmsBrazilOperationalTodayIso, localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from '../frmsOperationalDate';
+import { frmsBrazilOperationalTodayIso, isAtOrAfterFrmsPresentationBrasilia, localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from '../frmsOperationalDate';
 
 describe('FRMS operational date', () => {
   it('usa o dia operacional do Brasil, sem antecipar a virada UTC', () => {
     expect(frmsBrazilOperationalTodayIso(new Date('2026-10-13T01:30:00Z'))).toBe('2026-10-12');
     expect(frmsBrazilOperationalTodayIso(new Date('2026-10-13T03:30:00Z'))).toBe('2026-10-13');
+  });
+
+  it('classifica o teste tardio pelo horário de Brasília e não pelo fuso do telefone', () => {
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-07T09:59:59Z'), '07:00')).toBe(false);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-07T10:00:00Z'), '07:00')).toBe(true);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-07T15:13:00Z'), '07:00')).toBe(true);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-08T02:58:00Z'), '23:59')).toBe(false);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-08T02:59:00Z'), '23:59')).toBe(true);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date(NaN), '07:00')).toBe(true);
+    expect(isAtOrAfterFrmsPresentationBrasilia(new Date('2026-11-07T09:00:00Z'), '25:00')).toBe(true);
   });
 
   it('não depende do fuso horário do dispositivo', () => {
