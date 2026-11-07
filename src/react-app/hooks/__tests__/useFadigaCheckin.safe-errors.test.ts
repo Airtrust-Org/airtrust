@@ -39,6 +39,17 @@ describe('flight fatigue visible errors', () => {
     expect([past, outdated].join(' ')).not.toMatch(/readiness_not_allowed|invalid_readiness_protocol/);
   });
 
+  it('não orienta a alterar hora de apresentação quando o servidor discorda do relógio', () => {
+    const message = safeFadigaVisibleErrorMessage(
+      'daily-checkin-submit',
+      new Error('late_submission_not_confirmed_by_server'),
+    );
+    expect(message).toMatch(/relógio operacional do servidor/i);
+    expect(message).toMatch(/check-in não foi registrado/i);
+    expect(message).toMatch(/não altere o horário de apresentação/i);
+    expect(message).not.toContain('late_submission_not_confirmed_by_server');
+  });
+
   it('informa que a gravação ocorreu quando somente o pós-processamento falhou', () => {
     const message = safeFadigaVisibleErrorMessage(
       'daily-checkin-submit',
