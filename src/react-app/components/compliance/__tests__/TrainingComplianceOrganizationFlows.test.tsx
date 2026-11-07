@@ -433,4 +433,47 @@ describe('Training enrollment reconciliation', () => {
     expect(toastMock.success).toHaveBeenCalled();
   });
 
+  it('exibe alerta de estado degradado, mensagens distintas de vazio e bloqueia ações em lote quando meta.degraded for verdadeiro', async () => {
+    fetchWithAuthMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/compliance-treinamentos/reconciliacao')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              resumo: {
+                matriculas_ativas: 0,
+                matriculas_alinhadas: 0,
+                requisitos_sem_matricula: 0,
+                gaps_matricula_acionaveis: 0,
+                matriculados_sem_requisito: 0,
+                nao_aplica_matriculados: 0,
+                cursos_sem_modelo: 0,
+                matriculas_avulsas_reconciliadas: 0,
+              },
+              gaps_matricula: [],
+              matriculas_revisao: [],
+              convites_matricula: [],
+              meta: { reconciliation_ready: false, degraded: true },
+            },
+            meta: { reconciliation_ready: false, degraded: true },
+          }),
+        } as unknown as Response;
+      }
+      return { ok: true, json: async () => ({ success: true }) } as unknown as Response;
+    });
+
+    renderWithClient(<TrainingEnrollmentReconciliation setorId={3} funcaoId={9} />);
+    await screen.findByRole('alert');
+    expect(screen.getByText('Diagnóstico de reconciliação em modo degradado')).toBeInTheDocument();
+    expect(screen.getByText(/Gaps de matrícula indisponíveis temporariamente/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum gap de matrícula acionável.')).not.toBeInTheDocument();
+
+    const analisarBtn = screen.getByRole('button', { name: /Analisar matrículas pendentes/i });
+    expect(analisarBtn).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Revisar/ }));
+    expect(screen.getByText(/Matrículas para revisão indisponíveis temporariamente/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma matrícula pendente de revisão.')).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,6 @@
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
 
 type SnapshotPerson = {
   setor_id: number | null;
@@ -29,10 +31,7 @@ export type ComplianceDailySnapshot = {
 };
 
 async function snapshotTableExists(db: D1Database): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='training_compliance_daily_snapshots' LIMIT 1")
-    .first<{ ok: number }>();
-  return Boolean(row?.ok);
+  return hasSchemaTable(db, 'training_compliance_daily_snapshots');
 }
 
 function aggregate(
@@ -147,36 +146,38 @@ export async function readTrainingComplianceTrend(
   if (!scopes.length) return { ready: true, data: [] };
   const scopeSql = scopes.map(() => '(setor_id = ? AND funcao_id = ?)').join(' OR ');
   const scopeBindings = scopes.flatMap((scope) => [scope.setor_id, scope.funcao_id]);
-  const rows = await db
-    .prepare(
-      `SELECT snapshot_date,
-              SUM(pessoas) AS pessoas,
-              SUM(pessoas_com_pendencia) AS pessoas_com_pendencia,
-              SUM(requisitos_obrigatorios) AS requisitos_obrigatorios,
-              SUM(conformes) AS conformes,
-              SUM(vencendo) AS vencendo,
-              SUM(vencidos) AS vencidos,
-              SUM(nao_realizados) AS nao_realizados,
-              SUM(em_andamento) AS em_andamento
-         FROM training_compliance_daily_snapshots
-        WHERE empresa_id = ?
-          AND (${scopeSql})
-          AND snapshot_date >= date('now', ?)
-        GROUP BY snapshot_date
-        ORDER BY snapshot_date ASC`,
-    )
-    .bind(empresaId, ...scopeBindings, `-${boundedDays - 1} days`)
-    .all<{
-      snapshot_date: string;
-      pessoas: number;
-      pessoas_com_pendencia: number;
-      requisitos_obrigatorios: number;
-      conformes: number;
-      vencendo: number;
-      vencidos: number;
-      nao_realizados: number;
-      em_andamento: number;
-    }>();
+  const rows = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT snapshot_date,
+                SUM(pessoas) AS pessoas,
+                SUM(pessoas_com_pendencia) AS pessoas_com_pendencia,
+                SUM(requisitos_obrigatorios) AS requisitos_obrigatorios,
+                SUM(conformes) AS conformes,
+                SUM(vencendo) AS vencendo,
+                SUM(vencidos) AS vencidos,
+                SUM(nao_realizados) AS nao_realizados,
+                SUM(em_andamento) AS em_andamento
+           FROM training_compliance_daily_snapshots
+          WHERE empresa_id = ?
+            AND (${scopeSql})
+            AND snapshot_date >= date('now', ?)
+          GROUP BY snapshot_date
+          ORDER BY snapshot_date ASC`,
+      )
+      .bind(empresaId, ...scopeBindings, `-${boundedDays - 1} days`)
+      .all<{
+        snapshot_date: string;
+        pessoas: number;
+        pessoas_com_pendencia: number;
+        requisitos_obrigatorios: number;
+        conformes: number;
+        vencendo: number;
+        vencidos: number;
+        nao_realizados: number;
+        em_andamento: number;
+      }>(),
+  );
   const data = (rows.results || []).map((row) => ({
     ...row,
     setor_id: scopes.length === 1 ? scopes[0].setor_id : -1,

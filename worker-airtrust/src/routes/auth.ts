@@ -15,7 +15,7 @@ import {
   verifyJWT,
 } from '../utils/security';
 import { badRequest, forbidden, internalError, unauthorized } from '../middleware/error-handler';
-import { auth } from '../middleware/auth';
+import { auth, invalidateJtiCache } from '../middleware/auth';
 import { rateLimiter, rateLimitPresets } from '../middleware/rate-limit';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { createLogger, toError } from '../utils/logger';
@@ -392,6 +392,8 @@ async function blocklistAccessTokenJti(
   accessTokenJti: string | null | undefined,
 ): Promise<void> {
   if (!accessTokenJti) return;
+
+  invalidateJtiCache(accessTokenJti);
 
   await db
     .prepare(

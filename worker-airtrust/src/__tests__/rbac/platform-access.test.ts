@@ -4,8 +4,15 @@ import {
   canStartSupportReadOnlySession,
   isPlatformAdminAccess,
   resolvePlatformAccessState,
+  resetPlatformAccessCache,
+  getPlatformAccessCacheSize,
 } from '../../lib/rbac/platform-access';
 import { resetSchemaCache } from '../../utils/db-schema';
+
+beforeEach(() => {
+  resetSchemaCache();
+  resetPlatformAccessCache();
+});
 
 function createDb(options: {
   hasPlatformRolesTable?: boolean;
@@ -14,6 +21,7 @@ function createDb(options: {
   grants?: Array<{ empresa_id: number; access_level: 'read_only' | 'elevated' }>;
   roleReadFailures?: number;
   roleReadError?: string;
+  asyncDelayMs?: number;
 } = {}) {
   const {
     hasPlatformRolesTable = true,
@@ -22,12 +30,20 @@ function createDb(options: {
     grants = [],
     roleReadFailures = 0,
     roleReadError = 'D1_ERROR: SQLITE_BUSY: database is locked',
+    asyncDelayMs = 0,
   } = options;
   let failuresLeft = roleReadFailures;
+
+  const waitAsync = async () => {
+    if (asyncDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, asyncDelayMs));
+    }
+  };
 
   const prepare = vi.fn((query: string) => ({
     bind: vi.fn((...args: unknown[]) => ({
       first: vi.fn(async () => {
+        await waitAsync();
         if (query.includes('sqlite_master') && args[0] === 'user_platform_roles') {
           return { found: hasPlatformRolesTable ? 1 : 0 };
         }
@@ -37,6 +53,7 @@ function createDb(options: {
         return null;
       }),
       all: vi.fn(async () => {
+        await waitAsync();
         if (query.includes('FROM user_platform_roles')) {
           if (failuresLeft > 0) {
             failuresLeft -= 1;
@@ -144,6 +161,18 @@ describe('platform access foundation', () => {
       String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
   });
 
+  it('repete e recupera de erros D1_EXEC_ERROR 503 e connection lost preservando fail-closed', async () => {
+    const { db, prepare } = createDb({
+      roles: ['platform_admin'],
+      roleReadFailures: 1,
+      roleReadError: 'D1_EXEC_ERROR: Error in D1: 503 Service Unavailable',
+    });
+    const state = await resolvePlatformAccessState(db, 44);
+    expect(state.hasPersistedPlatformAdmin).toBe(true);
+    expect(prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+  });
+
   it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
     const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 2 });
     await expect(resolvePlatformAccessState(transient.db, 44)).rejects.toThrow('SQLITE_BUSY');
@@ -155,5 +184,29 @@ describe('platform access foundation', () => {
     await expect(resolvePlatformAccessState(schema.db, 44)).rejects.toThrow('no such column');
     expect(schema.prepare.mock.calls.filter(([query]) =>
       String(query).includes('FROM user_platform_roles'))).toHaveLength(1);
+  });
+
+  it('coalesce rajadas concorrentes em uma única consulta e revalida chamadas sequenciais (Issue #2014)', async () => {
+    const { db, prepare } = createDb({ roles: ['platform_admin'], asyncDelayMs: 10 });
+
+    // Rajadas concorrentes na mesma instância coalescem na mesma Promise (sem rajadas redundantes)
+    const [state1, state2] = await Promise.all([
+      resolvePlatformAccessState(db, 44),
+      resolvePlatformAccessState(db, 44),
+    ]);
+    expect(state1.hasPersistedPlatformAdmin).toBe(true);
+    expect(state2.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsFirst = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsFirst).toBe(1);
+
+    // Chamadas subsequentes revalidam contra o D1 imediatamente (sem janela obsoleta de 60s)
+    const state3 = await resolvePlatformAccessState(db, 44);
+    expect(state3.hasPersistedPlatformAdmin).toBe(true);
+
+    const callsSecond = prepare.mock.calls.filter(([query]) =>
+      String(query).includes('FROM user_platform_roles')).length;
+    expect(callsSecond).toBe(2);
   });
 });

@@ -20,7 +20,16 @@ import {
   resolveRequestedSessionRole,
 } from '../services/auth-session-roles';
 import { unauthorized, serviceUnavailable } from './error-handler';
-import { isPlatformAdminAccess, resolvePlatformAccessState, type PlatformAccessState } from '../lib/rbac/platform-access';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+  type PlatformAccessState,
+  resetPlatformAccessCache,
+  invalidatePlatformAccessCache,
+} from '../lib/rbac/platform-access';
+import { isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
+
+export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 
@@ -32,7 +41,7 @@ function isDevAuthBypassEnabled(env: Env): boolean {
 }
 
 async function hasTable(db: D1Database, sql: string): Promise<boolean> {
-  const result = await db.prepare(sql).first<{ found: number }>();
+  const result = await withD1Retry(() => db.prepare(sql).first<{ found: number }>());
   return Boolean(result?.found);
 }
 
@@ -57,46 +66,41 @@ async function resolveEffectiveUserRole(
   if (!Number.isFinite(eid) || eid <= 0) return fallback;
   if (!(await hasUsuariosEmpresasTable(db))) return fallback;
 
-  const roleRow = await db
-    .prepare(
-      `
-      SELECT ue.role, u.perfil
-      FROM usuarios u
-      LEFT JOIN usuarios_empresas ue
-        ON ue.usuario_id = u.id
-       AND ue.empresa_id = ?
-      WHERE u.id = ?
-        AND u.deleted_at IS NULL
-      LIMIT 1
-    `,
-    )
-    .bind(eid, uid)
-    .first<{ role: string | null; perfil: string | null }>();
+  const roleRow = await withD1Retry(() =>
+    db
+      .prepare(
+        `
+        SELECT ue.role, u.perfil
+        FROM usuarios u
+        LEFT JOIN usuarios_empresas ue
+          ON ue.usuario_id = u.id
+         AND ue.empresa_id = ?
+        WHERE u.id = ?
+          AND u.deleted_at IS NULL
+        LIMIT 1
+      `,
+      )
+      .bind(eid, uid)
+      .first<{ role: string | null; perfil: string | null }>(),
+  );
 
   return normalizeRuntimeRole(roleRow?.role || roleRow?.perfil || fallback);
 }
 
-/**
- * Executa uma leitura no D1 com retry limitado para absorver falhas transitórias
- * de RPC/rede na Edge Cloudflare. Estritamente fail-closed: se as tentativas
- * esgotarem, a exceção é propagada e o middleware retorna 503 normalmente.
- */
-export async function withD1Retry<T>(
-  operation: () => Promise<T>,
-  maxAttempts = 3,
-  initialBackoffMs = 40,
-): Promise<T> {
-  let attempt = 0;
-  while (true) {
-    try {
-      return await operation();
-    } catch (err) {
-      attempt += 1;
-      if (attempt >= maxAttempts) throw err;
-      const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 20;
-      await new Promise((resolve) => setTimeout(resolve, backoff));
-    }
-  }
+// In-flight dedup map para consultas de blocklist (evita rajadas redundantes no D1 sob requisições concorrentes)
+// Sem manter cache positivo estático de 60s que causaria janela de revogação obsoleta entre múltiplos isolates (Issue #2014)
+const _inFlightJtiChecks = new Map<string, Promise<boolean>>();
+
+export function resetBlocklistCache(): void {
+  _inFlightJtiChecks.clear();
+}
+
+export function invalidateJtiCache(jti: string): void {
+  _inFlightJtiChecks.delete(jti);
+}
+
+export function getValidJtiCacheSize(): number {
+  return _inFlightJtiChecks.size;
 }
 
 /**
@@ -104,15 +108,34 @@ export async function withD1Retry<T>(
  * Fail-closed: qualquer erro de leitura é propagado (não engolido), para que
  * o chamador decida como reagir — o caller MANDATÓRIO (auth()) deve tratar
  * como falha de infraestrutura (503), nunca como "não bloqueado".
+ * Revalidação mutável crítica contra D1 imediata em cada requisição,
+ * coalescendo apenas requisições em trânsito simultâneas (rajadas concorrentes).
  */
-async function isJtiBlocklisted(db: D1Database, jti: string): Promise<boolean> {
-  const row = await withD1Retry(() =>
-    db
-      .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-      .bind(jti)
-      .first(),
-  );
-  return Boolean(row);
+async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
+  const inFlight = _inFlightJtiChecks.get(jti);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = (async () => {
+    try {
+      const row = await withD1Retry(
+        () =>
+          db
+            .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
+            .bind(jti)
+            .first(),
+        7,
+        80,
+      );
+      return Boolean(row);
+    } finally {
+      _inFlightJtiChecks.delete(jti);
+    }
+  })();
+
+  _inFlightJtiChecks.set(jti, promise);
+  return promise;
 }
 
 type UserSecurityState = {
@@ -121,6 +144,27 @@ type UserSecurityState = {
   role: string;
   hasMembership: boolean;
 };
+
+// In-flight dedup map para consultas de user security (evita rajadas redundantes no D1 sob requisições concorrentes)
+// Revalidação mutável crítica garante que desativação ou remoção de tenant tenha efeito imediato entre todos os isolates (Issue #2014)
+const _inFlightUserSecurityChecks = new Map<string, Promise<UserSecurityState>>();
+
+export function resetUserSecurityCache(): void {
+  _inFlightUserSecurityChecks.clear();
+}
+
+export function invalidateUserSecurityCache(userId: number): void {
+  const prefix = `${userId}:`;
+  for (const key of _inFlightUserSecurityChecks.keys()) {
+    if (key.startsWith(prefix) || key === String(userId)) {
+      _inFlightUserSecurityChecks.delete(key);
+    }
+  }
+}
+
+export function getUserSecurityCacheSize(): number {
+  return _inFlightUserSecurityChecks.size;
+}
 
 /**
  * Resolve o estado de segurança do usuário autenticado: se a conta ainda
@@ -144,44 +188,61 @@ async function resolveUserSecurityState(
     return { found: false, active: false, role: fallback, hasMembership: false };
   }
 
-  const { activeWhere } = await getUsuariosSchema(db);
-  const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
-
-  const row = await withD1Retry(() =>
-    scoped
-      ? db
-          .prepare(
-            `
-            SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
-            FROM usuarios u
-            LEFT JOIN usuarios_empresas ue
-              ON ue.usuario_id = u.id AND ue.empresa_id = ?
-            WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
-            LIMIT 1
-          `,
-          )
-          .bind(eid, uid)
-          .first<{ id: number; perfil: string | null; role: string | null }>()
-      : db
-          .prepare(
-            `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
-          )
-          .bind(uid)
-          .first<{ id: number; perfil: string | null; role: string | null }>(),
-  );
-
-  if (!row) {
-    return { found: false, active: false, role: fallback, hasMembership: false };
+  const cacheKey = `${uid}:${eid}`;
+  const inFlight = _inFlightUserSecurityChecks.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const hasMembership = scoped ? Boolean(row.role) : true;
+  const promise = (async () => {
+    try {
+      const { activeWhere } = await getUsuariosSchema(db);
+      const scoped = eid > 0 && (await hasUsuariosEmpresasTable(db));
 
-  return {
-    found: true,
-    active: true,
-    role: normalizeRuntimeRole(row.role || row.perfil || fallback),
-    hasMembership,
-  };
+      const row = await withD1Retry(
+        () =>
+          scoped
+            ? db
+                .prepare(
+                  `
+                  SELECT u.id AS id, u.perfil AS perfil, ue.role AS role
+                  FROM usuarios u
+                  LEFT JOIN usuarios_empresas ue
+                    ON ue.usuario_id = u.id AND ue.empresa_id = ?
+                  WHERE u.id = ? AND u.deleted_at IS NULL ${activeWhere}
+                  LIMIT 1
+                `,
+                )
+                .bind(eid, uid)
+                .first<{ id: number; perfil: string | null; role: string | null }>()
+            : db
+                .prepare(
+                  `SELECT id AS id, perfil AS perfil, NULL AS role FROM usuarios WHERE id = ? AND deleted_at IS NULL ${activeWhere} LIMIT 1`,
+                )
+                .bind(uid)
+                .first<{ id: number; perfil: string | null; role: string | null }>(),
+        6,
+        80,
+      );
+
+      if (!row) {
+        return { found: false, active: false, role: fallback, hasMembership: false };
+      }
+
+      const hasMembership = scoped ? Boolean(row.role) : true;
+      return {
+        found: true,
+        active: true,
+        role: normalizeRuntimeRole(row.role || row.perfil || fallback),
+        hasMembership,
+      };
+    } finally {
+      _inFlightUserSecurityChecks.delete(cacheKey);
+    }
+  })();
+
+  _inFlightUserSecurityChecks.set(cacheKey, promise);
+  return promise;
 }
 
 export type AccessTokenSecurityState = {
@@ -206,7 +267,7 @@ export async function validateAccessTokenSecurityState(
   if (payload.jti) {
     let blocked: boolean;
     try {
-      blocked = await isJtiBlocklisted(db, payload.jti);
+      blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
     } catch (e) {
       console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
       return serviceUnavailable(
@@ -248,8 +309,10 @@ export async function validateAccessTokenSecurityState(
   let platformAdmin = false;
   let platformAccessState: PlatformAccessState | undefined;
   try {
-    platformAccessState = await withD1Retry(() =>
-      resolvePlatformAccessState(db, payload.sub),
+    platformAccessState = await withD1Retry(
+      () => resolvePlatformAccessState(db, payload.sub),
+      7,
+      80,
     );
     platformAdmin = isPlatformAdminAccess(platformAccessState);
   } catch (e) {
@@ -303,9 +366,10 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
   const usuariosExists = await hasTable(db, USUARIOS_TABLE_SQL);
 
   if (usuariosExists) {
-    const fallbackEmpresa = await db
-      .prepare(
-        `
+    const fallbackEmpresa = await withD1Retry(() =>
+      db
+        .prepare(
+          `
         SELECT COALESCE(f.empresa_id, e.id) AS empresa_id
         FROM usuarios u
         LEFT JOIN funcionarios f ON f.id = u.funcionario_id AND f.deleted_at IS NULL
@@ -320,18 +384,20 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
           COALESCE(f.empresa_id, e.id) ASC
         LIMIT 1
       `,
-      )
-      .bind(userId)
-      .first<{ empresa_id: number }>();
+        )
+        .bind(userId)
+        .first<{ empresa_id: number }>(),
+    );
 
     if (fallbackEmpresa?.empresa_id) {
       return fallbackEmpresa.empresa_id;
     }
   }
 
-  const empresaAtiva = await db
-    .prepare(
-      `
+  const empresaAtiva = await withD1Retry(() =>
+    db
+      .prepare(
+        `
       SELECT e.id AS empresa_id
       FROM empresas e
       WHERE e.deleted_at IS NULL
@@ -344,8 +410,9 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
         e.id ASC
       LIMIT 1
     `,
-    )
-    .first<{ empresa_id: number }>();
+      )
+      .first<{ empresa_id: number }>(),
+  );
 
   return empresaAtiva?.empresa_id ?? null;
 }
@@ -533,6 +600,15 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       c.set('userRole', identity.role);
       c.set('funcionarioId', identity.funcionarioId);
       return next();
+    }
+
+    // ===================== REUSO DE SESSÃO JÁ AUTENTICADA NESTA REQUISIÇÃO =====================
+    // Se a requisição já foi autenticada neste ciclo de middleware (ex: middleware global em index.ts),
+    // reaproveitar o contexto já validado para evitar consultas redundantes ao D1.
+    const existingUserId = c.get('userId');
+    if (existingUserId) {
+      await next();
+      return;
     }
 
     // ===================== AUTENTICAÇÃO JWT REAL =====================

@@ -1,3 +1,6 @@
+import { hasSchemaTable } from '../utils/db-schema';
+import { withD1Retry } from '../utils/d1-resilience';
+
 export const TRAINING_COMPLIANCE_SCOPES = [
   'EMPRESA',
   'SETOR',
@@ -215,21 +218,19 @@ export function trainingComplianceRuleApplicabilitySql(
 export async function hydrateTrainingComplianceConditions<
   T extends TrainingComplianceEmployeeShape,
 >(db: D1Database, empresaId: number, employees: T[]): Promise<T[]> {
-  const exists = await db
-    .prepare(
-      "SELECT 1 ok FROM sqlite_master WHERE type='table' AND name='funcionarios_compliance_condicoes' LIMIT 1",
-    )
-    .first<{ ok: number }>();
-  if (!exists?.ok || employees.length === 0) return employees;
-  const { results } = await db
-    .prepare(
-      `SELECT funcionario_id, condicao_id FROM funcionarios_compliance_condicoes
+  const exists = await hasSchemaTable(db, 'funcionarios_compliance_condicoes');
+  if (!exists || employees.length === 0) return employees;
+  const { results } = await withD1Retry(() =>
+    db
+      .prepare(
+        `SELECT funcionario_id, condicao_id FROM funcionarios_compliance_condicoes
       WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL
         AND (data_inicio IS NULL OR date(data_inicio)<=date('now'))
         AND (data_fim IS NULL OR date(data_fim)>=date('now'))`,
-    )
-    .bind(empresaId)
-    .all<{ funcionario_id: number; condicao_id: number }>();
+      )
+      .bind(empresaId)
+      .all<{ funcionario_id: number; condicao_id: number }>(),
+  );
   const byId = new Map(employees.map((employee) => [employee.id, employee]));
   for (const row of results || []) {
     const employee = byId.get(Number(row.funcionario_id));

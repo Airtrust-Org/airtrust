@@ -1,0 +1,67 @@
+name: AirTrust Orchestrator V1 (Read Only)
+
+on:
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, reopened, closed, labeled, unlabeled]
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+  workflow_run:
+    workflows: ['CI (fast gates)', 'CI (heavy gates)', 'Deploy AirTrust']
+    types: [completed]
+  schedule:
+    - cron: '17 10 * * *'
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: airtrust-orchestrator-readonly-v1
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    # An issue comment is an explicit status request from repository members,
+    # never a source of scripts, model instructions or production authority.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (
+        github.event.issue.number == 776 &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        ) &&
+        github.event.comment.body == '/airtrust-orchestrator status'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout trusted main (never execute PR code)
+        uses: actions/checkout@v7
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test read-only event reconciliation contract
+        run: node --test scripts/__tests__/airtrust-orchestrator-readonly.test.mjs
+      - name: Reconcile issues, PRs and runtime source without writes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AIRTRUST_ORCHESTRATOR_OUTPUT: ${{ runner.temp }}/airtrust-orchestrator-snapshot.json
+        run: node scripts/ops/airtrust-orchestrator-readonly.mjs
+      - name: Preserve sanitized evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: airtrust-orchestrator-readonly-${{ github.run_id }}
+          path: ${{ runner.temp }}/airtrust-orchestrator-snapshot.json
+          if-no-files-found: error
+          retention-days: 14

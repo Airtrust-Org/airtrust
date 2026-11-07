@@ -386,7 +386,7 @@ export async function fetchWithAuth(
       body.code === 'AUTH_USER_STATE_CHECK_UNAVAILABLE' ||
       body.code === 'PLATFORM_ACCESS_CHECK_UNAVAILABLE'
     ) {
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 120));
       return fetchWithAuth(url, options, true);
     }
   }

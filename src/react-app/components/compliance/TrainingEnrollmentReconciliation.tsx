@@ -62,16 +62,24 @@ type Reconciliation = {
     situacao: string;
     regra_efetiva: { id: number; escopo: string; obrigatoriedade: string } | null;
   }>;
+  meta?: {
+    reconciliation_ready?: boolean;
+    degraded?: boolean;
+  };
 };
 
 async function readJson<T>(response: Response): Promise<T> {
   const json = (await response.json().catch(() => ({}))) as {
     success?: boolean;
     data?: T;
+    meta?: { reconciliation_ready?: boolean; degraded?: boolean };
     error?: string;
   };
   if (!response.ok || json.success === false)
     throw new Error(json.error || 'Erro na reconciliação');
+  if (json.data && typeof json.data === 'object' && json.meta) {
+    return { ...(json.data as object), meta: json.meta } as T;
+  }
   return json.data as T;
 }
 
@@ -365,6 +373,25 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         </span>
       </div>
 
+      {data.meta?.degraded ? (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-950">
+              Diagnóstico de reconciliação em modo degradado
+            </p>
+            <p className="text-xs leading-relaxed text-amber-800">
+              Não foi possível processar a matriz completa devido a uma instabilidade temporária no banco de dados.
+              Os contadores e listas abaixo podem estar incompletos e <strong>não representam ausência de pendências</strong>.
+              Ações de sincronização e cancelamento em lote foram temporariamente desabilitadas para preservar a integridade das matrículas.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
         {(
           [
@@ -411,7 +438,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
             </p>
             {!syncPreview ? (
               <button type="button"
-                disabled={syncPending.isPending}
+                disabled={syncPending.isPending || Boolean(data.meta?.degraded)}
                 onClick={() => syncPending.mutate(false)}
                 className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
                 Analisar matrículas pendentes
@@ -422,7 +449,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                   {' '}{syncPreview.sem_curso_unico} pendência(s) sem curso EAD publicado único.</p>
                 <div className="flex flex-wrap gap-2">
                   <button type="button"
-                    disabled={syncPending.isPending || syncPreview.pendentes === 0}
+                    disabled={syncPending.isPending || syncPreview.pendentes === 0 || Boolean(data.meta?.degraded)}
                     onClick={() => syncPending.mutate(true)}
                     className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
                     Confirmar matrículas pendentes
@@ -514,7 +541,9 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                 {!data.gaps_matricula.length ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                      Nenhum gap de matrícula acionável.
+                      {data.meta?.degraded
+                        ? 'Gaps de matrícula indisponíveis temporariamente (diagnóstico em modo degradado). Tente atualizar a página.'
+                        : 'Nenhum gap de matrícula acionável.'}
                     </td>
                   </tr>
                 ) : null}
@@ -565,7 +594,9 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
             ))}
             {!data.convites_matricula?.length ? (
               <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
-                Nenhuma matrícula não iniciada disponível para convite.
+                {data.meta?.degraded
+                  ? 'Convites de matrícula indisponíveis temporariamente (diagnóstico em modo degradado). Tente atualizar a página.'
+                  : 'Nenhuma matrícula não iniciada disponível para convite.'}
               </div>
             ) : null}
           </div>
@@ -589,7 +620,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
               {!cleanupPreview ? (
                 <button
                   type="button"
-                  disabled={cleanup.isPending}
+                  disabled={cleanup.isPending || Boolean(data.meta?.degraded)}
                   onClick={() => cleanup.mutate({ ids: cleanupIds, aplicar: false })}
                   className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"
                 >
@@ -604,7 +635,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={!cleanupPreview.elegiveis.length || cleanup.isPending}
+                      disabled={!cleanupPreview.elegiveis.length || cleanup.isPending || Boolean(data.meta?.degraded)}
                       onClick={() => cleanup.mutate({
                         ids: cleanupPreview.elegiveis.map((item) => item.matricula_id),
                         aplicar: true,
@@ -744,10 +775,21 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
                 ))}
                 {!data.matriculas_revisao.length ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-emerald-700">
-                      <span className="inline-flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4" /> Nenhuma matrícula pendente de revisão.
-                      </span>
+                    <td
+                      colSpan={6}
+                      className={`px-4 py-6 text-center ${
+                        data.meta?.degraded ? 'text-amber-800' : 'text-emerald-700'
+                      }`}
+                    >
+                      {data.meta?.degraded ? (
+                        <span className="inline-flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" /> Matrículas para revisão indisponíveis temporariamente (diagnóstico em modo degradado). Tente atualizar a página.
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" /> Nenhuma matrícula pendente de revisão.
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ) : null}

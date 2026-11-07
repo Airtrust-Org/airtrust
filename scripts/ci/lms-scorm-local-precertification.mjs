@@ -4,13 +4,22 @@ import {createHash} from 'node:crypto';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {unzipSync} from 'fflate';
 
 export const LOCAL_CASES=['FIRST_ACCESS','SUSPEND_RESUME',
   'ASSESSMENT_INSUFFICIENT','ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION',
   'REOPEN_COMPLETED','NO_STATUS_DOWNGRADE'];
 
-export function summarizeLocalEvidence(zipBytes,runs){
+export function summarizeLocalEvidence(zipBytes,runs,candidate){
   const sha=createHash('sha256').update(zipBytes).digest('hex');
+  const files=unzipSync(new Uint8Array(zipBytes));
+  const manifest=files['imsmanifest.xml'];
+  if(!manifest)throw Error('ZIP_MANIFEST_MISSING');
+  const manifestSha256=createHash('sha256').update(manifest).digest('hex');
+  if(!candidate||!Number.isSafeInteger(candidate.empresaId)||candidate.empresaId<=0||
+     !Number.isSafeInteger(candidate.cursoId)||candidate.cursoId<=0||
+     !/^[a-f0-9]{40}$/.test(candidate.runtimeSha??'')||
+     candidate.manifestSha256!==manifestSha256)throw Error('CANDIDATE_PROVENANCE_INVALID');
   if(!Array.isArray(runs)||runs.length!==2)throw Error('BROWSER_COUNT_INVALID');
   for(const browser of ['CHROMIUM','WEBKIT']){
     const rows=runs.filter(r=>r?.browser===browser);
@@ -18,6 +27,9 @@ export function summarizeLocalEvidence(zipBytes,runs){
     const row=rows[0];
     if(row.source!=='LOCAL_DISPOSABLE_D1_R2_ONLY'||
        row.packageSha256!==sha)throw Error('ZIP_PROVENANCE_MISMATCH:'+browser);
+    if(row.empresaId!==candidate.empresaId||row.cursoId!==candidate.cursoId||
+       row.runtimeSha!==candidate.runtimeSha||row.manifestSha256!==manifestSha256)
+      throw Error('CANDIDATE_PROVENANCE_MISMATCH:'+browser);
     if(row.crossTenantAccess!=='PASS')throw Error('TENANT_PROBE_MISSING:'+browser);
     // No audited old-cycle rotation was exercised; never claim cycle isolation.
     if(row.cycleIsolation!=='INCONCLUSIVE')throw Error('CYCLE_SCOPE_OVERCLAIM:'+browser);
@@ -33,6 +45,8 @@ export function summarizeLocalEvidence(zipBytes,runs){
 
   }
   return {schemaVersion:1,source:'LOCAL_DISPOSABLE_ZIP_ONLY',
+    candidate:{empresaId:candidate.empresaId,cursoId:candidate.cursoId,
+      runtimeSha:candidate.runtimeSha,manifestSha256},
     packageSha256:sha,status:'UNCERTIFIED',activationAuthorized:false,
     checkedBrowsers:['CHROMIUM','WEBKIT'],passedChecks:14,
     missing:['REAL_STAGING_CANDIDATE','AUDITED_CYCLE_ROTATION',
@@ -50,7 +64,10 @@ function main(){
   if(expected!==fixture.packageSha256)throw Error('ZIP_SHA_DRIFT');
   const runs=['chromium','webkit'].map(browser=>
     JSON.parse(readFileSync(join(dir,'evidence-'+browser+'.json'),'utf8')));
-  const summary=summarizeLocalEvidence(zip,runs);
+  const summary=summarizeLocalEvidence(zip,runs,{
+    empresaId:fixture.companyId,cursoId:fixture.courseId,
+    runtimeSha:fixture.runtimeSha,manifestSha256:fixture.manifestSha256,
+  });
   const out=join('qa-state','lms-scorm-local-precertification.json');
   mkdirSync(dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(summary,null,2)+'\n',{mode:0o600});

@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { resolveAllowedOrigin } from '../config/allowed-origins';
 import { ApiError } from '../middleware/error-handler';
 import { detectLmsEditionMismatch } from '../services/lms-edition-mismatch';
+import { serveAuthorizedRenderedPptx } from './lms-pptx-rendered';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
 import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from '../lib/lms/lms-scorm-asset-paths';
 export { guessMime } from '../lib/lms/lms-scorm-asset-paths';
@@ -2657,6 +2658,22 @@ app.get('/pdf/asset/:cursoId', async (c) => {
 });
 
 // ── Servir arquivo PPTX do R2 ────────────────────────────────────────────────
+/** Authenticated, version-scoped visual derivative. Never changes enrollment evidence. */
+app.get('/pptx/rendered/:cursoId', async (c) => {
+  const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw, {
+    allowScopedQuery: false,
+  })) as JwtPayload;
+  const cursoId = Number(c.req.param('cursoId'));
+  const empresaId = Number(payload.empresa_id ?? 0);
+  if (!Number.isSafeInteger(cursoId) || cursoId <= 0 || empresaId <= 0) {
+    throw new ApiError('Escopo PPTX inválido', 400);
+  }
+  await ensureCourseAssetAccess(c.env.DB, payload, empresaId, cursoId);
+  return serveAuthorizedRenderedPptx(c.env.DB, c.env.BUCKET, empresaId, cursoId,
+    c.env.CORS_ORIGINS, c.req.header('Origin'));
+
+});
+
 app.get('/pptx/asset/:cursoId', async (c) => {
   const db = c.env.DB;
   const payload = (await authenticateLmsAssetRequest(c.env, c.req.raw, {
