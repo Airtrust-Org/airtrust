@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-05",
-    "last_reconciled_against": "0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
-    "schema_v2_digest": "410664b87d4070261ed34e095d16a7dc2851caca58b557587e128e44fa68dcab",
+    "last_reconciled_against": "0571/0572 LMS exam bank+attempts reconciled with main; 0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
+    "schema_v2_digest": "3763ed55f579454a11cba2680a427d92a8ee2e90c64a4207e41460bc6634adba",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1640,20 +1640,6 @@
       "note": "Additive nullable event identity, tenant-flight unique index and immutable guards; legacy/manual fuelings left NULL. Candidate review-only until explicitly authorized trusted-main workflow, D1 recovery, staging postchecks and separate Worker rollout. No staging or production apply asserted."
     },
     {
-      "change_file": "0564_controle_voos_pilot_supplier_history.sql",
-      "change_id": "controle-voos-pilot-supplier-history-0564",
-      "sha256": "0474f9d87e419b85e6a851766a34a8a3c8a2a3728976bf52a4644a191d63c4b8",
-      "targets": [
-        "cv_voo_abastecimentos"
-      ],
-      "domain": "Pilot App offline: immutable accepted supplier identity across catalog rename/deactivation",
-      "coverage": "OUT_OF_CONTRACT_SCOPE",
-      "governance_state": "REMOTE_APPLY_PENDING",
-      "reviewed_manifest": "controle-voos-pilot-supplier-history-0564.json",
-      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-supplier-history-0564.md",
-      "note": "Additive nullable immutable supplier code; no backfill or remote apply authorized. Newly accepted offline physical fuelings require code. Legacy ambiguous supplier identity remains fail-closed. Must apply after 0563 through governed Schema V2 before deploying the dependent Worker."
-    },
-    {
       "change_file": "0568_lms_scorm_qa_evidence_bindings.sql",
       "change_id": "lms-scorm-qa-evidence-bindings-0568",
       "sha256": "6f85d5e3d141e140c54ea5b62c2dc3143447187960b8d89d7b6ed6dc4f3eb197",
@@ -1724,6 +1710,38 @@
       "note": "DDL-only, zero backfill. Staging Schema 0569 is prerequisite; initial approvals, enrollments, progress, qualifications and certificates remain untouched."
     },
     {
+      "change_file": "0571_lms_exam_question_bank.sql",
+      "change_id": "lms-exam-question-bank-0571",
+      "sha256": "132c60338f3ae0fcbc1c41377ba445b77b21efb57e26d43c4c1a5568edaa6d70",
+      "targets": [
+        "lms_exam_question_audit",
+        "lms_exam_question_revisions"
+      ],
+      "domain": "LMS exams: independent question bank (tenant/course-scoped revisions, immutable publication, append-only audit)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-exam-question-bank-0571.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-exam-question-bank-0571.md",
+      "note": "DDL-only, zero backfill, no attempt/grade tables and no write to courses, enrollments, qualifications or certificates. Schema must be applied BEFORE the Worker route is enabled in staging."
+    },
+    {
+      "change_file": "0572_lms_exam_attempts.sql",
+      "change_id": "lms-exam-attempts-0572",
+      "sha256": "490e5271744b4aa5388175664eb5eb428f228de526a90c9fc4af6130c52b4ac1",
+      "targets": [
+        "lms_exam_attempt_responses",
+        "lms_exam_attempts",
+        "lms_exam_edition_bindings",
+        "lms_exam_plans"
+      ],
+      "domain": "LMS exams: immutable published plans, edition-to-exam binding, per-cycle attempts and responses",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-exam-attempts-0572.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-exam-attempts-0572.md",
+      "note": "DDL-only, zero backfill, storage only: a passed attempt is evidence for the canonical completion writer, never a completion. Requires 0569 and 0571 applied first."
+    },
+    {
       "change_file": "0573_frms_checkin_kss_provenance.sql",
       "change_id": "frms-checkin-kss-provenance-0573",
       "sha256": "06fa491147a5898b334abbe12610befc58f2f483ac6d1eecb03b957adc8ec34d",
@@ -1750,6 +1768,20 @@
       "reviewed_manifest": "lms-pptx-slide-evidence-0574.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
       "note": "Additive only, no backfill, no session grants or retroactive qualifications. Must apply Schema V2 in staging/production before enabling new Worker endpoints."
+    },
+    {
+      "change_file": "0564_controle_voos_pilot_supplier_history.sql",
+      "change_id": "controle-voos-pilot-supplier-history-0564",
+      "sha256": "0474f9d87e419b85e6a851766a34a8a3c8a2a3728976bf52a4644a191d63c4b8",
+      "targets": [
+        "cv_voo_abastecimentos"
+      ],
+      "domain": "Pilot App offline: immutable accepted supplier identity across catalog rename/deactivation",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "controle-voos-pilot-supplier-history-0564.json",
+      "evidence": "worker-airtrust/schema-v2/plans/controle-voos-pilot-supplier-history-0564.md",
+      "note": "Additive nullable immutable supplier code; no backfill or remote apply authorized. Newly accepted offline physical fuelings require code. Legacy ambiguous supplier identity remains fail-closed. Must apply after 0563 through governed Schema V2 before deploying the dependent Worker."
     }
   ]
 }

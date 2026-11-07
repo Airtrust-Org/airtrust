@@ -13,8 +13,12 @@ import {
   type ComplianceNotificationTarget,
 } from '../services/training-compliance-notifications';
 import { normalizeSearchText } from '../utils/text-search';
-import { listTrainingCommunications } from '../services/training-communication-history';
+import { listTrainingCommunications, maskTrainingContact } from '../services/training-communication-history';
 import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
+import {
+  reserveTrainingAlert,
+  commitTrainingAlertReservation,
+} from '../services/training-alert-reservation';
 import {
   buildDailyComplianceSnapshots,
   readTrainingComplianceTrend,
@@ -141,6 +145,8 @@ export function createTrainingComplianceIntelligenceRoutes({
                FROM notificacoes_log
               WHERE empresa_id = ?
                 AND assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+                AND (assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
+                  OR status IN ('pendente', 'processando'))
                 AND json_valid(corpo) = 1
            ), ranked AS (
              SELECT *,
@@ -443,6 +449,8 @@ export function createTrainingComplianceIntelligenceRoutes({
     let whatsappPending = 0;
     let emailMissing = 0;
     let whatsappMissing = 0;
+    let reservationFailures = 0;
+    let reservationFinalFailures = 0;
     const triggerKey = `MANUAL_${new Date().toISOString().replace(/[:.]/g, '-')}`;
     const results: Awaited<ReturnType<typeof sendComplianceNotification>>[] = [];
     for (let index = 0; index < targets.length; index += 5) {
@@ -474,16 +482,117 @@ export function createTrainingComplianceIntelligenceRoutes({
       });
       results.push(
         ...(await Promise.all(
-          queued.map(({ target, available }) =>
-            available.email || available.whatsapp
-              ? sendComplianceNotification(c.env, c.env.DB, target, available, triggerKey)
-              : Promise.resolve({
+          queued.map(async ({ target, available }) => {
+            let emailReservationKey: string | null = null;
+            let whatsappReservationKey: string | null = null;
+
+            if (available.email) {
+              const emailRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
                   funcionario_id: target.funcionario_id,
                   qualificacao_tipo_id: target.qualificacao_tipo_id,
-                  email: { attempted: false, ok: false },
-                  whatsapp: { attempted: false, ok: false },
-                }),
-          ),
+                },
+                channel: 'EMAIL',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.email),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (emailRes?.reserved) {
+                emailReservationKey = emailRes.key;
+              } else if (emailRes) {
+                available.email = false;
+                if (emailRes.reason === 'pending_indeterminate') {
+                  emailPending++;
+                } else {
+                  emailAlready++;
+                }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.email = false;
+                reservationFailures++;
+              }
+            }
+
+            if (available.whatsapp) {
+              const whatsappRes = await reserveTrainingAlert(c.env.DB, {
+                empresaId,
+                target: {
+                  funcionario_id: target.funcionario_id,
+                  qualificacao_tipo_id: target.qualificacao_tipo_id,
+                },
+                channel: 'WHATSAPP',
+                reenviarHoje: payload.reenviar_hoje === true,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+                origem: 'COMPLIANCE',
+              }).catch(() => null);
+
+              if (whatsappRes?.reserved) {
+                whatsappReservationKey = whatsappRes.key;
+              } else if (whatsappRes) {
+                available.whatsapp = false;
+                if (whatsappRes.reason === 'pending_indeterminate') {
+                  whatsappPending++;
+                } else {
+                  whatsappAlready++;
+                }
+              } else {
+                // Falha ao reservar (inclusive timeout depois do INSERT): bloqueio fail-closed.
+                available.whatsapp = false;
+                reservationFailures++;
+              }
+            }
+
+            if (!available.email && !available.whatsapp) {
+              return {
+                funcionario_id: target.funcionario_id,
+                qualificacao_tipo_id: target.qualificacao_tipo_id,
+                email: { attempted: false, ok: false },
+                whatsapp: { attempted: false, ok: false },
+              };
+            }
+
+            const notificationResult = await sendComplianceNotification(
+              c.env,
+              c.env.DB,
+              target,
+              available,
+              triggerKey,
+            );
+
+            if (emailReservationKey) {
+              const emailOutcome = notificationResult.email.ok
+                ? 'enviada'
+                : !target.email
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: emailReservationKey,
+                outcome: emailOutcome,
+                errorMessage: notificationResult.email.error,
+                destinatarioMascarado: maskTrainingContact(target.email),
+              }).catch(() => { reservationFinalFailures += 1; });
+            }
+
+            if (whatsappReservationKey) {
+              const whatsappOutcome = notificationResult.whatsapp.ok
+                ? 'enviada'
+                : !target.telefone
+                  ? 'sem_contato'
+                  : 'erro';
+              await commitTrainingAlertReservation(c.env.DB, {
+                empresaId,
+                notificationKey: whatsappReservationKey,
+                outcome: whatsappOutcome,
+                errorMessage: notificationResult.whatsapp.error,
+                destinatarioMascarado: maskTrainingContact(target.telefone),
+              }).catch(() => { reservationFinalFailures += 1; });
+            }
+
+            return notificationResult;
+          }),
         )),
       );
     }
@@ -505,13 +614,20 @@ export function createTrainingComplianceIntelligenceRoutes({
         email_pendente_historico: emailPending,
         whatsapp_pendente_historico: whatsappPending,
         reenvio_confirmado_hoje: payload.reenviar_hoje === true,
+        reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
       },
       ...extrairUsuarioAuditoria(c),
     });
     return c.json({
-      success: true,
+      success: reservationFailures === 0 && reservationFinalFailures === 0,
+      ...(reservationFailures > 0 || reservationFinalFailures > 0 ? {
+        error: 'Registro ou finalização de um ou mais avisos incompleto. Alguns envios podem ter sido aceitos; confira o histórico antes de reenviar.',
+      } : {}),
       data: {
         trigger_key: triggerKey,
+        reservas_falharam: reservationFailures,
+        reservas_resultado_pendente: reservationFinalFailures,
         selecionados: targets.length,
         email_sucesso: emailSuccess,
         whatsapp_sucesso: whatsappSuccess,

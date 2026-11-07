@@ -17,6 +17,20 @@ vi.mock('../../middleware/employee-sector-access', () => ({
   employeeSectorSql: () => ({ clause: '1 = 1', bindings: [] }),
   filterRequestedSetorIdsByAccess: vi.fn((ids: number[]) => ids),
 }));
+vi.mock('../../services/training-alert-reservation', () => ({
+  // Read-history tests exercise selection/override semantics. SQL reservation
+  // failure and concurrency are covered with real SQLite in the E2E suite.
+  reserveTrainingAlert: vi.fn(async (_db: unknown, params: {
+    target: { funcionario_id: number };
+    channel: string;
+  }) => ({
+    reserved: true, reservationId: 1,
+    key: `TEST:${params.target.funcionario_id}:${params.channel}`,
+    isResend: false,
+  })),
+  commitTrainingAlertReservation: vi.fn(async () => undefined),
+}));
+
 vi.mock('../../services/training-alert-same-day', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../services/training-alert-same-day')>();
   return { ...original, readSameDayTrainingAlerts: readHistory };

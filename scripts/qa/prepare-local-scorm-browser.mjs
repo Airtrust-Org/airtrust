@@ -155,6 +155,11 @@ async function main(){
   fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
   const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
   const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
+  const manifestBytes=files['imsmanifest.xml'];
+  assert(manifestBytes instanceof Uint8Array,'QA_MANIFEST_MISSING');
+  const manifestSha256=createHash('sha256').update(manifestBytes).digest('hex');
+  const runtimeSha=run('git',['rev-parse','HEAD']).trim();
+  assert(/^[a-f0-9]{40}$/.test(runtimeSha),'QA_RUNTIME_SHA_INVALID');
   for(const [filename,bytes] of Object.entries(files)){
     if(filename.endsWith('/'))continue; // ZIP directory entries are not R2 objects.
     const file=path.resolve(fixtureRoot,filename);
@@ -177,7 +182,8 @@ async function main(){
   }),{mode:0o600});
   fs.writeFileSync(path.join(fixtureRoot,'fixture.json'),JSON.stringify({
     origin:'http://127.0.0.1:8787',companyId,courseId,dbFile,
-    packageSha256,zipPath,fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
+    packageSha256,manifestSha256,runtimeSha,zipPath,
+    fixtureKind:externalDriver?'LOCAL_DISPOSABLE_REAL_ZIP':'LOCAL_DISPOSABLE_ZIP',
     ...(externalDriver?{driverPath:path.join(fixtureRoot,'driver.json')}:{}),
     enrollments:{chromium:firstId,'webkit-ipad':secondId},
     employeeIds:{chromium:firstEmployee,'webkit-ipad':secondEmployee},

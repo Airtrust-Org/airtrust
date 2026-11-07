@@ -59,6 +59,18 @@ export function isTransientD1Error(error: unknown): boolean {
     return false;
   }
 
+  // Resource ceilings of the current Worker invocation are deterministic.
+  // Retrying in the same invocation consumes even more of the exhausted budget.
+  // Keep this guard before generic D1_EXEC_ERROR / subrequest / resource matches.
+  if (
+    combined.includes('subrequest limit') ||
+    combined.includes('maximum number of subrequests') ||
+    combined.includes('resource limit') ||
+    combined.includes('cpu time limit')
+  ) {
+    return false;
+  }
+
   // 2. Padrões conhecidos de falhas transitórias
   return (
     combined.includes('busy') ||

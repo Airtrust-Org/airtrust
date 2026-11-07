@@ -12,7 +12,8 @@ import {DatabaseSync} from 'node:sqlite';
 
 type Fixture={
   origin:string;companyId:number;courseId:number;dbFile:string;
-  packageSha256:string;zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
+  packageSha256:string;manifestSha256:string;runtimeSha:string;
+  zipPath:string;fixtureKind:'LOCAL_DISPOSABLE_ZIP';
   enrollments:Record<string,number>;
   employeeIds:Record<string,number>;
   passEnrollments:Record<string,number>;
@@ -26,6 +27,8 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
   const localZipDigest=createHash('sha256').update(readFileSync(fixture.zipPath)).digest('hex');
   expect(localZipDigest).toMatch(/^[0-9a-f]{64}$/);
   expect(localZipDigest).toBe(fixture.packageSha256);
+  expect(fixture.runtimeSha).toMatch(/^[0-9a-f]{40}$/);
+  expect(fixture.manifestSha256).toMatch(/^[0-9a-f]{64}$/);
   let id=fixture.enrollments[testInfo.project.name];
   const failedEnrollmentId=id;
   expect(id).toBeGreaterThan(0);
@@ -239,7 +242,9 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
     'ASSESSMENT_APPROVED','EXPLICIT_FINALIZATION','REOPEN_COMPLETED',
     'NO_STATUS_DOWNGRADE'];
   const evidence={source:'LOCAL_DISPOSABLE_D1_R2_ONLY',browser,
-    packageSha256:localZipDigest,enrollmentIsolation:'SAME_TENANT_ONLY',
+    packageSha256:localZipDigest,manifestSha256:fixture.manifestSha256,
+    runtimeSha:fixture.runtimeSha,empresaId:fixture.companyId,cursoId:fixture.courseId,
+    enrollmentIsolation:'SAME_TENANT_ONLY',
     certificateDocument:'INCONCLUSIVE',crossTenantAccess:'PASS',cycleIsolation:'INCONCLUSIVE',
     cases:proven.map(name=>({name,status:'PASS'}))};
   writeFileSync(join('worker-airtrust/.wrangler/scorm-browser-qa',

@@ -2024,5 +2024,7 @@ describe('training compliance engine', () => {
     expect(Array.isArray(body.data.gaps_matricula)).toBe(true);
     expect(Array.isArray(body.data.matriculas_revisao)).toBe(true);
     expect(Array.isArray(body.data.convites_matricula)).toBe(true);
+    expect(body.meta?.degraded).toBe(false);
+    expect(body.data.meta?.degraded).toBe(false);
   });
 });

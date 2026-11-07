@@ -43,6 +43,7 @@ function createDb(options: {
   blocklistPermanentSqlError?: string;
   userSecurityPermanentSqlError?: string;
   callCounts?: CallCounts;
+  asyncDelayMs?: number;
 } = {}) {
   let transientFailuresRemaining = options.transientBlocklistFailures ?? 0;
   let transientUserSecurityRemaining = options.transientUserSecurityFailures ?? 0;
@@ -61,6 +62,9 @@ function createDb(options: {
           return statement;
         },
         async first<T>() {
+          if (options.asyncDelayMs) {
+            await new Promise((r) => setTimeout(r, options.asyncDelayMs));
+          }
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
           if (sql.includes('PRAGMA table_info')) return null as T;
 
@@ -182,26 +186,24 @@ describe('auth() — blocklist fail-closed', () => {
     expect(response.status).toBe(200);
   });
 
-  it('reuses positive non-blocklisted verification across subsequent requests within TTL', async () => {
+  it('coalesces concurrent requests during burst to avoid duplicate D1 blocklist queries', async () => {
     const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
     const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
     const { token } = await makeToken(7, 999002);
     const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
 
-    const app = buildApp(createDb({ usuarios, memberships, callCounts }), 'auth');
+    const app = buildApp(createDb({ usuarios, memberships, callCounts, asyncDelayMs: 15 }), 'auth');
 
-    // Primeira requisição: consulta D1
-    const res1 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    // Requisições concorrentes no mesmo isolate (rajada de chamadas): coalescência in-flight evita consultas redundantes
+    const [res1, res2] = await Promise.all([
+      app({ headers: { Authorization: `Bearer ${token}` } }),
+      app({ headers: { Authorization: `Bearer ${token}` } }),
+    ]);
     expect(res1.status).toBe(200);
-    expect(callCounts.blocklist).toBe(1);
-
-    // Segunda requisição com mesmo token/jti: micro-cache evita consulta ao D1
-    const res2 = await app({ headers: { Authorization: `Bearer ${token}` } });
     expect(res2.status).toBe(200);
     expect(callCounts.blocklist).toBe(1);
 
-    // Reset do cache força nova consulta ao D1
-    resetBlocklistCache();
+    // Próxima requisição sequencial revalida contra D1 (revalidação mutável crítica para evitar revogação obsoleta entre isolates #2014)
     const res3 = await app({ headers: { Authorization: `Bearer ${token}` } });
     expect(res3.status).toBe(200);
     expect(callCounts.blocklist).toBe(2);
@@ -368,26 +370,24 @@ describe('auth() — usuário inativo e membership', () => {
     expect(payload.userRole).toBe('USUARIO');
   });
 
-  it('reuses positive user security verification across subsequent requests within TTL', async () => {
+  it('coalesces concurrent requests during burst to avoid duplicate D1 user security queries', async () => {
     const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
     const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
     const { token } = await makeToken(7, 999002, 'USUARIO');
     const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
 
-    const app = buildApp(createDb({ usuarios, memberships, callCounts }), 'auth');
+    const app = buildApp(createDb({ usuarios, memberships, callCounts, asyncDelayMs: 15 }), 'auth');
 
-    // 1ª requisição: consulta D1
-    const res1 = await app({ headers: { Authorization: `Bearer ${token}` } });
+    // Requisições concorrentes no mesmo isolate (rajada de chamadas): coalescência in-flight evita consultas redundantes
+    const [res1, res2] = await Promise.all([
+      app({ headers: { Authorization: `Bearer ${token}` } }),
+      app({ headers: { Authorization: `Bearer ${token}` } }),
+    ]);
     expect(res1.status).toBe(200);
-    expect(callCounts.userSecurity).toBe(1);
-
-    // 2ª requisição: reutiliza cache de userSecurity dentro do TTL
-    const res2 = await app({ headers: { Authorization: `Bearer ${token}` } });
     expect(res2.status).toBe(200);
     expect(callCounts.userSecurity).toBe(1);
 
-    // Reset do cache força nova consulta ao D1
-    resetUserSecurityCache();
+    // Próxima requisição sequencial revalida contra D1 (revalidação mutável crítica para evitar revogação obsoleta entre isolates #2014)
     const res3 = await app({ headers: { Authorization: `Bearer ${token}` } });
     expect(res3.status).toBe(200);
     expect(callCounts.userSecurity).toBe(2);
@@ -461,8 +461,14 @@ describe('isTransientD1Error', () => {
     expect(isTransientD1Error(new Error('storage error'))).toBe(true);
     expect(isTransientD1Error(new Error('could not execute query'))).toBe(true);
     expect(isTransientD1Error(new Error('failed to execute statement'))).toBe(true);
-    expect(isTransientD1Error(new Error('subrequest limit exceeded'))).toBe(true);
-    expect(isTransientD1Error(new Error('resource limit reached'))).toBe(true);
+    expect(isTransientD1Error(new Error('subrequest limit exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('resource limit reached'))).toBe(false);
+    // Generic D1_EXEC_ERROR and other retryable wording must never override
+    // a hard Cloudflare invocation ceiling.
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: subrequest limit exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: resource limit reached'))).toBe(false);
+    expect(isTransientD1Error(new Error('maximum number of subrequests exceeded'))).toBe(false);
+    expect(isTransientD1Error(new Error('CPU time limit exceeded'))).toBe(false);
     expect(isTransientD1Error(new Error('sqlite_ioerr: disk I/O error'))).toBe(true);
     expect(isTransientD1Error(new Error('sqlite_cantopen: unable to open database file'))).toBe(true);
     expect(isTransientD1Error({ name: 'D1Error', code: 'ETIMEDOUT', message: 'failed' })).toBe(true);
@@ -541,6 +547,23 @@ describe('withD1Retry', () => {
     ).rejects.toThrow('socket hang up');
 
     expect(attempts).toBe(4);
+  });
+
+  it('does not retry a resource ceiling already exhausted in this Worker invocation', async () => {
+    for (const failure of [
+      'D1_EXEC_ERROR: subrequest limit exceeded',
+      'D1_EXEC_ERROR: resource limit reached',
+      'CPU time limit exceeded',
+    ]) {
+      let attempts = 0;
+      await expect(
+        withD1Retry(async () => {
+          attempts++;
+          throw new Error(failure);
+        }, 7, 5),
+      ).rejects.toThrow(failure);
+      expect(attempts).toBe(1);
+    }
   });
 
   it('fails immediately on attempt 1 without any retry when encountering permanent SQL error', async () => {
@@ -665,6 +688,84 @@ describe('auth() — nested sub-router reuse (idempotency)', () => {
     expect(response.status).toBe(200);
     // 1ª tentativa falhou transitoriamente, 2ª tentativa via withD1Retry teve sucesso
     expect(callCounts.userSecurity).toBe(2);
+  });
+});
+
+describe('auth() — revalidação mutável crítica entre múltiplos isolates (Issue #2014)', () => {
+  it('adversarial: dois isolates simulados com cache aquecido exigem 401/403 na instância distinta imediatamente após revogação no D1', async () => {
+    const usuarios: UsuarioRow[] = [
+      { id: 101, perfil: 'USUARIO', active: 1 },
+      { id: 102, perfil: 'USUARIO', active: 1 },
+      { id: 103, perfil: 'USUARIO', active: 1 },
+      { id: 104, perfil: 'ADMIN', active: 1 },
+    ];
+    const memberships = [
+      { usuarioId: 101, empresaId: 999002, role: 'viewer' },
+      { usuarioId: 102, empresaId: 999002, role: 'viewer' },
+      { usuarioId: 103, empresaId: 999002, role: 'viewer' },
+      { usuarioId: 104, empresaId: 999002, role: 'admin' },
+    ];
+    const blocklisted = new Set<string>();
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const sharedDb = createDb({ usuarios, memberships, blocklisted, callCounts });
+
+    // Instância / Isolate A
+    const appA = buildApp(sharedDb, 'auth');
+    // Instância / Isolate B (distinta da Instância A no Cloudflare Workers)
+    const appB = buildApp(sharedDb, 'auth');
+
+    const t101 = await makeToken(101, 999002, 'USUARIO');
+    const t102 = await makeToken(102, 999002, 'USUARIO');
+    const t103 = await makeToken(103, 999002, 'USUARIO');
+    const t104 = await makeToken(104, 999002, 'ADMIN');
+
+    // 1. Ambas as instâncias recebem requisições com sucesso (ambos os isolates têm caches aquecidos)
+    expect((await appA({ headers: { Authorization: `Bearer ${t101.token}` } })).status).toBe(200);
+    expect((await appB({ headers: { Authorization: `Bearer ${t101.token}` } })).status).toBe(200);
+    expect((await appA({ headers: { Authorization: `Bearer ${t102.token}` } })).status).toBe(200);
+    expect((await appB({ headers: { Authorization: `Bearer ${t102.token}` } })).status).toBe(200);
+    expect((await appA({ headers: { Authorization: `Bearer ${t103.token}` } })).status).toBe(200);
+    expect((await appB({ headers: { Authorization: `Bearer ${t103.token}` } })).status).toBe(200);
+    expect((await appA({ headers: { Authorization: `Bearer ${t104.token}` } })).status).toBe(200);
+    expect((await appB({ headers: { Authorization: `Bearer ${t104.token}` } })).status).toBe(200);
+
+    // 2. Mutações críticas ocorrem no D1 (logout, desativação, remoção de tenant, revogação de role)
+    // Caso 1: Logout / revogação de token no D1
+    blocklisted.add(t101.jti);
+
+    // Caso 2: Desativação de conta no D1
+    const u102 = usuarios.find((u) => u.id === 102);
+    if (u102) u102.active = 0;
+
+    // Caso 3: Remoção de vínculo de tenant no D1
+    const idx103 = memberships.findIndex((m) => m.usuarioId === 103);
+    if (idx103 >= 0) memberships.splice(idx103, 1);
+
+    // Caso 4: Revogação de cargo / tenant admin no D1
+    const m104 = memberships.find((m) => m.usuarioId === 104);
+    if (m104) m104.role = 'viewer';
+
+    // 3. A Instância B (outro isolate que não recebeu invalidação local) DEVE falhar fechada imediatamente
+    // Caso 1: Token revogado -> 401 TOKEN_REVOKED
+    const resB1 = await appB({ headers: { Authorization: `Bearer ${t101.token}` } });
+    expect(resB1.status).toBe(401);
+    expect(((await resB1.json()) as { code: string }).code).toBe('TOKEN_REVOKED');
+
+    // Caso 2: Conta desativada -> 401 USER_INACTIVE
+    const resB2 = await appB({ headers: { Authorization: `Bearer ${t102.token}` } });
+    expect(resB2.status).toBe(401);
+    expect(((await resB2.json()) as { code: string }).code).toBe('USER_INACTIVE');
+
+    // Caso 3: Vínculo de tenant removido -> 401 TENANT_MEMBERSHIP_INVALID
+    const resB3 = await appB({ headers: { Authorization: `Bearer ${t103.token}` } });
+    expect(resB3.status).toBe(401);
+    expect(((await resB3.json()) as { code: string }).code).toBe('TENANT_MEMBERSHIP_INVALID');
+
+    // Caso 4: Cargo alterado para viewer, mas token alega ADMIN -> 401 SESSION_ROLE_INVALID
+    const resB4 = await appB({ headers: { Authorization: `Bearer ${t104.token}` } });
+    expect(resB4.status).toBe(401);
+    expect(((await resB4.json()) as { code: string }).code).toBe('SESSION_ROLE_INVALID');
   });
 });
 

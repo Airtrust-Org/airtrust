@@ -8,6 +8,10 @@ import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employ
 import { logAudit } from '../utils/db';
 import { maskTrainingContact } from '../services/training-communication-history';
 import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
+import {
+  reserveTrainingAlert,
+  commitTrainingAlertReservation,
+} from '../services/training-alert-reservation';
 import { sendEmail } from '../lib/email';
 import type { Env } from '../types';
 import { createLogger, toError } from '../utils/logger';
@@ -577,13 +581,68 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     });
     const outcomes = await Promise.all(
       candidates.map(async ({ row, emailDuplicate, whatsappDuplicate }) => {
-        const emailEnabled = channels.email && !emailDuplicate;
-        const whatsappEnabled = channels.whatsapp && !whatsappDuplicate;
+        let emailEnabled = channels.email && !emailDuplicate;
+        let whatsappEnabled = channels.whatsapp && !whatsappDuplicate;
+
+        let emailReservationKey: string | null = null;
+        let whatsappReservationKey: string | null = null;
+
+        if (mode === 'alerta' && emailEnabled) {
+          const res = await reserveTrainingAlert(db, {
+            empresaId,
+            target: alertIdentity(row),
+            channel: 'EMAIL',
+            reenviarHoje: parsed.data.reenviar_hoje,
+            destinatarioMascarado: maskTrainingContact(row.email),
+            origem: 'LMS_ALERTA',
+          }).catch(() => null);
+
+          if (res?.reserved) {
+            emailReservationKey = res.key;
+          } else if (res) {
+            emailEnabled = false;
+            if (res.reason === 'pending_indeterminate') {
+              summary.email_pendente_historico += 1;
+            } else {
+              summary.email_ja_alertado += 1;
+            }
+          } else {
+            // D1 pode ter gravado a reserva antes de falhar: NUNCA despachar sem confirmação.
+            emailEnabled = false;
+            summary.auditoria_preparo_falhas += 1;
+          }
+        }
+
+        if (mode === 'alerta' && whatsappEnabled) {
+          const res = await reserveTrainingAlert(db, {
+            empresaId,
+            target: alertIdentity(row),
+            channel: 'WHATSAPP',
+            reenviarHoje: parsed.data.reenviar_hoje,
+            destinatarioMascarado: maskTrainingContact(row.telefone),
+            origem: 'LMS_ALERTA',
+          }).catch(() => null);
+
+          if (res?.reserved) {
+            whatsappReservationKey = res.key;
+          } else if (res) {
+            whatsappEnabled = false;
+            if (res.reason === 'pending_indeterminate') {
+              summary.whatsapp_pendente_historico += 1;
+            } else {
+              summary.whatsapp_ja_alertado += 1;
+            }
+          } else {
+            whatsappEnabled = false;
+            summary.auditoria_preparo_falhas += 1;
+          }
+        }
+
         // Nenhum novo despacho, logo não criar evento PREPARADO para os canais já aceitos.
         if (!emailEnabled && !whatsappEnabled) {
           return { emailStatus: null, whatsappStatus: null, auditPrepared: true, auditFinal: true };
         }
-        return sendMatriculaTracked(c, c.env, db, Number(row.id), {
+        const outcome = await sendMatriculaTracked(c, c.env, db, Number(row.id), {
           funcionarioId: Number(row.funcionario_id),
           empresaId,
           cursoId: Number(row.curso_id),
@@ -595,6 +654,48 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           canais: { email: emailEnabled, whatsapp: whatsappEnabled },
           reenvioConfirmadoHoje: mode === 'alerta' && parsed.data.reenviar_hoje,
         });
+
+        let reservationFinalized = true;
+        if (mode === 'alerta') {
+          if (emailReservationKey) {
+            const emailOutcome = outcome.emailStatus === 'ENVIADO'
+              ? 'enviada'
+              : outcome.emailStatus === 'SEM_EMAIL'
+                ? 'sem_contato'
+                : !outcome.auditPrepared
+                  ? 'erro' // Preparation failed before any provider call: safe to retry.
+                  : !outcome.auditFinal
+                    ? 'resultado_indeterminado'
+                    : 'erro';
+            await commitTrainingAlertReservation(db, {
+              empresaId,
+              notificationKey: emailReservationKey,
+              outcome: emailOutcome,
+              destinatarioMascarado: maskTrainingContact(row.email),
+            }).catch(() => { reservationFinalized = false; });
+          }
+          if (whatsappReservationKey) {
+            const whatsappOutcome = outcome.whatsappStatus === 'ENVIADO'
+              ? 'enviada'
+              : outcome.whatsappStatus === 'SEM_WHATSAPP'
+                ? 'sem_contato'
+                : !outcome.auditPrepared
+                  ? 'erro' // Preparation failed before any provider call: safe to retry.
+                  : !outcome.auditFinal
+                    ? 'resultado_indeterminado'
+                    : 'erro';
+            await commitTrainingAlertReservation(db, {
+              empresaId,
+              notificationKey: whatsappReservationKey,
+              outcome: whatsappOutcome,
+              destinatarioMascarado: maskTrainingContact(row.telefone),
+            }).catch(() => { reservationFinalized = false; });
+          }
+        }
+
+        // A mensagem pode ter sido aceita, mas a reserva segue pendente.
+        // Nunca reportar sucesso irrestrito se a finalização da trilha falhou.
+        return reservationFinalized ? outcome : { ...outcome, auditFinal: false };
       }),
     );
 

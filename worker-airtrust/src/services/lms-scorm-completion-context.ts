@@ -7,8 +7,14 @@ import {
   readActiveManifestCoverage,
   type ManifestStudyCoverage,
 } from './lms-completion-manifest-evidence';
+import { findApprovedExamEvidence, type ApprovedExamEvidence } from './lms-exams/exam-attempt-store';
 export interface ScormManifestClosureEvidence {
   coverage: ManifestStudyCoverage;
+  /**
+   * Passed, sealed AirTrust exam attempt for the active cycle and edition. Only
+   * looked up for assessment.mode=EXTERNAL; absent = still pending (fail-closed).
+   */
+  externalExam?: ApprovedExamEvidence | null;
 }
 
 export async function loadScormManifestClosureEvidence(params: {
@@ -21,9 +27,16 @@ export async function loadScormManifestClosureEvidence(params: {
   contentType: unknown;
   cmiJson: string | null | undefined;
   suspendData?: string | null;
+  db?: D1Database | null;
 }): Promise<ScormManifestClosureEvidence | null> {
   const coverage = await readActiveManifestCoverage(params);
-  return coverage ? { coverage } : null;
+  if (!coverage) return null;
+  if (coverage.assessment_mode !== 'EXTERNAL' || !params.db) return { coverage };
+  const externalExam = await findApprovedExamEvidence(params.db, {
+    empresaId: params.empresaId, matriculaId: params.matriculaId,
+    activePackagePrefix: params.activePrefix,
+  });
+  return { coverage, externalExam };
 }
 
 /**
@@ -44,6 +57,7 @@ export async function loadManifestEvidenceForEnrollment(
   empresaId: number,
   cmiJson: string | null | undefined,
   suspendData?: string | null,
+  db?: D1Database | null,
 ): Promise<ScormManifestClosureEvidence | null> {
   try {
     const matriculaId = Number(row.id);
@@ -54,7 +68,7 @@ export async function loadManifestEvidenceForEnrollment(
       cicloId: Number.isSafeInteger(Number(row.cicloId)) ? Number(row.cicloId) : null,
       activePrefix: row.scorm_package_r2_prefix,
       contentType: row.tipo_conteudo ?? 'scorm',
-      cmiJson, suspendData,
+      cmiJson, suspendData, db,
     });
   } catch {
     return null;

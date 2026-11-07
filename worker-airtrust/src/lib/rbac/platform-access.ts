@@ -36,33 +36,20 @@ function normalizeUserId(userId: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-interface CachedPlatformAccess {
-  expiresAt: number;
-  state: PlatformAccessState;
-}
-
-const _platformAccessCache = new Map<number, CachedPlatformAccess>();
-const PLATFORM_ACCESS_CACHE_TTL_MS = 60000;
-const MAX_PLATFORM_ACCESS_CACHE_SIZE = 1000;
-
-function pruneExpiredPlatformAccessCache(now: number): void {
-  for (const [key, entry] of _platformAccessCache.entries()) {
-    if (entry.expiresAt <= now) {
-      _platformAccessCache.delete(key);
-    }
-  }
-}
+// In-flight dedup map para consultas de platform access (evita rajadas redundantes no D1 sob requisições concorrentes)
+// Sem manter cache positivo estático de 60s que causaria janela de revogação obsoleta entre múltiplos isolates (Issue #2014)
+const _inFlightPlatformAccessChecks = new Map<number, Promise<PlatformAccessState>>();
 
 export function resetPlatformAccessCache(): void {
-  _platformAccessCache.clear();
+  _inFlightPlatformAccessChecks.clear();
 }
 
 export function invalidatePlatformAccessCache(userId: number): void {
-  _platformAccessCache.delete(userId);
+  _inFlightPlatformAccessChecks.delete(userId);
 }
 
 export function getPlatformAccessCacheSize(): number {
-  return _platformAccessCache.size;
+  return _inFlightPlatformAccessChecks.size;
 }
 
 export async function resolvePlatformAccessState(
@@ -83,33 +70,21 @@ export async function resolvePlatformAccessState(
     };
   }
 
-  const now = Date.now();
-  const cached = _platformAccessCache.get(normalizedUserId);
-  if (cached && cached.expiresAt > now) {
-    return cached.state;
-  }
-  if (cached) {
-    _platformAccessCache.delete(normalizedUserId);
+  const inFlight = _inFlightPlatformAccessChecks.get(normalizedUserId);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const state = await readPersistedPlatformStateWithRetry(db, normalizedUserId);
-
-  if (_platformAccessCache.size >= MAX_PLATFORM_ACCESS_CACHE_SIZE) {
-    pruneExpiredPlatformAccessCache(now);
-    while (_platformAccessCache.size >= MAX_PLATFORM_ACCESS_CACHE_SIZE) {
-      const oldestKey = _platformAccessCache.keys().next().value;
-      if (!oldestKey) break;
-      _platformAccessCache.delete(oldestKey);
+  const promise = (async () => {
+    try {
+      return await readPersistedPlatformStateWithRetry(db, normalizedUserId);
+    } finally {
+      _inFlightPlatformAccessChecks.delete(normalizedUserId);
     }
-  }
+  })();
 
-  let ttl = PLATFORM_ACCESS_CACHE_TTL_MS;
-  if (typeof state.earliestExpiryMs === 'number' && state.earliestExpiryMs > now) {
-    ttl = Math.min(ttl, state.earliestExpiryMs - now);
-  }
-  _platformAccessCache.set(normalizedUserId, { expiresAt: now + ttl, state });
-
-  return state;
+  _inFlightPlatformAccessChecks.set(normalizedUserId, promise);
+  return promise;
 }
 
 /**
