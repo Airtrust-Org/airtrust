@@ -89,6 +89,22 @@ describe('FRMS daily check-in: previous-day guard and commit receipt', () => {
     );
   });
 
+  it('shows actionable late-PVT guidance after the server rejects post-presentation evidence', async () => {
+    recoveryMock.mockResolvedValue(null);
+    apiFetchMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ success: false, error: 'post_presentation_readiness_not_allowed' }),
+    });
+    const { result } = renderHook(() => useSubmitCheckin(), { wrapper: createWrapper() });
+    await act(async () => {
+      await expect(result.current.mutateAsync(SYNTHETIC_FORM)).rejects.toThrow(
+        /hora de apresentação.*já passou/i,
+      );
+    });
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry a committed check-in after downstream processing fails', async () => {
     recoveryMock.mockResolvedValue(null);
     apiFetchMock.mockResolvedValue({
