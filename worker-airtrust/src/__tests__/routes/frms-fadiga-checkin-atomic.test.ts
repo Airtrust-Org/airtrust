@@ -117,13 +117,14 @@ function trials() {
   });
 }
 
-function request(readiness?: object) {
+function request(readiness?: object, lateAcknowledged = false) {
   return new Request('http://localhost/fadiga-checkin', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       reference_date: '2026-10-16', wake_time: '06:15', hora_apresentacao: '07:00',
       horas_sono_24h: 7, fit_for_duty: true, kss_score: 3,
       ...(readiness ? { readiness } : {}),
+      ...(lateAcknowledged ? { late_submission_acknowledged: true } : {}),
     }),
   });
 }
@@ -281,16 +282,29 @@ describe('daily check-in atomic commit', () => {
   });
 
 
+  it('rejects device-claimed late mode when Worker sees a pre-presentation check-in', async () => {
+    const { db, batch } = fakeDb();
+    const response = await router.fetch(request(undefined, true),
+      { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'late_submission_not_confirmed_by_server',
+    });
+    expect(batch).not.toHaveBeenCalled();
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
   it('flags same-day post-presentation submission without making a pre-flight claim', async () => {
     vi.setSystemTime(new Date('2026-10-16T10:15:00Z')); // 07:15 at the flight base.
     const { db, batch, statements } = fakeDb();
-    const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
+    const response = await router.fetch(request(undefined, true), { DB: db } as Env, {} as ExecutionContext);
     expect(response.status).toBe(200);
     const writes = batch.mock.calls[0][0];
     expect(writes[0].binds).toContain('RESTRITO');
     const event = writes.find((stmt) => stmt.sql.includes('INSERT INTO frms_fadiga_evento'));
     expect(JSON.parse(String(event?.binds[4]))).toMatchObject({
       status_operacional: 'RESTRITO', requires_operational_review: 1,
+      crew_acknowledged_late: true,
       submission_context: { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false },
     });
     const notification = statements.find((stmt) => stmt.sql.includes('INSERT INTO notificacoes_sistema'));
