@@ -40,7 +40,7 @@ import {
   rollbackScormPackageVersion,
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
-import { preflightDirectFormativeReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
+import { preflightDirectFormativeReplacement, readAlreadyActiveExternalReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedExternalScorm, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
   authorizeF5IntakeOperation,
@@ -324,10 +324,12 @@ app.post('/:id/scorm-replace',
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       userId: actorId(c), bytes, arquivoNome,
     });
+    const externalExam = candidate.authoringReview?.externalExam === true;
     if (candidate.status === 'ACTIVE') {
-      // Idempotent exact-SHA resubmission after the first request completed.
-      // Do not re-run activation, invalidate snapshots or change enrollments.
-      const receipt = await readAlreadyActiveFormativeReplacement({
+      // Idempotent exact-SHA resubmission; never change enrollments twice.
+      const reader = externalExam
+        ? readAlreadyActiveExternalReplacement : readAlreadyActiveFormativeReplacement;
+      const receipt = await reader({
         db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
         packageId: candidate.packageId, packageSha256: candidate.packageSha256,
       });
@@ -349,11 +351,16 @@ app.post('/:id/scorm-replace',
     // Clicking the unambiguous replacement button acknowledges that any open
     // enrollment uses the incoming course policy; the server supplies its own
     // contemporaneous count and retains CAS protection on policy+active SHA.
-    const preflight = await preflightDirectFormativeReplacement({
-      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
-      packageId: candidate.packageId, userId: actorId(c),
-    });
-    const data = await replaceValidatedFormativeScorm({
+    const preflight = externalExam
+      ? await evaluateFormativeActivation({
+          db: c.env.DB, empresaId, cursoId, packageId: candidate.packageId,
+        })
+      : await preflightDirectFormativeReplacement({
+          db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+          packageId: candidate.packageId, userId: actorId(c),
+        });
+    const replace = externalExam ? replaceValidatedExternalScorm : replaceValidatedFormativeScorm;
+    const data = await replace({
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId: candidate.packageId, userId: actorId(c),
       confirm: {
