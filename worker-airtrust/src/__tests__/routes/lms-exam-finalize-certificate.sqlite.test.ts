@@ -464,3 +464,71 @@ describe('finalizar - autorizacao e isolamento de tenant', () => {
     expect(PREFIX).toContain(`/${EMPRESA}/`);
   });
 });
+
+describe('finalizar - reenvio recupera certificado ausente de matricula ja CONCLUIDO (idempotente)', () => {
+  async function concludedWithoutCertificate(fault: 'pasta' | 'r2') {
+    const ctx = await examReady(setup()); stubBrowserRendering(ctx);
+    await attempt(ctx, 10);
+    if (fault === 'pasta') ctx.db.injectFault(/INSERT INTO pasta_virtual/);
+    else ctx.r2.state.putFails = true;
+    const first = await finalizar(ctx);
+    expect(first.status).toBe(200);
+    expect(matricula(ctx).status).toBe('CONCLUIDO');
+    expect(one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c).toBeNull();
+    ctx.r2.state.putFails = false;
+    return ctx;
+  }
+
+  it('(R1) falha do D1 no certificado: reenvio de /finalizar emite exatamente um certificado sem alterar conclusao/qualificacao', async () => {
+    const ctx = await concludedWithoutCertificate('pasta');
+    const before = { m: matricula(ctx), h: one(ctx, 'SELECT id, status, data_conclusao, funcionario_id FROM qualificacoes_historico') };
+    const r = await finalizar(ctx);
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ novo_status: 'CONCLUIDO', qualificacao_gerada: null });
+    expect(matricula(ctx)).toEqual(before.m);
+    expect(one(ctx, 'SELECT id, status, data_conclusao, funcionario_id FROM qualificacoes_historico')).toEqual(before.h);
+    const h = one(ctx, 'SELECT * FROM qualificacoes_historico');
+    expect(h.certificado_arquivo_id).toBe(one(ctx, 'SELECT id FROM documentos').id);
+    expect(h.numero_certificado).toBeTruthy();
+    expect(artifacts(ctx)).toMatchObject({ hist: 1, docs: 1, pasta: 1, r2: 1 });
+  });
+
+  it('(R2) falha do R2: reenvio recupera; novos reenvios nao renderizam nem duplicam', async () => {
+    const ctx = await concludedWithoutCertificate('r2');
+    expect((await finalizar(ctx)).status).toBe(200);
+    expect(artifacts(ctx)).toMatchObject({ hist: 1, docs: 1, pasta: 1, r2: 1 });
+    const renders = ctx.renders.n;
+    const certId = one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c;
+    expect((await finalizar(ctx)).status).toBe(200);
+    expect((await finalizar(ctx)).status).toBe(200);
+    expect(ctx.renders.n).toBe(renders);
+    expect(one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c).toBe(certId);
+    expect(artifacts(ctx)).toMatchObject({ hist: 1, docs: 1, pasta: 1, r2: 1 });
+  });
+
+  it('(R3) reenvios simultaneos apos a falha: uma qualificacao e um certificado', async () => {
+    const ctx = await concludedWithoutCertificate('pasta');
+    const rs = await Promise.all([finalizar(ctx), finalizar(ctx), finalizar(ctx)]);
+    expect(rs.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(artifacts(ctx)).toMatchObject({ hist: 1, docs: 1, pasta: 1, r2: 1 });
+    expect(one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c).toBe(one(ctx, 'SELECT id FROM documentos').id);
+  });
+
+  it('(R4) outro funcionario e outro tenant nao disparam a recuperacao', async () => {
+    const ctx = await concludedWithoutCertificate('pasta');
+    expect((await finalizar(ctx, OTHER_USER)).status).toBe(403);
+    const tb = await as(ctx, TENANT_B_ADMIN, 7, 'ADMIN', FINALIZAR, jsonInit('POST'));
+    expect(tb.status).toBe(404);
+    expect(artifacts(ctx)).toMatchObject({ hist: 1, docs: 0, pasta: 0, r2: 0 });
+  });
+
+  it('(R5) matricula ja certificada: reenvio e no-op (nenhuma renderizacao, mesmo certificado)', async () => {
+    const ctx = await examReady(setup()); stubBrowserRendering(ctx);
+    await attempt(ctx, 10);
+    expect((await finalizar(ctx)).status).toBe(200);
+    const snap = { a: artifacts(ctx), c: one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c };
+    expect((await finalizar(ctx)).status).toBe(200);
+    expect(artifacts(ctx)).toEqual(snap.a);
+    expect(one(ctx, 'SELECT certificado_arquivo_id c FROM qualificacoes_historico').c).toBe(snap.c);
+  });
+});
