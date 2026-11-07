@@ -503,7 +503,10 @@ describe('FrmsCheckinFadiga UI', () => {
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
     expect(payload).not.toHaveProperty('readiness');
-    expect(payload).toMatchObject({ fit_for_duty: true, aceite_termos: true, aceite_privacidade: true });
+    expect(payload).toMatchObject({
+      fit_for_duty: true, aceite_termos: true, aceite_privacidade: true,
+      late_submission_acknowledged: true,
+    });
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
   });
 
@@ -519,6 +522,7 @@ describe('FrmsCheckinFadiga UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     expect(mutateAsyncMock.mock.calls[0][0]).not.toHaveProperty('readiness');
+    expect(mutateAsyncMock.mock.calls[0][0]).toMatchObject({ late_submission_acknowledged: true });
   });
 
   it('renderiza KSS com titulo claro e descritores', () => {
