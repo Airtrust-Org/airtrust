@@ -623,6 +623,11 @@ export default function LmsAdminCursos() {
                                     <RowActionsMenu
                                       label={`Mais ações para o curso ${curso.titulo}`}
                                       actions={[
+                                        ...(curso.tipo_conteudo === 'scorm' ? [{
+                                          label: 'Banco de questões e provas (homologação)',
+                                          icon: BookOpen,
+                                          onSelect: () => navigate(`/lms/admin/provas/${curso.id}`),
+                                        }] : []),
                                         {
                                           label: 'Excluir curso',
                                           destructive: true,
