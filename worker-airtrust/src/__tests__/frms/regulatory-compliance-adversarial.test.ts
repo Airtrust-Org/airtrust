@@ -71,3 +71,15 @@ describe('regulatory compliance — adversarial inputs', () => {
     expect(evaluateRegulatoryCompliance(base({ profileCode: 'GENERIC' })).status).toBe('UNKNOWN');
   });
 });
+
+describe('profile rolling limits outside RBAC B/C', () => {
+  it('surfaces as pendingValidation without changing status', () => {
+    const r = evaluateRegulatoryCompliance(base({ rolling: { ...rolling, hv_28_dias_min: 94 * 60, hv_365_dias_min: 931 * 60 } }));
+    expect(r.status).toBe('COMPLIANT');
+    expect(r.pendingValidation?.map((f) => f.code)).toEqual(['PROFILE_FLIGHT_28D_LIMIT', 'PROFILE_FLIGHT_365D_LIMIT']);
+  });
+  it('exactly at the profile limit is not flagged', () => {
+    const r = evaluateRegulatoryCompliance(base({ rolling: { ...rolling, hv_28_dias_min: 93 * 60, hv_365_dias_min: 930 * 60 } }));
+    expect(r.pendingValidation).toBeUndefined();
+  });
+});
