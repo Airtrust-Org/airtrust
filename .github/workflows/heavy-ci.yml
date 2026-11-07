@@ -306,6 +306,11 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3
           npm ci
           npm --prefix worker-airtrust ci
+      - name: Verify synthetic LMS exam browser flow in Chromium and WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true timeout --signal=TERM 10m npm run test:e2e:lms-exam
       - name: Regression test immutable Factory V3 core in Chromium and WebKit (synthetic only)
         shell: bash
         run: |
