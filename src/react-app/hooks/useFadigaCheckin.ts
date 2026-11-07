@@ -25,6 +25,7 @@ export interface FadigaCheckinItem {
 export interface CheckinFormData {
   reference_date?: string;
   data_checkin?: string;
+  late_submission_acknowledged?: true;
   hora_dormiu?: string;
   hora_acordou?: string;
   wake_time?: string;
@@ -161,6 +162,9 @@ export function safeFadigaVisibleErrorMessage(
         // repeating the same PVT payload cannot make it valid as pre-flight evidence.
         if (code === 'post_presentation_readiness_not_allowed') {
           return 'A hora de apresentação informada já passou. O teste de atenção feito agora não pode ser aceito como avaliação pré-jornada. O check-in não foi registrado; procure a coordenação para regularizar o registro tardio. Não altere o horário de apresentação para contornar a regra.';
+        }
+        if (code === 'late_submission_not_confirmed_by_server') {
+          return 'O horário de apresentação não confere com o relógio operacional do servidor. O check-in não foi registrado. Verifique a data/hora automática do aparelho e procure a coordenação; não altere o horário de apresentação.';
         }
         if (code === 'retrospective_readiness_not_allowed') {
           return 'O teste de atenção de hoje não pode ser usado como avaliação de um dia anterior. O check-in não foi registrado; procure a coordenação para orientar o registro retrospectivo.';
