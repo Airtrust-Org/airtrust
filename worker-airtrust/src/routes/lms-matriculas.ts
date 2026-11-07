@@ -14,7 +14,7 @@ import { auth } from '../middleware/auth';
 import { hasRole, requirePermission, requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
-import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
+import { completeLmsMatricula, LmsCompletionRejectedError, recoverEadCertificateForCompletedMatricula } from '../services/lms-completion';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
@@ -1798,6 +1798,7 @@ app.post('/:id/finalizar', async (c) => {
     scorm: scormAtual,
   });
   if (matricula.status === 'CONCLUIDO') {
+    await recoverEadCertificateForCompletedMatricula(db, c.env, empresaId, matricula, getCallerUserId(c));
     return c.json({
       success: true,
       data: {
