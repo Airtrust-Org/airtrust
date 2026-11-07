@@ -50,9 +50,11 @@ describe('Prova final do aluno', () => {
     renderPage();
     const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
     expect(screen.queryByRole('button', { name: /Iniciar prova|Concluir treinamento/ })).toBeNull();
+    expect(screen.getByText(/Solicite uma nova tentativa apenas se este treinamento gera certificado EAD/)).toBeTruthy();
     mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
     fireEvent.click(button);
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Consulte seus certificados/));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/A emissão só é tentada para matrículas com qualificação EAD elegível/));
+    expect(screen.getByRole('status').textContent).toMatch(/não confirma emissão/);
     expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
     expect(screen.queryByTestId('where')).toBeNull();
   });
