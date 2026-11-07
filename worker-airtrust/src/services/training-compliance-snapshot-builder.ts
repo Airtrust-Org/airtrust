@@ -170,10 +170,10 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
   const faDeletedExpr = faCols.has('deleted_at') ? 'AND fa.deleted_at IS NULL' : '';
   const faActiveExpr = faCols.has('ativo') ? 'AND COALESCE(fa.ativo,1)=1' : '';
   const faStartExpr = faCols.has('data_inicio')
-    ? "AND (fa.data_inicio IS NULL OR date(fa.data_inicio) <= date('now'))"
+    ? "AND (fa.data_inicio IS NULL OR date(fa.data_inicio) <= date('now','-3 hours'))"
     : '';
   const faEndExpr = faCols.has('data_fim')
-    ? "AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))"
+    ? "AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now','-3 hours'))"
     : '';
   const aircraftDeletedExpr = aircraftCols.has('deleted_at') ? 'AND a.deleted_at IS NULL' : '';
   const modelRows = await withD1Retry(() =>
@@ -333,8 +333,8 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
           AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
-          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
-          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
+          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now','-3 hours'))
+          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now','-3 hours'))
         ORDER BY qt.nome ASC, tr.id ASC`,
       )
       .bind(empresaId)

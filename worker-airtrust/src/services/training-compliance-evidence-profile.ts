@@ -67,8 +67,8 @@ export async function resolveEffectiveTrainingComplianceProfile(
             AND tr.qualificacao_tipo_id=?
           WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
             AND tr.ativo=1 AND tr.deleted_at IS NULL
-            AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now'))
-            AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now'))
+            AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now','-3 hours'))
+            AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now','-3 hours'))
             AND ${applicability}
           ORDER BY ${priority} DESC, tr.id DESC
           LIMIT 1`,
@@ -97,8 +97,8 @@ export async function listTrainingComplianceEvidenceProfilesForQualification(
           WHERE empresa_id=? AND qualificacao_tipo_id=?
             AND ativo=1 AND deleted_at IS NULL
             AND perfil_competencia IS NOT NULL AND TRIM(perfil_competencia)<>''
-            AND (vigencia_inicio IS NULL OR date(vigencia_inicio)<=date('now'))
-            AND (vigencia_fim IS NULL OR date(vigencia_fim)>=date('now'))
+            AND (vigencia_inicio IS NULL OR date(vigencia_inicio)<=date('now','-3 hours'))
+            AND (vigencia_fim IS NULL OR date(vigencia_fim)>=date('now','-3 hours'))
           ORDER BY perfil_competencia ASC`,
       )
       .bind(params.empresaId, params.qualificacaoTipoId)
