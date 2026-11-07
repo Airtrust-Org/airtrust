@@ -50,6 +50,17 @@ describe('flight fatigue visible errors', () => {
     expect(message).not.toContain('POST_PROCESSING_FAILED');
   });
 
+  it('mostra somente o código curto de referência de uma falha sem expor conteúdo de erro', () => {
+    const error = Object.assign(new Error('D1_ERROR: clinical detail'), {
+      incidentId: '12345678-1234-1234-1234-123456789abc',
+    });
+    const message = safeFadigaVisibleErrorMessage('daily-checkin-submit', error);
+    expect(message).toMatch(/consulte seu Histórico antes de reenviar/i);
+    expect(message).toContain('Referência: 12345678');
+    expect(message).not.toContain('D1_ERROR');
+    expect(message).not.toContain('clinical detail');
+  });
+
   it('mantém um timeout operacional compreensível sem detalhe técnico', () => {
     expect(TEAM_PANEL_TIMEOUT_MESSAGE).toMatch(/demorou além do esperado/i);
     expect(TEAM_PANEL_TIMEOUT_MESSAGE).not.toMatch(/SQLITE|worker\.ts|stack/i);
