@@ -494,7 +494,7 @@ describe('FrmsCheckinFadiga UI', () => {
       expect(mutateAsyncMock).not.toHaveBeenCalled();
 
       // Yesterday's answers/PVT are not silently transferred into today's draft.
-      const nextDayDraftKey = 'frms-checkin-draft:101:6:2026-10-28';
+      const nextDayDraftKey = 'airtrust:frms-checkin-draft:101:6:2026-10-28';
       expect(window.sessionStorage.getItem(nextDayDraftKey)).toBeNull();
     } finally {
       vi.useRealTimers();
