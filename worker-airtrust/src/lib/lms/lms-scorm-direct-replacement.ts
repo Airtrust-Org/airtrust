@@ -127,6 +127,7 @@ export async function readAlreadyActiveExternalReplacement(params: {
   if (!row) return null;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (quality?.authoringReview?.externalExam !== true ||
+      quality.authoringReview.privateRelease !== false ||
       quality.structural?.status !== 'PASS' ||
       quality.completionManifest?.status !== 'PASS' ||
       quality.diagnostics?.status !== 'PASS') return null;
@@ -155,6 +156,7 @@ export async function replaceValidatedExternalScorm(params: {
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' || row.certification_profile !== null ||
       quality?.authoringReview?.externalExam !== true ||
+      quality.authoringReview.privateRelease !== false ||
       quality.structural?.status !== 'PASS' ||
       quality.completionManifest?.status !== 'PASS' ||
       quality.diagnostics?.status !== 'PASS') {
@@ -164,7 +166,7 @@ export async function replaceValidatedExternalScorm(params: {
   // records content coverage; it cannot self-issue a score or exam approval.
   if (preflight.course.tipoConteudo !== 'scorm' ||
       !['SCORED', 'FORMATIVE'].includes(preflight.course.currentPolicy) ||
-      !Number.isFinite(preflight.course.masteryScore) ||
+      !Number.isFinite(Number(preflight.course.masteryScore)) ||
       Number(preflight.course.masteryScore) <= 0) {
     throw new ApiError('Curso não dispõe de política de prova externa segura', 409, 'SCORM_EXTERNAL_POLICY_INVALID');
   }
