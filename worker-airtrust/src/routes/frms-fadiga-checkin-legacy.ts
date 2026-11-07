@@ -1372,7 +1372,9 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         : /readiness|trial|protocol/i.test(diagnosticMessage)
           ? 'READINESS'
           : 'OTHER';
+    const incidentId = crypto.randomUUID();
     console.error('[FRMS_CHECKIN_FAILURE]', {
+      incident_id: incidentId,
       phase: committedCheckinId ? 'POST_COMMIT' : 'PRE_COMMIT',
       category: failureCategory,
     });
@@ -1382,13 +1384,17 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
       return c.json({
         success: false,
         error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+        incident_id: incidentId,
         checkin_committed: true,
         checkin_id: committedCheckinId,
         retry_submission: false,
         requires_operational_review: true,
       }, 500);
     }
-    return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
+    return c.json({
+      success: false, error: 'Erro ao registrar check-in de fadiga',
+      incident_id: incidentId,
+    }, 500);
   }
 });
 router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {
