@@ -32,7 +32,7 @@ export type ScormQualityGateResult = {
   /** Independent browser E2E attestation, not SCORM protocol conformance. */
   functionalCertification: ScormFunctionalCertification;
   /** Untrusted author-declared review: informational ONLY, never an SME release approval. */
-  authoringReview?: { externalExam: boolean; reviewed: boolean };
+  authoringReview?: { externalExam: boolean; reviewed: boolean; privateRelease?: boolean };
   /**
    * Server-derived from the manifest contract, never from release.* fields.
    * Present only when the ZIP provably has no scored/external exam and may use
@@ -395,7 +395,12 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const conformance = conformanceNotSupported();
   const manifest = parseJsonEntry(pkg, 'airtrust-completion-manifest.json');
   const externalExam = asRecord(manifest?.assessment)?.mode === 'EXTERNAL';
-  const declaredReviewed = asRecord(manifest?.release)?.reviewed === true;
+  const release = asRecord(manifest?.release);
+  const declaredReviewed = release?.reviewed === true;
+  const releaseStatus = typeof release?.status === 'string'
+    ? release.status.trim().toUpperCase() : '';
+  const privateRelease = releaseStatus.startsWith('PRIVATE_') ||
+    releaseStatus.includes('DO_NOT_ACTIVATE');
   // Only the assessment/completion contract decides eligibility. The ZIP's own
   // release.* marker (status, reviewed, functionalCertified) is self-declared
   // metadata and is deliberately never read here.
@@ -409,7 +414,7 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
     diagnostics: diagnostic,
     conformance,
     functionalCertification: evaluateScormFunctionalCertification('', []),
-    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed },
+    authoringReview: { externalExam, reviewed: !externalExam || declaredReviewed, privateRelease },
     certificationProfile: formativeEligible ? FORMATIVE_PROFILE : null,
     assessmentPolicy: formativeEligible ? 'FORMATIVE' : null,
     formativeContract,
