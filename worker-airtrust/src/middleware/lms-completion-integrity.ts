@@ -145,7 +145,7 @@ function manifestEvidenceFor(c: Context<LmsIntegrityContext>, row: EnrollmentEvi
   return loadScormManifestClosureEvidence({
     bucket: c.env.BUCKET, empresaId: row.empresa_id, cursoId: row.curso_id, matriculaId: row.id,
     activePrefix: row.scorm_package_r2_prefix, contentType: row.tipo_conteudo,
-    cmiJson, suspendData: row.suspend_data,
+    cmiJson, suspendData: row.suspend_data, db: c.env.DB,
   });
 }
 
