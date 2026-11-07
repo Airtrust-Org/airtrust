@@ -59,6 +59,23 @@ describe('Prova final do aluno', () => {
     expect(screen.queryByTestId('where')).toBeNull();
   });
 
+  it('certificado já emitido ou não aplicável não oferece reenvio', async () => {
+    for (const cert of ['ISSUED', 'NOT_APPLICABLE']) {
+      mocked.mockReset();
+      mocked.mockResolvedValueOnce(ok({ ...state('COMPLETED'), certificate: cert }));
+      renderPage();
+      expect(await screen.findByText('Treinamento já concluído.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('certificado ausente (MISSING) oferece o reenvio', async () => {
+    mocked.mockResolvedValueOnce(ok({ ...state('COMPLETED'), certificate: 'MISSING' }));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' })).toBeTruthy();
+  });
+
   it('falha no reenvio do certificado não afirma que o treinamento deixou de estar concluído', async () => {
     mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
     renderPage();

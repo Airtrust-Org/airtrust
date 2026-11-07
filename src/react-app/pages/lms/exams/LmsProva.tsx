@@ -21,6 +21,7 @@ type Attempt = {
 };
 type ExamState = {
   state: 'NOT_AVAILABLE' | 'STUDY_PENDING' | 'READY' | 'PASSED' | 'COMPLETED';
+  certificate?: 'ISSUED' | 'MISSING' | 'NOT_APPLICABLE';
   missing: string[]; attemptsUsed: number; hasOpenAttempt?: boolean; finalizeRequired: boolean;
 };
 type Envelope<T> = { success: boolean; data?: T; code?: string };
@@ -175,10 +176,15 @@ export default function LmsProva(): React.ReactElement {
           {exam.state === 'COMPLETED' ? (
             <>
               <p className="mb-3">Treinamento já concluído.</p>
-              <p className="mb-3 text-sm">Solicite uma nova tentativa apenas se este treinamento gera certificado EAD e o documento ainda não aparece. A solicitação não garante emissão.</p>
-              <button type="button" className={secondary} disabled={busy} onClick={() => void retryCertificate()}>
-                Solicitar nova tentativa de emissão do certificado
-              </button>
+              {exam.certificate === 'ISSUED' ? <p className="text-sm">Certificado emitido. Consulte seus certificados.</p> : null}
+              {exam.certificate !== 'ISSUED' && exam.certificate !== 'NOT_APPLICABLE' ? (
+                <>
+                  <p className="mb-3 text-sm">Solicite uma nova tentativa apenas se este treinamento gera certificado EAD e o documento ainda não aparece. A solicitação não garante emissão.</p>
+                  <button type="button" className={secondary} disabled={busy} onClick={() => void retryCertificate()}>
+                    Solicitar nova tentativa de emissão do certificado
+                  </button>
+                </>
+              ) : null}
             </>
           ) : null}
           {exam.state === 'READY' ? (
