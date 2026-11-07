@@ -138,6 +138,21 @@ export default function LmsProva(): React.ReactElement {
     } finally { setBusy(false); }
   }
 
+  async function retryCertificate() {
+    if (busy) return;
+    setBusy(true); setError(''); setStatus('');
+    try {
+      // Backend rechecks tenant/ownership and idempotently retries issuance for CONCLUIDO.
+      // A 200 response does not guarantee issuance: rendering/R2 failures are logged server-side.
+      const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
+      const body = (await res.json()) as { success?: boolean; code?: string };
+      if (!res.ok || !body.success) throw new Error(body.code ?? 'CERTIFICATE_RETRY_FAILED');
+      setStatus('Solicitação processada. Consulte seus certificados; se ainda não aparecer, contate a Gerência de Treinamento.');
+    } catch {
+      setError('Não foi possível solicitar uma nova tentativa de emissão do certificado. Tente novamente mais tarde.');
+    } finally { setBusy(false); }
+  }
+
   const card = 'rounded-xl border border-slate-200 bg-white p-4 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
   const primary = 'inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
   const secondary = 'inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
@@ -157,7 +172,14 @@ export default function LmsProva(): React.ReactElement {
         <section className={card} aria-label="Situação da prova">
           {exam.state === 'NOT_AVAILABLE' ? <p>Este treinamento não tem prova final disponível para você no momento.</p> : null}
           {exam.state === 'STUDY_PENDING' ? <p>Conclua todo o conteúdo do treinamento para liberar a prova.</p> : null}
-          {exam.state === 'COMPLETED' ? <p>Treinamento já concluído.</p> : null}
+          {exam.state === 'COMPLETED' ? (
+            <>
+              <p className="mb-3">Treinamento já concluído.</p>
+              <button type="button" className={secondary} disabled={busy} onClick={() => void retryCertificate()}>
+                Verificar emissão do certificado
+              </button>
+            </>
+          ) : null}
           {exam.state === 'READY' ? (
             <>
               <p className="mb-3">Estudo concluído. A prova avalia o conteúdo do treinamento e as respostas são corrigidas pelo sistema.
