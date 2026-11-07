@@ -55,6 +55,30 @@ export function lmsExamDb(opts: { viewed?: number[]; bind?: boolean } = {}) {
   return db;
 }
 
+export const SYNTHETIC_JWT_SECRET = 'synthetic-jwt-secret-for-tests-only-0123456789';
+export const ADMIN_USER = 1;
+export const TENANT_B_ADMIN = 800;
+
+/**
+ * Tables the REAL auth + tenant middleware read (usuarios_empresas, empresas,
+ * token_blocklist). Synthetic identities only: 500/501 = learners (tenant 6),
+ * 1 = admin (tenant 6), 800 = admin of tenant B (7).
+ */
+export function addRealAuthTables(db: ExamSqliteD1): void {
+  db.exec(`
+    ALTER TABLE usuarios ADD COLUMN perfil TEXT;
+    ALTER TABLE usuarios ADD COLUMN ativo INTEGER DEFAULT 1;
+    CREATE TABLE empresas(id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, plano TEXT, ativo INTEGER, deleted_at TEXT);
+    CREATE TABLE usuarios_empresas(usuario_id INTEGER, empresa_id INTEGER, role TEXT, is_primary INTEGER DEFAULT 1,
+      PRIMARY KEY(usuario_id, empresa_id));
+    CREATE TABLE token_blocklist(jti TEXT PRIMARY KEY, expires_at TEXT);
+    INSERT INTO empresas VALUES(6,'sint-a','Empresa Sintetica A','pro',1,NULL),(7,'sint-b','Empresa Sintetica B','pro',1,NULL);
+    INSERT INTO usuarios(id,funcionario_id,deleted_at,perfil,ativo) VALUES(${ADMIN_USER},NULL,NULL,'ADMIN',1),(${TENANT_B_ADMIN},NULL,NULL,'ADMIN',1);
+    INSERT INTO usuarios_empresas VALUES(${LEARNER_USER},6,'ALUNO',1),(${OTHER_USER},6,'ALUNO',1),
+      (${ADMIN_USER},6,'ADMIN',1),(${TENANT_B_ADMIN},7,'ADMIN',1);
+  `);
+}
+
 /** Publishes 10 questions (q1..q10, o1 correct), one plan and the edition binding. */
 export async function publishExam(db: ExamSqliteD1, bind = true): Promise<ExamPlan> {
   const refs = [];
