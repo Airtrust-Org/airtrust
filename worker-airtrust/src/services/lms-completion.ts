@@ -133,6 +133,68 @@ async function ensureEadCertificateAfterCompletion(
   }
 }
 
+/**
+ * Idempotent self-healing for an enrollment that is ALREADY CONCLUIDO.
+ *
+ * Certificate issuance runs after the atomic completion commit, so a transient
+ * failure (D1 batch, R2 put, renderer) leaves CONCLUIDO + CONCLUIDA without a
+ * certificate. This re-runs only the certificate step for the exact, tenant- and
+ * employee-scoped qualification row already linked to the enrollment. It never
+ * changes enrollment status, progress or qualification, never creates a
+ * qualification, and never throws (the caller response must not change).
+ */
+export async function recoverEadCertificateForCompletedMatricula(params: {
+  db: D1Database;
+  env?: Env;
+  empresaId: number;
+  matriculaId: number;
+  funcionarioId: number;
+  qualificacaoTipoId: number | null;
+  qualificacaoHistoricoId: number | null;
+  actorUserId?: number;
+}): Promise<void> {
+  const { db, empresaId, funcionarioId, qualificacaoTipoId, qualificacaoHistoricoId } = params;
+  if (!qualificacaoTipoId || !qualificacaoHistoricoId) return;
+  try {
+    const historico = await db
+      .prepare(
+        `SELECT id FROM qualificacoes_historico
+          WHERE id = ? AND empresa_id = ? AND funcionario_id = ?
+            AND status = 'CONCLUIDA' AND deleted_at IS NULL
+          LIMIT 1`,
+      )
+      .bind(qualificacaoHistoricoId, empresaId, funcionarioId)
+      .first<{ id: number }>();
+    if (!historico) return;
+    const type = await db
+      .prepare(
+        `SELECT categoria_id FROM qualificacoes_tipos
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .bind(qualificacaoTipoId, empresaId)
+      .first<{ categoria_id: number | null }>();
+    if (!type?.categoria_id) return;
+    const category = await requireActiveQualificationCategoryById(db, empresaId, type.categoria_id);
+    await ensureEadCertificateAfterCompletion(
+      {
+        env: params.env,
+        empresaId,
+        matriculaId: params.matriculaId,
+        actorUserId: params.actorUserId,
+      } as CompleteLmsMatriculaParams,
+      category,
+      historico.id,
+    );
+  } catch {
+    console.error(JSON.stringify({
+      event: 'LMS_EAD_CERTIFICATE_RECOVERY_FAILED',
+      empresa_id: empresaId,
+      matricula_id: params.matriculaId,
+      qualificacao_historico_id: qualificacaoHistoricoId,
+    }));
+  }
+}
+
 function isConcurrentQualificationUniqueConstraint(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
   return (
