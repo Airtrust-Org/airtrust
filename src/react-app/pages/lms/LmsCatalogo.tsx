@@ -1525,7 +1525,7 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
