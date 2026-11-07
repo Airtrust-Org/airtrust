@@ -111,6 +111,34 @@ describe('E2E sintetico - publicacao, vinculo a edicao e estudo', () => {
     expect(JSON.stringify(bank)).not.toMatch(LEAK);
   });
 
+  it('substituicao por edicao EXTERNAL em curso SCORED: sem nota SCORM, estudo completo libera prova', async () => {
+    const db = freshDb([1, 2]);
+    // The administrator's edition replacement keeps the course-level SCORED
+    // policy; the active EXTERNAL package never sends a SCO score.
+    db.exec("UPDATE lms_cursos SET scorm_assessment_policy='SCORED', scorm_mastery_score=80 WHERE id=26 AND empresa_id=6");
+    await publishExam(db);
+    const before = await state(db);
+    expect(before.state).toBe('STUDY_PENDING');
+    expect(before.missing).toContain('manifest_required_units');
+    expect((await start(db, 'idem-scored-pre-0')).status).toBe(409);
+    expect(count(db, 'SELECT COUNT(*) n FROM lms_exam_attempts')).toBe(0);
+
+    // A trusted ledger of the four required slides, with lesson_status
+    // completed, is the ONLY change; score_raw remains null.
+    db.database.prepare('UPDATE lms_progresso_scorm SET cmi_json=? WHERE matricula_id=10')
+      .run(ledger([1, 2, 3, 4]));
+    expect(db.database.prepare('SELECT score_raw FROM lms_progresso_scorm WHERE matricula_id=10')
+      .get()).toMatchObject({ score_raw: null });
+    expect((await state(db)).state).toBe('READY');
+    const attempt = await start(db, 'idem-scored-study-complete');
+    expect(attempt.status).toBe(201);
+    await answerWith(db, attempt.body.data.attemptId, 10);
+    expect((await submit(db, attempt.body.data.attemptId)).status).toBe(200);
+    expect((await state(db)).state).toBe('PASSED');
+    expect(db.database.prepare('SELECT score_raw FROM lms_progresso_scorm WHERE matricula_id=10')
+      .get()).toMatchObject({ score_raw: null });
+  });
+
   it('estudo incompleto nao libera a prova; estudo completo atestado pelo ledger libera', async () => {
     const db = freshDb([1, 2]); await publishExam(db);
     // lesson_status=completed e progresso 99% na matricula NAO substituem o ledger.
