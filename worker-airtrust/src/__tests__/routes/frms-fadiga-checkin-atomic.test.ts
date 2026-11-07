@@ -384,7 +384,11 @@ describe('daily check-in atomic commit', () => {
       const response = await router.fetch(request(), { DB: db } as Env, {} as ExecutionContext);
       expect(response.status).toBe(500);
       const event = spy.mock.calls.find(([label]) => label === '[FRMS_CHECKIN_FAILURE]');
-      expect(event?.[1]).toEqual({ phase: 'PRE_COMMIT', category: 'D1' });
+      expect(event?.[1]).toMatchObject({
+        phase: 'PRE_COMMIT', category: 'D1', incident_id: expect.any(String),
+      });
+      const responseBody = await response.json() as { incident_id: string };
+      expect(responseBody.incident_id).toBe((event?.[1] as { incident_id: string }).incident_id);
       expect(JSON.stringify(event)).not.toMatch(/D1_ERROR|CHECK constraint|horas_sono|kss_score/i);
     } finally {
       spy.mockRestore();
@@ -400,8 +404,12 @@ describe('daily check-in atomic commit', () => {
         { DB: db } as Env, {} as ExecutionContext);
       expect(response.status).toBe(500);
       const event = spy.mock.calls.find(([label]) => label === '[FRMS_CHECKIN_FAILURE]');
-      expect(event?.[1]).toEqual({ phase: 'POST_COMMIT', category: 'OTHER' });
-      expect(JSON.stringify(event)).not.toMatch(/sensitive incident context|funcionario_id|trial|KSS|sono|70/i);
+      expect(event?.[1]).toMatchObject({
+        phase: 'POST_COMMIT', category: 'OTHER', incident_id: expect.any(String),
+      });
+      const responseBody = await response.json() as { incident_id: string };
+      expect(responseBody.incident_id).toBe((event?.[1] as { incident_id: string }).incident_id);
+      expect(JSON.stringify(event)).not.toMatch(/sensitive incident context|funcionario_id|trial|KSS|sono/i);
     } finally {
       spy.mockRestore();
     }
