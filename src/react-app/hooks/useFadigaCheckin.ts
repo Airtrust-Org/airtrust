@@ -168,7 +168,7 @@ export function safeFadigaVisibleErrorMessage(
           return 'Os dados do teste de atenção não passaram na validação. O check-in não foi registrado. Atualize o AirTrust e refaça o teste antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
         }
       }
-      return 'Não foi possível registrar o check-in de fadiga. Tente novamente.';
+      return 'Não foi possível confirmar o registro do check-in. Verifique seu Histórico antes de tentar novamente. Se persistir, informe a coordenação.';
   }
 }
 
