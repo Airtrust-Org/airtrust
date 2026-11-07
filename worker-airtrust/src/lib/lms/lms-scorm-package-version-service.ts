@@ -121,9 +121,60 @@ export async function createScormPackageCandidate(params: {
         return { ...packageReadModel(current ?? existing), ...freshQuality, status: 'REJECTED' as const };
       }
     }
-    const storedValidation = parseStoredScormValidation<ScormQualityGateResult>(
+    let storedValidation = parseStoredScormValidation<ScormQualityGateResult>(
       existing.validation_result_json,
     );
+    // Pre-change VALIDATED EXTERNAL editions were classified before the Worker
+    // persisted the private-release marker. Explicit same-SHA re-upload is the
+    // only opportunity to inspect the original submitted bytes under today's
+    // gates; never trust release.status from client JSON or reclassify by guess.
+    if (existing.status === 'VALIDATED' &&
+        storedValidation?.authoringReview?.externalExam === true &&
+        storedValidation.authoringReview.privateRelease === undefined) {
+      const refreshed = staticRejected
+        ? staticQuality
+        : validateScormPackageQuality(extractAndValidateLmsPackage(params.bytes, 'scorm'));
+      if (refreshed.structural.status !== 'PASS' ||
+          refreshed.completionManifest.status !== 'PASS' ||
+          refreshed.diagnostics.status !== 'PASS' ||
+          refreshed.authoringReview?.externalExam !== true) {
+        throw new ApiError('O ZIP EXTERNAL não passou na revalidação estática atual',
+          409, 'SCORM_EXTERNAL_REVALIDATION_FAILED');
+      }
+      const updatedValidation = JSON.stringify(withScormUploadMetadata({
+        ...storedValidation,
+        // Only replace these fields with a fresh server-derived inspection of
+        // the exact submitted ZIP. Preserve other recorded QA/readback fields.
+        structural: refreshed.structural,
+        completionManifest: refreshed.completionManifest,
+        diagnostics: refreshed.diagnostics,
+        authoringReview: refreshed.authoringReview,
+      }, originalFilename));
+      const oldValidation = existing.validation_result_json;
+      const update = await params.db.prepare(
+        `UPDATE lms_scorm_package_versions
+           SET validation_result_json=?, validation_finished_at=datetime('now')
+         WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?
+           AND status='VALIDATED' AND validation_result_json=?`,
+      ).bind(updatedValidation, existing.id, params.empresaId, params.cursoId,
+        packageSha256, oldValidation).run();
+      if (update.meta.changes !== 1) {
+        // Never overwrite a concurrent activation or silently claim fresh QA.
+        const current = await params.db.prepare(
+          `SELECT id, empresa_id, curso_id, package_sha256, r2_prefix, launch_file,
+                  scorm_versao, status, validation_result_json, assessment_policy,
+                  certification_profile
+             FROM lms_scorm_package_versions
+            WHERE id=? AND empresa_id=? AND curso_id=? AND package_sha256=?`,
+        ).bind(existing.id, params.empresaId, params.cursoId, packageSha256)
+          .first<PackageRow>();
+        if (!current) throw new ApiError('Candidato SCORM alterado durante revalidação',
+          409, 'SCORM_EXTERNAL_REVALIDATION_RACE');
+        return packageReadModel(current);
+      }
+      existing.validation_result_json = updatedValidation;
+      storedValidation = parseStoredScormValidation<ScormQualityGateResult>(updatedValidation);
+    }
     if (storedValidation && originalFilename) {
       const nextValidationJson = JSON.stringify(
         withScormUploadMetadata(storedValidation, originalFilename),

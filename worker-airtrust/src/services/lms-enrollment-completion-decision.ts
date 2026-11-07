@@ -249,6 +249,9 @@ export function buildEnrollmentCompletionDecision(
     administrativeAuthorized?: boolean;
     administrativeReason?: unknown;
     administrativeScoreOverride?: boolean;
+    /** Only set by the Worker after verifying an approved EXTERNAL exam attempt
+     * bound to this enrollment, active cycle and package edition. */
+    approvedExternalExam?: boolean;
     serverValidatedPptxCoverage?: boolean;
   } = {},
 ): LmsCompletionDecision {
@@ -264,7 +267,8 @@ export function buildEnrollmentCompletionDecision(
   // from graded assessment. Only FORMATIVE can omit a score; missing/unknown
   // policy stays SCORED (fail-closed, including legacy rows and test fixtures).
   const isFormative = row.scorm_assessment_policy === 'FORMATIVE' && row.tipo_conteudo === 'scorm';
-  const requiresAssessment = interactive && !isFormative &&
+  const externallyCertified = options.approvedExternalExam === true && row.tipo_conteudo === 'scorm';
+  const requiresAssessment = interactive && !isFormative && !externallyCertified &&
     (row.gerar_qualificacao_ao_concluir === 1 || row.scorm_mastery_score !== null);
   const statuses = source === 'scorm' || source === 'administrative' || source === 'manual'
     ? selectScormStatusFamily({
@@ -297,7 +301,7 @@ export function buildEnrollmentCompletionDecision(
     scoreMin: incoming.score_min ?? row.score_min,
     scoreMax: incoming.score_max ?? row.score_max,
     scoreScaled: incoming.score_scaled ?? row.score_scaled,
-    masteryScore: isFormative || options.administrativeScoreOverride ? null : row.scorm_mastery_score,
+    masteryScore: isFormative || externallyCertified || options.administrativeScoreOverride ? null : row.scorm_mastery_score,
     requiresAssessment: requiresAssessment && !options.administrativeScoreOverride,
     generatesQualification: row.gerar_qualificacao_ao_concluir === 1,
     informativeCourse: !interactive && row.gerar_qualificacao_ao_concluir !== 1,
