@@ -8,6 +8,7 @@ const mockState = vi.hoisted(() => ({
   alerts: [] as Array<{ tripulante_id: number; id: string; nivel: string; mensagem: string }>,
   dailyCalls: 0,
   alertCalls: 0,
+  alertLoading: false,
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -21,8 +22,8 @@ vi.mock('@/react-app/components/PageHeader', () => ({
   default: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 vi.mock('@/react-app/components/Button', () => ({
-  default: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>
-    <button type="button" onClick={onClick}>{children}</button>,
+  default: ({ children, onClick, disabled }: { children: ReactNode; onClick?: () => void; disabled?: boolean }) =>
+    <button type="button" disabled={disabled} onClick={onClick}>{children}</button>,
 }));
 vi.mock('@/react-app/hooks/useFrms', () => ({
   useFrmsDailyFatigue: () => ({
@@ -38,7 +39,7 @@ vi.mock('@/react-app/hooks/useFrms', () => ({
   }),
   useFrmsDailyFatigueAlerts: () => ({
     data: { items: mockState.alerts },
-    loading: false,
+    loading: mockState.alertLoading,
     error: null,
     refetch: () => {
       mockState.alertCalls++;
@@ -60,6 +61,7 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     mockState.alerts = [];
     mockState.dailyCalls = 0;
     mockState.alertCalls = 0;
+    mockState.alertLoading = false;
   });
 
   it('reconsulta ambos ao clicar Atualizar e deixa de apresentar verde quando surge risco crítico', () => {
@@ -72,6 +74,16 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
 
     expect(mockState.dailyCalls).toBe(1);
     expect(mockState.alertCalls).toBe(1);
+    // A fast roster response cannot make the screen look current while the
+    // canonical risk request for the same date is still pending.
+    mockState.alertLoading = true;
+    rendered.rerender(<FrmsFadigaPainel />);
+    expect(screen.queryByText('100%')).not.toBeInTheDocument();
+    expect(screen.getByText('Carregando painel e alertas...')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Atualizar' })).toBeDisabled();
+
+    mockState.alertLoading = false;
+    rendered.rerender(<FrmsFadigaPainel />);
     expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getAllByText('Crítica').length).toBeGreaterThan(0);
     expect(screen.queryByText('Preenchida — sem alerta identificado')).not.toBeInTheDocument();
