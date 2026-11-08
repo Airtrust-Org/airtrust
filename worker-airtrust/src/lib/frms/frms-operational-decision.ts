@@ -163,6 +163,7 @@ function humanizeComplianceReason(reason: string): string {
 
 const MOTIVO_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
   CHECKIN_CRITICO: 'Check-in indica fadiga crítica',
+  READINESS_REVISAO: 'Triagem de atenção/readiness requer revisão operacional',
   EFETIVIDADE_BAIXA: 'Efetividade cognitiva reduzida',
   SONO_INSUFICIENTE: 'Sono insuficiente (< 6h)',
   KSS_ALTO: 'Escala KSS elevada — sonolência reportada',
