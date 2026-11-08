@@ -223,7 +223,7 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
       .toBe('/api/lms/cursos/84/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
   });
 
-  it('does not allow an EXTERNAL manifest with scoring or private DO_NOT_ACTIVATE status through direct replacement', async () => {
+  it('keeps the server authoritative for inconsistent or private SCORM ZIPs', async () => {
     for (const manifest of [
       {
         assessment: { mode: 'EXTERNAL', scoringBySCORM: true, requiredInteractions: [] },
@@ -241,14 +241,22 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
       extractBrowserLmsPackageMock.mockReturnValue(f.entries);
       expect(await inspectScormReplacementProfile(scormFile(f.zip)))
         .toBe(manifest.release ? 'PRIVATE' : 'GOVERNED');
+      // No second client approval; the Worker may reject unsafe/invalid ZIPs.
+      fetchWithAuthMock.mockResolvedValueOnce(response({
+        ...CANDIDATE_VALIDATED, status: 'REJECTED',
+        structural: { status: 'FAIL', errors: ['Pacote inválido'] },
+      }));
       await expect(uploadScormInactiveProductionCandidate({
         cursoId: 84, file: scormFile(f.zip), replaceImmediately: true,
-      })).rejects.toThrow(/substituição direta/);
+      })).rejects.toThrow(/recusado|rejeitado/);
     }
-    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchWithAuthMock.mock.calls) {
+      expect(call[0]).toBe('/api/lms/cursos/84/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+    }
   });
 
-  it('routes AW139/S76-style graded mastery packages to inactive intake, even for admin', async () => {
+  it('preserves an explicit inactive intake path for governed QA when requested', async () => {
     const f = scormZipWithCompletionContract({
       ...noExamContract(),
       assessment: { requiredInteractions: ['q01'], masteryScore: 80, successStatus: 'passed', failureStatus: 'failed' },
