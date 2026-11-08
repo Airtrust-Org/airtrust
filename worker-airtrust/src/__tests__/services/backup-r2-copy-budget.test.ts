@@ -11,7 +11,7 @@ const CONFIG_TABLES = [
   'system_config', 'funcoes', 'setores', 'aeronaves', 'modelos_aeronave', 'empresas', 'papeis',
 ];
 
-function setup(objectCount: number, extraEnv: Partial<Env> = {}) {
+function setup(objectCount: number, extraEnv: Record<string, string> = {}) {
   const db = new BackupSqliteD1();
   for (const t of CONFIG_TABLES) db.exec(`CREATE TABLE "${t}" (id INTEGER PRIMARY KEY)`);
   const initial: Record<string, string> = {};
