@@ -327,14 +327,16 @@ app.post('/:id/scorm-replace',
       userId: actorId(c), bytes, arquivoNome,
     });
     const externalExam = candidate.authoringReview?.externalExam === true;
+    const formative = candidate.certificationProfile === FORMATIVE_PROFILE;
     if (candidate.status === 'ACTIVE') {
       // Idempotent exact-SHA resubmission; never change enrollments twice.
-      const reader = externalExam
-        ? readAlreadyActiveExternalReplacement : readAlreadyActiveFormativeReplacement;
-      const receipt = await reader({
+      const readArgs = {
         db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
         packageId: candidate.packageId, packageSha256: candidate.packageSha256,
-      });
+      };
+      const receipt = formative
+        ? await readAlreadyActiveFormativeReplacement(readArgs)
+        : await readAlreadyActiveExternalReplacement(readArgs, externalExam ? 'EXTERNAL' : 'SCORM');
       if (receipt) return c.json({ success: true, data: receipt });
     }
     if (candidate.status !== 'VALIDATED') {
@@ -353,23 +355,25 @@ app.post('/:id/scorm-replace',
     // Clicking the unambiguous replacement button acknowledges that any open
     // enrollment uses the incoming course policy; the server supplies its own
     // contemporaneous count and retains CAS protection on policy+active SHA.
-    const preflight = externalExam
-      ? await evaluateFormativeActivation({
-          db: c.env.DB, empresaId, cursoId, packageId: candidate.packageId,
-        })
-      : await preflightDirectFormativeReplacement({
+    const preflight = formative
+      ? await preflightDirectFormativeReplacement({
           db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
           packageId: candidate.packageId, userId: actorId(c),
+        })
+      : await evaluateFormativeActivation({
+          db: c.env.DB, empresaId, cursoId, packageId: candidate.packageId,
         });
-    const replace = externalExam ? replaceValidatedExternalScorm : replaceValidatedFormativeScorm;
-    const data = await replace({
+    const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId: candidate.packageId, userId: actorId(c),
       confirm: {
         cursoId, packageSha256: candidate.packageSha256,
         acknowledgeInProgress: preflight.impact.inProgress,
       },
-    });
+    };
+    const data = formative
+      ? await replaceValidatedFormativeScorm(replaceArgs)
+      : await replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM');
     return c.json({ success: true, data });
   });
 
@@ -710,11 +714,13 @@ app.post('/:id/scorm-package-versions/:packageId/replace-direct',
     const candidate = await readCandidate(c.env.DB, empresaId, cursoId, packageId);
     const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
     const externalExam = quality?.authoringReview?.externalExam === true;
-    const replace = externalExam ? replaceValidatedExternalScorm : replaceValidatedFormativeScorm;
-    const data = await replace({
+    const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId, userId: actorId(c), confirm: body.data.confirm,
-    });
+    };
+    const data = candidate.certification_profile === FORMATIVE_PROFILE
+      ? await replaceValidatedFormativeScorm(replaceArgs)
+      : await replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM');
     return c.json({ success: true, data });
   });
 
