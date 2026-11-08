@@ -843,6 +843,8 @@ export type ScormPackageVersionRow = {
   /** Server-derived. `FORMATIVE_NO_EXAM_V1` = formative course without a final exam. */
   certificationProfile?: 'FORMATIVE_NO_EXAM_V1' | null;
   assessmentPolicy?: 'SCORED' | 'FORMATIVE' | null;
+  /** From the Worker's persisted SCORM manifest inspection. */
+  authoringReview?: { externalExam: boolean; reviewed: boolean; privateRelease?: boolean };
   arquivoNome?: string | null;
   active?: boolean;
   /** Only set on the ACTIVE row: the edition a rollback would restore. */
