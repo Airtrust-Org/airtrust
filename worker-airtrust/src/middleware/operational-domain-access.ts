@@ -2,13 +2,15 @@
  * Operational-domain access facade.
  *
  * The core guard remains unchanged for managers and every operational
- * resource. Qualification-type catalog administration is the sole
- * exception: this UI is admin-only and every handler remains tenant-scoped,
- * so a tenant ADMINISTRADOR may maintain its own qualification models
- * without also holding an operational manager assignment.
+ * resource. Qualification catalog updates and historical qualification
+ * corrections by a tenant ADMINISTRADOR are narrowly exempted from
+ * classification-based checks; the latter explicitly verifies ownership
+ * and employee tenancy before the write handler runs. Route permissions
+ * and RBAC-state integrity checks remain mandatory.
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
+import { ApiError } from '../lib/errors/api-error';
 import * as core from '../services/operational-domain-access-core';
 import {
   assertOperationalAccess,
@@ -155,6 +157,14 @@ function isTenantAdminRole(userRole: unknown): boolean {
   );
 }
 
+function isTenantAdminQualificationHistoryUpdateRequest(
+  options: RequireOperationalAccessOptions,
+  userRole: unknown,
+): boolean {
+  return options.resourceType === 'qualificacao_historico' &&
+    options.action === 'update' && isTenantAdminRole(userRole);
+}
+
 function isTenantAdminQualificationCatalogRequest(
   options: RequireOperationalAccessOptions,
   userRole: unknown,
@@ -167,27 +177,49 @@ export function requireOperationalAccess(
 ): MiddlewareHandler<{ Bindings: Env }> {
   const guardedMiddleware = requireOperationalAccessGuard(options);
 
-  if (options.resourceType !== 'qualificacao_tipo') {
+  if (options.resourceType !== 'qualificacao_tipo' &&
+      !(options.resourceType === 'qualificacao_historico' && options.action === 'update')) {
     return guardedMiddleware;
   }
 
   return async (c, next) => {
     const userRole = (c.get as (key: string) => unknown)('userRole');
-    if (!isTenantAdminQualificationCatalogRequest(options, userRole)) {
+    const isCatalogAdmin = isTenantAdminQualificationCatalogRequest(options, userRole);
+    const isHistoryAdmin = isTenantAdminQualificationHistoryUpdateRequest(options, userRole);
+    if (!isCatalogAdmin && !isHistoryAdmin) {
       await guardedMiddleware(c, next);
       return;
     }
 
-    // Preserve the tenant rollout/state integrity checks. Query failures,
-    // missing tenants and invalid feature flags still fail closed.
-    await core.isTenantRbacEnabled(
-      c.env.DB,
-      Number((c.get as (key: string) => unknown)('empresaId') || 0),
-    );
+    const empresaId = Number((c.get as (key: string) => unknown)('empresaId') || 0);
+    // Preserve tenant RBAC rollout integrity, including missing/invalid flags.
+    await core.isTenantRbacEnabled(c.env.DB, empresaId);
 
-    // The qualification handlers themselves always resolve the resource
-    // with empresa_id from the authenticated tenant. A cross-tenant id
-    // therefore remains 404 and cannot be mutated.
+    if (isHistoryAdmin) {
+      // Updating legacy historical qualifications must not require the
+      // administrator to invent an operational domain for mixed EAD
+      // categories. This exception applies ONLY to a tenant administrator
+      // with the route's existing "qualificacoes:editar" permission, and
+      // ONLY to an existing history row owned by the authenticated tenant
+      // and linked to an employee of the same tenant.
+      // Managers, other actions and cross-tenant IDs keep the core guard.
+      const id = options.resolveResourceId
+        ? options.resolveResourceId(c)
+        : Number(c.req.param('id')) || null;
+      if (!id || !Number.isInteger(id) || id <= 0) {
+        throw new ApiError('Registro de qualificação inválido', 400, 'INVALID_QUALIFICATION_ID');
+      }
+      const owned = await c.env.DB.prepare(
+        `SELECT qh.id FROM qualificacoes_historico qh
+         INNER JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id
+         WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL LIMIT 1`,
+      ).bind(id, empresaId).first<{ id: number }>();
+      if (!owned) {
+        throw new ApiError('Registro não encontrado', 404, 'QUALIFICATION_HISTORY_NOT_FOUND');
+      }
+    }
+
+    // Catalog writes are already tenant-scoped in their handlers.
     await next();
   };
 }
