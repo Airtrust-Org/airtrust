@@ -17,6 +17,12 @@ type DailyFatigueStatusItem = Record<string, unknown> & {
   funcionario_nome?: unknown;
   status?: unknown;
   data_source?: unknown;
+  // The screening status and the configured fatigue score are distinct inputs.
+  // A normal subjective screening must not hide a scored restriction or a
+  // mandatory operational review after a check-in was submitted.
+  nivel_fadiga?: unknown;
+  status_operacional?: unknown;
+  requires_operational_review?: unknown;
 };
 
 // Audit 201 regression guard: alerts follow the canonical daily-fatigue status surface.
@@ -36,6 +42,56 @@ function dailyFatigueAlertMessage(status: string): string {
     return 'Fadiga diária em nível crítico. Revisão operacional imediata necessária.';
   }
   return 'Fadiga diária em nível de atenção. Revisão operacional necessária.';
+}
+
+type DailyFatigueAlertClassification = {
+  type: string;
+  severity: 'ATENCAO' | 'CRITICO';
+  message: string;
+};
+
+function resolveDailyFatigueAlert(item: DailyFatigueStatusItem): DailyFatigueAlertClassification | null {
+  const status = String(item.status || '');
+  if (status === 'not_submitted' || status === 'incomplete_checkin' ||
+      status === 'attention' || status === 'critical' || status === 'unfit_for_duty') {
+    return {
+      type: `daily_fatigue_${status}`,
+      severity: status === 'critical' || status === 'unfit_for_duty' ? 'CRITICO' : 'ATENCAO',
+      message: dailyFatigueAlertMessage(status),
+    };
+  }
+  if (status !== 'normal') return null;
+
+  // The score band comes from the stored check-in calculation using the active
+  // tenant's configured parameters; never recalculate threshold values here.
+  const scoreBand = item.nivel_fadiga;
+  const operationalStatus = item.status_operacional;
+  const reviewRequired = item.requires_operational_review === true ||
+    item.requires_operational_review === 1;
+
+  if (scoreBand === 'VERMELHO' || scoreBand === 'LARANJA' ||
+      operationalStatus === 'NAO_APTO') {
+    return {
+      type: 'daily_fatigue_score_critical',
+      severity: 'CRITICO',
+      message: 'Cálculo configurado do check-in indica condição de risco ou restrição elevada. Revisão operacional imediata necessária.',
+    };
+  }
+  if (scoreBand === 'AMARELO') {
+    return {
+      type: 'daily_fatigue_score_attention',
+      severity: 'ATENCAO',
+      message: 'Cálculo configurado do check-in indica atenção à fadiga. Revisão operacional necessária.',
+    };
+  }
+  if (operationalStatus === 'RESTRITO' || reviewRequired) {
+    return {
+      type: 'daily_fatigue_review_required',
+      severity: 'ATENCAO',
+      message: 'Check-in realizado, mas há revisão operacional pendente. Não presumir liberação para a jornada.',
+    };
+  }
+  return null;
 }
 
 function legacyRequest(c: Context<AppEnv>, pathname: string): Request {
@@ -124,35 +180,25 @@ export function createFrmsFadigaCheckinRouter(
       }
     }
 
-    const alertableStatuses = new Set([
-      'not_submitted',
-      'incomplete_checkin',
-      'attention',
-      'critical',
-      'unfit_for_duty',
-    ]);
-
-    const items = statusItems
-      .filter((item) => alertableStatuses.has(String(item.status || '')))
-      .map((item) => {
-        const status = String(item.status || '');
-        const funcionarioId = item.funcionario_id;
-        const critical = status === 'critical' || status === 'unfit_for_duty';
-        return {
-          id: `daily-fatigue-derived-${funcionarioId}-${date}-${status}`,
-          tripulante_id: funcionarioId,
-          nivel: critical ? 'CRITICO' : 'ATENCAO',
-          tipo_limite: `daily_fatigue_${status}`,
-          mensagem: dailyFatigueAlertMessage(status),
-          created_at: `${date} 00:00:00`,
-          resolvido: 0,
-          resolvido_em: null,
-          tripulante_nome: item.funcionario_nome,
-          requires_operational_review: 1,
-          alert_type: `daily_fatigue_${status}`,
-          data_source: item.data_source,
-        };
-      });
+    const items = statusItems.flatMap((item) => {
+      const alert = resolveDailyFatigueAlert(item);
+      if (!alert) return [];
+      const funcionarioId = item.funcionario_id;
+      return [{
+        id: `daily-fatigue-derived-${funcionarioId}-${date}-${alert.type}`,
+        tripulante_id: funcionarioId,
+        nivel: alert.severity,
+        tipo_limite: alert.type,
+        mensagem: alert.message,
+        created_at: `${date} 00:00:00`,
+        resolvido: 0,
+        resolvido_em: null,
+        tripulante_nome: item.funcionario_nome,
+        requires_operational_review: 1,
+        alert_type: alert.type,
+        data_source: item.data_source,
+      }];
+    });
 
     return c.json({
       success: true,
