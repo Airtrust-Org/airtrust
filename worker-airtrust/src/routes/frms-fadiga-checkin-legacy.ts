@@ -700,7 +700,11 @@ router.get('/daily-fatigue', async (c) => {
         status === 'incomplete_checkin' ||
         status === 'attention' ||
         status === 'critical' ||
-        status === 'unfit_for_duty';
+        status === 'unfit_for_duty' ||
+        // The stored review flag also covers late check-ins and operational
+        // restrictions independent of the subjective daily screening result.
+        // Do not turn a previously required review into a green row.
+        Number(row.requires_operational_review || 0) === 1;
 
       return {
         ...row,
