@@ -196,13 +196,26 @@ export async function reserveTrainingAlert(
         `UPDATE notificacoes_log
             SET status = 'pendente',
                 tentativas_envio = COALESCE(tentativas_envio, 0) + 1,
+                -- A confirmed manual resend may reuse a slot initially
+                -- created by an LMS/Compliance bulk operation. Mark its new
+                -- disposition in the same atomic CAS so readback is visible.
+                corpo = COALESCE(?, corpo),
+                tipo = COALESCE(?, tipo),
+                assunto = COALESCE(?, assunto),
+                destinatario = COALESCE(?, destinatario),
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
             AND status = 'enviada'
             AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key, observedAttempts)
+      .bind(
+        params.manual ? bodyPayload : null,
+        params.manual ? tipo : null,
+        params.manual ? assunto : null,
+        params.manual ? params.destinatarioMascarado || null : null,
+        params.empresaId, key, observedAttempts,
+      )
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {
