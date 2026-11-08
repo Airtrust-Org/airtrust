@@ -57,7 +57,7 @@ describe('qualificacoes history admin unclassified edit', () => {
 
   it('does not allow a cross-tenant or missing history ID', async () => {
     const { execute, next } = runHistoryUpdate({ owned: false });
-    await expect(execute()).rejects.toMatchObject({ status: 404 });
+    await expect(execute()).rejects.toMatchObject({ statusCode: 404 });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -69,7 +69,7 @@ describe('qualificacoes history admin unclassified edit', () => {
 
   it('rejects invalid historical ID before modifying any row', async () => {
     const { execute, next } = runHistoryUpdate({ id: 'oops' });
-    await expect(execute()).rejects.toMatchObject({ status: 400 });
+    await expect(execute()).rejects.toMatchObject({ statusCode: 400 });
     expect(next).not.toHaveBeenCalled();
   });
 });
