@@ -164,6 +164,63 @@ describe('computeRequirement — oráculo de status', () => {
     expect(result.status_compliance).toBe('NAO_REALIZADO');
   });
 
+  it.each([
+    '31/05/2026', '2026-02-30', '2026-13-01', 'not a date', '2026-06-01T99:99:00Z',
+  ])('evidência histórica com data de realização inválida %s não provoca 500 nem marca CONFORME', (invalid) => {
+    noon('2026-06-15');
+    const result = computeRequirement(rule({ validade_fonte: 'MODELO' }), [history(invalid, null)], []);
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_validacao).toBe(true);
+    expect(result.evidencia_pendente_motivo).toBe('DATA_REALIZACAO');
+  });
+
+  it('LMS concluído com data inválida não produz certificado nem conformidade', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(rule({ validade_fonte: 'MODELO' }), [], [lms('CONCLUIDO', '2026-02-30')]);
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_motivo).toBe('DATA_REALIZACAO');
+  });
+
+  it('data de vencimento inválida em evidência canônica exige validação, não conformidade infinita', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(
+      rule({ validade_fonte: 'EVIDENCIA' }),
+      [history('2026-05-01', '31/12/2026')], [],
+    );
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_motivo).toBe('DATA_VENCIMENTO');
+    expect(result.data_validade).toBeNull();
+  });
+
+  it('validade_meses inválida não dispara RangeError nem declara conformidade', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(
+      rule({ validade_fonte: 'MODELO', validade_meses: Number.NaN }),
+      [history('2026-05-01', null)], [],
+    );
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_motivo).toBe('REGRA_VALIDADE');
+  });
+
+  it('regra de validade inválida sem histórico bloqueia matrícula automática por revisão pendente', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(
+      rule({ validade_meses: Number.NaN }), [], [],
+    );
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_validacao).toBe(true);
+    expect(result.evidencia_pendente_motivo).toBe('REGRA_VALIDADE');
+  });
+
+  it('formato canônico SQLite datetime e ISO timestamp preservam o cálculo', () => {
+    noon('2026-06-15');
+    for (const realizedAt of ['2026-05-01 11:30:00', '2026-05-01T11:30:00.000Z']) {
+      const result = computeRequirement(rule({ validade_fonte: 'MODELO' }), [history(realizedAt, null)], []);
+      expect(result.status_compliance).toBe('CONFORME');
+      expect(result.data_validade).toBe('2027-05-01');
+    }
+  });
+
   it('LMS EM_ANDAMENTO sem conclusão → EM_ANDAMENTO, nunca CONFORME', () => {
     noon('2026-06-15');
     const result = computeRequirement(rule(), [], [lms('EM_ANDAMENTO', null)]);

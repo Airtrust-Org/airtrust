@@ -619,6 +619,32 @@ app.delete('/regras/:id', requireRole('admin', 'manager'), async (c) => {
   return c.json({ success: true });
 });
 
+// Read-only bulk projection for governed Compliance reconciliation.
+// One tenant-scoped snapshot per batch avoids N full D1 snapshots in parallel.
+app.get('/funcionarios/requisitos-lote', requireRole('admin'), async (c) => {
+  const rawIds = String(c.req.query('ids') || '');
+  if (!/^\d+(?:,\d+)*$/.test(rawIds)) {
+    throw new ApiError('IDs de funcionários inválidos', 400, 'COMPLIANCE_BATCH_IDS_INVALID');
+  }
+  const ids = rawIds.split(',').map(Number);
+  if (ids.length === 0 || ids.length > 25 ||
+      ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+      new Set(ids).size !== ids.length) {
+    throw new ApiError('Lote de funcionários inválido', 400, 'COMPLIANCE_BATCH_IDS_INVALID');
+  }
+  const empresaId = getEmpresaId(c);
+  const access = await getEmployeeSectorAccess(c, empresaId);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
+  const data = ids.map((id) => {
+    const person = peopleById.get(id);
+    if (!person) throw new ApiError('Funcionário não encontrado', 404, 'COMPLIANCE_BATCH_EMPLOYEE_NOT_FOUND');
+    // Do not return names, e-mail, phone, CPF or any other employee PII.
+    return { id, requisitos: person.requisitos };
+  });
+  return c.json({ success: true, data });
+});
+
 app.get('/funcionarios/:id', async (c) => {
   const empresaId = getEmpresaId(c);
   const funcionarioId = asPositiveInt(c.req.param('id'));

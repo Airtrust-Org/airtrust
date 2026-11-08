@@ -199,6 +199,47 @@ describe('training compliance engine', () => {
     patchComplianceSchema(sqlite);
   });
 
+  it('consulta requisitos em lote sem PII e mantém paridade com os endpoints individuais', async () => {
+    sqlite.database.exec(`
+      INSERT INTO treinamento_requisitos
+        (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, origem)
+      VALUES (1, 100, 'EMPRESA', 'OBRIGATORIA', 'EMPRESA');
+    `);
+    const app = createApp(sqlite.asD1());
+    const response = await app.request('/funcionarios/requisitos-lote?ids=1000,1002');
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.success).toBe(true);
+    expect(body.data.map((person: any) => person.id)).toEqual([1000, 1002]);
+    for (const person of body.data) {
+      expect(Object.keys(person).sort()).toEqual(['id', 'requisitos']);
+      const individual = await (await app.request(`/funcionarios/${person.id}`)).json() as any;
+      expect(person.requisitos).toEqual(individual.data.requisitos);
+    }
+  });
+
+  it('falha fechado para IDs inválidos, duplicados, grandes ou fora do tenant', async () => {
+    const app = createApp(sqlite.asD1());
+    for (const ids of ['', 'abc', '1000,1000', '0', '1000,-1',
+      Array.from({ length: 26 }, (_, i) => i + 1).join(',')]) {
+      const response = await app.request(`/funcionarios/requisitos-lote?ids=${ids}`);
+      expect(response.status, ids).toBe(400);
+    }
+    expect((await app.request('/funcionarios/requisitos-lote?ids=2000')).status).toBe(404);
+    expect((await app.request('/funcionarios/requisitos-lote?ids=1000,2000')).status).toBe(404);
+    tenantMock.id = 2;
+    expect((await app.request('/funcionarios/requisitos-lote?ids=1000')).status).toBe(404);
+  });
+
+  it('respeita escopo setorial restrito e nunca retorna funcionários de outros setores', async () => {
+    sectorAccessMock.access = { mode: 'restricted', setorIds: [10], funcionarioId: null };
+    const app = createApp(sqlite.asD1());
+    const allowed = await app.request('/funcionarios/requisitos-lote?ids=1000');
+    expect(allowed.status).toBe(200);
+    const denied = await app.request('/funcionarios/requisitos-lote?ids=1002');
+    expect(denied.status).toBe(404);
+  });
+
   it('exclui Check, Exame, Licença e Voo das pendências, regras e indicadores, preservando EAD', async () => {
     sqlite.database.exec(`
       INSERT INTO treinamento_requisitos
