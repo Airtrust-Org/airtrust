@@ -91,6 +91,19 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     expect(screen.queryByText('Preenchida — sem alerta identificado')).not.toBeInTheDocument();
   });
 
+  it('mostra status não reconhecido como indeterminado, nunca como verde', () => {
+    mockState.daily = [{
+      funcionario_id: 10, funcionario_nome: 'Tripulante Sintético',
+      status: 'unexpected_status', score_fadiga: 12,
+    }];
+    render(<FrmsFadigaPainel />);
+    const row = screen.getByText('Tripulante Sintético').closest('div.rounded-xl');
+    expect(row).toHaveClass('bg-slate-50');
+    expect(row).not.toHaveClass('bg-emerald-50');
+    expect(screen.getAllByText('Situação não determinada')).toHaveLength(2);
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+  });
+
   it('não converte resposta de alertas malformada em ausência confirmada de risco', () => {
     mockState.alertsMalformed = true;
     render(<FrmsFadigaPainel />);
