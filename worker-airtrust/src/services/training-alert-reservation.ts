@@ -243,13 +243,23 @@ export async function reserveTrainingAlert(
         `UPDATE notificacoes_log
             SET status = 'pendente',
                 tentativas_envio = COALESCE(tentativas_envio, 0) + 1,
+                corpo = COALESCE(?, corpo),
+                tipo = COALESCE(?, tipo),
+                assunto = COALESCE(?, assunto),
+                destinatario = COALESCE(?, destinatario),
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
             AND status = ?
             AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key, currentStatus, observedAttempts)
+      .bind(
+        params.manual ? bodyPayload : null,
+        params.manual ? tipo : null,
+        params.manual ? assunto : null,
+        params.manual ? params.destinatarioMascarado || null : null,
+        params.empresaId, key, currentStatus, observedAttempts,
+      )
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {
