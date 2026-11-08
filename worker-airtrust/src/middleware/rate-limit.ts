@@ -61,12 +61,12 @@ async function getRateLimitCountD1(
   key: string,
   windowSeconds: number,
 ): Promise<number> {
-  const now = new Date().toISOString();
-
+  // SQLite stores reset_at as 'YYYY-MM-DD HH:MM:SS' via datetime('now').
+  // Comparing that string to an ISO T/Z timestamp incorrectly deletes
+  // still-active limits. Use the same SQLite datetime representation.
   // Best-effort cleanup never changes the decision for the current request.
   if (Math.random() < 0.02) {
-    db.prepare(`DELETE FROM rate_limit_store WHERE reset_at < ?`)
-      .bind(now)
+    db.prepare(`DELETE FROM rate_limit_store WHERE reset_at < datetime('now')`)
       .run()
       .catch(() => undefined);
   }
