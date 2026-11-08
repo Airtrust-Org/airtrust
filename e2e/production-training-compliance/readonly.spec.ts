@@ -511,5 +511,42 @@ test('production intelligent training compliance UI and APIs are coherent and re
     await expect(detailIndicators.getByText(label)).toBeVisible();
   }
 
+  // Regression for the former HTTP 500 in individual Compliance readback:
+  // dashboard and reconciliation success alone do not prove employee detail.
+  // Use a person returned by the already authenticated, scoped Pessoas API.
+  // The browser performs only its normal protected GETs; no tokens, employee
+  // names, response bodies or internal IDs are emitted in test diagnostics.
+  const scopedEmployeeId = people.data
+    .map((row: { id?: unknown }) => Number(row.id))
+    .find((id: number) => Number.isSafeInteger(id) && id > 0);
+  expect(
+    scopedEmployeeId,
+    'Individual Compliance readback requires a visible scoped employee',
+  ).toBeGreaterThan(0);
+  const individualP = waitApi(
+    page,
+    `/api/compliance-treinamentos/funcionarios/${scopedEmployeeId}`,
+  );
+  await page.goto(`/funcionarios/${scopedEmployeeId}/ficha`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await assertProductionFrontendShaFromPage(
+    page,
+    EXPECTED_PAGES_SHA.slice(0, 7),
+    'production-employee-ficha-compliance',
+  );
+  const individualResponse = await individualP;
+  const individualJson = await individualResponse.json().catch(() => null);
+  const safeCode = (value: unknown) =>
+    typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
+      ? value : 'UNAVAILABLE';
+  expect(
+    individualResponse.ok(),
+    `Individual Compliance HTTP ${individualResponse.status()} code=${safeCode(individualJson?.code)} requestId=${safeCode(individualJson?.requestId)}`,
+  ).toBe(true);
+  expect(individualJson?.success).toBe(true);
+  expect(Number(individualJson?.data?.id) === scopedEmployeeId).toBe(true);
+  expect(Array.isArray(individualJson?.data?.requisitos)).toBe(true);
+
   guard.assertClean();
 });
