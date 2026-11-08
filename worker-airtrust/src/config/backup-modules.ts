@@ -92,6 +92,23 @@ export const BACKUP_MODULES = {
 
 export type ModuloBackup = keyof typeof BACKUP_MODULES;
 
+/**
+ * Colunas que guardam credencial ou segredo e NUNCA entram no export in-Worker.
+ *
+ * O backup grava JSON legível no mesmo bucket de produção; hashes de senha de todos
+ * os tenants não podem ficar lá (P08-02). A recuperação de credenciais depende do
+ * export/Time Travel do D1, não deste artefato.
+ *
+ * Hashes de conteúdo/integridade (ex.: `arquivo_hash`, `validacao_hash`,
+ * `hash_assinatura`) NÃO são segredo e permanecem no export.
+ */
+const SECRET_COLUMN_PATTERN =
+  /(^|_)(password|passwd|senha|secret|token|api_?key|private_?key)(_|$)/i;
+
+export function isSecretBackupColumn(columnName: string): boolean {
+  return SECRET_COLUMN_PATTERN.test(String(columnName || '').trim());
+}
+
 export const TODOS_MODULOS = Object.keys(BACKUP_MODULES) as ModuloBackup[];
 
 /**
