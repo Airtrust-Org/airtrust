@@ -264,20 +264,25 @@ export async function validateAccessTokenSecurityState(
     return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
   }
 
-  if (payload.jti) {
-    let blocked: boolean;
-    try {
-      blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
-    } catch (e) {
-      console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
-      return serviceUnavailable(
-        'Não foi possível verificar a revogação do token. Tente novamente.',
-        'AUTH_REVOCATION_CHECK_UNAVAILABLE',
-      );
-    }
-    if (blocked) {
-      return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
-    }
+  // P01-07: todo access token emitido por generateJWT() carrega `jti`. Um token
+  // sem `jti` nao pode ser consultado na blocklist (logout/revogacao), entao e
+  // rejeitado em vez de contornar a revogacao silenciosamente.
+  if (typeof payload.jti !== 'string' || payload.jti.length === 0) {
+    return unauthorized('Token sem identificador. Faça login novamente.', 'TOKEN_JTI_REQUIRED');
+  }
+
+  let blocked: boolean;
+  try {
+    blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
+  } catch (e) {
+    console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+    return serviceUnavailable(
+      'Não foi possível verificar a revogação do token. Tente novamente.',
+      'AUTH_REVOCATION_CHECK_UNAVAILABLE',
+    );
+  }
+  if (blocked) {
+    return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
   }
 
   let security: UserSecurityState;
@@ -746,21 +751,25 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
             // Fail-closed para a IDENTIDADE: se a checagem falhar, tratamos como
             // "não autenticado" (não define userId/userRole) em vez de autenticar
             // silenciosamente — mas optionalAuth nunca bloqueia a requisição em si.
-            if (payload.jti) {
-              try {
-                const blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
-                if (blocked) {
-                  await next();
-                  return;
-                }
-              } catch (e) {
-                console.error(
-                  '[OPTIONAL_AUTH] Falha ao consultar token_blocklist:',
-                  (e as Error).message,
-                );
+            // P01-07: token sem `jti` nao pode ser checado na blocklist; trata como
+            // nao autenticado.
+            if (typeof payload.jti !== 'string' || payload.jti.length === 0) {
+              await next();
+              return;
+            }
+            try {
+              const blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
+              if (blocked) {
                 await next();
                 return;
               }
+            } catch (e) {
+              console.error(
+                '[OPTIONAL_AUTH] Falha ao consultar token_blocklist:',
+                (e as Error).message,
+              );
+              await next();
+              return;
             }
 
             const effectiveRole = await resolveEffectiveUserRole(
