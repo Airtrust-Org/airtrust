@@ -136,7 +136,7 @@ export default function LmsProva(): React.ReactElement {
       const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'FINALIZE_FAILED');
-      await invalidateTrainingEvidenceProjections(queryClient);
+      void invalidateTrainingEvidenceProjections(queryClient);
       navigate('/lms');
     } catch {
       setError('A prova foi aprovada, mas a conclusão ainda não foi registrada. Tente novamente em instantes.');
@@ -152,7 +152,7 @@ export default function LmsProva(): React.ReactElement {
       const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'CERTIFICATE_RETRY_FAILED');
-      await invalidateTrainingEvidenceProjections(queryClient);
+      void invalidateTrainingEvidenceProjections(queryClient);
       setStatus('Solicitação recebida. A emissão só é tentada para matrículas com qualificação EAD elegível e vinculada; esta resposta não confirma emissão. Consulte seus certificados e, se estiver ausente, contate a Gerência de Treinamento.');
     } catch {
       setError('Não foi possível solicitar uma nova tentativa de emissão do certificado. Tente novamente mais tarde.');
