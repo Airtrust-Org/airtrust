@@ -1,6 +1,5 @@
 import { StrictMode } from 'react';
-import { fireEvent } from '@testing-library/react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ListaFuncionarios } from '../ListaFuncionarios';
 
@@ -150,6 +149,31 @@ describe('ListaFuncionarios pagination on fetch error', () => {
     expect(fetchMock).toHaveBeenCalled();
     // The canonical client, not this page, owns Authorization and token refresh.
     expect(fetchMock.mock.calls.every(([, options]) => options?.headers === undefined)).toBe(true);
+  });
+
+  it('ends the loading state after 15 seconds even if the auth client never settles', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    try {
+      render(
+        <ListaFuncionarios
+          statusFilter="ativos"
+          termoBusca=""
+          configColunasAberto={false}
+          onToggleConfigColunas={vi.fn()}
+        />,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+
+      expect(screen.getByText('Tempo limite ao carregar funcionários. Tente novamente.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+      expect(screen.queryByText('Nenhum funcionário cadastrado')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows recovery rather than claiming staff have been deleted after an API error', async () => {
