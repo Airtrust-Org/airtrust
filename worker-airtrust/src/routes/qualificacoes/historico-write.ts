@@ -1187,26 +1187,31 @@ writeRouter.patch(
 
     const cargaContext = await db
       .prepare(
-        `SELECT qt.validade_meses, qt.validade, qt.data_vencimento, qt.qualificacao_codigo
+        `SELECT qh.validade_meses, qt.validade AS tipo_validade,
+                qh.data_vencimento, qh.qualificacao_codigo, qt.vencimento_fim_mes
            FROM qualificacoes_historico qh
-           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
-          WHERE qh.id = ? AND qh.deleted_at IS NULL`,
+           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
+          WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
       )
-      .bind(id)
+      .bind(id, tenantCtx.empresaId)
       .first<{
         validade_meses: number | null;
-        validade: number | null;
+        tipo_validade: number | null;
         data_vencimento: string | null;
         qualificacao_codigo: string | null;
+        vencimento_fim_mes: number | null;
       }>();
 
+    // A validade atual do modelo prevalece sobre o snapshot legado, salvo CMA semestral.
+    const isCmaSemestral = String(cargaContext?.qualificacao_codigo || '').trim().toUpperCase() === 'CMA' && Number(cargaContext?.validade_meses) === 6;
+    const validadeMesesEfetiva = isCmaSemestral ? 6 : (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
     const dataVencimentoFinal = isG1SemQualificacaoCode(cargaContext?.qualificacao_codigo)
       ? (cargaContext?.data_vencimento ?? null)
       : calcularDataVencimento({
           dataConclusao: novaDataPlanejada,
           dataVencimento: null,
-          validadeMeses: cargaContext?.validade_meses ?? cargaContext?.validade,
-          vencimentoFimMes: 0,
+          validadeMeses: validadeMesesEfetiva,
+          vencimentoFimMes: cargaContext?.vencimento_fim_mes ?? 0,
         });
 
     await db
@@ -1216,9 +1221,9 @@ writeRouter.patch(
                 data_vencimento = ?,
                 status = '${QUALIFICACAO_STATUS.PLANEJADA}',
                 updated_at = datetime('now')
-          WHERE id = ? AND deleted_at IS NULL`,
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(novaDataPlanejada, dataVencimentoFinal, id)
+      .bind(novaDataPlanejada, dataVencimentoFinal, id, tenantCtx.empresaId)
       .run();
 
     await invalidateMaterializedStats(db);
