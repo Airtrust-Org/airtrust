@@ -29,7 +29,8 @@ describe('SCORM direct replacement administrator role boundary', () => {
     expect(route).toContain('readCandidate(c.env.DB, empresaId, cursoId, packageId)');
     expect(route).toContain('parseStoredScormValidation<ScormQualityGateResult>');
     expect(route).toContain('quality?.authoringReview?.externalExam === true');
-    expect(route).toContain('replaceValidatedExternalScorm : replaceValidatedFormativeScorm');
+    expect(route).toContain('candidate.certification_profile === FORMATIVE_PROFILE');
+    expect(route).toContain("replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM')");
     expect(route).not.toContain("c.req.query('externalExam')");
   });
 
