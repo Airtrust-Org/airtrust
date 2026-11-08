@@ -196,7 +196,10 @@ describe('fronteiras temporais e de faixa', () => {
 });
 
 describe('sanitização de evidência — ausente nunca vira zero', () => {
-  const raw = { data_referencia: '2026-09-26', funcionario_id: 7, repouso_anterior_min: 900, repouso_suficiente: 1 };
+  const raw = {
+    data_referencia: '2026-09-26', funcionario_id: 7, repouso_anterior_min: 900, repouso_suficiente: 1,
+    hv_dia_min: null, hv_mes_calendario_min: null, hv_28_dias_min: null, hv_365_dias_min: null, hv_ano_calendario_min: null,
+  };
   it('linha sem nenhuma leitura de voo válida é descartada', () => {
     expect(sanitizeRollingRegulatoryEvidence({ ...raw, hv_dia_min: null, hv_mes_calendario_min: '', hv_28_dias_min: -5, hv_365_dias_min: 'x', hv_ano_calendario_min: undefined })).toBeNull();
   });
