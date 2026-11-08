@@ -134,6 +134,7 @@
     "test:all": "npm run test:run && npm run test:worker",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:lms-exam": "playwright test --config=e2e/ci/lms-exam/lms-exam-browser.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "setup:dev": "bash worker-airtrust/setup-dev-db.sh",

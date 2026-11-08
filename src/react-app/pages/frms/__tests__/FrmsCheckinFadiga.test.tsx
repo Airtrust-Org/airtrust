@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FrmsCheckinFadiga, {
   isFadigaCheckinSubmitReady,
   isValidWakeTime,
@@ -97,10 +97,10 @@ vi.mock('../OperationalVigilanceTest', () => ({
       completedRef.current = true;
       onComplete({
         summary: {
-          protocolVersion: 'airtrust-vigilance-v1',
-          durationMs: 180000,
-          completedTrials: 1,
-          validResponses: 1,
+          protocolVersion: 'airtrust-brief-v1',
+          durationMs: 60000,
+          completedTrials: 10,
+          validResponses: 10,
           medianReactionTimeMs: 280,
           meanReactionTimeMs: 280,
           p90ReactionTimeMs: 280,
@@ -111,16 +111,14 @@ vi.mock('../OperationalVigilanceTest', () => ({
           responseSpeedPerSecond: 3.571,
           trials: [],
         },
-        trials: [
-          {
-            sequence: 1,
-            scheduledAtMs: 1000,
-            stimulusAtMs: 1100,
-            responseAtMs: 1380,
-            reactionTimeMs: 280,
-            outcome: 'response',
-          },
-        ],
+        trials: Array.from({ length: 10 }, (_, index) => ({
+          sequence: index + 1,
+          scheduledAtMs: index * 5000 + 1000,
+          stimulusAtMs: index * 5000 + 1100,
+          responseAtMs: index * 5000 + 1380,
+          reactionTimeMs: 280,
+          outcome: 'response' as const,
+        })),
       });
     }, [onComplete]);
     return <div data-testid="mock-vigilance-test">Teste cognitivo simulado</div>;
@@ -364,6 +362,9 @@ describe('FrmsCheckinFadiga team panel adapter', () => {
 
 describe('FrmsCheckinFadiga UI', () => {
   beforeEach(() => {
+    // Most existing UI cases exercise the normal pre-presentation contract.
+    // Only the targeted late-flow tests use a later clock.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T08:00:00Z'));
     mutateAsyncMock.mockReset();
     readinessMutateAsyncMock.mockReset();
     refetchMock.mockReset();
@@ -407,6 +408,10 @@ describe('FrmsCheckinFadiga UI', () => {
       isFetching: false,
     });
     usePermissionsMock.mockReturnValue({ isAdmin: false, isGestor: false, role: 'INSTRUTOR' });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   function enableStandbyContext() {
@@ -459,7 +464,8 @@ describe('FrmsCheckinFadiga UI', () => {
       render(<FrmsCheckinFadiga />);
       expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
       preencherFormularioValido();
-      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
       expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
         reference_date: '2026-10-27',
         data_checkin: '2026-10-27',
@@ -469,18 +475,65 @@ describe('FrmsCheckinFadiga UI', () => {
     }
   });
 
-  it('impede que um formulário aberto antes da meia-noite envie silenciosamente no dia anterior', () => {
+  it('preserva o dia de abertura e bloqueia PVT e rascunho antigos após meia-noite e tick do relógio', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-10-28T02:59:00Z')); // 27/10 23:59 Brasília
       render(<FrmsCheckinFadiga />);
       preencherFormularioValido();
+      fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
+
       vi.setSystemTime(new Date('2026-10-28T03:01:00Z')); // 28/10 00:01 Brasília
-      fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+      act(() => vi.advanceTimersByTime(15_001));
+      expect(screen.getByText('Data operacional do check-in: 27/10/2026 (Brasília)')).toBeInTheDocument();
+      expect(screen.getByText(/A data operacional mudou enquanto o formulário estava aberto/i)).toBeInTheDocument();
+      const staleButton = screen.getByRole('button', { name: 'Confirmar Check-in Diário' });
+      expect(staleButton).toBeDisabled();
+      fireEvent.click(staleButton);
       expect(mutateAsyncMock).not.toHaveBeenCalled();
+
+      // Yesterday's answers/PVT are not silently transferred into today's draft.
+      const nextDayDraftKey = 'airtrust:frms-checkin-draft:101:6:2026-10-28';
+      expect(window.sessionStorage.getItem(nextDayDraftKey)).toBeNull();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('permite registro tardio explícito sem enviar PVT como evidência pré-jornada', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T15:13:00Z')); // 12:13 Brasília
+    render(<FrmsCheckinFadiga />);
+    preencherFormularioValido();
+    expect(screen.getByText(/A apresentação informada já começou/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-vigilance-test')).not.toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' });
+    expect(button).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+    fireEvent.click(button);
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('readiness');
+    expect(payload).toMatchObject({
+      fit_for_duty: true, aceite_termos: true, aceite_privacidade: true,
+      late_submission_acknowledged: true,
+    });
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/home', { replace: true }));
+  });
+
+  it('nunca reenvia PVT pré-jornada se a hora de apresentação passou com o formulário aberto', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T08:00:00Z')); // 05:00
+    render(<FrmsCheckinFadiga />);
+    preencherFormularioValido(); // apresentação 06:30
+    expect(screen.getByRole('button', { name: 'Confirmar Check-in Diário' })).toBeEnabled();
+    clock.mockReturnValue(Date.parse('2026-11-07T15:13:00Z')); // atravessou a apresentação
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar Check-in Diário' }));
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo o registro tardio/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar check-in tardio para revisão' }));
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
+    expect(mutateAsyncMock.mock.calls[0][0]).not.toHaveProperty('readiness');
+    expect(mutateAsyncMock.mock.calls[0][0]).toMatchObject({ late_submission_acknowledged: true });
   });
 
   it('renderiza KSS com titulo claro e descritores', () => {
@@ -682,8 +735,9 @@ describe('FrmsCheckinFadiga UI', () => {
 
     const payload = mutateAsyncMock.mock.calls[0][0] as Record<string, unknown>;
     const readinessPayload = payload.readiness as Record<string, unknown>;
-    expect(readinessPayload.duration_ms).toBe(180000);
-    expect(readinessPayload.trials).toHaveLength(1);
+    expect(readinessPayload.duration_ms).toBe(60000);
+    expect(readinessPayload.protocol_version).toBe('airtrust-brief-v1');
+    expect(readinessPayload.trials).toHaveLength(10);
 
     expect(payload.kss_score).toBe(3);
     expect(payload.horas_sono_24h).toBe(8);

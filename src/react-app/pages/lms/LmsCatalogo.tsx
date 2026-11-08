@@ -749,7 +749,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile === 'FORMATIVE';
+  const directReplacement = canUploadInactiveProduction && isAdmin && (scormProfile === 'FORMATIVE' || scormProfile === 'EXTERNAL');
   useEffect(() => {
     if (!canUploadInactiveProduction || !contentFile) {
       setScormProfile('CHECKING');
@@ -1525,7 +1525,7 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP formativo e substituir' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
@@ -2086,7 +2086,7 @@ export default function LmsCatalogo() {
   async function handleProductionCandidateUpload(cursoId: number, file: File, replaceImmediately: boolean) {
     setIsSavingCourse(true);
     setUploadProgress(0);
-    setUploadStatus(replaceImmediately ? 'Validando substituição formativa no Worker...' : 'Enviando edição inativa para homologação...');
+    setUploadStatus(replaceImmediately ? 'Validando substituição SCORM no Worker...' : 'Enviando edição inativa para homologação...');
     try {
       return await uploadScormInactiveProductionCandidate({
         cursoId, file, replaceImmediately,

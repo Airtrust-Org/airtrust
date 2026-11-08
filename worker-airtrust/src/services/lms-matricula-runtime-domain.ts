@@ -236,7 +236,8 @@ export function evaluateScormClosureReadiness(params: {
   const manifestCoverage = manifest?.coverage.verified === true;
   // EXTERNAL packages stay pending until a passed exam attempt of the active
   // cycle/edition is attached by the Worker; the package itself never grants it.
-  const externalPending = manifest?.coverage.assessment_mode === 'EXTERNAL' && !manifest.externalExam;
+  const externalStudy = manifest?.coverage.assessment_mode === 'EXTERNAL';
+  const externalPending = externalStudy && !manifest?.externalExam;
   // Legacy rows without an explicit policy remain SCORED, never FORMATIVE.
   // This is the same fail-closed default as evaluateLmsCompletionEvidence.
   const policy = params.policy ?? 'SCORED';
@@ -261,14 +262,19 @@ export function evaluateScormClosureReadiness(params: {
   } : null;
 
 
-  const scoreRequired = policy === 'SCORED';
+  // An EXTERNAL edition certifies the exam through a sealed Worker attempt,
+  // never through a SCO score. It still requires complete study coverage.
+  const scoreRequired = policy === 'SCORED' && !externalStudy;
+  const coverageRequired = policy === 'FORMATIVE' || externalStudy;
   const validMastery = masteryScore != null && Number.isFinite(masteryScore) &&
     masteryScore > 0 && masteryScore <= 100;
   const validScore = scorePct != null && Number.isFinite(scorePct) &&
     scorePct >= 0 && scorePct <= 100;
-  const scorePassed = scoreRequired
-    ? validMastery && validScore && scorePct >= masteryScore
-    : policy === 'FORMATIVE';
+  const scorePassed = externalStudy
+    ? Boolean(manifest?.externalExam)
+    : scoreRequired
+      ? validMastery && validScore && scorePct >= masteryScore
+      : policy === 'FORMATIVE';
   const terminal = !failed && isScormSuccess(commit, {
     masteryScore: scoreRequired ? masteryScore : null,
     effectiveScorePct: scorePct,
@@ -278,8 +284,8 @@ export function evaluateScormClosureReadiness(params: {
     ...(!userConfirmed ? ['user_confirmation'] : []),
     // Navigation requirements belong only to non-scored content. For SCORED,
     // terminal success plus the verified course mastery result are sufficient.
-    ...(policy === 'FORMATIVE' && !lastStep ? ['terminal_location'] : []),
-    ...(policy === 'FORMATIVE' && !everySlide
+    ...(coverageRequired && !lastStep ? ['terminal_location'] : []),
+    ...(coverageRequired && !everySlide
       ? [manifest ? 'manifest_required_units' : 'distinct_slide_coverage'] : []),
     ...(!terminal ? ['terminal_scorm_status'] : []),
     ...(externalPending ? ['verified_external_assessment'] : []),
@@ -292,8 +298,10 @@ export function evaluateScormClosureReadiness(params: {
   if (wasCompleted) code = 'SCORM_ALREADY_COMPLETED';
   else if (failed) code = 'EXPLICIT_FAILURE';
   else if (!userConfirmed) code = 'SCORM_USER_CONFIRMATION_REQUIRED';
+  // Missing study coverage is not a ready-to-take-exam state, even if the
+  // independent exam is still pending. This gate is used by exam-attempt start.
+  else if (coverageRequired && (!everySlide || !lastStep)) code = 'PROGRESS_EVIDENCE_MISSING';
   else if (externalPending) code = 'EXTERNAL_ASSESSMENT_PENDING';
-  else if (policy === 'FORMATIVE' && (!everySlide || !lastStep)) code = 'PROGRESS_EVIDENCE_MISSING';
   else if (policy !== 'SCORED' && policy !== 'FORMATIVE') code = 'SCORM_ASSESSMENT_POLICY_INVALID';
   else if (scoreRequired && !validMastery) code = 'MASTERY_SCORE_MISSING';
   else if (scoreRequired && !validScore) code = 'SCORE_MISSING';
