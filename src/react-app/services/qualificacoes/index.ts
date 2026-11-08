@@ -325,6 +325,10 @@ export const qualificacoesService = {
       return { success: true, data: funcionarios };
     },
 
+    async tipoQualificacaoPorId(id: string | number): Promise<ApiResponse<TipoQualificacaoResumo>> {
+      return httpClient.get<TipoQualificacaoResumo>(`/qualificacoes/tipos/${encodeURIComponent(String(id))}`);
+    },
+
     async tiposQualificacao(
       limit = 1000,
       categoriaId?: number | null,
