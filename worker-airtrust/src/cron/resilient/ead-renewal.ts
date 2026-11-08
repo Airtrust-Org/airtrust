@@ -9,6 +9,8 @@ import {
   getTodayIsoSaoPaulo,
 } from '../../utils/qualificacoes-alerta-config';
 import {
+  TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE,
+  TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME,
   trainingComplianceEffectiveRequirementPredicateSql,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
@@ -51,7 +53,8 @@ interface ExistingMatricula {
 export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
   const vencExpr = getQualificacoesVencimentoExpr();
   const vencExprQh2 = getQualificacoesVencimentoExpr('qh2', 'qt');
-  return `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+  return `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE},
+       ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE}
        SELECT DISTINCT
            qh.id AS qualificacao_historico_id,
            qh.funcionario_id,
@@ -85,12 +88,15 @@ export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
           AND f.deleted_at IS NULL
           AND COALESCE(f.ativo, 1) = 1
           AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+         LEFT JOIN ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME} av_superseded
+           ON av_superseded.empresa_id = qh.empresa_id
+          AND av_superseded.funcionario_id = f.id
         WHERE qh.deleted_at IS NULL
           AND (
             UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
             OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
           )
-          AND ${trainingComplianceEffectiveRequirementPredicateSql({ qualificationExpr: 'qt.id', empresaExpr: 'qh.empresa_id', requireAutoEnrollment: true })}
+          AND ${trainingComplianceEffectiveRequirementPredicateSql({ qualificationExpr: 'qt.id', empresaExpr: 'qh.empresa_id', requireAutoEnrollment: true, avsecSupersededFromCte: true })}
           AND COALESCE(qh.renovada, 0) = 0
           AND (qh.data_vencimento IS NOT NULL OR qh.data_conclusao IS NOT NULL)
           AND NOT EXISTS (
