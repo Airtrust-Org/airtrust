@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-05",
-    "last_reconciled_against": "0571/0572 LMS exam bank+attempts reconciled with main; 0574 LMS PPTX evidence added; reviewed manifest, remote apply pending, existing scoped tables and baseline remain unchanged",
-    "schema_v2_digest": "46f7930d8e9ba7f74cf68d5df8b7f4f45d810d5e0369685f1eb4d40f35a9fd1d",
+    "last_reconciled_at": "2026-11-08",
+    "last_reconciled_against": "0575 IIO/APRS assistant requirement row-only governed repair added, remote apply pending; no DDL to scoped production schema tables",
+    "schema_v2_digest": "319fd163f399e2afaafe855b3b459f34d24c1b2d60a04c0586945ae48a039631",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1768,6 +1768,18 @@
       "reviewed_manifest": "lms-pptx-slide-evidence-0574.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-pptx-slide-evidence-0574.md",
       "note": "Additive only, no backfill, no session grants or retroactive qualifications. Must apply Schema V2 in staging/production before enabling new Worker endpoints."
+    },
+    {
+      "change_file": "0575_training_compliance_iio_aprs_assistant_restore.sql",
+      "change_id": "training-compliance-iio-aprs-assistant-restore-0575",
+      "sha256": "415141109828dae3cd7e3542e5c4d44f9f3cff6cab5949c7c2a7a8c225498eac",
+      "targets": [],
+      "domain": "Compliance: restore previously authorized mandatory IIO/APRS assistant role requirement after soft-delete drift",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "training-compliance-iio-aprs-assistant-restore-0575.json",
+      "evidence": "worker-airtrust/schema-v2/plans/training-compliance-iio-aprs-assistant-restore-0575.md",
+      "note": "Data-only repair limited to tenant 6 requirement id704 plus audit event; preflight exact production state, no APRS authority, no LMS or historical writes. Remote staging/production apply NOT authorized by merge."
     }
   ]
 }
