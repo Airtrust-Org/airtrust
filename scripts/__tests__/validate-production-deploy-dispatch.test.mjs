@@ -17,7 +17,8 @@ describe('validateProductionDeployDispatch', () => {
     expect(validateProductionDeployDispatch(valid)).toMatchObject({
       deployWorker: true,
       deployPages: false,
-      sha: valid.sha,
+      sha: valid.expectedSha,
+      workflowSha: valid.sha,
     });
   });
 
@@ -28,7 +29,10 @@ describe('validateProductionDeployDispatch', () => {
         expect(() => validateProductionDeployDispatch({ ...valid, reason })).toThrow(/reason/);
         return;
       }
-      expect(validateProductionDeployDispatch({ ...valid, reason }).reason).toBe(reason);
+      const safeReason = `deploy reviewed release: ${reason}`;
+      expect(validateProductionDeployDispatch({ ...valid, reason: safeReason }).reason).toBe(
+        safeReason,
+      );
     },
   );
 
@@ -41,12 +45,17 @@ describe('validateProductionDeployDispatch', () => {
     );
   });
 
-  it('rejects a mismatched or malformed expected SHA', () => {
-    expect(() =>
-      validateProductionDeployDispatch({ ...valid, expectedSha: 'b'.repeat(40) }),
-    ).toThrow(/does not match/);
+  it('accepts a pinned approved candidate even when trusted main has advanced', () => {
+    expect(validateProductionDeployDispatch({ ...valid, expectedSha: 'b'.repeat(40) }))
+      .toMatchObject({ sha: 'b'.repeat(40), workflowSha: valid.sha });
+  });
+
+  it('rejects absent or malformed immutable release SHA', () => {
+    expect(() => validateProductionDeployDispatch({ ...valid, expectedSha: '' })).toThrow(
+      /required/,
+    );
     expect(() => validateProductionDeployDispatch({ ...valid, expectedSha: '$(id)' })).toThrow(
-      /invalid/,
+      /required/,
     );
   });
 });

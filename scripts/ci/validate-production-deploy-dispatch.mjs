@@ -44,10 +44,7 @@ export function validateProductionDeployDispatch(input) {
   ) {
     fail('reason must contain 10-500 printable characters');
   }
-  if (expectedSha) {
-    if (!SHA.test(expectedSha)) fail('expected_sha is invalid');
-    if (expectedSha !== sha) fail('expected_sha does not match github sha');
-  }
+  if (!SHA.test(expectedSha || '')) fail('expected_sha is required and must be a 40-character SHA');
   if (runMigrations !== 'false') {
     fail('LEGACY_MIGRATION_RUNNER_DISABLED_USE_SCHEMA_V2');
   }
@@ -56,7 +53,8 @@ export function validateProductionDeployDispatch(input) {
     deployWorker: deployWorker === 'true',
     deployPages: deployPages === 'true',
     reason: normalizedReason,
-    sha,
+    sha: expectedSha,
+    workflowSha: sha,
   };
 }
 
