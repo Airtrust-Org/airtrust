@@ -32,8 +32,14 @@ describe('vigência na data operacional de São Paulo', () => {
     }
   });
 
-  it('loadRules: vigencia_fim = hoje (BRT) vale; vigencia_inicio = amanhã (BRT) ainda não', async () => {
-    const today = getTodayIsoSaoPaulo();
+  it.each([
+    ['2026-11-08 00:30:00', '2026-11-07'],
+    ['2026-11-08 02:59:59', '2026-11-07'],
+    ['2026-11-08 03:00:00', '2026-11-08'],
+  ])('loadRules mantém a data BRT na fronteira %s UTC', async (utcInstant, today) => {
+    // Congela o relógio do SQLite, não apenas Date do Node: o Worker delega
+    // a comparação de vigência ao relógio de SQL, diferente do relógio de JS.
+    expect(getTodayIsoSaoPaulo(new Date(utcInstant.replace(' ', 'T') + 'Z'))).toBe(today);
     const sqlite = new SqliteD1Database();
     sqlite.database.exec(`
       DROP TABLE IF EXISTS treinamento_requisitos; DROP TABLE IF EXISTS qualificacoes_tipos; DROP TABLE IF EXISTS funcionarios;
@@ -60,7 +66,14 @@ describe('vigência na data operacional de São Paulo', () => {
       INSERT INTO treinamento_requisitos (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_fim)
         VALUES (1, 1, 'EMPRESA', 'OBRIGATORIA', '${addDays(today, -1)}');
     `);
-    const rules = await loadRules(sqlite as unknown as D1Database, 1);
+    const clockedD1 = {
+      prepare(sql: string) {
+        // Preserva todos os predicados originais. Substitui SOMENTE a referência
+        // de tempo para provar que date('now') em UTC falharia neste cenário.
+        return sqlite.prepare(sql.replaceAll("date('now'", `date('${utcInstant}'`));
+      },
+    } as unknown as D1Database;
+    const rules = await loadRules(clockedD1, 1);
     expect(rules.map((r) => r.id)).toEqual([1]);
   });
 });
