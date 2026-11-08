@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiJson } from '@/react-app/lib/api-contract';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { tenantQueryKey } from '@/react-app/lib/query-client';
+import { invalidateEmployeeComplianceProjections } from '@/react-app/lib/compliance-source-invalidation';
 
 export interface Funcionario {
   id?: number;
@@ -105,8 +106,10 @@ export function useCriarFuncionario() {
   return useMutation({
     mutationFn: (data: Omit<Funcionario, 'id'>) =>
       apiJson<Funcionario>(API_BASE, mutationInit('POST', data)),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'funcionarios') }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'funcionarios') });
+      void invalidateEmployeeComplianceProjections(qc, empresaAtualId);
+    },
   });
 }
 
@@ -126,6 +129,7 @@ export function useAtualizarFuncionario() {
       qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'hospedagens') });
       qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'frms') });
       qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, 'auditoria') });
+      void invalidateEmployeeComplianceProjections(qc, empresaAtualId);
     },
   });
 }
@@ -145,6 +149,7 @@ export function useDeletarFuncionario() {
       ]) {
         qc.invalidateQueries({ queryKey: tenantQueryKey(empresaAtualId, key) });
       }
+      void invalidateEmployeeComplianceProjections(qc, empresaAtualId);
     },
   });
 }
