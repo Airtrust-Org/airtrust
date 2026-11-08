@@ -317,8 +317,8 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
           }
 
           if (query.includes('SELECT tr.perfil_competencia, tr.obrigatoriedade')) {
-            const qualificacaoTipoId = Number(args[0]);
-            const funcionarioId = Number(args[1]);
+            const qualificacaoTipoId = Number(args[1]);
+            const funcionarioId = Number(args[2]);
             if (qualificacaoTipoId === 301 && funcionarioId === 101) {
               return { perfil_competencia: 'AVSEC_TRIPULANTE', obrigatoriedade: 'OBRIGATORIA' };
             }
@@ -433,7 +433,7 @@ function createMockEnv(options: { operationalRbacEnabled?: number } = {}) {
             query.includes('SELECT DISTINCT perfil_competencia') &&
             query.includes('FROM treinamento_requisitos')
           ) {
-            const qualificacaoTipoId = Number(args[1]);
+            const qualificacaoTipoId = Number(args[2]);
             return {
               results:
                 qualificacaoTipoId === 301

@@ -1,8 +1,11 @@
 import {
   trainingComplianceRuleApplicabilitySql,
   trainingComplianceRulePrioritySql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
 } from './training-compliance-rule-engine';
 import { hasSchemaColumn, hasSchemaTable } from '../utils/db-schema';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 const tableExists = hasSchemaTable;
 const columnExists = hasSchemaColumn;
@@ -50,7 +53,7 @@ export async function buildQualificationEvidenceProfileSql(
 }
 export async function resolveEffectiveTrainingComplianceProfile(
   db: D1Database,
-  params: { empresaId: number; funcionarioId: number; qualificacaoTipoId: number },
+  params: { empresaId: number; funcionarioId: number; qualificacaoTipoId: number; operationalDate?: string },
 ): Promise<string | null> {
   if (!(await columnExists(db, 'treinamento_requisitos', 'perfil_competencia'))) return null;
   if (!(await tableExists(db, 'funcionarios'))) return null;
@@ -60,20 +63,21 @@ export async function resolveEffectiveTrainingComplianceProfile(
   try {
     const row = await db
       .prepare(
-        `SELECT tr.perfil_competencia, tr.obrigatoriedade
+        `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+         SELECT tr.perfil_competencia, tr.obrigatoriedade
            FROM funcionarios f
            JOIN treinamento_requisitos tr
              ON tr.empresa_id=f.empresa_id
             AND tr.qualificacao_tipo_id=?
           WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
             AND tr.ativo=1 AND tr.deleted_at IS NULL
-            AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now'))
-            AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now'))
+            AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+            AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
             AND ${applicability}
           ORDER BY ${priority} DESC, tr.id DESC
           LIMIT 1`,
       )
-      .bind(params.qualificacaoTipoId, params.funcionarioId, params.empresaId)
+      .bind(params.operationalDate ?? getTodayIsoSaoPaulo(), params.qualificacaoTipoId, params.funcionarioId, params.empresaId)
       .first<{ perfil_competencia: string | null; obrigatoriedade: string }>();
     if (!row || String(row.obrigatoriedade).toUpperCase() === 'NAO_APLICA') return null;
     return normalizeTrainingComplianceEvidenceProfile(row.perfil_competencia);
@@ -92,16 +96,17 @@ export async function listTrainingComplianceEvidenceProfilesForQualification(
   try {
     const { results } = await db
       .prepare(
-        `SELECT DISTINCT perfil_competencia
+        `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+         SELECT DISTINCT perfil_competencia
            FROM treinamento_requisitos
           WHERE empresa_id=? AND qualificacao_tipo_id=?
             AND ativo=1 AND deleted_at IS NULL
             AND perfil_competencia IS NOT NULL AND TRIM(perfil_competencia)<>''
-            AND (vigencia_inicio IS NULL OR date(vigencia_inicio)<=date('now'))
-            AND (vigencia_fim IS NULL OR date(vigencia_fim)>=date('now'))
+            AND (vigencia_inicio IS NULL OR date(vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+            AND (vigencia_fim IS NULL OR date(vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
           ORDER BY perfil_competencia ASC`,
       )
-      .bind(params.empresaId, params.qualificacaoTipoId)
+      .bind(getTodayIsoSaoPaulo(), params.empresaId, params.qualificacaoTipoId)
       .all<{ perfil_competencia: string }>();
     return [
       ...new Set(
