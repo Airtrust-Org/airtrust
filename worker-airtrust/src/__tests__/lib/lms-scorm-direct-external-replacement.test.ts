@@ -93,7 +93,7 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
         ...quality, authoringReview: { ...quality.authoringReview, privateRelease: true },
       }),
     } });
-    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/Quality Gate/);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/validação do conteúdo/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
@@ -104,7 +104,7 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
         ...quality, authoringReview: { externalExam: false, reviewed: true, privateRelease: false },
       }),
     } });
-    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/Quality Gate/);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/validação do conteúdo/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
@@ -115,7 +115,7 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
         ...quality, diagnostics: { status: 'FAIL' },
       }),
     } });
-    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/Quality Gate/);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/validação do conteúdo/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,7 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
     mocks.evaluate.mockResolvedValue(plan({ course: {
       id: 84, titulo: 'AA', tipoConteudo: 'scorm', currentPolicy: 'SCORED', masteryScore: 0,
     } }));
-    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/política de prova externa/);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/nota mínima positiva/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
@@ -160,12 +160,46 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
     })).toBeNull();
   });
 
+  it('directly activates a valid scored-in-SCO edition without a separate homologation ceremony', async () => {
+    const previous = plan();
+    const scored = { ...quality, authoringReview: { ...quality.authoringReview, externalExam: false } };
+    mocks.evaluate.mockResolvedValue({
+      ...previous, row: { ...previous.row, validation_result_json: JSON.stringify(scored) },
+    });
+    const result = await replaceValidatedExternalScorm(params(), 'SCORM');
+    expect(result).toMatchObject({
+      status: 'ACTIVE', assessmentPolicy: 'SCORED', examMode: 'SCORM',
+      validationMode: 'SERVER_STATIC_GATE',
+    });
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      policy: { incoming: 'SCORED' }, publishCourse: true,
+    }));
+  });
+
+  it('keeps scored-in-SCO activation separate from external exam declarations', async () => {
+    await expect(replaceValidatedExternalScorm(params(), 'SCORM'))
+      .rejects.toThrow(/validação do conteúdo/);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a scored-in-SCO ZIP marked private even when its structure is valid', async () => {
+    const p = plan();
+    mocks.evaluate.mockResolvedValue({
+      ...p, row: { ...p.row, validation_result_json: JSON.stringify({
+        ...quality, authoringReview: { externalExam: false, privateRelease: true, reviewed: false },
+      }) },
+    });
+    await expect(replaceValidatedExternalScorm(params(), 'SCORM'))
+      .rejects.toThrow(/validação do conteúdo/);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it('does not allow a scored-in-SCO package to use the EXTERNAL content route', async () => {
     const p = plan();
     mocks.evaluate.mockResolvedValue({ ...p, row: {
       ...p.row, certification_profile: 'FORMATIVE_NO_EXAM_V1',
     } });
-    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/Quality Gate/);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/validação do conteúdo/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 });

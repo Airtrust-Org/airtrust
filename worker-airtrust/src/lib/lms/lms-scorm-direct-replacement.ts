@@ -108,7 +108,7 @@ export async function readAlreadyActiveFormativeReplacement(params: {
 export async function readAlreadyActiveExternalReplacement(params: {
   db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
   packageId: string; packageSha256: string;
-}) {
+}, mode: 'EXTERNAL' | 'SCORM' = 'EXTERNAL') {
   const row = await params.db.prepare(`SELECT v.id, v.package_sha256, v.r2_prefix,
       v.launch_file, v.validation_result_json
     FROM lms_scorm_package_versions v
@@ -126,7 +126,7 @@ export async function readAlreadyActiveExternalReplacement(params: {
       launch_file: string; validation_result_json: string | null }>();
   if (!row) return null;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
-  if (quality?.authoringReview?.externalExam !== true ||
+  if (quality?.authoringReview?.externalExam !== (mode === 'EXTERNAL') ||
       quality.authoringReview.privateRelease !== false ||
       quality.structural?.status !== 'PASS' ||
       quality.completionManifest?.status !== 'PASS' ||
@@ -135,7 +135,7 @@ export async function readAlreadyActiveExternalReplacement(params: {
   return {
     packageId: row.id, packageSha256: row.package_sha256,
     status: 'ACTIVE' as const, cursoId: params.cursoId,
-    assessmentPolicy: 'SCORED' as const, examMode: 'EXTERNAL' as const,
+    assessmentPolicy: 'SCORED' as const, examMode: mode,
     validationMode: 'SERVER_STATIC_GATE' as const, alreadyActive: true as const,
   };
 }
@@ -144,7 +144,7 @@ export async function replaceValidatedExternalScorm(params: {
   db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
   packageId: string; userId: number | null;
   confirm: DirectReplacementConfirmation | undefined;
-}) {
+}, mode: 'EXTERNAL' | 'SCORM' = 'EXTERNAL') {
   if (!Number.isSafeInteger(params.userId) || Number(params.userId) <= 0) {
     throw new ApiError('Somente um administrador autenticado pode substituir conteúdo', 403, 'SCORM_REPLACE_ADMIN_REQUIRED');
   }
@@ -155,12 +155,12 @@ export async function replaceValidatedExternalScorm(params: {
   const row = preflight.row;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' || row.certification_profile !== null ||
-      quality?.authoringReview?.externalExam !== true ||
+      quality?.authoringReview?.externalExam !== (mode === 'EXTERNAL') ||
       quality.authoringReview.privateRelease !== false ||
       quality.structural?.status !== 'PASS' ||
       quality.completionManifest?.status !== 'PASS' ||
       quality.diagnostics?.status !== 'PASS') {
-    throw new ApiError('Pacote com prova externa não passou no Quality Gate estático', 409, 'SCORM_EXTERNAL_STATIC_GATE_FAILED');
+    throw new ApiError('Pacote SCORM não passou na validação do conteúdo', 409, 'SCORM_EXTERNAL_STATIC_GATE_FAILED');
   }
   // EXTERNAL remains a scored course-level qualification policy. The SCO only
   // records content coverage; it cannot self-issue a score or exam approval.
@@ -168,7 +168,7 @@ export async function replaceValidatedExternalScorm(params: {
       !['SCORED', 'FORMATIVE'].includes(preflight.course.currentPolicy) ||
       !Number.isFinite(Number(preflight.course.masteryScore)) ||
       Number(preflight.course.masteryScore) <= 0) {
-    throw new ApiError('Curso não dispõe de política de prova externa segura', 409, 'SCORM_EXTERNAL_POLICY_INVALID');
+    throw new ApiError('O curso exige uma nota mínima positiva configurada para sua avaliação', 409, 'SCORM_EXTERNAL_POLICY_INVALID');
   }
   const failed = preflight.checks.filter(check =>
     !check.ok && check.id !== 'NOT_ALREADY_ACTIVE');
@@ -203,14 +203,14 @@ export async function replaceValidatedExternalScorm(params: {
     const alreadyActive = await readAlreadyActiveExternalReplacement({
       db: params.db, bucket: params.bucket, empresaId: params.empresaId,
       cursoId: params.cursoId, packageId: row.id, packageSha256: row.package_sha256,
-    });
+    }, mode);
     if (alreadyActive) return alreadyActive;
     throw new ApiError('O curso mudou durante a substituição; recarregue antes de tentar novamente', 409, 'SCORM_REPLACE_RACE');
   }
   return {
     packageId: row.id, packageSha256: row.package_sha256,
     status: 'ACTIVE' as const, cursoId: params.cursoId,
-    assessmentPolicy: 'SCORED' as const, examMode: 'EXTERNAL' as const,
+    assessmentPolicy: 'SCORED' as const, examMode: mode,
     validationMode: 'SERVER_STATIC_GATE' as const,
     impactedInProgress: preflight.impact.inProgress,
   };

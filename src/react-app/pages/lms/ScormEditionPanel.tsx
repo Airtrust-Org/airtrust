@@ -332,54 +332,72 @@ export default function ScormEditionPanel({ cursoId, versions, isAdmin }: {
 }) {
   const qc = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const uploadLock = useRef(false);
   const productionUpload = typeof window !== 'undefined' && allowDirectScormUpload(isAdmin, window.location.hostname);
+  const active = versions.find((item) => item.status === 'ACTIVE');
 
   async function onSelectZip(file: File | undefined) {
     if (!file || !productionUpload || uploadLock.current) return;
     uploadLock.current = true;
     setUploading(true);
+    setMessage(null);
     try {
       const receipt = await uploadScormInactiveProductionCandidate({
         cursoId, file, replaceImmediately: true,
       });
-      if (receipt.status !== 'ACTIVE') throw new Error('O Worker não confirmou a substituição da edição.');
+      if (receipt.status !== 'ACTIVE') throw new Error('O servidor não confirmou o conteúdo ativo.');
       await Promise.all([
         qc.invalidateQueries({ queryKey: lmsKeys.curso(cursoId) }),
         qc.invalidateQueries({ queryKey: ['lms', 'cursos'], exact: false }),
+        qc.invalidateQueries({ queryKey: ['lms', 'cursos', cursoId, 'scorm-package-versions'] }),
       ]);
-      toast.success('ZIP validado e conteúdo substituído. Histórico preservado.');
+      setMessage('Conteúdo substituído e ativo.');
+      toast.success('Conteúdo substituído e ativo.');
     } catch (error) {
-      toast.error(errorText(error));
+      const reason = errorText(error);
+      setMessage(`Não foi possível substituir o conteúdo: ${reason}`);
+      toast.error(reason);
     } finally {
       uploadLock.current = false;
       setUploading(false);
     }
   }
 
+  // Production administration is intentionally one operation: choose a ZIP.
+  // Keep the versioned/audited server-side storage, but never expose the
+  // staging certification workflow as a prerequisite for operator upload.
+  if (productionUpload) {
+    return (
+      <div className="space-y-3 text-sm">
+        <label htmlFor={`scorm-direct-upload-${cursoId}`} className="block font-medium">
+          Enviar ZIP e substituir conteúdo
+        </label>
+        <input id={`scorm-direct-upload-${cursoId}`} type="file" accept=".zip,application/zip"
+          aria-label="Selecionar ZIP para substituir conteúdo"
+          disabled={uploading}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            void onSelectZip(file);
+          }} />
+        <p className="text-xs opacity-70">
+          Ao selecionar o ZIP, o conteúdo anterior é substituído automaticamente. O histórico de treinamentos é preservado.
+        </p>
+        {uploading ? <p role="status">Enviando e substituindo conteúdo…</p> : null}
+        {message ? <p role="status">{message}</p> : null}
+        {!uploading && !message ? (
+          <p role="status" className="text-xs">
+            {active ? 'Conteúdo atual ativo.' : 'Selecione o ZIP para disponibilizar o conteúdo.'}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Staging and non-admin surfaces retain their existing diagnostic view.
   return (
     <div className="space-y-2">
-      {productionUpload ? (
-        <div className="rounded-lg border p-3 text-sm">
-          <label htmlFor={`scorm-direct-upload-${cursoId}`} className="block font-medium">
-            Enviar ZIP SCORM e substituir automaticamente
-          </label>
-          <p className="mt-1 mb-2 text-xs opacity-70">
-            ZIPs formativos e conteúdos com prova externa são ativados automaticamente após validação do Worker.
-            Pacotes com prova dentro do SCORM continuam sujeitos à certificação funcional.
-            Em caso de falha, a edição anterior e o histórico concluído são preservados.
-          </p>
-          <input id={`scorm-direct-upload-${cursoId}`} type="file" accept=".zip,application/zip"
-            aria-label="Selecionar ZIP SCORM para substituição automática"
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              void onSelectZip(file);
-            }} />
-          {uploading ? <p role="status" className="mt-2">Validando ZIP e substituindo conteúdo…</p> : null}
-        </div>
-      ) : null}
       {versions.length === 0 ? <p className="text-sm opacity-70">Nenhuma edição enviada ainda.</p> : null}
       {versions.map((pkg) => (
         <EditionCard key={pkg.packageId} cursoId={cursoId} pkg={pkg} versions={versions} isAdmin={isAdmin} />
