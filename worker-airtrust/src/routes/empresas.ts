@@ -743,7 +743,7 @@ empresasRoutes.put('/:id', requireTenantRole('admin'), async (c) => {
     }
 
     const body = await c.req.json();
-    console.log('[PUT /empresas/:id] Body recebido:', JSON.stringify(body));
+    // Never log submitted tenant profile fields (contact, tax ID, URLs or credentials).
 
     // Permite updates parciais, inclusive toggle rápido de ativo/inativo.
     if (body.nome !== undefined && (typeof body.nome !== 'string' || body.nome.trim().length < 2)) {
