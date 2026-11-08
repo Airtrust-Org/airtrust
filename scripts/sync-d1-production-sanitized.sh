@@ -248,7 +248,7 @@ append_sql_block_if_table "usuarios" <<'EOF'
 UPDATE usuarios
 SET email = printf('user_%s@dev.airtrust.local', id),
     nome = printf('Usuario DEV %s', id),
-    password_hash = '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWPG',
+    password_hash = '__AIRTRUST_LOCAL_BCRYPT_HASH__',
     failed_login_attempts = 0,
     locked_until = NULL,
     last_login = NULL,
@@ -361,21 +361,33 @@ EOF
 append_sql_if_table "logs_acesso_dados" "DELETE FROM logs_acesso_dados;"
 printf '%s\n' 'PRAGMA foreign_keys=ON;' >> "$SANITIZE_FILE"
 
+# One-time bcrypt hashes are rendered into mode-0600 temporary SQL files,
+# not committed or appended to the exported SQL template.
+RENDERED_SANITIZE_SQL="$(mktemp "${TMPDIR:-/tmp}/airtrust-sanitize-XXXXXX.sql")"
+RENDERED_OVERRIDES_SQL="$(mktemp "${TMPDIR:-/tmp}/airtrust-overrides-XXXXXX.sql")"
+chmod 600 "$RENDERED_SANITIZE_SQL" "$RENDERED_OVERRIDES_SQL"
+trap 'rm -f "$RENDERED_SANITIZE_SQL" "$RENDERED_OVERRIDES_SQL"' EXIT
+node "$ROOT_DIR/scripts/render-local-dev-password-sql.mjs" "$SANITIZE_FILE" "$RENDERED_SANITIZE_SQL" \
+  || fail "Falha ao gerar hash de anonimização"
+node "$ROOT_DIR/scripts/render-local-dev-password-sql.mjs" \
+  "$ROOT_DIR/scripts/setup-local-overrides.sql" "$RENDERED_OVERRIDES_SQL" \
+  || fail "Falha ao gerar hash para overrides locais"
+
 if [[ "$TARGET" == "local" ]]; then
   info "Aplicando anonimização local"
-  local_sqlite_apply_file "$LOCAL_SQLITE_FILE" "$SANITIZE_FILE"
+  local_sqlite_apply_file "$LOCAL_SQLITE_FILE" "$RENDERED_SANITIZE_SQL"
   if [[ -f "$ROOT_DIR/scripts/setup-local-overrides.sql" ]]; then
     info "Aplicando overrides locais"
-    local_sqlite_apply_file "$LOCAL_SQLITE_FILE" "$ROOT_DIR/scripts/setup-local-overrides.sql"
+    local_sqlite_apply_file "$LOCAL_SQLITE_FILE" "$RENDERED_OVERRIDES_SQL"
   fi
   VALIDATION_USERS="$(local_exec --command "SELECT COUNT(*) AS c FROM usuarios WHERE deleted_at IS NULL" 2>/dev/null || true)"
   VALIDATION_FUNCS="$(local_exec --command "SELECT COUNT(*) AS c FROM funcionarios WHERE deleted_at IS NULL" 2>/dev/null || true)"
 else
   info "Aplicando anonimização em development remoto"
-  run_wranger_in_worker bash -lc "printf 'y\n' | ${WRANGLER[*]} d1 execute airtrust-db-dev --env development --remote --file \"$SANITIZE_FILE\""
+  run_wranger_in_worker bash -lc "printf 'y\n' | ${WRANGLER[*]} d1 execute airtrust-db-dev --env development --remote --file \"$RENDERED_SANITIZE_SQL\""
   if [[ -f "$ROOT_DIR/scripts/setup-local-overrides.sql" ]]; then
     info "Aplicando admin/overrides idempotentes em development"
-    run_wranger_in_worker bash -lc "printf 'y\n' | ${WRANGLER[*]} d1 execute airtrust-db-dev --env development --remote --file \"$ROOT_DIR/scripts/setup-local-overrides.sql\""
+    run_wranger_in_worker bash -lc "printf 'y\n' | ${WRANGLER[*]} d1 execute airtrust-db-dev --env development --remote --file \"$RENDERED_OVERRIDES_SQL\""
   fi
   VALIDATION_USERS="$(dev_exec_command "SELECT COUNT(*) AS c FROM usuarios WHERE deleted_at IS NULL" 2>/dev/null || true)"
   VALIDATION_FUNCS="$(dev_exec_command "SELECT COUNT(*) AS c FROM funcionarios WHERE deleted_at IS NULL" 2>/dev/null || true)"
