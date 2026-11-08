@@ -429,6 +429,9 @@ export class BackupOrchestrator {
             size: objeto.size,
             backup_key: backupKey,
           });
+        } else {
+          // A disappearing source object cannot yield a complete R2 backup.
+          throw new Error('R2_BACKUP_SOURCE_OBJECT_MISSING');
         }
       }
 
