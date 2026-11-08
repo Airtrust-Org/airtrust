@@ -1,5 +1,10 @@
 import { hasSchemaColumn, hasSchemaTable } from '../utils/db-schema';
 import { resolveEffectiveTrainingComplianceProfile } from './training-compliance-evidence-profile';
+import {
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
+} from './training-compliance-rule-engine';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 /** One D1 transaction: policy-guarded enrollment, first cycle, evidence profile and audit. */
 export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
@@ -27,8 +32,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
          WHERE fcc.empresa_id=f.empresa_id AND fcc.funcionario_id=f.id
            AND fcc.condicao_id=${alias}.condicao_id AND fcc.ativo=1
            AND fcc.deleted_at IS NULL
-           AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=date('now','-3 hours'))
-           AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=date('now','-3 hours'))))`
+           AND (fcc.data_inicio IS NULL OR date(fcc.data_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+           AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})))`
       : `AND ${alias}.condicao_id IS NULL`
     : '';
   const aircraftGuard=(alias:string)=> hasAircraft
@@ -40,8 +45,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           WHERE fa.funcionario_id=f.id
             ${aircraftAssignmentTenantGuard}
             AND fa.ativo=1 AND fa.deleted_at IS NULL
-            AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=date('now','-3 hours'))
-            AND (fa.data_fim IS NULL OR date(fa.data_fim)>=date('now','-3 hours'))
+            AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+            AND (fa.data_fim IS NULL OR date(fa.data_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
             AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=
                 UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ',''))))`
       : `AND (${alias}.aeronave_modelo IS NULL OR TRIM(${alias}.aeronave_modelo)='')`
@@ -57,13 +62,16 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
     OR (${alias}.escopo='SETOR_FUNCAO' AND ${alias}.setor_id=f.setor_id AND ${alias}.funcao_id=f.funcao_id)
     OR (${alias}.escopo='FUNCIONARIO' AND ${alias}.funcionario_id=f.id))`;
   const hasProfile=await hasSchemaColumn(db,'lms_matriculas','perfil_competencia');
+  const operationalDate=getTodayIsoSaoPaulo();
   const profile=hasProfile ? await resolveEffectiveTrainingComplianceProfile(db,{
     empresaId:p.empresaId,funcionarioId:p.funcionarioId,qualificacaoTipoId:p.qualificacaoTipoId,
+    operationalDate,
   }) : null;
   // Re-check persisted policy immediately before the write. A stale preview
   // cannot authorize an inactive employee, unpublished course, opt-out or NULL modality.
   const [enrollment,cycle,audit]=await db.batch([
-    db.prepare(`INSERT INTO lms_matriculas
+    db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+      INSERT INTO lms_matriculas
       (empresa_id,curso_id,funcionario_id,observacoes${hasProfile?',perfil_competencia':''})
       SELECT ?,?,?,?${hasProfile?',?':''} WHERE EXISTS (
         SELECT 1 FROM funcionarios f
@@ -76,8 +84,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
           AND tr.qualificacao_tipo_id=c.qualificacao_tipo_id AND tr.ativo=1 AND tr.deleted_at IS NULL
           AND tr.obrigatoriedade='OBRIGATORIA' AND tr.auto_matricular_ead=1
           AND tr.modalidade_requerida='EAD'
-          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=date('now','-3 hours'))
-          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=date('now','-3 hours'))
+          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
           ${conditionGuard('tr')}
           ${aircraftGuard('tr')}
         WHERE 1=(SELECT COUNT(*) FROM lms_cursos c2
@@ -93,8 +101,8 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
              WHERE higher.empresa_id=tr.empresa_id
                AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
                AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
-               AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=date('now','-3 hours'))
-               AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=date('now','-3 hours'))
+               AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+               AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
                AND ${applies('higher')}
                ${conditionGuard('higher')}
                ${aircraftGuard('higher')}
@@ -104,7 +112,7 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
       ) AND NOT EXISTS (
         SELECT 1 FROM lms_matriculas m
          WHERE m.empresa_id=? AND m.curso_id=? AND m.funcionario_id=?
-      )`).bind(p.empresaId,p.cursoId,p.funcionarioId,p.observacoes,
+      )`).bind(operationalDate,p.empresaId,p.cursoId,p.funcionarioId,p.observacoes,
         ...(hasProfile?[profile]:[]),
         p.cursoId,p.qualificacaoTipoId,p.regraId,p.funcionarioId,p.empresaId,
         p.empresaId,p.cursoId,p.funcionarioId),

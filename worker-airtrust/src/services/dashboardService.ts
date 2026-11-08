@@ -31,7 +31,10 @@ import {
   getTodayIsoSaoPaulo,
   getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
-import { trainingComplianceEffectiveRequirementPredicateSql } from './training-compliance-rule-engine';
+import {
+  trainingComplianceEffectiveRequirementPredicateSql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+} from './training-compliance-rule-engine';
 
 const SIMULADORES_OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
 
@@ -748,7 +751,8 @@ export async function getQualificationComplianceSummary(
 
   const result = await db
     .prepare(
-      `WITH active_employees AS (
+      `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE},
+       active_employees AS (
          SELECT f.id, f.empresa_id, f.setor_id, f.funcao_id, f.aeronave
          FROM funcionarios f
          WHERE f.empresa_id = ?
@@ -846,6 +850,7 @@ export async function getQualificationComplianceSummary(
        FROM scored`,
     )
     .bind(
+      hoje,
       empresaId,
       ...employeeScope.bindings,
       empresaId,

@@ -175,15 +175,16 @@ describe('training compliance rule engine', () => {
                (2,1,22,'FUNCAO',7,'AVSEC_TRIPULANTE','OBRIGATORIA',1);
       `);
       const predicate = trainingComplianceEffectiveRequirementPredicateSql();
-      const select = db.prepare(`SELECT f.id,qt.codigo,${predicate} eligible
+      const select = db.prepare(`WITH compliance_operational_date(hoje) AS (VALUES(?))
+        SELECT f.id,qt.codigo,${predicate} eligible
         FROM funcionarios f CROSS JOIN qualificacoes_tipos qt
         WHERE f.empresa_id=qt.empresa_id ORDER BY f.id,qt.id`);
-      expect(select.all().map((row) => [row.id, row.codigo, row.eligible]))
+      expect(select.all('2026-11-07').map((row) => [row.id, row.codigo, row.eligible]))
         .toEqual([[10, 'D1', 1], [10, 'AVSEC_CONSC', 0], [11, 'D1', 0], [11, 'AVSEC_CONSC', 1]]);
       db.exec(`INSERT INTO treinamento_requisitos
         (id,empresa_id,qualificacao_tipo_id,escopo,funcionario_id,obrigatoriedade,ativo)
         VALUES (3,1,22,'FUNCIONARIO',10,'NAO_APLICA',1);`);
-      expect(select.all().map((row) => [row.id, row.codigo, row.eligible]))
+      expect(select.all('2026-11-07').map((row) => [row.id, row.codigo, row.eligible]))
         .toEqual([[10, 'D1', 0], [10, 'AVSEC_CONSC', 1], [11, 'D1', 0], [11, 'AVSEC_CONSC', 1]]);
     } finally {
       db.close();

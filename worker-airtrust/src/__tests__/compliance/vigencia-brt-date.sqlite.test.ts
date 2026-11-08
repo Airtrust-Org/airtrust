@@ -1,13 +1,10 @@
-/**
- * Vigência de regra/vínculo deve usar a data operacional de São Paulo (UTC-3), como o vencimento.
- * Com `date('now')` (UTC), entre 21h e 24h BRT a regra mudava de vigência ~3h antes do dia civil.
- */
+/** Vigência e elegibilidade SQL usam a mesma data operacional IANA calculada pela aplicação. */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { loadRules } from '../../services/training-compliance-snapshot-builder';
-import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+import { trainingComplianceRuleApplicabilitySql } from '../../services/training-compliance-rule-engine';
 
 const SRC = join(__dirname, '..', '..');
 const FILES = [
@@ -18,12 +15,6 @@ const FILES = [
   'routes/compliance-treinamentos-conditions.ts',
 ];
 
-const addDays = (iso: string, days: number) => {
-  const d = new Date(`${iso}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-};
-
 describe('vigência na data operacional de São Paulo', () => {
   it('nenhum predicado de vigência/vínculo usa date(\'now\') em UTC', () => {
     for (const file of FILES) {
@@ -33,13 +24,14 @@ describe('vigência na data operacional de São Paulo', () => {
   });
 
   it.each([
-    ['2026-11-08 00:30:00', '2026-11-07'],
-    ['2026-11-08 02:59:59', '2026-11-07'],
-    ['2026-11-08 03:00:00', '2026-11-08'],
-  ])('loadRules mantém a data BRT na fronteira %s UTC', async (utcInstant, today) => {
-    // Congela o relógio do SQLite, não apenas Date do Node: o Worker delega
-    // a comparação de vigência ao relógio de SQL, diferente do relógio de JS.
-    expect(getTodayIsoSaoPaulo(new Date(utcInstant.replace(' ', 'T') + 'Z'))).toBe(today);
+    ['2026-11-08T00:30:00Z', '2026-11-07', [1]],
+    ['2026-11-08T02:59:59Z', '2026-11-07', [1]],
+    ['2026-11-08T03:00:00Z', '2026-11-08', [2]],
+  ])('loadRules avalia vigência na data operacional do instante %s', async (instant, today, expectedIds) => {
+    const operationalDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(instant));
+    expect(operationalDate).toBe(today);
     const sqlite = new SqliteD1Database();
     sqlite.database.exec(`
       DROP TABLE IF EXISTS treinamento_requisitos; DROP TABLE IF EXISTS qualificacoes_tipos; DROP TABLE IF EXISTS funcionarios;
@@ -59,21 +51,46 @@ describe('vigência na data operacional de São Paulo', () => {
         auto_matricular_ead INTEGER DEFAULT 0, ativo INTEGER DEFAULT 1, deleted_at TEXT,
         created_at TEXT DEFAULT '2026-01-01', updated_at TEXT DEFAULT '2026-01-01');
       INSERT INTO qualificacoes_tipos (id, empresa_id, nome, codigo, categoria) VALUES (1, 1, 'T', 'T1', 'TREINAMENTO');
+      INSERT INTO treinamento_requisitos (id, empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_fim)
+        VALUES (1, 1, 1, 'EMPRESA', 'OBRIGATORIA', '2026-11-07');
+      INSERT INTO treinamento_requisitos (id, empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_inicio)
+        VALUES (2, 1, 1, 'EMPRESA', 'OBRIGATORIA', '2026-11-08');
       INSERT INTO treinamento_requisitos (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_fim)
-        VALUES (1, 1, 'EMPRESA', 'OBRIGATORIA', '${today}');
-      INSERT INTO treinamento_requisitos (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_inicio)
-        VALUES (1, 1, 'EMPRESA', 'OBRIGATORIA', '${addDays(today, 1)}');
-      INSERT INTO treinamento_requisitos (empresa_id, qualificacao_tipo_id, escopo, obrigatoriedade, vigencia_fim)
-        VALUES (1, 1, 'EMPRESA', 'OBRIGATORIA', '${addDays(today, -1)}');
+        VALUES (1, 1, 'EMPRESA', 'OBRIGATORIA', '2026-11-06');
     `);
-    const clockedD1 = {
-      prepare(sql: string) {
-        // Preserva todos os predicados originais. Substitui SOMENTE a referência
-        // de tempo para provar que date('now') em UTC falharia neste cenário.
-        return sqlite.prepare(sql.replaceAll("date('now'", `date('${utcInstant}'`));
-      },
-    } as unknown as D1Database;
-    const rules = await loadRules(clockedD1, 1);
-    expect(rules.map((r) => r.id)).toEqual([1]);
+    const rules = await loadRules(sqlite.asD1(), 1, operationalDate);
+    expect(rules.map((r) => r.id)).toEqual(expectedIds);
+  });
+
+  it.each([
+    ['2026-11-07', 1],
+    ['2026-11-08', 0],
+  ])('eligibility honors the bound operational date %s', async (today, expected) => {
+    const sqlite = new SqliteD1Database();
+    sqlite.database.exec(`
+      DROP TABLE IF EXISTS funcionarios_compliance_condicoes;
+      DROP TABLE IF EXISTS funcionarios_aeronaves;
+      DROP TABLE IF EXISTS aeronaves;
+      DROP TABLE IF EXISTS funcionarios;
+      CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, setor_id INTEGER,
+        funcao_id INTEGER, aeronave TEXT);
+      CREATE TABLE funcionarios_compliance_condicoes (empresa_id INTEGER, funcionario_id INTEGER,
+        condicao_id INTEGER, ativo INTEGER, deleted_at TEXT, data_inicio TEXT, data_fim TEXT);
+      CREATE TABLE funcionarios_aeronaves (funcionario_id INTEGER, aeronave_id INTEGER,
+        ativo INTEGER, deleted_at TEXT, data_inicio TEXT, data_fim TEXT);
+      CREATE TABLE aeronaves (id INTEGER PRIMARY KEY, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      INSERT INTO funcionarios VALUES (1, 1, NULL, NULL, NULL);
+      INSERT INTO funcionarios_compliance_condicoes VALUES (1, 1, 7, 1, NULL, NULL, '2026-11-07');
+      INSERT INTO aeronaves VALUES (1, 1, 'AW139', NULL);
+      INSERT INTO funcionarios_aeronaves VALUES (1, 1, 1, NULL, NULL, '2026-11-07');
+    `);
+    const sql = trainingComplianceRuleApplicabilitySql('tr', 'f');
+    const eligible = await sqlite.asD1().prepare(`
+      WITH compliance_operational_date(hoje) AS (VALUES(?))
+      SELECT 1 FROM funcionarios f, (SELECT 'EMPRESA' escopo, 7 condicao_id,
+        'AW139' aeronave_modelo, 1 empresa_id, NULL setor_id, NULL funcao_id, NULL funcionario_id) tr
+      WHERE f.id=1 AND ${sql}
+    `).bind(today).first();
+    expect(Boolean(eligible)).toBe(Boolean(expected));
   });
 });
