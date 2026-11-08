@@ -33,10 +33,9 @@ test('synthetic never-realized rule starts on a deterministic past operational d
   const dryRun = JSON.parse(output);
   assert.equal(dryRun.mode, 'DRY_RUN');
   assert.equal(dryRun.vigencia_inicio, '2000-01-01');
-  const requirementInsert = seed.match(/INSERT INTO treinamento_requisitos\([\s\S]*?\nCREATE TABLE IF NOT EXISTS _qa_training_compliance_post/)?.[0];
-  assert.ok(requirementInsert);
-  assert.match(requirementInsert, /FIXTURE_VIGENCIA_START_DATE/);
-  assert.doesNotMatch(requirementInsert, /date\('now'\)/);
+  assert.match(seed, /FIXTURE_VIGENCIA_START_DATE = '2000-01-01'/);
+  assert.match(seed, /\$\{esc\(FIXTURE_VIGENCIA_START_DATE\)\}/);
+  assert.doesNotMatch(seed, /vigencia_inicio[\s\S]{0,200}date\('now'\)/);
 });
 
 test('browser QA stays read-only and proves never-realized compliance', () => {
