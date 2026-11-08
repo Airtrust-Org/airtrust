@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
+import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import type {
   TipoConteudo,
   MatriculaStatus,
@@ -1237,6 +1238,8 @@ export function useUpdateMatriculaStatus() {
         includeScorm: true,
         includeXapi: true,
       });
+      // Status changes can alter qualification evidence used by Compliance.
+      void invalidateTrainingEvidenceProjections(qc);
     },
   });
 }
@@ -1268,6 +1271,9 @@ export function useFinalizarMatricula() {
         includeScorm: true,
         includeXapi: true,
       });
+      // Only terminal finalization paths refresh the historical evidence
+      // projections; high-frequency SCORM progress commits remain unchanged.
+      void invalidateTrainingEvidenceProjections(qc);
     },
   });
 }
