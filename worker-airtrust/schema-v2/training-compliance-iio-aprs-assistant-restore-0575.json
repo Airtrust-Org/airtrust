@@ -1,0 +1,8 @@
+{
+  "changeId": "training-compliance-iio-aprs-assistant-restore-0575",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0575_training_compliance_iio_aprs_assistant_restore.sql",
+  "fileHash": "415141109828dae3cd7e3542e5c4d44f9f3cff6cab5949c7c2a7a8c225498eac",
+  "planPath": "worker-airtrust/schema-v2/plans/training-compliance-iio-aprs-assistant-restore-0575.md",
+  "planHash": "a36af293eed42f534aab852c9f4763387e0c28565e073989c45e8dbba03a16f0"
+}
