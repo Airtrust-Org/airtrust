@@ -339,6 +339,8 @@ describe('qualificacoes tipos update sync', () => {
     );
 
     const batchCall = calls.find((call) => call.method === 'batch');
+    // O update mestre e TODOS os históricos devem compor a mesma transação.
+    expect(batchCall?.query).toContain('UPDATE qualificacoes_tipos');
     expect(batchCall?.query).toContain('UPDATE qualificacoes_historico');
     expect(batchCall?.args).toContain(101);
     expect(batchCall?.args).toContain(202);
