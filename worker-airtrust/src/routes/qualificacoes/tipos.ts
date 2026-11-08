@@ -55,7 +55,7 @@ const requireOperacoesTipo = (action: 'update' | 'delete') =>
   requireOperationalAccess({ action, resourceType: 'qualificacao_tipo' });
 
 type TipoAtualizadoRow = {
-  id: number;
+  id: number | string;
   codigo: string | null;
   nome: string | null;
   categoria: string | null;
