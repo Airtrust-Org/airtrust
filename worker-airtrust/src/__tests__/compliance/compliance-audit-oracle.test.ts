@@ -174,6 +174,29 @@ describe('computeRequirement — oráculo de status', () => {
     expect(result.evidencia_pendente_motivo).toBe('DATA_REALIZACAO');
   });
 
+  it('evidência mais recente inválida mantém revisão mesmo com ciclo histórico vencido', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(
+      rule({ validade_fonte: 'EVIDENCIA' }),
+      [history('2026-02-30', '2027-02-28'), history('2024-01-01', '2025-01-01')], [],
+    );
+    expect(result.status_compliance).toBe('VENCIDO');
+    expect(result.evidencia_pendente_validacao).toBe(true);
+    expect(result.evidencia_pendente_motivo).toBe('DATA_REALIZACAO');
+  });
+
+  it('LMS concluído com data inválida impede auto-renovação sobre evidência histórica vencida', () => {
+    noon('2026-06-15');
+    const result = computeRequirement(
+      rule({ validade_fonte: 'EVIDENCIA' }),
+      [history('2024-01-01', '2025-01-01')],
+      [lms('CONCLUIDO', '2026-02-30')],
+    );
+    expect(result.status_compliance).toBe('VENCIDO');
+    expect(result.evidencia_pendente_validacao).toBe(true);
+    expect(result.evidencia_pendente_motivo).toBe('DATA_REALIZACAO');
+  });
+
   it('LMS concluído com data inválida não produz certificado nem conformidade', () => {
     noon('2026-06-15');
     const result = computeRequirement(rule({ validade_fonte: 'MODELO' }), [], [lms('CONCLUIDO', '2026-02-30')]);

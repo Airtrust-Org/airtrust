@@ -596,7 +596,12 @@ export function computeRequirement(
 
   const malformedRealization = [...allHistory, ...allLms.filter(
     (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO',
-  )].some((item) => Boolean(item.data_realizacao) && trainingComplianceIsoDay(item.data_realizacao) === null);
+  )].some((item) =>
+    Boolean(item.data_realizacao) &&
+    evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) &&
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade) &&
+    trainingComplianceIsoDay(item.data_realizacao) === null,
+  );
   const months = rule.validade_meses == null ? null : Number(rule.validade_meses);
   const invalidValidityConfig = months !== null && (!Number.isInteger(months) || months < 0 || months > 1200);
   const needsEvidenceExpiry = Boolean(
@@ -642,10 +647,13 @@ export function computeRequirement(
   }
 
   const evidenceReviewReason =
-    status_compliance !== 'NAO_REALIZADO' ? null :
     invalidValidityConfig ? 'REGRA_VALIDADE' :
     invalidEvidenceExpiry ? 'DATA_VENCIMENTO' :
-    malformedRealization ? 'DATA_REALIZACAO' :
+    // An older expired proof must not allow auto-enrollment while a later
+    // malformed completion for this same profile/modality remains unresolved.
+    malformedRealization && (status_compliance === 'NAO_REALIZADO' || status_compliance === 'VENCIDO')
+      ? 'DATA_REALIZACAO' :
+    status_compliance !== 'NAO_REALIZADO' ? null :
     modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
     profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff)) ? 'PERFIL' : null;
 
