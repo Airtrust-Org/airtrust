@@ -5,7 +5,6 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   failCleanup: false,
 }));
-const mark = (name: string) => async () => { state.calls.push(name); };
 vi.mock('../../cron/alertasDiarios', () => ({
   alertasDiariosHandler: async () => { state.calls.push('daily-alerts'); },
 }));
