@@ -6,8 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
 import type {
-  ScormVersao,
-  ScormAssessmentPolicy,
   TipoConteudo,
   MatriculaStatus,
   LmsCurso,
@@ -333,18 +331,41 @@ async function lmsRequestPaginated<T>(
   path: string,
   init?: RequestInit,
 ): Promise<{ data: T[]; total: number }> {
-  const res = await fetchWithAuth(`/api/lms${path}`, {
-    headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-    ...init,
+  // Bound catalog/list requests so a stalled network cannot leave cards as skeletons indefinitely.
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (init?.signal?.aborted) controller.abort();
+  else init?.signal?.addEventListener('abort', abortFromParent, { once: true });
+  // Bound the whole auth-aware call, including an unresolved refresh token
+  // operation that does not honor the caller's abort signal.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Tempo limite ao consultar os cursos. Tente novamente.'));
+    }, 20_000);
   });
-  const json = (await res.json()) as {
-    success: boolean;
-    data?: T[];
-    error?: string;
-    pagination?: { total: number; page: number; limit: number };
-  };
-  if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
-  return { data: json.data ?? [], total: json.pagination?.total ?? json.data?.length ?? 0 };
+  try {
+    const res = await Promise.race([
+      fetchWithAuth(`/api/lms${path}`, {
+        headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+        ...init,
+        signal: controller.signal,
+      }),
+      deadline,
+    ]);
+    const json = (await res.json()) as {
+      success: boolean;
+      data?: T[];
+      error?: string;
+      pagination?: { total: number; page: number; limit: number };
+    };
+    if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+    return { data: json.data ?? [], total: json.pagination?.total ?? json.data?.length ?? 0 };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    init?.signal?.removeEventListener('abort', abortFromParent);
+  }
 }
 
 // ── Query keys ────────────────────────────────────────────────────────────────
@@ -491,6 +512,7 @@ export function useLmsCursos(
     },
     enabled: options.enabled ?? true,
     staleTime: 15_000,
+    retry: 1,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });

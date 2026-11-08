@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import { safeFrontendApiResponseErrorMessage } from '@/react-app/lib/api-contract';
+import { appFetch } from '@/react-app/lib/app-fetch';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import {
   ArrowUpDown,
@@ -230,7 +231,6 @@ export function ListaFuncionarios({
   }, []);
 
   const [refreshKey, setRefreshKey] = useState(0);
-  const lastRequestRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
   const activeRequestIdRef = useRef(0);
   const debouncedTermoBusca = useDebounce(termoBusca, 400);
 
@@ -293,28 +293,7 @@ export function ListaFuncionarios({
     const requestId = ++activeRequestIdRef.current;
     let didTimeout = false;
 
-    const requestKey = JSON.stringify({
-      page: pagination.page,
-      limit: pagination.limit,
-      termoBusca: debouncedTermoBusca,
-      statusFilter,
-      funcaoFilter: funcaoFilter || '',
-      aeronaveFilter: aeronaveFilter || '',
-      quinzenaFilter: quinzenaFilter || '',
-      setorFilter: (setorFilter || []).join(','),
-      token: token || '',
-      sortColumn: sortConfig.column || '',
-      sortDirection: sortConfig.direction || '',
-      refreshKey,
-    });
-
-    const now = Date.now();
-    if (lastRequestRef.current.key === requestKey && now - lastRequestRef.current.at < 200) {
-      return () => {
-        abortController.abort();
-      };
-    }
-    lastRequestRef.current = { key: requestKey, at: now };
+    let timeoutId: number | undefined;
 
     const fetchData = async () => {
       try {
@@ -346,21 +325,26 @@ export function ListaFuncionarios({
         }
 
         const url = `${API_BASE_URL}/funcionarios?${params.toString()}`;
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-
-        const timeoutId = window.setTimeout(() => {
-          didTimeout = true;
-          abortController.abort();
-        }, 15000);
-
-        const response = await fetch(url, {
-          headers,
-          cache: 'no-cache',
-          signal: abortController.signal,
+        // appFetch supplies the current bearer token, including after refresh.
+        // Do not override it with the token captured at render time.
+        // A refresh token request may remain pending even after aborting the
+        // staff fetch signal. Race against a rejecting deadline so this page
+        // always leaves its loading state, independently of shared auth refresh.
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timeoutId = window.setTimeout(() => {
+            didTimeout = true;
+            abortController.abort();
+            reject(new Error('Employee list request timed out'));
+          }, 15000);
         });
+        const response = await Promise.race([
+          appFetch(url, {
+            cache: 'no-cache',
+            signal: abortController.signal,
+          }),
+          deadline,
+        ]);
 
-        window.clearTimeout(timeoutId);
         if (requestId !== activeRequestIdRef.current) return;
 
         if (!response.ok) {
@@ -377,6 +361,9 @@ export function ListaFuncionarios({
         const data = await response.json();
         if (requestId !== activeRequestIdRef.current) return;
 
+        if (data.success === false) {
+          throw new Error('O servidor não conseguiu retornar a lista de funcionários.');
+        }
         const lista = data.data || data.funcionarios || [];
         setFuncionarios(Array.isArray(lista) ? lista : []);
 
@@ -437,12 +424,16 @@ export function ListaFuncionarios({
           setPagination((prev) => buildEmptyPaginationState(prev));
         }
       } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         if (requestId === activeRequestIdRef.current) setLoading(false);
       }
     };
 
     void fetchData();
-    return () => abortController.abort();
+    return () => {
+      abortController.abort();
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
   }, [
     pagination.page,
     pagination.limit,
@@ -596,7 +587,11 @@ export function ListaFuncionarios({
         <>
           {error && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-              {error}
+              <p>{error}</p>
+              <p className="mt-1">A falha de consulta não indica exclusão dos cadastros.</p>
+              <button type="button" onClick={recarregar} className="mt-2 rounded border border-red-300 px-3 py-1 font-medium hover:bg-red-100">
+                Tentar novamente
+              </button>
             </div>
           )}
           <div className="max-h-[600px] overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -669,10 +664,12 @@ export function ListaFuncionarios({
                             <Users size={48} className="text-slate-300 dark:text-slate-600" />
                           )
                         }
-                        title={termoBusca ? 'Nenhum resultado' : 'Nenhum funcionário cadastrado'}
+                        title={error ? 'Dados temporariamente indisponíveis' : termoBusca ? 'Nenhum resultado' : 'Nenhum funcionário cadastrado'}
                         description={
-                          termoBusca
-                            ? `Não encontramos funcionários para "${termoBusca}"`
+                          error
+                            ? 'Não foi possível consultar a lista. Tente novamente; os registros não foram alterados.'
+                            : termoBusca
+                              ? `Não encontramos funcionários para "${termoBusca}"`
                             : 'Ainda não há funcionários cadastrados no sistema.'
                         }
                       />
