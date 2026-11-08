@@ -142,7 +142,7 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
         args: statements.flatMap((statement) => statement.__args || []),
         method: 'batch',
       });
-      return [];
+      return statements.map(() => ({ meta: { changes: 1, last_row_id: 0 } }));
     }),
   } as unknown as D1Database;
 
