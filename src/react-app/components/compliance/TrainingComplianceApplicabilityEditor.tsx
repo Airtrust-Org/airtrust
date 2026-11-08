@@ -5,6 +5,7 @@ import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { showToast } from '@/react-app/utils/toast';
 import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
+import { invalidateComplianceDependents } from './complianceCacheInvalidation';
 
 type Scope = 'EMPRESA' | 'SETOR' | 'FUNCAO' | 'SETOR_FUNCAO' | 'FUNCIONARIO';
 type Obrigatoriedade = 'OBRIGATORIA' | 'RECOMENDADA' | 'NAO_APLICA';
@@ -230,17 +231,7 @@ export function TrainingComplianceApplicabilityEditor({
     if (!tripulacaoSelected) setAeronaveModelo('');
   }, [tripulacaoSelected]);
 
-  const invalidate = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'rules', tipoId] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'summary'] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'people'] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'trainings'] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'sectors'] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'reconciliation'] }),
-      queryClient.invalidateQueries({ queryKey: ['training-compliance', 'org-matrix'] }),
-    ]);
-  };
+  const invalidate = () => invalidateComplianceDependents(queryClient);
 
   const createRule = useMutation({
     mutationFn: async () => {

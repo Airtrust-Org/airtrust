@@ -10,6 +10,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("@/react-app/lib/app-fetch", () => ({
+  appFetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
+
 vi.mock("@/react-app/hooks/useAuth", () => ({
   useAuth: () => ({
     token: "test-token",
@@ -28,10 +32,8 @@ vi.mock("react-router-dom", async (importOriginal) => {
   };
 });
 
-let lastModalProps = null;
 vi.mock("../ModalFuncionario", () => ({
   default: (props) => {
-    lastModalProps = props;
     return props.aberto ? <div data-testid="modal-funcionario">Modal Aberto para {props.funcionario?.nome}</div> : null;
   },
 }));
@@ -106,7 +108,6 @@ function mockFuncionarioFetch() {
 describe("ListaFuncionarios action buttons", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    lastModalProps = null;
     vi.stubGlobal("fetch", mockFetch);
     localStorage.clear();
   });

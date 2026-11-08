@@ -49,26 +49,39 @@ async function sendExam(page: Page) {
 test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> certificado -> reabertura', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  // The i18n fallback is unrelated to SCORM/exam behavior. In this synthetic
-  // browser test the frontend runs on :3000 and the API URL is :8787:
-  // fulfilling a cross-origin request without ACAO causes a WebKit pageerror.
-  // Supply a deterministic, CORS-valid response without outbound translation.
-  await page.route('**/api/public/translate**', (route) => {
-    const headers = {
-      'Access-Control-Allow-Origin': 'http://127.0.0.1:3000',
-      'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    };
-    if (route.request().method() === 'OPTIONS') {
-      return route.fulfill({ status: 204, headers });
-    }
-    return route.fulfill({
-      status: 200,
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: '{"success":true,"data":{"translatedText":""}}',
-    });
+  // Translation is provided by the disposable local API. Browser routing
+  // can bypass CORS preflight in Chromium but fail nondeterministically in WebKit.
+  // The browser uses the real API origin for i18n. The local synthetic API,
+  // not a browser-level route mock, must respond with production-like CORS.
+  const translation = await page.request.post(API + '/api/public/translate', {
+    headers: { Origin: 'http://127.0.0.1:3000' },
+    data: { text: 'Saudações', from: 'pt', to: 'en' },
   });
+  expect(translation.status()).toBe(200);
+  expect(translation.headers()['access-control-allow-credentials']).toBe('true');
+  expect(await translation.json()).toEqual({
+    success: true, data: { translatedText: '' },
+  });
+  // Synthetic browser E2E must support real cross-origin credentialed
+  // requests, otherwise WebKit may raise CORS errors after navigation.
+  const preflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://127.0.0.1:3000',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'Authorization,Content-Type',
+    },
+  });
+  expect(preflight.status()).toBe(204);
+  expect(preflight.headers()['access-control-allow-origin']).toBe('http://127.0.0.1:3000');
+  expect(preflight.headers()['access-control-allow-credentials']).toBe('true');
+  const untrustedPreflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://example.invalid', 'Access-Control-Request-Method': 'GET' },
+  });
+  expect(untrustedPreflight.status()).toBe(204);
+  expect(untrustedPreflight.headers()['access-control-allow-origin']).not.toBe('https://example.invalid');
+  expect(untrustedPreflight.headers()['access-control-allow-credentials']).toBeUndefined();
   const password = await reset(page);
 
   // 0) estado inicial: nada emitido
