@@ -197,6 +197,7 @@ export async function replaceValidatedExternalScorm(params: {
       coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE',
     },
     policy: { incoming: 'SCORED' },
+    publishCourse: true,
   });
   if (!activated) {
     const alreadyActive = await readAlreadyActiveExternalReplacement({
@@ -271,6 +272,7 @@ export async function replaceValidatedFormativeScorm(params: {
       coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE',
     },
     policy: { incoming: 'FORMATIVE' },
+    publishCourse: true,
   });
   if (!activated) {
     // A concurrent identical request may have committed before this CAS.
