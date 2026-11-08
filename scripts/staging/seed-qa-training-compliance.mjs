@@ -31,6 +31,8 @@ const categoryName = 'QA Compliance de Treinamentos';
 const trainingName = 'QA Compliance — Nunca realizado';
 const managedSectorCode = 'QA-SETOR-EXA';
 const qaAdminEmail = 'qa-examiner-admin@staging.airtrust.invalid';
+// Keep the synthetic requirement active regardless of the UTC/local midnight boundary.
+const FIXTURE_VIGENCIA_START_DATE = '2000-01-01';
 const tenantId = `(SELECT id FROM empresas WHERE codigo=${esc(TENANT)} AND deleted_at IS NULL AND COALESCE(ativo,1)=1)`;
 const typeId = `(SELECT id FROM qualificacoes_tipos WHERE empresa_id=${tenantId} AND UPPER(codigo)=UPPER(${esc(code)}) AND deleted_at IS NULL LIMIT 1)`;
 const managedSectorId = `(SELECT id FROM setores WHERE empresa_id=${tenantId} AND codigo=${esc(managedSectorCode)} AND ativo=1 AND deleted_at IS NULL)`;
@@ -61,7 +63,7 @@ INSERT INTO qualificacoes_tipos(tipo,codigo,nome,descricao,categoria_id,categori
 SELECT 'TREINAMENTO',${esc(code)},${esc(trainingName)},${esc('Fixture sintética staging para validar obrigação nunca realizada.')},qc.id,qc.nome,1,12,0,${esc(marker)},1,qc.empresa_id,datetime('now'),datetime('now'),NULL
 FROM qualificacoes_categorias qc WHERE qc.empresa_id=${tenantId} AND UPPER(qc.codigo)=UPPER(${esc(catCode)}) AND qc.deleted_at IS NULL;
 INSERT INTO treinamento_requisitos(empresa_id,qualificacao_tipo_id,escopo,setor_id,funcao_id,funcionario_id,obrigatoriedade,nivel_requerido,critico_operacional,origem,referencia_normativa,observacoes,vigencia_inicio,vigencia_fim,prazo_inicial_dias,auto_matricular_ead,ativo,created_at,updated_at,deleted_at)
-SELECT ${tenantId},${typeId},'SETOR',${managedSectorId},NULL,NULL,'OBRIGATORIA',NULL,0,'OUTRO','QA STAGING',${esc(marker)},date('now'),NULL,0,0,1,datetime('now'),datetime('now'),NULL;
+SELECT ${tenantId},${typeId},'SETOR',${managedSectorId},NULL,NULL,'OBRIGATORIA',NULL,0,'OUTRO','QA STAGING',${esc(marker)},${esc(FIXTURE_VIGENCIA_START_DATE)},NULL,0,0,1,datetime('now'),datetime('now'),NULL;
 CREATE TABLE IF NOT EXISTS _qa_training_compliance_post(rule_count INTEGER NOT NULL CHECK(rule_count=1), history_count INTEGER NOT NULL CHECK(history_count=0));
 DELETE FROM _qa_training_compliance_post;
 INSERT INTO _qa_training_compliance_post(rule_count,history_count)
@@ -88,6 +90,7 @@ if (!apply) {
       operation: rollback ? 'ROLLBACK' : 'SEED',
       code,
       marker,
+      vigencia_inicio: FIXTURE_VIGENCIA_START_DATE,
     }),
   );
   process.exit(0);
