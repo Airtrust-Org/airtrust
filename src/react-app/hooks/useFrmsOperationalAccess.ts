@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { httpClient, type ApiResponse, type HttpClientOptions } from '@/react-app/services/http-client';
+import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
+import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
 
@@ -124,13 +125,9 @@ function unwrap<T>(response: ApiResponse<EndpointEnvelope<T>>): T {
   return payload.data;
 }
 
-async function getEndpoint<T>(
-  path: string,
-  kind: FrmsOperationalRequestKind,
-  options?: HttpClientOptions,
-): Promise<T> {
+async function getEndpoint<T>(path: string, kind: FrmsOperationalRequestKind): Promise<T> {
   try {
-    return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path, options));
+    return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path));
   } catch (error) {
     console.error('[FRMS operational access] GET failed', { path, error });
     throw new Error(safeFrmsOperationalRequestError(kind));
@@ -174,14 +171,29 @@ export async function withFrmsAccessTimeout<T>(
   }
 }
 
+/**
+ * Align the FRMS bootstrap with the canonical authenticated transport used
+ * by successful session-profile selection. The generic client appended
+ * extra cache-bypass headers and generated a distinct browser preflight.
+ * This is not an authorization fallback.
+ */
+export async function requestFrmsOperationalAccess(signal: AbortSignal): Promise<FrmsOperationalAccess> {
+  const response = await fetchWithAuth(API_BASE_URL + '/me/operational-access', {
+    method: 'GET',
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) throw new Error('FRMS_ACCESS_HTTP_UNAVAILABLE');
+  const payload = (await response.json()) as EndpointEnvelope<FrmsOperationalAccess>;
+  if (payload?.success !== true || !payload.data) {
+    throw new Error('FRMS_ACCESS_RESPONSE_INVALID');
+  }
+  return payload.data;
+}
+
 async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
   try {
-    return await withFrmsAccessTimeout((signal) =>
-      getEndpoint<FrmsOperationalAccess>('/me/operational-access', 'access', {
-        signal,
-        retry: 0,
-      }),
-    );
+    return await withFrmsAccessTimeout(requestFrmsOperationalAccess);
   } catch {
     throw new Error(safeFrmsOperationalRequestError('access'));
   }
