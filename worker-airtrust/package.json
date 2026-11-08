@@ -67,6 +67,6 @@
     "wrangler": "^4.46.0"
   },
   "overrides": {
-    "ip-address": "10.7.2"
+    "ip-address": "10.7.4"
   }
 }
