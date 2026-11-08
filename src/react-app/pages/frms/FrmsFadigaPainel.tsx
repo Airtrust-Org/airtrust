@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BarChart3, Calendar, ShieldAlert } from 'lucide-react';
 import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 import { classifyDailyMonitorItem, summarizeDailyMonitor } from './frmsDailyMonitorRisk';
+import type { FrmsDailyFatigueStatus } from '@/react-app/hooks/useFrms';
 import AppLayout from '@/react-app/components/AppLayout';
 import PageHeader from '@/react-app/components/PageHeader';
 import Button from '@/react-app/components/Button';
@@ -12,6 +13,11 @@ import {
   useFrmsFadigaAnalytics,
 } from '@/react-app/hooks/useFrms';
 
+type FrmsDailyMonitorRow = FrmsDailyFatigueStatus & {
+  funcionario_nome?: string;
+  score_fadiga?: number | null;
+};
+
 export default function FrmsFadigaPainel() {
   const navigate = useNavigate();
   const [data, setData] = useState(frmsBrazilOperationalTodayIso());
@@ -19,14 +25,10 @@ export default function FrmsFadigaPainel() {
   const { data: alertsData, loading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useFrmsDailyFatigueAlerts(data);
   const { data: analyticsData } = useFrmsFadigaAnalytics(30);
 
-  const dailyItemsValid = Array.isArray((dailyData as { items?: unknown[] } | null)?.items);
-  const alertItemsValid = Array.isArray((alertsData as { items?: unknown[] } | null)?.items);
-  const itens = dailyItemsValid
-    ? (dailyData as unknown as { items: Array<Record<string, unknown>> }).items
-    : [];
-  const alertItems = alertItemsValid
-    ? (alertsData as unknown as { items: Array<Record<string, unknown>> }).items
-    : [];
+  const dailyItemsValid = Array.isArray(dailyData?.items);
+  const alertItemsValid = Array.isArray(alertsData?.items);
+  const itens: FrmsDailyMonitorRow[] = dailyItemsValid ? (dailyData?.items ?? []) : [];
+  const alertItems = alertItemsValid ? (alertsData?.items ?? []) : [];
 
   const resumo = summarizeDailyMonitor(itens, alertItems);
   const { alertIndex } = resumo;
