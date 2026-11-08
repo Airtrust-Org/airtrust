@@ -110,9 +110,14 @@ export function ModalAtribuirQualificacao({
     isLoading: loadingFuncionarios,
     error: errorFuncionarios,
   } = useFuncionariosAtivos(isOpen);
-  const { data: tiposData = [], isLoading: loadingTipos } = useTiposQualificacao(
+  const {
+    data: tiposData = [],
+    isLoading: loadingTipos,
+    error: errorTipos,
+  } = useTiposQualificacao(
     Number(form.categoria) || undefined,
     isOpen,
+    isEditMode ? habilitacao?.qualificacao_id : undefined,
   );
   const {
     data: categoriasData = [],
@@ -232,7 +237,7 @@ export function ModalAtribuirQualificacao({
   // Funções de carregamento antigas removidas - agora usamos React Query hooks.
 
   useEffect(() => {
-    if (!form.categoria || !form.qualificacao_codigo) {
+    if (!form.categoria || !form.qualificacao_codigo || loadingTipos || tiposFiltrados.length === 0) {
       return;
     }
 
@@ -243,7 +248,7 @@ export function ModalAtribuirQualificacao({
     if (!codigoAindaValido) {
       setForm((prev) => ({ ...prev, qualificacao_codigo: '' }));
     }
-  }, [form.categoria, form.qualificacao_codigo, tiposFiltrados]);
+  }, [form.categoria, form.qualificacao_codigo, loadingTipos, tiposFiltrados]);
 
   useEffect(() => {
     if (!form.qualificacao_codigo) return;
@@ -525,7 +530,12 @@ export function ModalAtribuirQualificacao({
                 {!form.categoria && (
                   <p className="mt-1 text-xs text-gray-500">ℹ️ Selecione uma categoria primeiro</p>
                 )}
-                {form.categoria && tiposFiltrados.length === 0 && (
+                {errorTipos && (
+                  <p className="mt-1 text-xs text-red-600">
+                    Não foi possível carregar o modelo vinculado. Reabra o formulário ou contate o administrador.
+                  </p>
+                )}
+                {form.categoria && tiposFiltrados.length === 0 && !loadingTipos && !errorTipos && (
                   <p className="mt-1 text-xs text-amber-600">
                     ⚠️ Nenhum tipo de qualificação encontrado para esta categoria
                   </p>
@@ -727,6 +737,7 @@ export function ModalAtribuirQualificacao({
                   loading ||
                   !form.funcionario_id ||
                   !form.categoria ||
+                  Boolean(errorTipos) ||
                   !form.qualificacao_codigo ||
                   !form.data_realizacao ||
                   (!form.data_vencimento && !isG1SemSelected)
