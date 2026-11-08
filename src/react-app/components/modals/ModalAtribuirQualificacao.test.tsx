@@ -6,6 +6,7 @@ import { ModalAtribuirQualificacao } from './ModalAtribuirQualificacao';
 const serviceMocks = vi.hoisted(() => ({
   atualizarHistoricoQualificacao: vi.fn(),
   criarHistoricoQualificacao: vi.fn(),
+  useTiposQualificacao: vi.fn(),
 }));
 
 const funcionariosMock = [
@@ -33,6 +34,14 @@ const tiposMock = [
     categoria: 'TREINAMENTO TEÓRICO',
     categoria_id: 3,
     validade: 12,
+  },
+  {
+    id: 900,
+    nome: 'Coordenador de Voo',
+    codigo: 'EAD_COORDENADOR_VOO',
+    categoria: 'TREINAMENTO TEÓRICO',
+    categoria_id: 3,
+    validade: 24,
   },
 ];
 
@@ -63,10 +72,7 @@ vi.mock('@/react-app/hooks/qualificacoes/useFuncionariosAtivos', () => ({
 }));
 
 vi.mock('@/react-app/hooks/qualificacoes/useTiposQualificacao', () => ({
-  useTiposQualificacao: () => ({
-    data: tiposMock,
-    isLoading: false,
-  }),
+  useTiposQualificacao: (...args: unknown[]) => serviceMocks.useTiposQualificacao(...args),
 }));
 
 vi.mock('@/react-app/hooks/qualificacoes/useCategoriasQualificacao', () => ({
@@ -90,6 +96,52 @@ describe('ModalAtribuirQualificacao', () => {
     serviceMocks.atualizarHistoricoQualificacao.mockReset();
     serviceMocks.criarHistoricoQualificacao.mockReset();
     serviceMocks.atualizarHistoricoQualificacao.mockResolvedValue({ id: 77 });
+    serviceMocks.useTiposQualificacao.mockReset();
+    serviceMocks.useTiposQualificacao.mockReturnValue({
+      data: tiposMock,
+      isLoading: false,
+      error: null,
+    });
+  });
+
+  it('resolve o modelo de um histórico por ID mesmo antes da categoria, mantendo validade de 24 meses', async () => {
+    render(
+      <ModalAtribuirQualificacao
+        isOpen
+        onClose={vi.fn()}
+        habilitacao={{
+          id: 77,
+          funcionario_id: 1,
+          qualificacao_id: 900,
+          qualificacao_codigo: 'EAD_COORDENADOR_VOO',
+          data_conclusao: '2025-09-03',
+          data_vencimento: '2027-09-03',
+          tipo_treinamento: 'INICIAL',
+        }}
+      />,
+    );
+
+    expect(serviceMocks.useTiposQualificacao).toHaveBeenCalledWith(undefined, true, 900);
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[1]).toHaveValue('3');
+      expect(screen.getByText('ℹ️ Validade: 24 meses')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Este tipo não tem validade definida/)).not.toBeInTheDocument();
+
+    // Caso real: o registro foi inicialmente lançado como Inicial e deve
+    // aceitar a alteração para Periódico sem perder os 24 meses cadastrados.
+    fireEvent.click(screen.getByRole('radio', { name: /Periódico/ }));
+    fireEvent.click(screen.getByRole('button', { name: '✓ Salvar' }));
+    await waitFor(() => {
+      expect(serviceMocks.atualizarHistoricoQualificacao).toHaveBeenCalledWith(
+        77,
+        expect.objectContaining({
+          qualificacao_codigo: 'EAD_COORDENADOR_VOO',
+          tipo_treinamento: 'RECORRENTE',
+          data_vencimento: '2027-09-03',
+        }),
+      );
+    });
   });
 
   it('allows a registered instructor to receive a qualification as an employee', () => {

@@ -1047,9 +1047,11 @@ export async function createQualificacao(
   const validadeMeses =
     typeof tipoQualificacao.validade === 'number' && tipoQualificacao.validade > 0
       ? tipoQualificacao.validade
-      : 12;
+      : null;
   const vencimentoFimMes = Number(tipoQualificacao.vencimento_fim_mes || 0) === 1 ? 1 : 0;
-  const dataVencimento = calcularDataVencimento(dataConclusao, validadeMeses, vencimentoFimMes);
+  const dataVencimento = validadeMeses === null
+    ? null
+    : calcularDataVencimento(dataConclusao, validadeMeses, vencimentoFimMes);
 
   const qualificacaoExistente = await db
     .prepare(
@@ -1095,7 +1097,7 @@ export async function createQualificacao(
     empresaId,
   );
   const observacoes = [
-    `EdApp: ${origem} | Válido por ${validadeMeses} meses | Conclusão: ${dataConclusao}`,
+    `EdApp: ${origem} | ${validadeMeses === null ? 'Sem validade definida' : `Válido por ${validadeMeses} meses`} | Conclusão: ${dataConclusao}`,
   ];
 
   if (nextQualificacao?.data_conclusao) {
@@ -1135,12 +1137,13 @@ export async function createQualificacao(
     });
   }
 
+  const validadeDescricao = validadeMeses === null ? 'sem validade definida' : `validade: ${validadeMeses} meses`;
   return {
     success: true,
     qualificacao_id: result.meta.last_row_id,
     message: nextQualificacao
-      ? `Qualificação histórica criada como renovada (validade: ${validadeMeses} meses)`
-      : `Qualificação criada (validade: ${validadeMeses} meses)`,
+      ? `Qualificação histórica criada como renovada (${validadeDescricao})`
+      : `Qualificação criada (${validadeDescricao})`,
     renovacao: renovadas > 0 || Boolean(nextQualificacao),
     created: true,
   };
