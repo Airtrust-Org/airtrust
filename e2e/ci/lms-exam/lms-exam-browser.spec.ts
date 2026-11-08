@@ -57,7 +57,17 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
     }
   });
   const pageErrors: string[] = [];
-  page.on('pageerror', (e) => pageErrors.push(e.message));
+  page.on('pageerror', (e) => pageErrors.push(e.stack || e.message));
+  // On failing WebKit runs, preserve an origin-only network diagnosis while
+  // keeping the existing strict pageerror assertion and the real CORS checks.
+  page.on('requestfailed', (request) => {
+    const requestUrl = new URL(request.url());
+    if (requestUrl.pathname.startsWith('/api/')) {
+      let frameOrigin = 'DETACHED';
+      try { frameOrigin = new URL(request.frame().url()).origin; } catch { /* frame navigated */ }
+      console.log(`LMS_SYNTHETIC_FAILED_REQUEST:path=${requestUrl.pathname}:frameOrigin=${frameOrigin}:cause=${request.failure() || 'UNKNOWN'}`);
+    }
+  });
   // Keep the synthetic Portuguese examination fixed to pt-BR on every
   // navigation. Without this, WebKit's en-US locale can start asynchronous
   // runtime translation while the page navigates, intermittently reporting a
@@ -115,10 +125,14 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   // 1) login sintetico (UI) e player com estudo concluido: CTA da prova final
   await login(page, password);
   await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
+  // Let the initial dashboard's protected API reads finish before leaving.
+  // WebKit can otherwise report navigation-aborted reads as CORS pageerrors.
+  await page.waitForLoadState('networkidle');
   await page.goto(`/lms/player/${MATRICULA}`);
   const cta = page.getByTestId('lms-open-exam');
   await expect(cta).toBeVisible();
   await expect(cta).toHaveText('Ir para a prova final');
+  await page.waitForLoadState('networkidle');
   await cta.click();
   await expect(page).toHaveURL(new RegExp(`/lms/provas/${MATRICULA}$`));
 
@@ -194,9 +208,12 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await page.goto(`/lms/provas/${MATRICULA}`);
   await expect(page.getByText('Treinamento já concluído.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Iniciar prova|Tentar novamente|Retomar prova/ })).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
   await page.goto(`/lms/player/${MATRICULA}`);
   await expect(page.getByTestId('lms-open-exam')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
   await page.reload();
+  await page.waitForLoadState('networkidle');
   expect(await evidence(page)).toEqual(afterFinalize);
 
   expect(pageErrors).toEqual([]);
