@@ -69,6 +69,26 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
       body: '{"success":true,"data":{"translatedText":""}}',
     });
   });
+  // Synthetic browser E2E must support real cross-origin credentialed
+  // requests, otherwise WebKit may raise CORS errors after navigation.
+  const preflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://127.0.0.1:3000',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'Authorization,Content-Type',
+    },
+  });
+  expect(preflight.status()).toBe(204);
+  expect(preflight.headers()['access-control-allow-origin']).toBe('http://127.0.0.1:3000');
+  expect(preflight.headers()['access-control-allow-credentials']).toBe('true');
+  const untrustedPreflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://example.invalid', 'Access-Control-Request-Method': 'GET' },
+  });
+  expect(untrustedPreflight.status()).toBe(204);
+  expect(untrustedPreflight.headers()['access-control-allow-origin']).not.toBe('https://example.invalid');
+  expect(untrustedPreflight.headers()['access-control-allow-credentials']).toBeUndefined();
   const password = await reset(page);
 
   // 0) estado inicial: nada emitido

@@ -63,7 +63,13 @@ app.onError((e, c) => c.json({ success: false, code: (e as { code?: string }).co
   ((e as { statusCode?: number }).statusCode ?? 500) as 500));
 app.use('*', async (c, next) => {
   await next();
-  c.header('Access-Control-Allow-Origin', c.req.header('Origin') ?? '*');
+  const origin = c.req.header('Origin');
+  // Only the synthetic localhost frontend may use credentialed cross-origin
+  // requests. Echoing an arbitrary Origin together with ACA-C is unsafe.
+  const isLocalFrontend = origin === 'http://127.0.0.1:3000' || origin === 'http://localhost:3000';
+  c.header('Access-Control-Allow-Origin', isLocalFrontend ? origin : '*');
+  c.header('Vary', 'Origin');
+  if (isLocalFrontend) c.header('Access-Control-Allow-Credentials', 'true');
   c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, Cache-Control');
   c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 });
