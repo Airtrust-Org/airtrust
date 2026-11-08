@@ -57,7 +57,17 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
     }
   });
   const pageErrors: string[] = [];
-  page.on('pageerror', (e) => pageErrors.push(e.message));
+  page.on('pageerror', (e) => pageErrors.push(e.stack || e.message));
+  // On failing WebKit runs, preserve an origin-only network diagnosis while
+  // keeping the existing strict pageerror assertion and the real CORS checks.
+  page.on('requestfailed', (request) => {
+    const requestUrl = new URL(request.url());
+    if (requestUrl.pathname.startsWith('/api/')) {
+      let frameOrigin = 'DETACHED';
+      try { frameOrigin = new URL(request.frame().url()).origin; } catch { /* frame navigated */ }
+      console.log(`LMS_SYNTHETIC_FAILED_REQUEST:path=${requestUrl.pathname}:frameOrigin=${frameOrigin}:cause=${request.failure() || 'UNKNOWN'}`);
+    }
+  });
   // Keep the synthetic Portuguese examination fixed to pt-BR on every
   // navigation. Without this, WebKit's en-US locale can start asynchronous
   // runtime translation while the page navigates, intermittently reporting a
