@@ -64,7 +64,17 @@ export default function FrmsFadigaPainel() {
               onChange={(e) => setData(e.target.value)}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
-            <Button variant="secondary" onClick={() => refetch()}>
+            <Button
+              variant="secondary"
+              disabled={loading || alertsLoading}
+              onClick={() => {
+                // Both sources describe the same operational day. Refreshing
+                // only the roster can incorrectly pair a current check-in
+                // with outdated risk alerts in the monitor.
+                refetch();
+                refetchAlerts();
+              }}
+            >
               Atualizar
             </Button>
           </div>
