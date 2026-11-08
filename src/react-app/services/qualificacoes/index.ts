@@ -325,19 +325,19 @@ export const qualificacoesService = {
       return { success: true, data: funcionarios };
     },
 
-    async tipoQualificacaoPorId(id: string | number): Promise<ApiResponse<TipoQualificacaoResumo>> {
-      return httpClient.get<TipoQualificacaoResumo>(`/qualificacoes/tipos/${encodeURIComponent(String(id))}`);
+    async tipoQualificacaoPorId(id: string | number): Promise<ApiResponse<ApiResponse<TipoQualificacaoResumo>>> {
+      return httpClient.get<ApiResponse<TipoQualificacaoResumo>>(`/qualificacoes/tipos/${encodeURIComponent(String(id))}`);
     },
 
     async tiposQualificacao(
       limit = 1000,
       categoriaId?: number | null,
-    ): Promise<ApiResponse<TipoQualificacaoResumo[]>> {
+    ): Promise<ApiResponse<ApiResponse<TipoQualificacaoResumo[]>>> {
       const params = new URLSearchParams({ limit: String(limit) });
       if (categoriaId && Number.isFinite(categoriaId) && categoriaId > 0) {
         params.set('categoria_id', String(categoriaId));
       }
-      return httpClient.get<TipoQualificacaoResumo[]>(`/qualificacoes/tipos?${params.toString()}`);
+      return httpClient.get<ApiResponse<TipoQualificacaoResumo[]>>(`/qualificacoes/tipos?${params.toString()}`);
     },
   },
 };
