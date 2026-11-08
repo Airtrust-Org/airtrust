@@ -25,10 +25,12 @@ import type { AlertaGerado } from '../lib/frms/alertas';
 import { FRMS_STATUS, type FrmsStatus } from '../lib/frms/types';
 
 export function getSaoPauloOperationalDate(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(now);
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 function getSaoPauloHour(now = new Date()): number {
