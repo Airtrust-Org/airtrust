@@ -4380,7 +4380,12 @@ export default function Qualificacoes() {
                     queryKey: ['lms', 'cursos'],
                     exact: false,
                   });
-                  await queryClient.invalidateQueries({ queryKey: lmsKeys.adminStats() });
+                  await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: lmsKeys.adminStats() }),
+                    // O modal e as projeções de Compliance possuem caches independentes.
+                    queryClient.invalidateQueries({ queryKey: ['tipos-qualificacao'] }),
+                    invalidateTrainingEvidenceProjections(queryClient),
+                  ]);
                   showToast.success(buildTipoSaveSuccessMessage(responseJson?.data, isEdit));
 
                   // Atualização otimista: reflete o valor salvo na tabela IMEDIATAMENTE,
