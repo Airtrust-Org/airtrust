@@ -1604,38 +1604,44 @@ router.put(
     )} WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`;
     binds.push(id, empresaId);
 
-    let result;
-    try {
-      result = await db
-        .prepare(sql)
-        .bind(...binds)
-        .run();
-    } catch (error) {
-      if (isTipoCodigoUniqueConstraintError(error)) {
-        return c.json({ success: false, error: 'Código já existe' }, 409);
-      }
-      throw error;
-    }
-
-    if (result.meta.changes === 0) {
-      return c.json({ success: false, error: 'Falha ao atualizar tipo' }, 500);
-    }
-
+    // O modelo e os registros históricos precisam ser confirmados na mesma
+    // transação D1. O antigo UPDATE separado deixava a validade do modelo
+    // alterada quando a sincronização de histórico falhava.
+    const modelUpdateStatement = db.prepare(sql).bind(...binds);
+    const historyUpdateStatements: D1PreparedStatement[] = [];
     let historicosSincronizados = 0;
     let historicosIgnorados = 0;
     const warnings: string[] = [];
 
     if (shouldSyncHistoricoSnapshotsOnTipoUpdate(data)) {
-      const tipoAtualizado = (await db
-        .prepare(
-          `SELECT id, codigo, nome, categoria, validade, vencimento_fim_mes,
-                  carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
-             FROM qualificacoes_tipos
-            WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL
-            LIMIT 1`,
-        )
-        .bind(id, empresaId)
-        .first()) as TipoAtualizadoRow | null;
+      // Snapshot do modelo após o patch, calculado em memória antes de gravar.
+      // Assim os vencimentos podem ser recalculados e commitados atomicamente.
+      const tipoAtualizado: TipoAtualizadoRow = {
+        id,
+        codigo: data.codigo !== undefined ? normalizeTipoCodigo(data.codigo) : rowAtual.codigo,
+        nome: data.nome !== undefined ? data.nome.trim() : rowAtual.nome,
+        categoria: categoriaFinal,
+        categoria_id: categoriaCanonica?.id ?? rowAtual.categoria_id,
+        formato_id: rowAtual.formato_id,
+        formato_codigo: rowAtual.formato_codigo,
+        validade: validadeFinal,
+        vencimento_fim_mes:
+          data.vencimento_fim_mes !== undefined
+            ? (data.vencimento_fim_mes ? 1 : 0)
+            : rowAtual.vencimento_fim_mes,
+        carga_horaria:
+          data.carga_horaria_recorrente !== undefined
+            ? data.carga_horaria_recorrente
+            : rowAtual.carga_horaria,
+        carga_horaria_inicial:
+          data.carga_horaria_inicial !== undefined
+            ? data.carga_horaria_inicial
+            : rowAtual.carga_horaria_inicial,
+        carga_horaria_recorrente:
+          data.carga_horaria_recorrente !== undefined
+            ? data.carga_horaria_recorrente
+            : rowAtual.carga_horaria_recorrente,
+      };
 
       if (tipoAtualizado) {
         const historicos = (await db
@@ -1765,15 +1771,30 @@ router.put(
           ];
         });
 
-        if (statements.length > 0) {
-          await db.batch(statements);
-          historicosSincronizados = statements.length;
-          await invalidateMaterializedStats(db);
-          console.log(
-            `[TIPOS_SYNC] ${historicosSincronizados} historicos sincronizados para tipo_id=${id}`,
-          );
-        }
+        historyUpdateStatements.push(...statements);
       }
+    }
+
+    // Cloudflare D1 executa batch de modo transacional: a falha em qualquer
+    // histórico faz rollback também na alteração do modelo.
+    let modelUpdateResult: D1Result | undefined;
+    try {
+      const results = await db.batch([modelUpdateStatement, ...historyUpdateStatements]);
+      modelUpdateResult = results[0];
+    } catch (error) {
+      if (isTipoCodigoUniqueConstraintError(error)) {
+        return c.json({ success: false, error: 'Código já existe' }, 409);
+      }
+      throw error;
+    }
+
+    if (!modelUpdateResult || modelUpdateResult.meta.changes === 0) {
+      return c.json({ success: false, error: 'Falha ao atualizar tipo' }, 500);
+    }
+    historicosSincronizados = historyUpdateStatements.length;
+    if (historicosSincronizados > 0) {
+      await invalidateMaterializedStats(db);
+      console.log(`[TIPOS_SYNC] ${historicosSincronizados} históricos sincronizados para tipo_id=${id}`);
     }
 
     // Auditoria
