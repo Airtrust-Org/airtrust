@@ -327,15 +327,23 @@ export function ListaFuncionarios({
         const url = `${API_BASE_URL}/funcionarios?${params.toString()}`;
         // appFetch supplies the current bearer token, including after refresh.
         // Do not override it with the token captured at render time.
-        timeoutId = window.setTimeout(() => {
-          didTimeout = true;
-          abortController.abort();
-        }, 15000);
-
-        const response = await appFetch(url, {
-          cache: 'no-cache',
-          signal: abortController.signal,
+        // A refresh token request may remain pending even after aborting the
+        // staff fetch signal. Race against a rejecting deadline so this page
+        // always leaves its loading state, independently of shared auth refresh.
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timeoutId = window.setTimeout(() => {
+            didTimeout = true;
+            abortController.abort();
+            reject(new Error('Employee list request timed out'));
+          }, 15000);
         });
+        const response = await Promise.race([
+          appFetch(url, {
+            cache: 'no-cache',
+            signal: abortController.signal,
+          }),
+          deadline,
+        ]);
 
         if (requestId !== activeRequestIdRef.current) return;
 
@@ -422,7 +430,10 @@ export function ListaFuncionarios({
     };
 
     void fetchData();
-    return () => abortController.abort();
+    return () => {
+      abortController.abort();
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
   }, [
     pagination.page,
     pagination.limit,
