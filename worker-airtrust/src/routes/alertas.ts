@@ -1030,7 +1030,8 @@ Por favor, providencie a renovação o quanto antes.
 
         await finalizeReservation('WHATSAPP', 'enviada', whatsappResult.providerMessageId || null);
         if (whatsappResult.provider === 'twilio' && whatsappResult.providerMessageId) {
-          await upsertWhatsAppDeliveryLog(db, {
+          try {
+            await upsertWhatsAppDeliveryLog(db, {
             empresaId,
             qualificacaoHistoricoId: Number(r.id),
             funcionarioId: Number(r.funcionario_id),
@@ -1045,7 +1046,14 @@ Por favor, providencie a renovação o quanto antes.
               templateKey: whatsappResult.templateKey || null,
               templateName: whatsappResult.templateName || null,
             },
-          });
+            });
+          } catch (logError) {
+            // Provider acceptance has already been recorded by the canonical
+            // reservation. A secondary delivery-log failure must not mark it
+            // as an unsent message or allow an accidental duplicate.
+            auditPendingChannels.push('WHATSAPP');
+            logger.error('Falha ao registrar rastreamento WhatsApp', toError(logError));
+          }
         }
 
         alertas.push({
