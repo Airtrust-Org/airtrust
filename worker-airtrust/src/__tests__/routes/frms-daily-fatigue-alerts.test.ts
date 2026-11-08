@@ -25,6 +25,44 @@ function createLegacyRouter() {
       }));
       return c.json({ success: true, data: { date, items: crew.slice(offset, offset + limit) } });
     }
+    if (date === '2026-09-07') {
+      return c.json({
+        success: true,
+        data: {
+          date,
+          items: [
+            { funcionario_id: 401, status: 'attention', data_source: 'crew_reported',
+              nivel_fadiga: 'VERDE', status_operacional: 'APTO' },
+            { funcionario_id: 402, status: 'attention', data_source: 'crew_reported',
+              nivel_fadiga: 'VERMELHO', status_operacional: 'RESTRITO' },
+            { funcionario_id: 403, status: 'attention', data_source: 'crew_reported',
+              nivel_fadiga: 'VERDE', status_operacional: 'NAO_APTO' },
+            { funcionario_id: 404, status: 'incomplete_checkin', data_source: 'crew_reported',
+              nivel_fadiga: 'VERMELHO', status_operacional: 'RESTRITO' },
+          ],
+        },
+      });
+    }
+    if (date === '2026-09-06') {
+      return c.json({
+        success: true,
+        data: {
+          date,
+          items: [
+            { funcionario_id: 301, status: 'normal', data_source: 'crew_reported',
+              nivel_fadiga: 'LARANJA', status_operacional: 'RESTRITO', requires_operational_review: true },
+            { funcionario_id: 302, status: 'normal', data_source: 'crew_reported',
+              nivel_fadiga: 'AMARELO', status_operacional: 'APTO_COM_RESSALVA', requires_operational_review: false },
+            { funcionario_id: 303, status: 'normal', data_source: 'crew_reported',
+              nivel_fadiga: 'VERDE', status_operacional: 'RESTRITO', requires_operational_review: true },
+            { funcionario_id: 304, status: 'normal', data_source: 'crew_reported',
+              nivel_fadiga: 'VERDE', status_operacional: 'APTO', requires_operational_review: false },
+            { funcionario_id: 305, status: 'normal', data_source: 'crew_reported',
+              nivel_fadiga: 'VERMELHO', status_operacional: 'RESTRITO', requires_operational_review: true },
+          ],
+        },
+      });
+    }
     if (date === '2026-09-04') {
       return c.json({ success: true, data: { date, items: null } });
     }
@@ -169,6 +207,59 @@ describe('GET /api/frms/daily-fatigue/alerts', () => {
     expect(body.data.items).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ tripulante_id: 105 })]),
     );
+  });
+
+  it('não esconde score configurado elevado ou revisão pós-check-in apenas porque a triagem diária foi normal', async () => {
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-06', {
+        headers: { 'x-role': 'ADMINISTRADOR' },
+      }),
+      {} as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.data.count).toBe(4);
+    expect(body.data.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tripulante_id: 301, nivel: 'CRITICO',
+        alert_type: 'daily_fatigue_score_critical' }),
+      expect.objectContaining({ tripulante_id: 302, nivel: 'ATENCAO',
+        alert_type: 'daily_fatigue_score_attention' }),
+      expect.objectContaining({ tripulante_id: 303, nivel: 'ATENCAO',
+        alert_type: 'daily_fatigue_review_required' }),
+      expect.objectContaining({ tripulante_id: 305, nivel: 'CRITICO',
+        alert_type: 'daily_fatigue_score_critical' }),
+    ]));
+    expect(body.data.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tripulante_id: 304 })]),
+    );
+    expect(body.data.items.every((item: { mensagem: string }) =>
+      item.mensagem.includes('revisão') || item.mensagem.includes('Revisão'))).toBe(true);
+  });
+
+  it('não reduz severidade CRITICA calculada a ATENCAO quando a triagem subjetiva já era atenção', async () => {
+    const response = await createApp().fetch(
+      new Request('http://localhost/api/frms/daily-fatigue/alerts?date=2026-09-07', {
+        headers: { 'x-role': 'ADMINISTRADOR' },
+      }), {} as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    const byId = new Map(body.data.items.map((item: { tripulante_id: number }) =>
+      [item.tripulante_id, item]));
+    expect(byId.get(401)).toMatchObject({
+      nivel: 'ATENCAO', alert_type: 'daily_fatigue_attention',
+    });
+    expect(byId.get(402)).toMatchObject({
+      nivel: 'CRITICO', alert_type: 'daily_fatigue_score_critical',
+    });
+    expect(byId.get(403)).toMatchObject({
+      nivel: 'CRITICO', alert_type: 'daily_fatigue_score_critical',
+    });
+    // Never trust a stale score when the check-in evidence is incomplete.
+    expect(byId.get(404)).toMatchObject({
+      nivel: 'ATENCAO', alert_type: 'daily_fatigue_incomplete_checkin',
+    });
+    expect(body.data.count).toBe(4);
   });
 
   it('varre páginas além dos 100 primeiros tripulantes sem perder alerta real', async () => {

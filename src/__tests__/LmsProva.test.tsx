@@ -3,6 +3,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LmsProva from '../react-app/pages/lms/exams/LmsProva';
 import { fetchWithAuth } from '../react-app/config/api';
 
@@ -21,13 +22,15 @@ const attempt = (over = {}) => ({
   ] }], ...over,
 });
 function Where() { return <div data-testid="where">{useLocation().pathname}</div>; }
-const renderPage = () => render(
-  <MemoryRouter initialEntries={['/lms/provas/10']}>
-    <Routes>
-      <Route path="/lms/provas/:matriculaId" element={<LmsProva />} />
-      <Route path="/lms" element={<Where />} />
-    </Routes>
-  </MemoryRouter>);
+const renderPage = (client = new QueryClient()) => render(
+  <QueryClientProvider client={client}>
+    <MemoryRouter initialEntries={['/lms/provas/10']}>
+      <Routes>
+        <Route path="/lms/provas/:matriculaId" element={<LmsProva />} />
+        <Route path="/lms" element={<Where />} />
+      </Routes>
+    </MemoryRouter>
+  </QueryClientProvider>);
 const calls = () => mocked.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? 'GET'} ${url}`);
 
 describe('Prova final do aluno', () => {
@@ -120,6 +123,54 @@ describe('Prova final do aluno', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Concluir treinamento' }));
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/lms'));
     expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
+  });
+
+  it('revalida Compliance, qualificações, LMS e indicadores após conclusão direta da prova', async () => {
+    const client = new QueryClient();
+    const keys = [
+      ['training-compliance', 'summary'],
+      ['qualificacoes', 'detail', '23'],
+      ['historico-qualificacoes', { funcionarioId: 101 }],
+      ['lms', 'matricula-detalhe', 10],
+      ['lms-stats'],
+    ];
+    for (const key of keys) client.setQueryData(key, { status: 'old' });
+    mocked.mockResolvedValueOnce(ok(state('PASSED')));
+    renderPage(client);
+    const button = await screen.findByRole('button', { name: 'Concluir treinamento' });
+    mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/lms'));
+    for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    client.clear();
+  });
+
+  it('não anuncia nova evidência ao falhar a conclusão direta da prova', async () => {
+    const client = new QueryClient();
+    const key = ['training-compliance', 'summary'];
+    client.setQueryData(key, { status: 'old' });
+    mocked.mockResolvedValueOnce(ok(state('PASSED')));
+    renderPage(client);
+    const button = await screen.findByRole('button', { name: 'Concluir treinamento' });
+    mocked.mockResolvedValueOnce(fail('REQUIRES_REVIEW', 409));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/ainda não foi registrada/));
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    client.clear();
+  });
+
+  it('invalida evidências após solicitação de recuperação de certificado aceita', async () => {
+    const client = new QueryClient();
+    const key = ['historico-qualificacoes', { funcionarioId: 101 }];
+    client.setQueryData(key, { status: 'old' });
+    mocked.mockResolvedValueOnce(ok(state('COMPLETED')));
+    renderPage(client);
+    const button = await screen.findByRole('button', { name: 'Solicitar nova tentativa de emissão do certificado' });
+    mocked.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/A emissão só é tentada/));
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    client.clear();
   });
 
   it('reprovação oferece nova tentativa e falha ao salvar desfaz a marcação', async () => {

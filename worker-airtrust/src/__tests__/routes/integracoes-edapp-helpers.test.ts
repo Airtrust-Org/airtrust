@@ -144,6 +144,36 @@ describe('integracoes-edapp-helpers.createQualificacao', () => {
     expect(insertCall?.args[8]).toBeNull();
   });
 
+  it('não inventa validade de 12 meses quando o tipo EdApp não possui periodicidade', async () => {
+    const { db, calls } = createMockDb([
+      ['FROM qualificacoes_tipos', { first: () => ({ id: 10, validade: null, vencimento_fim_mes: 0 }) }],
+      ['AND data_conclusao = ?', { first: () => null }],
+      ['SET renovada = 1', { run: () => ({ meta: { changes: 0 } }) }],
+      [`AND date(COALESCE(data_conclusao, '1900-01-01')) > date(?)`, { first: () => null }],
+      ['INSERT INTO qualificacoes_historico', { run: () => ({ meta: { last_row_id: 4208, changes: 1 } }) }],
+    ]);
+
+    const result = await createQualificacao(
+      db,
+      41,
+      'E1',
+      'analytics:manual:E1',
+      '2026-04-08T12:34:56.000Z',
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      qualificacao_id: 4208,
+      message: 'Qualificação criada (sem validade definida)',
+    });
+    const insertCall = calls.find(
+      (call) => call.method === 'run' && call.query.includes('INSERT INTO qualificacoes_historico'),
+    );
+    expect(insertCall?.args[4]).toBeNull(); // data_vencimento
+    expect(insertCall?.args[5]).toBeNull(); // validade_meses
+    expect(insertCall?.args[6]).toContain('Sem validade definida');
+  });
+
   it('marca a nova qualificacao como renovada quando o historico chega fora de ordem', async () => {
     const { db, calls } = createMockDb([
       [

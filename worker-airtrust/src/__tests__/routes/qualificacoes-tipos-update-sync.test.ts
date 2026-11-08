@@ -142,7 +142,7 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
         args: statements.flatMap((statement) => statement.__args || []),
         method: 'batch',
       });
-      return [];
+      return statements.map(() => ({ meta: { changes: 1, last_row_id: 0 } }));
     }),
   } as unknown as D1Database;
 
@@ -339,9 +339,17 @@ describe('qualificacoes tipos update sync', () => {
     );
 
     const batchCall = calls.find((call) => call.method === 'batch');
+    // O update mestre e TODOS os históricos devem compor a mesma transação.
+    expect(batchCall?.query).toContain('UPDATE qualificacoes_tipos');
     expect(batchCall?.query).toContain('UPDATE qualificacoes_historico');
+    expect(batchCall?.args).toContain(101);
     expect(batchCall?.args).toContain(202);
     expect(batchCall?.args).toContain('AS350-B2');
+    // A validade do modelo deve atualizar TODOS os históricos correspondentes,
+    // independentemente da data originalmente persistida (24 meses, fim do mês).
+    expect(batchCall?.args).toContain('2027-01-31');
+    expect(batchCall?.args).toContain('2027-02-28');
+    expect(batchCall?.args).toContain(24);
   });
 
   it('faz soft-delete do curso LMS quando categoria sai de EAD para não-EAD', async () => {

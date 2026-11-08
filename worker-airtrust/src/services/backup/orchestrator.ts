@@ -110,6 +110,15 @@ export class BackupOrchestrator {
    * Executa backup manual (via API)
    */
   async executarBackupManual(options: CriarBackupOptions): Promise<number> {
+    // The exporter below reads all company rows. Never label such an artifact
+    // TENANT_SCOPED: without tenant-bound SQL, it would expose other companies'
+    // personnel, qualifications and credentials to the requesting tenant.
+    // A future tenant export must implement and test empresa_id isolation for
+    // every configured table and linked R2 object, not only change this label.
+    if (options.escopo === 'TENANT_SCOPED') {
+      throw new Error('TENANT_SCOPED_BACKUP_NOT_IMPLEMENTED');
+    }
+
     const startTime = Date.now();
     const backupUuid = options.backup_uuid || generateUUID();
 

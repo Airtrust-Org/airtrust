@@ -4,6 +4,7 @@ import { Building2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
+import { invalidateComplianceDependents } from './complianceCacheInvalidation';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -117,12 +118,8 @@ export function TrainingComplianceOrganizationEditor() {
     },
   });
 
-  const invalidate = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['training-compliance'] }),
-      queryClient.invalidateQueries({ queryKey: ['qualification-types'] }),
-    ]);
-  };
+  const invalidate = () => invalidateComplianceDependents(queryClient);
+
   const save = useMutation({
     mutationFn: async ({ row, value }: { row: MatrixRow; value: string }) => {
       if (!setorId) throw new Error('Selecione o setor.');

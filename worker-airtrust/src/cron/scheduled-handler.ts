@@ -487,38 +487,11 @@ export async function runScheduledJobs(
       console.warn('[CRON] Falha ao agregar latência diária:', (e as Error).message);
     }
 
-    try {
-      const purgeDaysRaw =
-        (env as unknown as Record<string, string>).SOFT_DELETE_PURGE_DAYS || '90';
-      const purgeDays = parseInt(purgeDaysRaw, 10);
-      if (purgeDays > 0) {
-        const tables = [
-          'qualificacoes_historico',
-          'funcionarios',
-          'qualificacoes_tipos',
-          'habilitacoes',
-          'licencas',
-        ];
-
-        for (const tableName of tables) {
-          try {
-            const stmt = await db
-              .prepare(
-                `DELETE FROM ${tableName} WHERE deleted_at IS NOT NULL AND julianday('now') - julianday(deleted_at) > ?`,
-              )
-              .bind(purgeDays)
-              .run();
-            if (stmt.meta.changes > 0) {
-              console.log(`[PURGE] ${tableName} removidos definitivos: ${stmt.meta.changes}`);
-            }
-          } catch (purgeErr) {
-            console.warn(`[PURGE] Falha em ${tableName}:`, (purgeErr as Error).message);
-          }
-        }
-      }
-    } catch (purgeGlobalErr) {
-      console.warn('[PURGE] Erro geral na rotina de limpeza:', (purgeGlobalErr as Error).message);
-    }
+    // Retention safety (P12-02): do not hard-delete regulated qualification or
+    // personnel records in recurring cron. The legacy 90-day purge had no
+    // verified archival/restore contract and could cascade to linked evidence.
+    // Future physical retention requires a separately approved, auditable job
+    // with explicit scope, recovery point and validated restore.
 
     if (event.cron === '*/10 * * * *' || event.cron === TRAINING_ALERT_DAILY_CRON) {
       try {

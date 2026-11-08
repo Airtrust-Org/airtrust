@@ -6,6 +6,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { fetchWithAuth } from '../../../config/api';
 
 type Choice = { id: string; text: string };
@@ -50,6 +52,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export default function LmsProva(): React.ReactElement {
   const { matriculaId } = useParams<{ matriculaId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [exam, setExam] = useState<ExamState | null>(null);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -133,6 +136,7 @@ export default function LmsProva(): React.ReactElement {
       const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'FINALIZE_FAILED');
+      void invalidateTrainingEvidenceProjections(queryClient);
       navigate('/lms');
     } catch {
       setError('A prova foi aprovada, mas a conclusão ainda não foi registrada. Tente novamente em instantes.');
@@ -148,6 +152,7 @@ export default function LmsProva(): React.ReactElement {
       const res = await fetchWithAuth(`/api/lms/matriculas/${matriculaId}/finalizar`, { method: 'POST' });
       const body = (await res.json()) as { success?: boolean; code?: string };
       if (!res.ok || !body.success) throw new Error(body.code ?? 'CERTIFICATE_RETRY_FAILED');
+      void invalidateTrainingEvidenceProjections(queryClient);
       setStatus('Solicitação recebida. A emissão só é tentada para matrículas com qualificação EAD elegível e vinculada; esta resposta não confirma emissão. Consulte seus certificados e, se estiver ausente, contate a Gerência de Treinamento.');
     } catch {
       setError('Não foi possível solicitar uma nova tentativa de emissão do certificado. Tente novamente mais tarde.');

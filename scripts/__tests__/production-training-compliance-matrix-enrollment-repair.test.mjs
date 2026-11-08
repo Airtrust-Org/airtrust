@@ -35,7 +35,7 @@ test('missing enrollment target is organizational-role only and defers designati
 
 test('repair uses canonical compliance evidence and expiry-only enrollment before enrolling', () => {
   assert.match(script, /RENEWAL_WINDOW_DAYS = 0/);
-  assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/\$\{funcionarioId\}/);
+  assert.match(script, /\/api\/compliance-treinamentos\/funcionarios\/requisitos-lote\?ids=\$\{employeeChunk.join\(','\)\}/);
   assert.match(script, /status === 'CONFORME'/);
   assert.match(script, /parsed <= RENEWAL_WINDOW_DAYS/);
   assert.match(script, /CANONICAL_REQUIREMENT_AMBIGUOUS/);
@@ -66,7 +66,11 @@ test('repair cancels only provably unstarted redundant enrollments satisfied by 
   assert.match(script, /POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS/);
 });
 
-test('production enrollment repair uses small API batches to stay within Worker request timeouts', () => {
+test('production repair reads canonical employee requirements once per bounded batch, not N full snapshots', () => {
+  assert.match(script, /employeeChunk of chunk\(employeeIds, 25\)/);
+  assert.match(script, /CANONICAL_COMPLIANCE_BATCH_INVALID/);
+  assert.match(script, /CANONICAL_COMPLIANCE_BATCH_ID_MISMATCH/);
+  assert.doesNotMatch(script, /Promise\.all\(employeeChunk\.map/);
   assert.match(script, /employeeChunk of chunk\(\[\.\.\.new Set\(employeeIds\)\]\.sort\(\(a, b\) => a - b\), 10\)/);
 });
 

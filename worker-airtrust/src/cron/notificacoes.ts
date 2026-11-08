@@ -19,7 +19,11 @@ import {
 import { createStructuredConsole } from '../utils/logger';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 import { resolveSetorComplianceAlertEmails } from '../services/setores-responsaveis-compliance';
-import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
+import {
+  trainingComplianceEffectiveRequirementPredicateSql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+} from '../services/training-compliance-rule-engine';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import {
   inferTrainingAlertStageCode,
   normalizeTrainingAlertFrequency,
@@ -224,6 +228,7 @@ export function buildQualificacoesParaNotificarQuery(): string {
   const qualificationStatusExpr = `UPPER(COALESCE(qh.status, '${QUALIFICACAO_STATUS.CONCLUIDA}'))`;
 
   return `
+    WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
     SELECT
       qh.id,
       qh.funcionario_id,
@@ -285,7 +290,7 @@ async function carregarQualificacoesParaNotificar(
   empresaId: number,
 ): Promise<QualificacaoParaNotificar[]> {
   const { results } = await env.DB.prepare(buildQualificacoesParaNotificarQuery())
-    .bind(empresaId, empresaId, empresaId)
+    .bind(getTodayIsoSaoPaulo(), empresaId, empresaId, empresaId)
     .all<QualificacaoParaNotificar>();
 
   return results ?? [];

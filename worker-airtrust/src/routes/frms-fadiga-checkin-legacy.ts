@@ -700,7 +700,11 @@ router.get('/daily-fatigue', async (c) => {
         status === 'incomplete_checkin' ||
         status === 'attention' ||
         status === 'critical' ||
-        status === 'unfit_for_duty';
+        status === 'unfit_for_duty' ||
+        // The stored review flag also covers late check-ins and operational
+        // restrictions independent of the subjective daily screening result.
+        // Do not turn a previously required review into a green row.
+        Number(row.requires_operational_review || 0) === 1;
 
       return {
         ...row,
@@ -940,6 +944,13 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
     const datePolicy = evaluateCrewCheckinDate(dataCheckin, operationalToday, parsed.data.late_submission_reason);
     if (!datePolicy.valid) return c.json({ success: false, error: datePolicy.error }, 400);
     const afterPresentation = !datePolicy.retrospective && isAtOrAfterFrmsPresentation(submittedAt, input.jornadaInicioPrevista);
+    // Device clocks are not authoritative. Never treat a self-declared late
+    // check-in without PVT as valid preflight evidence when the Worker sees
+    // that the reported presentation time is still in the future.
+    if (parsed.data.late_submission_acknowledged === true &&
+        !afterPresentation && !datePolicy.retrospective) {
+      return c.json({ success: false, error: 'late_submission_not_confirmed_by_server' }, 409);
+    }
     if ((datePolicy.retrospective || afterPresentation) && parsed.data.readiness) {
       return c.json({ success: false, error: datePolicy.retrospective ? 'retrospective_readiness_not_allowed' : 'post_presentation_readiness_not_allowed' }, 409);
     }
@@ -1189,6 +1200,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
           requires_operational_review: requiresOperationalReview,
           hora_apresentacao: input.jornadaInicioPrevista,
           presentation_time_source: 'CREW_REPORTED',
+          crew_acknowledged_late: parsed.data.late_submission_acknowledged === true,
           submission_context: datePolicy.retrospective ? { timing: 'RETROSPECTIVE_D1', reason: datePolicy.reason, preflight_evidence: false } : afterPresentation ? { timing: 'POST_PRESENTATION', reason: null, preflight_evidence: false } : { timing: 'SAME_DAY', reason: null, preflight_evidence: null },
           componentes: scoreBase.componentes,
           ...kssProvenanceEventFields(input.kssProvenance), declared_evidence: buildDailyCheckinDeclarationEvidence(input, submittedAt.toISOString()),
@@ -1360,20 +1372,41 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         contexto_piloto: contextoPiloto,
       },
     });
-  } catch {
+  } catch (error) {
+    // Keep production diagnostics privacy-safe: never log self-reported sleep,
+    // KSS, PVT trials, employee IDs, free-text answers, SQL or exception stacks.
+    // Distinguish failed write from committed check-in with failed downstream work.
+    const diagnosticMessage = error instanceof Error ? error.message : '';
+    const failureCategory = /D1_|SQLITE|database|constraint|no such table|no such column/i.test(diagnosticMessage)
+      ? 'D1'
+      : /timeout|abort|fetch failed|network|subrequest|resource limit/i.test(diagnosticMessage)
+        ? 'RESOURCE_OR_NETWORK'
+        : /readiness|trial|protocol/i.test(diagnosticMessage)
+          ? 'READINESS'
+          : 'OTHER';
+    const incidentId = crypto.randomUUID();
+    console.error('[FRMS_CHECKIN_FAILURE]', {
+      incident_id: incidentId,
+      phase: committedCheckinId ? 'POST_COMMIT' : 'PRE_COMMIT',
+      category: failureCategory,
+    });
     if (committedCheckinId) {
       // A transação canônica já confirmou check-in/readiness/KSS. Não induzir reenvio
       // quando sync, alertas, auditoria ou contexto operacional falharam depois.
       return c.json({
         success: false,
         error: 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED',
+        incident_id: incidentId,
         checkin_committed: true,
         checkin_id: committedCheckinId,
         retry_submission: false,
         requires_operational_review: true,
       }, 500);
     }
-    return c.json({ success: false, error: 'Erro ao registrar check-in de fadiga' }, 500);
+    return c.json({
+      success: false, error: 'Erro ao registrar check-in de fadiga',
+      incident_id: incidentId,
+    }, 500);
   }
 });
 router.post('/fadiga-checkin/me', requireFatigueCheckinAccess, async (c) => {

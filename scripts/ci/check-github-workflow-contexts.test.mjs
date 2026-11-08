@@ -84,3 +84,34 @@ jobs:
 
   assert.deepEqual(violations, ['other.yml:6 jobs.check.env cannot use runner context']);
 });
+
+
+test('rejects untrusted PR title interpolated directly in multiline shell run', () => {
+  const sample = [
+    'jobs:',
+    '  check:',
+    '    timeout-minutes: 10',
+    '    steps:',
+    '      - name: unsafe',
+    '        run: |',
+    '          echo "${{ github.event.pull_request.title }}"',
+  ].join('\n');
+  const violations = inspectWorkflowText('pr-check.yml', sample);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /untrusted GitHub context inside run/);
+});
+
+test('permits untrusted PR metadata only through step env', () => {
+  const sample = [
+    'jobs:',
+    '  check:',
+    '    timeout-minutes: 10',
+    '    steps:',
+    '      - name: safe',
+    '        env:',
+    '          TITLE: ${{ github.event.pull_request.title }}',
+    '        run: |',
+    '          printf "%s\\n" "$TITLE"',
+  ].join('\n');
+  assert.deepEqual(inspectWorkflowText('pr-check.yml', sample), []);
+});

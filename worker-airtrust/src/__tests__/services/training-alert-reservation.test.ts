@@ -147,6 +147,47 @@ describe('Training alert reservation — concurrency and atomic claim', () => {
     }
   });
 
+  it('retains explicit manual provenance when overriding an earlier LMS bulk reservation', async () => {
+    const previous = await reserveTrainingAlert(db as never, {
+      empresaId: 1,
+      target: { funcionario_id: 401, qualificacao_tipo_id: 88, curso_id: 30 },
+      channel: 'EMAIL',
+      destinatarioMascarado: 'p***@example.com',
+      diaOperacional: '2026-11-06',
+      origem: 'LMS_ALERTA',
+    });
+    expect(previous.reserved).toBe(true);
+    await commitTrainingAlertReservation(db as never, {
+      empresaId: 1, notificationKey: previous.key, outcome: 'enviada',
+    });
+
+    const manual = await reserveTrainingAlert(db as never, {
+      empresaId: 1,
+      target: { funcionario_id: 401, qualificacao_tipo_id: 88 },
+      channel: 'EMAIL',
+      destinatarioMascarado: 'p***@example.com',
+      diaOperacional: '2026-11-06',
+      origem: 'COMPLIANCE',
+      manual: true,
+      qualificacaoNome: 'CMA sintetico',
+      reenviarHoje: true,
+    });
+    expect(manual).toMatchObject({ reserved: true, isResend: true });
+    const row = db.database.prepare(
+      'SELECT corpo, tipo, assunto, status, tentativas_envio FROM notificacoes_log WHERE notification_key = ?',
+    ).get(previous.key) as {
+      corpo: string; tipo: string; assunto: string; status: string; tentativas_envio: number;
+    };
+    expect(row.status).toBe('pendente');
+    expect(row.tentativas_envio).toBe(2);
+    expect(row.tipo).toBe('EMAIL_COMPLIANCE');
+    expect(row.assunto).toContain('[COMPLIANCE_TREINAMENTO:RESERVA:');
+    expect(JSON.parse(row.corpo)).toMatchObject({
+      manual: true, qualificacao_nome: 'CMA sintetico',
+      funcionario_id: 401, qualificacao_tipo_id: 88,
+    });
+  });
+
   it('simulates concurrent voluntary resends (reenviarHoje=true): only ONE resend wins', async () => {
     const params = {
       empresaId: 1,

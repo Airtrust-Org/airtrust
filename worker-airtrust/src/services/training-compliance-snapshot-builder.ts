@@ -12,11 +12,13 @@ import {
   hydrateTrainingComplianceConditions,
   trainingComplianceEvidenceMeetsRequiredModality,
   trainingComplianceEligibleCategorySql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
   type TrainingComplianceScope,
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
-import { trainingComplianceEvidenceIsRealizedBy } from './training-compliance-enrollment-policy';
+import { trainingComplianceEvidenceIsRealizedBy, trainingComplianceIsoDay } from './training-compliance-enrollment-policy';
 
 export const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 export const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
@@ -117,7 +119,11 @@ export function normalizeEnum<T extends readonly string[]>(
 }
 export const ruleApplies = trainingComplianceRuleApplies;
 export const resolvedRules = resolveTrainingComplianceRules;
-export async function loadEmployees(db: D1Database, empresaId: number): Promise<Employee[]> {
+export async function loadEmployees(
+  db: D1Database,
+  empresaId: number,
+  operationalDate = getTodayIsoSaoPaulo(),
+): Promise<Employee[]> {
   const cols = await columnSet(db, 'funcionarios');
   const hasSetorId = cols.has('setor_id');
   const hasFuncaoId = cols.has('funcao_id');
@@ -161,25 +167,26 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
     };
   });
   if (!(await tableExists(db, 'funcionarios_aeronaves')) || !(await tableExists(db, 'aeronaves'))) {
-    return hydrateTrainingComplianceConditions(db, empresaId, employees);
+    return hydrateTrainingComplianceConditions(db, empresaId, employees, operationalDate);
   }
   const faCols = await columnSet(db, 'funcionarios_aeronaves');
   const aircraftCols = await columnSet(db, 'aeronaves');
   if (!aircraftCols.has('modelo'))
-    return hydrateTrainingComplianceConditions(db, empresaId, employees);
+    return hydrateTrainingComplianceConditions(db, empresaId, employees, operationalDate);
   const faDeletedExpr = faCols.has('deleted_at') ? 'AND fa.deleted_at IS NULL' : '';
   const faActiveExpr = faCols.has('ativo') ? 'AND COALESCE(fa.ativo,1)=1' : '';
   const faStartExpr = faCols.has('data_inicio')
-    ? "AND (fa.data_inicio IS NULL OR date(fa.data_inicio) <= date('now'))"
+    ? `AND (fa.data_inicio IS NULL OR date(fa.data_inicio) <= ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})`
     : '';
   const faEndExpr = faCols.has('data_fim')
-    ? "AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))"
+    ? `AND (fa.data_fim IS NULL OR date(fa.data_fim) >= ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})`
     : '';
   const aircraftDeletedExpr = aircraftCols.has('deleted_at') ? 'AND a.deleted_at IS NULL' : '';
   const modelRows = await withD1Retry(() =>
     db
       .prepare(
-        `SELECT DISTINCT CAST(fa.funcionario_id AS INTEGER) AS funcionario_id,
+        `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+         SELECT DISTINCT CAST(fa.funcionario_id AS INTEGER) AS funcionario_id,
               UPPER(TRIM(a.modelo)) AS modelo
          FROM funcionarios_aeronaves fa
          JOIN aeronaves a ON a.id = fa.aeronave_id AND a.empresa_id = ?
@@ -190,7 +197,7 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
           ${faEndExpr}
           ${aircraftDeletedExpr}`,
       )
-      .bind(empresaId)
+      .bind(operationalDate, empresaId)
       .all<{ funcionario_id: number; modelo: string }>(),
   );
   const byId = new Map(employees.map((employee) => [employee.id, employee]));
@@ -206,7 +213,7 @@ export async function loadEmployees(db: D1Database, empresaId: number): Promise<
       legacyAircraftByEmployee.get(employee.id)?.join(' / ') || null,
     );
   }
-  return hydrateTrainingComplianceConditions(db, empresaId, employees);
+  return hydrateTrainingComplianceConditions(db, empresaId, employees, operationalDate);
 }
 
 export async function loadAircraftModelsCatalog(db: D1Database, empresaId: number) {
@@ -235,7 +242,11 @@ export async function loadAircraftModelsCatalog(db: D1Database, empresaId: numbe
     .filter((row) => Boolean(row.modelo));
 }
 
-export async function loadRules(db: D1Database, empresaId: number): Promise<Rule[]> {
+export async function loadRules(
+  db: D1Database,
+  empresaId: number,
+  operationalDate = getTodayIsoSaoPaulo(),
+): Promise<Rule[]> {
   const hasV2 = await tableExists(db, 'treinamento_requisitos');
   const tipoCols = await columnSet(db, 'qualificacoes_tipos');
   const validadeExpr = tipoCols.has('validade')
@@ -295,7 +306,8 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
   const { results } = await withD1Retry(() =>
     db
       .prepare(
-        `SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
+        `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+         SELECT tr.id, tr.empresa_id, tr.qualificacao_tipo_id,
               qt.nome AS qualificacao_tipo_nome,
               qt.codigo AS qualificacao_tipo_codigo,
               ${validadeExpr} AS validade_meses,
@@ -333,11 +345,11 @@ export async function loadRules(db: D1Database, empresaId: number): Promise<Rule
           AND tr.ativo = 1
           AND tr.deleted_at IS NULL
           AND ${trainingComplianceEligibleCategorySql('qt.categoria')}
-          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= date('now'))
-          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= date('now'))
+          AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio) <= ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim) >= ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
         ORDER BY qt.nome ASC, tr.id ASC`,
       )
-      .bind(empresaId)
+      .bind(operationalDate, empresaId)
       .all<Rule>(),
   );
   return (results || []).map((rule) => ({
@@ -582,12 +594,31 @@ export function computeRequirement(
   let data_validade: string | null = null;
   let dias_para_vencer: number | null = null;
 
-  if (evidence?.data_realizacao) {
-    if (evidence.data_vencimento && (rule.validade_fonte === 'EVIDENCIA' || (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses))) {
-      data_validade = evidence.data_vencimento.slice(0, 10);
-    } else if (rule.validade_meses) {
-      const base = new Date(`${evidence.data_realizacao.slice(0, 10)}T12:00:00Z`);
-      base.setUTCMonth(base.getUTCMonth() + Number(rule.validade_meses));
+  const malformedRealization = [...allHistory, ...allLms.filter(
+    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO',
+  )].some((item) =>
+    Boolean(item.data_realizacao) &&
+    evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) &&
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade) &&
+    trainingComplianceIsoDay(item.data_realizacao) === null,
+  );
+  const months = rule.validade_meses == null ? null : Number(rule.validade_meses);
+  const invalidValidityConfig = months !== null && (!Number.isInteger(months) || months < 0 || months > 1200);
+  const needsEvidenceExpiry = Boolean(
+    evidence?.data_vencimento &&
+    (rule.validade_fonte === 'EVIDENCIA' || (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses)),
+  );
+  const invalidEvidenceExpiry = needsEvidenceExpiry && trainingComplianceIsoDay(evidence?.data_vencimento) === null;
+
+  // Keep invalid dates or invalid validity rules pending manual review.
+  // In particular, do not call toISOString() on an Invalid Date (HTTP 500)
+  // or mark unknown expiration as lifetime compliance.
+  if (evidence?.data_realizacao && !invalidValidityConfig && !invalidEvidenceExpiry) {
+    if (needsEvidenceExpiry) {
+      data_validade = trainingComplianceIsoDay(evidence.data_vencimento);
+    } else if (months) {
+      const base = new Date(`${trainingComplianceIsoDay(evidence.data_realizacao)}T12:00:00Z`);
+      base.setUTCMonth(base.getUTCMonth() + months);
       data_validade = base.toISOString().slice(0, 10);
     }
     if (!data_validade) {
@@ -616,6 +647,12 @@ export function computeRequirement(
   }
 
   const evidenceReviewReason =
+    invalidValidityConfig ? 'REGRA_VALIDADE' :
+    invalidEvidenceExpiry ? 'DATA_VENCIMENTO' :
+    // An older expired proof must not allow auto-enrollment while a later
+    // malformed completion for this same profile/modality remains unresolved.
+    malformedRealization && (status_compliance === 'NAO_REALIZADO' || status_compliance === 'VENCIDO')
+      ? 'DATA_REALIZACAO' :
     status_compliance !== 'NAO_REALIZADO' ? null :
     modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
     profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff)) ? 'PERFIL' : null;
@@ -701,9 +738,10 @@ export async function buildSnapshot(
   access: EmployeeSectorAccess,
   targetFilter?: TrainingComplianceTargetFilter,
 ) {
+  const today = getTodayIsoSaoPaulo();
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
-    loadEmployees(db, empresaId),
-    loadRules(db, empresaId),
+    loadEmployees(db, empresaId, today),
+    loadRules(db, empresaId, today),
     loadQualificationEvidence(db, empresaId),
     loadLmsEvidence(db, empresaId),
   ]);
@@ -718,7 +756,6 @@ export async function buildSnapshot(
     employees = employees.filter((employee) => employee.id === targetFilter.funcionarioId);
   }
   // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
-  const today = getTodayIsoSaoPaulo();
   const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today) };
 
   const people = employees.map((employee) => {

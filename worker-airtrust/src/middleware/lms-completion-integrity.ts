@@ -280,6 +280,10 @@ async function guardScormCommit(
     explicitCompletion:
       ['completed', 'complete'].includes(completion) || incoming.completion_candidate === true,
     explicitFailure: failureSignal,
+    // This evidence was loaded by the Worker for the active edition/cycle;
+    // the client cannot self-declare a passing external examination.
+    approvedExternalExam: manifest?.coverage.assessment_mode === 'EXTERNAL' &&
+      manifest.coverage.verified === true && Boolean(manifest.externalExam),
   });
   return decision.accepted ? null : decisionRejection(c, matriculaId, decision, closure);
 }
@@ -392,6 +396,8 @@ async function guardManualFinalize(
   const decision = buildDecision(row, isScorm ? 'scorm' : 'manual', {}, assetSessionValid, {
     explicitCompletion: validatedPptx || (isScorm ? true : storedCompletion),
     serverValidatedPptxCoverage: validatedPptx,
+    approvedExternalExam: isScorm && manifest?.coverage.assessment_mode === 'EXTERNAL' &&
+      manifest.coverage.verified === true && Boolean(manifest.externalExam),
     explicitFailure:
       normalizeStatus(row.lesson_status) === 'failed' ||
       normalizeStatus(row.success_status) === 'failed',

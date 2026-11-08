@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Link2, UserPlus } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
 import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
+import { invalidateComplianceDependents } from './complianceCacheInvalidation';
 import {
   nextComplianceTableSort,
   sortComplianceRows,
@@ -128,8 +129,7 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         ),
       ),
   });
-  const invalidate = async () =>
-    queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+  const invalidate = () => invalidateComplianceDependents(queryClient);
 
   const enroll = useMutation({
     mutationFn: async (gap: Reconciliation['gaps_matricula'][number]) => {
@@ -176,10 +176,11 @@ export function TrainingEnrollmentReconciliation({ setorId, funcaoId }: Props) {
         nao_encontradas: number;
       }>(response);
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       showToast.success(
         `${data.enviados} convite(s) enviado(s); ${data.sem_email} sem e-mail; ${data.falhas} falha(s).`,
       );
+      await invalidate();
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao enviar convites'),

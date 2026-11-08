@@ -41,8 +41,8 @@ const quality = {
   formativeContract: { eligible: true, requiredSlides: 101, requiredActivities: 14 },
 };
 
-function makeParams(status = 'REJECTED', concurrentStatus?: string) {
-  const original = { ...row, status };
+function makeParams(status = 'REJECTED', concurrentStatus?: string, validation?: string) {
+  const original = { ...row, status, ...(validation ? { validation_result_json: validation } : {}) };
   const first = vi.fn().mockResolvedValueOnce(original)
     .mockResolvedValue({ ...original, status: concurrentStatus ?? status,
       validation_result_json: concurrentStatus === 'VALIDATED'
@@ -99,6 +99,46 @@ describe('same-SHA SCORM candidate upload lifecycle', () => {
     expect(result.arquivoNome).toBe('WINNER.zip');
     // The loser must not issue the stale filename UPDATE after the readback.
     expect(params.db.prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates legacy VALIDATED EXTERNAL same-SHA bytes and records current private marker with CAS', async () => {
+    const legacy = JSON.stringify({
+      ...quality, assessmentPolicy: null, certificationProfile: null,
+      authoringReview: { externalExam: true, reviewed: false },
+    });
+    const params = makeParams('VALIDATED', undefined, legacy);
+    mocks.quality.mockReturnValue({
+      ...quality, assessmentPolicy: null, certificationProfile: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+    });
+    const result = await createScormPackageCandidate(params);
+    expect(result.status).toBe('VALIDATED');
+    expect(result.packageSha256).toBe(sha);
+    expect(result.authoringReview).toMatchObject({
+      externalExam: true, privateRelease: false,
+    });
+    expect(mocks.full).toHaveBeenCalledOnce();
+    expect(mocks.quality).toHaveBeenCalledTimes(2);
+    expect(params.bucket.put).not.toHaveBeenCalled();
+    expect(params.db.prepare).toHaveBeenCalledWith(expect.stringContaining(
+      "status='VALIDATED' AND validation_result_json=?",
+    ));
+    const calls = vi.mocked(params.db.prepare).mock.results;
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not turn an old EXTERNAL PRIVATE candidate into a public edition', async () => {
+    const legacy = JSON.stringify({
+      ...quality, assessmentPolicy: null, certificationProfile: null,
+      authoringReview: { externalExam: true, reviewed: false },
+    });
+    const params = makeParams('VALIDATED', undefined, legacy);
+    mocks.quality.mockReturnValue({
+      ...quality, assessmentPolicy: null, certificationProfile: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: true },
+    });
+    const result = await createScormPackageCandidate(params);
+    expect(result.authoringReview?.privateRelease).toBe(true);
   });
 
   it('does not retry a non-rejected same-SHA candidate', async () => {

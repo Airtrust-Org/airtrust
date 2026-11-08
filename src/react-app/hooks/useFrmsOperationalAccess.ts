@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
+import { httpClient, type ApiResponse, type HttpClientOptions } from '@/react-app/services/http-client';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
 
@@ -124,9 +124,13 @@ function unwrap<T>(response: ApiResponse<EndpointEnvelope<T>>): T {
   return payload.data;
 }
 
-async function getEndpoint<T>(path: string, kind: FrmsOperationalRequestKind): Promise<T> {
+async function getEndpoint<T>(
+  path: string,
+  kind: FrmsOperationalRequestKind,
+  options?: HttpClientOptions,
+): Promise<T> {
   try {
-    return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path));
+    return unwrap<T>(await httpClient.get<EndpointEnvelope<T>>(path, options));
   } catch (error) {
     console.error('[FRMS operational access] GET failed', { path, error });
     throw new Error(safeFrmsOperationalRequestError(kind));
@@ -146,10 +150,48 @@ async function postEndpoint<T>(
   }
 }
 
+// A request that never settles must not leave the coordinator indefinitely
+// looking at a spinner. This is UI fail-closed, NOT a permission bypass or a
+// fallback to an assumed operational role.
+export async function withFrmsAccessTimeout<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = 15_000,
+): Promise<T> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request(controller.signal),
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error('FRMS_ACCESS_TIMEOUT'));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
+  try {
+    return await withFrmsAccessTimeout((signal) =>
+      getEndpoint<FrmsOperationalAccess>('/me/operational-access', 'access', {
+        signal,
+        retry: 0,
+      }),
+    );
+  } catch {
+    throw new Error(safeFrmsOperationalRequestError('access'));
+  }
+}
+
 export function useFrmsOperationalAccess() {
   return useQuery({
     queryKey: ['frms-operational-access'],
-    queryFn: () => getEndpoint<FrmsOperationalAccess>('/me/operational-access', 'access'),
+    queryFn: fetchFrmsOperationalAccess,
+    retry: false,
     staleTime: 2 * 60 * 1000,
   });
 }
