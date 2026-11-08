@@ -392,19 +392,8 @@ export default function LmsCursoDetalhe() {
           </LmsSurface>
         </div>
         {canManage && curso.tipo_conteudo === 'scorm' ? (
-          <LmsSurface title="Edições do pacote SCORM" description="Para ZIPs formativos válidos, selecionar o arquivo substitui automaticamente a edição atual. ZIPs avaliativos mantêm seus controles de certificação.">
-            {packageVersions.isPending ? (
-              <p role="status" className="text-sm text-slate-500">Consultando edições SCORM…</p>
-            ) : packageVersions.isError ? (
-              <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-rose-700">
-                <span>Não foi possível consultar as edições do pacote. O envio não deve ser repetido sem verificar o recibo.</span>
-                <Button variant="secondary" type="button" onClick={() => void packageVersions.refetch()}>
-                  Tentar novamente
-                </Button>
-              </div>
-            ) : (
-              <ScormEditionPanel cursoId={Number(id)} versions={packageVersions.data ?? []} isAdmin={isAdmin} />
-            )}
+          <LmsSurface title="Conteúdo do curso" description="Selecione um ZIP SCORM para substituir imediatamente o conteúdo atual.">
+            <ScormEditionPanel cursoId={Number(id)} versions={packageVersions.data ?? []} isAdmin={isAdmin} />
           </LmsSurface>
         ) : null}
         {curso.conteudo_programatico ? (
