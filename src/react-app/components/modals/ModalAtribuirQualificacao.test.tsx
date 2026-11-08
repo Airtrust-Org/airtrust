@@ -127,6 +127,21 @@ describe('ModalAtribuirQualificacao', () => {
       expect(screen.getByText('ℹ️ Validade: 24 meses')).toBeInTheDocument();
     });
     expect(screen.queryByText(/Este tipo não tem validade definida/)).not.toBeInTheDocument();
+
+    // Caso real: o registro foi inicialmente lançado como Inicial e deve
+    // aceitar a alteração para Periódico sem perder os 24 meses cadastrados.
+    fireEvent.click(screen.getByRole('radio', { name: /Periódico/ }));
+    fireEvent.click(screen.getByRole('button', { name: '✓ Salvar' }));
+    await waitFor(() => {
+      expect(serviceMocks.atualizarHistoricoQualificacao).toHaveBeenCalledWith(
+        77,
+        expect.objectContaining({
+          qualificacao_codigo: 'EAD_COORDENADOR_VOO',
+          tipo_treinamento: 'RECORRENTE',
+          data_vencimento: '2027-09-03',
+        }),
+      );
+    });
   });
 
   it('allows a registered instructor to receive a qualification as an employee', () => {
