@@ -100,7 +100,7 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     const row = screen.getByText('Tripulante Sintético').closest('div.rounded-xl');
     expect(row).toHaveClass('bg-slate-50');
     expect(row).not.toHaveClass('bg-emerald-50');
-    expect(screen.getAllByText('Situação não determinada')).toHaveLength(2);
+    expect(screen.getByText('Situação não determinada')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
   });
 
