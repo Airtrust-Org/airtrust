@@ -140,7 +140,10 @@ describe('ModalAlertaEAD', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /enviar alerta/i }));
-    await waitFor(() => expect(warningMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText(/Reenvio cancelado\. Nenhum alerta adicional foi enviado\./i))
+        .toBeInTheDocument(),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).reenviar_hoje).toBe(false);
