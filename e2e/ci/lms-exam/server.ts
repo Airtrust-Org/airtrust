@@ -74,6 +74,13 @@ app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 });
 app.options('*', (c) => c.body(null, 204));
+// Only the disposable synthetic browser fixture implements translation here.
+// A real CORS-valid endpoint avoids Playwright route interception for the
+// credentialed cross-origin fallback triggered by the frontend's i18n layer.
+app.post('/api/public/translate', (c) => c.json({
+  success: true, data: { translatedText: '' },
+}));
+
 
 // --- SIMULADO: sessao ---
 const mint = (u: { id: number; role: string }, type: 'access' | 'refresh', ttl: number) => generateJWT({
