@@ -2,10 +2,11 @@
  * Operational-domain access facade.
  *
  * The core guard remains unchanged for managers and every operational
- * resource. Qualification-type catalog administration is the sole
- * exception: this UI is admin-only and every handler remains tenant-scoped,
- * so a tenant ADMINISTRADOR may maintain its own qualification models
- * without also holding an operational manager assignment.
+ * resource. Qualification catalog updates and historical qualification
+ * corrections by a tenant ADMINISTRADOR are narrowly exempted from
+ * classification-based checks; the latter explicitly verifies ownership
+ * and employee tenancy before the write handler runs. Route permissions
+ * and RBAC-state integrity checks remain mandatory.
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
