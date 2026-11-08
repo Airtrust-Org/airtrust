@@ -325,16 +325,14 @@ export function ListaFuncionarios({
         }
 
         const url = `${API_BASE_URL}/funcionarios?${params.toString()}`;
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-
+        // appFetch supplies the current bearer token, including after refresh.
+        // Do not override it with the token captured at render time.
         timeoutId = window.setTimeout(() => {
           didTimeout = true;
           abortController.abort();
         }, 15000);
 
         const response = await appFetch(url, {
-          headers,
           cache: 'no-cache',
           signal: abortController.signal,
         });
