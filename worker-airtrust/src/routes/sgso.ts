@@ -471,17 +471,21 @@ sgso.get('/relatos/:id', async (c) => {
       .bind(id, empresaId)
       .all<Record<string, unknown>>();
 
-    // Mascarar relator se anônimo
-    if (relato.anonimo) {
-      relato.relator_nome = 'Anônimo';
-      relato.relator_cargo = null;
-      relato.relator_id = null;
+    // Redact submitter identity from the public API, including legacy data.
+    // The D1-created_by audit trail remains for governed internal forensics.
+    const relatoPublico = { ...relato };
+    if (Number(relatoPublico.anonimo) === 1) {
+      delete relatoPublico.created_by;
+      delete relatoPublico.updated_by;
+      relatoPublico.relator_nome = 'Anônimo';
+      relatoPublico.relator_cargo = null;
+      relatoPublico.relator_id = null;
     }
 
     return c.json({
       success: true,
       data: {
-        ...relato,
+        ...relatoPublico,
         avaliacoes_risco: avaliacoes.results,
         acoes_mitigacao: acoes.results,
         fatores_humanos: fatores.results,
@@ -573,8 +577,11 @@ sgso.get('/relatos/:id/historico', async (c) => {
 
     const rows = await db
       .prepare(
-        `SELECT h.*, f.nome AS alterado_por_nome
+        `SELECT h.*, r.anonimo AS relato_anonimo, f.nome AS alterado_por_nome
          FROM sgso_relatos_historico_status h
+         INNER JOIN sgso_relatos r
+           ON r.id = h.relato_id AND r.empresa_id = h.empresa_id
+          AND r.deleted_at IS NULL
          LEFT JOIN funcionarios f ON f.id = h.alterado_por
          WHERE h.relato_id = ? AND h.empresa_id = ?
          ORDER BY h.alterado_em ASC`,
@@ -582,7 +589,20 @@ sgso.get('/relatos/:id/historico', async (c) => {
       .bind(id, empresaId)
       .all<Record<string, unknown>>();
 
-    return c.json({ success: true, data: rows.results });
+    const data = rows.results.map((row) => {
+      const result = { ...row };
+      const isAnonymous = Number(result.relato_anonimo) === 1;
+      delete result.relato_anonimo;
+      if (isAnonymous) {
+        // Hide actors even for historical anonymous reports. Preserve the
+        // original audit rows in D1, outside the public reporting API.
+        delete result.alterado_por;
+        delete result.alterado_por_nome;
+      }
+      return result;
+    });
+
+    return c.json({ success: true, data });
   } catch (err) {
     return sgsoErrorResponse(c, err, 'Erro ao buscar histórico', 'SGSO_HISTORICO_GET_ERROR');
   }
