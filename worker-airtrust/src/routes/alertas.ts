@@ -1085,8 +1085,16 @@ Por favor, providencie a renovação o quanto antes.
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        // These failures occur before any provider request. Release the
+        // reservation so a corrected contact/configuration can be retried.
+        // Network/provider errors remain indeterminate (fail closed).
+        const confirmedPreDispatch = new Set([
+          'WHATSAPP_NOT_CONFIGURED',
+          'WHATSAPP_INVALID_PHONE',
+          'TWILIO_WHATSAPP_FROM_NOT_CONFIGURED',
+        ]);
         await finalizeReservation('WHATSAPP',
-          msg === 'WHATSAPP_NOT_CONFIGURED' ? 'erro' : 'resultado_indeterminado',
+          confirmedPreDispatch.has(msg) ? 'erro' : 'resultado_indeterminado',
           null, msg);
         alertas.push({
           tipo: 'whatsapp',

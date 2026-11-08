@@ -139,6 +139,31 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
     expect(((await response.json()) as any).data.canais_ja_alertados_hoje).toEqual([]);
   });
 
+  it('releases a confirmed pre-dispatch phone failure and permits a corrected same-day attempt', async () => {
+    const { app, db } = createApp();
+    const key = 'TRAINING_ALERT:2026-11-08:44:q:7:WHATSAPP';
+    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 24, key });
+    delivery.mockRejectedValueOnce(new Error('WHATSAPP_INVALID_PHONE'));
+    const failed = await request(app, db);
+    expect(failed.status).toBe(400);
+    expect(commit).toHaveBeenCalledWith(db, expect.objectContaining({
+      notificationKey: key, outcome: 'erro', errorMessage: 'WHATSAPP_INVALID_PHONE',
+    }));
+    expect(delivery).toHaveBeenCalledTimes(1);
+
+    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 25, key });
+    delivery.mockResolvedValueOnce({
+      provider: 'generic', providerStatus: 'accepted', providerMessageId: 'synthetic-msg',
+      destination: '+5521999999999', source: '', messageMode: 'free-form',
+    });
+    const corrected = await request(app, db);
+    expect(corrected.status).toBe(200);
+    expect(delivery).toHaveBeenCalledTimes(2);
+    expect(commit).toHaveBeenCalledWith(db, expect.objectContaining({
+      notificationKey: key, outcome: 'enviada', providerMessageId: 'synthetic-msg',
+    }));
+  });
+
   it('never overrides a pending or indeterminate send, even with resend confirmation', async () => {
     const { app, db } = createApp();
     reserve.mockResolvedValueOnce({
