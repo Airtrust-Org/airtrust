@@ -142,7 +142,7 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
   it('releases a confirmed pre-dispatch phone failure and permits a corrected same-day attempt', async () => {
     const { app, db } = createApp();
     const key = 'TRAINING_ALERT:2026-11-08:44:q:7:WHATSAPP';
-    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 24, key });
+    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 24, key, isResend: false });
     delivery.mockRejectedValueOnce(new Error('WHATSAPP_INVALID_PHONE'));
     const failed = await request(app, db);
     expect(failed.status).toBe(400);
@@ -151,7 +151,7 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
     }));
     expect(delivery).toHaveBeenCalledTimes(1);
 
-    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 25, key });
+    reserve.mockResolvedValueOnce({ reserved: true, reservationId: 25, key, isResend: false });
     delivery.mockResolvedValueOnce({
       provider: 'generic', providerStatus: 'accepted', providerMessageId: 'synthetic-msg',
       destination: '+5521999999999', source: '', messageMode: 'free-form',
