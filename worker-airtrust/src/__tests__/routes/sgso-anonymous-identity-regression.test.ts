@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
+import { errorHandler } from '../../middleware/error-handler';
 
 const viewer = vi.hoisted(() => ({ userId: 42, role: 'user', empresaId: 1 }));
 vi.mock('../../middleware/auth', () => ({
@@ -30,6 +31,7 @@ describe('SGSO anonymous submitter privacy (P10-01)', () => {
       );
       const app = new Hono<any>();
       app.route('/api/sgso', sgsoRoutes);
+      app.onError(errorHandler);
       const env = { DB: db.asD1() } as any;
       viewer.userId = 42;
       viewer.empresaId = 1;
@@ -50,8 +52,28 @@ describe('SGSO anonymous submitter privacy (P10-01)', () => {
         .bind(id).first<{ created_by: number }>();
       expect(stored?.created_by).toBe(42);
 
+      // Autor do relato anônimo: continua vendo o próprio relato (sem identidade na resposta).
+      const own = await app.request('/api/sgso/relatos/' + id, {}, env);
+      expect(own.status).toBe(200);
+      expect(((await own.json()) as any).data).not.toHaveProperty('created_by');
+
+      // P10-02: outro papel não-gestor (aluno) não lista, não lê e não vê o histórico do relato alheio.
       viewer.userId = 99;
       viewer.role = 'aluno';
+      expect((await app.request('/api/sgso/relatos/' + id, {}, env)).status).toBe(404);
+      const alienList = await app.request('/api/sgso/relatos', {}, env);
+      expect(((await alienList.json()) as any).data).toEqual([]);
+      const alienHistory = await app.request('/api/sgso/relatos/' + id + '/historico', {}, env);
+      expect(((await alienHistory.json()) as any).data).toEqual([]);
+      const alienComment = await app.request(
+        '/api/sgso/relatos/' + id + '/comentarios',
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ texto: 'oi aqui' }) },
+        env,
+      );
+      expect(alienComment.status).toBe(403);
+
+      // Gestão do SGSO (mesmo papel que já escreve no fluxo) lê tudo, sempre com a identidade redigida.
+      viewer.role = 'manager';
       const detail = await app.request('/api/sgso/relatos/' + id, {}, env);
       expect(detail.status).toBe(200);
       const report = ((await detail.json()) as any).data;
