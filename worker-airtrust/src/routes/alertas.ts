@@ -141,8 +141,8 @@ function alertasErrorResponse(
 }
 
 // Auth específico por rota (rotas montadas em /api não podem ter use('*') global)
-app.use('/alertas/vencimentos', auth());
-app.use('/alertas/ead-vencido/:id', auth());
+app.use('/alertas/vencimentos', auth(), requireRole('admin', 'manager'));
+app.use('/alertas/ead-vencido/:id', auth(), requireRole('admin', 'manager'));
 app.use('/alertas/whatsapp/delivery/:sid', auth());
 app.use('/alertas/whatsapp/templates', auth());
 app.use('/alertas/whatsapp/templates/*', auth());
@@ -640,7 +640,6 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
     const result = await db.prepare(query).bind(id, empresaId).first();
 
     console.log('[ALERTAS] Resultado query:', result ? 'encontrado' : 'não encontrado');
-    console.log('[ALERTAS] Dados completos:', JSON.stringify(result, null, 2));
 
     if (!result) {
       return alertasErrorResponse(
