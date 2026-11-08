@@ -333,18 +333,30 @@ async function lmsRequestPaginated<T>(
   path: string,
   init?: RequestInit,
 ): Promise<{ data: T[]; total: number }> {
-  const res = await fetchWithAuth(`/api/lms${path}`, {
-    headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-    ...init,
-  });
-  const json = (await res.json()) as {
-    success: boolean;
-    data?: T[];
-    error?: string;
-    pagination?: { total: number; page: number; limit: number };
-  };
-  if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
-  return { data: json.data ?? [], total: json.pagination?.total ?? json.data?.length ?? 0 };
+  // Bound catalog/list requests so a stalled network cannot leave cards as skeletons indefinitely.
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (init?.signal?.aborted) controller.abort();
+  else init?.signal?.addEventListener('abort', abortFromParent, { once: true });
+  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetchWithAuth(`/api/lms${path}`, {
+      headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+      ...init,
+      signal: controller.signal,
+    });
+    const json = (await res.json()) as {
+      success: boolean;
+      data?: T[];
+      error?: string;
+      pagination?: { total: number; page: number; limit: number };
+    };
+    if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+    return { data: json.data ?? [], total: json.pagination?.total ?? json.data?.length ?? 0 };
+  } finally {
+    clearTimeout(timeoutId);
+    init?.signal?.removeEventListener('abort', abortFromParent);
+  }
 }
 
 // ── Query keys ────────────────────────────────────────────────────────────────
@@ -491,6 +503,7 @@ export function useLmsCursos(
     },
     enabled: options.enabled ?? true,
     staleTime: 15_000,
+    retry: 1,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });
