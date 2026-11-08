@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { tenantQueryKey } from '@/react-app/lib/query-client';
 
 /**
  * A Compliance decision may change applicable rules, LMS enrollments, training
@@ -16,12 +17,26 @@ export const complianceDependentQueryKeys = [
   ['lms'],
   ['lms-stats'],
   ['treinamentos-planejados'],
-  ['funcionarios'],
-  ['dashboard'],
 ] as const;
 
-export async function invalidateComplianceDependents(client: QueryClient): Promise<void> {
-  await Promise.all(
-    complianceDependentQueryKeys.map((queryKey) => client.invalidateQueries({ queryKey })),
-  );
+// Newer employee/qualification/dashboard hooks are scoped as
+// ['tenant', empresaId, module, ...]. Prefixes without that scope do not match.
+export function complianceTenantDependentQueryKeys(empresaId?: number | null) {
+  return [
+    tenantQueryKey(empresaId, 'funcionarios'),
+    tenantQueryKey(empresaId, 'dashboard'),
+    tenantQueryKey(empresaId, 'qualificacoes'),
+    tenantQueryKey(empresaId, 'historico'),
+  ];
+}
+
+export async function invalidateComplianceDependents(
+  client: QueryClient,
+  empresaId?: number | null,
+): Promise<void> {
+  const keys = [
+    ...complianceDependentQueryKeys,
+    ...complianceTenantDependentQueryKeys(empresaId),
+  ];
+  await Promise.all(keys.map((queryKey) => client.invalidateQueries({ queryKey })));
 }
