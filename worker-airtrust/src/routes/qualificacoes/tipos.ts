@@ -1618,7 +1618,7 @@ router.put(
       // Assim os vencimentos podem ser recalculados e commitados atomicamente.
       const tipoAtualizado: TipoAtualizadoRow = {
         id,
-        codigo: data.codigo !== undefined ? normalizeTipoCodigo(data.codigo) : rowAtual.codigo,
+        codigo: typeof data.codigo === 'string' ? normalizeTipoCodigo(data.codigo) : rowAtual.codigo,
         nome: data.nome !== undefined ? data.nome.trim() : rowAtual.nome,
         categoria: categoriaFinal,
         categoria_id: categoriaCanonica?.id ?? rowAtual.categoria_id,
