@@ -9,6 +9,7 @@ const mockState = vi.hoisted(() => ({
   dailyCalls: 0,
   alertCalls: 0,
   alertLoading: false,
+  alertsMalformed: false,
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -38,7 +39,7 @@ vi.mock('@/react-app/hooks/useFrms', () => ({
     },
   }),
   useFrmsDailyFatigueAlerts: () => ({
-    data: { items: mockState.alerts },
+    data: mockState.alertsMalformed ? { count: 0 } : { items: mockState.alerts },
     loading: mockState.alertLoading,
     error: null,
     refetch: () => {
@@ -62,6 +63,7 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     mockState.dailyCalls = 0;
     mockState.alertCalls = 0;
     mockState.alertLoading = false;
+    mockState.alertsMalformed = false;
   });
 
   it('reconsulta ambos ao clicar Atualizar e deixa de apresentar verde quando surge risco crítico', () => {
@@ -87,5 +89,13 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getAllByText('Crítica').length).toBeGreaterThan(0);
     expect(screen.queryByText('Preenchida — sem alerta identificado')).not.toBeInTheDocument();
+  });
+
+  it('não converte resposta de alertas malformada em ausência confirmada de risco', () => {
+    mockState.alertsMalformed = true;
+    render(<FrmsFadigaPainel />);
+    expect(screen.getByText(/Não foi possível verificar os alertas de fadiga/i)).toBeInTheDocument();
+    expect(screen.queryByText('Preenchida — sem alerta identificado')).not.toBeInTheDocument();
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
   });
 });

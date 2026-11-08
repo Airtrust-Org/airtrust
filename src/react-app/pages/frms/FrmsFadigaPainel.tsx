@@ -19,17 +19,21 @@ export default function FrmsFadigaPainel() {
   const { data: alertsData, loading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useFrmsDailyFatigueAlerts(data);
   const { data: analyticsData } = useFrmsFadigaAnalytics(30);
 
-  const itens = Array.isArray((dailyData as { items?: unknown[] } | null)?.items)
-    ? (((dailyData as { items?: unknown[] } | null)?.items || []) as Array<Record<string, unknown>>)
+  const dailyItemsValid = Array.isArray((dailyData as { items?: unknown[] } | null)?.items);
+  const alertItemsValid = Array.isArray((alertsData as { items?: unknown[] } | null)?.items);
+  const itens = dailyItemsValid
+    ? (dailyData as { items: Array<Record<string, unknown>> }).items
     : [];
-  const alertItems = Array.isArray((alertsData as { items?: unknown[] } | null)?.items)
-    ? (((alertsData as { items?: unknown[] } | null)?.items || []) as Array<Record<string, unknown>>)
+  const alertItems = alertItemsValid
+    ? (alertsData as { items: Array<Record<string, unknown>> }).items
     : [];
 
   const resumo = summarizeDailyMonitor(itens, alertItems);
   const { alertIndex } = resumo;
-  // Never claim 0% or green status until canonical alerts have been read.
-  const riskUnavailable = loading || alertsLoading || Boolean(alertsError);
+  // Missing/malformed API data is unknown, NOT a confirmed empty roster or
+  // zero alerts. Both sources must be complete for an operational risk summary.
+  const riskUnavailable = loading || alertsLoading || Boolean(alertsError) ||
+    !dailyItemsValid || !alertItemsValid;
 
   return (
     <AppLayout>
@@ -83,12 +87,12 @@ export default function FrmsFadigaPainel() {
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Check-ins</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{loading ? '—' : Number(resumo.complete)}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{loading || !dailyItemsValid ? '—' : Number(resumo.complete)}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Score médio</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {loading || resumo.mediaScore === null ? '—' : Math.round(resumo.mediaScore)}
+              {loading || !dailyItemsValid || resumo.mediaScore === null ? '—' : Math.round(resumo.mediaScore)}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -98,7 +102,7 @@ export default function FrmsFadigaPainel() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Pendente/incompleto</p>
             <p className="mt-2 text-2xl font-bold text-violet-600">
-              {loading ? '—' : Number(resumo.pending)}
+              {loading || !dailyItemsValid ? '—' : Number(resumo.pending)}
             </p>
           </div>
         </div>
@@ -111,7 +115,7 @@ export default function FrmsFadigaPainel() {
             </div>
             {loading || alertsLoading ? (
               <div className="py-10 text-center text-sm text-slate-400">Carregando painel e alertas...</div>
-            ) : alertsError ? (
+            ) : alertsError || !alertItemsValid || !dailyItemsValid ? (
               <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 <p>Não foi possível verificar os alertas de fadiga. A condição operacional não pode ser presumida como normal.</p>
                 <Button variant="secondary" onClick={() => refetchAlerts()}>Reconsultar alertas</Button>
@@ -223,7 +227,7 @@ export default function FrmsFadigaPainel() {
           </div>
           {alertsLoading ? (
             <p className="text-sm text-slate-500">Verificando alertas de fadiga diária...</p>
-          ) : alertsError ? (
+          ) : alertsError || !alertItemsValid ? (
             <p role="alert" className="text-sm text-amber-800">Não foi possível consultar os alertas. O estado de risco permanece desconhecido.</p>
           ) : alertItems.length === 0 ? (
             <p className="text-sm text-slate-500">Sem alertas identificados na data selecionada.</p>
