@@ -58,6 +58,19 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   });
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
+  // Keep the synthetic Portuguese examination fixed to pt-BR on every
+  // navigation. Without this, WebKit's en-US locale can start asynchronous
+  // runtime translation while the page navigates, intermittently reporting a
+  // cross-origin i18n request as a pageerror after a successful certification.
+  // The explicit OPTIONS/POST checks below still verify the real test API CORS
+  // contract; no network error is intercepted or silently ignored.
+  await page.addInitScript(() => {
+    // Playwright runs init scripts in child frames too; a sandboxed SCORM
+    // iframe may have an opaque origin and no localStorage access.
+    if (window.top === window) {
+      localStorage.setItem('airtrust:language:manual', 'pt-BR');
+    }
+  });
   // Translation is provided by the disposable local API. Browser routing
   // can bypass CORS preflight in Chromium but fail nondeterministically in WebKit.
   // The browser uses the real API origin for i18n. The local synthetic API,
