@@ -56,7 +56,11 @@ jobs:
             scripts/__tests__/staging-frontend-pr-ui-qa-workflow.test.mjs
 
       - name: ✅ PR checks are structurally valid
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.actor }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "PR: ${{ github.event.pull_request.title }}"
-          echo "Author: ${{ github.actor }}"
-          echo "URL: ${{ github.event.pull_request.html_url }}"
+          printf 'PR: %s\n' "$PR_TITLE"
+          printf 'Author: %s\n' "$PR_AUTHOR"
+          printf 'URL: %s\n' "$PR_URL"
