@@ -52,15 +52,17 @@ type DailyFatigueAlertClassification = {
 
 function resolveDailyFatigueAlert(item: DailyFatigueStatusItem): DailyFatigueAlertClassification | null {
   const status = String(item.status || '');
+  // Missing and incomplete evidence must never be promoted using a potentially
+  // stale score; critical / unfit subjective findings always remain critical.
   if (status === 'not_submitted' || status === 'incomplete_checkin' ||
-      status === 'attention' || status === 'critical' || status === 'unfit_for_duty') {
+      status === 'critical' || status === 'unfit_for_duty') {
     return {
       type: `daily_fatigue_${status}`,
       severity: status === 'critical' || status === 'unfit_for_duty' ? 'CRITICO' : 'ATENCAO',
       message: dailyFatigueAlertMessage(status),
     };
   }
-  if (status !== 'normal') return null;
+  if (status !== 'normal' && status !== 'attention') return null;
 
   // The score band comes from the stored check-in calculation using the active
   // tenant's configured parameters; never recalculate threshold values here.
@@ -75,6 +77,15 @@ function resolveDailyFatigueAlert(item: DailyFatigueStatusItem): DailyFatigueAle
       type: 'daily_fatigue_score_critical',
       severity: 'CRITICO',
       message: 'Cálculo configurado do check-in indica condição de risco ou restrição elevada. Revisão operacional imediata necessária.',
+    };
+  }
+  // A screening result of ATTENTION is not a ceiling for the separately
+  // calculated fatigue level or an explicit NAO_APTO operational restriction.
+  if (status === 'attention') {
+    return {
+      type: 'daily_fatigue_attention',
+      severity: 'ATENCAO',
+      message: dailyFatigueAlertMessage(status),
     };
   }
   if (scoreBand === 'AMARELO') {
