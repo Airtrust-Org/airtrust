@@ -24,14 +24,14 @@ export function useTiposQualificacao(
       // que trunca em 500 linhas e impede resolver categoria/validade.
       if (!normalizedCategoriaId && selectedId) {
         const res = await buscarTipoQualificacaoPorId(selectedId);
-        if (!res.success || !res.data) {
-          throw new Error(res.error || 'Modelo vinculado não encontrado.');
+        if (!res?.success || !res.data) {
+          throw new Error(res?.error || 'Modelo vinculado não encontrado.');
         }
         return [res.data];
       }
 
       const res = await listarTiposQualificacao(500, normalizedCategoriaId);
-      if (!res.success) throw new Error(res.error || 'Falha ao carregar tipos');
+      if (!res?.success) throw new Error(res?.error || 'Falha ao carregar tipos');
       const tipos = res.data || [];
       if (!selectedId || tipos.some((tipo) => String(tipo.id) === selectedId)) {
         return tipos;
@@ -40,8 +40,8 @@ export function useTiposQualificacao(
       // Mesmo com mais de 500 modelos na categoria, preservar a edição
       // do registro associado sem permitir seleção de modelos de outra categoria.
       const selecionado = await buscarTipoQualificacaoPorId(selectedId);
-      if (!selecionado.success || !selecionado.data) {
-        throw new Error(selecionado.error || 'Modelo vinculado não encontrado.');
+      if (!selecionado?.success || !selecionado.data) {
+        throw new Error(selecionado?.error || 'Modelo vinculado não encontrado.');
       }
       return Number(selecionado.data.categoria_id) === normalizedCategoriaId
         ? [selecionado.data, ...tipos]
