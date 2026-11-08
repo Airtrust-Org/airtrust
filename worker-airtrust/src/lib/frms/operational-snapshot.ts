@@ -1017,6 +1017,22 @@ interface OperationalSnapshotRows {
  * A janela aqui é a janela INTERNA de cálculo — não necessariamente o intervalo
  * pedido pelo cliente.
  */
+/** Load objective readiness evidence with tenant/date isolation. Malformed D1 responses fail closed. */
+export async function loadReadinessSnapshotRows(
+  db: D1Database, empresaId: number, inicio: string, fim: string,
+): Promise<ReadinessSnapshotRow[]> {
+  const result = await db.prepare(`SELECT reference_date AS data_operacional, CAST(funcionario_id AS INTEGER) AS funcionario_id,
+                       classification, protocol_version
+                  FROM frms_readiness_assessment
+                 WHERE empresa_id = ? AND deleted_at IS NULL
+                   AND reference_date >= ? AND reference_date <= ?`)
+    .bind(empresaId, inicio, fim).all<ReadinessSnapshotRow>();
+  if (!result || !Array.isArray(result.results)) {
+    throw new Error('FRMS_READINESS_QUERY_INCOMPLETE');
+  }
+  return result.results;
+}
+
 async function loadOperationalSnapshotRows(
   db: D1Database,
   empresaId: number,
@@ -1227,12 +1243,7 @@ async function loadOperationalSnapshotRows(
         empresaId, janelaFim, missionHistoryStart,
       )
       .all<MissionPeriodRow>(),
-    db.prepare(`SELECT reference_date AS data_operacional, CAST(funcionario_id AS INTEGER) AS funcionario_id,
-                       classification, protocol_version
-                  FROM frms_readiness_assessment
-                 WHERE empresa_id = ? AND deleted_at IS NULL
-                   AND reference_date >= ? AND reference_date <= ?`)
-      .bind(empresaId, janelaInicio, janelaFim).all<ReadinessSnapshotRow>(),
+    loadReadinessSnapshotRows(db, empresaId, janelaInicio, janelaFim),
   ]);
 
   return {
@@ -1251,7 +1262,7 @@ async function loadOperationalSnapshotRows(
       operational_data_source: row.operational_data_source,
     })),
     checkins: checkinsResult.results || [],
-    readiness: readinessResult.results || [],
+    readiness: readinessResult,
     effectiveness: (effectivenessResult.results || []).map((row) => {
       let parsed: EffectivenessResult['componentes'] | null = null;
       if (row.effectiveness_componentes_json) {
