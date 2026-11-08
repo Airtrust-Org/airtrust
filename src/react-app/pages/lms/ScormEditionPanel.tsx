@@ -68,6 +68,11 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
 }) {
   const sha = String(pkg.packageSha256 ?? '');
   const formative = pkg.certificationProfile === FORMATIVE;
+  // Distinguish content with a separate certifying exam from scored exams
+  // within the SCO. Eligibility comes from the Worker's stored validation.
+  const externalContent = pkg.authoringReview?.externalExam === true &&
+    pkg.authoringReview?.privateRelease === false;
+  const directContent = formative || externalContent;
   const validated = pkg.status === 'VALIDATED';
   const preflight = useScormActivationPreflight(cursoId, pkg.packageId, validated);
   const runConformance = useRunScormPackageConformance(cursoId);
@@ -96,6 +101,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
   const awaitingApproval = pending.has('ADMIN_APPROVAL');
   const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
+  const directExternalReady = !externalContent || Boolean(data?.canActivate && Number(data.course.masteryScore) > 0);
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -117,13 +123,14 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
       <p className="font-medium">
         {pkg.status === 'ACTIVE' ? 'Conteúdo atual' : pkg.status === 'VALIDATED' ? 'Nova edição recebida' : pkg.status === 'REJECTED' ? 'ZIP recusado' : 'Edição anterior'} · SHA {sha12(sha)}
         {formative ? <span className="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-900">Formativo · sem prova final</span> : null}
-        {pkg.assessmentPolicy === 'SCORED' ? <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs">Avaliativo</span> : null}
+        {externalContent ? <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-900">Conteúdo · prova externa</span> : null}
+        {pkg.assessmentPolicy === 'SCORED' && !externalContent ? <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs">Avaliativo</span> : null}
       </p>
       {pkg.arquivoNome ? <p className="text-xs opacity-70">{pkg.arquivoNome}</p> : null}
       <p className="font-mono text-xs break-all opacity-70">{sha}</p>
       <p>
         Estático: {pkg.structural?.status ?? '—'}
-        {formative ? null : <> · Runtime: {pkg.runtime?.status ?? pkg.conformance?.status ?? 'PENDENTE'} · Certificação funcional: {pkg.functionalCertification?.status === 'CERTIFIED' ? 'certificada' : 'pendente'} · Publicável: {pkg.publishable ? 'sim' : 'não'}</>}
+        {directContent ? null : <> · Runtime: {pkg.runtime?.status ?? pkg.conformance?.status ?? 'PENDENTE'} · Certificação funcional: {pkg.functionalCertification?.status === 'CERTIFIED' ? 'certificada' : 'pendente'} · Publicável: {pkg.publishable ? 'sim' : 'não'}</>}
       </p>
       {(pkg.runtime?.errors ?? pkg.completionManifest?.errors ?? []).map((reason: string) => (
         <p key={reason} className="text-rose-600">{reason}</p>
@@ -136,20 +143,25 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
           <Button type="button" variant="secondary" onClick={() => void preflight.refetch()}>Tentar novamente</Button>
         </div>
       ) : null}
-      {validated && formative && data ? (
+      {validated && directContent && data ? (
         <div className="mt-3 space-y-2 rounded border border-emerald-300 bg-emerald-50 p-3 text-emerald-950">
           <p className="font-semibold">Edição validada — substituição direta disponível</p>
-          <p className="text-xs">A validação do servidor confere estrutura, manifesto, atividades, SHA e arquivos no armazenamento antes de trocar o conteúdo. Não é necessário importar JSON ou obter homologação manual.</p>
+          <p className="text-xs">O servidor verifica o ZIP, SHA e arquivos antes da ativação. Uma falha mantém a edição anterior.</p>
+          {externalContent ? <p className="text-xs">Este pacote contém somente o conteúdo. A prova externa e sua nota continuam obrigatórias para a qualificação do aluno.</p> : null}
+          {externalContent && !directExternalReady ? <p className="text-xs" role="alert">A substituição ainda não é permitida: confira os requisitos do curso e a nota mínima configurada.</p> : null}
           {data.incomingPolicy === 'FORMATIVE' ? (
             <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>
           ) : null}
-          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending}
+          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending || !directExternalReady}
             onClick={() => {
               void directReplace.mutateAsync({
                 packageId: pkg.packageId,
                 confirm: { cursoId, packageSha256: sha,
                   ...(inProgress ? { acknowledgeInProgress: inProgress } : {}) },
-              }).then(() => toast.success('Conteúdo substituído. Histórico preservado.'))
+              }).then((result) => {
+                  if (result.status !== 'ACTIVE') throw new Error('Ativação não confirmada pelo Worker.');
+                  toast.success('Conteúdo substituído. Histórico preservado.');
+                })
                 .catch((error: unknown) => toast.error(errorText(error)));
             }}>
 Substituir esta edição já enviada
@@ -158,7 +170,7 @@ Substituir esta edição já enviada
         </div>
       ) : null}
 
-      {validated && data && !formative ? (
+      {validated && data && !directContent ? (
         <details open={!formative} className="mt-3 rounded border p-2">
           <summary className="cursor-pointer text-xs font-medium">{formative ? 'Detalhes técnicos (opcional)' : 'Detalhes de ativação'}</summary>
         <div className="mt-3 space-y-3">
@@ -350,14 +362,15 @@ export default function ScormEditionPanel({ cursoId, versions, isAdmin }: {
       {productionUpload ? (
         <div className="rounded-lg border p-3 text-sm">
           <label htmlFor={`scorm-direct-upload-${cursoId}`} className="block font-medium">
-            Enviar ZIP formativo e substituir imediatamente
+            Enviar ZIP SCORM e substituir automaticamente
           </label>
           <p className="mt-1 mb-2 text-xs opacity-70">
-            Ao selecionar o arquivo, o Worker valida o pacote e substitui a edição ativa automaticamente.
-            Em caso de falha, a edição anterior permanece ativa. Histórico concluído é preservado.
+            ZIPs formativos e conteúdos com prova externa são ativados automaticamente após validação do Worker.
+            Pacotes com prova dentro do SCORM continuam sujeitos à certificação funcional.
+            Em caso de falha, a edição anterior e o histórico concluído são preservados.
           </p>
           <input id={`scorm-direct-upload-${cursoId}`} type="file" accept=".zip,application/zip"
-            aria-label="Selecionar ZIP formativo e substituir"
+            aria-label="Selecionar ZIP SCORM para substituição automática"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
