@@ -243,7 +243,25 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-lifecycle');
   await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
 
-  const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  // Record network status without exposing request headers or employee data.
+  const catalogNetwork: string[] = [];
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push('REQUEST_FAILED');
+    }
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push(`HTTP_${response.status()}`);
+    }
+  });
+  let catalogs: ApiResult;
+  try {
+    catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : 'UNKNOWN';
+    throw new Error(`QA_CATALOG_READBACK_FAILED:network=${catalogNetwork.join(',') || 'NO_RESPONSE'}:${failure}`);
+  }
   expect(catalogs.ok, JSON.stringify(catalogs.json)).toBe(true);
   const sector = catalogs.json.data.setores.find((item: any) => item.nome === sectorName);
   const fn = catalogs.json.data.funcoes.find((item: any) => item.nome === functionName);
