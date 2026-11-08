@@ -9,12 +9,12 @@ const SHA = 'da0a36e661a1b592c47867e162841e3fc91b56d09e1e2feb7ea4c39f3c50f0ae';
 const OLD = 'e'.repeat(64);
 
 const m = vi.hoisted(() => ({
-  preflight: { data: undefined as unknown }, uploadZip: vi.fn(),
+  preflight: { data: undefined as unknown }, uploadZip: vi.fn(), production: false,
   approve: vi.fn(), activate: vi.fn(), directReplace: vi.fn(), rollback: vi.fn(), importEvidence: vi.fn(), conformance: vi.fn(), refetch: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn().mockResolvedValue(undefined) }) }));
-vi.mock('./lmsScormDirectUploadPolicy', () => ({ allowDirectScormUpload: (isAdmin: boolean) => isAdmin }));
+vi.mock('./lmsScormDirectUploadPolicy', () => ({ allowDirectScormUpload: (isAdmin: boolean) => isAdmin && m.production }));
 vi.mock('./lmsContentUpload', () => ({ uploadScormInactiveProductionCandidate: m.uploadZip }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/react-app/components/Button', () => ({
@@ -49,7 +49,10 @@ function preflight(over: Record<string, unknown> = {}, failing: string[] = []) {
 }
 
 describe('ScormEditionPanel — formative edition workflow', () => {
-  beforeEach(() => { Object.values(m).forEach((fn) => typeof fn === 'function' && 'mockReset' in fn && fn.mockReset()); });
+  beforeEach(() => {
+    Object.values(m).forEach((fn) => typeof fn === 'function' && 'mockReset' in fn && fn.mockReset());
+    m.production = false;
+  });
 
   it('formative editions do not expose signed homologation or a second activation ceremony', () => {
     m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
@@ -119,12 +122,13 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     expect((screen.getByRole('button', { name: 'Substituir esta edição já enviada' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('selecting a formative ZIP in course details uploads and replaces in one operation', async () => {
+  it('selecting a ZIP in course details uploads and replaces in one operation', async () => {
+    m.production = true;
     m.preflight = { data: undefined };
     m.uploadZip.mockResolvedValue({ status: 'ACTIVE', packageId: 'p1', packageSha256: SHA });
     render(<ScormEditionPanel cursoId={55} versions={[]} isAdmin />);
     await userEvent.upload(
-      screen.getByLabelText('Selecionar ZIP formativo e substituir'),
+      screen.getByLabelText('Selecionar ZIP para substituir conteúdo'),
       new File(['zip'], 'aw139.zip', { type: 'application/zip' }),
     );
     await waitFor(() => expect(m.uploadZip).toHaveBeenCalledWith(expect.objectContaining({
@@ -133,10 +137,89 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     expect(m.uploadZip.mock.calls[0][0].file.name).toBe('aw139.zip');
   });
 
+  it('activates an existing validated EXTERNAL exam package without a second ZIP upload or a runtime certification ceremony', async () => {
+    m.preflight = preflight({
+      incomingPolicy: null,
+      impact: { terminalToFreeze: 0, inProgress: 0, notStarted: 0 },
+      canActivate: true,
+    });
+    m.directReplace.mockResolvedValue({ status: 'ACTIVE' });
+    const external = {
+      ...candidate,
+      certificationProfile: null, assessmentPolicy: null, publishable: false,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+      runtime: { status: 'PASS' },
+      functionalCertification: { status: 'UNCERTIFIED' },
+    };
+    render(<ScormEditionPanel cursoId={78} versions={[external]} isAdmin />);
+    expect(screen.getByText('Conteúdo · prova externa')).toBeTruthy();
+    expect(screen.getByText(/A prova externa e sua nota continuam obrigatórias/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Executar conformance' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Substituir esta edição já enviada' }));
+    await waitFor(() => expect(m.directReplace).toHaveBeenCalledWith({
+      packageId: 'pkg-new', confirm: { cursoId: 78, packageSha256: SHA },
+    }));
+    expect(m.uploadZip).not.toHaveBeenCalled();
+    expect(m.activate).not.toHaveBeenCalled();
+  });
+
+  it('does not offer direct replacement for private external-exam ZIPs', () => {
+    m.preflight = preflight();
+    render(<ScormEditionPanel cursoId={78} versions={[{
+      ...candidate, certificationProfile: null, assessmentPolicy: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: true },
+      publishable: false,
+    }]} isAdmin />);
+    expect(screen.queryByRole('button', { name: 'Substituir esta edição já enviada' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Executar conformance' })).toBeTruthy();
+  });
+
+  it('blocks direct external activation when the server preflight rejects the course policy', () => {
+    m.preflight = preflight({ canActivate: false }, ['SCORED_THRESHOLD_PRESENT']);
+    render(<ScormEditionPanel cursoId={78} versions={[{
+      ...candidate, certificationProfile: null, assessmentPolicy: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+      publishable: false,
+    }]} isAdmin />);
+    expect((screen.getByRole('button', { name: 'Substituir esta edição já enviada' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('A substituição ainda não é permitida');
+  });
+
+  it('rejects direct external activation in the UI when the course has no positive external-exam threshold', () => {
+    m.preflight = preflight({
+      incomingPolicy: null, canActivate: true,
+      course: { id: 78, titulo: 'Atendimento e Rampa', currentPolicy: 'SCORED', masteryScore: 0 },
+    });
+    render(<ScormEditionPanel cursoId={78} versions={[{
+      ...candidate, certificationProfile: null, assessmentPolicy: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+      publishable: false,
+    }]} isAdmin />);
+    expect((screen.getByRole('button', { name: 'Substituir esta edição já enviada' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('production shows one upload action, not edition, conformance or activation steps', () => {
+    m.production = true;
+    m.preflight = preflight({}, ['JOURNEY_EVIDENCE', 'ADMIN_APPROVAL']);
+    render(<ScormEditionPanel cursoId={78} versions={[candidate]} isAdmin />);
+    expect(screen.getByLabelText('Selecionar ZIP para substituir conteúdo')).toBeTruthy();
+    expect(screen.queryByText(/Nova edição recebida/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Executar conformance' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ativar versão' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Substituir esta edição já enviada' })).toBeNull();
+  });
+
+  it('production displays the active content without an edition/version table', () => {
+    m.production = true;
+    render(<ScormEditionPanel cursoId={78} versions={[{ ...candidate, status: 'ACTIVE' }]} isAdmin />);
+    expect(screen.getByText('Conteúdo atual ativo.')).toBeTruthy();
+    expect(screen.queryByText(/SHA/)).toBeNull();
+  });
+
   it('a non-administrator has no direct-upload field', () => {
     m.preflight = { data: undefined };
     render(<ScormEditionPanel cursoId={55} versions={[]} isAdmin={false} />);
-    expect(screen.queryByLabelText('Selecionar ZIP formativo e substituir')).toBeNull();
+    expect(screen.queryByLabelText('Selecionar ZIP para substituir conteúdo')).toBeNull();
   });
 
   it('the active edition offers rollback to the previous one only after typing its SHA prefix', async () => {

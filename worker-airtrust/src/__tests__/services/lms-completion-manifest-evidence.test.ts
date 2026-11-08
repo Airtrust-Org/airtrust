@@ -146,6 +146,56 @@ describe('política de avaliação do servidor: NONE não equivale a EXTERNAL', 
     expect(r).toMatchObject({ eligible_for_server_verification: true,
       code: 'SCORM_READY_FOR_SERVER_VERIFICATION', missing: [] });
   });
+  it('SCORED + conteúdo EXTERNAL permite iniciar a prova sem nota SCORM após o estudo completo', () => {
+    // Regression: a content-only SCO records completed but intentionally never
+    // writes score_raw/passed; approval is issued only by the separate exam.
+    const evidence = evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full);
+    const study = evaluateScormClosureReadiness({
+      mode: 'reconcile', commit: { lesson_status: 'completed' },
+      wasCompleted: false, cmiJson: full, location: { current: 4, total: 4 },
+      policy: 'SCORED', masteryScore: 80, scorePct: null, manifest: evidence,
+    });
+    expect(study).toMatchObject({
+      code: 'EXTERNAL_ASSESSMENT_PENDING', eligible_for_server_verification: false,
+      terminal_status_verified: true, every_slide_verified: true,
+    });
+    expect(study.missing).toEqual(['verified_external_assessment']);
+    expect(isStudyCompleteAwaitingExam(study)).toBe(true);
+
+    const passed = evaluateScormClosureReadiness({
+      mode: 'reconcile', commit: { lesson_status: 'completed' },
+      wasCompleted: false, cmiJson: full, location: { current: 4, total: 4 },
+      policy: 'SCORED', masteryScore: 80, scorePct: null,
+      manifest: { ...evidence, externalExam: {
+        attemptId: 'att-0123456789abcdef', planSha256: 'd'.repeat(64),
+      } },
+    });
+    expect(passed).toMatchObject({
+      code: 'SCORM_READY_FOR_SERVER_VERIFICATION',
+      eligible_for_server_verification: true, assessment_verified: true, missing: [],
+    });
+
+    const incomplete = ledger([1, 2, 3]);
+    const notReady = evaluateScormClosureReadiness({
+      mode: 'reconcile', commit: { lesson_status: 'completed' },
+      wasCompleted: false, cmiJson: incomplete, location: { current: 4, total: 4 },
+      policy: 'SCORED', masteryScore: 80, scorePct: null,
+      manifest: evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), incomplete),
+    });
+    expect(notReady.missing).toContain('manifest_required_units');
+    expect(isStudyCompleteAwaitingExam(notReady)).toBe(false);
+
+    // Legacy SCORED packages without EXTERNAL manifest still require the score.
+    const regular = evaluateScormClosureReadiness({
+      mode: 'reconcile', commit: { lesson_status: 'completed' },
+      wasCompleted: false, cmiJson: full, location: { current: 4, total: 4 },
+      policy: 'SCORED', masteryScore: 80, scorePct: null,
+      manifest: evidenceFor(manifest({ assessmentMode: 'SCORM' }), full),
+    });
+    expect(regular.missing).toContain('assessment_score');
+    expect(isStudyCompleteAwaitingExam(regular)).toBe(false);
+  });
+
   it('EXTERNAL não é interpretado como NONE sem comprovação independente', () => {
     const r = readiness(evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full), full);
     expect(r).toMatchObject({ eligible_for_server_verification: false,

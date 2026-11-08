@@ -153,12 +153,12 @@ test('signer rejects ZIP drift, runtime mismatch, incomplete PDF and missing sec
   const f=fixture();try{
     assert.throws(()=>f.sign({secret:''}),/SECRET_MISSING/);
     assert.throws(()=>f.sign({runtimeSha:'c'.repeat(40)}),/RUNTIME_SHA_DRIFT/);
+    // Restore byte-for-byte. Re-zipping identical entries can change the ZIP
+    // metadata (mtime), which must not be silently accepted as the old SHA.
+    const originalZipBytes = readFileSync(f.candidate.zipPath);
     writeFileSync(f.candidate.zipPath,'different bytes');
     assert.throws(()=>f.sign(),/ZIP_SHA_DRIFT/);
-    writeFileSync(f.candidate.zipPath,zipSync({
-      'imsmanifest.xml':strToU8('<manifest><resources><resource href="index.html"/></resources></manifest>'),
-      'index.html':strToU8('<html><body><h1>Synthetic QA</h1></body></html>'),
-    }));
+    writeFileSync(f.candidate.zipPath, originalZipBytes);
     writeFileSync(f.pdfPaths.CHROMIUM,'not a certificate');
     assert.throws(()=>f.sign(),/CERTIFICATE_DOCUMENT_UNVERIFIED/);
   }finally{rmSync(f.dir,{recursive:true,force:true});}

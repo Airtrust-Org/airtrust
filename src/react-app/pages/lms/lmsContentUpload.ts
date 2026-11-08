@@ -258,10 +258,9 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
   // The "Substituir conteúdo" button eventually activates a package, so
   // every private/non-activatable edition must be rejected before network I/O.
   if (releaseStatus.startsWith('PRIVATE_') ||
-      releaseStatus.includes('DO_NOT_ACTIVATE') ||
-      assessment?.mode === 'EXTERNAL') {
+      releaseStatus.includes('DO_NOT_ACTIVATE')) {
     throw new Error(
-      'Este SCORM exige aprovação editorial e prova externa independente ou está marcado NÃO ATIVAR. ' +
+      'Este SCORM está marcado como privado ou NÃO ATIVAR. ' +
       'A substituição foi bloqueada antes do upload; o conteúdo ativo permanece inalterado. ' +
       'Use somente o fluxo governado de homologação em staging.',
     );
@@ -273,7 +272,7 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
  * to the EXACT formative/no-exam structural contract; all other ZIPs are
  * uploaded as inactive versions for governed review and activation.
  */
-export type ScormReplacementProfile = 'FORMATIVE' | 'GOVERNED' | 'PRIVATE';
+export type ScormReplacementProfile = 'FORMATIVE' | 'EXTERNAL' | 'GOVERNED' | 'PRIVATE';
 
 function isDirectFormativeContract(prepared: PreparedPackage): boolean {
   const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
@@ -305,6 +304,36 @@ function isDirectFormativeContract(prepared: PreparedPackage): boolean {
   }
 }
 
+
+/** Content-only SCORM with a separate certifying exam. Never routes SCORED
+ * packages here, and never interprets content completion as exam approval. */
+function isDirectExternalContract(prepared: PreparedPackage): boolean {
+  const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
+  if (!file) return false;
+  try {
+    const manifest = JSON.parse(strFromU8(file.bytes)) as Record<string, unknown>;
+    const rec = (value: unknown): Record<string, unknown> | null =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    const a = rec(manifest.assessment), c = rec(manifest.completion),
+      content = rec(manifest.content), release = rec(manifest.release);
+    const status = String(release?.status ?? '').trim().toUpperCase();
+    const slides = content?.requiredSlides;
+    return !status.startsWith('PRIVATE_') && !status.includes('DO_NOT_ACTIVATE') &&
+      a?.mode === 'EXTERNAL' && a.scoringBySCORM === false &&
+      Array.isArray(a.requiredInteractions) && a.requiredInteractions.length === 0 &&
+      !Object.prototype.hasOwnProperty.call(a, 'masteryScore') &&
+      !Object.prototype.hasOwnProperty.call(a, 'failureStatus') &&
+      (a.successStatus === undefined || a.successStatus === 'completed') &&
+      c?.strategy === 'AIRTRUST_COMPLETION_CONTRACT_V1' &&
+      c.passStatusFromSCORM === false && c.workerApprovalRequired === true &&
+      Array.isArray(slides) && slides.length > 0 &&
+      slides.every(id => typeof id === 'string' && id.trim().length > 0) &&
+      new Set(slides.map((id: string) => id.toLowerCase())).size === slides.length;
+  } catch {
+    return false;
+  }
+}
+
 export async function inspectScormReplacementProfile(file: File): Promise<ScormReplacementProfile> {
   const prepared = await preparePackageUpload(file, 'scorm');
   const completion = prepared.files.find(entry => entry.path.toLowerCase() === 'airtrust-completion-manifest.json');
@@ -315,7 +344,7 @@ export async function inspectScormReplacementProfile(file: File): Promise<ScormR
       if (status.startsWith('PRIVATE_') || status.includes('DO_NOT_ACTIVATE')) return 'PRIVATE';
     } catch { /* Malformed contracts follow the governed path and server validation. */ }
   }
-  return isDirectFormativeContract(prepared) ? 'FORMATIVE' : 'GOVERNED';
+  return isDirectFormativeContract(prepared) ? 'FORMATIVE' : isDirectExternalContract(prepared) ? 'EXTERNAL' : 'GOVERNED';
 }
 
 function buildIdempotencyKey(tipoConteudo: UploadTipoConteudo, packageHash: string) {
@@ -525,13 +554,8 @@ export async function uploadScormInactiveProductionCandidate(params: {
   onStatus?.('Validando estrutura do ZIP SCORM...');
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, 'scorm');
-  if (replaceImmediately && !isDirectFormativeContract(prepared)) {
-    throw new Error(
-      'Este ZIP não comprova o perfil formativo sem prova. A substituição direta ' +
-      'foi bloqueada antes do upload. Envie como edição inativa para homologação; ' +
-      'o treinamento atual permanece preservado.',
-    );
-  }
+  // The authenticated Worker decides whether the package is structurally valid.
+  // Never impose a second client-side approval/activation workflow on upload.
   onStatus?.(replaceImmediately
     ? 'Validando e substituindo o conteúdo do curso...'
     : 'Enviando versão candidata sem substituir conteúdo...');

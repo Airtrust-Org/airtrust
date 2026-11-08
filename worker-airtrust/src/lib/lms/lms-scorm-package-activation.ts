@@ -26,11 +26,13 @@ export type CertifiedScormActivation = Readonly<{
    * the pre-statements are safe even if the activation itself is then refused.
    */
   policy?: Readonly<{ incoming: 'SCORED' | 'FORMATIVE' }>;
+  /** Only explicit administrator direct replacement publishes a draft course. */
+  publishCourse?: boolean;
 }>;
 
 export async function commitCertifiedScormActivation(input: CertifiedScormActivation): Promise<boolean> {
   const { db, empresaId, cursoId, packageId, packageSha256, prefix,
-    launchFile, originalFilename, actorId, auditId, validationJson, observed, policy } = input;
+    launchFile, originalFilename, actorId, auditId, validationJson, observed, policy, publishCourse } = input;
   if (!validationJson) return false;
   // The candidate must still be the exact VALIDATED, attested bytes for any
   // pre-statement to run; otherwise a stale request must change nothing.
@@ -108,7 +110,8 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
     db.prepare(`UPDATE lms_cursos SET tipo_conteudo='scorm',
       scorm_package_r2_prefix=?, scorm_launch_file=?, scorm_versao='1.2',
       scorm_assessment_policy=COALESCE(?,scorm_assessment_policy),
-      conteudo_arquivo_nome=COALESCE(?,conteudo_arquivo_nome),updated_at=datetime('now')
+      conteudo_arquivo_nome=COALESCE(?,conteudo_arquivo_nome),
+      ${publishCourse ? 'ativo=1, publicado=1,' : ''}updated_at=datetime('now')
       WHERE id=? AND empresa_id=? AND deleted_at IS NULL AND changes()=1
         AND EXISTS(SELECT 1 FROM lms_scorm_package_versions p
           WHERE p.id=? AND p.empresa_id=? AND p.curso_id=?

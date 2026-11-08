@@ -131,7 +131,7 @@ describe('dashboard home reliability fixes', () => {
               first: async () => ({ name: String(args[0] || '') }),
             };
           }
-          if (query.includes('WITH active_employees AS')) {
+          if (query.includes('active_employees AS')) {
             return {
               first: async () => ({
                 pessoas: 10,
@@ -163,7 +163,9 @@ describe('dashboard home reliability fixes', () => {
       escopo_modelo: 'MATRIZ_CANONICA',
     });
 
-    const sql = calls.find((call) => call.query.includes('WITH active_employees AS'))?.query || '';
+    const complianceCall = calls.find((call) => call.query.includes('active_employees AS'));
+    const sql = complianceCall?.query || '';
+    expect(complianceCall?.args[0]).toBe('2026-05-26');
     expect(sql).toContain("classe_requisito, '')) IN ('DOCUMENTO', 'AVALIACAO')");
     expect(sql).toContain('treinamento_requisitos');
     expect(sql).not.toContain('qualificacoes_tipos_setores');

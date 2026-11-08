@@ -39,6 +39,8 @@ describe('resilient scheduled router', () => {
     expect(tenMinute).toEqual({
       useResilientJobs: true,
       runDailyAlerts: false,
+      runLicenseAlerts: false,
+      runRefreshTokenCleanup: false,
       runComplianceReports: true,
       runEadRenewal: true,
       runComplianceRoster: true,
@@ -51,6 +53,8 @@ describe('resilient scheduled router', () => {
 
     const daily = getResilientCronPlan('0 8 * * *', atEightUtc);
     expect(daily.runDailyAlerts).toBe(true);
+    expect(daily.runLicenseAlerts).toBe(true);
+    expect(daily.runRefreshTokenCleanup).toBe(true);
     expect(daily.runComplianceReports).toBe(true);
     expect(daily.runComplianceRoster).toBe(true);
     expect(daily.runDailyFrms).toBe(true);
@@ -112,6 +116,8 @@ describe('resilient scheduled router', () => {
     expect(router).toContain("await runStep('training-compliance-reports'");
     expect(router).toContain("await runStep('lms-compliance-roster'");
     expect(router).toContain("await runStep('training-alerts'");
+    expect(router).toContain("await runStep('license-alerts', plan.runLicenseAlerts");
+    expect(router).toContain("await runStep('refresh-token-cleanup', plan.runRefreshTokenCleanup");
     expect(router).not.toContain("await runStep('lms-reminders'");
     expect(router).toContain("await runStep('sigvoos-frms'");
     expect(router).toContain("await runStep('domain-events'");

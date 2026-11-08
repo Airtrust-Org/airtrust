@@ -11,6 +11,12 @@ test('staging and production guards verify only the official gates', () => {
   assert.doesNotMatch(staging, /ignoredJobs/);
   assert.doesNotMatch(production, /ignoredJobs/);
   assert.match(production, /checks:\s*read/);
+  assert.match(production, /validate-production-release-candidate\.mjs/);
+  assert.ok(production.includes('RELEASE_SHA: ${{ inputs.expected_sha }}'));
+  assert.ok(production.includes('ref: ${{ inputs.expected_sha }}'));
+  assert.match(production, /fetch-depth: 0/);
+  assert.match(production, /concurrency:[\s\S]*group: deploy-airtrust-production/);
+
   assert.match(production, /statuses:\s*read/);
   assert.match(staging, /uses: actions\/checkout@v7/);
 });

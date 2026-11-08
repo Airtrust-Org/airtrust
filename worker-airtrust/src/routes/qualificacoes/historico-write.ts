@@ -320,10 +320,10 @@ writeRouter.post(
         .bind(id)
         .run();
 
-      // 2. Calcular nova data de vencimento
-      // Prioridade: hist_validade_meses > tipo_validade
+      // A validade do modelo atual prevalece sobre snapshots legados.
+      // CMA 60+ mantém a exceção semestral calculada abaixo.
       // NULL = sem vencimento (não fabricar 12 meses)
-      let validadeMeses = original.hist_validade_meses ?? original.tipo_validade ?? null;
+      let validadeMeses = original.tipo_validade ?? original.hist_validade_meses ?? null;
       if (validadeMeses === 0) validadeMeses = null;
 
       // Regra CMA semestral: pilotos com mais de 60 anos têm validade de 6 meses
@@ -587,7 +587,7 @@ writeRouter.post(
     // Buscar qualificacao_id pelo código
     const tipo = await db
       .prepare(
-        `SELECT id, categoria, categoria_id, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
+        `SELECT id, categoria, categoria_id, validade, vencimento_fim_mes, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
            FROM qualificacoes_tipos
           WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -597,6 +597,7 @@ writeRouter.post(
         categoria: string;
         categoria_id: number | null;
         validade: number | null;
+        vencimento_fim_mes: number | null;
         carga_horaria: number | null;
         carga_horaria_inicial: number | null;
         carga_horaria_recorrente: number | null;
@@ -672,7 +673,7 @@ writeRouter.post(
       dataConclusao: data_conclusao,
       dataVencimento: data_vencimento,
       validadeMeses: validadeMesesInsert ?? validade_meses,
-      vencimentoFimMes: 0,
+      vencimentoFimMes: tipo.vencimento_fim_mes ?? 0,
     });
 
     const instrutorResolution = await resolveInstrutorNomePorPayload(db, tenantCtx.empresaId, {
@@ -939,26 +940,31 @@ writeRouter.put(
     const cargaContext = await db
       .prepare(
         `SELECT qh.tipo_treinamento, qh.carga_horaria,
-                qh.validade_meses, qh.data_vencimento, qh.qualificacao_codigo, qt.validade,
+                qh.validade_meses, qh.data_vencimento, qh.qualificacao_codigo,
+                qt.validade AS tipo_validade, qt.vencimento_fim_mes,
                 qt.carga_horaria, qt.carga_horaria_inicial, qt.carga_horaria_recorrente
            FROM qualificacoes_historico qh
-           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
-          WHERE qh.id = ? AND qh.deleted_at IS NULL`,
+           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
+          WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
       )
-      .bind(id)
+      .bind(id, tenantCtx.empresaId)
       .first<{
         tipo_treinamento: string | null;
         carga_horaria: number | null;
         validade_meses: number | null;
         data_vencimento: string | null;
         qualificacao_codigo: string | null;
-        validade: number | null;
+        tipo_validade: number | null;
+        vencimento_fim_mes: number | null;
         carga_horaria_inicial: number | null;
         carga_horaria_recorrente: number | null;
       }>();
 
+    // Regra atual do modelo é canônica; CMA semestral tem exceção por idade.
+    const isCmaSemestral = String(cargaContext?.qualificacao_codigo || '').trim().toUpperCase() === 'CMA' && Number(cargaContext?.validade_meses) === 6;
+    const validadeMesesEfetiva = isCmaSemestral ? 6 : (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
     const tipoTreinamentoFinal =
-      (Number(cargaContext?.validade_meses ?? cargaContext?.validade ?? 0) === 6
+      (Number(validadeMesesEfetiva ?? 0) === 6
         ? 'SEMESTRAL'
         : undefined) ||
       tipoTreinamentoBody ||
@@ -974,8 +980,8 @@ writeRouter.put(
       : calcularDataVencimento({
           dataConclusao: data_conclusao,
           dataVencimento: data_vencimento,
-          validadeMeses: cargaContext?.validade_meses ?? cargaContext?.validade,
-          vencimentoFimMes: 0,
+          validadeMeses: validadeMesesEfetiva,
+          vencimentoFimMes: cargaContext?.vencimento_fim_mes ?? 0,
         });
 
     await db
@@ -1187,26 +1193,31 @@ writeRouter.patch(
 
     const cargaContext = await db
       .prepare(
-        `SELECT qt.validade_meses, qt.validade, qt.data_vencimento, qt.qualificacao_codigo
+        `SELECT qh.validade_meses, qt.validade AS tipo_validade,
+                qh.data_vencimento, qh.qualificacao_codigo, qt.vencimento_fim_mes
            FROM qualificacoes_historico qh
-           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
-          WHERE qh.id = ? AND qh.deleted_at IS NULL`,
+           LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
+          WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
       )
-      .bind(id)
+      .bind(id, tenantCtx.empresaId)
       .first<{
         validade_meses: number | null;
-        validade: number | null;
+        tipo_validade: number | null;
         data_vencimento: string | null;
         qualificacao_codigo: string | null;
+        vencimento_fim_mes: number | null;
       }>();
 
+    // A validade atual do modelo prevalece sobre o snapshot legado, salvo CMA semestral.
+    const isCmaSemestral = String(cargaContext?.qualificacao_codigo || '').trim().toUpperCase() === 'CMA' && Number(cargaContext?.validade_meses) === 6;
+    const validadeMesesEfetiva = isCmaSemestral ? 6 : (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
     const dataVencimentoFinal = isG1SemQualificacaoCode(cargaContext?.qualificacao_codigo)
       ? (cargaContext?.data_vencimento ?? null)
       : calcularDataVencimento({
           dataConclusao: novaDataPlanejada,
           dataVencimento: null,
-          validadeMeses: cargaContext?.validade_meses ?? cargaContext?.validade,
-          vencimentoFimMes: 0,
+          validadeMeses: validadeMesesEfetiva,
+          vencimentoFimMes: cargaContext?.vencimento_fim_mes ?? 0,
         });
 
     await db
@@ -1216,9 +1227,9 @@ writeRouter.patch(
                 data_vencimento = ?,
                 status = '${QUALIFICACAO_STATUS.PLANEJADA}',
                 updated_at = datetime('now')
-          WHERE id = ? AND deleted_at IS NULL`,
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
-      .bind(novaDataPlanejada, dataVencimentoFinal, id)
+      .bind(novaDataPlanejada, dataVencimentoFinal, id, tenantCtx.empresaId)
       .run();
 
     await invalidateMaterializedStats(db);

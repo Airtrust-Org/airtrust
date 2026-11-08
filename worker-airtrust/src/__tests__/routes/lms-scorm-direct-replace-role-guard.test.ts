@@ -20,6 +20,36 @@ describe('SCORM direct replacement administrator role boundary', () => {
     expect(route).toContain("requireOperacoesCurso('update')");
   });
 
+  it('routes an existing EXTERNAL content-only candidate by the persisted tenant-scoped manifest rather than UI input', () => {
+    const start = source.indexOf("app.post('/:id/scorm-package-versions/:packageId/replace-direct'");
+    const end = source.indexOf("app.post('/:id/scorm-package-versions/:packageId/activate'", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const route = source.slice(start, end);
+    expect(route).toContain('readCandidate(c.env.DB, empresaId, cursoId, packageId)');
+    expect(route).toContain('parseStoredScormValidation<ScormQualityGateResult>');
+    expect(route).toContain('quality?.authoringReview?.externalExam === true');
+    expect(route).toContain("candidate.status === 'VALIDATED'");
+    expect(route).toContain('await preflightDirectFormativeReplacement(');
+    expect(route).toContain('const resolved = refreshed?.row ?? candidate');
+    expect(route).toContain('resolved.certification_profile === FORMATIVE_PROFILE');
+    expect(route).toContain("replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM')");
+    expect(route).not.toContain("c.req.query('externalExam')");
+  });
+
+  it('resolves legacy formative profile before direct ZIP upload dispatch and uses the refreshed in-progress count', () => {
+    const start = source.indexOf("app.post('/:id/scorm-replace'");
+    const end = source.indexOf("app.get('/:id/scorm-package-versions'", start);
+    const route = source.slice(start, end);
+    const reclassify = route.indexOf('const preflight = await preflightDirectFormativeReplacement(');
+    const useResolvedProfile = route.indexOf('preflight.row.certification_profile === FORMATIVE_PROFILE');
+    const replaceFormative = route.indexOf('replaceValidatedFormativeScorm(replaceArgs)');
+    expect(reclassify).toBeGreaterThan(0);
+    expect(useResolvedProfile).toBeGreaterThan(reclassify);
+    expect(replaceFormative).toBeGreaterThan(useResolvedProfile);
+    expect(route).toContain('acknowledgeInProgress: preflight.impact.inProgress');
+  });
+
   it('rejects a GESTOR with an explicit editing grant before the replacement handler can run', async () => {
     const app = new Hono<{ Bindings: Env; Variables: { userRole: string } }>();
     app.onError(errorHandler);

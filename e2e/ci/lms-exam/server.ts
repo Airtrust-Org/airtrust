@@ -44,7 +44,15 @@ async function reset(opts: { viewed?: number[] } = {}) {
   const db = finalizeCertificateDb({ viewed: opts.viewed });
   addAuthTables(db);
   // Tabelas auxiliares lidas por GET /matriculas/:id (conteudo H5P/handoff); vazias e sinteticas.
-  db.exec(`ALTER TABLE lms_cursos ADD COLUMN scorm_versao TEXT; ALTER TABLE lms_cursos ADD COLUMN scorm_launch_file TEXT;`);
+  // The learner's /matriculas/minhas-ead query selects these real LMS
+  // catalogue columns. The synthetic finalization fixture intentionally omits
+  // them; without this adapter the browser smoke logs SQLite 500s while a
+  // narrower UI assertion can still pass (false green).
+  db.exec(`ALTER TABLE lms_cursos ADD COLUMN scorm_versao TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN scorm_launch_file TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN categoria TEXT;
+    ALTER TABLE lms_cursos ADD COLUMN carga_horaria_minutos INTEGER;
+    ALTER TABLE lms_cursos ADD COLUMN thumbnail_r2_key TEXT;`);
   db.exec(`CREATE TABLE lms_h5p_conteudos(id INTEGER PRIMARY KEY, empresa_id INTEGER, r2_key TEXT, deleted_at TEXT);`);
   await publishExam(db as unknown as ExamSqliteD1);
   state = { db, r2: memoryBucket(), renders: 0 };
@@ -55,11 +63,24 @@ app.onError((e, c) => c.json({ success: false, code: (e as { code?: string }).co
   ((e as { statusCode?: number }).statusCode ?? 500) as 500));
 app.use('*', async (c, next) => {
   await next();
-  c.header('Access-Control-Allow-Origin', c.req.header('Origin') ?? '*');
+  const origin = c.req.header('Origin');
+  // Only the synthetic localhost frontend may use credentialed cross-origin
+  // requests. Echoing an arbitrary Origin together with ACA-C is unsafe.
+  const isLocalFrontend = origin === 'http://127.0.0.1:3000' || origin === 'http://localhost:3000';
+  c.header('Access-Control-Allow-Origin', isLocalFrontend ? origin : '*');
+  c.header('Vary', 'Origin');
+  if (isLocalFrontend) c.header('Access-Control-Allow-Credentials', 'true');
   c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, Cache-Control');
   c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 });
 app.options('*', (c) => c.body(null, 204));
+// Only the disposable synthetic browser fixture implements translation here.
+// A real CORS-valid endpoint avoids Playwright route interception for the
+// credentialed cross-origin fallback triggered by the frontend's i18n layer.
+app.post('/api/public/translate', (c) => c.json({
+  success: true, data: { translatedText: '' },
+}));
+
 
 // --- SIMULADO: sessao ---
 const mint = (u: { id: number; role: string }, type: 'access' | 'refresh', ttl: number) => generateJWT({

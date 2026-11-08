@@ -203,7 +203,60 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
     expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('FORMATIVE');
   });
 
-  it('routes AW139/S76-style graded mastery packages to inactive intake, even for admin', async () => {
+  it('routes a content-only EXTERNAL exam package to admin direct replacement without independent attestation', async () => {
+    const f = scormZipWithCompletionContract({
+      assessment: { mode: 'EXTERNAL', scoringBySCORM: false, requiredInteractions: [] },
+      content: { requiredSlides: ['intro', 'procedure', 'fixation'] },
+      completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+      release: { reviewed: false, approved: false, certified: false },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('EXTERNAL');
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(f.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({ status: 'ACTIVE', packageId: 'external-active', packageSha256: sha }));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 84, file: scormFile(f.zip), replaceImmediately: true,
+    });
+    expect(receipt).toEqual({ status: 'ACTIVE', packageId: 'external-active', packageSha256: sha });
+    expect(fetchWithAuthMock.mock.calls[0]?.[0])
+      .toBe('/api/lms/cursos/84/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+  });
+
+  it('keeps the server authoritative for inconsistent or private SCORM ZIPs', async () => {
+    for (const manifest of [
+      {
+        assessment: { mode: 'EXTERNAL', scoringBySCORM: true, requiredInteractions: [] },
+        content: { requiredSlides: ['s1'] },
+        completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+      },
+      {
+        assessment: { mode: 'EXTERNAL', scoringBySCORM: false, requiredInteractions: [] },
+        content: { requiredSlides: ['s1'] },
+        completion: { strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1', passStatusFromSCORM: false, workerApprovalRequired: true },
+        release: { status: 'PRIVATE_CANDIDATE_DO_NOT_ACTIVATE' },
+      },
+    ]) {
+      const f = scormZipWithCompletionContract(manifest);
+      extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+      expect(await inspectScormReplacementProfile(scormFile(f.zip)))
+        .toBe(manifest.release ? 'PRIVATE' : 'GOVERNED');
+      // No second client approval; the Worker may reject unsafe/invalid ZIPs.
+      fetchWithAuthMock.mockResolvedValueOnce(response({
+        ...CANDIDATE_VALIDATED, status: 'REJECTED',
+        structural: { status: 'FAIL', errors: ['Pacote inválido'] },
+      }));
+      await expect(uploadScormInactiveProductionCandidate({
+        cursoId: 84, file: scormFile(f.zip), replaceImmediately: true,
+      })).rejects.toThrow(/recusado|rejeitado/);
+    }
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchWithAuthMock.mock.calls) {
+      expect(call[0]).toBe('/api/lms/cursos/84/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+    }
+  });
+
+  it('preserves an explicit inactive intake path for governed QA when requested', async () => {
     const f = scormZipWithCompletionContract({
       ...noExamContract(),
       assessment: { requiredInteractions: ['q01'], masteryScore: 80, successStatus: 'passed', failureStatus: 'failed' },
@@ -218,15 +271,19 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
     expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/63/scorm-upload');
   });
 
-  it('blocks a forced direct replacement of a scored SOP before any network request', async () => {
+  it('sends scored SCORM to the same one-step Worker replacement without a browser approval gate', async () => {
     const f = scormZipWithCompletionContract({
       ...noExamContract(), assessment: { requiredInteractions: ['q'], masteryScore: 80, successStatus: 'passed' },
     });
     extractBrowserLmsPackageMock.mockReturnValue(f.entries);
-    await expect(uploadScormInactiveProductionCandidate({
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(f.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({ ...CANDIDATE_VALIDATED, packageSha256: sha, status: 'ACTIVE' }));
+    const result = await uploadScormInactiveProductionCandidate({
       cursoId: 62, file: scormFile(f.zip), replaceImmediately: true,
-    })).rejects.toThrow(/não comprova o perfil formativo/);
-    expect(fetchWithAuthMock).not.toHaveBeenCalled();
+    });
+    expect(result).toMatchObject({ status: 'ACTIVE', packageSha256: sha });
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/62/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
   });
 
   it('never directly replaces a private candidate or unproven/invalid manifest', async () => {
@@ -376,7 +433,6 @@ describe('uploadStructuredLmsPackage — SCORM governed package-version flow', (
     ['private R5 QA upload (actual MGM RC1 contract)', { release: { status: 'PRIVATE_QA_UPLOAD_ONLY', reviewed: false }, assessment: { mode: 'NONE' } }],
     ['private draft with mixed-case release marker', { release: { status: ' private_review_pending ' }, assessment: { mode: 'NONE' } }],
     ['explicit non-activation without private prefix', { release: { status: 'CANDIDATE_DO_NOT_ACTIVATE' }, assessment: { mode: 'NONE' } }],
-    ['external examination R5', { release: { status: 'REVIEWED' }, assessment: { mode: 'EXTERNAL' } }],
   ];
   it.each(blockedR5Cases)('blocks %s before any network upload or activation', async (_label, contract) => {
     const fixture = scormZipWithCompletionContract(contract);

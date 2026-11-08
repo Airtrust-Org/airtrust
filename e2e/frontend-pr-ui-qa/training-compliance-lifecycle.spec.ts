@@ -45,26 +45,53 @@ async function api<T = any>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<ApiResult<T>> {
-  return page.evaluate(
+  // Keep an individual stalled request from consuming the seven-minute
+  // lifecycle timeout. Report only a sanitized route and stable error class.
+  const safeRoute = path.split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:id');
+  const request = page.evaluate(
     async ({ apiBase, requestPath, method, body }) => {
       const token =
         window.sessionStorage.getItem('airtrust_token') ||
         window.localStorage.getItem('airtrust_token');
       if (!token) throw new Error('QA_AUTH_TOKEN_MISSING');
-      const response = await fetch(`${apiBase}${requestPath}`, {
-        method: method || 'GET',
-        credentials: 'include',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const json = await response.json().catch(() => ({}));
-      return { status: response.status, ok: response.ok, json };
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 25_000);
+      try {
+        const response = await fetch(`${apiBase}${requestPath}`, {
+          method: method || 'GET',
+          credentials: 'include',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const json = await response.json().catch(() => ({}));
+        return { status: response.status, ok: response.ok, json };
+      } finally {
+        window.clearTimeout(timer);
+      }
     },
     { apiBase: API_BASE, requestPath: path, method: options.method, body: options.body },
   );
+  let evaluationTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        evaluationTimer = setTimeout(() => reject(new Error('QA_API_EVALUATE_TIMEOUT')), 35_000);
+      }),
+    ]);
+  } catch (error) {
+    const className = error instanceof Error
+      ? error.message.includes('AbortError') ? 'REQUEST_ABORTED' :
+        error.message.includes('QA_API_EVALUATE_TIMEOUT') ? 'EVALUATE_TIMEOUT' : error.name
+      : 'UNKNOWN';
+    throw new Error(`QA_LIFECYCLE_API_FAILURE:${options.method || 'GET'}:${safeRoute}:${className}`);
+  } finally {
+    if (evaluationTimer) clearTimeout(evaluationTimer);
+  }
 }
 
 async function employeeSnapshot(page: Page, employeeId: number) {
@@ -185,6 +212,27 @@ async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boo
   return result;
 }
 
+async function assertCompliancePageReady(page: Page) {
+  const heading = page.getByRole('heading', { name: 'Compliance de Treinamentos' });
+  try {
+    // A cold authenticated staging browser can wait for /auth/me and the
+    // operational profile before rendering. Do not turn startup latency into
+    // a false catalog failure, but retain a bounded readiness check.
+    await expect(heading).toBeVisible({ timeout: 25_000 });
+  } catch {
+    const route = new URL(page.url()).pathname;
+    const safeRoute = route === '/treinamentos/compliance' ? 'COMPLIANCE' :
+      route === '/login' ? 'LOGIN' : route === '/' ? 'HOME' : 'OTHER';
+    const visibleState = await page.evaluate(() => ({
+      denied: /acesso negado|sem permissão|acesso não autorizado/i.test(document.body.innerText),
+      moduleUnavailable: /módulo indisponível|não está ativo/i.test(document.body.innerText),
+      loginForm: Boolean(document.querySelector('input[type="password"]')),
+      tokenPresent: Boolean(sessionStorage.getItem('airtrust_token') || localStorage.getItem('airtrust_token')),
+    }));
+    throw new Error(`QA_COMPLIANCE_PAGE_NOT_READY:route=${safeRoute}:denied=${visibleState.denied}:moduleUnavailable=${visibleState.moduleUnavailable}:loginForm=${visibleState.loginForm}:tokenPresent=${visibleState.tokenPresent}`);
+  }
+}
+
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
   page,
 }) => {
@@ -214,9 +262,27 @@ test('full training compliance lifecycle recalculates organization, enrollments 
 
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-lifecycle');
-  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+  await assertCompliancePageReady(page);
 
-  const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  // Record network status without exposing request headers or employee data.
+  const catalogNetwork: string[] = [];
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push('REQUEST_FAILED');
+    }
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push(`HTTP_${response.status()}`);
+    }
+  });
+  let catalogs: ApiResult;
+  try {
+    catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : 'UNKNOWN';
+    throw new Error(`QA_CATALOG_READBACK_FAILED:network=${catalogNetwork.join(',') || 'NO_RESPONSE'}:${failure}`);
+  }
   expect(catalogs.ok, JSON.stringify(catalogs.json)).toBe(true);
   const sector = catalogs.json.data.setores.find((item: any) => item.nome === sectorName);
   const fn = catalogs.json.data.funcoes.find((item: any) => item.nome === functionName);
@@ -639,7 +705,7 @@ test('expired synthetic evidence renews cycle two and issues an authorized PDF',
 
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-cycle-two');
-  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+  await assertCompliancePageReady(page);
 
   const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
   expect(catalogs.ok).toBe(true);

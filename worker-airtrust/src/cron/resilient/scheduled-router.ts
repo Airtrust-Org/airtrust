@@ -10,6 +10,8 @@ import { runDomainEventDispatchJob } from './domain-events';
 import { runEadRenewalJob } from './ead-renewal';
 import { runTrainingComplianceRosterJob } from './compliance-roster';
 import { runSigvoosFrmsJobs } from './sigvoos-frms';
+import { processLicenseAlerts } from '../license-alerts';
+import { cleanupExpiredRefreshTokens } from '../../services/auth-refresh-token';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
 const DAILY_UTC_CRON = TRAINING_ALERT_DAILY_CRON;
@@ -24,6 +26,8 @@ type LegacyScheduledHandler = (
 export interface ResilientCronPlan {
   useResilientJobs: boolean;
   runDailyAlerts: boolean;
+  runLicenseAlerts: boolean;
+  runRefreshTokenCleanup: boolean;
   runComplianceReports: boolean;
   runEadRenewal: boolean;
   runComplianceRoster: boolean;
@@ -40,6 +44,8 @@ export function getResilientCronPlan(cron: string, _now = new Date()): Resilient
   return {
     useResilientJobs: isTenMinute || isDaily,
     runDailyAlerts: isDaily,
+    runLicenseAlerts: isDaily,
+    runRefreshTokenCleanup: isDaily,
     runComplianceReports: isTenMinute || isDaily,
     runEadRenewal: isTenMinute || isDaily,
     runComplianceRoster: isTenMinute || isDaily,
@@ -132,6 +138,11 @@ export async function runResilientScheduledJobs(
   // Preserve the existing ordering. Isolation is sequential rather than
   // Promise.allSettled because SIGVOOS/domain-event/FRMS jobs can have
   // operational dependencies and must not be made concurrent by a reliability fix.
+  // In the delegated legacy handler the cron label is intentionally replaced.
+  // These daily-only jobs were silently skipped without explicit routing.
+  await runStep('refresh-token-cleanup', plan.runRefreshTokenCleanup, () =>
+    cleanupExpiredRefreshTokens(env.DB),
+  );
   await runStep('training-compliance-snapshots', plan.runDailyAlerts, () =>
     refreshTrainingComplianceSnapshots(env),
   );
@@ -149,6 +160,7 @@ export async function runResilientScheduledJobs(
     runDomainEventDispatchJob(env.DB, logger),
   );
   await runStep('daily-frms', plan.runDailyFrms, () => runDailyFrmsOperations(event, env, logger));
+  await runStep('license-alerts', plan.runLicenseAlerts, () => processLicenseAlerts(env));
   await runStep('cron-health', plan.runCronHealth, () =>
     logCronHealthSnapshot(env.DB, logger, now),
   );
