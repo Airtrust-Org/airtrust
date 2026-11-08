@@ -352,17 +352,17 @@ app.post('/:id/scorm-replace',
         409, 'SCORM_REPLACE_STATIC_GATE_FAILED',
       );
     }
-    // Clicking the unambiguous replacement button acknowledges that any open
-    // enrollment uses the incoming course policy; the server supplies its own
-    // contemporaneous count and retains CAS protection on policy+active SHA.
-    const preflight = formative
-      ? await preflightDirectFormativeReplacement({
-          db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
-          packageId: candidate.packageId, userId: actorId(c),
-        })
-      : await evaluateFormativeActivation({
-          db: c.env.DB, empresaId, cursoId, packageId: candidate.packageId,
-        });
+    // Legacy VALIDATED rows may lack a pinned certification profile. Resolve
+    // that from the trusted R2 ZIP before choosing FORMATIVE vs SCORED;
+    // a missing DB column must never turn an exam-free course into scored.
+    const preflight = await preflightDirectFormativeReplacement({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      packageId: candidate.packageId, userId: actorId(c),
+    });
+    const resolvedQuality = parseStoredScormValidation<ScormQualityGateResult>(
+      preflight.row.validation_result_json);
+    const resolvedFormative = preflight.row.certification_profile === FORMATIVE_PROFILE;
+    const resolvedExternalExam = resolvedQuality?.authoringReview?.externalExam === true;
     const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId: candidate.packageId, userId: actorId(c),
@@ -371,9 +371,9 @@ app.post('/:id/scorm-replace',
         acknowledgeInProgress: preflight.impact.inProgress,
       },
     };
-    const data = formative
+    const data = resolvedFormative
       ? await replaceValidatedFormativeScorm(replaceArgs)
-      : await replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM');
+      : await replaceValidatedExternalScorm(replaceArgs, resolvedExternalExam ? 'EXTERNAL' : 'SCORM');
     return c.json({ success: true, data });
   });
 
@@ -712,13 +712,20 @@ app.post('/:id/scorm-package-versions/:packageId/replace-direct',
     // Read the stored, tenant-scoped validation; the browser never chooses
     // the activation policy or declares an external exam.
     const candidate = await readCandidate(c.env.DB, empresaId, cursoId, packageId);
-    const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
+    const refreshed = candidate.status === 'VALIDATED'
+      ? await preflightDirectFormativeReplacement({
+          db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+          packageId, userId: actorId(c),
+        })
+      : null;
+    const resolved = refreshed?.row ?? candidate;
+    const quality = parseStoredScormValidation<ScormQualityGateResult>(resolved.validation_result_json);
     const externalExam = quality?.authoringReview?.externalExam === true;
     const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId, userId: actorId(c), confirm: body.data.confirm,
     };
-    const data = candidate.certification_profile === FORMATIVE_PROFILE
+    const data = resolved.certification_profile === FORMATIVE_PROFILE
       ? await replaceValidatedFormativeScorm(replaceArgs)
       : await replaceValidatedExternalScorm(replaceArgs, externalExam ? 'EXTERNAL' : 'SCORM');
     return c.json({ success: true, data });
