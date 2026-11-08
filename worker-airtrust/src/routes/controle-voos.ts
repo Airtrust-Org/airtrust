@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
-import { assertControleVoosCoordination, requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { assertControleVoosCoordination, hasControleVoosViewAccess, requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosView, requireControleVoosViewOrPilotAccess, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
   parseSigvoosRealPreviewRequest,
   runSigvoosRealApiPreview,
@@ -796,7 +796,7 @@ controleVoos.get(
   },
 );
 
-controleVoos.get('/jornadas', auth(), async (c) => {
+controleVoos.get('/jornadas', auth(), requireControleVoosView(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const filters = parseOperationalReadFilters(c);
 
@@ -818,7 +818,7 @@ controleVoos.get('/jornadas', auth(), async (c) => {
   });
 });
 
-controleVoos.get('/voos', auth(), async (c) => {
+controleVoos.get('/voos', auth(), requireControleVoosView(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const page = Math.max(parseInt(c.req.query('page') || '1', 10) || 1, 1);
   const requestedLimit =
@@ -1019,6 +1019,11 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+  // P06-01: programacao completa so para quem tem acesso de leitura; piloto/tripulante
+  // le apenas voos em que consta na tripulacao (mesma regra do RDV).
+  if (!(await hasControleVoosViewAccess(c))) {
+    await assertRdvSelfScope(c, c.env.DB, empresaId, flight.id, RDV_CAPABILITIES.visualizarProprio);
+  }
   const [presentation, aircraft] = await Promise.all([
     enrichFlightsWithPresentation(c.env.DB, empresaId, [flight]),
     flight.aeronave_id
@@ -1568,7 +1573,7 @@ controleVoos.put('/voos/:id/rdv', auth(), async (c) => {
 
 controleVoos.post('/voos/:id/rdv/finalizar-preenchimento', auth(), finalizeRdvPreenchimentoHandler);
 
-controleVoos.get('/dashboard', auth(), async (c) => {
+controleVoos.get('/dashboard', auth(), requireControleVoosView(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const filters = parseOperationalReadFilters(c);
   const scope = buildFlightScope('v', empresaId, filters);
@@ -1682,7 +1687,7 @@ controleVoos.get('/dashboard', auth(), async (c) => {
   });
 });
 
-controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
+controleVoos.get('/relatorios/resumo-operacional', auth(), requireControleVoosView(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const filters = parseOperationalReadFilters(c, { requireRange: true });
   const scope = buildFlightScope('v', empresaId, filters);
@@ -1891,7 +1896,7 @@ controleVoos.get('/relatorios/resumo-operacional', auth(), async (c) => {
   });
 });
 
-controleVoos.get('/catalogos/:nome', auth(), async (c) => {
+controleVoos.get('/catalogos/:nome', auth(), requireControleVoosViewOrPilotAccess(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const key = catalogKey(c.req.param('nome'));
   if (!key) {

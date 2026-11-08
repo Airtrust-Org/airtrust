@@ -185,6 +185,7 @@ function createSqliteD1(): SqliteD1 {
       CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY,
         funcionario_id INTEGER,
+        perfil TEXT,
         deleted_at TEXT
       );
       CREATE TABLE IF NOT EXISTS usuarios_empresas (
@@ -3495,4 +3496,89 @@ describe('controle voos routes', () => {
     expect(crossTenant.status).toBe(404);
   });
 
+});
+
+describe('P06-01 leitura de Controle de Voos exige acesso de leitura', () => {
+  const READ_PATHS = [
+    '/api/controle-voos/voos',
+    '/api/controle-voos/jornadas?data=2026-06-14',
+    '/api/controle-voos/dashboard?data_inicio=2026-06-14&data_fim=2026-06-15',
+    '/api/controle-voos/relatorios/resumo-operacional?data_inicio=2026-06-14&data_fim=2026-06-15',
+  ];
+
+  function pilotFixture(db: SqliteD1, funcionarioId: number | null, perfil = 'ALUNO', membershipRole = 'student') {
+    seedCrewForFlight601(db);
+    runSql(
+      db.databasePath,
+      `INSERT OR REPLACE INTO usuarios(id, funcionario_id, perfil) VALUES (10, ${funcionarioId ?? 'NULL'}, '${perfil}');
+       INSERT OR REPLACE INTO usuarios_empresas(usuario_id, empresa_id, role) VALUES (10, 1, '${membershipRole}');`,
+    );
+  }
+
+  it('aluno (role student) nao le voos, jornadas, dashboard, relatorio nem detalhe de voo sem tripulacao', async () => {
+    const db = createSqliteD1();
+    pilotFixture(db, 5555);
+    for (const path of READ_PATHS) {
+      const response = await request(db, path, {}, 1, 'student');
+      expect(response.status, path).toBe(403);
+    }
+    for (const path of ['/api/controle-voos/voos/601', '/api/controle-voos/voos/601/plano-voo']) {
+      const response = await request(db, path, {}, 1, 'student');
+      expect(response.status, path).toBe(403);
+    }
+  });
+
+  it('viewer com perfil ALUNO tambem e negado, mas viewer sem perfil de aluno continua lendo o painel', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+    pilotFixture(db, 5555, 'ALUNO', 'viewer');
+    for (const path of READ_PATHS) {
+      expect((await request(db, path, {}, 1, 'viewer')).status, path).toBe(403);
+    }
+
+    runSql(db.databasePath, "UPDATE usuarios SET perfil = 'OBSERVADOR' WHERE id = 10;");
+    for (const path of READ_PATHS) {
+      expect((await request(db, path, {}, 1, 'viewer')).status, path).toBe(200);
+    }
+  });
+
+  it('tripulante le o proprio voo e o plano; piloto fora da tripulacao nao', async () => {
+    const db = createSqliteD1();
+    pilotFixture(db, 1001);
+    expect((await request(db, '/api/controle-voos/voos/601', {}, 1, 'student')).status).toBe(200);
+    expect((await request(db, '/api/controle-voos/voos/601/plano-voo', {}, 1, 'student')).status).toBe(200);
+
+    runSql(db.databasePath, 'UPDATE usuarios SET funcionario_id = 7777 WHERE id = 10;');
+    const outsider = await request(db, '/api/controle-voos/voos/601', {}, 1, 'student');
+    expect(outsider.status).toBe(403);
+    expect(await outsider.json()).toMatchObject({ code: 'CONTROLE_VOOS_RDV_NOT_CREW' });
+  });
+
+  it('catalogos seguem disponiveis ao piloto (formularios) e a quem tem leitura', async () => {
+    const db = createSqliteD1();
+    pilotFixture(db, 1001);
+    expect((await request(db, '/api/controle-voos/catalogos/aeroportos', {}, 1, 'student')).status).toBe(200);
+    expect((await request(db, '/api/controle-voos/catalogos/aeroportos', {}, 1, 'admin')).status).toBe(200);
+  });
+
+  it('GRANT controle_voos.view libera a leitura; DENY bloqueia ate o admin', async () => {
+    const db = createSqliteD1();
+    pilotFixture(db, 5555);
+    runSql(db.databasePath, "INSERT INTO usuario_permissoes(usuario_id, permissao, tipo) VALUES (10,'controle_voos.view','GRANT');");
+    expect((await request(db, '/api/controle-voos/voos', {}, 1, 'student')).status).toBe(200);
+
+    runSql(db.databasePath, "UPDATE usuario_permissoes SET tipo = 'DENY' WHERE usuario_id = 10 AND permissao = 'controle_voos.view';");
+    expect((await request(db, '/api/controle-voos/voos', {}, 1, 'admin')).status).toBe(403);
+    expect((await request(db, '/api/controle-voos/catalogos/aeroportos', {}, 1, 'admin')).status).toBe(403);
+  });
+
+  it('Coordenacao de Voo e admin leem normalmente', async () => {
+    const db = createSqliteD1();
+    seedDashboardFixtures(db.databasePath);
+    for (const role of ['admin', 'manager', 'coordenacao_voo']) {
+      for (const path of READ_PATHS) {
+        expect((await request(db, path, {}, 1, role)).status, `${role} ${path}`).toBe(200);
+      }
+    }
+  });
 });
