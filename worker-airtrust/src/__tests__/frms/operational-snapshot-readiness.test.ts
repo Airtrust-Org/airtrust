@@ -78,4 +78,23 @@ describe('FRMS readiness posterior ao check-in', () => {
     expect(item.readiness_classification).toBe('unknown_future_state');
   });
 
+  it('ignora readiness com identificador ou data inválidos sem contaminar a fila', () => {
+    const input = fixture();
+    input.rows.readiness = [
+      { data_operacional: '2026-11-08-extra', funcionario_id: 10, classification: 'operational_review', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-08', funcionario_id: 0, classification: 'operational_review', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-08', funcionario_id: 10.5, classification: 'operational_review', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-08', funcionario_id: 10, classification: 'preserved', protocol_version: 'airtrust-brief-v1' },
+    ];
+    const item = buildFrmsOperationalSnapshot(input).items[0];
+    expect(item.readiness_classification).toBe('preserved');
+    expect(item.alertas).not.toContain('READINESS_REVISAO');
+  });
+
+  it('não interpreta ausência de avaliação objetiva como resultado preserved', () => {
+    const item = buildFrmsOperationalSnapshot(fixture()).items[0];
+    expect(item.readiness_classification).toBeNull();
+    expect(item.readiness_protocol_version).toBeNull();
+  });
+
 });
