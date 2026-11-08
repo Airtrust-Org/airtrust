@@ -37,7 +37,7 @@ export default defineConfig({
     },
     {
       command:
-        'VITE_API_URL=http://127.0.0.1:8787 npm run build && npx vite preview --host 127.0.0.1 --port 3000 --strictPort',
+        'VITE_API_URL=http://127.0.0.1:3000 npm run build && npx vite preview --host 127.0.0.1 --port 3000 --strictPort',
       url: 'http://127.0.0.1:3000/login',
       cwd: '../../..',
       reuseExistingServer: false,
