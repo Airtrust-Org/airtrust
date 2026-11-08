@@ -86,6 +86,17 @@ else
   [[ "${AIRTRUST_CONFIRM_PROD_SYNC:-}" == "$CONFIRM_SYNC_TEXT" ]] || fail "Com --yes, defina AIRTRUST_CONFIRM_PROD_SYNC exatamente como: $CONFIRM_SYNC_TEXT"
 fi
 
+# Preflight credentials BEFORE exporting or replacing local D1. A failed renderer
+# must not leave an imported production database awaiting sanitization.
+PREFLIGHT_PASSWORD_SQL="$(mktemp "${TMPDIR:-/tmp}/airtrust-password-preflight-XXXXXX.sql")"
+chmod 600 "$PREFLIGHT_PASSWORD_SQL"
+trap 'rm -f "$PREFLIGHT_PASSWORD_SQL"' EXIT
+node "$ROOT_DIR/scripts/render-local-dev-password-sql.mjs" \
+  "$ROOT_DIR/scripts/setup-local-overrides.sql" "$PREFLIGHT_PASSWORD_SQL" \
+  || fail "Credencial local inválida ou bcrypt indisponível; importação cancelada antes do export"
+rm -f "$PREFLIGHT_PASSWORD_SQL"
+trap - EXIT
+
 mkdir -p "$BACKUPS_DIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 EXPORT_FILE="$BACKUPS_DIR/production-export-$STAMP.sql"

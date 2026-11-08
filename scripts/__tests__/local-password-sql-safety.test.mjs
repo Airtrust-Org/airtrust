@@ -68,3 +68,15 @@ test('source templates do not contain baked bcrypt values', () => {
     assert.ok(source.includes(marker), name);
   }
 });
+
+
+test('local production import preflights bcrypt before any export or local D1 replacement', () => {
+  const script = readFileSync(join(root, 'scripts/sync-d1-production-sanitized.sh'), 'utf8');
+  const preflight = script.indexOf('PREFLIGHT_PASSWORD_SQL=');
+  const exportCall = script.indexOf('info "Exportando D1 de produção para $EXPORT_FILE"');
+  const localReset = script.indexOf('rm -rf "$WORKER_DIR/.wrangler/state/v3/d1"');
+  assert.ok(preflight > 0 && exportCall > preflight && localReset > preflight,
+    'password renderer must run before exporting or replacing the local database');
+  assert.match(script.slice(preflight, exportCall), /render-local-dev-password-sql\.mjs/);
+  assert.match(script.slice(preflight, exportCall), /\|\| fail/);
+});
