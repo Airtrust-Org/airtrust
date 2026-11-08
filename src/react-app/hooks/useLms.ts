@@ -336,13 +336,24 @@ async function lmsRequestPaginated<T>(
   const abortFromParent = () => controller.abort();
   if (init?.signal?.aborted) controller.abort();
   else init?.signal?.addEventListener('abort', abortFromParent, { once: true });
-  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+  // Bound the whole auth-aware call, including an unresolved refresh token
+  // operation that does not honor the caller's abort signal.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Tempo limite ao consultar os cursos. Tente novamente.'));
+    }, 20_000);
+  });
   try {
-    const res = await fetchWithAuth(`/api/lms${path}`, {
-      headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
-      ...init,
-      signal: controller.signal,
-    });
+    const res = await Promise.race([
+      fetchWithAuth(`/api/lms${path}`, {
+        headers: init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+        ...init,
+        signal: controller.signal,
+      }),
+      deadline,
+    ]);
     const json = (await res.json()) as {
       success: boolean;
       data?: T[];
@@ -352,7 +363,7 @@ async function lmsRequestPaginated<T>(
     if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
     return { data: json.data ?? [], total: json.pagination?.total ?? json.data?.length ?? 0 };
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
     init?.signal?.removeEventListener('abort', abortFromParent);
   }
 }
