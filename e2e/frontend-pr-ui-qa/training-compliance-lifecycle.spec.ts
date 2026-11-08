@@ -45,26 +45,53 @@ async function api<T = any>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<ApiResult<T>> {
-  return page.evaluate(
+  // Keep an individual stalled request from consuming the seven-minute
+  // lifecycle timeout. Report only a sanitized route and stable error class.
+  const safeRoute = path.split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:id');
+  const request = page.evaluate(
     async ({ apiBase, requestPath, method, body }) => {
       const token =
         window.sessionStorage.getItem('airtrust_token') ||
         window.localStorage.getItem('airtrust_token');
       if (!token) throw new Error('QA_AUTH_TOKEN_MISSING');
-      const response = await fetch(`${apiBase}${requestPath}`, {
-        method: method || 'GET',
-        credentials: 'include',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const json = await response.json().catch(() => ({}));
-      return { status: response.status, ok: response.ok, json };
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 25_000);
+      try {
+        const response = await fetch(`${apiBase}${requestPath}`, {
+          method: method || 'GET',
+          credentials: 'include',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const json = await response.json().catch(() => ({}));
+        return { status: response.status, ok: response.ok, json };
+      } finally {
+        window.clearTimeout(timer);
+      }
     },
     { apiBase: API_BASE, requestPath: path, method: options.method, body: options.body },
   );
+  let evaluationTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        evaluationTimer = setTimeout(() => reject(new Error('QA_API_EVALUATE_TIMEOUT')), 35_000);
+      }),
+    ]);
+  } catch (error) {
+    const className = error instanceof Error
+      ? error.message.includes('AbortError') ? 'REQUEST_ABORTED' :
+        error.message.includes('QA_API_EVALUATE_TIMEOUT') ? 'EVALUATE_TIMEOUT' : error.name
+      : 'UNKNOWN';
+    throw new Error(`QA_LIFECYCLE_API_FAILURE:${options.method || 'GET'}:${safeRoute}:${className}`);
+  } finally {
+    if (evaluationTimer) clearTimeout(evaluationTimer);
+  }
 }
 
 async function employeeSnapshot(page: Page, employeeId: number) {

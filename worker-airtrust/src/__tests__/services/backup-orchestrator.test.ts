@@ -182,6 +182,22 @@ afterEach(() => {
 });
 
 describe('BackupOrchestrator integrity', () => {
+  it('falha antes de ler D1 ou gravar R2 quando o backup é rotulado TENANT_SCOPED', async () => {
+    const { orchestrator, state, r2 } = createOrchestrator();
+    const initialKeys = r2.keys();
+
+    await expect(orchestrator.executarBackupManual({
+      tipo: 'COMPLETO',
+      modulos: ['PESSOAS'],
+      triggered_by: 'UNIT_TEST',
+      escopo: 'TENANT_SCOPED',
+    })).rejects.toThrow('TENANT_SCOPED_BACKUP_NOT_IMPLEMENTED');
+
+    expect(state.preparedSql).toEqual([]);
+    expect(state.controlUuids).toEqual([]);
+    expect(r2.keys()).toEqual(initialKeys);
+  });
+
   it('gera UUID criptograficamente seguro para backup manual sem UUID fornecido', async () => {
     const { orchestrator, state } = createOrchestrator();
 
