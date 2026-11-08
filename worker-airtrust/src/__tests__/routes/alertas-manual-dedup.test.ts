@@ -56,8 +56,8 @@ function createApp() {
   app.route('/api', alertasRoutes);
   const db = {
     prepare: vi.fn(() => ({
-      bind: () => ({
-        first: async () => ({
+      bind: (...args: unknown[]) => ({
+        first: async () => args[1] === 1 ? ({
           id: 17,
           funcionario_id: 44,
           qualificacao_id: 7,
@@ -68,7 +68,7 @@ function createApp() {
           funcionario_nome: 'Pessoa Sintetica',
           funcionario_email: 'synthetic@example.invalid',
           funcionario_telefone: '21999999999',
-        }),
+        }) : null,
       }),
     })),
   };
@@ -161,12 +161,9 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
   it('preserves tenant scope before trying to reserve or send', async () => {
     const { app, db } = createApp();
     viewer.empresaId = 2;
-    reserve.mockResolvedValueOnce({
-      reserved: false, key: 'x', reason: 'already_sent', existingStatus: 'enviada',
-    });
     const response = await request(app, db);
-    expect(reserve).toHaveBeenCalledWith(db, expect.objectContaining({ empresaId: 2 }));
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(404);
+    expect(reserve).not.toHaveBeenCalled();
     expect(delivery).not.toHaveBeenCalled();
   });
 });
