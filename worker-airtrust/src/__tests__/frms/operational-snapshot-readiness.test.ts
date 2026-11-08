@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildFrmsOperationalSnapshot, type BuildOperationalSnapshotInput } from '../../lib/frms/operational-snapshot';
+import { describe, expect, it, vi } from 'vitest';
+import { buildFrmsOperationalSnapshot, loadReadinessSnapshotRows, type BuildOperationalSnapshotInput } from '../../lib/frms/operational-snapshot';
 
 function fixture(): BuildOperationalSnapshotInput {
   return {
@@ -97,4 +97,43 @@ describe('FRMS readiness posterior ao check-in', () => {
     expect(item.readiness_protocol_version).toBeNull();
   });
 
+});
+
+describe('FRMS readiness D1 loader — isolamento e falha fechada', () => {
+  function fakeDb(result: unknown, reject = false) {
+    const all = vi.fn().mockImplementation(() => reject ? Promise.reject(new Error('D1 unavailable')) : Promise.resolve(result));
+    const bind = vi.fn().mockReturnValue({ all });
+    const prepare = vi.fn().mockReturnValue({ bind });
+    return { db: { prepare } as unknown as D1Database, prepare, bind, all };
+  }
+
+  it('filtra empresa, data e registros removidos na própria consulta', async () => {
+    const fake = fakeDb({ results: [{ data_operacional: '2026-11-08', funcionario_id: 10, classification: 'attention', protocol_version: 'brief-v1' }] });
+    const rows = await loadReadinessSnapshotRows(fake.db, 42, '2026-11-07', '2026-11-08');
+    expect(rows).toHaveLength(1);
+    const sql = fake.prepare.mock.calls[0][0] as string;
+    expect(sql).toMatch(/empresa_id\s*=\s*\?/);
+    expect(sql).toMatch(/deleted_at\s+IS\s+NULL/i);
+    expect(sql).toMatch(/reference_date\s*>=\s*\?/);
+    expect(sql).toMatch(/reference_date\s*<=\s*\?/);
+    expect(fake.bind).toHaveBeenCalledWith(42, '2026-11-07', '2026-11-08');
+  });
+
+  it('não transforma falha D1 em readiness normal ou ausente', async () => {
+    const fake = fakeDb(null, true);
+    await expect(loadReadinessSnapshotRows(fake.db, 42, '2026-11-08', '2026-11-08')).rejects.toThrow('D1 unavailable');
+  });
+
+  it.each([undefined, null, {}, { results: null }, { results: {} }])(
+    'não transforma resultado D1 incompleto (%s) em lista vazia', async (response) => {
+      const fake = fakeDb(response);
+      await expect(loadReadinessSnapshotRows(fake.db, 42, '2026-11-08', '2026-11-08'))
+        .rejects.toThrow('FRMS_READINESS_QUERY_INCOMPLETE');
+    },
+  );
+
+  it('aceita lista vazia explicitamente confirmada pelo D1', async () => {
+    const fake = fakeDb({ results: [] });
+    await expect(loadReadinessSnapshotRows(fake.db, 42, '2026-11-08', '2026-11-08')).resolves.toEqual([]);
+  });
 });
