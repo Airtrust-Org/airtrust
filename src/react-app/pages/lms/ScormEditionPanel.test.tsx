@@ -181,6 +181,19 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     expect(screen.getByRole('alert').textContent).toContain('A substituição ainda não é permitida');
   });
 
+  it('rejects direct external activation in the UI when the course has no positive external-exam threshold', () => {
+    m.preflight = preflight({
+      incomingPolicy: null, canActivate: true,
+      course: { id: 78, titulo: 'Atendimento e Rampa', currentPolicy: 'SCORED', masteryScore: 0 },
+    });
+    render(<ScormEditionPanel cursoId={78} versions={[{
+      ...candidate, certificationProfile: null, assessmentPolicy: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+      publishable: false,
+    }]} isAdmin />);
+    expect((screen.getByRole('button', { name: 'Substituir esta edição já enviada' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('a non-administrator has no direct-upload field', () => {
     m.preflight = { data: undefined };
     render(<ScormEditionPanel cursoId={55} versions={[]} isAdmin={false} />);
