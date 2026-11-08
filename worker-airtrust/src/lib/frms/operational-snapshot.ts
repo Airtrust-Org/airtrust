@@ -583,9 +583,32 @@ export function buildFrmsOperationalSnapshot(
     }
   }
 
+  // Multiple active screenings may exist on the same operational day. Preserve
+  // the most review-requiring observation, independent of D1 result order.
+  // This is alert aggregation, not a clinical score or a declaration of unfitness.
+  const readinessPriority = (classification: string): number => {
+    switch (classification) {
+      case 'operational_review': return 4;
+      case 'attention': return 3;
+      case 'preserved': return 1;
+      case 'baseline_building': return 0;
+      default: return 2; // Unknown evidence must not silently become normal.
+    }
+  };
   for (const row of input.rows.readiness ?? []) {
-    // Tenant scoping is enforced by the D1 loader; only matching operational keys are used.
-    readinessMap.set(`${row.data_operacional}::${asNumber(row.funcionario_id)}`, row);
+    // Tenant scoping is enforced by the parameterized D1 loader.
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(row.data_operacional) ||
+        !Number.isInteger(row.funcionario_id) || row.funcionario_id <= 0) continue;
+    const key = `${row.data_operacional}::${row.funcionario_id}`;
+    const current = readinessMap.get(key);
+    const nextPriority = readinessPriority(row.classification);
+    const currentPriority = current ? readinessPriority(current.classification) : -1;
+    if (!current || nextPriority > currentPriority ||
+        (nextPriority === currentPriority &&
+         `${row.classification}::${row.protocol_version}` >
+         `${current.classification}::${current.protocol_version}`)) {
+      readinessMap.set(key, row);
+    }
   }
 
   for (const row of input.rows.effectiveness) {
@@ -733,7 +756,7 @@ export function buildFrmsOperationalSnapshot(
     }
     // A separate, later vigilance screening cannot be erased by a normal subjective score.
     // This is an operational review signal, never a clinical diagnosis or automatic unfitness.
-    if (readiness?.classification === 'attention' || readiness?.classification === 'operational_review') {
+    if (readiness && !['preserved', 'baseline_building'].includes(readiness.classification)) {
       alertas.push('READINESS_REVISAO');
     }
 
