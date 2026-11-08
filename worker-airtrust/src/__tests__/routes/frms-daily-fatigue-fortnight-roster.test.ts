@@ -155,6 +155,33 @@ describe('GET /daily-fatigue?scope=team — roster da quinzena', () => {
     });
   });
 
+  it('preserva a revisão operacional já exigida no check-in mesmo quando a triagem subjetiva foi normal', async () => {
+    const base = {
+      cargo: 'Piloto', quinzena_numero: 2, jornada_id: 'j-real',
+      checkin_id: 'c-real', checkin_apresentacao: '07:00', wake_time: '05:00',
+      horas_sono: 8, kss_score: 3, kss_provenance: 'CREW_REPORTED',
+      fit_for_duty: 1, computed_risk_level: 'normal',
+      score_fadiga: 12, nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+    };
+    const response = await router.request(
+      'http://localhost/daily-fatigue?date=2026-09-27&scope=team',
+      { headers: { authorization: 'Bearer synthetic' } },
+      env([
+        { ...base, funcionario_id: 601, requires_operational_review: 1 },
+        { ...base, funcionario_id: 602, requires_operational_review: 0 },
+      ]),
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { data: { items: Array<Record<string, unknown>> } };
+    expect(payload.data.items.find((row) => row.funcionario_id === 601)).toMatchObject({
+      status: 'normal', nivel_fadiga: 'VERDE', status_operacional: 'APTO',
+      requires_operational_review: 1,
+    });
+    expect(payload.data.items.find((row) => row.funcionario_id === 602)).toMatchObject({
+      status: 'normal', requires_operational_review: 0,
+    });
+  });
+
   it('não converte classificação ausente ou inválida em risco normal', async () => {
     const base = {
       cargo: 'Piloto',
