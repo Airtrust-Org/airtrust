@@ -485,13 +485,11 @@ async function upsertHistoricoPlanejadoForParticipante(
       ? evento.programa_validade_meses
       : typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
         ? evento.qualificacao_validade
-        : 12;
+        : null;
   const vencimentoFimMes = Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1;
-  const dataVencimento = calcularDataVencimento(
-    evento.data_prevista,
-    validadeMeses,
-    vencimentoFimMes,
-  );
+  const dataVencimento = validadeMeses === null
+    ? null
+    : calcularDataVencimento(evento.data_prevista, validadeMeses, vencimentoFimMes);
   const instrutor = evento.instrutor_guerra || evento.instrutor_nome || null;
 
   let existing: HistoricoPlanejadoRow | null = null;
@@ -695,12 +693,14 @@ async function concluirHistoricoPlanejado(
       const validadeMesesCorrigida =
         typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
           ? evento.qualificacao_validade
-          : 12;
-      const dataVencimentoCorrigida = calcularDataVencimento(
-        dataConclusaoCorrigida,
-        validadeMesesCorrigida,
-        Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
-      );
+          : null;
+      const dataVencimentoCorrigida = validadeMesesCorrigida === null
+        ? null
+        : calcularDataVencimento(
+            dataConclusaoCorrigida,
+            validadeMesesCorrigida,
+            Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
+          );
       await db
         .prepare(
           `UPDATE qualificacoes_historico
@@ -744,12 +744,14 @@ async function concluirHistoricoPlanejado(
   const validadeMeses =
     typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
       ? evento.qualificacao_validade
-      : 12;
-  const dataVencimento = calcularDataVencimento(
-    dataConclusao,
-    validadeMeses,
-    Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
-  );
+      : null;
+  const dataVencimento = validadeMeses === null
+    ? null
+    : calcularDataVencimento(
+        dataConclusao,
+        validadeMeses,
+        Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
+      );
 
   // M5: ao concluir um treinamento (inclusive retroativo), só pode ser marcado como
   // RENOVADO um histórico ANTERIOR à nova conclusão. Sem o filtro de data, uma

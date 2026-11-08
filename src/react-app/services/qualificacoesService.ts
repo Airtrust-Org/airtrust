@@ -41,6 +41,14 @@ export async function listarFuncionariosAtivos(limit?: number) {
   return response;
 }
 
+export async function buscarTipoQualificacaoPorId(id: string | number) {
+  const response = await qualificacoesService.lookups.tipoQualificacaoPorId(id);
+  if (!response.success) {
+    failWithSafeMessage(response.error, 'Não foi possível carregar o modelo da qualificação.');
+  }
+  return response.data;
+}
+
 export async function listarTiposQualificacao(limit = 1000, categoriaId?: number | null) {
   const response = await qualificacoesService.lookups.tiposQualificacao(limit, categoriaId);
   if (!response.success) {
