@@ -749,7 +749,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin && (scormProfile === 'FORMATIVE' || scormProfile === 'EXTERNAL');
+  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile !== 'PRIVATE' && scormProfile !== 'CHECKING';
   useEffect(() => {
     if (!canUploadInactiveProduction || !contentFile) {
       setScormProfile('CHECKING');
@@ -1276,10 +1276,10 @@ function CourseDrawer({
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
                           <p className="mt-1">{directReplacement
-                            ? 'Pacote elegível para substituição automática (formativo ou com prova externa). O Worker validará o arquivo e ativará a nova edição. Matrículas concluídas e histórico permanecem preservados.'
+                            ? 'Ao enviar o ZIP SCORM válido, o conteúdo anterior será substituído e o curso permanecerá ativo. Históricos concluídos são preservados.'
                             : scormProfile === 'PRIVATE'
                               ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
-                              : 'ZIP com avaliação dentro do SCORM ou perfil não confirmado: será recebido como edição INATIVA, sem substituir o curso até validação governada.'}</p>
+                              : 'A substituição automática é feita por administradores. Este perfil não pode publicar o curso.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1525,7 +1525,7 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP, ativar e publicar curso' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
