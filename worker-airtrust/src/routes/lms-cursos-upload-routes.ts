@@ -40,6 +40,8 @@ import {
   rollbackScormPackageVersion,
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
+import { parseStoredScormValidation } from '../lib/lms/lms-scorm-package-filename';
+import type { ScormQualityGateResult } from '../lib/lms/lms-scorm-quality-gate';
 import { preflightDirectFormativeReplacement, readAlreadyActiveExternalReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedExternalScorm, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
@@ -701,10 +703,17 @@ app.post('/:id/scorm-package-versions/:packageId/replace-direct',
     if (!body.success || !body.data.confirm) {
       throw new ApiError('Confirmação do curso e SHA do pacote obrigatória', 400, 'SCORM_REPLACE_CONFIRMATION_INVALID');
     }
-    const data = await replaceValidatedFormativeScorm({
-      db: c.env.DB, bucket: c.env.BUCKET, empresaId: getEmpresaIdSafe(c),
-      cursoId: courseIdParam(c), packageId: c.req.param('packageId'),
-      userId: actorId(c), confirm: body.data.confirm,
+    const empresaId = getEmpresaIdSafe(c), cursoId = courseIdParam(c);
+    const packageId = c.req.param('packageId');
+    // Read the stored, tenant-scoped validation; the browser never chooses
+    // the activation policy or declares an external exam.
+    const candidate = await readCandidate(c.env.DB, empresaId, cursoId, packageId);
+    const quality = parseStoredScormValidation<ScormQualityGateResult>(candidate.validation_result_json);
+    const externalExam = quality?.authoringReview?.externalExam === true;
+    const replace = externalExam ? replaceValidatedExternalScorm : replaceValidatedFormativeScorm;
+    const data = await replace({
+      db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
+      packageId, userId: actorId(c), confirm: body.data.confirm,
     });
     return c.json({ success: true, data });
   });
