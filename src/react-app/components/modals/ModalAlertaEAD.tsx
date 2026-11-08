@@ -118,7 +118,7 @@ Por favor, providencie a renovação quando aplicável.`;
 
   const [mensagem, setMensagem] = useState(mensagemPadrao);
 
-  const handleEnviar = async () => {
+  const handleEnviar = async (reenviarHoje = false): Promise<void> => {
     if (!enviarEmail && !enviarWhatsApp) {
       showToast.error('Selecione pelo menos um canal de envio');
       return;
@@ -139,6 +139,7 @@ Por favor, providencie a renovação quando aplicável.`;
           mensagem,
           enviarEmail,
           enviarWhatsApp,
+          reenviar_hoje: reenviarHoje,
         }),
       });
 
@@ -152,8 +153,25 @@ Por favor, providencie a renovação quando aplicável.`;
         return;
       }
 
+      if (res.status === 409 && data?.code === 'ALERTA_ALREADY_SENT_TODAY'
+          && data?.reenvio_permitido === true && !reenviarHoje) {
+        const confirmado = window.confirm(
+          'O funcionário já recebeu este alerta hoje pelos canais selecionados. '
+          + 'Deseja enviar novamente? Este reenvio será registrado no histórico.',
+        );
+        if (confirmado) {
+          await handleEnviar(true);
+        } else {
+          setStatus({ type: 'warning', message: 'Reenvio cancelado. Nenhum alerta adicional foi enviado.' });
+        }
+        return;
+      }
+
       if (res.ok && data.success) {
         const alertas = (data?.data?.alertas || []) as AlertaCanal[];
+        const skipped = (data?.data?.canais_ja_alertados_hoje || []) as string[];
+        const pending = (data?.data?.canais_pendentes || []) as string[];
+        const auditPending = (data?.data?.canais_auditoria_pendente || []) as string[];
         const resumoBase: CanalResumo[] = alertas.map((alerta) => ({
           canal: alerta.tipo,
           status: alerta.status,
@@ -229,7 +247,16 @@ Por favor, providencie a renovação quando aplicável.`;
 
         setCanalResumo(resumoBase);
 
-        if (canaisErro.length > 0 && canaisSucesso.length > 0) {
+        if (skipped.length > 0 || pending.length > 0 || auditPending.length > 0) {
+          const detail = [
+            skipped.length ? `Já alertado hoje (sem reenvio): ${skipped.join(', ')}.` : '',
+            pending.length ? `Aguardando reconciliação: ${pending.join(', ')}.` : '',
+            auditPending.length ? `Auditoria pendente: ${auditPending.join(', ')}.` : '',
+          ].filter(Boolean).join(' ');
+          const msg = `Alerta processado. ${detail}`;
+          setStatus({ type: 'warning', message: msg });
+          showToast.warning(msg, { duration: 8000 });
+        } else if (canaisErro.length > 0 && canaisSucesso.length > 0) {
           const msg = `Alerta enviado parcialmente. Sucesso: ${nomesSucesso}. Falhou: ${nomesErro}.`;
           setStatus({ type: 'warning', message: msg });
           showToast.warning(msg, { duration: 8000 });
@@ -391,7 +418,7 @@ Por favor, providencie a renovação quando aplicável.`;
           </button>
           <button
             type="button"
-            onClick={handleEnviar}
+            onClick={() => void handleEnviar()}
             disabled={loading || (!enviarEmail && !enviarWhatsApp)}
             className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
