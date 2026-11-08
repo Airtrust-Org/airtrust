@@ -1,6 +1,6 @@
-import type { Origem, FrmsJornada, LimitesMap, EffectivenessResult } from './types';
+import type { Origem, LimitesMap, EffectivenessResult } from './types';
 import { calcularDiaDoCiclo } from './db-service-jornadas';
-import { calcEffectiveness, calcFatorizacao, type FrmsV2DailyAdjustments } from './calculos';
+import type { FrmsV2DailyAdjustments } from './calculos';
 import {
   computeFlightHoursDelta,
   resolveOperationalPolicyV2,
@@ -44,7 +44,9 @@ import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
 import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
-import { clockToMinutes, minutesToClock, projectSleepStart } from './operational-clock';
+import { clockToMinutes } from './operational-clock';
+import { calculateMorningEffectivenessProjection, type EffectivenessSnapshotRow } from './morning-effectiveness-projection';
+export { calculateMorningEffectivenessProjection } from './morning-effectiveness-projection';
 
 export type { MissionPeriodRow } from './mission-periods';
 import { collectByBindChunks } from '../../utils/d1-bind-chunks';
@@ -54,6 +56,7 @@ import { collectByBindChunks } from '../../utils/d1-bind-chunks';
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
   | 'CHECKIN_CRITICO'
+  | 'READINESS_REVISAO'
   | 'SONO_ESTIMADO'
   | 'SONO_INSUFICIENTE'
   | 'KSS_ALTO'
@@ -108,6 +111,8 @@ export interface FrmsOperationalSnapshotItem {
   hora_acordar: string | null;
   fadiga_score: number | null;
   status_operacional_checkin: string | null;
+  readiness_classification?: string | null;
+  readiness_protocol_version?: string | null;
 
   effectiveness_pct: number | null;
   effectiveness_componentes?: EffectivenessResult['componentes'] | null;
@@ -194,6 +199,7 @@ export interface BuildOperationalSnapshotInput {
     escalas: ScaleSnapshotRow[];
     jornadas: JornadaSnapshotRow[];
     checkins: CheckinSnapshotRow[];
+    readiness?: ReadinessSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
     activities?: FrmsActivitySnapshotRow[];
     /** Presença diária na quinzena/período operacional, mesmo sem atividade no dia. */
@@ -242,16 +248,11 @@ interface CheckinSnapshotRow {
   computed_risk_level: string | null;
 }
 
-interface EffectivenessSnapshotRow {
+interface ReadinessSnapshotRow {
   data_operacional: string;
   funcionario_id: number;
-  effectiveness_pct: number | null;
-  effectiveness_nivel: string | null;
-  effectiveness_componentes_json?: string | null;
-  effectiveness_componentes?: EffectivenessResult['componentes'] | null;
-  source?: 'REAL' | 'PROJETADA_APRESENTACAO' | 'PROJETADA_ATIVIDADE';
-  dia_periodo_embarcado?: number | null;
-  total_dias_periodo?: number | null;
+  classification: string;
+  protocol_version: string;
 }
 
 interface FuncionarioSnapshotRow {
@@ -273,102 +274,6 @@ function normalizeText(value: unknown): string | null {
 function asNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-export function calculateMorningEffectivenessProjection(input: {
-  dataOperacional: string;
-  funcionarioId: number;
-  presentationTime: string | null | undefined;
-  wakeTime: string | null | undefined;
-  sleepHours: number | null | undefined;
-  limites: LimitesMap;
-  diaPeriodo?: number | null;
-  totalDiasPeriodo?: number | null;
-  plannedEndTime?: string | null;
-  plannedActivityMinutes?: number | null;
-  frmsFlightEquivalentMinutes?: number | null;
-  v2Adjustments?: FrmsV2DailyAdjustments | null;
-}): EffectivenessSnapshotRow | null {
-  const presentation = normalizeText(input.presentationTime);
-  const wakeTime = normalizeText(input.wakeTime);
-  const sleepHours = Number(input.sleepHours ?? 0);
-  if (!presentation || !wakeTime || !Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 24) return null;
-  if (clockToMinutes(presentation) == null || clockToMinutes(wakeTime) == null) return null;
-
-  const sleepStart = projectSleepStart(wakeTime, sleepHours);
-  if (!sleepStart) return null;
-  const [year, month] = input.dataOperacional.split('-').map(Number);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-
-  const presentationMinutes = clockToMinutes(presentation)!;
-  const plannedEnd = normalizeText(input.plannedEndTime);
-  const plannedEndMinutes = clockToMinutes(plannedEnd);
-  let plannedDutyMinutes = Math.max(0, Number(input.plannedActivityMinutes ?? 0));
-  let endTime = presentation;
-  if (plannedEndMinutes != null) {
-    let boundaryMinutes = plannedEndMinutes - presentationMinutes;
-    if (boundaryMinutes < 0) boundaryMinutes += 24 * 60;
-    // Para dias mistos (ex.: treinamento diurno + simulador noturno), a soma
-    // das durações conhecidas é a carga de atividade; a janela início→fim é
-    // mantida apenas como limite temporal/circadiano e não substitui a carga.
-    if (plannedDutyMinutes <= 0) plannedDutyMinutes = boundaryMinutes;
-    endTime = plannedEnd!;
-  } else if (plannedDutyMinutes > 0) {
-    endTime = minutesToClock(presentationMinutes + plannedDutyMinutes);
-  }
-  const frmsFlightEquivalentMinutes = Math.max(0, Number(input.frmsFlightEquivalentMinutes ?? 0));
-
-  const jornada = {
-    id: `projection-${input.dataOperacional}::${input.funcionarioId}`,
-    empresa_id: 0,
-    tripulante_id: input.funcionarioId,
-    data: input.dataOperacional,
-    status: 'ES',
-    hora_apresentacao: presentation,
-    hora_termino: endTime,
-    duracao_jornada_minutos: plannedDutyMinutes,
-    horas_voo_minutos: frmsFlightEquivalentMinutes,
-    hora_dormiu: sleepStart,
-    hora_acordou: wakeTime,
-    origem: 'MANUAL',
-    tipo_base: 'HOME',
-    tripulacao_aumentada: 0,
-    aclimatado: 1,
-  } as FrmsJornada;
-
-  const fatorizacao = calcFatorizacao({
-    jornada,
-    repousoAnteriorMin: null,
-    limites: input.limites,
-    diasDoMes: daysInMonth,
-    diaDoCiclo: input.diaPeriodo ?? null,
-  });
-  const effectiveness = calcEffectiveness(
-    fatorizacao,
-    input.limites,
-    {
-      hora_apresentacao: presentation,
-      hora_termino: endTime,
-      hora_dormiu: sleepStart,
-      hora_acordou: wakeTime,
-      dia_periodo_embarcado: input.diaPeriodo ?? null,
-      total_dias_periodo: input.totalDiasPeriodo ?? null,
-    },
-    null,
-    input.v2Adjustments ?? null,
-  );
-
-  return {
-    data_operacional: input.dataOperacional,
-    funcionario_id: input.funcionarioId,
-    effectiveness_pct: effectiveness.effectiveness_pct,
-    effectiveness_nivel: effectiveness.nivel,
-    effectiveness_componentes: effectiveness.componentes,
-    source: plannedDutyMinutes > 0 || frmsFlightEquivalentMinutes > 0 ? 'PROJETADA_ATIVIDADE' : 'PROJETADA_APRESENTACAO',
-    dia_periodo_embarcado: input.diaPeriodo ?? null,
-    total_dias_periodo: input.totalDiasPeriodo ?? null,
-  };
 }
 
 function appendMorningEffectivenessProjections(
@@ -601,6 +506,7 @@ export function buildFrmsOperationalSnapshot(
   const escalaMap = new Map<string, ScaleSnapshotRow>();
   const jornadaMap = new Map<string, JornadaSnapshotRow>();
   const checkinMap = new Map<string, CheckinSnapshotRow>();
+  const readinessMap = new Map<string, ReadinessSnapshotRow>();
   const effectivenessMap = new Map<string, EffectivenessSnapshotRow>();
   const activityMap = new Map<string, FrmsActivitySnapshotRow[]>();
   const funcionarioMap = new Map<number, FuncionarioSnapshotRow>();
@@ -677,6 +583,34 @@ export function buildFrmsOperationalSnapshot(
     }
   }
 
+  // Multiple active screenings may exist on the same operational day. Preserve
+  // the most review-requiring observation, independent of D1 result order.
+  // This is alert aggregation, not a clinical score or a declaration of unfitness.
+  const readinessPriority = (classification: string): number => {
+    switch (classification) {
+      case 'operational_review': return 4;
+      case 'attention': return 3;
+      case 'preserved': return 1;
+      case 'baseline_building': return 0;
+      default: return 2; // Unknown evidence must not silently become normal.
+    }
+  };
+  for (const row of input.rows.readiness ?? []) {
+    // Tenant scoping is enforced by the parameterized D1 loader.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.data_operacional) ||
+        !Number.isInteger(row.funcionario_id) || row.funcionario_id <= 0) continue;
+    const key = `${row.data_operacional}::${row.funcionario_id}`;
+    const current = readinessMap.get(key);
+    const nextPriority = readinessPriority(row.classification);
+    const currentPriority = current ? readinessPriority(current.classification) : -1;
+    if (!current || nextPriority > currentPriority ||
+        (nextPriority === currentPriority &&
+         `${row.classification}::${row.protocol_version}` >
+         `${current.classification}::${current.protocol_version}`)) {
+      readinessMap.set(key, row);
+    }
+  }
+
   for (const row of input.rows.effectiveness) {
     const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
     effectivenessMap.set(key, row);
@@ -710,6 +644,7 @@ export function buildFrmsOperationalSnapshot(
     const escala = escalaMap.get(key) ?? null;
     const jornada = jornadaMap.get(key) ?? null;
     const checkin = checkinMap.get(key) ?? null;
+    const readiness = readinessMap.get(key) ?? null;
     const efetividade = effectivenessMap.get(key) ?? null;
     const activities = activityMap.get(key) ?? [];
     const funcionario = funcionarioMap.get(funcionario_id) ?? null;
@@ -819,6 +754,11 @@ export function buildFrmsOperationalSnapshot(
     if (isCriticalCheckin(checkin)) {
       alertas.push('CHECKIN_CRITICO');
     }
+    // A separate, later vigilance screening cannot be erased by a normal subjective score.
+    // This is an operational review signal, never a clinical diagnosis or automatic unfitness.
+    if (readiness && !['preserved', 'baseline_building'].includes(readiness.classification)) {
+      alertas.push('READINESS_REVISAO');
+    }
 
     // Check-in existente mas incompleto não é "recebido com precisão reduzida":
     // é dado insuficiente para o cálculo canônico e deve ficar fail-closed.
@@ -923,6 +863,8 @@ export function buildFrmsOperationalSnapshot(
       hora_acordar: horaAcordar,
       fadiga_score: checkin ? asNumber(checkin.score_fadiga, 0) : null,
       status_operacional_checkin: completeDailyCheckin ? normalizeText(checkin?.status_operacional) : null,
+      readiness_classification: readiness?.classification ?? null,
+      readiness_protocol_version: readiness?.protocol_version ?? null,
 
       effectiveness_pct: effectivenessPctNormalized,
       effectiveness_componentes:
@@ -1064,6 +1006,7 @@ interface OperationalSnapshotRows {
   checkins: CheckinSnapshotRow[];
   effectiveness: EffectivenessSnapshotRow[];
   activities: FrmsActivitySnapshotRow[];
+  readiness: ReadinessSnapshotRow[];
   regulatoryRolling: RollingRegulatoryEvidence[];
   missionPeriods: MissionPeriodRow[];
 }
@@ -1074,6 +1017,22 @@ interface OperationalSnapshotRows {
  * A janela aqui é a janela INTERNA de cálculo — não necessariamente o intervalo
  * pedido pelo cliente.
  */
+/** Load objective readiness evidence with tenant/date isolation. Malformed D1 responses fail closed. */
+export async function loadReadinessSnapshotRows(
+  db: D1Database, empresaId: number, inicio: string, fim: string,
+): Promise<ReadinessSnapshotRow[]> {
+  const result = await db.prepare(`SELECT reference_date AS data_operacional, CAST(funcionario_id AS INTEGER) AS funcionario_id,
+                       classification, protocol_version
+                  FROM frms_readiness_assessment
+                 WHERE empresa_id = ? AND deleted_at IS NULL
+                   AND reference_date >= ? AND reference_date <= ?`)
+    .bind(empresaId, inicio, fim).all<ReadinessSnapshotRow>();
+  if (!result || !Array.isArray(result.results)) {
+    throw new Error('FRMS_READINESS_QUERY_INCOMPLETE');
+  }
+  return result.results;
+}
+
 async function loadOperationalSnapshotRows(
   db: D1Database,
   empresaId: number,
@@ -1081,7 +1040,7 @@ async function loadOperationalSnapshotRows(
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
   const missionHistoryStart = addDaysIso(janelaInicio, -ACT_CDS_MAX_POST_MISSION_REST_DAYS);
-  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
+  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult, readinessResult] = await Promise.all([
     db
       .prepare(
         `WITH escala_crew AS (
@@ -1284,6 +1243,7 @@ async function loadOperationalSnapshotRows(
         empresaId, janelaFim, missionHistoryStart,
       )
       .all<MissionPeriodRow>(),
+    loadReadinessSnapshotRows(db, empresaId, janelaInicio, janelaFim),
   ]);
 
   return {
@@ -1302,6 +1262,7 @@ async function loadOperationalSnapshotRows(
       operational_data_source: row.operational_data_source,
     })),
     checkins: checkinsResult.results || [],
+    readiness: readinessResult,
     effectiveness: (effectivenessResult.results || []).map((row) => {
       let parsed: EffectivenessResult['componentes'] | null = null;
       if (row.effectiveness_componentes_json) {
@@ -1848,6 +1809,7 @@ export async function listFrmsOperationalSnapshot(
       escalas: contextRows.escalas,
       jornadas: contextRows.jornadas,
       checkins: contextRows.checkins,
+      readiness: contextRows.readiness,
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
       roster: buildActiveFortnightRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
