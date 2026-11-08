@@ -26,7 +26,7 @@ describe('read latency fan-out contracts', () => {
     );
     expect(modal).toContain('useFuncionariosAtivos(isOpen)');
     expect(modal).toMatch(
-      /useTiposQualificacao\(\s*Number\(form\.categoria\) \|\| undefined,\s*isOpen,\s*\)/,
+      /useTiposQualificacao\(\s*Number\(form\.categoria\) \|\| undefined,\s*isOpen,\s*isEditMode \? habilitacao\?\.qualificacao_id : undefined,\s*\)/,
     );
     expect(modal).toContain('useCategoriasQualificacao(isOpen)');
   });

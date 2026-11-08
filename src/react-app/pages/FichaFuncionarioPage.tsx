@@ -20,6 +20,7 @@ import CadernetaHorasVoo from '@/react-app/pages/funcionarios/CadernetaHorasVoo'
 import { buildPasta360Url } from '@/react-app/utils/pasta360';
 import { isTripulacaoVooFuncionario } from '@/react-app/config/pastaVirtual';
 import { useFrmsOperationalSnapshot } from '@/react-app/hooks/useFrmsOperationalSnapshot';
+import { resolveFichaComplianceStatus, type FichaComplianceStatus } from './fichaComplianceStatus';
 import { FortnightConsolidatedPanel } from '@/react-app/pages/frms/components/FortnightOperationalIndicator';
 import {
   ArrowLeft,
@@ -42,7 +43,7 @@ import {
 // Tipos
 // ============================================================
 
-type ComplianceStatus = 'conforme' | 'em_risco' | 'nao_conforme';
+type ComplianceStatus = FichaComplianceStatus;
 type RequisitoStatus = 'ok' | 'risco' | 'faltando';
 
 interface Funcionario {
@@ -254,6 +255,14 @@ function statusRegulatorioHistorico(registro: Qualificacao, requisitos: MatrizRe
 }
 
 function badgeCompliance(status: ComplianceStatus) {
+  if (status === 'indisponivel') {
+    return (
+      <span role="status" className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+        <ShieldAlert className="h-3.5 w-3.5" />
+        Compliance indisponível
+      </span>
+    );
+  }
   if (status === 'conforme') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
@@ -462,6 +471,7 @@ export default function FichaFuncionarioPage() {
   const [tab, setTab] = useState<FichaTab>(() => normalizeFichaTab(searchParams.get('tab')));
   const [ficha, setFicha] = useState<Ficha360Data | null>(null);
   const [requisitosFuncao, setRequisitosFuncao] = useState<MatrizRequisito[]>([]);
+  const [complianceReadError, setComplianceReadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -521,6 +531,9 @@ export default function FichaFuncionarioPage() {
       try {
         setLoading(true);
         setError('');
+        setFicha(null);
+        setRequisitosFuncao([]);
+        setComplianceReadError(true);
 
         const fichaRes = await fetchWithAuth(`${API_BASE_URL}/funcionarios/${id}/ficha-360`);
         if (!fichaRes.ok) {
@@ -528,22 +541,31 @@ export default function FichaFuncionarioPage() {
         }
 
         const fichaJson = await fichaRes.json();
-        const complianceRes = await fetchWithAuth(
-          `${API_BASE_URL}/compliance-treinamentos/funcionarios/${id}`,
-        );
-        let complianceJson: { data?: { requisitos?: MatrizRequisito[] } } = {};
-
-        if (!complianceRes.ok) {
-          console.warn('[FichaFuncionarioPage] Falha ao carregar compliance de treinamentos', {
-            funcionarioId: id,
-            status: complianceRes.status,
-          });
-        } else {
-          complianceJson = await complianceRes.json();
+        let requisitos: MatrizRequisito[] | null = null;
+        try {
+          const complianceRes = await fetchWithAuth(
+            `${API_BASE_URL}/compliance-treinamentos/funcionarios/${id}`,
+          );
+          const complianceJson = complianceRes.ok
+            ? await complianceRes.json().catch(() => null)
+            : null;
+          if (complianceRes.ok && complianceJson?.success === true &&
+              Array.isArray(complianceJson?.data?.requisitos)) {
+            requisitos = complianceJson.data.requisitos as MatrizRequisito[];
+          } else {
+            // A failed request is not an empty matrix. Do not imply that this
+            // employee is compliant or has no mandatory requirements.
+            console.warn('[FichaFuncionarioPage] Requisitos de Compliance indisponíveis', {
+              status: complianceRes.status,
+            });
+          }
+        } catch {
+          console.warn('[FichaFuncionarioPage] Consulta de Compliance indisponível');
         }
 
         setFicha(fichaJson.data);
-        setRequisitosFuncao((complianceJson.data?.requisitos || []) as MatrizRequisito[]);
+        setComplianceReadError(requisitos === null);
+        setRequisitosFuncao(requisitos ?? []);
       } catch (err) {
         setError('Erro ao carregar dados do funcionário');
       } finally {
@@ -602,20 +624,10 @@ export default function FichaFuncionarioPage() {
     () => treinamentos.filter((treinamento) => treinamento.registro_tipo === 'matricula').length,
     [treinamentos],
   );
-  const complianceStatus = useMemo<ComplianceStatus>(() => {
-    if (requisitosFuncao.length === 0) return 'conforme';
-    if (requisitosFuncao.some((req) => req.status === 'VENCIDO' || req.status === 'EM_FALTA')) {
-      return 'nao_conforme';
-    }
-    if (
-      requisitosFuncao.some(
-        (req) => req.status === 'EM_DIA' && Number(req.dias_para_vencer ?? 9999) <= 30,
-      )
-    ) {
-      return 'em_risco';
-    }
-    return 'conforme';
-  }, [requisitosFuncao]);
+  const complianceStatus = useMemo(
+    () => resolveFichaComplianceStatus(requisitosFuncao, complianceReadError),
+    [requisitosFuncao, complianceReadError],
+  );
 
   // ============================================================
   // Renderização
@@ -790,7 +802,18 @@ export default function FichaFuncionarioPage() {
                 <h3 className="mb-4 text-base font-semibold text-gray-800">
                   Situação de Requisitos da Matriz da Função
                 </h3>
-                {requisitosFuncao.length === 0 ? (
+                {complianceReadError ? (
+                  <div role="alert" className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">Não foi possível consultar os requisitos de treinamento.</p>
+                      <p className="mt-1 text-xs">
+                        Os dados de Compliance estão indisponíveis. Não considere a ausência de
+                        requisitos como conformidade ou liberação operacional.
+                      </p>
+                    </div>
+                  </div>
+                ) : requisitosFuncao.length === 0 ? (
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
@@ -930,9 +953,11 @@ export default function FichaFuncionarioPage() {
                       : 'Sem qualificações em risco imediato.'}
                   </li>
                   <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    {requisitosFuncao.length > 0
-                      ? `${requisitosFuncao.length} requisito(s) ativos na matriz da função.`
-                      : `Função ${f.funcao} sem requisitos ativos na matriz de treinamento.`}
+                    {complianceReadError
+                      ? 'Requisitos de treinamento indisponíveis; verificar o Compliance antes de declarar conformidade.'
+                      : requisitosFuncao.length > 0
+                        ? `${requisitosFuncao.length} requisito(s) ativos na matriz da função.`
+                        : `Função ${f.funcao} sem requisitos ativos na matriz de treinamento.`}
                   </li>
                   <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                     {ficha.treinamentos.length > 0

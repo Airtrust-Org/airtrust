@@ -25,7 +25,7 @@ type MockEvent = {
   qualificacao_tipo_id: number;
   qualificacao_codigo: string;
   qualificacao_categoria: string;
-  qualificacao_validade: number;
+  qualificacao_validade: number | null;
   qualificacao_vencimento_fim_mes: number;
   qualificacao_carga_horaria: number | null;
   qualificacao_carga_horaria_inicial: number | null;
@@ -741,6 +741,18 @@ describe('treinamentos planejados integration service', () => {
     vi.clearAllMocks();
     invalidateMaterializedStatsMock.mockResolvedValue(undefined);
     publishQualificacaoEventMock.mockResolvedValue(undefined);
+  });
+
+  it('não inventa vencimento para treinamento planejado cujo modelo não tem validade', async () => {
+    const state = buildBaseState('PLANEJADO');
+    state.event.qualificacao_validade = null;
+    const db = createMockDb(state);
+
+    await syncTreinamentoPlanejadoIntegration({ db, empresaId: 1, treinamentoId: 77 });
+
+    expect(state.histories).toHaveLength(1);
+    expect(state.histories[0].status).toBe('PLANEJADA');
+    expect(state.histories[0].data_vencimento).toBeNull();
   });
 
   it('cria historico planejado e agenda solicitacoes aprovadas', async () => {
