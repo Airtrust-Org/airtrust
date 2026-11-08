@@ -1890,11 +1890,21 @@ export default function LmsCatalogo() {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isSavingCourse, setIsSavingCourse] = useState(false);
 
-  const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
+  const {
+    data: publishedCoursesResponse,
+    isLoading: loadingPublishedCourses,
+    isError: publishedCoursesError,
+    refetch: retryPublishedCourses,
+  } = useLmsCursos({
     publicados: true,
     limit: 300,
   });
-  const { data: draftCoursesResponse, isLoading: loadingDraftCourses } = useLmsCursos(
+  const {
+    data: draftCoursesResponse,
+    isLoading: loadingDraftCourses,
+    isError: draftCoursesError,
+    refetch: retryDraftCourses,
+  } = useLmsCursos(
     {
       publicados: false,
       limit: 300,
@@ -1931,6 +1941,7 @@ export default function LmsCatalogo() {
   const loadingCourses = canManage
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
+  const catalogRequestFailed = publishedCoursesError || (canManage && draftCoursesError);
   // Disabled queries may still expose stale React Query cache; never use personal rows in admin mode.
   const myMatriculas = loadPersonalEnrollments ? (matriculas ?? []) : [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
@@ -2404,7 +2415,16 @@ export default function LmsCatalogo() {
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
-            {studentMode && personalEnrollmentError ? (
+            {catalogRequestFailed ? (
+              <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                <p>Não foi possível consultar todos os cursos. Isso não significa que foram removidos.</p>
+                <button type="button" className="mt-2 rounded border border-amber-500 px-3 py-1 font-medium hover:bg-amber-100" onClick={() => {
+                  void retryPublishedCourses();
+                  if (canManage) void retryDraftCourses();
+                }}>Tentar novamente</button>
+              </div>
+            ) : null}
+            {catalogRequestFailed && courses.length === 0 ? null : studentMode && personalEnrollmentError ? (
               <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
                 Não foi possível carregar suas matrículas pessoais. Verifique o vínculo da conta com um funcionário ativo desta empresa e tente novamente.
               </div>
