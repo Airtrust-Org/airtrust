@@ -111,6 +111,8 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
       target: { funcionario_id: 44, qualificacao_tipo_id: 7 },
       channel: 'WHATSAPP',
       reenviarHoje: false,
+      manual: true,
+      qualificacaoNome: 'CMA',
     }));
     expect(delivery).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
