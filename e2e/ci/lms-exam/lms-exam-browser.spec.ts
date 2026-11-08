@@ -47,6 +47,15 @@ async function sendExam(page: Page) {
 }
 
 test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> certificado -> reabertura', async ({ page }) => {
+  // This learning-flow fixture uses Portuguese labels. Fix the browser
+  // locale before navigation so auto-locale/i18n requests cannot race
+  // unrelated SCORM assertions in WebKit. Translation API is exercised
+  // separately by the HTTP/CORS contract probe below.
+  await page.addInitScript(() => {
+    if (window.location.origin === 'http://127.0.0.1:3000') {
+      window.localStorage.setItem('airtrust:language:manual', 'pt-BR');
+    }
+  });
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
   // Keep the synthetic Portuguese examination fixed to pt-BR on every
@@ -105,6 +114,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
 
   // 1) login sintetico (UI) e player com estudo concluido: CTA da prova final
   await login(page, password);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
   await page.goto(`/lms/player/${MATRICULA}`);
   const cta = page.getByTestId('lms-open-exam');
   await expect(cta).toBeVisible();
