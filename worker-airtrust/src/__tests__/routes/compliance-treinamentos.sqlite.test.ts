@@ -22,8 +22,12 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
     Boolean(row && !row.deleted_at && ['NAO_INICIADO', 'EM_ANDAMENTO'].includes(row.status)),
 }));
 
+const roleMock = vi.hoisted(() => ({ role: 'admin' }));
 vi.mock('../../middleware/rbac', () => ({
-  requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  requireRole: (...allowedRoles: string[]) => async (_c: unknown, next: () => Promise<void>) => {
+    if (!allowedRoles.includes(roleMock.role)) throw new ApiError('Permissão negada', 403, 'RBAC_FORBIDDEN');
+    await next();
+  },
 }));
 
 const sectorAccessMock = vi.hoisted(() => ({
@@ -194,6 +198,7 @@ describe('training compliance engine', () => {
 
   beforeEach(() => {
     tenantMock.id = 1;
+    roleMock.role = 'admin';
     sectorAccessMock.access = { mode: 'all', setorIds: [], funcionarioId: null };
     sqlite = new SqliteD1Database();
     patchComplianceSchema(sqlite);
@@ -216,6 +221,19 @@ describe('training compliance engine', () => {
       const individual = await (await app.request(`/funcionarios/${person.id}`)).json() as any;
       expect(person.requisitos).toEqual(individual.data.requisitos);
     }
+  });
+
+  it('rejeita consulta em lote para viewer e manager, sem executar a projeção', async () => {
+    const app = createApp(sqlite.asD1());
+    for (const role of ['viewer', 'manager']) {
+      roleMock.role = role;
+      const response = await app.request('/funcionarios/requisitos-lote?ids=1000');
+      expect(response.status, role).toBe(403);
+      const body = await response.json() as any;
+      expect(body.success).toBe(false);
+    }
+    roleMock.role = 'admin';
+    expect((await app.request('/funcionarios/requisitos-lote?ids=1000')).status).toBe(200);
   });
 
   it('falha fechado para IDs inválidos, duplicados, grandes ou fora do tenant', async () => {
