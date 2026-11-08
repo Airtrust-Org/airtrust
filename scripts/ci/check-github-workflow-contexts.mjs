@@ -23,6 +23,8 @@ export function inspectWorkflowText(fileName, text) {
   let currentJob = null;
   let inJobEnv = false;
   let currentJobHasTimeout = false;
+  let runIndent = null;
+  const untrustedContext = /\$\{\{\s*(?:github\.event\.(?:pull_request\.(?:title|body)|issue\.(?:title|body)|comment\.body)|github\.head_ref)\b/;
 
   const finishCurrentJob = () => {
     if (currentJob && timeoutProtectedWorkflows.has(fileName) && !currentJobHasTimeout) {
@@ -37,6 +39,13 @@ export function inspectWorkflowText(fileName, text) {
     if (trimmed === '' || trimmed.startsWith('#')) continue;
 
     const indent = line.length - line.trimStart().length;
+
+    if (runIndent !== null && indent <= runIndent) runIndent = null;
+    const isRunDeclaration = /^(?:-\s*)?run:\s*/.test(trimmed);
+    if (isRunDeclaration) runIndent = indent;
+    if (currentJob && runIndent !== null && untrustedContext.test(line)) {
+      violations.push(`${fileName}:${index + 1} jobs.${currentJob} untrusted GitHub context inside run`);
+    }
 
     if (indent === 0) {
       finishCurrentJob();

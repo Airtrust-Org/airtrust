@@ -155,7 +155,7 @@ describe('qualificacoes historico write router', () => {
     let readbackCount = 0;
     const { db, calls } = createMockDb([
       [
-        'LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL',
+        'SELECT qh.tipo_treinamento, qh.carga_horaria',
         {
           first: () => ({
             tipo_treinamento: 'RECORRENTE',
@@ -163,7 +163,8 @@ describe('qualificacoes historico write router', () => {
             validade_meses: 12,
             data_vencimento: '2026-07-15',
             qualificacao_codigo: 'SIM',
-            validade: 12,
+            tipo_validade: 24,
+            vencimento_fim_mes: 1,
             carga_horaria_inicial: 4,
             carga_horaria_recorrente: 8,
           }),
@@ -253,6 +254,12 @@ describe('qualificacoes historico write router', () => {
       1,
     ]);
 
+    const modelRead = calls.find((call) => call.method === 'first' && call.query.includes('qt.validade AS tipo_validade'));
+    expect(modelRead?.args).toEqual([123, 1]);
+    expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
+      validadeMeses: 24,
+      vencimentoFimMes: 1,
+    }));
     const retryCall = calls.find(
       (call) => call.method === 'run' && call.query.includes('SET instrutor = ?,'),
     );
@@ -281,6 +288,7 @@ describe('qualificacoes historico write router', () => {
             id: 19,
             categoria: 'OPS',
             validade: 12,
+            vencimento_fim_mes: 1,
             carga_horaria: 8,
             carga_horaria_inicial: 8,
             carga_horaria_recorrente: 8,
@@ -345,6 +353,10 @@ describe('qualificacoes historico write router', () => {
       'INICIAL',
       1,
     ]);
+    expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
+      vencimentoFimMes: 1,
+      validadeMeses: 12,
+    }));
     expect(publishQualificacaoEventMock).toHaveBeenCalledWith(
       db,
       'created',
@@ -449,11 +461,12 @@ describe('qualificacoes historico write router', () => {
 
     const { db, calls } = createMockDb([
       [
-        'SELECT qt.validade_meses, qt.validade, qt.data_vencimento, qt.qualificacao_codigo',
+        'SELECT qh.validade_meses, qt.validade AS tipo_validade,',
         {
           first: () => ({
             validade_meses: 12,
-            validade: 12,
+            tipo_validade: 24,
+            vencimento_fim_mes: 1,
             data_vencimento: null,
             qualificacao_codigo: 'CRM',
           }),
@@ -497,7 +510,17 @@ describe('qualificacoes historico write router', () => {
         call.query.includes('SET data_conclusao = ?') &&
         call.query.includes("status = 'PLANEJADA'"),
     );
-    expect(updateCall?.args).toEqual(['2099-05-10', '2027-05-10', 654]);
+    expect(updateCall?.args).toEqual(['2099-05-10', '2027-05-10', 654, 1]);
+    const readCall = calls.find((call) => call.method === 'first' && call.query.includes('qt.validade AS tipo_validade'));
+    expect(readCall?.args).toEqual([654, 1]);
+    expect(readCall?.query).toContain('qh.empresa_id = ?');
+    expect(readCall?.query).toContain('qt.vencimento_fim_mes');
+    expect(readCall?.query).not.toContain('qt.validade_meses');
+    expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
+      validadeMeses: 24,
+      vencimentoFimMes: 1,
+      dataConclusao: '2099-05-10',
+    }));
   });
 
   it('limpa o vínculo da matrícula e do ciclo LMS ao excluir a qualificação', async () => {

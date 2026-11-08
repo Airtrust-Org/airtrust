@@ -16,6 +16,22 @@ const put = source.slice(source.indexOf("app.put('/regras/:id',"),
   source.indexOf("app.delete('/regras/:id',"));
 
 describe('Compliance requirement save enrollment synchronization', () => {
+  it('bulk reconciliation endpoint requires admin, is read-only, scoped and excludes employee PII', () => {
+    const start = source.indexOf("app.get('/funcionarios/requisitos-lote'");
+    const end = source.indexOf("app.get('/funcionarios/:id'", start);
+    const route = source.slice(start, end);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(route).toContain("requireRole('admin')");
+    expect(route).toContain('const empresaId = getEmpresaId(c)');
+    expect(route).toContain('getEmployeeSectorAccess(c, empresaId)');
+    expect(route).toContain('new Map(snapshot.people.map');
+    expect(route).toContain("COMPLIANCE_BATCH_EMPLOYEE_NOT_FOUND");
+    expect(route).toContain('return { id, requisitos: person.requisitos }');
+    expect(route).not.toMatch(/\.run\(\)|\.batch\(|UPDATE |INSERT |DELETE /);
+  });
+
+
   it('reconciles immediately on both create and edit after saving the requirement', () => {
     expect(post).toContain('reconcileTrainingComplianceRuleEnrollment(');
     expect(put).toContain('reconcileTrainingComplianceRuleEnrollment(');

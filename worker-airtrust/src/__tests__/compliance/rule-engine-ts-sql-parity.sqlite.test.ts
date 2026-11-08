@@ -14,6 +14,7 @@ import {
   resolvedRules,
 } from '../../services/training-compliance-snapshot-builder';
 import { trainingComplianceEffectiveRequirementPredicateSql } from '../../services/training-compliance-rule-engine';
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
 
 function prng(seed: number) {
   let a = seed >>> 0;
@@ -143,11 +144,12 @@ describe('paridade motor TS × predicado SQL de requisito efetivo obrigatório',
     });
     const rows = sqlite.database
       .prepare(
-        `SELECT f.id AS fid, qt.id AS tid FROM funcionarios f
+        `WITH compliance_operational_date(hoje) AS (VALUES(?))
+         SELECT f.id AS fid, qt.id AS tid FROM funcionarios f
            JOIN qualificacoes_tipos qt ON qt.empresa_id = f.empresa_id
           WHERE f.empresa_id = 1 AND ${predicate}`,
       )
-      .all() as Array<{ fid: number; tid: number }>;
+      .all(getTodayIsoSaoPaulo()) as Array<{ fid: number; tid: number }>;
     const sqlPairs = new Set(rows.map((r) => `${r.fid}:${r.tid}`));
 
     const onlyTs = [...tsPairs].filter((p) => !sqlPairs.has(p)).sort();
@@ -189,8 +191,9 @@ describe('divergência conhecida: atribuição de aeronave encerrada + campo leg
       ruleAlias: 'tr', employeeAlias: 'f', qualificationExpr: 'qt.id',
     });
     const sqlRequired = Boolean(
-      x.prepare(`SELECT 1 AS ok FROM funcionarios f JOIN qualificacoes_tipos qt ON qt.empresa_id = f.empresa_id
-                  WHERE f.id = 1 AND qt.id = 1 AND ${predicate}`).get(),
+      x.prepare(`WITH compliance_operational_date(hoje) AS (VALUES(?))
+                  SELECT 1 AS ok FROM funcionarios f JOIN qualificacoes_tipos qt ON qt.empresa_id = f.empresa_id
+                  WHERE f.id = 1 AND qt.id = 1 AND ${predicate}`).get(getTodayIsoSaoPaulo()),
     );
     expect({ tsRequired, sqlRequired }).toEqual({ tsRequired: true, sqlRequired: false });
   });

@@ -101,6 +101,8 @@ export async function listTrainingCommunications(
                   ELSE n.tipo END AS tipo,
              n.destinatario AS destinatario,
              CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                  OR (n.assunto LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
+                      AND n.status IN ('pendente', 'processando'))
                   THEN 'REGISTRO_RESERVA' ELSE 'REGISTRO_ENVIO'
              END AS destinatario_fonte,
              n.status AS status_envio, n.erro_mensagem AS erro,
@@ -123,7 +125,8 @@ export async function listTrainingCommunications(
          -- Coordination rows are not additional deliveries; preserve indeterminate
          -- pending reservations for operators to reconcile safely.
          AND (n.assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
-              OR n.status IN ('pendente', 'processando'))
+              OR n.status IN ('pendente', 'processando')
+              OR COALESCE(json_extract(n.corpo, '$.manual'), 0) = 1)
          AND ${scope.clause}`);
     bindings.push(empresaId, ...scope.bindings);
   }

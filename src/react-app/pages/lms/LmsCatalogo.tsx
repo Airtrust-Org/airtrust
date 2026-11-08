@@ -749,7 +749,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin && (scormProfile === 'FORMATIVE' || scormProfile === 'EXTERNAL');
+  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile !== 'PRIVATE' && scormProfile !== 'CHECKING';
   useEffect(() => {
     if (!canUploadInactiveProduction || !contentFile) {
       setScormProfile('CHECKING');
@@ -846,7 +846,7 @@ function CourseDrawer({
       return;
     }
     if (candidateFirstScorm && contentFile) {
-      toast.error('Para enviar o ZIP, use “Enviar ZIP para homologação”. Para salvar dados do curso, remova primeiro o ZIP selecionado.');
+      toast.error('Para enviar o ZIP, utilize o botão de envio ou substituição abaixo. Para salvar apenas os dados do curso, remova primeiro o ZIP selecionado.');
       return;
     }
     const errs = validateForm(form);
@@ -1276,10 +1276,10 @@ function CourseDrawer({
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                           <p className="font-semibold">Trocar o conteúdo deste curso</p>
                           <p className="mt-1">{directReplacement
-                            ? 'Perfil formativo sem prova identificado. O Worker revalidará os gates antes de substituir a edição. Históricos e conclusões anteriores permanecem preservados.'
+                            ? 'Ao enviar o ZIP SCORM válido, o conteúdo anterior será substituído e o curso permanecerá ativo. Históricos concluídos são preservados.'
                             : scormProfile === 'PRIVATE'
                               ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
-                              : 'ZIP pontuado, prova externa ou perfil não confirmado: será recebido somente como edição INATIVA. O conteúdo atual não muda até homologação e ativação governada.'}</p>
+                              : 'A substituição automática é feita por administradores. Este perfil não pode publicar o curso.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
                               Candidato recebido — VALIDATED significa apenas validação estrutural. ID: {qaCandidateReceipt.packageId}.
@@ -1319,7 +1319,7 @@ function CourseDrawer({
                           <p className="mt-1 text-amber-800">
                             Atual: {storedContentLabel ?? 'conteúdo já publicado'}
                           </p>
-                          <p className="mt-1 text-amber-800">{candidateFirstScorm ? 'ZIP para homologar' : 'Novo envio'}: {contentFile?.name}</p>
+                          <p className="mt-1 text-amber-800">{candidateFirstScorm ? (directReplacement ? 'ZIP para substituição automática' : 'ZIP para homologar') : 'Novo envio'}: {contentFile?.name}</p>
                           {candidateFirstScorm ? (
                             <p className="mt-2 font-medium">Use o botão de substituição no rodapé. Não repita o envio sem conferir o resultado.</p>
                           ) : null}
@@ -1525,7 +1525,7 @@ function CourseDrawer({
                     loading={isCandidateUploading}
                     disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Validar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
@@ -1890,11 +1890,21 @@ export default function LmsCatalogo() {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isSavingCourse, setIsSavingCourse] = useState(false);
 
-  const { data: publishedCoursesResponse, isLoading: loadingPublishedCourses } = useLmsCursos({
+  const {
+    data: publishedCoursesResponse,
+    isLoading: loadingPublishedCourses,
+    isError: publishedCoursesError,
+    refetch: retryPublishedCourses,
+  } = useLmsCursos({
     publicados: true,
     limit: 300,
   });
-  const { data: draftCoursesResponse, isLoading: loadingDraftCourses } = useLmsCursos(
+  const {
+    data: draftCoursesResponse,
+    isLoading: loadingDraftCourses,
+    isError: draftCoursesError,
+    refetch: retryDraftCourses,
+  } = useLmsCursos(
     {
       publicados: false,
       limit: 300,
@@ -1931,6 +1941,7 @@ export default function LmsCatalogo() {
   const loadingCourses = canManage
     ? loadingPublishedCourses || loadingDraftCourses
     : loadingPublishedCourses;
+  const catalogRequestFailed = publishedCoursesError || (canManage && draftCoursesError);
   // Disabled queries may still expose stale React Query cache; never use personal rows in admin mode.
   const myMatriculas = loadPersonalEnrollments ? (matriculas ?? []) : [];
   const matriculasByCurso = new Map(myMatriculas.map((m) => [m.curso_id, m]));
@@ -2404,7 +2415,16 @@ export default function LmsCatalogo() {
 
           {/* Course grid */}
           <div className="p-5 sm:p-6">
-            {studentMode && personalEnrollmentError ? (
+            {catalogRequestFailed ? (
+              <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                <p>Não foi possível consultar todos os cursos. Isso não significa que foram removidos.</p>
+                <button type="button" className="mt-2 rounded border border-amber-500 px-3 py-1 font-medium hover:bg-amber-100" onClick={() => {
+                  void retryPublishedCourses();
+                  if (canManage) void retryDraftCourses();
+                }}>Tentar novamente</button>
+              </div>
+            ) : null}
+            {catalogRequestFailed && courses.length === 0 ? null : studentMode && personalEnrollmentError ? (
               <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
                 Não foi possível carregar suas matrículas pessoais. Verifique o vínculo da conta com um funcionário ativo desta empresa e tente novamente.
               </div>

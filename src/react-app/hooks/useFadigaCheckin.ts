@@ -25,6 +25,7 @@ export interface FadigaCheckinItem {
 export interface CheckinFormData {
   reference_date?: string;
   data_checkin?: string;
+  late_submission_acknowledged?: true;
   hora_dormiu?: string;
   hora_acordou?: string;
   wake_time?: string;
@@ -148,10 +149,35 @@ export function safeFadigaVisibleErrorMessage(
     case 'team-checkins-load':
       return 'Não foi possível carregar os check-ins da equipe.';
     case 'daily-checkin-submit':
-      if (_technicalDetail instanceof Error && _technicalDetail.message === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
-        return 'O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.';
+      if (_technicalDetail instanceof Error) {
+        const incidentId = (_technicalDetail as Error & { incidentId?: string }).incidentId;
+        const reference = typeof incidentId === 'string' && /^[a-f0-9-]{36}$/i.test(incidentId)
+          ? ` Referência: ${incidentId.slice(0, 8)}.`
+          : '';
+        const code = _technicalDetail.message;
+        if (code === 'FRMS_CHECKIN_COMMITTED_POST_PROCESSING_FAILED') {
+          return `O check-in foi gravado, mas houve falha nas atualizações operacionais. Não envie novamente; informe a coordenação para verificar o processamento e os alertas.${reference}`;
+        }
+        // A rejection before the D1 batch is not a transient connection failure:
+        // repeating the same PVT payload cannot make it valid as pre-flight evidence.
+        if (code === 'post_presentation_readiness_not_allowed') {
+          return 'A hora de apresentação informada já passou. O teste de atenção feito agora não pode ser aceito como avaliação pré-jornada. O check-in não foi registrado; procure a coordenação para regularizar o registro tardio. Não altere o horário de apresentação para contornar a regra.';
+        }
+        if (code === 'late_submission_not_confirmed_by_server') {
+          return 'O horário de apresentação não confere com o relógio operacional do servidor. O check-in não foi registrado. Verifique a data/hora automática do aparelho e procure a coordenação; não altere o horário de apresentação.';
+        }
+        if (code === 'retrospective_readiness_not_allowed') {
+          return 'O teste de atenção de hoje não pode ser usado como avaliação de um dia anterior. O check-in não foi registrado; procure a coordenação para orientar o registro retrospectivo.';
+        }
+        if (code === 'invalid_readiness_protocol') {
+          return 'A versão do teste de atenção não é compatível com o protocolo atual. Atualize o AirTrust e refaça o teste somente antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
+        }
+        if (['invalid_trial_sequence', 'invalid_trial_timing', 'invalid_duration', 'readiness_trials_required'].includes(code)) {
+          return 'Os dados do teste de atenção não passaram na validação. O check-in não foi registrado. Atualize o AirTrust e refaça o teste antes da apresentação; caso a jornada já tenha começado, procure a coordenação.';
+        }
+        return `Não foi possível confirmar o registro do check-in. Consulte seu Histórico antes de reenviar e informe à coordenação.${reference}`;
       }
-      return 'Não foi possível registrar o check-in de fadiga. Tente novamente.';
+      return 'Não foi possível confirmar o registro do check-in. Consulte seu Histórico antes de reenviar e informe à coordenação.';
   }
 }
 
@@ -276,9 +302,16 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     ...init,
   });
-  const json = (await response.json()) as { success: boolean; data?: T; error?: string };
+  const json = (await response.json()) as {
+    success: boolean; data?: T; error?: unknown; incident_id?: unknown;
+  };
   if (!response.ok || !json.success) {
-    throw new Error(json.error || `Erro HTTP ${response.status}`);
+    const error: Error & { incidentId?: string } =
+      new Error(typeof json.error === 'string' ? json.error : `Erro HTTP ${response.status}`);
+    if (typeof json.incident_id === 'string' && /^[a-f0-9-]{36}$/i.test(json.incident_id)) {
+      error.incidentId = json.incident_id;
+    }
+    throw error;
   }
   return json.data as T;
 }

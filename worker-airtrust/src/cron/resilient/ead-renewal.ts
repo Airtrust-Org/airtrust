@@ -4,8 +4,15 @@ import {
   hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
 } from '../../services/lms-matricula-cycle';
-import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
-import { trainingComplianceEffectiveRequirementPredicateSql } from '../../services/training-compliance-rule-engine';
+import {
+  getQualificacoesVencimentoExpr,
+  getTodayIsoSaoPaulo,
+} from '../../utils/qualificacoes-alerta-config';
+import {
+  trainingComplianceEffectiveRequirementPredicateSql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
+} from '../../services/training-compliance-rule-engine';
 import {
   enqueueCronJobItem,
   listRunnableCronJobItems,
@@ -44,7 +51,8 @@ interface ExistingMatricula {
 export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
   const vencExpr = getQualificacoesVencimentoExpr();
   const vencExprQh2 = getQualificacoesVencimentoExpr('qh2', 'qt');
-  return `SELECT DISTINCT
+  return `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+       SELECT DISTINCT
            qh.id AS qualificacao_historico_id,
            qh.funcionario_id,
            qh.empresa_id,
@@ -100,7 +108,7 @@ export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
                )
                AND date(${vencExprQh2}) > date(${vencExpr})
           )
-          AND date(${vencExpr}) <= date('now', '+' || ? || ' days')
+          AND date(${vencExpr}) <= date(${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}, '+' || ? || ' days')
           AND qh.id > ?
         ORDER BY qh.id ASC
         LIMIT ?`;
@@ -267,7 +275,7 @@ export async function runEadRenewalJob(db: D1Database, logger: CronJobLogger) {
 
       const discovery = await db
         .prepare(buildQualificacoesEadRenovacaoResilienteQuery())
-        .bind(LMS_RENOVACAO_EAD_JANELA_DIAS, cursor, EAD_RENEWAL_DISCOVERY_BATCH)
+        .bind(getTodayIsoSaoPaulo(), LMS_RENOVACAO_EAD_JANELA_DIAS, cursor, EAD_RENEWAL_DISCOVERY_BATCH)
         .all<RenewalRow>();
       const rows = discovery.results || [];
       const discoveredAt = new Date().toISOString();

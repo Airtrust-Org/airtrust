@@ -27,7 +27,7 @@ import OperationalVigilanceTest, {
   type OperationalVigilanceResult,
 } from './OperationalVigilanceTest';
 import RecoveryActivityCard from './RecoveryActivityCard';
-import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
+import { frmsBrazilOperationalTodayIso, isAtOrAfterFrmsPresentationBrasilia } from './frmsOperationalDate';
 import { useReadinessBaseline, useReadinessToday } from '@/react-app/hooks/useOperationalReadiness';
 import { previousOperationalDate, useFrmsRecoveryContext, type RecoveryActivityType } from '@/react-app/hooks/useFrmsRecovery';
 import {
@@ -495,7 +495,15 @@ function TriStateButtons({
 export default function FrmsFlightCheckinFadiga() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = frmsBrazilOperationalTodayIso();
+  // A check-in and its PVT are bound to the operational day on which the
+  // form was opened. The 15 s timer must never silently relabel that evidence
+  // after midnight Brasília or copy it into a different day's draft.
+  const [today] = useState(() => frmsBrazilOperationalTodayIso());
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(interval);
+  }, []);
   const { isAdmin, isGestor, role } = usePermissions();
   const { user, empresaAtualId } = useAuth();
   const draftKey = useMemo(
@@ -544,6 +552,9 @@ export default function FrmsFlightCheckinFadiga() {
   const [aceiteTermos, setAceiteTermos] = useState(restoredDraft?.aceiteTermos ?? false);
   const [aceitePrivacidade, setAceitePrivacidade] = useState(restoredDraft?.aceitePrivacidade ?? false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  // Acknowledgement is bound to the declared presentation time, not to an
+  // editable free-floating boolean that could survive a changed schedule.
+  const [lateAcknowledgedPresentation, setLateAcknowledgedPresentation] = useState<string | null>(null);
   const [vigilanceResult, setVigilanceResult] = useState<OperationalVigilanceResult | null>(
     restoredDraft?.vigilanceResult?.summary.protocolVersion === 'airtrust-brief-v1'
       ? restoredDraft.vigilanceResult : null,
@@ -626,11 +637,16 @@ export default function FrmsFlightCheckinFadiga() {
     observacao,
   });
 
-  const canSubmitWithReadiness = canSubmit && vigilanceResult !== null;
   const isNeedsCoordinatorReview = fitForDutyChoice === 'nao' || fitForDutyChoice === 'coord';
   const presentationTimeHasValue = presentationTime.trim().length > 0;
   const presentationTimeNormalized = normalizeWakeTimeInput(presentationTime);
   const presentationTimeValid = presentationTimeNormalized !== null;
+  const isLateCheckin = presentationTimeValid &&
+    isAtOrAfterFrmsPresentationBrasilia(new Date(nowMs), presentationTimeNormalized);
+  const lateAcknowledged = isLateCheckin && lateAcknowledgedPresentation === presentationTimeNormalized;
+  const dateRolledOver = frmsBrazilOperationalTodayIso(new Date(nowMs)) !== today;
+  const canSubmitWithReadiness = !dateRolledOver && canSubmit &&
+    (isLateCheckin ? lateAcknowledged : vigilanceResult !== null);
   const presentationTimeShowInvalid =
     (presentationTimeTouched || submitAttempted) && presentationTimeHasValue && !presentationTimeValid;
   const wakeTimeHasValue = wakeTime.trim().length > 0;
@@ -654,7 +670,8 @@ export default function FrmsFlightCheckinFadiga() {
   }
   if (qualidadeSono === null) missingItems.push('Qualidade do sono');
   if (kssScore === null) missingItems.push('Nível de sonolência (KSS)');
-  if (vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
+  if (isLateCheckin && !lateAcknowledged) missingItems.push('Confirmação de registro tardio');
+  else if (!isLateCheckin && vigilanceResult === null) missingItems.push('Teste breve de atenção e tempo de reação');
   if (fitForDutyChoice === null) missingItems.push('Condição para iniciar a jornada');
   if (isNeedsCoordinatorReview && !observacao.trim())
     missingItems.push('Observação obrigatória para revisão');
@@ -671,7 +688,16 @@ export default function FrmsFlightCheckinFadiga() {
     }
 
     setSubmitAttempted(true);
-    if (!canSubmitWithReadiness) {
+    // Re-evaluate the clock when the pilot actually clicks. A form can cross
+    // presentation time while PVT is running or while the phone is suspended.
+    const lateAtSubmit = presentationTimeNormalized !== null &&
+      isAtOrAfterFrmsPresentationBrasilia(new Date(Date.now()), presentationTimeNormalized);
+    if (lateAtSubmit && lateAcknowledgedPresentation !== presentationTimeNormalized) {
+      setNowMs(Date.now());
+      toast.error('O horário de apresentação já passou. Confirme o registro tardio para revisão da coordenação.');
+      return;
+    }
+    if (!canSubmit || (!lateAtSubmit && !vigilanceResult)) {
       toast.error(
         !presentationTimeValid && presentationTimeHasValue
           ? 'Informe uma hora de apresentação válida, ex.: 06:30.'
@@ -697,7 +723,7 @@ export default function FrmsFlightCheckinFadiga() {
       const kss = kssScore!;
       const fitForDuty = fitChoiceToPayload(fitForDutyChoice);
 
-      if (!vigilanceResult) {
+      if (!lateAtSubmit && !vigilanceResult) {
         toast.error('Conclua o teste breve de atenção antes de enviar.');
         return;
       }
@@ -724,16 +750,28 @@ export default function FrmsFlightCheckinFadiga() {
         alcool_ult_12h: optionalBinaryResponseToPayload(alcoolUlt12h),
         aceite_termos: true,
         aceite_privacidade: true,
-        readiness: {
+        ...(lateAtSubmit ? { late_submission_acknowledged: true as const } : {}),
+        // A post-presentation screen cannot be misrepresented as pre-flight
+        // PVT evidence. The Worker persists a RESTRITO check-in requiring
+        // operational review when readiness is absent after presentation.
+        ...(!lateAtSubmit && vigilanceResult ? { readiness: {
           duration_ms: vigilanceResult.summary.durationMs,
           trials: vigilanceResult.trials,
           protocol_version: vigilanceResult.summary.protocolVersion,
-        },
+        } } : {}),
       });
 
       clearFadigaCheckinDraft(draftKey);
-      toast.success('Check-in de fadiga e teste de atenção registrados com sucesso');
-      await refetch();
+      toast.success(lateAtSubmit
+        ? 'Check-in tardio registrado para revisão da coordenação; não comprova aptidão pré-jornada.'
+        : 'Check-in de fadiga e teste de atenção registrados com sucesso');
+      // A failed follow-up GET must not turn a committed POST into an apparent
+      // submission failure or provoke duplicate check-ins.
+      try {
+        await refetch();
+      } catch {
+        // The check-in is already confirmed by the Worker.
+      }
 
       if ((result as { data?: { requires_frat_review?: number } })?.data?.requires_frat_review) {
         toast.warning('Check-in indica revisão FRAT recomendada');
@@ -818,6 +856,13 @@ export default function FrmsFlightCheckinFadiga() {
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900">
               Data operacional do check-in: {today.slice(8, 10)}/{today.slice(5, 7)}/{today.slice(0, 4)} (Brasília)
             </div>
+            {dateRolledOver && (
+              <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
+                A data operacional mudou enquanto o formulário estava aberto. Por segurança,
+                as respostas e o teste de atenção anteriores não podem ser usados no novo dia.
+                Atualize a página e realize um novo check-in antes de enviar.
+              </div>
+            )}
 
             {existente && (
               <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -1116,6 +1161,15 @@ export default function FrmsFlightCheckinFadiga() {
                 label="Bloco 3 - Atenção e tempo de reação"
                 hint="Teste breve de atenção AirTrust (60 segundos, não validado como PVT-B): avalia atenção e reação. Não determina aptidão nem libera voo."
               >
+                {isLateCheckin ? (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="alert">
+                    <p className="font-semibold">A apresentação informada já começou.</p>
+                    <p className="mt-1">O teste de atenção realizado agora não pode comprovar a avaliação pré-jornada.
+                      Você poderá registrar a declaração como tardia, sem atestar prontidão pré-voo,
+                      com classificação restrita e revisão da Coordenação. Não altere o horário para contornar a regra.</p>
+                  </div>
+                ) : (
+                  <>
                 {interruptedPvtRecovered ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
                     A página foi interrompida durante o teste objetivo. Suas respostas do check-in foram preservadas; reinicie apenas o teste breve de atenção para manter a validade da medição.
@@ -1152,6 +1206,8 @@ export default function FrmsFlightCheckinFadiga() {
                       if (running) setInterruptedPvtRecovered(false);
                     }}
                   />
+                )}
+                  </>
                 )}
               </FormCard>
 
@@ -1315,6 +1371,20 @@ export default function FrmsFlightCheckinFadiga() {
                 </label>
               </div>
 
+              {isLateCheckin && (
+                <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-5 w-5 shrink-0 accent-amber-700"
+                    checked={lateAcknowledged}
+                    onChange={(event) => setLateAcknowledgedPresentation(
+                      event.target.checked ? presentationTimeNormalized : null,
+                    )}
+                  />
+                  <span>Confirmo o registro tardio, sem avaliação pré-jornada válida.
+                    Sei que o check-in ficará restrito e deverá ser revisado pela Coordenação.</span>
+                </label>
+              )}
               <Button
                 id="submit-checkin-fadiga"
                 onClick={submit}
@@ -1322,7 +1392,7 @@ export default function FrmsFlightCheckinFadiga() {
                 disabled={!canSubmitWithReadiness || submitMutation.isPending}
                 className="min-h-12 w-full text-base"
               >
-                Confirmar Check-in Diário
+                {isLateCheckin ? 'Registrar check-in tardio para revisão' : 'Confirmar Check-in Diário'}
               </Button>
 
               {!canSubmitWithReadiness && (

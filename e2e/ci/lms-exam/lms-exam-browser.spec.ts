@@ -47,28 +47,73 @@ async function sendExam(page: Page) {
 }
 
 test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> certificado -> reabertura', async ({ page }) => {
-  const pageErrors: string[] = [];
-  page.on('pageerror', (e) => pageErrors.push(e.message));
-  // The i18n fallback is unrelated to SCORM/exam behavior. In this synthetic
-  // browser test the frontend runs on :3000 and the API URL is :8787:
-  // fulfilling a cross-origin request without ACAO causes a WebKit pageerror.
-  // Supply a deterministic, CORS-valid response without outbound translation.
-  await page.route('**/api/public/translate**', (route) => {
-    const headers = {
-      'Access-Control-Allow-Origin': 'http://127.0.0.1:3000',
-      'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    };
-    if (route.request().method() === 'OPTIONS') {
-      return route.fulfill({ status: 204, headers });
+  // This learning-flow fixture uses Portuguese labels. Fix the browser
+  // locale before navigation so auto-locale/i18n requests cannot race
+  // unrelated SCORM assertions in WebKit. Translation API is exercised
+  // separately by the HTTP/CORS contract probe below.
+  await page.addInitScript(() => {
+    if (window.location.origin === 'http://127.0.0.1:3000') {
+      window.localStorage.setItem('airtrust:language:manual', 'pt-BR');
     }
-    return route.fulfill({
-      status: 200,
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: '{"success":true,"data":{"translatedText":""}}',
-    });
   });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (e) => pageErrors.push(e.stack || e.message));
+  // On failing WebKit runs, preserve an origin-only network diagnosis while
+  // keeping the existing strict pageerror assertion and the real CORS checks.
+  page.on('requestfailed', (request) => {
+    const requestUrl = new URL(request.url());
+    if (requestUrl.pathname.startsWith('/api/')) {
+      let frameOrigin = 'DETACHED';
+      try { frameOrigin = new URL(request.frame().url()).origin; } catch { /* frame navigated */ }
+      console.log(`LMS_SYNTHETIC_FAILED_REQUEST:path=${requestUrl.pathname}:frameOrigin=${frameOrigin}:cause=${request.failure() || 'UNKNOWN'}`);
+    }
+  });
+  // Keep the synthetic Portuguese examination fixed to pt-BR on every
+  // navigation. Without this, WebKit's en-US locale can start asynchronous
+  // runtime translation while the page navigates, intermittently reporting a
+  // cross-origin i18n request as a pageerror after a successful certification.
+  // The explicit OPTIONS/POST checks below still verify the real test API CORS
+  // contract; no network error is intercepted or silently ignored.
+  await page.addInitScript(() => {
+    // Playwright runs init scripts in child frames too; a sandboxed SCORM
+    // iframe may have an opaque origin and no localStorage access.
+    if (window.top === window) {
+      localStorage.setItem('airtrust:language:manual', 'pt-BR');
+    }
+  });
+  // Translation is provided by the disposable local API. Browser routing
+  // can bypass CORS preflight in Chromium but fail nondeterministically in WebKit.
+  // The browser uses the real API origin for i18n. The local synthetic API,
+  // not a browser-level route mock, must respond with production-like CORS.
+  const translation = await page.request.post(API + '/api/public/translate', {
+    headers: { Origin: 'http://127.0.0.1:3000' },
+    data: { text: 'Saudações', from: 'pt', to: 'en' },
+  });
+  expect(translation.status()).toBe(200);
+  expect(translation.headers()['access-control-allow-credentials']).toBe('true');
+  expect(await translation.json()).toEqual({
+    success: true, data: { translatedText: '' },
+  });
+  // Synthetic browser E2E must support real cross-origin credentialed
+  // requests, otherwise WebKit may raise CORS errors after navigation.
+  const preflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://127.0.0.1:3000',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'Authorization,Content-Type',
+    },
+  });
+  expect(preflight.status()).toBe(204);
+  expect(preflight.headers()['access-control-allow-origin']).toBe('http://127.0.0.1:3000');
+  expect(preflight.headers()['access-control-allow-credentials']).toBe('true');
+  const untrustedPreflight = await page.request.fetch(API + '/api/lms/matriculas/minhas-ead', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://example.invalid', 'Access-Control-Request-Method': 'GET' },
+  });
+  expect(untrustedPreflight.status()).toBe(204);
+  expect(untrustedPreflight.headers()['access-control-allow-origin']).not.toBe('https://example.invalid');
+  expect(untrustedPreflight.headers()['access-control-allow-credentials']).toBeUndefined();
   const password = await reset(page);
 
   // 0) estado inicial: nada emitido
@@ -79,10 +124,15 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
 
   // 1) login sintetico (UI) e player com estudo concluido: CTA da prova final
   await login(page, password);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
+  // Let the initial dashboard's protected API reads finish before leaving.
+  // WebKit can otherwise report navigation-aborted reads as CORS pageerrors.
+  await page.waitForLoadState('networkidle');
   await page.goto(`/lms/player/${MATRICULA}`);
   const cta = page.getByTestId('lms-open-exam');
   await expect(cta).toBeVisible();
   await expect(cta).toHaveText('Ir para a prova final');
+  await page.waitForLoadState('networkidle');
   await cta.click();
   await expect(page).toHaveURL(new RegExp(`/lms/provas/${MATRICULA}$`));
 
@@ -158,9 +208,12 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await page.goto(`/lms/provas/${MATRICULA}`);
   await expect(page.getByText('Treinamento já concluído.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Iniciar prova|Tentar novamente|Retomar prova/ })).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
   await page.goto(`/lms/player/${MATRICULA}`);
   await expect(page.getByTestId('lms-open-exam')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
   await page.reload();
+  await page.waitForLoadState('networkidle');
   expect(await evidence(page)).toEqual(afterFinalize);
 
   expect(pageErrors).toEqual([]);

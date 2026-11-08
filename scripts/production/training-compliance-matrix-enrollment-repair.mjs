@@ -228,18 +228,22 @@ async function loadCanonicalRequirementMap(token, targetRows) {
   const employeeIds = [...new Set(targetRows.map((row) => Number(row.funcionario_id)))].sort((a, b) => a - b);
   const map = new Map();
 
-  for (const employeeChunk of chunk(employeeIds, 5)) {
-    const people = await Promise.all(employeeChunk.map(async (funcionarioId) => {
-      const json = await apiJson(token, `/api/compliance-treinamentos/funcionarios/${funcionarioId}`, {}, {
-        retryTimeouts: true,
-        maxAttempts: 4,
-        timeoutMs: 30000,
-      });
-      if (json?.success !== true || !json?.data || Number(json.data.id) !== funcionarioId) {
-        fail('CANONICAL_COMPLIANCE_PERSON_INVALID');
-      }
-      return json.data;
-    }));
+  // One bounded, admin-only, tenant-scoped read per batch. The former
+  // Promise.all(5 × /funcionarios/:id) recomputed the whole Compliance/D1
+  // snapshot for every employee and could exhaust request resources.
+  for (const employeeChunk of chunk(employeeIds, 25)) {
+    const json = await apiJson(
+      token, `/api/compliance-treinamentos/funcionarios/requisitos-lote?ids=${employeeChunk.join(',')}`,
+      {}, { retryTimeouts: true, maxAttempts: 4, timeoutMs: 30000 },
+    );
+    const people = json?.data;
+    if (json?.success !== true || !Array.isArray(people) || people.length !== employeeChunk.length) {
+      fail('CANONICAL_COMPLIANCE_BATCH_INVALID');
+    }
+    const foundIds = new Set(people.map((person) => Number(person?.id)));
+    if (foundIds.size !== employeeChunk.length || employeeChunk.some((id) => !foundIds.has(id))) {
+      fail('CANONICAL_COMPLIANCE_BATCH_ID_MISMATCH');
+    }
 
     for (const person of people) {
       for (const requirement of Array.isArray(person.requisitos) ? person.requisitos : []) {

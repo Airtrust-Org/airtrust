@@ -16,7 +16,12 @@ import {
 } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { classifyComplianceEnrollmentFailure } from '../services/training-compliance-rule-enrollment';
-import { trainingComplianceEffectiveRequirementPredicateSql } from '../services/training-compliance-rule-engine';
+import {
+  trainingComplianceEffectiveRequirementPredicateSql,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
+  TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
+} from '../services/training-compliance-rule-engine';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -73,17 +78,20 @@ type AutoEnrollmentSummary={created:number;reactivated:number;preserved:number;s
 async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:number,funcionarioId:number,condicaoId:number):Promise<AutoEnrollmentSummary>{
   const summary={created:0,reactivated:0,preserved:0,skipped_valid_evidence:0,unavailable_course:0};
   const predicate=trainingComplianceEffectiveRequirementPredicateSql({ruleAlias:'tr_effective',employeeAlias:'f',qualificationExpr:'qt.id',empresaExpr:'f.empresa_id',requireAutoEnrollment:true});
-  const {results}=await db.prepare(`SELECT qt.id qualificacao_tipo_id,qt.validade,MIN(lc.id) course_id,COUNT(DISTINCT lc.id) course_count
+  const operationalDate=getTodayIsoSaoPaulo();
+  const {results}=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+    SELECT qt.id qualificacao_tipo_id,qt.validade,MIN(lc.id) course_id,COUNT(DISTINCT lc.id) course_count
     FROM funcionarios f JOIN qualificacoes_tipos qt ON qt.empresa_id=f.empresa_id AND qt.ativo=1 AND qt.deleted_at IS NULL
     LEFT JOIN lms_cursos lc ON lc.empresa_id=f.empresa_id AND lc.qualificacao_tipo_id=qt.id AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL
     WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
       AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
       AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
       AND ${predicate}
-    GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
+    GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
   for(const row of results||[]){
     if(Number(row.course_count)!==1||!row.course_id){summary.unavailable_course+=1;continue;}
-    const valid=await db.prepare(`SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=date('now')) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND qt.validade IS NOT NULL AND qh.data_conclusao IS NOT NULL AND date(qh.data_conclusao,'+'||qt.validade||' months')>=date('now'))) LIMIT 1`).bind(row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
+    const valid=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+      SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND qt.validade IS NOT NULL AND qh.data_conclusao IS NOT NULL AND date(qh.data_conclusao,'+'||qt.validade||' months')>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
     if(valid?.ok){summary.skipped_valid_evidence+=1;continue;}
     const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,row.course_id,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
     if(existing){

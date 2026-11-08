@@ -1,3 +1,24 @@
+/**
+ * Mirrors the Worker's pre-presentation guard for a timely UI warning.
+ * The Worker remains authoritative: client time can be skewed or tampered with.
+ * Missing/invalid times fail closed instead of granting preflight status.
+ */
+export function isAtOrAfterFrmsPresentationBrasilia(
+  instant: Date,
+  presentationTime: string | null | undefined,
+): boolean {
+  if (!Number.isFinite(instant.getTime()) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(presentationTime ?? '')) return true;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(instant);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return true;
+  const [scheduledHour, scheduledMinute] = presentationTime!.split(':').map(Number);
+  return hour * 60 + minute >= scheduledHour * 60 + scheduledMinute;
+}
+
 /** Operational day at the flight base: independent of UTC and viewer's timezone. */
 export function frmsBrazilOperationalTodayIso(now: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-US', {

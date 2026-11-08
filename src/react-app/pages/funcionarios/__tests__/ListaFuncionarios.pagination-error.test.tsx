@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ListaFuncionarios } from '../ListaFuncionarios';
 
@@ -8,6 +9,10 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     warning: vi.fn(),
   },
+}));
+
+vi.mock('@/react-app/lib/app-fetch', () => ({
+  appFetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
 }));
 
 vi.mock('@/react-app/hooks/useAuth', () => ({
@@ -122,4 +127,77 @@ describe('ListaFuncionarios pagination on fetch error', () => {
     expect(findPaginationText('Página 1 de 1')).toBeInTheDocument();
     expect(screen.queryByText(/500/)).not.toBeInTheDocument();
   });
+
+  it('restarts the list request after StrictMode aborts the first effect', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: [{ id: 17, nome: 'Funcionário teste' }] }),
+    });
+
+    render(
+      <StrictMode>
+        <ListaFuncionarios
+          statusFilter="ativos"
+          termoBusca=""
+          configColunasAberto={false}
+          onToggleConfigColunas={vi.fn()}
+        />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Funcionário teste')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalled();
+    // The canonical client, not this page, owns Authorization and token refresh.
+    expect(fetchMock.mock.calls.every(([, options]) => options?.headers === undefined)).toBe(true);
+  });
+
+  it('ends the loading state after 15 seconds even if the auth client never settles', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    try {
+      render(
+        <ListaFuncionarios
+          statusFilter="ativos"
+          termoBusca=""
+          configColunasAberto={false}
+          onToggleConfigColunas={vi.fn()}
+        />,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+
+      expect(screen.getByText('Tempo limite ao carregar funcionários. Tente novamente.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+      expect(screen.queryByText('Nenhum funcionário cadastrado')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows recovery rather than claiming staff have been deleted after an API error', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: [{ id: 20, nome: 'Funcionário recuperado' }] }),
+      });
+
+    render(
+      <ListaFuncionarios
+        statusFilter="ativos"
+        termoBusca=""
+        configColunasAberto={false}
+        onToggleConfigColunas={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Não foi possível carregar os funcionários/)).toBeInTheDocument());
+    expect(screen.queryByText('Nenhum funcionário cadastrado')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/i }));
+    await waitFor(() => expect(screen.getByText('Funcionário recuperado')).toBeInTheDocument());
+  });
+
 });

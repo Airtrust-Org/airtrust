@@ -354,20 +354,20 @@ app.post('/api/telemetry/client-error', auth(), async (c) => {
     const userId = c.get('userId');
     const empresaId = c.get('empresaId');
 
-    const payload = {
+    // Untrusted client telemetry can contain user identifiers, query tokens,
+    // message bodies and full URLs. Record only allowlisted non-content fields.
+    const safeLabel = (value: unknown): string => {
+      const label = typeof value === 'string' ? value : '';
+      return /^[a-zA-Z0-9_-]{1,40}$/.test(label) ? label : 'unknown';
+    };
+    console.error('[CLIENT_TELEMETRY]', {
       userId,
       empresaId,
-      type: String(body?.type || 'frontend_error'),
-      scope: String(body?.scope || 'unknown'),
-      moduleKey: String(body?.moduleKey || 'unknown'),
-      message: String(body?.message || '').slice(0, 1500),
-      path: String(body?.path || c.req.path),
-      href: String(body?.href || ''),
-      userAgent: c.req.header('User-Agent') || null,
-      timestamp: String(body?.timestamp || new Date().toISOString()),
-    };
-
-    console.error('[CLIENT_TELEMETRY]', JSON.stringify(payload));
+      type: safeLabel(body?.type),
+      scope: safeLabel(body?.scope),
+      moduleKey: safeLabel(body?.moduleKey),
+      hasMessage: typeof body?.message === 'string' && body.message.length > 0,
+    });
 
     return c.json({ success: true });
   } catch (error) {

@@ -82,7 +82,7 @@ export async function sendEmailDetailed(
       providerResponse = null;
     }
 
-    console.log('[email] Sent to', payload.to.map((t) => t.email).join(', '));
+    console.info('[email] Provider accepted delivery', { recipientCount: payload.to.length });
     return {
       ok: true,
       providerMessageId,

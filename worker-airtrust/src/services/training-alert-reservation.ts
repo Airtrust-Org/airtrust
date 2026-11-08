@@ -54,6 +54,8 @@ export interface ReserveTrainingAlertParams {
   destinatarioMascarado?: string | null;
   diaOperacional?: string;
   origem: 'LMS_ALERTA' | 'COMPLIANCE';
+  manual?: boolean;
+  qualificacaoNome?: string | null;
 }
 
 export type ReservationOutcome =
@@ -81,6 +83,8 @@ export async function reserveTrainingAlert(
     curso_id: params.target.curso_id ?? null,
     channel: params.channel,
     origem: params.origem,
+    manual: params.manual === true,
+    qualificacao_nome: params.qualificacaoNome || null,
     reserved_at: new Date().toISOString(),
   });
 
@@ -192,13 +196,26 @@ export async function reserveTrainingAlert(
         `UPDATE notificacoes_log
             SET status = 'pendente',
                 tentativas_envio = COALESCE(tentativas_envio, 0) + 1,
+                -- A confirmed manual resend may reuse a slot initially
+                -- created by an LMS/Compliance bulk operation. Mark its new
+                -- disposition in the same atomic CAS so readback is visible.
+                corpo = COALESCE(?, corpo),
+                tipo = COALESCE(?, tipo),
+                assunto = COALESCE(?, assunto),
+                destinatario = COALESCE(?, destinatario),
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
             AND status = 'enviada'
             AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key, observedAttempts)
+      .bind(
+        params.manual ? bodyPayload : null,
+        params.manual ? tipo : null,
+        params.manual ? assunto : null,
+        params.manual ? params.destinatarioMascarado || null : null,
+        params.empresaId, key, observedAttempts,
+      )
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {
@@ -226,13 +243,23 @@ export async function reserveTrainingAlert(
         `UPDATE notificacoes_log
             SET status = 'pendente',
                 tentativas_envio = COALESCE(tentativas_envio, 0) + 1,
+                corpo = COALESCE(?, corpo),
+                tipo = COALESCE(?, tipo),
+                assunto = COALESCE(?, assunto),
+                destinatario = COALESCE(?, destinatario),
                 updated_at = datetime('now')
           WHERE empresa_id = ?
             AND notification_key = ?
             AND status = ?
             AND COALESCE(tentativas_envio, 0) = ?`,
       )
-      .bind(params.empresaId, key, currentStatus, observedAttempts)
+      .bind(
+        params.manual ? bodyPayload : null,
+        params.manual ? tipo : null,
+        params.manual ? assunto : null,
+        params.manual ? params.destinatarioMascarado || null : null,
+        params.empresaId, key, currentStatus, observedAttempts,
+      )
       .run();
 
     if (Number(casUpdate.meta?.changes || 0) > 0) {
