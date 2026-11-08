@@ -514,7 +514,7 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c, 'Alertas.vencimentos');
   try {
     const empresaId = getEmpresaId(c as any);
-    const scope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c as any, empresaId), 'p');
+    const scope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c, empresaId), 'p');
     const diasConfigurados = await getQualificacoesAlertaDias(c.env.DB, empresaId);
     const diasStr = c.req.query('dias');
     const dias = diasStr ? normalizeQualificacoesAlertaDias(diasStr) : diasConfigurados;
@@ -619,7 +619,7 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
     console.log('[ALERTAS] Opções:', { enviarEmailCanal, enviarWhatsApp });
 
     const db = c.env.DB;
-    const sendScope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c as any, empresaId), 'f');
+    const sendScope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c, empresaId), 'f');
 
     // Buscar qualificação com dados do funcionário (qualificacoes_historico)
     const query = `
