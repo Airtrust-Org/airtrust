@@ -79,6 +79,7 @@ describe('manual training alerts RBAC (P04-02/P04-03)', () => {
     } finally {
       viewer.role = 'aluno';
     }
+  });
 
   it('filters both qualification and license visibility by a manager sector', async () => {
     const queries: Array<{ sql: string; args: unknown[] }> = [];
@@ -120,6 +121,5 @@ describe('manual training alerts RBAC (P04-02/P04-03)', () => {
       viewer.role = 'aluno';
       viewer.setorIds = [17];
     }
-  });
   });
 });
