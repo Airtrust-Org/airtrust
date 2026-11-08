@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('scheduled cron regulatory retention contract', () => {
   it('does not execute legacy default hard-purge policy', () => {
     const source = readFileSync(
-      new URL('../../cron/scheduled-handler.ts', import.meta.url),
+      'src/cron/scheduled-handler.ts',
       'utf8',
     );
     expect(source).not.toContain("SOFT_DELETE_PURGE_DAYS || '90'");
