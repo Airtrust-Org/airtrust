@@ -10,6 +10,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("@/react-app/lib/app-fetch", () => ({
+  appFetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
+
 vi.mock("@/react-app/hooks/useAuth", () => ({
   useAuth: () => ({
     token: "test-token",
