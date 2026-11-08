@@ -554,13 +554,8 @@ export async function uploadScormInactiveProductionCandidate(params: {
   onStatus?.('Validando estrutura do ZIP SCORM...');
   onProgress?.(10);
   const prepared = await preparePackageUpload(file, 'scorm');
-  if (replaceImmediately && !isDirectFormativeContract(prepared) && !isDirectExternalContract(prepared)) {
-    throw new Error(
-      'Este ZIP não comprova perfil formativo ou prova externa sem nota no SCORM. A substituição direta ' +
-      'foi bloqueada antes do upload. Envie como edição inativa para homologação; ' +
-      'o treinamento atual permanece preservado.',
-    );
-  }
+  // The authenticated Worker decides whether the package is structurally valid.
+  // Never impose a second client-side approval/activation workflow on upload.
   onStatus?.(replaceImmediately
     ? 'Validando e substituindo o conteúdo do curso...'
     : 'Enviando versão candidata sem substituir conteúdo...');
