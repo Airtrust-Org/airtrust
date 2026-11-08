@@ -111,6 +111,19 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    // Vite preview serves the compiled frontend, but it does not inherit
+    // server.proxy. Our localhost browser-E2E intentionally uses a same-origin
+    // /api contract; without this local-only preview proxy, WebKit requests
+    // reach the static preview server instead of the disposable synthetic API.
+    // This setting is only for the CLI preview server, not Cloudflare Pages.
+    preview: {
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+      },
+    },
     server: {
       host: 'localhost',
       port: 3000,
