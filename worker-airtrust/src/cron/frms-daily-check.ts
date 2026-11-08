@@ -24,6 +24,15 @@ import { processarAlertas } from '../lib/frms/alertas';
 import type { AlertaGerado } from '../lib/frms/alertas';
 import { FRMS_STATUS, type FrmsStatus } from '../lib/frms/types';
 
+export function getSaoPauloOperationalDate(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 function getSaoPauloHour(now = new Date()): number {
   const value = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
@@ -174,7 +183,7 @@ export async function notificarCheckinFadigaPendente(
   db: D1Database,
   empresaId: number,
 ): Promise<number> {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = getSaoPauloOperationalDate();
 
   const pendentes = await db
     .prepare(
@@ -207,7 +216,7 @@ export async function notificarCheckinFadigaPendente(
          FROM notificacoes_sistema
          WHERE tipo = 'FADIGA_CHECKIN_PENDENTE'
            AND grupo = 'frms'
-           AND date(created_at) = ?
+           AND json_extract(dados, '$.data_checkin') = ?
            AND json_extract(dados, '$.empresa_id') = ?
            AND json_extract(dados, '$.funcionario_id') = ?
          LIMIT 1`,
@@ -246,7 +255,7 @@ export async function frmsDailyCheck(env: Env): Promise<{
   erros: string[];
 }> {
   const db = env.DB;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = getSaoPauloOperationalDate();
   const horaSaoPaulo = getSaoPauloHour();
 
   const tripulantes = await listarTripulantesAtivos(db);
