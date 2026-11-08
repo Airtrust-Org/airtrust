@@ -282,6 +282,52 @@ describe('solicitacoes treinamento router', () => {
     );
   });
 
+  it('conclui solicitação ad-hoc sem inventar 12 meses quando o modelo não tem validade', async () => {
+    sincronizarSolicitacaoConcluidaMock.mockResolvedValue({
+      treinamentoPlanejadoId: null,
+      qualificacaoHistoricoId: null,
+    });
+
+    const { db, calls } = createMockDb([
+      ['SELECT s.id, s.status, s.solicitante_id, s.qualificacao_id, s.tipo_treinamento', {
+        first: () => ({
+          id: 'req-sem-validade',
+          status: 'AGENDADA',
+          solicitante_id: 11,
+          qualificacao_id: 9,
+          tipo_treinamento: 'RECORRENTE',
+          qualificacao_codigo: 'OPS',
+          qualificacao_categoria: 'TREINAMENTO',
+          qualificacao_validade: null,
+          qualificacao_vencimento_fim_mes: 0,
+        }),
+      }],
+      ["UPDATE solicitacoes_treinamento SET status = 'CONCLUIDA'", {
+        run: () => ({ meta: { changes: 1 } }),
+      }],
+      ['INSERT INTO qualificacoes_historico', {
+        run: () => ({ success: true, meta: { changes: 1, last_row_id: 901 } }),
+      }],
+      ...CANONICAL_PRIMITIVE_HANDLERS,
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/treinamentos', solicitacoesRoutes);
+
+    const response = await app.fetch(
+      new Request('http://localhost/treinamentos/solicitacoes/req-sem-validade/concluir', {
+        method: 'POST',
+      }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    const insert = calls.find((call) => call.method === 'run' && call.query.includes('INSERT INTO qualificacoes_historico'));
+    expect(insert).toBeDefined();
+    expect(insert?.args).toContain(null);
+    expect(response.status).not.toBe(409);
+  });
+
   it('quando a qualificação não pode ser garantida, retorna 409 explícito com committed=true/retryable=true — nunca sucesso silencioso nem falso rollback', async () => {
     sincronizarSolicitacaoConcluidaMock.mockResolvedValue({
       treinamentoPlanejadoId: null,
