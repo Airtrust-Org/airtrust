@@ -18,7 +18,7 @@ import {
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
-import { trainingComplianceEvidenceIsRealizedBy } from './training-compliance-enrollment-policy';
+import { trainingComplianceEvidenceIsRealizedBy, trainingComplianceIsoDay } from './training-compliance-enrollment-policy';
 
 export const SCOPES = TRAINING_COMPLIANCE_SCOPES;
 export const OBRIGATORIEDADES = ['OBRIGATORIA', 'RECOMENDADA', 'NAO_APLICA'] as const;
@@ -594,12 +594,31 @@ export function computeRequirement(
   let data_validade: string | null = null;
   let dias_para_vencer: number | null = null;
 
-  if (evidence?.data_realizacao) {
-    if (evidence.data_vencimento && (rule.validade_fonte === 'EVIDENCIA' || (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses))) {
-      data_validade = evidence.data_vencimento.slice(0, 10);
-    } else if (rule.validade_meses) {
-      const base = new Date(`${evidence.data_realizacao.slice(0, 10)}T12:00:00Z`);
-      base.setUTCMonth(base.getUTCMonth() + Number(rule.validade_meses));
+  const malformedRealization = [...allHistory, ...allLms.filter(
+    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO',
+  )].some((item) =>
+    Boolean(item.data_realizacao) &&
+    evidenceMatchesCompetencyProfile(rule.perfil_competencia, item) &&
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade) &&
+    trainingComplianceIsoDay(item.data_realizacao) === null,
+  );
+  const months = rule.validade_meses == null ? null : Number(rule.validade_meses);
+  const invalidValidityConfig = months !== null && (!Number.isInteger(months) || months < 0 || months > 1200);
+  const needsEvidenceExpiry = Boolean(
+    evidence?.data_vencimento &&
+    (rule.validade_fonte === 'EVIDENCIA' || (rule.qualificacao_tipo_codigo === 'AVSEC_CONSC' && !rule.validade_meses)),
+  );
+  const invalidEvidenceExpiry = needsEvidenceExpiry && trainingComplianceIsoDay(evidence?.data_vencimento) === null;
+
+  // Keep invalid dates or invalid validity rules pending manual review.
+  // In particular, do not call toISOString() on an Invalid Date (HTTP 500)
+  // or mark unknown expiration as lifetime compliance.
+  if (evidence?.data_realizacao && !invalidValidityConfig && !invalidEvidenceExpiry) {
+    if (needsEvidenceExpiry) {
+      data_validade = trainingComplianceIsoDay(evidence.data_vencimento);
+    } else if (months) {
+      const base = new Date(`${trainingComplianceIsoDay(evidence.data_realizacao)}T12:00:00Z`);
+      base.setUTCMonth(base.getUTCMonth() + months);
       data_validade = base.toISOString().slice(0, 10);
     }
     if (!data_validade) {
@@ -628,6 +647,12 @@ export function computeRequirement(
   }
 
   const evidenceReviewReason =
+    invalidValidityConfig ? 'REGRA_VALIDADE' :
+    invalidEvidenceExpiry ? 'DATA_VENCIMENTO' :
+    // An older expired proof must not allow auto-enrollment while a later
+    // malformed completion for this same profile/modality remains unresolved.
+    malformedRealization && (status_compliance === 'NAO_REALIZADO' || status_compliance === 'VENCIDO')
+      ? 'DATA_REALIZACAO' :
     status_compliance !== 'NAO_REALIZADO' ? null :
     modalityMismatch && candidateEvidence?.data_realizacao ? 'MODALIDADE' :
     profileMismatch && allHistory.some((item) => trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff)) ? 'PERFIL' : null;
