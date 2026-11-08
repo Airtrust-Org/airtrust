@@ -372,7 +372,7 @@ app.post('/:id/usuarios/invite', requireTenantRole('manager'), async (c) => {
 
       user = { id: result.meta.last_row_id };
       isNewUser = true;
-      console.log(`[INVITE] Novo usuário criado: ${normalizedEmail} (ID: ${user.id}).`);
+      console.info('[INVITE] Novo usuário criado', { userId: user.id });
     } catch (insertError) {
       const uniqueEmailRace =
         insertError instanceof Error &&
