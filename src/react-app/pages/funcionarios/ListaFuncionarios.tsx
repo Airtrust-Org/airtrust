@@ -6,6 +6,8 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { safeFrontendApiResponseErrorMessage } from '@/react-app/lib/api-contract';
 import { appFetch } from '@/react-app/lib/app-fetch';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { queryClient } from '@/react-app/lib/query-client';
+import { invalidateEmployeeComplianceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import {
   ArrowUpDown,
   ArrowUp,
@@ -185,7 +187,7 @@ export function ListaFuncionarios({
   onCloseModalNovoFuncionario,
 }: ListaFuncionariosProps) {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, empresaAtualId } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -490,6 +492,7 @@ export function ListaFuncionarios({
         });
 
         if (response.ok) {
+          void invalidateEmployeeComplianceProjections(queryClient, empresaAtualId);
           setFuncionarios((current) => current.filter((f) => f.id !== id));
           setTimeout(() => {
             recarregar();
@@ -517,7 +520,7 @@ export function ListaFuncionarios({
         setExcluindo(null);
       }
     },
-    [token, recarregar, excluindo],
+    [token, recarregar, excluindo, empresaAtualId],
   );
 
   const handleSalvarFuncionario = useCallback(
@@ -538,6 +541,7 @@ export function ListaFuncionarios({
         });
 
         if (response.ok) {
+          void invalidateEmployeeComplianceProjections(queryClient, empresaAtualId);
           toast.success(
             dados.id ? 'Funcionário atualizado com sucesso!' : 'Funcionário criado com sucesso!',
           );
@@ -561,7 +565,7 @@ export function ListaFuncionarios({
         toast.error('Erro de rede ao salvar funcionário. Verifique sua conexão.');
       }
     },
-    [token, recarregar, onCloseModalNovoFuncionario],
+    [token, recarregar, onCloseModalNovoFuncionario, empresaAtualId],
   );
 
   const statsCallbackRef = useRef(onStatsChange);
