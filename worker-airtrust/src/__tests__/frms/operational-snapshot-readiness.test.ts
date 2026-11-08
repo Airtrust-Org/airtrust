@@ -37,4 +37,45 @@ describe('FRMS readiness posterior ao check-in', () => {
     expect(item.alertas).not.toContain('READINESS_REVISAO');
     expect(item.readiness_classification).toBe('baseline_building');
   });
+  it.each([
+    ['operational_review', 'preserved'],
+    ['preserved', 'operational_review'],
+    ['attention', 'baseline_building'],
+    ['baseline_building', 'attention'],
+  ])('preserva sinal adverso independente da ordem: %s / %s', (first, second) => {
+    const input = fixture();
+    input.rows.readiness = [first, second].map(classification => ({
+      data_operacional: '2026-11-08', funcionario_id: 10, classification,
+      protocol_version: 'airtrust-brief-v1',
+    }));
+    const item = buildFrmsOperationalSnapshot(input).items[0];
+    expect(item.alertas).toContain('READINESS_REVISAO');
+    expect(item.readiness_classification).toBe(
+      first === 'operational_review' || second === 'operational_review' ? 'operational_review' : 'attention',
+    );
+  });
+
+  it('não permite que readiness de outro funcionário ou dia contamine a observação', () => {
+    const input = fixture();
+    input.rows.readiness = [
+      { data_operacional: '2026-11-08', funcionario_id: 99, classification: 'operational_review', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-07', funcionario_id: 10, classification: 'attention', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-08', funcionario_id: 10, classification: 'preserved', protocol_version: 'airtrust-brief-v1' },
+    ];
+    const item = buildFrmsOperationalSnapshot(input).items[0];
+    expect(item.readiness_classification).toBe('preserved');
+    expect(item.alertas).not.toContain('READINESS_REVISAO');
+  });
+
+  it('classificação desconhecida exige revisão, não é normalizada silenciosamente', () => {
+    const input = fixture();
+    input.rows.readiness = [
+      { data_operacional: '2026-11-08', funcionario_id: 10, classification: 'unknown_future_state', protocol_version: 'airtrust-brief-v1' },
+      { data_operacional: '2026-11-08', funcionario_id: 10, classification: 'preserved', protocol_version: 'airtrust-brief-v1' },
+    ];
+    const item = buildFrmsOperationalSnapshot(input).items[0];
+    expect(item.alertas).toContain('READINESS_REVISAO');
+    expect(item.readiness_classification).toBe('unknown_future_state');
+  });
+
 });
