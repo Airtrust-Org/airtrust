@@ -597,7 +597,7 @@ export function buildFrmsOperationalSnapshot(
   };
   for (const row of input.rows.readiness ?? []) {
     // Tenant scoping is enforced by the parameterized D1 loader.
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(row.data_operacional) ||
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.data_operacional) ||
         !Number.isInteger(row.funcionario_id) || row.funcionario_id <= 0) continue;
     const key = `${row.data_operacional}::${row.funcionario_id}`;
     const current = readinessMap.get(key);
