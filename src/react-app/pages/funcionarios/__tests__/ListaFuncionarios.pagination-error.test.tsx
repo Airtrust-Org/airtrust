@@ -148,6 +148,8 @@ describe('ListaFuncionarios pagination on fetch error', () => {
 
     await waitFor(() => expect(screen.getByText('Funcionário teste')).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalled();
+    // The canonical client, not this page, owns Authorization and token refresh.
+    expect(fetchMock.mock.calls.every(([, options]) => options?.headers === undefined)).toBe(true);
   });
 
   it('shows recovery rather than claiming staff have been deleted after an API error', async () => {
