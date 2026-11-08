@@ -101,6 +101,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
   const awaitingApproval = pending.has('ADMIN_APPROVAL');
   const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
+  const directExternalReady = !externalContent || Boolean(data?.canActivate && Number(data.course.masteryScore) > 0);
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -147,11 +148,11 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
           <p className="font-semibold">Edição validada — substituição direta disponível</p>
           <p className="text-xs">O servidor verifica o ZIP, SHA e arquivos antes da ativação. Uma falha mantém a edição anterior.</p>
           {externalContent ? <p className="text-xs">Este pacote contém somente o conteúdo. A prova externa e sua nota continuam obrigatórias para a qualificação do aluno.</p> : null}
-          {externalContent && !data.canActivate ? <p className="text-xs" role="alert">A substituição ainda não é permitida: confira os requisitos do curso e a nota mínima configurada.</p> : null}
+          {externalContent && !directExternalReady ? <p className="text-xs" role="alert">A substituição ainda não é permitida: confira os requisitos do curso e a nota mínima configurada.</p> : null}
           {data.incomingPolicy === 'FORMATIVE' ? (
             <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>
           ) : null}
-          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending || (externalContent && !data.canActivate)}
+          <Button variant="primary" loading={directReplace.isPending} disabled={!isAdmin || directReplace.isPending || !directExternalReady}
             onClick={() => {
               void directReplace.mutateAsync({
                 packageId: pkg.packageId,
