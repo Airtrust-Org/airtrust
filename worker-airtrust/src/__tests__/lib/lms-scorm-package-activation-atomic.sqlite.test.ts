@@ -21,6 +21,7 @@ function fixture() {
     );
     CREATE TABLE lms_cursos (
       id INTEGER, empresa_id INTEGER, tipo_conteudo TEXT,
+      ativo INTEGER NOT NULL DEFAULT 1, publicado INTEGER NOT NULL DEFAULT 0,
       scorm_package_r2_prefix TEXT, scorm_launch_file TEXT, scorm_versao TEXT,
       conteudo_arquivo_nome TEXT, updated_at TEXT, deleted_at TEXT,
       scorm_assessment_policy TEXT NOT NULL DEFAULT 'SCORED',
@@ -93,6 +94,36 @@ describe('certified SCORM package activation — atomic SQLite/D1 transition', (
     expect(coursePrefix(db,7)).toBe('lms/scorm/7/41/a/');
     expect(db.database.prepare(`SELECT status FROM lms_scorm_package_versions
       WHERE id='other-tenant'`).get()).toEqual({status:'ACTIVE'});
+  });
+
+  it('direct administrator replacement atomically publishes the course for learners, not other tenants', async () => {
+    const db = fixture();
+    const published = (tenant: number) => db.database.prepare(
+      'SELECT publicado, ativo FROM lms_cursos WHERE empresa_id=? AND id=41',
+    ).get(tenant);
+    expect(published(6)).toEqual({ publicado: 0, ativo: 1 });
+    expect(await commitCertifiedScormActivation({ ...candidate(db), publishCourse: true })).toBe(true);
+    expect(published(6)).toEqual({ publicado: 1, ativo: 1 });
+    expect(published(7)).toEqual({ publicado: 0, ativo: 1 });
+    expect(auditCount(db)).toBe(1);
+  });
+
+  it('ordinary governed activation does not publish a deliberately drafted course', async () => {
+    const db = fixture();
+    expect(await commitCertifiedScormActivation(candidate(db))).toBe(true);
+    expect(db.database.prepare('SELECT publicado FROM lms_cursos WHERE empresa_id=6 AND id=41').get())
+      .toEqual({ publicado: 0 });
+  });
+
+  it('failed direct CAS never publishes a draft or changes the active pointer', async () => {
+    const db = fixture();
+    const stale = { ...candidate(db), publishCourse: true };
+    db.database.prepare("UPDATE lms_scorm_package_versions SET status='REJECTED' WHERE id='b'").run();
+    expect(await commitCertifiedScormActivation(stale)).toBe(false);
+    expect(db.database.prepare('SELECT publicado FROM lms_cursos WHERE empresa_id=6 AND id=41').get())
+      .toEqual({ publicado: 0 });
+    expect(states(db)[0]).toEqual({ id: 'a', status: 'ACTIVE' });
+    expect(auditCount(db)).toBe(0);
   });
 
   it('rejects a delayed second activation of the same candidate without demoting it', async () => {
