@@ -288,12 +288,19 @@ else
 fi
 
 if [[ -f "$OVERRIDES_FILE" ]]; then
-  info "Aplicando overrides locais..."
-  if sqlite3 "$SQLITE_FILE" < "$OVERRIDES_FILE" 2>/dev/null; then
+  info "Aplicando overrides locais com bcrypt gerado na execução..."
+  LOCAL_OVERRIDES_RENDERED="$(mktemp "${TMPDIR:-/tmp}/airtrust-overrides-XXXXXX.sql")"
+  chmod 600 "$LOCAL_OVERRIDES_RENDERED"
+  trap 'rm -f "$LOCAL_OVERRIDES_RENDERED"' EXIT
+  node "$SCRIPT_DIR/render-local-dev-password-sql.mjs" "$OVERRIDES_FILE" "$LOCAL_OVERRIDES_RENDERED" \
+    || error "Falha ao gerar credencial local; overrides bloqueados"
+  if sqlite3 "$SQLITE_FILE" < "$LOCAL_OVERRIDES_RENDERED" 2>/dev/null; then
     success "Overrides locais aplicados"
   else
-    warn "Overrides locais aplicados com avisos"
+    error "Falha nos overrides locais; não registrar credenciais"
   fi
+  rm -f "$LOCAL_OVERRIDES_RENDERED"
+  trap - EXIT
 fi
 
 echo ""
