@@ -103,6 +103,39 @@ describe('consolidated training communication history', () => {
   });
 
 
+  it('shows completed manual EAD/CMA alerts in central history without duplicating bulk reservations', async () => {
+    db.database.exec(
+      "INSERT INTO notificacoes_log " +
+      "(id,empresa_id,tipo,destinatario,assunto,corpo,notification_key,status,enviado_em,created_at) VALUES " +
+      "(48,1,'WHATSAPP_COMPLIANCE','***3333'," +
+      "'[COMPLIANCE_TREINAMENTO:RESERVA:TRAINING_ALERT:2026-11-04:1000:q:100:WHATSAPP]'," +
+      "'{\"funcionario_id\":1000,\"qualificacao_tipo_id\":100,\"qualificacao_nome\":\"CMA sintetico\",\"origem\":\"COMPLIANCE\",\"manual\":true}'," +
+      "'TRAINING_ALERT:2026-11-04:1000:q:100:WHATSAPP','enviada','2026-11-04 16:30:00','2026-11-04 16:30:00')",
+    );
+    const sent = await read({ origem: 'COMPLIANCE', resultado: 'enviada' });
+    const manual = sent.rows.find((row) => row.id === 'compliance:48');
+    expect(manual).toMatchObject({
+      funcionario_id: 1000,
+      qualificacao_tipo_id: 100,
+      qualificacao_nome: 'CMA sintetico',
+      origem: 'COMPLIANCE',
+      tipo: 'WHATSAPP_COMPLIANCE',
+      status_envio: 'enviada',
+      destinatario: '***3333',
+      destinatario_fonte: 'REGISTRO_ENVIO',
+    });
+    expect(sent.rows.some((row) => row.id === 'compliance:10')).toBe(true);
+    const sameDay = await readSameDayTrainingAlerts(
+      db.asD1(), 1, all, new Date('2026-11-04T19:30:00Z'),
+    );
+    expect(sameDay.wasSent({ funcionario_id: 1000, qualificacao_tipo_id: 100 }, 'WHATSAPP'))
+      .toBe(true);
+    const restricted = await read({ origem: 'COMPLIANCE' }, {
+      mode: 'restricted', setorIds: [11], funcionarioId: null,
+    });
+    expect(restricted.rows.some((row) => row.id === 'compliance:48')).toBe(false);
+  });
+
   it('counts delivery once and preserves only indeterminate reservation as a separate warning', async () => {
     db.database.exec(`
       INSERT INTO notificacoes_log(
