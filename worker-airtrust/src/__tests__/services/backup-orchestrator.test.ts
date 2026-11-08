@@ -198,6 +198,24 @@ describe('BackupOrchestrator integrity', () => {
     expect(r2.keys()).toEqual(initialKeys);
   });
 
+  it('falha sem manifesto de R2 quando um objeto listado desaparece antes da cópia', async () => {
+    const { orchestrator, state, r2 } = createOrchestrator();
+    vi.mocked(r2.bucket.get).mockResolvedValueOnce(null);
+
+    await expect(orchestrator.executarBackupManual({
+      tipo: 'COMPLETO',
+      modulos: ['CONFIGURACOES'],
+      triggered_by: 'UNIT_TEST',
+      escopo: 'SYSTEM_GLOBAL',
+    })).rejects.toThrow('R2_BACKUP_SOURCE_OBJECT_MISSING');
+
+    expect(state.statusUpdates).toContain('FALHOU');
+    expect(state.statusUpdates).not.toContain('CONCLUIDO');
+    expect(state.finalChecksum).toBe('');
+    expect(r2.keys().some((key) => key.endsWith('/r2-manifest.json'))).toBe(false);
+    expect(r2.keys().some((key) => key.endsWith('/checksum-manifest.json'))).toBe(false);
+  });
+
   it('gera UUID criptograficamente seguro para backup manual sem UUID fornecido', async () => {
     const { orchestrator, state } = createOrchestrator();
 

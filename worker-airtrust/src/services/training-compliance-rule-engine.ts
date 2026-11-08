@@ -256,6 +256,52 @@ export function trainingComplianceEligibleCategorySql(categoryExpr: string): str
   return `UPPER(REPLACE(REPLACE(TRIM(COALESCE(${categoryExpr}, '')), 'ç', 'C'), 'Ç', 'C')) NOT IN ('CHECK', 'EXAME', 'LICENCA', 'VOO', 'TREINAMENTO DE VOO')`;
 }
 
+export const TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME = 'training_compliance_avsec_superseded';
+
+/**
+ * CTE equivalente a regra inline "AVSEC_CONSC corporativo substituido por regra
+ * AVSEC especializada D1 que ainda prevalece para o funcionario"
+ * (`trainingComplianceEffectiveRequirementPredicateSql`, ramo
+ * `corporateNotSuperseded`). Cada funcionario/empresa listado e aquele para o qual
+ * existe regra especial D1 OBRIGATORIA com perfil AVSEC_ aplicavel e nao superada
+ * por outra regra aplicavel de maior prioridade para o mesmo tipo/perfil.
+ * Declarar APOS `compliance_operational_date`.
+ */
+export const TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE = (() => {
+  const f = 'f_avsec';
+  const special = 'tr_avsec_special';
+  const other = 'tr_avsec_override';
+  const specialPriority = trainingComplianceRulePrioritySql(special);
+  const otherPriority = trainingComplianceRulePrioritySql(other);
+  return `${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME}(empresa_id, funcionario_id) AS (
+    SELECT DISTINCT ${f}.empresa_id, ${f}.id
+      FROM funcionarios ${f}
+      JOIN treinamento_requisitos ${special} ON ${special}.empresa_id=${f}.empresa_id
+      JOIN qualificacoes_tipos qt_avsec ON qt_avsec.id=${special}.qualificacao_tipo_id
+        AND qt_avsec.empresa_id=${special}.empresa_id AND qt_avsec.deleted_at IS NULL
+     WHERE ${f}.deleted_at IS NULL AND UPPER(TRIM(qt_avsec.codigo))='D1'
+       AND ${special}.ativo=1 AND ${special}.deleted_at IS NULL
+       AND ${special}.obrigatoriedade='OBRIGATORIA'
+       AND SUBSTR(UPPER(TRIM(COALESCE(${special}.perfil_competencia,''))),1,6)='AVSEC_'
+       AND (${special}.vigencia_inicio IS NULL OR date(${special}.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+       AND (${special}.vigencia_fim IS NULL OR date(${special}.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+       AND ${trainingComplianceRuleApplicabilitySql(special, f)}
+       AND NOT EXISTS (
+         SELECT 1 FROM treinamento_requisitos ${other}
+          WHERE ${other}.empresa_id=${special}.empresa_id
+            AND ${other}.qualificacao_tipo_id=${special}.qualificacao_tipo_id
+            AND ${other}.ativo=1 AND ${other}.deleted_at IS NULL
+            AND (${other}.vigencia_inicio IS NULL OR date(${other}.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+            AND (${other}.vigencia_fim IS NULL OR date(${other}.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+            AND (${other}.perfil_competencia IS NULL
+                 OR UPPER(TRIM(${other}.perfil_competencia))=UPPER(TRIM(${special}.perfil_competencia)))
+            AND ${trainingComplianceRuleApplicabilitySql(other, f)}
+            AND (${otherPriority}>${specialPriority} OR
+                (${otherPriority}=${specialPriority} AND ${other}.id>${special}.id))
+       )
+  )`;
+})();
+
 export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   ruleAlias?: string;
   employeeAlias?: string;
@@ -263,6 +309,19 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   empresaExpr?: string;
   requireAutoEnrollment?: boolean;
   includeNonTrainingCategories?: boolean;
+  /**
+   * Em vez de aninhar a regra de substituicao AVSEC (3 niveis de subconsulta
+   * correlacionada, ~100 niveis de expressao), usa a CTE
+   * `training_compliance_avsec_superseded` ligada pelo CHAMADOR no FROM (nao em
+   * subconsulta: CTE referenciada dentro de expressao soma a profundidade):
+   *   WITH ..., ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE}
+   *   ... LEFT JOIN training_compliance_avsec_superseded <alias>
+   *         ON <alias>.empresa_id = <empresa> AND <alias>.funcionario_id = <f>.id
+   * Necessario onde o predicado e combinado com outros filtros e o limite de
+   * profundidade de expressao do D1 (100) e excedido.
+   */
+  avsecSupersededFromCte?: boolean;
+  avsecSupersededAlias?: string;
 }): string {
   const tr = options?.ruleAlias || 'tr';
   const f = options?.employeeAlias || 'f';
@@ -280,7 +339,7 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const other = 'tr_avsec_override';
   const specialPriority = trainingComplianceRulePrioritySql(special);
   const otherPriority = trainingComplianceRulePrioritySql(other);
-  const corporateNotSuperseded = `NOT (
+  const corporateNotSupersededInline = `NOT (
     UPPER(TRIM(COALESCE(qt.codigo,'')))='AVSEC_CONSC'
     AND ${tr}.escopo='EMPRESA' AND ${tr}.condicao_id IS NULL
     AND NULLIF(TRIM(${tr}.aeronave_modelo),'') IS NULL
@@ -310,6 +369,16 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
         )
     )
   )`;
+  const supersededAlias = options?.avsecSupersededAlias || 'av_superseded';
+  const corporateSupersededCte = `NOT (
+    UPPER(TRIM(COALESCE(qt.codigo,'')))='AVSEC_CONSC'
+    AND ${tr}.escopo='EMPRESA' AND ${tr}.condicao_id IS NULL
+    AND NULLIF(TRIM(${tr}.aeronave_modelo),'') IS NULL
+    AND ${supersededAlias}.funcionario_id IS NOT NULL
+  )`;
+  const corporateNotSuperseded = options?.avsecSupersededFromCte
+    ? corporateSupersededCte
+    : corporateNotSupersededInline;
   return `COALESCE((SELECT CASE WHEN ${tr}.obrigatoriedade='OBRIGATORIA'${auto} THEN 1 ELSE 0 END
     FROM treinamento_requisitos ${tr}
    WHERE ${tr}.empresa_id=${empresa} AND ${tr}.qualificacao_tipo_id=${qualification}
