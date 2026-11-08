@@ -79,6 +79,7 @@ export interface FrmsDecisaoPolicy {
 export const CAUSA_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
   CHECKIN_PENDENTE: 'Check-in pendente para voo escalado',
   CHECKIN_CRITICO: 'Check-in indica fadiga critica',
+  READINESS_REVISAO: 'Triagem de atenção/readiness requer revisão operacional',
   SONO_ESTIMADO: 'Dado de sono estimado sem check-in real',
   SONO_INSUFICIENTE: 'Horas de sono abaixo de 6h',
   KSS_ALTO: 'Escala KSS elevada indicando sonolencia',
