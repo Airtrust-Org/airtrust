@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ListaFuncionarios } from '../ListaFuncionarios';
 
@@ -85,7 +85,8 @@ describe('Actual HR editing page notifies Compliance after confirmed employee wr
     render(<ListaFuncionarios {...baseProps} />);
     await screen.findByText('Funcionário A');
     fireEvent.click(screen.getAllByTitle('Editar')[0]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Salvar edição' }));
+    const save = await screen.findByRole('button', { name: 'Salvar edição' });
+    await act(async () => { fireEvent.click(save); });
   }
 
   it('invalidates the correct tenant after a real HR form save succeeds', async () => {
