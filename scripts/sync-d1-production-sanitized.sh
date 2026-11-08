@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# source_reference: PR #2076 / P13-10; tracked local sanitization script with DML.
+# operational_decision: replace the shared development bcrypt literal with a fresh,
+#   generated local-only fixture; no production account or remote schema change.
+# dry_run_required: review source and exercise synthetic local fixture tests before
+#   any separately authorized production-to-development data export.
+# rollback_plan_required: revert this script revision to restore its former local
+#   fixture flow; never restore the compromised reusable bcrypt value.
+
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
