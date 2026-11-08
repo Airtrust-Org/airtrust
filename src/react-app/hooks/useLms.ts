@@ -6,8 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import { safeLmsResponseErrorText } from '@/react-app/lib/lms-safe-error-response';
 import type {
-  ScormVersao,
-  ScormAssessmentPolicy,
   TipoConteudo,
   MatriculaStatus,
   LmsCurso,
