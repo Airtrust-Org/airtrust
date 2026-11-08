@@ -25,6 +25,7 @@ import {
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
 import { getEmpresaId } from '../middleware/tenant';
+import { getEmployeeSectorAccess, buildFuncionarioScopeWhere } from '../middleware/employee-sector-access';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
 import {
   getTwilioWhatsAppDiagnosis,
@@ -53,7 +54,7 @@ import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
 const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
 
-export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string) {
+export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string, scopeClause = '1 = 1') {
   const vencimentoExprNew = getQualificacoesVencimentoExpr('qh_new', 'qt_new');
   return `SELECT
           qh.id,
@@ -116,6 +117,7 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
           UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
           OR UPPER(TRIM(COALESCE(qh.categoria, qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
         )
+        AND (${scopeClause})
       ORDER BY data_vencimento ASC`;
 }
 
@@ -141,8 +143,8 @@ function alertasErrorResponse(
 }
 
 // Auth específico por rota (rotas montadas em /api não podem ter use('*') global)
-app.use('/alertas/vencimentos', auth());
-app.use('/alertas/ead-vencido/:id', auth());
+app.use('/alertas/vencimentos', auth(), requireRole('admin', 'manager'));
+app.use('/alertas/ead-vencido/:id', auth(), requireRole('admin', 'manager'));
 app.use('/alertas/whatsapp/delivery/:sid', auth());
 app.use('/alertas/whatsapp/templates', auth());
 app.use('/alertas/whatsapp/templates/*', auth());
@@ -512,6 +514,7 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c, 'Alertas.vencimentos');
   try {
     const empresaId = getEmpresaId(c as any);
+    const scope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c, empresaId), 'p');
     const diasConfigurados = await getQualificacoesAlertaDias(c.env.DB, empresaId);
     const diasStr = c.req.query('dias');
     const dias = diasStr ? normalizeQualificacoesAlertaDias(diasStr) : diasConfigurados;
@@ -522,9 +525,9 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
 
     // 1. Qualificações a vencer
     const qualStmt = await c.env.DB.prepare(
-      buildAlertasVencimentosQualificacoesQuery(vencimentoExpr),
+      buildAlertasVencimentosQualificacoesQuery(vencimentoExpr, scope.clause),
     )
-      .bind(empresaId, hojeSp, dias)
+      .bind(empresaId, hojeSp, dias, ...scope.bindings)
       .all();
 
     if (!qualStmt.success) {
@@ -552,9 +555,10 @@ app.get('/alertas/vencimentos', async (c: Context<{ Bindings: Env }>) => {
         AND p.empresa_id = ?
         AND UPPER(COALESCE(NULLIF(TRIM(p.status), ''), 'ATIVO')) = 'ATIVO'
           AND date(l.data_vencimento) <= date(?, '+' || ? || ' days')
+          AND (${scope.clause})
       ORDER BY l.data_vencimento ASC`,
     )
-      .bind(empresaId, hojeSp, dias)
+      .bind(empresaId, hojeSp, dias, ...scope.bindings)
       .all();
 
     if (!licStmt.success) {
@@ -615,6 +619,7 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
     console.log('[ALERTAS] Opções:', { enviarEmailCanal, enviarWhatsApp });
 
     const db = c.env.DB;
+    const sendScope = buildFuncionarioScopeWhere(await getEmployeeSectorAccess(c, empresaId), 'f');
 
     // Buscar qualificação com dados do funcionário (qualificacoes_historico)
     const query = `
@@ -635,12 +640,13 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       WHERE qh.id = ?
         AND qh.deleted_at IS NULL
         AND f.empresa_id = ?
+        AND qh.empresa_id = f.empresa_id
+        AND (${sendScope.clause})
     `;
 
-    const result = await db.prepare(query).bind(id, empresaId).first();
+    const result = await db.prepare(query).bind(id, empresaId, ...sendScope.bindings).first();
 
     console.log('[ALERTAS] Resultado query:', result ? 'encontrado' : 'não encontrado');
-    console.log('[ALERTAS] Dados completos:', JSON.stringify(result, null, 2));
 
     if (!result) {
       return alertasErrorResponse(
