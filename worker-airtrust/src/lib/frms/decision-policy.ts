@@ -92,6 +92,7 @@ export const CAUSA_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> 
 
 const ALERT_PRIORITY: FrmsOperationalSnapshotAlertCode[] = [
   'CHECKIN_CRITICO',
+  'READINESS_REVISAO',
   'EFETIVIDADE_BAIXA',
   'CHECKIN_PENDENTE',
   'SONO_INSUFICIENTE',

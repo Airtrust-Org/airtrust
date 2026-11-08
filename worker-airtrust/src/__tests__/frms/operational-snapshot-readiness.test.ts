@@ -26,6 +26,10 @@ describe('FRMS readiness posterior ao check-in', () => {
     expect(item.alertas).toContain('READINESS_REVISAO');
     expect(item.snapshot_status).not.toBe('OK');
     expect(item.readiness_classification).toBe(classification);
+    expect(item.causa).toContain('readiness');
+    expect(item.motivos_principais).toEqual(expect.arrayContaining([
+      expect.stringContaining('readiness'),
+    ]));
   });
   it('não promove baseline em construção nem readiness de outro dia', () => {
     const input = fixture();

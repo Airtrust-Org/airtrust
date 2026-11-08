@@ -98,6 +98,7 @@ export interface FrmsDecisaoOperacionalInput {
 
 const ALERT_PRIORIDADE: FrmsOperationalSnapshotAlertCode[] = [
   'CHECKIN_CRITICO',       // violação biológica/operacional crítica
+  'READINESS_REVISAO',     // triagem objetiva requer revisão
   'EFETIVIDADE_BAIXA',     // fadiga calculada crítica
   'SONO_INSUFICIENTE',     // risco biológico significativo
   'KSS_ALTO',              // sonolência auto-reportada elevada
