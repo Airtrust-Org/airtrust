@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/useLms';
+import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {
@@ -835,7 +836,7 @@ export default function LmsPlayer() {
         throw new Error('A matrícula ainda não consta como concluída no servidor.');
       }
       setCompleted(true);
-      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+      void invalidateTrainingEvidenceProjections(queryClient, empresaAtualId);
       showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
       navigate('/lms/cursos', { replace: true });
     } catch (error) {
@@ -871,7 +872,7 @@ export default function LmsPlayer() {
         setCompleted(true);
         setCompletionDialogOpen(false);
         setIsFinalizing(false);
-        void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+        void invalidateTrainingEvidenceProjections(queryClient, empresaAtualId);
         showCompletionToast('success', 'Curso concluído e registrado com sucesso.');
         navigate('/lms/cursos', { replace: true });
       }).catch(() => {
@@ -1285,7 +1286,7 @@ export default function LmsPlayer() {
       }
 
       setCompleted(true);
-      void queryClient.invalidateQueries({ queryKey: ['training-compliance'] });
+      void invalidateTrainingEvidenceProjections(queryClient, empresaAtualId);
       setLiveProgress(100);
       setQualificacaoGerada(Boolean(json.data?.qualificacao_gerada));
       void refetchMatricula();
