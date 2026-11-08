@@ -18,7 +18,7 @@ INSERT INTO usuarios (
 )
 SELECT
   'dev.login@airtrust.invalid',
-  '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWPG',
+  '__AIRTRUST_LOCAL_BCRYPT_HASH__',
   'Desenvolvedor Admin',
   'ADMIN',
   (
@@ -43,7 +43,7 @@ WHERE NOT EXISTS (
 );
 
 UPDATE usuarios
-SET password_hash = '$2b$10$g2ndd.4BDOPg4O0vb.7cGeX88MhzayrKRiwomRatJkuyfKkj9XWPG',
+SET password_hash = '__AIRTRUST_LOCAL_BCRYPT_HASH__',
     nome = 'Desenvolvedor Admin',
     perfil = 'ADMIN',
     funcionario_id = COALESCE(
