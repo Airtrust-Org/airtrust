@@ -858,6 +858,8 @@ Por favor, providencie a renovação o quanto antes.
               : String(r.funcionario_telefone || ''),
           ),
           origem: 'COMPLIANCE',
+          manual: true,
+          qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || ''),
         });
         if (claim.reserved) {
           reservations[channel] = claim.key;
