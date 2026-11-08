@@ -320,10 +320,10 @@ writeRouter.post(
         .bind(id)
         .run();
 
-      // 2. Calcular nova data de vencimento
-      // Prioridade: hist_validade_meses > tipo_validade
+      // A validade do modelo atual prevalece sobre snapshots legados.
+      // CMA 60+ mantém a exceção semestral calculada abaixo.
       // NULL = sem vencimento (não fabricar 12 meses)
-      let validadeMeses = original.hist_validade_meses ?? original.tipo_validade ?? null;
+      let validadeMeses = original.tipo_validade ?? original.hist_validade_meses ?? null;
       if (validadeMeses === 0) validadeMeses = null;
 
       // Regra CMA semestral: pilotos com mais de 60 anos têm validade de 6 meses
