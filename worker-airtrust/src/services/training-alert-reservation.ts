@@ -54,6 +54,8 @@ export interface ReserveTrainingAlertParams {
   destinatarioMascarado?: string | null;
   diaOperacional?: string;
   origem: 'LMS_ALERTA' | 'COMPLIANCE';
+  manual?: boolean;
+  qualificacaoNome?: string | null;
 }
 
 export type ReservationOutcome =
@@ -81,6 +83,8 @@ export async function reserveTrainingAlert(
     curso_id: params.target.curso_id ?? null,
     channel: params.channel,
     origem: params.origem,
+    manual: params.manual === true,
+    qualificacao_nome: params.qualificacaoNome || null,
     reserved_at: new Date().toISOString(),
   });
 
