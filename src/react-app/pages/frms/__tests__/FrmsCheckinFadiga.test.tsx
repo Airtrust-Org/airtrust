@@ -364,7 +364,9 @@ describe('FrmsCheckinFadiga UI', () => {
   beforeEach(() => {
     // Most existing UI cases exercise the normal pre-presentation contract.
     // Only the targeted late-flow tests use a later clock.
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-07T08:00:00Z'));
+    // Freeze both Date.now() and new Date(); mixing clocks fails after midnight BRT.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-07T08:00:00Z'));
     mutateAsyncMock.mockReset();
     readinessMutateAsyncMock.mockReset();
     refetchMock.mockReset();
