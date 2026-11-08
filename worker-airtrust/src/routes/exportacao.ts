@@ -10,7 +10,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
-import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { resolveQualificationExportExpiry } from '../services/qualificacoes/export-expiry';
 import { getEmpresaId } from '../middleware/tenant';
 import { createLogger, toError } from '../utils/logger';
 import {
@@ -20,7 +20,6 @@ import {
 import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
-  getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
 import {
   buildRenewalSqlPredicates,
@@ -50,7 +49,7 @@ interface QualificacaoExportRow {
   validade_meses: string | number | null;
   vencimento_fim_mes: string | number | null;
   data_realizacao: string | null;
-  data_vencimento_raw: string | null;
+  data_vencimento_persistida: string | null;
   renovada: string | number | null;
   qualificacao_status: string | null;
   tem_renovacao_posterior: string | number | null;
@@ -288,11 +287,10 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
         COALESCE(qh.tipo, qt.nome)                                         AS qualificacao_nome,
         COALESCE(qh.qualificacao_codigo, qt.codigo)                        AS qualificacao_codigo,
         COALESCE(qh.categoria, qt.categoria)                               AS categoria,
-        COALESCE(qh.validade_meses, qt.validade)                       AS validade_meses,
+        COALESCE(qt.validade, qh.validade_meses)                       AS validade_meses,
         qt.vencimento_fim_mes                                              AS vencimento_fim_mes,
         qh.data_conclusao                                                  AS data_realizacao,
-        ${getQualificacoesVencimentoExpr()}
-                                                                           AS data_vencimento_raw,
+        qh.data_vencimento                                                AS data_vencimento_persistida,
         qh.renovada,
         qh.status                                                          AS qualificacao_status,
         CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END AS tem_renovacao_posterior,
@@ -304,7 +302,7 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
         qh.created_at
       FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f         ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = f.empresa_id AND qt.deleted_at IS NULL
       LEFT JOIN modelos_aeronave ma    ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       WHERE ${conditions.join('\n        AND ')}
       ORDER BY qh.data_conclusao DESC, f.nome ASC
@@ -335,31 +333,15 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
     const todayThreshold = dThreshold.toISOString().split('T')[0];
 
     const enriched = results.map((r) => {
-      let validadeMesesEfetiva = Number(r.validade_meses || 12);
-
-      // Ajuste especial para CMA acima de 60 anos
-      const codigoQ = String(r.qualificacao_codigo || '').toUpperCase();
-      if (codigoQ === 'CMA' && r.funcionario_nascimento && r.data_realizacao) {
-        const birthDate = new Date(String(r.funcionario_nascimento) + 'T00:00:00Z');
-        const refDate = new Date(String(r.data_realizacao) + 'T00:00:00Z');
-        const sixtiethBirthday = new Date(birthDate);
-        sixtiethBirthday.setFullYear(sixtiethBirthday.getFullYear() + 60);
-        if (sixtiethBirthday <= refDate) validadeMesesEfetiva = 6;
-      }
-
-      const vencimentoFimMes = Number(r.vencimento_fim_mes || 0) === 1 ? 1 : 0;
-      let dataVencimento = r.data_vencimento_raw as string | null;
-      if (r.data_realizacao && validadeMesesEfetiva > 0) {
-        try {
-          dataVencimento = calcularDataVencimento(
-            String(r.data_realizacao),
-            validadeMesesEfetiva,
-            vencimentoFimMes,
-          );
-        } catch {
-          // mantém data_vencimento_raw como fallback
-        }
-      }
+      const { validadeMeses: validadeMesesEfetiva, dataVencimento } =
+        resolveQualificationExportExpiry({
+          validadeMeses: r.validade_meses,
+          dataVencimentoPersistida: r.data_vencimento_persistida,
+          dataRealizacao: r.data_realizacao,
+          codigoQualificacao: r.qualificacao_codigo,
+          nascimentoFuncionario: r.funcionario_nascimento,
+          vencimentoFimMes: r.vencimento_fim_mes,
+        });
 
       // Derivar status — mesma lógica do historico.ts
       // RENOVADA: NUNCA derivar baseado apenas em renovada=1 ou status='RENOVADA' persistido.
