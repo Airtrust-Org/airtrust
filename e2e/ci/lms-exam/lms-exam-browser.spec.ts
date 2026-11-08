@@ -56,7 +56,11 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   // The explicit OPTIONS/POST checks below still verify the real test API CORS
   // contract; no network error is intercepted or silently ignored.
   await page.addInitScript(() => {
-    localStorage.setItem('airtrust:language:manual', 'pt-BR');
+    // Playwright runs init scripts in child frames too; a sandboxed SCORM
+    // iframe may have an opaque origin and no localStorage access.
+    if (window.top === window) {
+      localStorage.setItem('airtrust:language:manual', 'pt-BR');
+    }
   });
   // Translation is provided by the disposable local API. Browser routing
   // can bypass CORS preflight in Chromium but fail nondeterministically in WebKit.
