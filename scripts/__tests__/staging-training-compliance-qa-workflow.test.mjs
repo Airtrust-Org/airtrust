@@ -24,6 +24,21 @@ test('synthetic fixture is isolated, confirmed and always cleaned', () => {
   execFileSync('node', ['--check', 'scripts/staging/seed-qa-training-compliance.mjs']);
 });
 
+test('synthetic never-realized rule starts on a deterministic past operational date', () => {
+  const output = execFileSync('node', [
+    'scripts/staging/seed-qa-training-compliance.mjs',
+    '--code=QA-COMP-TEST',
+    '--marker=QA_ONLY_TRAINING_COMPLIANCE_TEST',
+  ], { encoding: 'utf8' });
+  const dryRun = JSON.parse(output);
+  assert.equal(dryRun.mode, 'DRY_RUN');
+  assert.equal(dryRun.vigencia_inicio, '2000-01-01');
+  const requirementInsert = seed.match(/INSERT INTO treinamento_requisitos\([\s\S]*?\nCREATE TABLE IF NOT EXISTS _qa_training_compliance_post/)?.[0];
+  assert.ok(requirementInsert);
+  assert.match(requirementInsert, /FIXTURE_VIGENCIA_START_DATE/);
+  assert.doesNotMatch(requirementInsert, /date\('now'\)/);
+});
+
 test('browser QA stays read-only and proves never-realized compliance', () => {
   assert.match(spec, /installReadOnlyGuard/);
   assert.match(spec, /nao_realizados/);
