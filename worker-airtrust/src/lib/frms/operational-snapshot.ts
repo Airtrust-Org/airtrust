@@ -54,6 +54,7 @@ import { collectByBindChunks } from '../../utils/d1-bind-chunks';
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
   | 'CHECKIN_CRITICO'
+  | 'READINESS_REVISAO'
   | 'SONO_ESTIMADO'
   | 'SONO_INSUFICIENTE'
   | 'KSS_ALTO'
@@ -108,6 +109,8 @@ export interface FrmsOperationalSnapshotItem {
   hora_acordar: string | null;
   fadiga_score: number | null;
   status_operacional_checkin: string | null;
+  readiness_classification?: string | null;
+  readiness_protocol_version?: string | null;
 
   effectiveness_pct: number | null;
   effectiveness_componentes?: EffectivenessResult['componentes'] | null;
@@ -194,6 +197,7 @@ export interface BuildOperationalSnapshotInput {
     escalas: ScaleSnapshotRow[];
     jornadas: JornadaSnapshotRow[];
     checkins: CheckinSnapshotRow[];
+    readiness?: ReadinessSnapshotRow[];
     effectiveness: EffectivenessSnapshotRow[];
     activities?: FrmsActivitySnapshotRow[];
     /** Presença diária na quinzena/período operacional, mesmo sem atividade no dia. */
@@ -240,6 +244,13 @@ interface CheckinSnapshotRow {
   nivel_fadiga: string | null;
   status_operacional: string | null;
   computed_risk_level: string | null;
+}
+
+interface ReadinessSnapshotRow {
+  data_operacional: string;
+  funcionario_id: number;
+  classification: string;
+  protocol_version: string;
 }
 
 interface EffectivenessSnapshotRow {
@@ -601,6 +612,7 @@ export function buildFrmsOperationalSnapshot(
   const escalaMap = new Map<string, ScaleSnapshotRow>();
   const jornadaMap = new Map<string, JornadaSnapshotRow>();
   const checkinMap = new Map<string, CheckinSnapshotRow>();
+  const readinessMap = new Map<string, ReadinessSnapshotRow>();
   const effectivenessMap = new Map<string, EffectivenessSnapshotRow>();
   const activityMap = new Map<string, FrmsActivitySnapshotRow[]>();
   const funcionarioMap = new Map<number, FuncionarioSnapshotRow>();
@@ -677,6 +689,11 @@ export function buildFrmsOperationalSnapshot(
     }
   }
 
+  for (const row of input.rows.readiness ?? []) {
+    // Tenant scoping is enforced by the D1 loader; only matching operational keys are used.
+    readinessMap.set(`${row.data_operacional}::${asNumber(row.funcionario_id)}`, row);
+  }
+
   for (const row of input.rows.effectiveness) {
     const key = `${row.data_operacional}::${asNumber(row.funcionario_id)}`;
     effectivenessMap.set(key, row);
@@ -710,6 +727,7 @@ export function buildFrmsOperationalSnapshot(
     const escala = escalaMap.get(key) ?? null;
     const jornada = jornadaMap.get(key) ?? null;
     const checkin = checkinMap.get(key) ?? null;
+    const readiness = readinessMap.get(key) ?? null;
     const efetividade = effectivenessMap.get(key) ?? null;
     const activities = activityMap.get(key) ?? [];
     const funcionario = funcionarioMap.get(funcionario_id) ?? null;
@@ -819,6 +837,11 @@ export function buildFrmsOperationalSnapshot(
     if (isCriticalCheckin(checkin)) {
       alertas.push('CHECKIN_CRITICO');
     }
+    // A separate, later vigilance screening cannot be erased by a normal subjective score.
+    // This is an operational review signal, never a clinical diagnosis or automatic unfitness.
+    if (readiness?.classification === 'attention' || readiness?.classification === 'operational_review') {
+      alertas.push('READINESS_REVISAO');
+    }
 
     // Check-in existente mas incompleto não é "recebido com precisão reduzida":
     // é dado insuficiente para o cálculo canônico e deve ficar fail-closed.
@@ -923,6 +946,8 @@ export function buildFrmsOperationalSnapshot(
       hora_acordar: horaAcordar,
       fadiga_score: checkin ? asNumber(checkin.score_fadiga, 0) : null,
       status_operacional_checkin: completeDailyCheckin ? normalizeText(checkin?.status_operacional) : null,
+      readiness_classification: readiness?.classification ?? null,
+      readiness_protocol_version: readiness?.protocol_version ?? null,
 
       effectiveness_pct: effectivenessPctNormalized,
       effectiveness_componentes:
@@ -1064,6 +1089,7 @@ interface OperationalSnapshotRows {
   checkins: CheckinSnapshotRow[];
   effectiveness: EffectivenessSnapshotRow[];
   activities: FrmsActivitySnapshotRow[];
+  readiness: ReadinessSnapshotRow[];
   regulatoryRolling: RollingRegulatoryEvidence[];
   missionPeriods: MissionPeriodRow[];
 }
@@ -1081,7 +1107,7 @@ async function loadOperationalSnapshotRows(
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
   const missionHistoryStart = addDaysIso(janelaInicio, -ACT_CDS_MAX_POST_MISSION_REST_DAYS);
-  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult] = await Promise.all([
+  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult, readinessResult] = await Promise.all([
     db
       .prepare(
         `WITH escala_crew AS (
@@ -1284,6 +1310,12 @@ async function loadOperationalSnapshotRows(
         empresaId, janelaFim, missionHistoryStart,
       )
       .all<MissionPeriodRow>(),
+    db.prepare(`SELECT reference_date AS data_operacional, CAST(funcionario_id AS INTEGER) AS funcionario_id,
+                       classification, protocol_version
+                  FROM frms_readiness_assessment
+                 WHERE empresa_id = ? AND deleted_at IS NULL
+                   AND reference_date >= ? AND reference_date <= ?`)
+      .bind(empresaId, janelaInicio, janelaFim).all<ReadinessSnapshotRow>(),
   ]);
 
   return {
@@ -1302,6 +1334,7 @@ async function loadOperationalSnapshotRows(
       operational_data_source: row.operational_data_source,
     })),
     checkins: checkinsResult.results || [],
+    readiness: readinessResult.results || [],
     effectiveness: (effectivenessResult.results || []).map((row) => {
       let parsed: EffectivenessResult['componentes'] | null = null;
       if (row.effectiveness_componentes_json) {
@@ -1848,6 +1881,7 @@ export async function listFrmsOperationalSnapshot(
       escalas: contextRows.escalas,
       jornadas: contextRows.jornadas,
       checkins: contextRows.checkins,
+      readiness: contextRows.readiness,
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
       roster: buildActiveFortnightRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
