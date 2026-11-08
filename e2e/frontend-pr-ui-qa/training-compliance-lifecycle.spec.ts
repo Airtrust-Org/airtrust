@@ -212,6 +212,27 @@ async function setExplicitEadEnrollment(page: Page, ruleId: number, enabled: boo
   return result;
 }
 
+async function assertCompliancePageReady(page: Page) {
+  const heading = page.getByRole('heading', { name: 'Compliance de Treinamentos' });
+  try {
+    // A cold authenticated staging browser can wait for /auth/me and the
+    // operational profile before rendering. Do not turn startup latency into
+    // a false catalog failure, but retain a bounded readiness check.
+    await expect(heading).toBeVisible({ timeout: 25_000 });
+  } catch {
+    const route = new URL(page.url()).pathname;
+    const safeRoute = route === '/treinamentos/compliance' ? 'COMPLIANCE' :
+      route === '/login' ? 'LOGIN' : route === '/' ? 'HOME' : 'OTHER';
+    const visibleState = await page.evaluate(() => ({
+      denied: /acesso negado|sem permissão|acesso não autorizado/i.test(document.body.innerText),
+      moduleUnavailable: /módulo indisponível|não está ativo/i.test(document.body.innerText),
+      loginForm: Boolean(document.querySelector('input[type="password"]')),
+      tokenPresent: Boolean(sessionStorage.getItem('airtrust_token') || localStorage.getItem('airtrust_token')),
+    }));
+    throw new Error(`QA_COMPLIANCE_PAGE_NOT_READY:route=${safeRoute}:denied=${visibleState.denied}:moduleUnavailable=${visibleState.moduleUnavailable}:loginForm=${visibleState.loginForm}:tokenPresent=${visibleState.tokenPresent}`);
+  }
+}
+
 test('full training compliance lifecycle recalculates organization, enrollments and evidence', async ({
   page,
 }) => {
@@ -241,9 +262,27 @@ test('full training compliance lifecycle recalculates organization, enrollments 
 
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-lifecycle');
-  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+  await assertCompliancePageReady(page);
 
-  const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  // Record network status without exposing request headers or employee data.
+  const catalogNetwork: string[] = [];
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push('REQUEST_FAILED');
+    }
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname === '/api/compliance-treinamentos/catalogos') {
+      catalogNetwork.push(`HTTP_${response.status()}`);
+    }
+  });
+  let catalogs: ApiResult;
+  try {
+    catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
+  } catch (error) {
+    const failure = error instanceof Error ? error.message : 'UNKNOWN';
+    throw new Error(`QA_CATALOG_READBACK_FAILED:network=${catalogNetwork.join(',') || 'NO_RESPONSE'}:${failure}`);
+  }
   expect(catalogs.ok, JSON.stringify(catalogs.json)).toBe(true);
   const sector = catalogs.json.data.setores.find((item: any) => item.nome === sectorName);
   const fn = catalogs.json.data.funcoes.find((item: any) => item.nome === functionName);
@@ -666,7 +705,7 @@ test('expired synthetic evidence renews cycle two and issues an authorized PDF',
 
   await page.goto('/treinamentos/compliance', { waitUntil: 'domcontentloaded' });
   if (SHORT_SHA) await assertLiveFrontendShaFromPage(page, SHORT_SHA, 'training-compliance-cycle-two');
-  await expect(page.getByRole('heading', { name: 'Compliance de Treinamentos' })).toBeVisible();
+  await assertCompliancePageReady(page);
 
   const catalogs = await api(page, '/api/compliance-treinamentos/catalogos');
   expect(catalogs.ok).toBe(true);
