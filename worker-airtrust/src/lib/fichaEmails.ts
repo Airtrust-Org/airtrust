@@ -213,9 +213,7 @@ export async function enviarEmailFichaSessao(
     }
 
     if (!toEmail) {
-      console.warn(
-        `[fichaEmails] Destinatário sem email — tipo=${tipo} ficha=${fichaId} para="${toName}"`,
-      );
+      console.warn('[fichaEmails] Destinatário sem email', { tipo, fichaId });
       return;
     }
 
@@ -226,8 +224,8 @@ export async function enviarEmailFichaSessao(
       htmlContent: buildHtml(text),
     });
 
-    console.log(`[fichaEmails] ✅ Email ${tipo} enviado → ficha=${fichaId} para=${toEmail}`);
+    console.info('[fichaEmails] Provider accepted email', { tipo, fichaId });
   } catch (err) {
-    console.error(`[fichaEmails] ❌ Erro ao enviar email ${tipo} para ficha ${fichaId}:`, err);
+    console.error('[fichaEmails] Delivery failed', { tipo, fichaId, errorType: err instanceof Error ? err.name : 'UNKNOWN' });
   }
 }
