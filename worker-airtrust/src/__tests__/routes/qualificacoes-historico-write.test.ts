@@ -449,11 +449,12 @@ describe('qualificacoes historico write router', () => {
 
     const { db, calls } = createMockDb([
       [
-        'SELECT qt.validade_meses, qt.validade, qt.data_vencimento, qt.qualificacao_codigo',
+        'SELECT qh.validade_meses, qt.validade AS tipo_validade,',
         {
           first: () => ({
             validade_meses: 12,
-            validade: 12,
+            tipo_validade: 24,
+            vencimento_fim_mes: 1,
             data_vencimento: null,
             qualificacao_codigo: 'CRM',
           }),
@@ -497,7 +498,17 @@ describe('qualificacoes historico write router', () => {
         call.query.includes('SET data_conclusao = ?') &&
         call.query.includes("status = 'PLANEJADA'"),
     );
-    expect(updateCall?.args).toEqual(['2099-05-10', '2027-05-10', 654]);
+    expect(updateCall?.args).toEqual(['2099-05-10', '2027-05-10', 654, 1]);
+    const readCall = calls.find((call) => call.method === 'first' && call.query.includes('qt.validade AS tipo_validade'));
+    expect(readCall?.args).toEqual([654, 1]);
+    expect(readCall?.query).toContain('qh.empresa_id = ?');
+    expect(readCall?.query).toContain('qt.vencimento_fim_mes');
+    expect(readCall?.query).not.toContain('qt.validade_meses');
+    expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
+      validadeMeses: 24,
+      vencimentoFimMes: 1,
+      dataConclusao: '2099-05-10',
+    }));
   });
 
   it('limpa o vínculo da matrícula e do ciclo LMS ao excluir a qualificação', async () => {
