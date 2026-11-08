@@ -88,6 +88,8 @@ jobs:
         env:
           RELEASE_SHA: ${{ inputs.expected_sha }}
           TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+          DEPLOY_WORKER: ${{ inputs.deploy_worker }}
+          DEPLOY_PAGES: ${{ inputs.deploy_pages }}
         run: node scripts/ci/validate-production-release-candidate.mjs
 
       - name: Verify official release gates
