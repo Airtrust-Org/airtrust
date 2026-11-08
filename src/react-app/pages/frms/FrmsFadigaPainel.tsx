@@ -22,10 +22,10 @@ export default function FrmsFadigaPainel() {
   const dailyItemsValid = Array.isArray((dailyData as { items?: unknown[] } | null)?.items);
   const alertItemsValid = Array.isArray((alertsData as { items?: unknown[] } | null)?.items);
   const itens = dailyItemsValid
-    ? (dailyData as { items: Array<Record<string, unknown>> }).items
+    ? (dailyData as unknown as { items: Array<Record<string, unknown>> }).items
     : [];
   const alertItems = alertItemsValid
-    ? (alertsData as { items: Array<Record<string, unknown>> }).items
+    ? (alertsData as unknown as { items: Array<Record<string, unknown>> }).items
     : [];
 
   const resumo = summarizeDailyMonitor(itens, alertItems);
