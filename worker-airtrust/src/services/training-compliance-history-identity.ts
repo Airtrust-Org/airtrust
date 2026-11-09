@@ -7,28 +7,41 @@ export function trainingComplianceHistoryIdentitySql(
   historicalTypeColumn: string,
   hasQualificationCode: boolean,
   hasActiveTypeColumn: boolean,
-): { joins: string; resolvedTypeSql: string } {
+  carriedTypeColumns: readonly string[] = [],
+): { cteSql: string; joins: string; resolvedTypeSql: string } {
   const activeId = hasActiveTypeColumn ? 'AND COALESCE(qt_history_id.ativo, 1) = 1' : '';
-  const activeCode = hasActiveTypeColumn ? 'AND COALESCE(qt_history_code.ativo, 1) = 1' : '';
   const currentTypeJoin = `
          LEFT JOIN qualificacoes_tipos qt_history_id
            ON qt_history_id.id = qh.${historicalTypeColumn}
           AND qt_history_id.empresa_id = f.empresa_id
           AND qt_history_id.deleted_at IS NULL
           ${activeId}`;
+  // The canonical code is normalized once into a materialized CTE so SQLite
+  // can hash/index it. Joining on UPPER(TRIM(COALESCE(codigo,''))) directly
+  // forces a scan of every tenant type for each history row (rows_read =
+  // history rows x tenant types, ~485k in production, #2078).
+  // Explicit narrow columns (not SELECT *): with * SQLite stopped choosing an
+  // automatic index in production and rescanned the CTE for every history row.
+  const carried = carriedTypeColumns.map((name) => `, ${name}`).join('');
+  const cteSql = hasQualificationCode
+    ? `qt_history_code_idx AS MATERIALIZED (
+           SELECT id, empresa_id${carried},
+                  UPPER(TRIM(COALESCE(codigo,''))) AS history_code_key
+             FROM qualificacoes_tipos
+            WHERE deleted_at IS NULL
+              ${hasActiveTypeColumn ? 'AND COALESCE(ativo, 1) = 1' : ''})`
+    : '';
   const canonicalCodeJoin = hasQualificationCode
     ? `
-         LEFT JOIN qualificacoes_tipos qt_history_code
-           ON qt_history_code.empresa_id = f.empresa_id
-          AND qt_history_code.deleted_at IS NULL
-          ${activeCode}
-          AND UPPER(TRIM(COALESCE(qt_history_code.codigo,''))) =
-              UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))`
+         LEFT JOIN qt_history_code_idx qt_history_code
+           ON qt_history_code.history_code_key =
+              UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))
+          AND qt_history_code.empresa_id = f.empresa_id`
     : '';
   const resolvedTypeSql = hasQualificationCode
     ? `COALESCE(qt_history_id.id, qt_history_code.id, qh.${historicalTypeColumn})`
     : `COALESCE(qt_history_id.id, qh.${historicalTypeColumn})`;
-  return { joins: currentTypeJoin + canonicalCodeJoin, resolvedTypeSql };
+  return { cteSql, joins: currentTypeJoin + canonicalCodeJoin, resolvedTypeSql };
 }
 
 
