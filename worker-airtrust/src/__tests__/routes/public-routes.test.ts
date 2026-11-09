@@ -48,103 +48,22 @@ describe('public routes extraction', () => {
     });
   });
 
-  it('preserva fallback quando from == to', async () => {
+  it('rejeita texto arbitrário sem encaminhá-lo ao Google ou a qualquer provedor', async () => {
+    const externalFetch = vi.fn();
+    vi.stubGlobal('fetch', externalFetch);
     const app = createPublicApp();
     const response = await app.request('/api/public/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Teste', from: 'pt', to: 'pt' }),
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      data: {
-        translatedText: 'Teste',
-        source: 'pt',
-        target: 'pt',
-      },
-    });
-  });
-
-  it('faz fallback com status 200 quando provider responde não-ok', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
+      body: JSON.stringify({
+        text: 'Funcionário João CPF 000.000.000-00', from: 'pt', to: 'en',
       }),
-    );
-
-    const app = createPublicApp();
-    const response = await app.request('/api/public/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Olá', from: 'pt', to: 'en' }),
     });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      data: {
-        translatedText: 'Olá',
-        source: 'pt',
-        target: 'en',
-        fallback: true,
-      },
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false, code: 'UNSAFE_DYNAMIC_TRANSLATION_DISABLED',
     });
-  });
-
-  it('faz fallback com status 200 quando fetch dispara erro', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new Error('Network connection timeout')),
-    );
-
-    const app = createPublicApp();
-    const response = await app.request('/api/public/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Funcionários', from: 'pt', to: 'en' }),
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      data: {
-        translatedText: 'Funcionários',
-        source: 'pt',
-        target: 'en',
-        fallback: true,
-      },
-    });
-  });
-
-  it('mantém sucesso quando provider responde payload válido', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => [[['Hello', 'Olá']]],
-      }),
-    );
-
-    const app = createPublicApp();
-    const response = await app.request('/api/public/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Olá', from: 'pt', to: 'en' }),
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      data: {
-        translatedText: 'Hello',
-        source: 'pt',
-        target: 'en',
-      },
-    });
+    expect(externalFetch).not.toHaveBeenCalled();
   });
 
   it('limita o proxy público de tradução por IP', async () => {
@@ -161,7 +80,7 @@ describe('public routes extraction', () => {
         headers,
         body,
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(410);
     }
 
     const blocked = await app.request('/api/public/translate', {

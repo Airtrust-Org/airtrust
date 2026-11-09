@@ -271,6 +271,31 @@ app.get('/whatsapp/overview', auth(), requireRole('admin', 'manager'), async (c)
   }
 });
 
+/** One employee row per notification: prefer tenant-owned history, never a many-to-many CPF join. */
+const logEmployeeJoinSql = `
+  LEFT JOIN qualificacoes_historico qh
+    ON nl.qualificacao_historico_id = qh.id
+   AND qh.empresa_id = nl.empresa_id
+   AND qh.deleted_at IS NULL
+  LEFT JOIN funcionarios f
+    ON f.id = CASE
+      -- Foreign/deleted history must not fall back to a CPF from this tenant.
+      WHEN nl.qualificacao_historico_id IS NOT NULL AND qh.id IS NULL THEN NULL
+      WHEN qh.funcionario_id IS NOT NULL THEN qh.funcionario_id
+      -- Legacy imports may have tenant-owned histories with a NULL employee id:
+      -- resolve by CPF only when exactly one active employee matches this tenant.
+      ELSE (
+        SELECT CASE WHEN COUNT(*) = 1 THEN MIN(f_unique.id) ELSE NULL END
+          FROM funcionarios f_unique
+         WHERE f_unique.empresa_id = nl.empresa_id
+           AND f_unique.deleted_at IS NULL
+           AND f_unique.cpf = nl.funcionario_cpf
+      )
+    END
+   AND f.empresa_id = nl.empresa_id
+   AND f.deleted_at IS NULL
+`;
+
 // =============================================
 // GET /api/notificacoes/log
 // Listar log de notificações
@@ -333,20 +358,19 @@ app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
         qt.nome as qualificacao_nome,
         qt.categoria
       FROM notificacoes_log nl
-      LEFT JOIN funcionarios f
-        ON nl.funcionario_cpf = f.cpf
-       AND f.empresa_id = nl.empresa_id
-       AND f.deleted_at IS NULL
-      LEFT JOIN qualificacoes_historico qh
-        ON nl.qualificacao_historico_id = qh.id
-       AND qh.empresa_id = nl.empresa_id
-       AND qh.deleted_at IS NULL
+      ${logEmployeeJoinSql}
       LEFT JOIN qualificacoes_tipos qt
-        ON qh.qualificacao_codigo = qt.codigo
-       AND qt.empresa_id = nl.empresa_id
-       AND qt.deleted_at IS NULL
+        ON qt.id = (
+          SELECT qtype.id
+            FROM qualificacoes_tipos qtype
+           WHERE qtype.codigo = qh.qualificacao_codigo
+             AND qtype.empresa_id = nl.empresa_id
+             AND qtype.deleted_at IS NULL
+           ORDER BY qtype.id DESC
+           LIMIT 1
+        )
       WHERE ${conditions.join(' AND ')}
-      ORDER BY nl.created_at DESC
+      ORDER BY nl.created_at DESC, nl.id DESC
       LIMIT ? OFFSET ?
     `;
 
@@ -359,18 +383,18 @@ app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
     const statsConditions: string[] = ['nl.empresa_id = ?'];
     const statsBindings: unknown[] = [empresaId];
     appendEmployeeSectorFilter(statsConditions, statsBindings, access, 'f');
+    // An administrator can count tenant logs directly: joining employees for all
+    // historical rows would execute unnecessary correlated lookups at large scale.
+    const statsEmployeeJoin = access.mode === 'all' ? '' : logEmployeeJoinSql;
 
     const { results: stats } = await c.env.DB.prepare(
       `SELECT
-         COUNT(*) as total,
-         SUM(CASE WHEN nl.status = 'enviada' THEN 1 ELSE 0 END) as enviadas,
-         SUM(CASE WHEN nl.status = 'erro' THEN 1 ELSE 0 END) as erros,
-         SUM(CASE WHEN nl.status = 'pendente' THEN 1 ELSE 0 END) as pendentes
+         COUNT(DISTINCT nl.id) as total,
+         COUNT(DISTINCT CASE WHEN nl.status = 'enviada' THEN nl.id END) as enviadas,
+         COUNT(DISTINCT CASE WHEN nl.status = 'erro' THEN nl.id END) as erros,
+         COUNT(DISTINCT CASE WHEN nl.status = 'pendente' THEN nl.id END) as pendentes
        FROM notificacoes_log nl
-       LEFT JOIN funcionarios f
-         ON nl.funcionario_cpf = f.cpf
-        AND f.empresa_id = nl.empresa_id
-        AND f.deleted_at IS NULL
+       ${statsEmployeeJoin}
        WHERE ${statsConditions.join(' AND ')}`,
     )
       .bind(...statsBindings)

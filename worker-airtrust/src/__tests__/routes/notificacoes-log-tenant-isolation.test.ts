@@ -121,7 +121,7 @@ function createMockEnv() {
             return { results: visible };
           }
 
-          if (query.includes('COUNT(*) as total')) {
+          if (query.includes('COUNT(DISTINCT nl.id) as total')) {
             return {
               results: [
                 {
@@ -226,7 +226,7 @@ describe('notificacoes /log tenant isolation', () => {
     expect(listQuery?.args[0]).toBe(1);
 
     const statsQuery = calls.find(
-      (call) => call.method === 'all' && call.query.includes('COUNT(*) as total'),
+      (call) => call.method === 'all' && call.query.includes('COUNT(DISTINCT nl.id) as total'),
     );
     // Stats query now joins funcionarios for sector scoping, so empresa_id is
     // aliased (nl.empresa_id) rather than bare.

@@ -2,14 +2,15 @@ import { Hono } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { getSchemaColumns } from '../utils/db-schema';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { canReadFuncionarioSimuladorData } from '../services/simuladores/funcionario-read-scope';
 
-const matrizTreinamento = new Hono<{ Bindings: Env }>();
+const matrizTreinamento = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 matrizTreinamento.use('*', auth());
 
@@ -483,6 +484,29 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
     const db = c.env.DB;
     const empresaId = getEmpresaId(c);
     const funcionarioId = Number(c.req.param('funcionario_id'));
+    // P07-03: leitura individual so do proprio funcionario, de funcionarios do
+    // escopo do gestor, ou por admin/instrutor/compliance (mesma politica do P07-02).
+    const rawReaderFuncionarioId = Number(c.get('funcionarioId') || 0);
+    const canRead = await canReadFuncionarioSimuladorData(
+      db,
+      {
+        empresaId,
+        userId: Number(c.get('userId') || 0),
+        userRole: c.get('userRole'),
+        funcionarioId:
+          Number.isInteger(rawReaderFuncionarioId) && rawReaderFuncionarioId > 0
+            ? rawReaderFuncionarioId
+            : null,
+      },
+      funcionarioId,
+    );
+    if (!canRead) {
+      throw new ApiError(
+        'Sem permissão para consultar requisitos deste funcionário',
+        403,
+        'MATRIZ_FUNCIONARIO_READ_FORBIDDEN',
+      );
+    }
     // Pega função atual do funcionário (compatível com schema legado: funcao textual)
     const funcColSet = await getSchemaColumns(db, 'funcionarios');
     const hasFuncaoId = funcColSet.has('funcao_id');

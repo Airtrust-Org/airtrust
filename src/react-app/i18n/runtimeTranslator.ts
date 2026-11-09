@@ -1,5 +1,4 @@
-import { API_BASE_URL } from '@/react-app/config/api';
-import { SupportedLanguage } from './translations';
+import { translations, type SupportedLanguage } from './translations';
 
 const CACHE_KEY = 'airtrust:i18n:runtime:en-cache';
 const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'title', 'aria-label', 'alt'] as const;
@@ -11,51 +10,40 @@ let translationCache = new Map<string, string>();
 let observer: MutationObserver | null = null;
 let running = false;
 
-const PT_HINTS_REGEX =
-  /[ãõáàâéêíóôúç]|\b(não|para|com|sem|configurações|funcionários|qualificações|simuladores|sair|salvar|empresa|senha|usuário|carregando|erro|falha|sucesso)\b/i;
-const WEEKDAY_ABBREVIATIONS_REGEX =
-  /^(dom|seg|ter|qua|qui|sex|sáb|sab|sun|mon|tue|wed|thu|fri|sat)$/i;
-
-function sanitizeCache(map: Map<string, string>) {
-  const badPairs: Array<[string, string]> = [
-    ['TER', 'TO HAVE'],
-    ['Ter', 'To have'],
-    ['ter', 'to have'],
-    ['TO', 'TO THE'],
-    ['To', 'To the'],
-    ['to', 'to the'],
-    ['TH', 'THE'],
-    ['Th', 'The'],
-    ['th', 'the'],
-  ];
-
-  for (const [key, value] of badPairs) {
-    const current = map.get(key);
-    if (current === value) {
-      map.delete(key);
-    }
+/** Only developer-maintained phrases may be auto-translated. Never process arbitrary user data externally. */
+const safePhraseTranslations = new Map<string, string>();
+const ambiguousPhrases = new Set<string>();
+for (const key of Object.keys(translations['pt-BR']) as Array<keyof typeof translations['pt-BR']>) {
+  const pt = translations['pt-BR'][key]?.trim();
+  const en = translations['en-US'][key]?.trim();
+  if (!pt || !en || pt === en || ambiguousPhrases.has(pt)) continue;
+  const prior = safePhraseTranslations.get(pt);
+  if (prior && prior !== en) {
+    safePhraseTranslations.delete(pt);
+    ambiguousPhrases.add(pt);
+  } else {
+    safePhraseTranslations.set(pt, en);
   }
 }
 
+/** No storage or network access for untrusted text. Dynamic content remains unchanged. */
+export function getCatalogTranslation(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return safePhraseTranslations.get(normalized) || normalized;
+}
+
 function loadCache() {
+  translationCache = new Map(safePhraseTranslations);
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    translationCache = new Map(Object.entries(parsed));
-    sanitizeCache(translationCache);
+    // Previous runtime translation cache could contain PII from DOM; remove it without reading.
+    localStorage.removeItem(CACHE_KEY);
   } catch {
-    translationCache = new Map();
+    // Storage may be unavailable in private browsing.
   }
 }
 
 function persistCache() {
-  try {
-    const entries = Object.fromEntries(translationCache.entries());
-    localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
-  } catch {
-    // ignore quota/private-mode errors
-  }
+  // Deliberately never persist runtime DOM phrases or user information.
 }
 
 function shouldSkipTextNode(node: Text): boolean {
@@ -96,53 +84,12 @@ function getTrimmed(text: string): string {
 }
 
 function shouldTranslateText(text: string): boolean {
-  const normalized = getTrimmed(text);
-  if (!normalized) return false;
-
-  if (WEEKDAY_ABBREVIATIONS_REGEX.test(normalized)) return false;
-
-  // Evitar retraduzir textos já em inglês e siglas puras
-  if (/^[A-Z0-9_\-\s]{2,}$/.test(normalized)) return false;
-  if (/^[\w\s.,:;!?()[\]"'/%+-]+$/.test(normalized) && !PT_HINTS_REGEX.test(normalized)) {
-    return false;
-  }
-
-  return PT_HINTS_REGEX.test(normalized);
+  return safePhraseTranslations.has(getTrimmed(text));
 }
 
 async function translatePhraseToEnglish(text: string): Promise<string> {
   const normalized = getTrimmed(text);
-  if (!normalized) return text;
-  if (!shouldTranslateText(normalized)) return normalized;
-
-  const cached = translationCache.get(normalized);
-  if (cached) return cached;
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/public/translate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ text: normalized, from: 'pt', to: 'en' }),
-    });
-
-    if (!response.ok) {
-      translationCache.set(normalized, normalized);
-      return normalized;
-    }
-
-    const json = (await response.json()) as {
-      success?: boolean;
-      data?: { translatedText?: string };
-    };
-
-    const translated = json?.data?.translatedText?.trim() || normalized;
-    translationCache.set(normalized, translated);
-    return translated;
-  } catch {
-    translationCache.set(normalized, normalized);
-    return normalized;
-  }
+  return shouldTranslateText(normalized) ? getCatalogTranslation(normalized) : normalized;
 }
 
 function applyTranslationWithSpacing(original: string, translatedTrimmed: string): string {
