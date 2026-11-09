@@ -19,6 +19,7 @@ import {
 import {
   type BackupChecksumManifest,
   type BackupRestoreDrillReport,
+  sha256Hex,
   verifyBackupChecksumManifest,
 } from './checksum-manifest';
 
@@ -44,6 +45,8 @@ export interface BackupSetVerification {
   drill: BackupRestoreDrillReport | null;
   /** módulo -> chave do JSON no R2, extraído do manifesto verificado. */
   moduleKeys: Record<string, string>;
+  /** módulo -> digest SHA-256 esperado autenticado pelo manifesto. */
+  moduleDigests: Record<string, string>;
 }
 
 const decoder = new TextDecoder();
@@ -68,6 +71,7 @@ export async function verifyBackupSet(
       manifestSha256: null,
       drill: null,
       moduleKeys: {},
+      moduleDigests: {},
     };
   }
 
@@ -94,6 +98,7 @@ export async function verifyBackupSet(
   }
 
   const moduleKeys: Record<string, string> = {};
+  const moduleDigests: Record<string, string> = {};
   if (manifest && Array.isArray(manifest.artifacts)) {
     if (manifest.backup_uuid !== backupUuid) {
       failures.push(
@@ -102,9 +107,18 @@ export async function verifyBackupSet(
     }
 
     const known = new Set(manifest.artifacts.map((artifact) => artifact.key));
+    // Caminho oficial de módulos exportados: backups/(ano/mes/dia/)?{backupUuid}/{MODULO}.json
+    // Exclui categoricamente arquivos de r2-files/ para impedir colisões de nomes.
+    const moduleKeyPattern = new RegExp(
+      `^backups/(?:\\d{4}/\\d{2}/\\d{2}/)?${backupUuid.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}/([A-Z_]+)\\.json$`,
+    );
     for (const artifact of manifest.artifacts) {
-      const match = /\/([A-Z_]+)\.json$/.exec(artifact.key);
-      if (match && match[1] in BACKUP_MODULES) moduleKeys[match[1]] = artifact.key;
+      if (artifact.key.includes('/r2-files/')) continue;
+      const match = moduleKeyPattern.exec(artifact.key);
+      if (match && match[1] in BACKUP_MODULES) {
+        moduleKeys[match[1]] = artifact.key;
+        moduleDigests[match[1]] = artifact.sha256;
+      }
     }
 
     for (const modulo of options.expectedModules ?? []) {
@@ -143,6 +157,7 @@ export async function verifyBackupSet(
     manifestSha256: drill.manifestSha256,
     drill,
     moduleKeys,
+    moduleDigests,
   };
 }
 
@@ -209,9 +224,24 @@ export async function restoreVerifiedBackupIntoScratch(
 
   const files: ModuleBackupFile[] = [];
   for (const modulo of modulos) {
-    const raw = await reader.get(verification.moduleKeys[modulo]);
+    const key = verification.moduleKeys[modulo];
+    const raw = await reader.get(key);
     if (!raw) throw new Error(`RESTORE_MODULE_OBJECT_MISSING: ${modulo}`);
-    files.push(JSON.parse(decoder.decode(asBytes(raw))) as ModuleBackupFile);
+    const bytes = asBytes(raw);
+
+    // Reautentica os bytes efetivamente utilizados contra o digest do manifesto verificado (P2)
+    const expectedSha256 = verification.moduleDigests?.[modulo];
+    if (!expectedSha256) {
+      throw new Error(`RESTORE_UNAUTHENTICATED_MODULE: ${modulo}`);
+    }
+    const actualDigest = `sha256:${await sha256Hex(bytes)}`;
+    if (actualDigest !== expectedSha256) {
+      throw new Error(
+        `RESTORE_MODULE_DIGEST_MISMATCH: ${modulo} (${key}) esperado=${expectedSha256}, atual=${actualDigest}`,
+      );
+    }
+
+    files.push(JSON.parse(decoder.decode(bytes)) as ModuleBackupFile);
   }
 
   const report: RestoreReport = {

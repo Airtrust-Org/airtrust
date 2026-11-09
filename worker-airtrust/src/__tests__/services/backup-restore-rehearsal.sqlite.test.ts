@@ -513,6 +513,62 @@ describe('Ensaio sintético backup -> restore', () => {
     cenarios.C7 = { destino_nao_vazio: 'recusado', deriva_de_schema: 'recusada', falha_no_meio: 'rollback total' };
   });
 
+  it('P2A colisão de nomes: objeto em r2-files com basename de módulo não sobrescreve o módulo exportado', async () => {
+    const { d1, r2, orchestrator } = newWorld();
+    const uuid = 'ensaio-p2a-colisao';
+    await orchestrator.executarBackupManual({ tipo: 'MODULAR', modulos: ['PESSOAS'], triggered_by: 'ENSAIO', escopo: 'SYSTEM_GLOBAL', backup_uuid: uuid });
+    const ctl = controle(d1, uuid);
+    const reader = r2Reader(r2);
+
+    // Injeta um objeto em r2-files com o mesmo basename de um módulo
+    const collisionKey = `backups/${uuid}/r2-files/PESSOAS.json`;
+    const payload = new TextEncoder().encode('{"malicioso": true}');
+    r2.store.set(collisionKey, { bytes: payload, uploaded: new Date() });
+
+    // Atualiza o manifesto adicionando o objeto em r2-files
+    const manifestKey = `backups/${uuid}/checksum-manifest.json`;
+    const manifest = JSON.parse(r2.text(manifestKey));
+    manifest.artifact_count += 1;
+    manifest.total_bytes += payload.length;
+    manifest.artifacts.push({
+      key: collisionKey,
+      size: payload.length,
+      sha256: `sha256:${sha256(payload)}`,
+    });
+    const newManifestJson = JSON.stringify(manifest);
+    r2.store.get(manifestKey)!.bytes = new TextEncoder().encode(newManifestJson);
+    const newManifestSha256 = `sha256:${sha256(newManifestJson)}`;
+
+    const v = await verifyBackupSet({ reader, backupUuid: uuid, expectedManifestSha256: newManifestSha256, expectedModules: ['PESSOAS'] });
+    expect(v.failures).toEqual([]);
+    expect(v.ok).toBe(true);
+    // A chave associada ao módulo PESSOAS deve ser o módulo exportado, NUNCA o arquivo de r2-files
+    expect(v.moduleKeys.PESSOAS).not.toContain('/r2-files/');
+    expect(v.moduleKeys.PESSOAS).toMatch(new RegExp(`^backups/(?:\\d{4}/\\d{2}/\\d{2}/)?${uuid}/PESSOAS\\.json$`));
+  });
+
+  it('P2B bytes alterados após verificação: restore rejeita objeto mutado antes da escrita e desfaz', async () => {
+    const { d1, r2, orchestrator } = newWorld();
+    const uuid = 'ensaio-p2b-mutacao-pos-verificacao';
+    await orchestrator.executarBackupManual({ tipo: 'MODULAR', modulos: ['PESSOAS'], triggered_by: 'ENSAIO', escopo: 'SYSTEM_GLOBAL', backup_uuid: uuid });
+    const ctl = controle(d1, uuid);
+    const reader = r2Reader(r2);
+
+    const v = await verifyBackupSet({ reader, backupUuid: uuid, expectedManifestSha256: ctl.checksum, expectedModules: ['PESSOAS'] });
+    expect(v.ok).toBe(true);
+
+    // Modifica o módulo PESSOAS no R2 DEPOIS que a verificação passou
+    const pessoasKey = v.moduleKeys.PESSOAS;
+    const adulterado = JSON.parse(r2.text(pessoasKey));
+    adulterado.tabelas_principais.usuarios[0].email = 'hacked@adulterado.com';
+    r2.store.get(pessoasKey)!.bytes = new TextEncoder().encode(JSON.stringify(adulterado));
+
+    const scratch = scratchWithSchemaOf(d1.database);
+    await expect(restoreVerifiedBackupIntoScratch(v, reader, sqliteTarget(scratch))).rejects.toThrow('RESTORE_MODULE_DIGEST_MISMATCH: PESSOAS');
+    // Nada deve ter sido inserido no scratch
+    expect((scratch.prepare('SELECT COUNT(*) n FROM usuarios').get() as { n: number }).n).toBe(0);
+  });
+
   it('C8 cobertura: o backup in-Worker cobre 43 tabelas, sem duplicatas, todas com nome válido', () => {
     expect(ALL_TABLES).toHaveLength(43);
     expect(new Set(ALL_TABLES).size).toBe(43);
