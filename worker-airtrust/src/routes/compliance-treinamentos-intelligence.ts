@@ -50,6 +50,7 @@ type IntelligenceDeps = {
     empresaId: number,
     access: EmployeeSectorAccess,
     targetFilter?: TrainingComplianceTargetFilter,
+    options?: { coalesce?: boolean },
   ) => Promise<TrainingComplianceSnapshot>;
   tableExists: (db: D1Database, tableName: string) => Promise<boolean>;
 };
@@ -290,7 +291,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     if ([...statuses].some((status) => !allowed.has(status))) {
       throw new ApiError('Status de pendência inválido', 400);
     }
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
     const notificationStats = await loadComplianceNotificationStats(c.env.DB, empresaId);
     const statusPriority: Record<string, number> = {
       VENCIDO: 0,
@@ -668,7 +669,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     const targetFilter = requestedSetorId || requestedFuncaoId
       ? { setorId: requestedSetorId, funcaoId: requestedFuncaoId }
       : undefined;
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, targetFilter);
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, targetFilter, { coalesce: true });
     const currentPeople = snapshot.people.filter(
       (person) =>
         (!requestedSetorId || person.setor_id === requestedSetorId) &&

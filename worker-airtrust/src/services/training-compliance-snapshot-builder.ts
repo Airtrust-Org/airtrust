@@ -747,6 +747,16 @@ type SnapshotSources = {
 // (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
 const _inFlightSnapshotSources = new WeakMap<D1Database, Map<string, Promise<SnapshotSources>>>();
 
+async function loadSnapshotSources(db: D1Database, empresaId: number, today: string): Promise<SnapshotSources> {
+  const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
+    loadEmployees(db, empresaId, today),
+    loadRules(db, empresaId, today),
+    loadQualificationEvidence(db, empresaId),
+    loadLmsEvidence(db, empresaId),
+  ]);
+  return { allEmployees, rules, historyMap, lmsMap };
+}
+
 export function loadSnapshotSourcesCoalesced(
   db: D1Database,
   empresaId: number,
@@ -764,13 +774,7 @@ export function loadSnapshotSourcesCoalesced(
   let promise!: Promise<SnapshotSources>;
   promise = (async () => {
     try {
-      const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
-        loadEmployees(db, empresaId, today),
-        loadRules(db, empresaId, today),
-        loadQualificationEvidence(db, empresaId),
-        loadLmsEvidence(db, empresaId),
-      ]);
-      return { allEmployees, rules, historyMap, lmsMap };
+      return await loadSnapshotSources(db, empresaId, today);
     } finally {
       if (map.get(key) === promise) map.delete(key);
     }
@@ -784,9 +788,15 @@ export async function buildSnapshot(
   empresaId: number,
   access: EmployeeSectorAccess,
   targetFilter?: TrainingComplianceTargetFilter,
+  // coalesce: SOMENTE para endpoints de leitura (GET). Leituras pos-escrita
+  // (POST/PUT, servicos de matricula/reconciliacao, cron) ficam sempre frescas
+  // para nunca entrar numa leitura em voo anterior a gravacao.
+  options?: { coalesce?: boolean },
 ) {
   const today = getTodayIsoSaoPaulo();
-  const { allEmployees, rules, historyMap, lmsMap } = await loadSnapshotSourcesCoalesced(db, empresaId, today);
+  const { allEmployees, rules, historyMap, lmsMap } = options?.coalesce
+    ? await loadSnapshotSourcesCoalesced(db, empresaId, today)
+    : await loadSnapshotSources(db, empresaId, today);
   let employees = filterEmployeesByAccess(allEmployees, access);
   if (targetFilter?.setorId != null) {
     employees = employees.filter((employee) => employee.setor_id === targetFilter.setorId);

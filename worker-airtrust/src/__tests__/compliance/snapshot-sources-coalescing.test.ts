@@ -28,15 +28,24 @@ describe('buildSnapshot in-flight coalescing (#2078)', () => {
     expect(base).toBeGreaterThan(0);
 
     const burst = countingDb();
-    await Promise.all([1, 2, 3, 4, 5].map(() => buildSnapshot(burst.db, 6, ALL)));
+    await Promise.all([1, 2, 3, 4, 5].map(() => buildSnapshot(burst.db, 6, ALL, undefined, { coalesce: true })));
     expect(burst.state.statements).toBe(base);
+  });
+
+  it('padrao (pos-escrita/servicos/cron) NUNCA coalesce: cada chamada le o D1', async () => {
+    const single = countingDb();
+    await buildSnapshot(single.db, 6, ALL);
+    const base = single.state.statements;
+    const c = countingDb();
+    await Promise.all([1, 2, 3].map(() => buildSnapshot(c.db, 6, ALL)));
+    expect(c.state.statements).toBeGreaterThan(base * 2);
   });
 
   it('nao ha cache pos-conclusao: chamada posterior le o D1 novamente', async () => {
     const c = countingDb();
-    await buildSnapshot(c.db, 6, ALL);
+    await buildSnapshot(c.db, 6, ALL, undefined, { coalesce: true });
     const first = c.state.statements;
-    await buildSnapshot(c.db, 6, ALL);
+    await buildSnapshot(c.db, 6, ALL, undefined, { coalesce: true });
     expect(c.state.statements).toBeGreaterThan(first);
   });
 
@@ -45,14 +54,14 @@ describe('buildSnapshot in-flight coalescing (#2078)', () => {
     await buildSnapshot(single.db, 6, ALL);
     const base = single.state.statements;
     const c = countingDb();
-    await Promise.all([buildSnapshot(c.db, 6, ALL), buildSnapshot(c.db, 7, ALL)]);
+    await Promise.all([buildSnapshot(c.db, 6, ALL, undefined, { coalesce: true }), buildSnapshot(c.db, 7, ALL, undefined, { coalesce: true })]);
     expect(c.state.statements).toBeGreaterThan(base);
   });
 
   it('falha compartilhada propaga a todos e libera a chave para nova tentativa', async () => {
     let fail = true;
     const db: any = { prepare: () => { const s: any = { bind: () => s, all: async () => { if (fail) throw new Error('D1 overloaded'); return { results: [] }; }, first: async () => null, raw: async () => [] }; return s; }, batch: async () => [] };
-    const r = await Promise.allSettled([buildSnapshot(db, 6, ALL), buildSnapshot(db, 6, ALL)]);
+    const r = await Promise.allSettled([buildSnapshot(db, 6, ALL, undefined, { coalesce: true }), buildSnapshot(db, 6, ALL, undefined, { coalesce: true })]);
     expect(r.every((x) => x.status === 'rejected')).toBe(true);
     fail = false;
     await expect(buildSnapshot(db, 6, ALL)).resolves.toBeDefined();
