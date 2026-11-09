@@ -57,6 +57,19 @@ import type { TrainingAlertChannel } from '../services/training-alert-reservatio
 const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
 
+/** Encode untrusted database values before interpolating them into email HTML. */
+export function escapeAlertEmailHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      default: return '&#39;';
+    }
+  });
+}
+
 export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string, scopeClause = '1 = 1') {
   const vencimentoExprNew = getQualificacoesVencimentoExpr('qh_new', 'qt_new');
   return `SELECT
@@ -924,13 +937,13 @@ Por favor, providencie a renovação o quanto antes.
             <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
               <h2 style="color: #f59e0b; margin-top: 0;">🔔 ALERTA - ${tipoAlerta} ${alertTimingLabel}</h2>
               <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Funcionário:</strong> ${r.funcionario_nome}</p>
-                <p style="margin: 5px 0;"><strong>Qualificação:</strong> ${r.tipo_nome || r.tipo_codigo}</p>
-                <p style="margin: 5px 0;"><strong>Vencimento:</strong> ${vencimentoLabel}</p>
-                <p style="margin: 5px 0;"><strong>Status:</strong> ${statusVencimento}</p>
+                <p style="margin: 5px 0;"><strong>Funcionário:</strong> ${escapeAlertEmailHtml(r.funcionario_nome)}</p>
+                <p style="margin: 5px 0;"><strong>Qualificação:</strong> ${escapeAlertEmailHtml(r.tipo_nome || r.tipo_codigo)}</p>
+                <p style="margin: 5px 0;"><strong>Vencimento:</strong> ${escapeAlertEmailHtml(vencimentoLabel)}</p>
+                <p style="margin: 5px 0;"><strong>Status:</strong> ${escapeAlertEmailHtml(statusVencimento)}</p>
               </div>
               <p style="color: #dc2626; font-weight: bold;">Por favor, providencie a renovação o quanto antes.</p>
-              ${trainingUrl ? `<p style="margin:24px 0"><a href="${trainingUrl}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar treinamento</a></p>` : ''}
+              ${trainingUrl ? `<p style="margin:24px 0"><a href="${escapeAlertEmailHtml(trainingUrl)}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">Acessar treinamento</a></p>` : ''}
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
               <p style="color: #6b7280; font-size: 12px; margin: 0;">
                 Esta é uma notificação automática. Por favor, não responda este email.
