@@ -27,7 +27,9 @@ import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { isManagerPerfil } from '../services/setores-gestores';
 import { persistRefreshToken, resolveAndRotateRefreshToken } from '../services/auth-refresh-token';
+import { recordSuccessfulLogin } from '../services/auth-last-login';
 import { refreshTokenKeys } from '../services/refresh-token-key';
+import { revokeAllUserAccessTokens } from '../services/auth-session-revocation';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -850,7 +852,9 @@ authRoutes.post(
       throw unauthorized('Token inválido ou expirado', 'INVALID_RESET_TOKEN');
     }
 
-    // Revoga refresh tokens para forçar novo login em todos os dispositivos.
+    // Revoga access tokens (marcador por usuario) e refresh tokens para forçar
+    // novo login em todos os dispositivos (P01-03).
+    await revokeAllUserAccessTokens(db, user.id);
     await db
       .prepare(
         `UPDATE refresh_tokens
@@ -1119,6 +1123,11 @@ authRoutes.post(
         logStep('refresh_token_failed', { error: toError(refreshErr).message });
         throw refreshErr;
       }
+
+      // N-03: trilha de ultimo acesso, melhor esforco (nunca bloqueia o login).
+      await recordSuccessfulLogin(db, authenticatedUser.id, (lastLoginErr) =>
+        logStep('last_login_failed', { error: toError(lastLoginErr).message }),
+      );
 
       // Retornar tokens e dados do usuário
       return c.json({
@@ -1545,6 +1554,10 @@ authRoutes.post('/change-password', auth(), async (c) => {
     .bind(passwordHash, userId)
     .run();
 
+  // P01-03: a senha ja mudou; encerra TODAS as sessoes. O marcador derruba os
+  // access tokens de outros dispositivos (iat < agora) e a revogacao dos refresh
+  // tokens nao e mais engolida: se falhar, a troca nao pode reportar sucesso.
+  await revokeAllUserAccessTokens(db, userId);
   await db
     .prepare(
       `UPDATE refresh_tokens
@@ -1553,8 +1566,7 @@ authRoutes.post('/change-password', auth(), async (c) => {
          AND revoked_at IS NULL`,
     )
     .bind(userId)
-    .run()
-    .catch(() => null);
+    .run();
 
   const currentAccessToken = extractBearerToken(c.req.header('Authorization'));
   if (currentAccessToken && c.env.JWT_SECRET) {
