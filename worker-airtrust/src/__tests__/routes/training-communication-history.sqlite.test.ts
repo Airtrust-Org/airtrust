@@ -282,7 +282,7 @@ describe('consolidated training communication history', () => {
       { notifications: false, audit: true }, { limit: 100, offset: 0 });
     expect(result.rows).toHaveLength(100);
     expect(result.rows.every((row) => row.status_envio === 'enviada')).toBe(true);
-    const sql = calls.find((call) => call.includes('WITH communications AS')) || '';
+    const sql = calls.find((call) => call.includes('communications AS (')) || '';
     expect(sql).toContain('done.entity_id = a.entity_id');
     const plan = db.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 101, 0) as
       Array<{ detail: string }>;
