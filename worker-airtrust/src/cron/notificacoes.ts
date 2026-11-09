@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import {
   getLocalWhatsAppTemplateRecord,
   isWhatsAppTemplateApproved,
-  refreshLocalWhatsAppTemplateApproval,
+  refreshLocalWhatsAppTemplateApprovalWithOutcome,
   seedLocalWhatsAppTemplateCatalog,
 } from '../utils/alert-whatsapp-templates-store';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
@@ -307,6 +307,7 @@ async function processarConfiguracao(
   let enviadas = 0;
   let erros = 0;
   const whatsAppTemplateCache = new Map<string, WhatsAppTemplateRecord | null>();
+  const whatsAppTemplateCircuit: WhatsAppTemplateCircuit = new Map();
 
   const tipoCanal = normalizeTipoCanal(config.tipo);
   const dedupWindowSql = getDedupWindowSql(config);
@@ -404,6 +405,7 @@ async function processarConfiguracao(
       diasAteVencimento,
       {
         whatsAppTemplateCache,
+        whatsAppTemplateCircuit,
         emailRecipientsOverride,
       },
     );
@@ -412,6 +414,17 @@ async function processarConfiguracao(
       enviadas++;
     } else {
       erros++;
+    }
+  }
+
+  for (const [templateKey, circuit] of whatsAppTemplateCircuit) {
+    if (circuit.skipped > 0) {
+      log.warn('[NOTIFICACOES] Disjuntor do template WhatsApp pulou envios no ciclo', {
+        configId: config.id,
+        templateKey,
+        errorCode: circuit.code,
+        skipped: circuit.skipped,
+      });
     }
   }
 
@@ -580,6 +593,17 @@ function isCmaQualificacao(qualificacao: QualificacaoParaNotificar): boolean {
   return categoria.includes('CMA') || nome.includes('CMA');
 }
 
+/**
+ * P13-05: depois que um template de WhatsApp falha por configuracao
+ * (nao sincronizado/nao aprovado), os demais envios que usam o mesmo template
+ * no mesmo ciclo falhariam igual e cada um gravava uma linha de erro
+ * (168 mil em 6 meses). O disjuntor e por ciclo: a primeira falha e registrada
+ * normalmente; as seguintes sao puladas sem nova chamada ao provedor nem nova
+ * linha de erro, e contadas em um unico aviso ao fim da configuracao.
+ */
+type WhatsAppTemplateCircuit = Map<string, { code: string; skipped: number }>;
+class WhatsAppTemplateCircuitOpen extends Error {}
+
 async function enviarNotificacao(
   env: Env,
   empresaId: number,
@@ -588,6 +612,7 @@ async function enviarNotificacao(
   diasAteVencimento: number,
   options?: {
     whatsAppTemplateCache?: Map<string, WhatsAppTemplateRecord | null>;
+    whatsAppTemplateCircuit?: WhatsAppTemplateCircuit;
     emailRecipientsOverride?: string[];
   },
 ): Promise<boolean> {
@@ -674,6 +699,11 @@ async function enviarNotificacao(
         isCma: isCmaQualificacao(qualificacao),
         expired: diasAteVencimento < 0,
       });
+      const openCircuit = options?.whatsAppTemplateCircuit?.get(templateKey);
+      if (openCircuit) {
+        openCircuit.skipped += 1;
+        throw new WhatsAppTemplateCircuitOpen(openCircuit.code);
+      }
       const cachedTemplate = options?.whatsAppTemplateCache?.get(templateKey);
       let localTemplate = cachedTemplate;
       if (localTemplate === undefined) {
@@ -683,16 +713,23 @@ async function enviarNotificacao(
       const templateDefinition = getAlertWhatsAppTemplateDefinition(templateKey);
 
       if (!templateDefinition || !localTemplate?.twilio_content_sid) {
+        options?.whatsAppTemplateCircuit?.set(templateKey, {
+          code: 'WHATSAPP_TEMPLATE_NOT_SYNCED',
+          skipped: 0,
+        });
         throw new Error('WHATSAPP_TEMPLATE_NOT_SYNCED');
       }
 
+      let approvalCheckConclusive = true;
       if (!isWhatsAppTemplateApproved(localTemplate.approval_status)) {
-        localTemplate = await refreshLocalWhatsAppTemplateApproval(
+        const refreshed = await refreshLocalWhatsAppTemplateApprovalWithOutcome(
           env,
           env.DB,
           templateKey,
           localTemplate,
         );
+        localTemplate = refreshed.record;
+        approvalCheckConclusive = refreshed.conclusive;
         options?.whatsAppTemplateCache?.set(templateKey, localTemplate ?? null);
       }
 
@@ -700,6 +737,14 @@ async function enviarNotificacao(
         !localTemplate?.twilio_content_sid ||
         !isWhatsAppTemplateApproved(localTemplate.approval_status)
       ) {
+        // So abre o disjuntor quando o provedor respondeu: timeout/503 na
+        // consulta de aprovacao e transitorio e a proxima qualificacao tenta de novo.
+        if (approvalCheckConclusive) {
+          options?.whatsAppTemplateCircuit?.set(templateKey, {
+            code: 'WHATSAPP_TEMPLATE_NOT_APPROVED',
+            skipped: 0,
+          });
+        }
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 
@@ -786,6 +831,9 @@ async function enviarNotificacao(
     });
     return true;
   } catch (error) {
+    if (error instanceof WhatsAppTemplateCircuitOpen) {
+      return false;
+    }
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     log.error('[NOTIFICACOES] Erro ao enviar notificacao', error, {
       configId: config.id,

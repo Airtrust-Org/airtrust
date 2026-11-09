@@ -1,0 +1,8 @@
+{
+  "changeId": "notificacoes-log-empresa-assunto-index-0576",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0576_notificacoes_log_empresa_assunto_index.sql",
+  "fileHash": "9775943a6b5164e0cb9ac0b7739c808e080caea9b2d66f16eb5ab5dbe12af27a",
+  "planPath": "worker-airtrust/schema-v2/plans/notificacoes-log-empresa-assunto-index-0576.md",
+  "planHash": "59c920d59f61ec71690fe5bee48f9abe91c3ddfd0fb0e3163a3c2e1cb12d7121"
+}
