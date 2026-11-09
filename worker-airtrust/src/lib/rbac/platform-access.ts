@@ -100,7 +100,7 @@ async function readPersistedPlatformStateWithRetry(
   db: D1Database,
   userId: number,
 ): Promise<PlatformAccessState> {
-  return withD1Retry(() => readPersistedPlatformState(db, userId), 2, 30);
+  return withD1Retry(() => readPersistedPlatformState(db, userId), 6, 80);
 }
 
 async function readPersistedPlatformState(
