@@ -143,6 +143,20 @@ export function isTransientD1Error(error: unknown): boolean {
   );
 }
 
+/** Categorias fixas para telemetria; nunca devolve texto arbitrário da exceção. */
+export function classifyD1Failure(error: unknown): string {
+  const value = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const text = value.toLowerCase();
+  if (/no such (table|column)|syntax error|constraint failed/.test(text)) return 'schema_or_sql';
+  if (/subrequest limit|too many subrequests|cpu time limit|memory limit exceeded/.test(text)) return 'worker_limit';
+  if (/database resource limit|too many connections|rate limit|overload/.test(text)) return 'database_capacity';
+  if (/timeout|timed out|deadline exceeded|etimedout/.test(text)) return 'timeout';
+  if (/rpc|connection|network|socket|transport|channel closed|fetch failed/.test(text)) return 'transport';
+  if (/busy|locked/.test(text)) return 'database_busy';
+  if (/503|502|504|unavailable/.test(text)) return 'service_unavailable';
+  return 'unclassified';
+}
+
 /**
  * Executa uma leitura no D1 com retry limitado para absorver falhas transitórias
  * (locks de banco, timeouts ou erros transitórios de rede/conexão).
@@ -155,13 +169,16 @@ export async function withD1Retry<T>(
   operation: () => Promise<T>,
   maxAttempts = 7,
   initialBackoffMs = 80,
+  onAttempt?: (attempt: number, error?: unknown) => void,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
+      onAttempt?.(attempt + 1);
       return await operation();
     } catch (err) {
       attempt += 1;
+      onAttempt?.(attempt, err);
       if (attempt >= maxAttempts || !isTransientD1Error(err)) {
         throw err;
       }

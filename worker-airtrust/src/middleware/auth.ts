@@ -27,7 +27,7 @@ import {
   resetPlatformAccessCache,
   invalidatePlatformAccessCache,
 } from '../lib/rbac/platform-access';
-import { isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
+import { classifyD1Failure, isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
 
 export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
@@ -111,7 +111,7 @@ export function getValidJtiCacheSize(): number {
  * Revalidação mutável crítica contra D1 imediata em cada requisição,
  * coalescendo apenas requisições em trânsito simultâneas (rajadas concorrentes).
  */
-async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
+async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAttempt?: (attempt: number, error?: unknown) => void): Promise<boolean> {
   const inFlight = _inFlightJtiChecks.get(jti);
   if (inFlight) {
     return inFlight;
@@ -127,6 +127,7 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Prom
             .first(),
         7,
         80,
+        onAttempt,
       );
       return Boolean(row);
     } finally {
@@ -257,12 +258,12 @@ export type AccessTokenSecurityState = {
 function logAuthInfrastructureError(
   code: string,
   error: unknown,
-  context: { stage: string; durationMs: number },
+  context: { stage: string; durationMs: number; attempts?: number },
 ): void {
   // Never log arbitrary driver error messages, names or causes: they may contain
   // SQL bindings, credentials or personal data. The fixed stage/code are enough
   // to correlate with sanitized infrastructure telemetry.
-  void error;
+  const errorCategory = classifyD1Failure(error);
   const errorClass = 'InfrastructureReadError';
   console.error(
     '[AUTH_INFRASTRUCTURE_ERROR]',
@@ -270,6 +271,8 @@ function logAuthInfrastructureError(
       code,
       stage: context.stage,
       errorClass,
+      errorCategory,
+      attempts: context.attempts,
       durationMs: context.durationMs,
       timestamp: new Date().toISOString(),
     }),
@@ -298,11 +301,12 @@ export async function validateAccessTokenSecurityState(
   }
 
   const startTime = Date.now();
+  let jtiAttempts = 0;
 
   // Executa as 3 validações de segurança independentes concorrentemente via Promise.allSettled
   // reduzindo latência de D1 sob rajadas e mitigando timeouts/503 em cascata (Incidente #2078).
   const [jtiResult, userSecurityResult, platformAccessResult] = await Promise.allSettled([
-    isJtiBlocklisted(db, payload.jti, payload.exp),
+    isJtiBlocklisted(db, payload.jti, payload.exp, (attempt) => { jtiAttempts = Math.max(jtiAttempts, attempt); }),
     resolveUserSecurityState(db, payload.sub, payload.empresa_id, payload.role ?? ''),
     resolvePlatformAccessState(db, payload.sub),
   ]);
@@ -311,6 +315,7 @@ export async function validateAccessTokenSecurityState(
   if (jtiResult.status === 'rejected') {
     logAuthInfrastructureError('AUTH_REVOCATION_CHECK_UNAVAILABLE', jtiResult.reason, {
       stage: 'token_blocklist',
+      attempts: jtiAttempts,
       durationMs: Date.now() - startTime,
     });
     return serviceUnavailable(
