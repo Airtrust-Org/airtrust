@@ -11,6 +11,7 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { D1Database } from '@cloudflare/workers-types';
 import { parseImportFile, IMPORT_FILE_LIMITS } from '../utils/parseImportFile';
 import { AppError } from '../utils/errors';
@@ -540,7 +541,7 @@ app.post('/validar/:entidade', async (c: Context) => {
     });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
@@ -666,7 +667,7 @@ app.post('/executar/:entidade', async (c: Context) => {
     });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -966,7 +967,7 @@ app.post('/validar-json/:entidade', async (c: Context) => {
     });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
@@ -1090,7 +1091,7 @@ app.post('/batch-historico-v3', async (c: Context) => {
     return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -1262,7 +1263,7 @@ app.post('/executar-json/:entidade', async (c: Context) => {
     });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
@@ -1310,7 +1311,7 @@ app.get('/historico/list', async (c: Context) => {
     });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, error: error.message }, error.status as any);
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
     }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
