@@ -125,13 +125,29 @@ export async function refreshLocalWhatsAppTemplateApproval(
   templateKey: AlertWhatsAppTemplateKey,
   existingRecord?: LocalWhatsAppTemplateRecord | null,
 ): Promise<LocalWhatsAppTemplateRecord | null> {
+  return (await refreshLocalWhatsAppTemplateApprovalWithOutcome(env, db, templateKey, existingRecord))
+    .record;
+}
+
+/**
+ * Igual a `refreshLocalWhatsAppTemplateApproval`, mas informa se a consulta ao
+ * provedor foi conclusiva. Falha de rede/503 ou resposta sem status devolvem o
+ * registro local antigo com `conclusive: false`: quem decide parar de tentar
+ * (ex.: disjuntor do cron) nao pode tratar isso como "template nao aprovado".
+ */
+export async function refreshLocalWhatsAppTemplateApprovalWithOutcome(
+  env: Env,
+  db: D1Database,
+  templateKey: AlertWhatsAppTemplateKey,
+  existingRecord?: LocalWhatsAppTemplateRecord | null,
+): Promise<{ record: LocalWhatsAppTemplateRecord | null; conclusive: boolean }> {
   const localRecord = existingRecord ?? (await getLocalWhatsAppTemplateRecord(db, templateKey));
-  if (!localRecord?.twilio_content_sid) return localRecord || null;
+  if (!localRecord?.twilio_content_sid) return { record: localRecord || null, conclusive: true };
 
   try {
     const approval = await getTwilioWhatsAppApproval(env, localRecord.twilio_content_sid);
     const approvalStatus = String(approval?.status || '').trim();
-    if (!approvalStatus) return localRecord;
+    if (!approvalStatus) return { record: localRecord, conclusive: false };
 
     const approvalError = approval?.rejection_reason || null;
     const approvalPayloadJson = JSON.stringify({ whatsapp: approval });
@@ -150,13 +166,16 @@ export async function refreshLocalWhatsAppTemplateApproval(
       .run();
 
     return {
-      ...localRecord,
-      approval_status: approvalStatus,
-      approval_error: approvalError,
-      approval_payload_json: approvalPayloadJson,
+      record: {
+        ...localRecord,
+        approval_status: approvalStatus,
+        approval_error: approvalError,
+        approval_payload_json: approvalPayloadJson,
+      },
+      conclusive: true,
     };
   } catch {
-    return localRecord;
+    return { record: localRecord, conclusive: false };
   }
 }
 
