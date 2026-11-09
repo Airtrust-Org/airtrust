@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   failCleanup: false,
   failRetention: false,
+  failDomainOverload: false,
 }));
 vi.mock('../../cron/alertasDiarios', () => ({
   alertasDiariosHandler: async () => { state.calls.push('daily-alerts'); },
@@ -26,7 +27,10 @@ vi.mock('../../cron/resilient/daily-frms', () => ({
   runDailyFrmsOperations: async () => { state.calls.push('frms'); },
 }));
 vi.mock('../../cron/resilient/domain-events', () => ({
-  runDomainEventDispatchJob: async () => { state.calls.push('domain-events'); },
+  runDomainEventDispatchJob: async () => {
+    state.calls.push('domain-events');
+    if (state.failDomainOverload) throw new Error('D1_ERROR: D1 DB is overloaded. Too many resources consumed within a 10 second window');
+  },
 }));
 vi.mock('../../cron/resilient/ead-renewal', () => ({
   runEadRenewalJob: async () => { state.calls.push('ead-renewal'); },
@@ -70,12 +74,13 @@ function createEnv(): Env {
   return { DB: db, ENVIRONMENT: 'test' } as unknown as Env;
 }
 const ctx = {} as ExecutionContext;
-const event = (cron: string) => ({ cron, scheduledTime: Date.now() }) as ScheduledEvent;
+const event = (cron: string, minute = 20) => ({ cron, scheduledTime: Date.parse(`2026-08-02T08:${String(minute).padStart(2, '0')}:00Z`) }) as ScheduledEvent;
 
 afterEach(() => {
   state.calls.length = 0;
   state.failCleanup = false;
   state.failRetention = false;
+  state.failDomainOverload = false;
 });
 
 describe('resilient cron daily maintenance runtime contract', () => {
@@ -100,7 +105,32 @@ describe('resilient cron daily maintenance runtime contract', () => {
     expect(state.calls).not.toContain('cron-runs-retention');
     expect(state.calls).not.toContain('license-alerts');
     expect(state.calls).toContain('sigvoos-frms');
+    expect(state.calls).toContain('health');
+    expect(state.calls).not.toContain('domain-events');
     expect(legacy).not.toHaveBeenCalled();
+  });
+
+
+  it('runs domain events on the adjacent slot without launching SIGVOOS, preserving deferred processing', async () => {
+    await runResilientScheduledJobs(event('*/10 * * * *', 10), createEnv(), ctx, vi.fn());
+    expect(state.calls).toContain('domain-events');
+    expect(state.calls).not.toContain('sigvoos-frms');
+    expect(state.calls).not.toContain('health');
+  });
+
+
+  it('stops further D1 cron work in the same tick on overload and retries normally on a later slot', async () => {
+    state.failDomainOverload = true;
+    await expect(
+      runResilientScheduledJobs(event('*/10 * * * *', 50), createEnv(), ctx, vi.fn()),
+    ).rejects.toThrow('CRON_TICK_PARTIAL_FAILURE: domain-events');
+    expect(state.calls).toContain('domain-events');
+    expect(state.calls).not.toContain('health');
+    state.calls.length = 0;
+    state.failDomainOverload = false;
+    await runResilientScheduledJobs(event('*/10 * * * *', 20), createEnv(), ctx, vi.fn());
+    expect(state.calls).toContain('health');
+    expect(state.calls).toContain('sigvoos-frms');
   });
 
   it('continues license alerts when token cleanup fails and surfaces partial failure', async () => {

@@ -16,8 +16,11 @@ function compactSql(sql: string): string {
 describe('cron resilience health', () => {
   it('consulta somente campos operacionais agregados e aplica limite', () => {
     const sql = compactSql(buildCronHealthQuery());
-    expect(sql).toContain("s.job_name IN ( 'ead-renewal'");
+    expect(sql).toContain("job_name IN ( 'ead-renewal'");
     expect(sql).toContain("i.status = 'FAILED' AND i.attempts >= ?");
+    expect(sql).toContain('limited_state AS MATERIALIZED');
+    expect(sql).toContain('ORDER BY r.started_at DESC, r.id DESC LIMIT 1 OFFSET 1');
+    expect(sql).not.toContain('ROW_NUMBER() OVER');
     expect(sql).toContain('domain-events-dispatch');
     expect(sql).toContain('LIMIT ?');
     expect(sql).not.toMatch(/token|cookie|email|cpf|nome|payload_json/i);
@@ -52,7 +55,7 @@ describe('cron resilience health', () => {
 
     const snapshot = await collectCronHealthSnapshot(db, new Date('2026-08-02T08:00:00.000Z'));
 
-    expect(bind).toHaveBeenCalledWith(CRON_HEALTH_RETRY_THRESHOLD, CRON_HEALTH_STATE_LIMIT);
+    expect(bind).toHaveBeenCalledWith(CRON_HEALTH_STATE_LIMIT, CRON_HEALTH_RETRY_THRESHOLD);
     expect(snapshot).toMatchObject({
       checkedScopes: 1,
       repeatedFailureScopes: 1,
