@@ -13,7 +13,7 @@ Base: `origin/main` = `53644f8f6431e34585e708027e8e767020b71fd5`. Produção Wor
 
 O relatório `AIRTRUST_FRMS_CICLO3_RELATORIO_COMPROVACOES.md` **não deve ser usado como fonte** sem esta correção:
 1. SHAs desatualizados (cita main `c86619fa` e produção `a02e8326`; realidade acima).
-2. O Markdown e o JSON divergem em 10 itens (P01, P09, P30, P33, P37, P38, P39 e outros). O JSON cita arquivos reais e é a base usada aqui; todos os arquivos citados foram conferidos no repositório (3 nomes imprecisos: `preferred-operational-source.ts`, `frms-f0b-new-cases.test.mjs`, `case-treatment-lifecycle.test.ts`).
+2. O Markdown e o JSON divergem em 7 itens (P01, P09, P30, P33, P37, P38, P39). O JSON cita arquivos reais e é a base usada aqui; todos os arquivos citados foram conferidos no repositório (3 nomes imprecisos: `preferred-operational-source.ts`, `frms-f0b-new-cases.test.mjs`, `case-treatment-lifecycle.test.ts`).
 3. O Markdown cita artefatos que não existem no repositório (ex.: “Nota técnica jurídica FRMS-LEG-01”, “protocolo de teste breve (3 minutos)” — o protocolo implementado é 60 s) e descrições genéricas (P46 “D1 encryption at rest”, P47 “retenção 5 anos”) sem prova de código. Essas linhas **não** contam como evidência.
 4. PR #2103 consta como “OPEN” no relatório; está MERGED.
 5. Os itens P08 e P36 constam como “AGUARDA_RELEASE_AUTORIZADO”; já foram executados.
