@@ -30,7 +30,7 @@ export const QUERIES = Object.freeze({
   ].join(' '),
   checkins: [
     'SELECT CAST(ch.funcionario_id AS INTEGER) AS funcionario_id,',
-    'ch.data_checkin, CASE WHEN ch.deleted_at IS NULL THEN 1 ELSE 0 END AS active',
+    'ch.data_checkin, ch.created_at, CASE WHEN ch.deleted_at IS NULL THEN 1 ELSE 0 END AS active',
     'FROM frms_fadiga_checkin ch',
     'WHERE ch.empresa_id = ? AND ch.data_checkin BETWEEN ? AND ?',
   ].join(' '),
@@ -52,6 +52,13 @@ const role = (raw) => {
   const x = String(raw || '').trim().toUpperCase();
   return x === 'PIC' ? 'PIC' : x === 'SIC' ? 'SIC' : 'OTHER';
 };
+// D1 stores created_at as UTC 'YYYY-MM-DD HH:MM:SS'; Brazil has had no DST since 2019 (UTC-3).
+export function saoPauloDateOf(createdAtUtc) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(createdAtUtc || ''));
+  if (!m) return null;
+  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) - 3 * 3600 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
 export function reconcileDailyCrewCheckins({ flights = [], crew = [], checkins = [] }) {
   const flightIds = new Set(flights.map(f => positiveId(f.id)).filter(Boolean));
   const assigned = crew.filter(c => flightIds.has(positiveId(c.voo_id)));
@@ -71,6 +78,21 @@ export function reconcileDailyCrewCheckins({ flights = [], crew = [], checkins =
     received: [...ids].filter(id => received.has(id)).length,
     pending: [...ids].filter(id => !received.has(id)).length,
   });
+  // Date-attribution discriminator for assigned crew still pending on the audit day: when was the
+  // adjacent-day check-in actually submitted (America/Sao_Paulo)? Aggregates only, no identifiers.
+  const pendingIds = [...allAssigned].filter(id => !received.has(id));
+  const adjacentAttribution = { submittedOnAuditDay: 0, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0 };
+  for (const id of pendingIds) {
+    for (const ch of checkins) {
+      if (positiveId(ch.funcionario_id) !== id || Number(ch.active) !== 1) continue;
+      if (ch.data_checkin !== PREVIOUS_DATE && ch.data_checkin !== NEXT_DATE) continue;
+      const submitted = saoPauloDateOf(ch.created_at);
+      if (!submitted) adjacentAttribution.createdAtUnavailable += 1;
+      else if (submitted === AUDIT_DATE) adjacentAttribution.submittedOnAuditDay += 1;
+      else if (submitted === ch.data_checkin) adjacentAttribution.submittedOnOwnLabelDay += 1;
+      else adjacentAttribution.submittedOtherDay += 1;
+    }
+  }
   return {
     date: AUDIT_DATE,
     scope: 'one pre-approved tenant and aircraft, no row identifiers',
@@ -85,10 +107,11 @@ export function reconcileDailyCrewCheckins({ flights = [], crew = [], checkins =
     assignedWithOnlySoftDeletedToday: [...allAssigned].filter(id => !received.has(id) && softDeleted.has(id)).length,
     assignedWithPreviousDayCheckinButMissingToday: [...allAssigned].filter(id => !received.has(id) && prev.has(id)).length,
     assignedWithNextDayCheckinButMissingToday: [...allAssigned].filter(id => !received.has(id) && next.has(id)).length,
+    adjacentCheckinSubmissionDayBrt: adjacentAttribution,
     sameDayDuplicateCheckinEmployees: [...received].filter(id =>
       checkins.filter(ch => positiveId(ch.funcionario_id) === id && ch.data_checkin === AUDIT_DATE && Number(ch.active) === 1).length > 1
     ).length,
-    interpretation: 'Persistence evidence only. No verdict about fitness, compliance, or root cause of a missing submission.',
+    interpretation: 'submittedOnAuditDay>0 would indicate a date-attribution defect (check-in sent on the audit day but labelled adjacent); submittedOnOwnLabelDay indicates a legitimate adjacent-day submission, i.e. the pending status is real. Persistence evidence only. No verdict about fitness, compliance, or root cause of a missing submission.',
   };
 }
 async function queryProduction(sql, params) {

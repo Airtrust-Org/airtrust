@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   AUDIT_DATE, TENANT_ID, AIRCRAFT_PREFIX, QUERIES,
-  reconcileDailyCrewCheckins,
+  reconcileDailyCrewCheckins, saoPauloDateOf,
 } from '../production/frms-cv-20261027-readonly-checkin.mjs';
 
 const fixture = () => ({
@@ -100,4 +100,21 @@ test('workflow requires explicit SHA, production environment and readonly confir
   assert.match(script, /PRODUCTION_TARGET_PIN_FAILED/);
   assert.match(script, /MUTATING_OR_MULTISTATEMENT_SQL_BLOCKED/);
   assert.match(script, /writeFile\(out/);
+});
+
+test('adjacent check-in is classified by the Sao Paulo day it was really submitted', () => {
+  assert.equal(saoPauloDateOf('2026-10-28 01:30:00'), '2026-10-27'); // 22:30 BRT on the 27th
+  assert.equal(saoPauloDateOf('2026-10-28 03:00:00'), '2026-10-28');
+  assert.equal(saoPauloDateOf('garbage'), null);
+  const f = fixture();
+  // label 28/10 but sent 27/10 22:30 BRT -> date-attribution defect candidate
+  f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-28', created_at: '2026-10-28 01:30:00', active: 1});
+  let r = reconcileDailyCrewCheckins(f);
+  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {submittedOnAuditDay: 1, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0});
+  // legitimately sent on 28/10 -> pending is real
+  f.checkins[f.checkins.length - 1].created_at = '2026-10-28 12:00:00';
+  r = reconcileDailyCrewCheckins(f);
+  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {submittedOnAuditDay: 0, submittedOnOwnLabelDay: 1, submittedOtherDay: 0, createdAtUnavailable: 0});
+  assert.deepEqual(r.roles.SIC, {assigned: 1, received: 0, pending: 1});
+  assert.doesNotMatch(JSON.stringify(r), /created_at|funcionario_id/);
 });
