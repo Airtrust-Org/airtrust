@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
-import { requireControleVoosCoordination, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { getUserPermissionOverride } from '../middleware/rbac';
+import { hasControleVoosViewAccess, requireControleVoosCoordination, requireControleVoosWrite } from '../middleware/controle-voos-access';
+import { assertRdvSelfScope } from '../middleware/controle-voos-rdv-access';
+import { RDV_CAPABILITIES } from '../services/controle-voos/rdv-workflow';
 import type { Env } from '../types';
 import { getFlightOrThrow, recordFlightEvent } from '../repositories/controle-voos/rdv-repository';
 import { getActorId, getEmpresaIdSafe } from '../middleware/controle-voos-rdv-context';
@@ -205,6 +208,15 @@ async function buildResponse(db: D1Database, empresaId: number, vooIdText: strin
 
 routes.get('/voos/:id/plano-voo', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
+  // P06-01: DENY explícito em controle_voos.view bloqueia a rota antes de qualquer fallback de RDV/papel
+  if ((await getUserPermissionOverride(c, 'controle_voos.view')) === 'DENY') {
+    throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_RBAC_FORBIDDEN');
+  }
+  // P06-01: plano de voo completo so para leitura autorizada ou tripulante do voo.
+  if (!(await hasControleVoosViewAccess(c))) {
+    const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
+    await assertRdvSelfScope(c, c.env.DB, empresaId, flight.id, RDV_CAPABILITIES.visualizarProprio);
+  }
   const data = await buildResponse(c.env.DB, empresaId, c.req.param('id'));
   return c.json({ success: true, data });
 });
