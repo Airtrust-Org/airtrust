@@ -4,6 +4,7 @@ import type { OperationalReadFilters } from './controle-voos-flight-input';
 import type { Context } from 'hono';
 import { auth } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
+import { getUserPermissionOverride } from '../middleware/rbac';
 import type { Env } from '../types';
 import { assertControleVoosCoordination, hasControleVoosViewAccess, requireControleVoosCoordination, requireControleVoosSigvoosPreview, requireControleVoosView, requireControleVoosViewOrPilotAccess, requireControleVoosWrite } from '../middleware/controle-voos-access';
 import {
@@ -1018,6 +1019,10 @@ controleVoos.post('/voos', auth(), requireControleVoosWrite(), async (c) => {
 
 controleVoos.get('/voos/:id', auth(), async (c) => {
   const empresaId = getEmpresaIdSafe(c);
+  // P06-01: DENY explícito em controle_voos.view bloqueia a rota antes de qualquer fallback de RDV/papel
+  if ((await getUserPermissionOverride(c, 'controle_voos.view')) === 'DENY') {
+    throw new ApiError('Permissao insuficiente', 403, 'CONTROLE_VOOS_RBAC_FORBIDDEN');
+  }
   const flight = await getFlightOrThrow(c.env.DB, c.req.param('id'), empresaId);
   // P06-01: programacao completa so para quem tem acesso de leitura; piloto/tripulante
   // le apenas voos em que consta na tripulacao (mesma regra do RDV).

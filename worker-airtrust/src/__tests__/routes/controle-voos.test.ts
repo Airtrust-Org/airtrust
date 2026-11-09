@@ -3570,6 +3570,22 @@ describe('P06-01 leitura de Controle de Voos exige acesso de leitura', () => {
     runSql(db.databasePath, "UPDATE usuario_permissoes SET tipo = 'DENY' WHERE usuario_id = 10 AND permissao = 'controle_voos.view';");
     expect((await request(db, '/api/controle-voos/voos', {}, 1, 'admin')).status).toBe(403);
     expect((await request(db, '/api/controle-voos/catalogos/aeroportos', {}, 1, 'admin')).status).toBe(403);
+    // P06-01 (revisão P1): DENY explícito bloqueia admin não-tripulante em voo e plano de voo (sem bypass de RDV)
+    expect((await request(db, '/api/controle-voos/voos/601', {}, 1, 'admin')).status).toBe(403);
+    expect((await request(db, '/api/controle-voos/voos/601/plano-voo', {}, 1, 'admin')).status).toBe(403);
+  });
+
+  it('DENY controle_voos.view bloqueia tripulante legítimo e preserva tripulante sem DENY', async () => {
+    const db = createSqliteD1();
+    pilotFixture(db, 1001); // 1001 é tripulante no voo 601
+    // Sem DENY: tripulante acessa voo e plano de voo
+    expect((await request(db, '/api/controle-voos/voos/601', {}, 1, 'student')).status).toBe(200);
+    expect((await request(db, '/api/controle-voos/voos/601/plano-voo', {}, 1, 'student')).status).toBe(200);
+
+    // Com DENY explícito: até mesmo o tripulante legítimo é bloqueado
+    runSql(db.databasePath, "INSERT INTO usuario_permissoes(usuario_id, permissao, tipo) VALUES (10,'controle_voos.view','DENY');");
+    expect((await request(db, '/api/controle-voos/voos/601', {}, 1, 'student')).status).toBe(403);
+    expect((await request(db, '/api/controle-voos/voos/601/plano-voo', {}, 1, 'student')).status).toBe(403);
   });
 
   it('Coordenacao de Voo e admin leem normalmente', async () => {
