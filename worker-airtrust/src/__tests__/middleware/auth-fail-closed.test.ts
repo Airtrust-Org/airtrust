@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   auth,
   optionalAuth,
@@ -420,6 +420,30 @@ describe('auth() — usuário inativo e membership', () => {
     const res3 = await app({ headers: { Authorization: `Bearer ${token}` } });
     expect(res3.status).toBe(200);
     expect(callCounts.userSecurity).toBe(2);
+  });
+});
+
+describe('auth() — infrastructure log sanitization (#2078)', () => {
+  it('never logs raw D1 exceptions containing sensitive SQL bindings or bearer secrets', async () => {
+    const secret = 'Bearer-super-secret-test-token-CPF-12345678900';
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { token } = await makeToken(7, 999002);
+      const response = await buildApp(createDb({
+        usuarios: [{ id: 7, perfil: 'ALUNO', active: 1 }],
+        memberships: [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }],
+        platformAccessPermanentSqlError: `SQLITE_ERROR: no such column: expires_at ${secret}`,
+      }), 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(503);
+      expect((await response.json() as { code: string }).code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+      const logs = JSON.stringify(spy.mock.calls);
+      expect(logs).toContain('AUTH_INFRASTRUCTURE_ERROR');
+      expect(logs).toContain('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+      expect(logs).not.toContain(secret);
+      expect(logs).not.toContain('no such column');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

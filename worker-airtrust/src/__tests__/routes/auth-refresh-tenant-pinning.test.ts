@@ -70,6 +70,17 @@ vi.mock('../../utils/security', () => ({
 
 import { authRoutes } from '../../routes/auth';
 
+// P01-02: estes testes simulam o D1 por texto de SQL com tokens de fixture
+// (nao hex). O hash real e o fallback legado sao provados em
+// auth-refresh-token-hash.sqlite.test.ts; aqui o modulo e neutro para manter o
+// foco na orquestracao das rotas.
+vi.mock('../../services/refresh-token-key', () => ({
+  REFRESH_TOKEN_HASH_PREFIX: '',
+  hashRefreshToken: async (rawToken: string) => rawToken,
+  refreshTokenKeys: async (rawToken: string) => ({ hashed: rawToken, legacyKey: null }),
+}));
+
+
 type MockUser = {
   id: number;
   email: string;

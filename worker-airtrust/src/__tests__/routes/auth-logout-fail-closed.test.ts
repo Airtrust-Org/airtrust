@@ -5,6 +5,17 @@ import { errorHandler } from '../../middleware/error-handler';
 import { generateJWT } from '../../utils/security';
 import type { Env } from '../../types';
 
+// P01-02: estes testes simulam o D1 por texto de SQL com tokens de fixture
+// (nao hex). O hash real e o fallback legado sao provados em
+// auth-refresh-token-hash.sqlite.test.ts; aqui o modulo e neutro para manter o
+// foco na orquestracao das rotas.
+vi.mock('../../services/refresh-token-key', () => ({
+  REFRESH_TOKEN_HASH_PREFIX: '',
+  hashRefreshToken: async (rawToken: string) => rawToken,
+  refreshTokenKeys: async (rawToken: string) => ({ hashed: rawToken, legacyKey: null }),
+}));
+
+
 const JWT_SECRET = 'test-secret-256-bit-key-for-testing-only-not-production';
 
 function createDb(options: { blocklistInsertThrows?: boolean; refreshUpdateThrows?: boolean } = {}) {
