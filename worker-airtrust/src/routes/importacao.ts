@@ -11,8 +11,10 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { D1Database } from '@cloudflare/workers-types';
-import { parseImportFile } from '../utils/parseImportFile';
+import { parseImportFile, IMPORT_FILE_LIMITS } from '../utils/parseImportFile';
+import { AppError } from '../utils/errors';
 import { remapRowHeaders } from '../services/importacao/columnMappings';
 import { FuncionarioImportacao as FuncionarioImportacaoService } from '../services/importacao/FuncionarioImportacao';
 import { QualificacaoTipoImportacaoService } from '../services/importacao/QualificacaoTipoImportacao';
@@ -491,6 +493,13 @@ app.post('/validar/:entidade', async (c: Context) => {
       size: file.size,
     });
 
+    if (file.size > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+      throw new AppError(
+        `Arquivo excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`,
+        413,
+      );
+    }
+
     const buffer = await file.arrayBuffer();
     const parsed = await parseImportFile(buffer, file.type);
 
@@ -531,6 +540,9 @@ app.post('/validar/:entidade', async (c: Context) => {
       preview: parsed.rows.slice(0, 5), // primeiras 5 linhas
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -595,6 +607,13 @@ app.post('/executar/:entidade', async (c: Context) => {
       return c.json({ success: false, error: `Mode inválido. Use ${validModes.join(', ')}` }, 400);
     }
 
+    if ((file as File).size > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+      throw new AppError(
+        `Arquivo excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`,
+        413,
+      );
+    }
+
     const buffer = await (file as File).arrayBuffer();
     const parsed = await parseImportFile(buffer, (file as File).type);
 
@@ -647,6 +666,9 @@ app.post('/executar/:entidade', async (c: Context) => {
         : `Importação falhou com ${result.errors.length} erros`,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }
@@ -944,6 +966,9 @@ app.post('/validar-json/:entidade', async (c: Context) => {
       preview: rows.slice(0, 5),
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -1065,6 +1090,9 @@ app.post('/batch-historico-v3', async (c: Context) => {
     // Passar debugLogs para a função
     return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }
@@ -1234,6 +1262,9 @@ app.post('/executar-json/:entidade', async (c: Context) => {
         : `Importação falhou com ${result.errors.length} erros`,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -1279,6 +1310,9 @@ app.get('/historico/list', async (c: Context) => {
       data: rows,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as ContentfulStatusCode);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }

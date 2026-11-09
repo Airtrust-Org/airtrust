@@ -220,9 +220,12 @@ empresasRoutes.get('/minha', async (c) => {
     .first();
 
   if (!empresa) {
-    // AUTO-RECOVERY: Se for a empresa principal (ID 1) e não existir, criar automaticamente
-    // Isso evita travamento em dev/staging se o seed não foi rodado
-    if (tenantCtx.empresaId === 1) {
+    // P00-06: AUTO-RECOVERY restrito estritamente a desenvolvimento/teste.
+    // Em produção (ENVIRONMENT === 'production'), endpoints GET jamais executam escrita;
+    // falha fechado (404) sem mutações (INSERT/UPDATE) no banco de dados.
+    const envStr = (c.env.ENVIRONMENT as string | undefined) ?? 'production';
+    const isDevOrTest = envStr === 'development' || envStr === 'test';
+    if (tenantCtx.empresaId === 1 && isDevOrTest) {
       console.log('[AUTO-RECOVERY] Checando existência da empresa AirTrust (ID 1)...');
 
       try {
