@@ -180,6 +180,9 @@ async function login(page: Page) {
 
   await page.addInitScript(
     ({ accessToken, refreshToken, user }) => {
+      // O app escolhe o idioma pela geolocalizacao do IP (runner US => en-US). Os seletores deste
+      // spec sao em portugues; fixa o idioma como um usuario BR escolheria manualmente.
+      localStorage.setItem('airtrust:language:manual', 'pt-BR');
       localStorage.setItem('airtrust_persist_login_policy', '2');
       localStorage.setItem('airtrust_persist_login', '1');
       localStorage.setItem('airtrust_token', accessToken);
