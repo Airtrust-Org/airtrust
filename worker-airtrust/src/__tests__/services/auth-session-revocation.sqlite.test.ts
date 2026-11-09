@@ -68,10 +68,10 @@ describe('P01-03 revogacao de todas as sessoes do usuario', () => {
     expect(await isAccessTokenRevoked(asD1(db), { jti: 'other', sub: 7, iat: NOW })).toBe(false);
   });
 
-  it('marcador expirado deixa de bloquear (so precisa viver o TTL do access token)', async () => {
+  it('marcador expirado deixa de bloquear (depois do TTL maximo do access token)', async () => {
     const db = fixture();
     db.database.exec(
-      `INSERT INTO token_blocklist (jti, expires_at) VALUES ('user-sessions:7:${NOW}', datetime('now','-1 minutes'))`,
+      "INSERT INTO token_blocklist (jti, expires_at) VALUES ('user-sessions:7', datetime('now','-1 minutes'))",
     );
     expect(await isAccessTokenRevoked(asD1(db), { jti: 'a', sub: 7, iat: NOW - 600 })).toBe(false);
   });
@@ -80,6 +80,49 @@ describe('P01-03 revogacao de todas as sessoes do usuario', () => {
     const db = fixture(", revoked_at TEXT NOT NULL DEFAULT (datetime('now'))");
     await revokeAllUserAccessTokens(asD1(db), 7, NOW);
     expect(await isAccessTokenRevoked(asD1(db), { jti: 'a', sub: 7, iat: NOW - 10 })).toBe(true);
+  });
+
+  it('o marcador cobre token de personificacao (1 h): ainda bloqueia 50 min depois da troca', async () => {
+    const db = fixture();
+    const agora = Math.floor(Date.now() / 1000);
+    const trocaHa50min = agora - 50 * 60;
+    await revokeAllUserAccessTokens(asD1(db), 7, trocaHa50min);
+    // token de 1 h emitido 1 min antes da troca ainda nao expirou (vence em ~9 min)
+    expect(
+      await isAccessTokenRevoked(asD1(db), { jti: 'imp', sub: 7, iat: trocaHa50min - 60 }),
+    ).toBe(true);
+    // e depois da vida maxima do token + folga o marcador sai sozinho
+    const trocaHa70min = agora - 70 * 60;
+    const db2 = fixture();
+    await revokeAllUserAccessTokens(asD1(db2), 7, trocaHa70min);
+    expect(
+      await isAccessTokenRevoked(asD1(db2), { jti: 'imp2', sub: 7, iat: trocaHa70min - 60 }),
+    ).toBe(false);
+  });
+
+  it('nova troca de senha move o corte para frente, mantendo um unico marcador', async () => {
+    const db = fixture();
+    await revokeAllUserAccessTokens(asD1(db), 7, NOW);
+    await revokeAllUserAccessTokens(asD1(db), 7, NOW + 120);
+    const n = (db.database.prepare('SELECT COUNT(*) n FROM token_blocklist').get() as { n: number }).n;
+    expect(n).toBe(1);
+    // token emitido entre as duas trocas: so o segundo corte o derruba
+    expect(await isAccessTokenRevoked(asD1(db), { jti: 'mid', sub: 7, iat: NOW + 60 })).toBe(true);
+    expect(await isAccessTokenRevoked(asD1(db), { jti: 'after', sub: 7, iat: NOW + 120 })).toBe(false);
+  });
+
+  it('a consulta por requisicao usa o indice de jti (sem varrer a token_blocklist)', () => {
+    const db = fixture();
+    const plan = db.database
+      .prepare(
+        `EXPLAIN QUERY PLAN SELECT 1 FROM token_blocklist
+         WHERE expires_at > datetime('now')
+           AND (jti = ? OR (jti = ? AND CAST(strftime('%s', expires_at) AS INTEGER) - ? > ?))
+         LIMIT 1`,
+      )
+      .all('a', 'user-sessions:7', 3900, 0) as Array<{ detail: string }>;
+    expect(plan.length).toBeGreaterThan(0);
+    for (const step of plan) expect(step.detail).not.toMatch(/^SCAN/);
   });
 
   it('repetir a troca no mesmo segundo e idempotente e usuario invalido e rejeitado', async () => {

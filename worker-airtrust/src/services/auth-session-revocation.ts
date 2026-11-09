@@ -1,30 +1,28 @@
 /**
  * P01-03: trocar/redefinir a senha revogava os refresh tokens, mas os access
- * tokens (30 min) emitidos para outros dispositivos continuavam validos, porque
- * so o `jti` do token usado na troca era bloqueado. O desenho por `jti` de cada
+ * tokens emitidos para outros dispositivos continuavam validos, porque so o
+ * `jti` do token usado na troca era bloqueado. O desenho por `jti` de cada
  * sessao (refresh_tokens.access_token_jti) nao funciona em producao: a coluna
  * nao existe e nenhum codigo a preenchia.
  *
- * Solucao sem migration: um marcador "sessoes do usuario revogadas ate o
- * instante T" na propria `token_blocklist`, com a chave
- * `user-sessions:<userId>:<T em segundos>`. A verificacao que ja roda em toda
- * requisicao (middleware/auth.ts) rejeita qualquer access token do usuario com
- * `iat < T`. O marcador so precisa viver o TTL do access token (30 min) e o
- * cutoff vai codificado na chave, entao nao depende de colunas que variam entre
- * ambientes (created_at x revoked_at).
+ * Solucao sem migration: UM marcador por usuario na propria `token_blocklist`,
+ * com a chave exata `user-sessions:<userId>`. O instante de corte T nao precisa
+ * de coluna propria: e `expires_at - MARKER_TTL_SECONDS` (TTL fixo). A
+ * verificacao que ja roda em toda requisicao (middleware/auth.ts) rejeita
+ * qualquer access token do usuario com `iat < T`. A consulta usa so igualdade
+ * em `jti` (indice/PK), sem `LIKE`, entao nao varre a tabela. Nao depende de
+ * colunas que variam entre ambientes (created_at x revoked_at).
  */
 export const USER_SESSIONS_REVOKED_PREFIX = 'user-sessions:';
-const ACCESS_TOKEN_TTL_MINUTES = 30;
-// Folga para tokens emitidos no limite do TTL e pequenos desvios de relogio.
-const MARKER_TTL_MINUTES = ACCESS_TOKEN_TTL_MINUTES + 5;
+// Maior vida de um access token emitido hoje: personificacao admin (3600 s) em
+// routes/auth.ts. O marcador precisa viver pelo menos isso, mais folga para
+// desvio de relogio; do contrario um token antigo "reviveria" apos o marcador
+// expirar.
+const MAX_ACCESS_TOKEN_TTL_SECONDS = 3600;
+const MARKER_TTL_SECONDS = MAX_ACCESS_TOKEN_TTL_SECONDS + 300;
 
-export function userSessionsRevocationLikePattern(userId: number | string): string {
-  return `${USER_SESSIONS_REVOKED_PREFIX}${Number(userId)}:%`;
-}
-
-/** Posicao (1-based, para substr do SQLite) onde comeca o cutoff na chave do marcador. */
-export function userSessionsRevocationCutoffStart(userId: number | string): number {
-  return `${USER_SESSIONS_REVOKED_PREFIX}${Number(userId)}:`.length + 1;
+export function userSessionsRevocationKey(userId: number | string): string {
+  return `${USER_SESSIONS_REVOKED_PREFIX}${Number(userId)}`;
 }
 
 export async function revokeAllUserAccessTokens(
@@ -35,12 +33,14 @@ export async function revokeAllUserAccessTokens(
   if (!Number.isInteger(userId) || userId <= 0) {
     throw new Error('INVALID_USER_ID_FOR_SESSION_REVOCATION');
   }
+  // REPLACE: uma nova troca de senha move o corte T para frente (nunca ha mais
+  // de um marcador por usuario).
   await db
     .prepare(
-      `INSERT OR IGNORE INTO token_blocklist (jti, expires_at)
-       VALUES (?, datetime('now', '+${MARKER_TTL_MINUTES} minutes'))`,
+      `INSERT OR REPLACE INTO token_blocklist (jti, expires_at)
+       VALUES (?, datetime(?, 'unixepoch'))`,
     )
-    .bind(`${USER_SESSIONS_REVOKED_PREFIX}${userId}:${nowSeconds}`)
+    .bind(userSessionsRevocationKey(userId), nowSeconds + MARKER_TTL_SECONDS)
     .run();
 }
 
@@ -58,13 +58,14 @@ export async function isAccessTokenRevoked(
     .prepare(
       `SELECT 1 FROM token_blocklist
        WHERE expires_at > datetime('now')
-         AND (jti = ? OR (jti LIKE ? AND CAST(substr(jti, ?) AS INTEGER) > ?))
+         AND (jti = ?
+              OR (jti = ? AND CAST(strftime('%s', expires_at) AS INTEGER) - ? > ?))
        LIMIT 1`,
     )
     .bind(
       token.jti,
-      userSessionsRevocationLikePattern(token.sub ?? 0),
-      userSessionsRevocationCutoffStart(token.sub ?? 0),
+      userSessionsRevocationKey(token.sub ?? 0),
+      MARKER_TTL_SECONDS,
       Number.isFinite(token.iat) ? Number(token.iat) : 0,
     )
     .first();
