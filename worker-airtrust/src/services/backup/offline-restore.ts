@@ -145,18 +145,46 @@ export async function verifyBackupSet(
       }
     }
 
-    // O catálogo/cópia de R2 só vale se cada arquivo copiado está no manifesto.
+    // O catálogo de cópias R2 é não confiável até validar formato e referências.
+    // Um JSON inválido não pode abortar o ensaio por exceção nem produzir falso PASS.
     const r2ManifestKey = manifest.artifacts.find((a) => a.key.endsWith('/r2-manifest.json'))?.key;
+    const copiedKeys = manifest.artifacts
+      .filter((a) => a.key.includes('/r2-files/'))
+      .map((a) => a.key);
+    if (!r2ManifestKey && copiedKeys.length > 0) {
+      failures.push('Cópias R2 presentes sem r2-manifest.json');
+    }
     if (r2ManifestKey) {
       const raw = await reader.get(r2ManifestKey);
-      if (raw) {
-        const r2Manifest = JSON.parse(decoder.decode(asBytes(raw))) as {
-          arquivos?: Array<{ backup_key: string }>;
-        };
-        for (const file of r2Manifest.arquivos ?? []) {
-          if (!known.has(file.backup_key)) {
-            failures.push(`Arquivo R2 copiado fora do manifesto: ${file.backup_key}`);
+      if (!raw) {
+        failures.push('Catálogo R2 ausente após verificação');
+      } else {
+        try {
+          const catalog = JSON.parse(decoder.decode(asBytes(raw))) as unknown;
+          if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog) ||
+              !('arquivos' in catalog) || !Array.isArray(catalog.arquivos)) {
+            failures.push('Catálogo R2 inválido: arquivos ausentes ou malformados');
+          } else {
+            const entries = catalog.arquivos as unknown[];
+            const listed = new Set<string>();
+            for (const entry of entries) {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
+                  !('backup_key' in entry) || typeof entry.backup_key !== 'string') {
+                failures.push('Catálogo R2 com entrada inválida');
+                continue;
+              }
+              if (listed.has(entry.backup_key)) failures.push('Catálogo R2 com chave duplicada');
+              listed.add(entry.backup_key);
+              if (!known.has(entry.backup_key) || !entry.backup_key.includes('/r2-files/')) {
+                failures.push(`Arquivo R2 copiado fora do manifesto: ${entry.backup_key}`);
+              }
+            }
+            for (const key of copiedKeys) {
+              if (!listed.has(key)) failures.push(`Cópia R2 sem referência no catálogo: ${key}`);
+            }
           }
+        } catch {
+          failures.push('Catálogo R2 contém JSON inválido');
         }
       }
     }
