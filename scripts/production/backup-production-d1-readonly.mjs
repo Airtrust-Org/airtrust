@@ -74,12 +74,15 @@ function main() {
     });
 
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    if (report.restored_sqlite.integrity_check !== 'ok') {
-      fail(`integrity_check divergente: ${report.restored_sqlite.integrity_check}`);
+    if (!report.ok) {
+      process.stderr.write(
+        `D1_RESTORE_INTEGRITY_FAILED: integrity=${report.restored_sqlite.integrity_check} ` +
+          `foreign_key_violations=${report.restored_sqlite.foreign_key_check_count}\n`,
+      );
+      process.exitCode = 1;
     }
-    rmSync(inspected.scratchDir, { recursive: true, force: true });
   } finally {
-    // no-op: local scratch dir is cleaned only after successful inspection.
+    rmSync(inspected.scratchDir, { recursive: true, force: true });
   }
 }
 
