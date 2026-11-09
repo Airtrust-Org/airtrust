@@ -87,6 +87,7 @@ jobs:
             --out-dir "$out_dir" > "$raw_report"
           jq -e '.ok == true' "$raw_report" >/dev/null
           jq -e '.restored_sqlite.integrity_check == "ok"' "$raw_report" >/dev/null
+          jq -e '.restored_sqlite.foreign_key_check_count == 0' "$raw_report" >/dev/null
           jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$raw_report" >/dev/null
           jq '{
             ok, generated_at, git_head,

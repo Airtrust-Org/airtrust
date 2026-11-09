@@ -13,9 +13,9 @@ describe('dependency security floors', () => {
   it('locks React Router on the reviewed safe 7.x floor', () => {
     const pkg = readJson('package.json');
     const lock = readJson('package-lock.json');
-    expect(pkg.dependencies?.['react-router-dom']).toBe('^7.18.3');
-    expect(lock.packages?.['node_modules/react-router-dom']?.version).toBe('7.18.3');
-    expect(lock.packages?.['node_modules/react-router']?.version).toBe('7.18.3');
+    expect(pkg.dependencies?.['react-router-dom']).toBe('^7.18.5');
+    expect(lock.packages?.['node_modules/react-router-dom']?.version).toBe('7.18.5');
+    expect(lock.packages?.['node_modules/react-router']?.version).toBe('7.18.5');
   });
 
   it('locks the Worker Hono runtime on the reviewed patched 4.13.13', () => {
