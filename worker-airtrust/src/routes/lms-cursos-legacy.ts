@@ -1381,7 +1381,7 @@ app.get('/', async (c) => {
   const offset = (page - 1) * limit;
   const categoria = c.req.query('categoria');
   const q = c.req.query('q');
-  const somentePublicados = c.req.query('publicados') !== '0';
+  const somentePublicados = c.req.query('publicados') !== '0' || !hasRole(c, 'admin', 'manager');
 
   const rawSetorIds = c.req.query('setor_ids') || c.req.query('setor_id');
   const requestedSetorIds: number[] = rawSetorIds
