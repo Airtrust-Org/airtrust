@@ -59,8 +59,54 @@ interface BackupArtifactDigest extends R2BackupObject {
   sha256: string;
 }
 
+/**
+ * Uma execução em Worker/cron não passa de poucos minutos. Linha EM_PROGRESSO mais velha que
+ * isto só existe porque o isolate foi encerrado (memória, tempo, limite de subrequests) antes
+ * de chegar ao catch que grava FALHOU. Em produção havia 132 dessas, algumas desde 2026-04-01.
+ */
+export const BACKUP_STALE_RUN_MINUTES = 60;
+
 export class BackupOrchestrator {
   constructor(private env: Env) {}
+
+  /**
+   * Converte execuções automáticas abandonadas (EM_PROGRESSO além do limite) em FALHOU.
+   * Sem isso elas parecem backups em andamento para sempre e bloqueiam o retry do dia
+   * (`obterStatusBackupAutomaticoDoDia` só reexecuta quando o último status é FALHOU).
+   * Retorna quantas linhas foram encerradas. Não toca em objetos R2.
+   */
+  async encerrarExecucoesAbandonadas(): Promise<number> {
+    const janela = `-${BACKUP_STALE_RUN_MINUTES} minutes`;
+    const criterio = `status = 'EM_PROGRESSO'
+          AND substr(triggered_by, 1, 5) = 'CRON_'
+          AND deleted_at IS NULL
+          AND created_at < datetime('now', ?)`;
+
+    await this.env.DB.prepare(
+      `INSERT INTO backups_logs (backups_controle_id, nivel, mensagem, detalhes)
+       SELECT id, 'ERROR',
+              'Execução abandonada: o Worker foi encerrado antes de concluir o backup',
+              ?
+         FROM backups_controle
+        WHERE ${criterio}`,
+    )
+      .bind(JSON.stringify({ motivo: 'STALE_EM_PROGRESSO', limite_minutos: BACKUP_STALE_RUN_MINUTES }), janela)
+      .run();
+
+    const result = await this.env.DB.prepare(
+      `UPDATE backups_controle
+          SET status = 'FALHOU', updated_at = CURRENT_TIMESTAMP
+        WHERE ${criterio}`,
+    )
+      .bind(janela)
+      .run();
+
+    const encerradas = Number(result?.meta?.changes ?? 0);
+    if (encerradas > 0) {
+      console.warn(`⚠️ ${encerradas} execução(ões) de backup abandonada(s) marcada(s) como FALHOU`);
+    }
+    return encerradas;
+  }
 
   /**
    * Executa backup automático (cron) com idempotência por tipo e dia UTC.
@@ -68,6 +114,12 @@ export class BackupOrchestrator {
    */
   async executarBackupAutomatico(tipo: AutomaticBackupType): Promise<void> {
     const triggeredBy = `CRON_${tipo}`;
+    try {
+      await this.encerrarExecucoesAbandonadas();
+    } catch (error) {
+      // Higiene de controle nunca pode impedir o backup do dia.
+      console.error('Falha ao encerrar execuções de backup abandonadas:', this.formatarErro(error));
+    }
     const statusExistente = await this.obterStatusBackupAutomaticoDoDia(triggeredBy);
 
     if (statusExistente && statusExistente !== 'FALHOU') {

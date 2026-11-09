@@ -68,7 +68,10 @@ function createMockDb(options: MockDbOptions = {}) {
             const status = String(bindings[0] || '');
             state.statusUpdates.push(status);
             state.latestAutomaticStatus = status;
-          } else if (sql.includes("SET status = 'FALHOU'")) {
+          } else if (
+            sql.includes("SET status = 'FALHOU'") &&
+            !sql.includes("WHERE status = 'EM_PROGRESSO'") // varredura de abandonadas: no-op neste mock
+          ) {
             state.statusUpdates.push('FALHOU');
             state.latestAutomaticStatus = 'FALHOU';
           }
