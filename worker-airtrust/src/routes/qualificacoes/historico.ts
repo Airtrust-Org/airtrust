@@ -295,7 +295,7 @@ export const getHistoricoListHandler = safe(async (c) => {
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
       LEFT JOIN qualificacoes_tipos qt
-        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = qh.empresa_id OR qt.empresa_id = 1)))
+        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = f.empresa_id OR qt.empresa_id = 1)))
        AND qt.deleted_at IS NULL
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       ${categoriaJoinClause}`;
@@ -850,7 +850,7 @@ router.get(
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
       LEFT JOIN qualificacoes_tipos qt
-        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = qh.empresa_id OR qt.empresa_id = 1)))
+        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = f.empresa_id OR qt.empresa_id = 1)))
        AND qt.deleted_at IS NULL
       ${categoriaJoinClause}`;
 
@@ -947,7 +947,7 @@ router.get(
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt
-        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = qh.empresa_id OR qt.empresa_id = 1)))
+        ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo AND (qt.empresa_id = f.empresa_id OR qt.empresa_id = 1)))
        AND qt.deleted_at IS NULL
       ${categoriaJoinClause}`;
 
