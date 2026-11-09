@@ -279,6 +279,7 @@ export async function loadPreferredOperationalJourneys(
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
       WHERE j.deleted_at IS NULL AND f.deleted_at IS NULL AND f.empresa_id = ?
+        AND j.empresa_id = f.empresa_id
         AND j.data BETWEEN ? AND ? AND ${canonical}`,
   ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>());
 

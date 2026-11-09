@@ -43,6 +43,21 @@ describe('FRMS preferred operational source resilience', () => {
     fetchControleVoosOperationalRecordsMock.mockReset();
   });
 
+  it('restringe SIGVOOS ao mesmo tenant da jornada e do funcionário', async () => {
+    fetchControleVoosOperationalRecordsMock.mockResolvedValue([]);
+    const prepare = vi.fn((_sql: string) => ({
+      bind: vi.fn((...params: unknown[]) => {
+        expect(params).toEqual([6, '2026-09-27', '2026-09-27']);
+        return { all: vi.fn().mockResolvedValue({ results: [] }) };
+      }),
+    }));
+    const db = { prepare } as unknown as D1Database;
+    await loadPreferredOperationalJourneys(db, 6, '2026-09-27', '2026-09-27');
+    const sql = String(prepare.mock.calls[0]?.[0]);
+    expect(sql).toContain('f.empresa_id = ?');
+    expect(sql).toMatch(/j\.empresa_id\s*=\s*f\.empresa_id/);
+  });
+
   it('mantém Controle de Voos disponível quando a leitura SIGVOOS falha', async () => {
     fetchControleVoosOperationalRecordsMock.mockResolvedValue([cv()]);
     const db = dbWithLegacyResult(Promise.reject(new Error('legacy schema unavailable')));
