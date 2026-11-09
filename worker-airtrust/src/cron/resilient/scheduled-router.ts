@@ -13,6 +13,7 @@ import { runSigvoosFrmsJobs } from './sigvoos-frms';
 import { processLicenseAlerts } from '../license-alerts';
 import { cleanupExpiredRefreshTokens } from '../../services/auth-refresh-token';
 import { purgeOldCronJobRuns } from './cron-runs-retention';
+import { isCronD1Overloaded } from './job-runner';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
 const DAILY_UTC_CRON = TRAINING_ALERT_DAILY_CRON;
@@ -39,9 +40,17 @@ export interface ResilientCronPlan {
   delegateLegacy: boolean;
 }
 
-export function getResilientCronPlan(cron: string, _now = new Date()): ResilientCronPlan {
+export function getResilientCronPlan(cron: string, scheduledAt = new Date()): ResilientCronPlan {
   const isTenMinute = cron === TEN_MINUTE_CRON;
   const isDaily = cron === DAILY_UTC_CRON;
+  // Separate the two expensive D1 consumers across adjacent 10-minute ticks.
+  // The same fixed UTC slot is chosen on every Worker isolate; a slow trigger
+  // cannot drift into a different phase or process both sources accidentally.
+  // Durable per-tenant cursors/leases preserve resumable work across phases.
+  const minute = Math.floor(scheduledAt.getUTCMinutes() / 10) * 10;
+  const sigvoosSlot = minute % 20 === 0;
+  const domainSlot = minute % 20 === 10;
+  const healthSlot = minute % 30 === 20;
   return {
     useResilientJobs: isTenMinute || isDaily,
     runDailyAlerts: isDaily,
@@ -51,9 +60,9 @@ export function getResilientCronPlan(cron: string, _now = new Date()): Resilient
     runEadRenewal: isTenMinute || isDaily,
     runComplianceRoster: isTenMinute || isDaily,
     runDailyFrms: isDaily,
-    runSigvoosFrms: isTenMinute,
-    runDomainEvents: isTenMinute,
-    runCronHealth: isTenMinute || isDaily,
+    runSigvoosFrms: isTenMinute && sigvoosSlot,
+    runDomainEvents: isTenMinute && domainSlot,
+    runCronHealth: isDaily || (isTenMinute && healthSlot),
     // The legacy handler contains broad daily maintenance blocks. It is not
     // called for every ten-minute tick anymore; backup triggers remain fully
     // delegated through the non-resilient branch above.
@@ -98,7 +107,11 @@ export async function runResilientScheduledJobs(
 ): Promise<void> {
   const logger = createStructuredConsole('ResilientScheduledRouter', env.ENVIRONMENT);
   const now = new Date();
-  const plan = getResilientCronPlan(event.cron, now);
+  const scheduledAt =
+    Number.isFinite(event.scheduledTime) && event.scheduledTime > 0
+      ? new Date(event.scheduledTime)
+      : now;
+  const plan = getResilientCronPlan(event.cron, scheduledAt);
 
   if (!plan.useResilientJobs) {
     await legacyHandler(event, env, ctx);
@@ -121,17 +134,34 @@ export async function runResilientScheduledJobs(
   }
 
   const failures: Array<{ job: string; error: string }> = [];
+  let saturated = false;
   const runStep = async (job: string, enabled: boolean, task: () => Promise<unknown>) => {
     if (!enabled) return;
-    try {
-      await task();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      failures.push({ job, error: message });
-      logger.error('[CRON_ROUTER] Job falhou; demais jobs do tick continuarão em ordem', {
+    if (saturated) {
+      logger.warn('[CRON_ROUTER] Job adiado até o próximo tick por sobrecarga D1', {
         trigger: event.cron,
         job,
-        error_code: message,
+        error_code: 'D1_OVERLOADED_TICK_BREAKER',
+      });
+      return;
+    }
+    try {
+      const result = await task();
+      // The durable runner catches and returns FAILED instead of throwing.
+      // Propagate its persisted overload code before running the next D1 job.
+      const summary = result as { outcome?: unknown; errorCode?: unknown } | null;
+      if (summary?.outcome === 'FAILED' && isCronD1Overloaded(summary.errorCode)) {
+        throw new Error('D1_DB_IS_OVERLOADED');
+      }
+    } catch (error) {
+      const overloaded = isCronD1Overloaded(error);
+      if (overloaded) saturated = true;
+      const errorCode = overloaded ? 'D1_OVERLOADED' : 'CRON_STEP_FAILURE';
+      failures.push({ job, error: errorCode });
+      logger.error('[CRON_ROUTER] Job falhou; estado conservador preservado', {
+        trigger: event.cron,
+        job,
+        error_code: errorCode,
       });
     }
   };
