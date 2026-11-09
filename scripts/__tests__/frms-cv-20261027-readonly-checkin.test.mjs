@@ -58,6 +58,29 @@ test("a check-in from yesterday or a soft-deleted one cannot mark today's check-
   assert.equal(r.assignedWithNextDayCheckinButMissingToday, 0);
 });
 
+test('next-day check-in remains a separate evidence band, never a receipt on the target date', () => {
+  const f = fixture();
+  f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-28', active: 1});
+  f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-28', active: 1});
+  const r = reconcileDailyCrewCheckins(f);
+  assert.deepEqual(r.currentDate, {assigned: 2, received: 1, pending: 1});
+  assert.deepEqual(r.roles.SIC, {assigned: 1, received: 0, pending: 1});
+  assert.equal(r.assignedWithNextDayCheckinButMissingToday, 1);
+  assert.equal(r.sameDayDuplicateCheckinEmployees, 0);
+});
+
+test('unrelated or malformed identifiers cannot change target-day receipt or leak into aggregate', () => {
+  const f = fixture();
+  f.checkins.push({funcionario_id: 99, data_checkin: '2026-10-27', active: 1});
+  f.checkins.push({funcionario_id: 'not-a-number', data_checkin: '2026-10-27', active: 1});
+  f.checkins.push({funcionario_id: 0, data_checkin: '2026-10-27', active: 1});
+  const r = reconcileDailyCrewCheckins(f);
+  assert.equal(r.uniqueAssigned, 2);
+  assert.deepEqual(r.currentDate, {assigned: 2, received: 1, pending: 1});
+  assert.equal(r.sameDayDuplicateCheckinEmployees, 0);
+  assert.doesNotMatch(JSON.stringify(r), /not-a-number|funcionario_id|voo_id/);
+});
+
 test('duplicate active rows detected without disclosing individuals', () => {
   const f = fixture();
   f.checkins.push({funcionario_id: 10, data_checkin: '2026-10-27', active: 1});
