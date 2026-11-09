@@ -84,6 +84,12 @@ export interface CronJobRunSummary {
   errorCode?: string;
 }
 
+/** Recognize both raw D1 exceptions and error codes persisted by the durable runner. */
+export function isCronD1Overloaded(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /D1(?:_ERROR)?[:_ ].*(?:DB.IS.OVERLOADED|TOO.MANY.RESOURCES.CONSUMED)|D1_DB_IS_OVERLOADED/i.test(message);
+}
+
 function normalizeErrorCode(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? 'CRON_JOB_FAILED');
   const normalized = raw

@@ -46,7 +46,7 @@ describe('resilient scheduled router', () => {
       runComplianceRoster: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
-      runDomainEvents: true,
+      runDomainEvents: false,
       runCronHealth: true,
       delegateLegacy: false,
     });
@@ -62,6 +62,19 @@ describe('resilient scheduled router', () => {
     expect(daily.runDomainEvents).toBe(false);
     expect(daily.runCronHealth).toBe(true);
     expect(daily.delegateLegacy).toBe(true);
+  });
+
+
+  it('separa os jobs D1 em slots determinísticos; cada job mantém cadência de no máximo 30 min', () => {
+    const slots = [0, 10, 20, 30, 40, 50].map((minute) =>
+      getResilientCronPlan('*/10 * * * *', new Date(`2026-08-02T08:${String(minute).padStart(2, '0')}:00Z`)),
+    );
+    expect(slots.map((s) => [s.runSigvoosFrms, s.runDomainEvents, s.runCronHealth])).toEqual([
+      [true, false, false], [false, true, false], [true, false, true],
+      [false, true, false], [true, false, false], [false, true, true],
+    ]);
+    expect(slots.every((s) => !(s.runSigvoosFrms && s.runDomainEvents))).toBe(true);
+    expect(slots.every((s) => s.runComplianceRoster && s.runComplianceReports)).toBe(true);
   });
 
   it('delega triggers não relacionados sem ativar jobs resilientes', () => {
@@ -89,9 +102,9 @@ describe('resilient scheduled router', () => {
   });
 
   it('não executa o handler monolítico em cada tick de dez minutos', () => {
-    const tenMinute = getResilientCronPlan('*/10 * * * *');
+    const tenMinute = getResilientCronPlan('*/10 * * * *', new Date('2026-08-02T08:20:00Z'));
     expect(tenMinute.delegateLegacy).toBe(false);
-    expect(tenMinute.runDomainEvents).toBe(true);
+    expect(tenMinute.runDomainEvents).toBe(false);
   });
 
   it('ativa o roteador no entrypoint sem alterar os triggers oficiais', () => {
