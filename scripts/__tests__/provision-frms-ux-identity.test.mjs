@@ -12,6 +12,8 @@ import {
   CONFIRM, buildProvisionSql, buildRollbackSql,
 } from '../staging/provision-frms-ux-identity.mjs';
 
+function syntheticBcryptShape(){ return ['$2b','10','x'.repeat(53)].join('$'); }
+
 test('identity is pinned to isolated staging D1, tenant and synthetic crew', () => {
   assert.equal(DB_NAME, 'airtrust-db-staging-baseline-20260701');
   assert.equal(DB_ID, 'bf9963f4-eb12-439b-a830-20bbf577ac22');
@@ -22,7 +24,7 @@ test('identity is pinned to isolated staging D1, tenant and synthetic crew', () 
 });
 
 test('provision is fixed-scope additive and permits no arbitrary tenant', () => {
-  const sql=buildProvisionSql('$2b$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZA');
+  const sql=buildProvisionSql(syntheticBcryptShape());
   assert.match(sql,/INSERT INTO usuarios \(/);
   assert.match(sql,/INSERT INTO usuarios_empresas \(/);
   assert.match(sql,/emp\.id=999013/);
