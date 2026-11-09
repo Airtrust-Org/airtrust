@@ -139,11 +139,13 @@ function parseXLSX(file: ArrayBuffer): ParseResult {
           return false;
         }
 
-        totalUncompressed += fileInfo.size;
+        // fflate define originalSize como o tamanho descomprimido da entrada (P1 Codex review)
+        const uncompressedSize = fileInfo.originalSize ?? fileInfo.size;
+        totalUncompressed += uncompressedSize;
         if (totalUncompressed > IMPORT_FILE_LIMITS.maxUncompressedBytes) {
           throw new Error('Limite de descompressão excedido (possível Zip Bomb)');
         }
-        if (fileInfo.size > IMPORT_FILE_LIMITS.maxEntryBytes) {
+        if (uncompressedSize > IMPORT_FILE_LIMITS.maxEntryBytes) {
           throw new Error('Entrada da planilha excede o limite máximo permitido');
         }
         return true;

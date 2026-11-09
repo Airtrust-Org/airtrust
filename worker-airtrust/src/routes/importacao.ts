@@ -539,6 +539,9 @@ app.post('/validar/:entidade', async (c: Context) => {
       preview: parsed.rows.slice(0, 5), // primeiras 5 linhas
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -662,6 +665,9 @@ app.post('/executar/:entidade', async (c: Context) => {
         : `Importação falhou com ${result.errors.length} erros`,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }
@@ -959,6 +965,9 @@ app.post('/validar-json/:entidade', async (c: Context) => {
       preview: rows.slice(0, 5),
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -1080,6 +1089,9 @@ app.post('/batch-historico-v3', async (c: Context) => {
     // Passar debugLogs para a função
     return executarImportacaoHistoricoEmLotes(c, batchRows, mode, empresaId, debugLogs);
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }
@@ -1249,6 +1261,9 @@ app.post('/executar-json/:entidade', async (c: Context) => {
         : `Importação falhou com ${result.errors.length} erros`,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     if (errorMsg === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
@@ -1294,6 +1309,9 @@ app.get('/historico/list', async (c: Context) => {
       data: rows,
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, error: error.message }, error.status as any);
+    }
     if (error instanceof Error && error.message === 'TENANT_CONTEXT_REQUIRED') {
       return tenantContextResponse(c);
     }
