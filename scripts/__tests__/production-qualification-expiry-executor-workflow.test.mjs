@@ -28,7 +28,7 @@ test('required inputs are declared and validated before any production access', 
   }
   assert.match(workflow, /CONFIRM_PRODUCTION" == AIRTRUST_PRODUCTION/);
   assert.match(workflow, /EXPECTED_SHA" == "\$GITHUB_SHA"/);
-  assert.match(workflow, /merge-base --is-ancestor "\$GITHUB_SHA" origin\/main/);
+  assert.match(workflow, /merge-base --is-ancestor "\$SOURCE_SHA" origin\/main/);
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /RECOVERY_BOOKMARK_REQUIRED/);
   assert.match(workflow, /ROLLBACK_ARTIFACT_ID_REQUIRED/);
@@ -59,7 +59,7 @@ test('apply confirmation and recovery attestation exist only in apply/rollback s
   for (const s of withApply) {
     assert.match(s, /AIRTRUST_EXPIRY_RECOVERY_READY: 'yes'/);
     assert.match(s, /AIRTRUST_EXPIRY_ACTOR: \$\{\{ github\.actor \}\}/);
-    assert.match(s, /EXPECTED_SOURCE_SHA: \$\{\{ github\.sha \}\}/);
+    assert.match(s, /EXPECTED_SOURCE_SHA: \$\{\{ needs\.guard\.outputs\.source_sha \}\}/);
     assert.match(s, /--apply/);
   }
   assert.equal(workflow.split('AIRTRUST_EXPIRY_RECOVERY_READY').length - 1, 2);
