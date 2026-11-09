@@ -379,6 +379,9 @@ app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
     const statsConditions: string[] = ['nl.empresa_id = ?'];
     const statsBindings: unknown[] = [empresaId];
     appendEmployeeSectorFilter(statsConditions, statsBindings, access, 'f');
+    // An administrator can count tenant logs directly: joining employees for all
+    // historical rows would execute unnecessary correlated lookups at large scale.
+    const statsEmployeeJoin = access.mode === 'all' ? '' : logEmployeeJoinSql;
 
     const { results: stats } = await c.env.DB.prepare(
       `SELECT
@@ -387,7 +390,7 @@ app.get('/log', auth(), requireRole('admin', 'manager'), async (c) => {
          COUNT(DISTINCT CASE WHEN nl.status = 'erro' THEN nl.id END) as erros,
          COUNT(DISTINCT CASE WHEN nl.status = 'pendente' THEN nl.id END) as pendentes
        FROM notificacoes_log nl
-       ${logEmployeeJoinSql}
+       ${statsEmployeeJoin}
        WHERE ${statsConditions.join(' AND ')}`,
     )
       .bind(...statsBindings)
