@@ -259,16 +259,17 @@ function logAuthInfrastructureError(
   error: unknown,
   context: { stage: string; durationMs: number },
 ): void {
-  const errMessage = error instanceof Error ? error.message : String(error);
-  const errName = error instanceof Error ? error.name : 'UnknownError';
-  console.error(`[AUTH] Falha ao executar ${context.stage}: ${errMessage}`);
+  // Never log arbitrary driver error messages, names or causes: they may contain
+  // SQL bindings, credentials or personal data. The fixed stage/code are enough
+  // to correlate with sanitized infrastructure telemetry.
+  void error;
+  const errorClass = 'InfrastructureReadError';
   console.error(
     '[AUTH_INFRASTRUCTURE_ERROR]',
     JSON.stringify({
       code,
       stage: context.stage,
-      errorClass: errName,
-      errorMessage: errMessage,
+      errorClass,
       durationMs: context.durationMs,
       timestamp: new Date().toISOString(),
     }),
