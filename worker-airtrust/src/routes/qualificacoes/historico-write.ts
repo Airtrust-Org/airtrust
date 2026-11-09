@@ -30,6 +30,7 @@ import {
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
 import { requireOperationalAccess } from '../../middleware/operational-domain-access';
+import { isValidCalendarIsoDate } from '../../utils/calendar-date';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo
@@ -935,6 +936,20 @@ writeRouter.put(
     // Validar campos obrigatórios
     if (!data_conclusao) {
       return c.json({ success: false, error: 'data_conclusao é obrigatória' }, 400);
+    }
+    if (!isValidCalendarIsoDate(data_conclusao)) {
+      return c.json({ success: false, error: 'data_conclusao inválida (use AAAA-MM-DD)' }, 400);
+    }
+    if (data_vencimento) {
+      if (!isValidCalendarIsoDate(data_vencimento)) {
+        return c.json({ success: false, error: 'data_vencimento inválida (use AAAA-MM-DD)' }, 400);
+      }
+      if (data_vencimento < data_conclusao) {
+        return c.json(
+          { success: false, error: 'data_vencimento não pode ser anterior à data_conclusao' },
+          400,
+        );
+      }
     }
 
     const cargaContext = await db

@@ -308,6 +308,9 @@ function hasGlobalCronHealthScope(snapshot: CronHealthSnapshot): boolean {
   return snapshot.affectedScopes.some((scope) => !scope.scope_key.startsWith('empresa:'));
 }
 
+// Schema de producao: `usuarios.active` (nao `ativo`) e `usuarios_empresas` sem
+// `ativo`/`deleted_at`. Os INSERTs abaixo referenciavam colunas inexistentes, falhavam
+// em silencio (erro apenas logado) e o alerta nunca chegou a ninguem (P13-01).
 async function insertTenantCronHealthAlerts(
   db: D1Database,
   empresaId: number,
@@ -329,14 +332,12 @@ async function insertTenantCronHealthAlerts(
            JOIN usuarios u
              ON u.id = ue.usuario_id
             AND u.deleted_at IS NULL
-            AND COALESCE(u.ativo, 1) = 1
+            AND COALESCE(u.active, 1) = 1
            LEFT JOIN usuarios_empresas_perfis uep
              ON uep.usuario_id = ue.usuario_id
             AND uep.empresa_id = ue.empresa_id
             AND COALESCE(uep.ativo, 1) = 1
           WHERE ue.empresa_id = ?
-            AND ue.deleted_at IS NULL
-            AND COALESCE(ue.ativo, 1) = 1
             AND (
               UPPER(COALESCE(ue.role, '')) IN ('ADMIN', 'ADMINISTRADOR', 'SUPER_ADMIN')
               OR UPPER(COALESCE(uep.perfil, '')) IN ('ADMIN', 'ADMINISTRADOR', 'SUPER_ADMIN')
@@ -383,7 +384,7 @@ async function insertPlatformCronHealthAlerts(
        JOIN usuarios u
          ON u.id = upr.user_id
         AND u.deleted_at IS NULL
-        AND COALESCE(u.ativo, 1) = 1
+        AND COALESCE(u.active, 1) = 1
        WHERE upr.role_code = 'platform_admin'
          AND upr.revoked_at IS NULL
          AND (upr.expires_at IS NULL OR datetime(upr.expires_at) > datetime('now'))
