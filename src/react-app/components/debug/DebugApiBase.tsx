@@ -23,7 +23,7 @@ export const DebugApiBase: React.FC = () => {
       try {
         // Tenta health do histórico; se protegido sem token, retornará erro
         const res = await fetch(`${API_BASE_URL}/qualificacoes/historico/health`, {
-          headers: { Authorization: 'Bearer dev-bypass', 'X-Dev-Auth-Bypass': '1' },
+          headers: { Authorization: 'Bearer dev-bypass' },
         });
         const json = (await res.json()) as HistoricoHealth;
         if (!ignore) setHealth(json);

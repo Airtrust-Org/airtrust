@@ -4,6 +4,7 @@ import type { Env } from '../../types';
 const state = vi.hoisted(() => ({
   calls: [] as string[],
   failCleanup: false,
+  failRetention: false,
 }));
 vi.mock('../../cron/alertasDiarios', () => ({
   alertasDiariosHandler: async () => { state.calls.push('daily-alerts'); },
@@ -50,6 +51,14 @@ vi.mock('../../services/auth-refresh-token', () => ({
   },
 }));
 
+vi.mock('../../cron/resilient/cron-runs-retention', () => ({
+  purgeOldCronJobRuns: async () => {
+    state.calls.push('cron-runs-retention');
+    if (state.failRetention) throw new Error('SYNTHETIC_CRON_RETENTION_FAILURE');
+    return 0;
+  },
+}));
+
 import { runResilientScheduledJobs } from '../../cron/resilient/scheduled-router';
 
 function createEnv(): Env {
@@ -66,6 +75,7 @@ const event = (cron: string) => ({ cron, scheduledTime: Date.now() }) as Schedul
 afterEach(() => {
   state.calls.length = 0;
   state.failCleanup = false;
+  state.failRetention = false;
 });
 
 describe('resilient cron daily maintenance runtime contract', () => {
@@ -75,6 +85,7 @@ describe('resilient cron daily maintenance runtime contract', () => {
     });
     await runResilientScheduledJobs(event('0 8 * * *'), createEnv(), ctx, legacy);
     expect(state.calls.filter((value) => value === 'refresh-token-cleanup')).toHaveLength(1);
+    expect(state.calls.filter((value) => value === 'cron-runs-retention')).toHaveLength(1);
     expect(state.calls.filter((value) => value === 'license-alerts')).toHaveLength(1);
     expect(state.calls.indexOf('license-alerts')).toBeLessThan(
       state.calls.indexOf('legacy:__airtrust_resilient_delegated__'),
@@ -86,6 +97,7 @@ describe('resilient cron daily maintenance runtime contract', () => {
     const legacy = vi.fn();
     await runResilientScheduledJobs(event('*/10 * * * *'), createEnv(), ctx, legacy);
     expect(state.calls).not.toContain('refresh-token-cleanup');
+    expect(state.calls).not.toContain('cron-runs-retention');
     expect(state.calls).not.toContain('license-alerts');
     expect(state.calls).toContain('sigvoos-frms');
     expect(legacy).not.toHaveBeenCalled();
@@ -99,6 +111,19 @@ describe('resilient cron daily maintenance runtime contract', () => {
     await expect(
       runResilientScheduledJobs(event('0 8 * * *'), createEnv(), ctx, legacy),
     ).rejects.toThrow(/CRON_TICK_PARTIAL_FAILURE: refresh-token-cleanup/);
+    expect(state.calls).toContain('license-alerts');
+    expect(legacy).toHaveBeenCalledTimes(1);
+  });
+
+  it('P13-08: falha da retencao de cron_job_runs nao impede os demais jobs do tick diario', async () => {
+    state.failRetention = true;
+    const legacy = vi.fn(async (e: ScheduledEvent) => {
+      state.calls.push('legacy:' + e.cron);
+    });
+    await expect(
+      runResilientScheduledJobs(event('0 8 * * *'), createEnv(), ctx, legacy),
+    ).rejects.toThrow(/CRON_TICK_PARTIAL_FAILURE: cron-runs-retention/);
+    expect(state.calls).toContain('refresh-token-cleanup');
     expect(state.calls).toContain('license-alerts');
     expect(legacy).toHaveBeenCalledTimes(1);
   });
