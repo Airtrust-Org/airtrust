@@ -158,6 +158,7 @@ function createSchema(database: DatabaseSync): void {
       categoria_id INTEGER,
       dominio_codigo TEXT,
       validade INTEGER,
+      vencimento_fim_mes INTEGER NOT NULL DEFAULT 0,
       carga_horaria REAL,
       carga_horaria_inicial REAL,
       carga_horaria_recorrente REAL,
@@ -193,6 +194,10 @@ function createSchema(database: DatabaseSync): void {
       tipo_treinamento TEXT,
       empresa_id INTEGER NOT NULL,
       renovacao_de INTEGER,
+      certificado_arquivo_id INTEGER,
+      arquivo_url TEXT,
+      origem_tipo TEXT,
+      lms_matricula_id INTEGER,
       created_at TEXT,
       updated_at TEXT,
       deleted_at TEXT

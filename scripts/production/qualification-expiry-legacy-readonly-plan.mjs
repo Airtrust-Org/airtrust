@@ -16,12 +16,18 @@ import path from 'node:path';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const READONLY_CONFIRMATION = 'AIRTRUST_PRODUCTION_QUALIFICATION_EXPIRY_READONLY_2068';
-const REALIZED = new Set(['CONCLUIDA', 'CONCLUIDO', 'RENOVADA', 'VALIDA', 'VENCIDA']);
+export const REALIZED_STATUSES = new Set(['CONCLUIDA', 'CONCLUIDO', 'RENOVADA', 'VALIDA', 'VENCIDA']);
 
 // Explicit exceptions depend on personnel/medical or special operating rules;
 // do not auto-recalculate by a generic training-model month count.
 const EXCEPTIONS = new Set(['CMA', 'ASO', 'G1-SEM', 'G1_SEM']);
-const SELECT = `
+
+/** CMA/ASO/CHT/G1-SEM models follow regulatory rules and never use the generic month count. */
+export function isRegulatoryException(modelCode) {
+  const model = String(modelCode ?? '').trim().toUpperCase();
+  return EXCEPTIONS.has(model) || model.startsWith('CMA_') || model.startsWith('CHT-');
+}
+const SELECT_BASE = `
 SELECT
   h.id, h.empresa_id, h.qualificacao_id, t.codigo AS model_code,
   h.status, h.data_conclusao, h.data_vencimento,
@@ -38,8 +44,18 @@ LEFT JOIN qualificacoes_tipos t
  AND t.deleted_at IS NULL
 WHERE h.empresa_id = 6
   AND h.deleted_at IS NULL
-  AND h.data_conclusao IS NOT NULL
+  AND h.data_conclusao IS NOT NULL`;
+const SELECT = `${SELECT_BASE}
 ORDER BY h.id`.trim();
+
+/** Same inventory SELECT (tenant 6) optionally narrowed to validated history ids. */
+export function buildInventorySelectSql(ids = null) {
+  if (ids === null) return SELECT;
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every(i => Number.isSafeInteger(i) && i > 0)) {
+    throw new Error('INVENTORY_IDS_INVALID');
+  }
+  return `${SELECT_BASE}\n  AND h.id IN (${ids.join(',')})\nORDER BY h.id`.trim();
+}
 
 function dateOnly(value) {
   const str = typeof value === 'string' ? value.slice(0, 10) : '';
@@ -78,7 +94,7 @@ function classify(row) {
 
   if (Number(row.empresa_id) !== 6 || !Number.isInteger(Number(row.id)) || Number(row.id) < 1) reason = 'invalid_tenant_or_id';
   else if (!model || !Number.isInteger(Number(row.qualificacao_id)) || Number(row.qualificacao_id) < 1) reason = 'model_link_missing';
-  else if (!REALIZED.has(status)) reason = 'non_realized_or_unrecognized_status';
+  else if (!REALIZED_STATUSES.has(status)) reason = 'non_realized_or_unrecognized_status';
   else if (!completed) reason = 'completion_date_invalid';
   else if (EXCEPTIONS.has(model) || model.startsWith('CMA_') || model.startsWith('CHT-')) reason = 'regulatory_special_case';
   else if (validity === null || ![0, 1].includes(eomValue)) reason = 'model_validity_ambiguous';
