@@ -11,7 +11,7 @@ import { getTenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import { safe } from './safe-handler';
-import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
+import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent, buildQualificacoesTipoResolutionJoin } from '../../services/qualificacoes/historico-helpers';
 import {
   COMPLETED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -181,10 +181,7 @@ writeRouter.post(
                   qt.carga_horaria_recorrente as tipo_carga_horaria_recorrente
          FROM qualificacoes_historico qh
          INNER JOIN funcionarios f ON f.id = qh.funcionario_id
-         LEFT JOIN qualificacoes_tipos qt
-           ON (qt.id = qh.qualificacao_id OR qt.codigo = qh.qualificacao_codigo)
-          AND qt.empresa_id = f.empresa_id
-          AND qt.deleted_at IS NULL
+         ${buildQualificacoesTipoResolutionJoin('f.empresa_id', 'qt', 'qh')}
          WHERE qh.id = ?
            AND qh.deleted_at IS NULL
            AND f.deleted_at IS NULL
@@ -944,10 +941,7 @@ writeRouter.put(
                 qt.id AS tipo_id_resolvido, qt.validade AS tipo_validade, qt.vencimento_fim_mes,
                 qt.carga_horaria, qt.carga_horaria_inicial, qt.carga_horaria_recorrente
            FROM qualificacoes_historico qh
-           LEFT JOIN qualificacoes_tipos qt
-             ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo))
-            AND (qt.empresa_id = qh.empresa_id OR qt.empresa_id = 1)
-            AND qt.deleted_at IS NULL
+           ${buildQualificacoesTipoResolutionJoin('qh.empresa_id', 'qt', 'qh')}
           WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
       )
       .bind(id, tenantCtx.empresaId)
@@ -1200,10 +1194,7 @@ writeRouter.patch(
         `SELECT qh.validade_meses, qt.validade AS tipo_validade,
                 qh.data_vencimento, qh.qualificacao_codigo, qt.vencimento_fim_mes
            FROM qualificacoes_historico qh
-           LEFT JOIN qualificacoes_tipos qt
-             ON ((qt.id = qh.qualificacao_id) OR (qh.qualificacao_id IS NULL AND qt.codigo = qh.qualificacao_codigo))
-            AND (qt.empresa_id = qh.empresa_id OR qt.empresa_id = 1)
-            AND qt.deleted_at IS NULL
+           ${buildQualificacoesTipoResolutionJoin('qh.empresa_id', 'qt', 'qh')}
           WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
       )
       .bind(id, tenantCtx.empresaId)
