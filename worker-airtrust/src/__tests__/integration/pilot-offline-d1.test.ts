@@ -91,7 +91,7 @@ beforeEach(async () => {
 afterEach(async () => { await miniflare?.dispose(); });
 
 describe('Pilot offline sync with a disposable local D1 Worker', () => {
-  async function nextSnapshot(initial: PilotOfflineSyncCommand, fuelings: Record<string, unknown>[]) {
+  async function nextSnapshot(initial: PilotOfflineSyncCommand, fuelings: Record<string, unknown>[], sequence = 2) {
     const current = await state();
     const flightVersion = Number(current.cv_voos[0].versao);
     const rdvVersion = Number(current.cv_rdv_operacional[0].versao);
@@ -104,9 +104,9 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
       },
     }));
     return command({
-      client_operation_id: '123e4567-e89b-42d3-a456-426614174001',
+      client_operation_id: `123e4567-e89b-42d3-a456-${String(426614174000 + sequence).padStart(12, '0')}`,
       base_server_version: rdvVersion, base_flight_version: flightVersion,
-      local_sequence: 2,
+      local_sequence: sequence,
       payload: {
         ...initial.payload,
         source_package_id: `pilot-offline:v1:voo:42:v${flightVersion}:rdv:${rdvVersion}`,
@@ -128,6 +128,123 @@ describe('Pilot offline sync with a disposable local D1 Worker', () => {
     expect(saved.cv_voo_abastecimentos).toHaveLength(1);
     expect(saved.cv_voo_abastecimentos[0].client_local_id).toBe('fuel-1');
     expect(saved.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('keeps original supplier identity and immutable displayed name after a catalog rename', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const accepted = (await state()).cv_voo_abastecimentos[0];
+    expect(accepted).toMatchObject({ fornecedor: 'Synthetic supplier', supplier_code_at_acceptance: 'TEST' });
+    expect((await request('/__fixture/catalog?action=rename-supplier', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(next)).status).toBe(200);
+    const current = await state();
+    expect(current.cv_voo_abastecimentos).toHaveLength(1);
+    expect(current.cv_voo_abastecimentos[0]).toEqual(accepted);
+    expect(current.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('accepts a previously recorded supplier after deactivation but rejects a newly recorded one', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=disable-supplier', { method: 'POST' })).status).toBe(200);
+    const same = first.payload.fuelings as Record<string, unknown>[];
+    const next = await nextSnapshot(first, same);
+    expect((await send(next)).status).toBe(200);
+    const saved = await state();
+    expect(saved.cv_voo_abastecimentos).toHaveLength(1);
+    const third = await nextSnapshot(next, [...same, { ...same[0], client_local_id: 'fuel-new' }], 3);
+    const before = await state();
+    const response = await send(third);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUEL_SUPPLIER_NOT_CONFIGURED');
+    expect(await state()).toEqual(before);
+  });
+  it('rejects changing the supplier code on an accepted physical fueling', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const fueling = (first.payload.fuelings as Record<string, unknown>[])[0];
+    const next = await nextSnapshot(first, [{ ...fueling, empresa_abastecimento_codigo: 'OTHER' }]);
+    const before = await state();
+    const response = await send(next);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
+    expect(await state()).toEqual(before);
+  });
+  it('does not guess the original supplier for pre-0564 events after a rename', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=legacy-fueling', { method: 'POST' })).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=rename-supplier', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    const before = await state();
+    const response = await send(next);
+    expect(response.status).toBe(409);
+    expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_FUELING_ALREADY_RECORDED_CHANGED');
+    expect(await state()).toEqual(before);
+  });
+  it('preserves the entire accepted justification audit row after catalog deactivation', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const original = (await state()).cv_voo_justificativas[0];
+    expect((await request('/__fixture/catalog?action=disable-justification', { method: 'POST' })).status).toBe(200);
+    const next = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(next)).status).toBe(200);
+    const saved = await state();
+    expect(saved.cv_voo_justificativas).toHaveLength(1);
+    // Id, timestamp, created_by, updated_by and deleted_at are evidence,
+    // not transient fields to rewrite on a cumulative snapshot.
+    expect(saved.cv_voo_justificativas[0]).toEqual(original);
+    expect(saved.cv_offline_sync_receipts).toHaveLength(2);
+  });
+  it('keeps unchanged active justification evidence but still updates changed active values', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const original = (await state()).cv_voo_justificativas[0];
+    const same = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    expect((await send(same)).status).toBe(200);
+    expect((await state()).cv_voo_justificativas[0]).toEqual(original);
+    const changedBase = await nextSnapshot(same, same.payload.fuelings as Record<string, unknown>[], 3);
+    const changed = await command({
+      ...changedBase,
+      payload: {
+        ...changedBase.payload,
+        justifications: [{ justificativa_codigo: 'TEST', minutos: 25, observacao: 'revised with active catalog' }],
+      },
+    });
+    expect((await send(changed)).status).toBe(200);
+    const updated = (await state()).cv_voo_justificativas[0];
+    expect(updated).toMatchObject({
+      id: original.id, created_at: original.created_at,
+      minutos: 25, observacao: 'revised with active catalog', deleted_at: null,
+    });
+  });
+  it('soft-deletes an accepted justification omitted by a later cumulative snapshot', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    const nextBase = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+    const omitted = await command({ ...nextBase, payload: { ...nextBase.payload, justifications: [] } });
+    expect((await send(omitted)).status).toBe(200);
+    expect((await state()).cv_voo_justificativas[0].deleted_at).not.toBeNull();
+  });
+  it('rejects new or changed inactive justifications without altering the accepted evidence', async () => {
+    const first = await command();
+    expect((await send(first)).status).toBe(200);
+    expect((await request('/__fixture/catalog?action=disable-justification', { method: 'POST' })).status).toBe(200);
+    const current = await state();
+    for (const justifications of [
+      [{ justificativa_codigo: 'TEST', minutos: 21, observacao: 'reason' }],
+      [{ justificativa_codigo: 'OTHER', minutos: 20, observacao: 'reason' }],
+    ]) {
+      const nextBase = await nextSnapshot(first, first.payload.fuelings as Record<string, unknown>[]);
+      const invalid = await command({
+        ...nextBase,
+        client_operation_id: crypto.randomUUID(),
+        payload: { ...nextBase.payload, justifications },
+      });
+      const response = await send(invalid);
+      expect(response.status).toBe(409);
+      expect((await responseBody(response)).code).toBe('CONTROLE_VOOS_PILOT_SYNC_JUSTIFICATION_NOT_CONFIGURED');
+      expect(await state()).toEqual(current);
+    }
   });
   it('accepts two equal-valued fuelings that have different physical identities', async () => {
     const first = await command();

@@ -27,7 +27,8 @@
         "13_coordination_handoff_receipt": "PENDING",
         "14_service_worker_scope_isolated": "PENDING",
         "15_touch_scroll_no_critical_overflow": "PENDING"
-      }
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
       "platform": "ipad",
@@ -37,7 +38,24 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {}
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
       "platform": "ipad",
@@ -47,7 +65,24 @@
       "os_version": "REPLACE",
       "browser_version": "installed-home-screen",
       "result": "PENDING",
-      "scenario_results": {}
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
       "platform": "android",
@@ -57,7 +92,24 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {}
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
       "platform": "android",
@@ -67,7 +119,24 @@
       "os_version": "REPLACE",
       "browser_version": "REPLACE",
       "result": "PENDING",
-      "scenario_results": {}
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     },
     {
       "platform": "android",
@@ -77,8 +146,28 @@
       "os_version": "REPLACE",
       "browser_version": "installed-pwa",
       "result": "PENDING",
-      "scenario_results": {}
+      "scenario_results": {
+        "1_vault_unlock": "PENDING",
+        "2_download_authorized_package": "PENDING",
+        "3_local_package_readiness": "PENDING",
+        "4_rdv_saved_on_tablet": "PENDING",
+        "5_airplane_offline": "PENDING",
+        "6_refresh_reopen_offline": "PENDING",
+        "7_restore_exact_saved_value": "PENDING",
+        "8_continue_offline_revision": "PENDING",
+        "9_reconnect_transmit": "PENDING",
+        "10_idempotent_receipt_no_duplicate": "PENDING",
+        "11_explicit_conflict_handling": "PENDING",
+        "12_finalize_separate_from_sync": "PENDING",
+        "13_coordination_handoff_receipt": "PENDING",
+        "14_service_worker_scope_isolated": "PENDING",
+        "15_touch_scroll_no_critical_overflow": "PENDING"
+      },
+      "evidence_ref": "REPLACE_WITH_SANITIZED_PHYSICAL_EVIDENCE_REFERENCE"
     }
   ],
-  "notes": "Do not include credentials, tokens, personal data or sensitive operational payloads. A row may be PASS only when all mandatory scenarios applicable to it are PASS."
+  "notes": "Do not include credentials, tokens, personal data or sensitive operational payloads. A row may be PASS only when all mandatory scenarios applicable to it are PASS.",
+  "worker_source_sha": "REPLACE_WITH_EXACT_40_CHAR_WORKER_SHA",
+  "pages_source_sha": "REPLACE_WITH_EXACT_40_CHAR_PAGES_SHA",
+  "staging_pages_url": "REPLACE_WITH_OFFICIAL_STAGING_PAGES_PREVIEW_URL"
 }
