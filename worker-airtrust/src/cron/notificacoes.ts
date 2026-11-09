@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import {
   getLocalWhatsAppTemplateRecord,
   isWhatsAppTemplateApproved,
-  refreshLocalWhatsAppTemplateApproval,
+  refreshLocalWhatsAppTemplateApprovalWithOutcome,
   seedLocalWhatsAppTemplateCatalog,
 } from '../utils/alert-whatsapp-templates-store';
 import { normalizeWhatsAppPhone } from '../utils/whatsapp';
@@ -720,13 +720,16 @@ async function enviarNotificacao(
         throw new Error('WHATSAPP_TEMPLATE_NOT_SYNCED');
       }
 
+      let approvalCheckConclusive = true;
       if (!isWhatsAppTemplateApproved(localTemplate.approval_status)) {
-        localTemplate = await refreshLocalWhatsAppTemplateApproval(
+        const refreshed = await refreshLocalWhatsAppTemplateApprovalWithOutcome(
           env,
           env.DB,
           templateKey,
           localTemplate,
         );
+        localTemplate = refreshed.record;
+        approvalCheckConclusive = refreshed.conclusive;
         options?.whatsAppTemplateCache?.set(templateKey, localTemplate ?? null);
       }
 
@@ -734,10 +737,14 @@ async function enviarNotificacao(
         !localTemplate?.twilio_content_sid ||
         !isWhatsAppTemplateApproved(localTemplate.approval_status)
       ) {
-        options?.whatsAppTemplateCircuit?.set(templateKey, {
-          code: 'WHATSAPP_TEMPLATE_NOT_APPROVED',
-          skipped: 0,
-        });
+        // So abre o disjuntor quando o provedor respondeu: timeout/503 na
+        // consulta de aprovacao e transitorio e a proxima qualificacao tenta de novo.
+        if (approvalCheckConclusive) {
+          options?.whatsAppTemplateCircuit?.set(templateKey, {
+            code: 'WHATSAPP_TEMPLATE_NOT_APPROVED',
+            skipped: 0,
+          });
+        }
         throw new Error('WHATSAPP_TEMPLATE_NOT_APPROVED');
       }
 
