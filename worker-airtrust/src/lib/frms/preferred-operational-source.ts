@@ -292,9 +292,8 @@ export async function loadPreferredOperationalJourneys(
       empresaId,
       from,
       to,
-      error: legacyResult.reason instanceof Error
-        ? legacyResult.reason.message
-        : String(legacyResult.reason ?? ''),
+      // Raw D1 errors can include SQL fragments and operational identifiers.
+      reason: 'SOURCE_QUERY_FAILED',
     });
   }
   if (cvResult.status === 'rejected') {
@@ -302,9 +301,8 @@ export async function loadPreferredOperationalJourneys(
       empresaId,
       from,
       to,
-      error: cvResult.reason instanceof Error
-        ? cvResult.reason.message
-        : String(cvResult.reason ?? ''),
+      // Preserve source availability without logging untrusted exception details.
+      reason: 'SOURCE_QUERY_FAILED',
     });
   }
 
