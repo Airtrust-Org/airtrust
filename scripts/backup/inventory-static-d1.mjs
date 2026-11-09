@@ -24,12 +24,13 @@ export function buildInventory({ migrationFiles, backupSource }) {
   const seen = new Map();
   for (const [filename, sql] of migrationFiles) {
     for (const table of extractCreatedTables(sql)) {
-      if (!seen.has(table)) seen.set(table, filename);
+      if (!seen.has(table.toLowerCase())) seen.set(table.toLowerCase(), { table, filename });
     }
   }
-  const configured = new Set(extractConfiguredTables(backupSource));
-  const tables = [...seen].sort(([a], [b]) => a.localeCompare(b)).map(([table, firstSeen]) => ({
-    table, first_seen_in: firstSeen, in_worker_backup: configured.has(table),
+  const configuredNames = extractConfiguredTables(backupSource);
+  const configured = new Set(configuredNames.map(name => name.toLowerCase()));
+  const tables = [...seen].sort(([a], [b]) => a.localeCompare(b)).map(([key, { table, filename }]) => ({
+    table, first_seen_in: filename, in_worker_backup: configured.has(key),
   }));
   return {
     source: 'static_migration_metadata_only',
@@ -37,7 +38,7 @@ export function buildInventory({ migrationFiles, backupSource }) {
     schema_tables_detected: tables.length,
     worker_backup_tables_configured: configured.size,
     schema_tables_not_in_worker_backup: tables.filter(t => !t.in_worker_backup).length,
-    configured_tables_not_found_in_migrations: [...configured].filter(t => !seen.has(t)),
+    configured_tables_not_found_in_migrations: configuredNames.filter(name => !seen.has(name.toLowerCase())),
     tables,
     limitations: [
       'Static CREATE TABLE parser; migrations can rename/drop tables. Not an authoritative live D1 schema.',
