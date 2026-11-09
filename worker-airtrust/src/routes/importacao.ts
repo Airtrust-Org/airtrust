@@ -12,7 +12,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { parseImportFile } from '../utils/parseImportFile';
+import { parseImportFile, IMPORT_FILE_LIMITS } from '../utils/parseImportFile';
+import { AppError } from '../utils/errors';
 import { remapRowHeaders } from '../services/importacao/columnMappings';
 import { FuncionarioImportacao as FuncionarioImportacaoService } from '../services/importacao/FuncionarioImportacao';
 import { QualificacaoTipoImportacaoService } from '../services/importacao/QualificacaoTipoImportacao';
@@ -491,6 +492,13 @@ app.post('/validar/:entidade', async (c: Context) => {
       size: file.size,
     });
 
+    if (file.size > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+      throw new AppError(
+        `Arquivo excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`,
+        413,
+      );
+    }
+
     const buffer = await file.arrayBuffer();
     const parsed = await parseImportFile(buffer, file.type);
 
@@ -593,6 +601,13 @@ app.post('/executar/:entidade', async (c: Context) => {
     if (!validModes.includes(mode)) {
       logger.warn('Mode inválido', { mode, valid_modes: validModes });
       return c.json({ success: false, error: `Mode inválido. Use ${validModes.join(', ')}` }, 400);
+    }
+
+    if ((file as File).size > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+      throw new AppError(
+        `Arquivo excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`,
+        413,
+      );
     }
 
     const buffer = await (file as File).arrayBuffer();
