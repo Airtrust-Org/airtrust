@@ -340,6 +340,16 @@ require_sqlite_column "qualificacoes_historico" "perfil_competencia"
 require_sqlite_column "lms_matriculas" "perfil_competencia"
 
 printf 'setup:lms:local: applying synthetic LMS smoke seed\n'
-sqlite3 "$SQLITE_FILE" < "$SEED_FILE"
+# O seed não versiona hash de senha: o bcrypt do login sintético local é gerado
+# a cada execução (salt novo) com a senha de fixture usada pelos scripts de QA.
+SEED_RENDERED="$(mktemp "${TMPDIR:-/tmp}/airtrust-lms-smoke-seed-XXXXXX.sql")"
+chmod 600 "$SEED_RENDERED"
+trap 'rm -f "$SEED_RENDERED"' EXIT
+AIRTRUST_LOCAL_FIXTURE_PASSWORD="${AIRTRUST_LOCAL_FIXTURE_PASSWORD:-Admin@123}" \
+  node "$SCRIPT_DIR/render-local-dev-password-sql.mjs" "$SEED_FILE" "$SEED_RENDERED" \
+  || error "failed to render the synthetic LMS smoke credential"
+sqlite3 "$SQLITE_FILE" < "$SEED_RENDERED"
+rm -f "$SEED_RENDERED"
+trap - EXIT
 
 printf 'setup:lms:local: ready\n'

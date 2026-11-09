@@ -148,7 +148,14 @@ for migration_file in "${INCREMENTAL_MIGRATIONS[@]}"; do
 done
 
 info "Aplicando seed fictício do ambiente development..."
-printf 'y\n' | "${WRANGLER[@]}" d1 execute "$DEV_DB_NAME" --env "$DEV_ENV" --remote --file "$SEED_FILE"
+RENDERED_SEED_FILE="$(mktemp "${TMPDIR:-/tmp}/airtrust-dev-seed-XXXXXX.sql")"
+chmod 600 "$RENDERED_SEED_FILE"
+trap 'rm -f "$RENDERED_SEED_FILE"' EXIT
+node ../scripts/render-local-dev-password-sql.mjs "$SEED_FILE" "$RENDERED_SEED_FILE" \
+  || fail "Falha ao gerar credencial do seed; nada foi enviado ao D1 development"
+printf 'y\n' | "${WRANGLER[@]}" d1 execute "$DEV_DB_NAME" --env "$DEV_ENV" --remote --file "$RENDERED_SEED_FILE"
+rm -f "$RENDERED_SEED_FILE"
+trap - EXIT
 ok "Seed aplicado"
 
 echo
