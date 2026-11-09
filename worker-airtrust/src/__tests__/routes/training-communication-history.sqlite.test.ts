@@ -1,8 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { employeeSectorSql } from '../../middleware/employee-sector-access';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { readSameDayTrainingAlerts } from '../../services/training-alert-same-day';
 import {
   listTrainingCommunications,
+  runCommunicationsQuery,
   maskTrainingContact,
   type TrainingCommunicationFilters,
 } from '../../services/training-communication-history';
@@ -33,16 +35,21 @@ beforeEach(() => {
       action TEXT,
       entity_type TEXT,
       entity_id INTEGER,
+      usuario_id INTEGER,
       new_values TEXT,
       created_at TEXT
     );
+    -- Mesmos indices relevantes de producao (migration 0332).
     CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+    CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+    CREATE INDEX idx_audit_logs_empresa_usuario ON audit_logs(empresa_id, usuario_id);
     CREATE TABLE notificacoes_log (
       id INTEGER PRIMARY KEY,
       empresa_id INTEGER NOT NULL,
       tipo TEXT, destinatario TEXT, assunto TEXT, corpo TEXT, notification_key TEXT,
       status TEXT, erro_mensagem TEXT, enviado_em TEXT, created_at TEXT
     );
+    CREATE INDEX idx_notificacoes_log_empresa_assunto ON notificacoes_log(empresa_id, assunto);
     INSERT INTO audit_logs(id,empresa_id,action,entity_type,new_values,created_at)
       VALUES
       (10,1,'LMS_MATRICULA_ALERTA','lms_matriculas',
@@ -281,11 +288,16 @@ describe('consolidated training communication history', () => {
       { notifications: false, audit: true }, { limit: 100, offset: 0 });
     expect(result.rows).toHaveLength(100);
     expect(result.rows.every((row) => row.status_envio === 'enviada')).toBe(true);
-    const sql = calls.find((call) => call.includes('WITH communications AS')) || '';
-    expect(sql).toContain('done.entity_id = a.entity_id');
+    const sql = calls.find((call) => call.includes('communications AS (')) || '';
+    expect(sql).toContain('audit_rel AS MATERIALIZED');
     const plan = db.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 101, 0) as
       Array<{ detail: string }>;
-    expect(plan.some((row) => row.detail.includes('SEARCH done USING INDEX idx_audit_logs_entity'))).toBe(true);
+    // #2078: a leitura de audit_logs acontece uma unica vez, pelo indice de action,
+    // sem varrer a tabela nem usar os indices por tenant/entidade (~24k linhas).
+    const auditPlan = plan.filter((row) => /audit_logs|a0/.test(row.detail));
+    expect(auditPlan.some((row) => row.detail.includes('idx_audit_logs_action'))).toBe(true);
+    expect(plan.some((row) => /SCAN (a0|audit_logs)/.test(row.detail))).toBe(false);
+    expect(plan.some((row) => row.detail.includes('idx_audit_logs_empresa_usuario'))).toBe(false);
   });
 
 it('bloqueia reenvio do dia quando há PREPARADO pendente; falha final não bloqueia', async () => {
@@ -318,5 +330,204 @@ it('bloqueia reenvio do dia quando há PREPARADO pendente; falha final não bloq
     expect(maskTrainingContact('someone@example.com')).toBe('s***@example.com');
     expect(maskTrainingContact('+55 (21) 99999-8888')).toBe('***8888');
     expect(maskTrainingContact(null)).toBe(null);
+  });
+
+  describe('caminho rapido top-N exato (#2078)', () => {
+    const tables = { notifications: true, audit: true };
+    function seedVolume() {
+      db.database.exec(`
+        WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 1500)
+        INSERT INTO notificacoes_log(id,empresa_id,tipo,destinatario,assunto,corpo,status,enviado_em,created_at)
+        SELECT 1000+n, CASE WHEN n % 11 = 0 THEN 2 ELSE 1 END,
+               'EMAIL_COMPLIANCE','x@example.com',
+               CASE WHEN n % 7 = 0 THEN '[OUTRO:1]' WHEN n % 5 = 0 THEN '[COMPLIANCE_GESTOR:1]' ELSE '[COMPLIANCE_TREINAMENTO:100]' END,
+               CASE WHEN n % 9 = 0 THEN 'nao-json'
+                    WHEN n % 13 = 0 THEN '{"funcionario_id":999999,"qualificacao_nome":"orfao"}'
+                    ELSE '{"funcionario_id":' || (1000 + (n % 2)) || ',"qualificacao_tipo_id":100,"qualificacao_nome":"MGO"}' END,
+               'enviada',
+               CASE WHEN n % 17 = 0 THEN NULL ELSE datetime('2026-10-01 00:00:00', '+' || (n % 400) || ' minutes') END,
+               datetime('2026-10-01 00:00:00', '+' || (n % 300) || ' minutes')
+        FROM seq;
+      `);
+    }
+    it('rapido e completo retornam exatamente as mesmas linhas e has_more', async () => {
+      seedVolume();
+      for (const [limit, offset] of [[50, 0], [50, 50], [30, 200], [100, 0]]) {
+        const f = { limit, offset };
+        const fast = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, true);
+        const full = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, false);
+        expect(fast).not.toBeNull();
+        expect(fast).toEqual(full);
+      }
+    });
+    it('quando a janela nao cobre a pagina, devolve null e a API cai na consulta completa', async () => {
+      seedVolume();
+      const f = { limit: 100, offset: 0, funcionario_q: 'nome-inexistente-xyz' };
+      expect(await runCommunicationsQuery(db.asD1(), 1, all, tables, f, true)).toBeNull();
+      const viaApi = await listTrainingCommunications(db.asD1(), 1, all, tables, f);
+      const full = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, false);
+      expect(viaApi).toEqual(full);
+    });
+    it('isolamento: nunca devolve notificacao de outra empresa', async () => {
+      seedVolume();
+      const r = await listTrainingCommunications(db.asD1(), 2, all, tables, { limit: 50, offset: 0 });
+      expect(r.rows.every((row) => row.funcionario_id >= 2000 || row.id.startsWith('lms:'))).toBe(true);
+    });
+  });
+
+  describe('trilha de auditoria LMS: equivalencia com a consulta legada e plano (#2078)', () => {
+    // Consulta anterior ao #2078 (subconsulta correlacionada sobre audit_logs inteiro),
+    // mantida aqui apenas como oraculo de equivalencia.
+    type Access = typeof all | { mode: 'restricted'; setorIds: number[]; funcionarioId: null };
+    function legacyAuditRows(empresaId: number, access: Access, limit: number, offset: number) {
+      const scope = employeeSectorSql(access as never, 'f');
+      const sql = `WITH communications AS (
+        SELECT 'lms:' || a.id || ':' || channel.canal AS id,
+               f.id AS funcionario_id, f.nome AS funcionario_nome, NULL AS setor_nome,
+               c.qualificacao_tipo_id AS qualificacao_tipo_id,
+               CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER) AS curso_id,
+               COALESCE(json_extract(a.new_values, '$.curso_titulo'), c.titulo) AS qualificacao_nome,
+               json_extract(a.new_values, '$.status_matricula') AS status_compliance,
+               channel.canal AS tipo,
+               CASE WHEN channel.canal = 'EMAIL' THEN
+                   COALESCE(json_extract(a.new_values, '$.email_destinatario_mascarado'), f.email)
+                 ELSE COALESCE(json_extract(a.new_values, '$.whatsapp_destinatario_mascarado'), f.telefone)
+               END AS destinatario,
+               CASE WHEN (channel.canal = 'EMAIL' AND json_extract(a.new_values, '$.email_destinatario_mascarado') IS NOT NULL)
+                      OR (channel.canal = 'WHATSAPP' AND json_extract(a.new_values, '$.whatsapp_destinatario_mascarado') IS NOT NULL)
+                 THEN 'REGISTRO_ENVIO' ELSE 'CADASTRO_ATUAL' END AS destinatario_fonte,
+               CASE json_extract(a.new_values, channel.result_path)
+                 WHEN 'ENVIADO' THEN 'enviada' WHEN 'FALHA' THEN 'erro' WHEN 'PENDENTE' THEN 'pendente'
+                 WHEN 'SEM_EMAIL' THEN 'sem_contato' WHEN 'SEM_WHATSAPP' THEN 'sem_contato'
+                 ELSE 'desconhecido' END AS status_envio,
+               NULL AS erro, a.created_at AS enviado_em, 0 AS gestor,
+               CASE WHEN a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_ALERTA_PREPARADO') THEN 'LMS_ALERTA'
+                    ELSE 'LMS_CONVITE' END AS origem,
+               f.setor_id AS setor_id, f.funcao_id AS funcao_id
+          FROM audit_logs a
+          JOIN funcionarios f ON f.empresa_id = a.empresa_id
+            AND f.id = CAST(CASE WHEN json_valid(a.new_values) THEN json_extract(a.new_values, '$.funcionario_id') END AS INTEGER)
+          LEFT JOIN lms_cursos c ON c.id = CAST(CASE WHEN json_valid(a.new_values)
+            THEN json_extract(a.new_values, '$.curso_id') END AS INTEGER)
+            AND c.empresa_id = a.empresa_id
+          JOIN (SELECT 'EMAIL' AS canal, '$.email_resultado' AS result_path
+                UNION ALL SELECT 'WHATSAPP', '$.whatsapp_resultado') channel
+            ON json_extract(a.new_values, channel.result_path) IS NOT NULL
+         WHERE a.empresa_id = ?
+           AND a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
+                            'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO')
+           AND (a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
+             SELECT 1 FROM audit_logs done
+              WHERE done.empresa_id = a.empresa_id
+                AND done.action = REPLACE(a.action, '_PREPARADO', '')
+                AND done.entity_type = a.entity_type
+                AND done.entity_id = a.entity_id
+                AND json_valid(done.new_values) = 1
+                AND json_extract(done.new_values, '$.tentativa_id') = json_extract(a.new_values, '$.tentativa_id')))
+           AND a.entity_type = 'lms_matriculas'
+           AND json_valid(a.new_values) = 1
+           AND ${scope.clause})
+        SELECT * FROM communications WHERE funcionario_id > 0
+         ORDER BY enviado_em DESC, id DESC LIMIT ? OFFSET ?`;
+      const raw = db.database.prepare(sql).all(empresaId, ...scope.bindings, limit + 1, offset) as Array<Record<string, unknown>>;
+      return {
+        rows: raw.slice(0, limit).map((row) => ({
+          ...row,
+          gestor: Boolean(row.gestor),
+          destinatario: maskTrainingContact((row.destinatario as string | null) ?? null),
+        })),
+        has_more: raw.length > limit,
+      };
+    }
+
+    function seedAudit() {
+      db.database.exec(`
+        WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 900)
+        INSERT INTO audit_logs(empresa_id,action,entity_type,entity_id,usuario_id,new_values,created_at)
+        SELECT
+          CASE WHEN n % 6 = 0 THEN 2 ELSE 1 END,
+          CASE n % 5 WHEN 0 THEN 'LMS_MATRICULA_ALERTA_PREPARADO' WHEN 1 THEN 'LMS_MATRICULA_ALERTA'
+                     WHEN 2 THEN 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO' WHEN 3 THEN 'LMS_MATRICULA_CONVITE_EMAIL'
+                     ELSE 'OUTRA_ACAO' END,
+          CASE WHEN n % 23 = 0 THEN 'outra_entidade' ELSE 'lms_matriculas' END,
+          CASE WHEN n % 19 = 0 THEN NULL ELSE 5000 + (n / 5) END,
+          n % 3,
+          CASE
+            WHEN n % 29 = 0 THEN 'nao-json'
+            WHEN n % 31 = 0 THEN '{"funcionario_id":999999,"curso_id":30,"email_resultado":"ENVIADO"}'
+            ELSE json_object(
+              'tentativa_id', CASE WHEN n % 17 = 0 THEN NULL ELSE 't' || (n / 5) END,
+              'funcionario_id', CASE n % 4 WHEN 0 THEN 1000 WHEN 1 THEN 1001 WHEN 2 THEN 1002 ELSE 2000 END,
+              'curso_id', CASE WHEN n % 7 = 0 THEN 31 ELSE 30 END,
+              'email_resultado', CASE n % 3 WHEN 0 THEN 'ENVIADO' WHEN 1 THEN 'PENDENTE' ELSE 'FALHA' END,
+              'whatsapp_resultado', CASE WHEN n % 2 = 0 THEN 'SEM_WHATSAPP' END)
+          END,
+          datetime('2026-10-01 00:00:00', '+' || (n % 40) || ' minutes')
+        FROM seq;
+      `);
+    }
+
+    it('devolve exatamente as mesmas linhas, ordem e has_more que a consulta legada (empates, orfaos, JSON invalido, NULLs, 2 tenants, offsets profundos)', async () => {
+      seedAudit();
+      const accesses: Access[] = [all, { mode: 'restricted', setorIds: [10], funcionarioId: null }];
+      for (const empresa of [1, 2]) {
+        for (const access of accesses) {
+          for (const [limit, offset] of [[25, 0], [100, 0], [40, 40], [200, 300], [50, 5000]]) {
+            const expected = legacyAuditRows(empresa, access, limit, offset);
+            const actual = await runCommunicationsQuery(
+              db.asD1(), empresa, access, { notifications: false, audit: true }, { limit, offset }, false,
+            );
+            expect(actual).toEqual(expected);
+          }
+        }
+      }
+      // O oraculo precisa exercitar de fato a pagina (nao e comparacao de vazios).
+      expect(legacyAuditRows(1, all, 100, 0).rows.length).toBeGreaterThan(50);
+    });
+
+    it('PREPARADO de outro tenant, outro entity_id ou outra entidade nao suprime nem e suprimido', async () => {
+      db.database.exec(`
+        INSERT INTO audit_logs(id,empresa_id,action,entity_type,entity_id,new_values,created_at) VALUES
+        (50,1,'LMS_MATRICULA_ALERTA_PREPARADO','lms_matriculas',77,'{"tentativa_id":"x","funcionario_id":1000,"curso_id":30,"email_resultado":"PENDENTE"}','2026-11-06 10:00:00'),
+        (51,2,'LMS_MATRICULA_ALERTA','lms_matriculas',77,'{"tentativa_id":"x","funcionario_id":2000,"curso_id":31,"email_resultado":"ENVIADO"}','2026-11-06 10:01:00'),
+        (52,1,'LMS_MATRICULA_ALERTA','lms_matriculas',78,'{"tentativa_id":"x","funcionario_id":1000,"curso_id":30,"email_resultado":"ENVIADO"}','2026-11-06 10:02:00'),
+        (53,1,'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO','lms_matriculas',79,'{"tentativa_id":"y","funcionario_id":1000,"curso_id":30,"email_resultado":"PENDENTE"}','2026-11-06 10:03:00'),
+        (54,1,'LMS_MATRICULA_CONVITE_EMAIL','outra_entidade',79,'{"tentativa_id":"y","funcionario_id":1000,"curso_id":30,"email_resultado":"ENVIADO"}','2026-11-06 10:04:00');
+      `);
+      const result = await runCommunicationsQuery(
+        db.asD1(), 1, all, { notifications: false, audit: true }, { limit: 100, offset: 0 }, false,
+      );
+      const ids = result!.rows.map((row) => row.id);
+      expect(ids).toContain('lms:50:EMAIL');
+      expect(ids).toContain('lms:53:EMAIL');
+      expect(ids).toContain('lms:52:EMAIL');
+      expect(ids).not.toContain('lms:51:EMAIL');
+      expect(ids).not.toContain('lms:54:EMAIL');
+      expect(result).toEqual(legacyAuditRows(1, all, 100, 0));
+    });
+
+    it('plano completo (notificacoes + auditoria): sem varredura de tabela e uma unica leitura de audit_logs por action', async () => {
+      seedAudit();
+      const calls: string[] = [];
+      const original = db.asD1();
+      const wrapper = {
+        prepare: (sql: string) => {
+          calls.push(sql);
+          return original.prepare(sql);
+        },
+      } as unknown as D1Database;
+      for (const fast of [true, false]) {
+        calls.length = 0;
+        await runCommunicationsQuery(wrapper, 1, all, { notifications: true, audit: true }, { limit: 50, offset: 0 }, fast);
+        const sql = calls.find((call) => call.includes('communications AS (')) || '';
+        const binds = fast ? [1, 1, 1, 500, 500, 1, 51, 0] : [1, 1, 1, 1, 51, 0];
+        const plan = db.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...binds) as Array<{ detail: string }>;
+        const details = plan.map((row) => row.detail);
+        const scans = details.filter((d) => /^SCAN (n0|notificacoes_log|a0|audit_logs|done)\b/.test(d));
+        expect(scans).toEqual([]);
+        expect(details.filter((d) => d.includes('idx_audit_logs_action'))).toHaveLength(1);
+        expect(details.some((d) => d.includes('idx_audit_logs_empresa_usuario'))).toBe(false);
+      }
+    });
   });
 });
