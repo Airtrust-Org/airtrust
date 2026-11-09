@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   auth,
   resetBlocklistCache,
@@ -337,4 +337,27 @@ describe('Pendência 6 — Incidente 503 e Verificação Adversarial de Revogaç
     const body = (await res.json()) as { code: string };
     expect(body.code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
   });
+  it('11. Leituras JTI coalescidas propagam contagem real de tentativas para ambos os requests', async () => {
+    const db = createMockD1({ blocklistReadThrows: true, asyncDelayMs: 25 });
+    const app = buildTestApp(db);
+    const token = await makeToken('jti-coalesced-diagnostics-11');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [a, b] = await Promise.all([
+        app('/api/compliance-treinamentos/reconciliacao', { headers }),
+        app('/api/compliance-treinamentos/reconciliacao', { headers }),
+      ]);
+      expect([a.status, b.status]).toEqual([503, 503]);
+      const events = log.mock.calls
+        .filter(([tag]) => tag === '[AUTH_INFRASTRUCTURE_ERROR]')
+        .map(([, payload]) => JSON.parse(String(payload)) as { code: string; attempts: number });
+      const jtiEvents = events.filter((event) => event.code === 'AUTH_REVOCATION_CHECK_UNAVAILABLE');
+      expect(jtiEvents).toHaveLength(2);
+      expect(jtiEvents.map((event) => event.attempts)).toEqual([7, 7]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
 });
