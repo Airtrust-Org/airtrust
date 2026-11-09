@@ -183,35 +183,17 @@ export async function runCommunicationsQuery(
              CASE WHEN a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_ALERTA_PREPARADO') THEN 'LMS_ALERTA'
                   ELSE 'LMS_CONVITE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
-        FROM audit_logs a
+        FROM audit_src a
         JOIN funcionarios f ON f.empresa_id = a.empresa_id
-          AND f.id = CAST(CASE WHEN json_valid(a.new_values) THEN json_extract(a.new_values, '$.funcionario_id') END AS INTEGER)
-        LEFT JOIN lms_cursos c ON c.id = CAST(CASE WHEN json_valid(a.new_values)
-          THEN json_extract(a.new_values, '$.curso_id') END AS INTEGER)
+          AND f.id = CAST(json_extract(a.new_values, '$.funcionario_id') AS INTEGER)
+        LEFT JOIN lms_cursos c ON c.id = CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER)
           AND c.empresa_id = a.empresa_id
         JOIN (
           SELECT 'EMAIL' AS canal, '$.email_resultado' AS result_path
           UNION ALL SELECT 'WHATSAPP', '$.whatsapp_resultado'
         ) channel ON json_extract(a.new_values, channel.result_path) IS NOT NULL
-       WHERE a.empresa_id = ?
-         AND a.action IN (
-           'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
-           'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO'
-         )
-         AND (a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
-           SELECT 1 FROM audit_logs done
-           WHERE done.empresa_id = a.empresa_id
-             AND done.action = REPLACE(a.action, '_PREPARADO', '')
-             AND done.entity_type = a.entity_type
-             AND done.entity_id = a.entity_id
-             AND json_valid(done.new_values) = 1
-             AND json_extract(done.new_values, '$.tentativa_id') =
-                 json_extract(a.new_values, '$.tentativa_id')
-         ))
-         AND a.entity_type = 'lms_matriculas'
-         AND json_valid(a.new_values) = 1
-         AND ${scope.clause}`);
-    bindings.push(empresaId, ...scope.bindings);
+       WHERE ${scope.clause}`);
+    bindings.push(...scope.bindings);
   }
 
   if (!selects.length) return { rows: [], has_more: false };
@@ -290,16 +272,50 @@ export async function runCommunicationsQuery(
       ? `${notifSrc},`
       : '';
   const fastWhere = fast ? ` AND ((SELECT c FROM cutoff) IS NULL OR enviado_em > (SELECT c FROM cutoff))` : '';
-  const sql = `WITH ${fastPrefix} communications AS (${selects.join(' UNION ALL ')})
+  // #2078: audit_logs tem ~24k linhas por tenant e o planner escolhia
+  // `funcionarios` como tabela externa e varria o indice (empresa_id) de audit_logs
+  // para CADA funcionario (4,5M rows_read por carga). As linhas LMS relevantes
+  // (~170) sao materializadas uma unica vez pelo indice de `action`; os unary plus
+  // (+empresa_id, +entity_type) impedem o planner de preferir os indices por
+  // tenant/entidade, que leem ~24k linhas. A deduplicacao PREPARADO x final e feita
+  // sobre esse conjunto: o "done" correspondente sempre pertence a ele (mesma
+  // empresa, mesma entidade, acao final listada, JSON valido), logo o resultado e
+  // identico ao da subconsulta correlacionada anterior sobre audit_logs inteiro.
+  const auditPrefix = tables.audit
+    ? `audit_rel AS MATERIALIZED (
+         SELECT a0.id, a0.empresa_id, a0.action, a0.entity_type, a0.entity_id,
+                a0.new_values, a0.created_at
+           FROM audit_logs a0
+          WHERE a0.action IN (
+                  'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
+                  'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO')
+            AND +a0.empresa_id = ?
+            AND +a0.entity_type = 'lms_matriculas'
+            AND json_valid(a0.new_values) = 1),
+       audit_src AS MATERIALIZED (
+         SELECT a.* FROM audit_rel a
+          WHERE a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
+            SELECT 1 FROM audit_rel done
+             WHERE done.action = REPLACE(a.action, '_PREPARADO', '')
+               AND done.entity_type = a.entity_type
+               AND done.entity_id = a.entity_id
+               AND json_extract(done.new_values, '$.tentativa_id') =
+                   json_extract(a.new_values, '$.tentativa_id'))),`
+    : '';
+  const sql = `WITH ${fastPrefix} ${auditPrefix} communications AS (${selects.join(' UNION ALL ')})
     SELECT * FROM communications
      WHERE ${where.join(' AND ')}${fastWhere}
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
-  const prefixBindings = fast
-    ? [empresaId, empresaId, empresaId, preLimit, preLimit]
-    : tables.notifications
-      ? [empresaId, empresaId, empresaId]
-      : [];
+  const auditBindings = tables.audit ? [empresaId] : [];
+  const prefixBindings = [
+    ...(fast
+      ? [empresaId, empresaId, empresaId, preLimit, preLimit]
+      : tables.notifications
+        ? [empresaId, empresaId, empresaId]
+        : []),
+    ...auditBindings,
+  ];
   const result = await withD1Retry(() =>
     db
       .prepare(sql)
