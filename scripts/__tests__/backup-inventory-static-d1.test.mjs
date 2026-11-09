@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { buildInventory, extractCreatedTables, extractConfiguredTables } from '../backup/inventory-static-d1.mjs';
+import { buildInventory, buildInventoryFromSchemaMetadata, extractCreatedTables, extractConfiguredTables } from '../backup/inventory-static-d1.mjs';
 
 test('ignores SQL comments and parses quoted tables', () => {
   const sql = '-- CREATE TABLE fake(id int);\n/* CREATE TABLE hidden(id int); */\nCREATE TABLE IF NOT EXISTS "real_one" (id int);\nCREATE TABLE main.[real_two] (id int);';
@@ -45,4 +45,28 @@ test('includes both internal qualification backup tables from the actual version
   const actual = extractCreatedTables(source);
   assert.ok(actual.includes('bkp_qual_historico_20260325'));
   assert.ok(actual.includes('bkp_qual_tipos_20260325'));
+});
+
+test('uses optional local schema names to calculate exact supplied-schema coverage without DB calls', () => {
+  const result = buildInventoryFromSchemaMetadata({
+    metadata: { tables: ['Funcionarios', 'qualificacoes_historico', 'sqlite_sequence', 'backup_shadow'] },
+    backupSource: "tabelas_principais: ['funcionarios'], tabelas_relacionadas: ['qualificacoes_historico', 'absent']",
+  });
+  assert.equal(result.source, 'operator_supplied_schema_table_names_only');
+  assert.equal(result.schema_tables_detected, 3);
+  assert.equal(result.schema_tables_not_in_worker_backup, 1);
+  assert.deepEqual(result.configured_tables_not_found_in_schema_metadata, ['absent']);
+  assert.deepEqual(result.tables.filter(row => !row.in_worker_backup).map(row => row.table), ['backup_shadow']);
+});
+
+test('rejects database dumps, row content, invalid identifiers and case-insensitive duplicates', () => {
+  for (const metadata of [
+    { tables: ['employees'], rows: [{ cpf: '000' }] },
+    { tables: [{name: 'employees', records: []}] },
+    { tables: ['x; DROP TABLE y'] },
+    { tables: ['Users', 'users'] },
+    { tables: 'users' },
+  ]) {
+    assert.throws(() => buildInventoryFromSchemaMetadata({metadata, backupSource: ''}));
+  }
 });
