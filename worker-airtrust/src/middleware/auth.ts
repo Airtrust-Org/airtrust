@@ -32,6 +32,7 @@ import { isTransientD1Error, withD1Retry } from '../utils/d1-resilience';
 export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
+import { isAccessTokenRevoked } from '../services/auth-session-revocation';
 
 const USUARIOS_TABLE_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
@@ -111,7 +112,13 @@ export function getValidJtiCacheSize(): number {
  * Revalidação mutável crítica contra D1 imediata em cada requisição,
  * coalescendo apenas requisições em trânsito simultâneas (rajadas concorrentes).
  */
-async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Promise<boolean> {
+async function isJtiBlocklisted(
+  db: D1Database,
+  jti: string,
+  exp?: number,
+  sub?: string | number,
+  iat?: number,
+): Promise<boolean> {
   const inFlight = _inFlightJtiChecks.get(jti);
   if (inFlight) {
     return inFlight;
@@ -119,16 +126,8 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number): Prom
 
   const promise = (async () => {
     try {
-      const row = await withD1Retry(
-        () =>
-          db
-            .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-            .bind(jti)
-            .first(),
-        7,
-        80,
-      );
-      return Boolean(row);
+      // P01-03: alem do jti do token, vale o marcador "sessoes do usuario revogadas ate T".
+      return await withD1Retry(() => isAccessTokenRevoked(db, { jti, sub, iat }), 7, 80);
     } finally {
       _inFlightJtiChecks.delete(jti);
     }
@@ -251,6 +250,32 @@ export type AccessTokenSecurityState = {
 };
 
 /**
+ * Log sanitizado estruturado para falhas de infraestrutura de autenticação/D1.
+ * Restrição estrita de governança: ZERO PII (sem tokens, emails, nomes ou identificadores de usuário).
+ */
+function logAuthInfrastructureError(
+  code: string,
+  error: unknown,
+  context: { stage: string; durationMs: number },
+): void {
+  // Never log arbitrary driver error messages, names or causes: they may contain
+  // SQL bindings, credentials or personal data. The fixed stage/code are enough
+  // to correlate with sanitized infrastructure telemetry.
+  void error;
+  const errorClass = 'InfrastructureReadError';
+  console.error(
+    '[AUTH_INFRASTRUCTURE_ERROR]',
+    JSON.stringify({
+      code,
+      stage: context.stage,
+      errorClass,
+      durationMs: context.durationMs,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+/**
  * Revalida um access JWT já assinado contra o estado mutável de segurança.
  * Usado tanto pelo middleware auth() quanto por superfícies públicas que
  * precisam aceitar Authorization bearer sem pular logout, desativação de
@@ -264,38 +289,53 @@ export async function validateAccessTokenSecurityState(
     return unauthorized('Tipo de token inválido para esta rota', 'INVALID_TOKEN_TYPE');
   }
 
-  if (payload.jti) {
-    let blocked: boolean;
-    try {
-      blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
-    } catch (e) {
-      console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
-      return serviceUnavailable(
-        'Não foi possível verificar a revogação do token. Tente novamente.',
-        'AUTH_REVOCATION_CHECK_UNAVAILABLE',
-      );
-    }
-    if (blocked) {
-      return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
-    }
+  // P01-07: todo access token emitido por generateJWT() carrega `jti`. Um token
+  // sem `jti` nao pode ser consultado na blocklist (logout/revogacao), entao e
+  // rejeitado em vez de contornar a revogacao silenciosamente.
+  if (typeof payload.jti !== 'string' || payload.jti.length === 0) {
+    return unauthorized('Token sem identificador. Faça login novamente.', 'TOKEN_JTI_REQUIRED');
   }
 
-  let security: UserSecurityState;
-  try {
-    security = await resolveUserSecurityState(
-      db,
-      payload.sub,
-      payload.empresa_id,
-      payload.role ?? '',
+  const startTime = Date.now();
+
+  // Executa as 3 validações de segurança independentes concorrentemente via Promise.allSettled
+  // reduzindo latência de D1 sob rajadas e mitigando timeouts/503 em cascata (Incidente #2078).
+  const [jtiResult, userSecurityResult, platformAccessResult] = await Promise.allSettled([
+    isJtiBlocklisted(db, payload.jti, payload.exp, payload.sub, payload.iat),
+    resolveUserSecurityState(db, payload.sub, payload.empresa_id, payload.role ?? ''),
+    resolvePlatformAccessState(db, payload.sub),
+  ]);
+
+  // 1. Falha de infraestrutura na consulta de revogação JTI -> 503 fail-closed
+  if (jtiResult.status === 'rejected') {
+    logAuthInfrastructureError('AUTH_REVOCATION_CHECK_UNAVAILABLE', jtiResult.reason, {
+      stage: 'token_blocklist',
+      durationMs: Date.now() - startTime,
+    });
+    return serviceUnavailable(
+      'Não foi possível verificar a revogação do token. Tente novamente.',
+      'AUTH_REVOCATION_CHECK_UNAVAILABLE',
     );
-  } catch (e) {
-    console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
+  }
+
+  // 2. Token revogado -> 401
+  if (jtiResult.value) {
+    return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
+  }
+
+  // 3. Falha de infraestrutura no status da conta do usuário -> 503 fail-closed
+  if (userSecurityResult.status === 'rejected') {
+    logAuthInfrastructureError('AUTH_USER_STATE_CHECK_UNAVAILABLE', userSecurityResult.reason, {
+      stage: 'user_security_state',
+      durationMs: Date.now() - startTime,
+    });
     return serviceUnavailable(
       'Não foi possível verificar o status da conta. Tente novamente.',
       'AUTH_USER_STATE_CHECK_UNAVAILABLE',
     );
   }
 
+  const security = userSecurityResult.value;
   if (!security.found || !security.active) {
     return unauthorized(
       'Usuário inativo ou não encontrado. Faça login novamente.',
@@ -303,26 +343,23 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  // A autorização global vem EXCLUSIVAMENTE da concessão persistida.
-  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
-  // O tenantMiddleware valida a existência e atividade da empresa selecionada.
-  let platformAdmin = false;
-  let platformAccessState: PlatformAccessState | undefined;
-  try {
-    platformAccessState = await withD1Retry(
-      () => resolvePlatformAccessState(db, payload.sub),
-      7,
-      80,
-    );
-    platformAdmin = isPlatformAdminAccess(platformAccessState);
-  } catch (e) {
-    console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
+  // 4. Falha de infraestrutura na autorização global / platform access -> 503 fail-closed
+  if (platformAccessResult.status === 'rejected') {
+    logAuthInfrastructureError('PLATFORM_ACCESS_CHECK_UNAVAILABLE', platformAccessResult.reason, {
+      stage: 'platform_access_state',
+      durationMs: Date.now() - startTime,
+    });
     return serviceUnavailable(
       'Não foi possível validar as permissões da conta. Tente novamente.',
       'PLATFORM_ACCESS_CHECK_UNAVAILABLE',
     );
   }
 
+  const platformAccessState = platformAccessResult.value;
+  const platformAdmin = isPlatformAdminAccess(platformAccessState);
+
+  // 5. A autorização global vem EXCLUSIVAMENTE da concessão persistida.
+  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
   if (!security.hasMembership && !platformAdmin) {
     return unauthorized(
       'Usuário sem vínculo válido com o tenant do token.',
@@ -684,9 +721,13 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
           Number(payload.empresa_id ?? 0),
           selectedSessionRole,
           security.role,
+          security.platformAccessState,
         );
       } catch (e) {
-        console.error('[AUTH] Falha ao validar perfil ativo da sessão:', (e as Error).message);
+        logAuthInfrastructureError('AUTH_SESSION_ROLE_CHECK_UNAVAILABLE', e, {
+          stage: 'session_role_validation',
+          durationMs: 0,
+        });
         return serviceUnavailable(
           'Não foi possível validar o perfil ativo da sessão. Tente novamente.',
           'AUTH_SESSION_ROLE_CHECK_UNAVAILABLE',
@@ -746,21 +787,31 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
             // Fail-closed para a IDENTIDADE: se a checagem falhar, tratamos como
             // "não autenticado" (não define userId/userRole) em vez de autenticar
             // silenciosamente — mas optionalAuth nunca bloqueia a requisição em si.
-            if (payload.jti) {
-              try {
-                const blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
-                if (blocked) {
-                  await next();
-                  return;
-                }
-              } catch (e) {
-                console.error(
-                  '[OPTIONAL_AUTH] Falha ao consultar token_blocklist:',
-                  (e as Error).message,
-                );
+            // P01-07: token sem `jti` nao pode ser checado na blocklist; trata como
+            // nao autenticado.
+            if (typeof payload.jti !== 'string' || payload.jti.length === 0) {
+              await next();
+              return;
+            }
+            try {
+              const blocked = await isJtiBlocklisted(
+                c.env.DB,
+                payload.jti,
+                payload.exp,
+                payload.sub,
+                payload.iat,
+              );
+              if (blocked) {
                 await next();
                 return;
               }
+            } catch (e) {
+              console.error(
+                '[OPTIONAL_AUTH] Falha ao consultar token_blocklist:',
+                (e as Error).message,
+              );
+              await next();
+              return;
             }
 
             const effectiveRole = await resolveEffectiveUserRole(

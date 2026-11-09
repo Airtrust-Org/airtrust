@@ -83,6 +83,7 @@ vi.mock('../../services/qualificacoes/historico-helpers', async (importOriginal)
   resolveHistoricoReadExpiry: ({ dataVencimento, dataConclusao }: { dataVencimento?: string | null; dataConclusao?: string | null }) => dataVencimento || dataConclusao || null,
   buildCategoriaResolutionJoinClause: () => `LEFT JOIN qualificacoes_categorias qh_categoria_ref ON qh_categoria_ref.id = qh.categoria_id LEFT JOIN qualificacoes_categorias qt_categoria_ref ON qt_categoria_ref.id = qt.categoria_id LEFT JOIN qualificacoes_categorias qc ON qc.id = COALESCE(qh.categoria_id, qt.categoria_id)`,
   categoriaCandidatosAtivosExpr: () => '1',
+  buildQualificacoesTipoResolutionJoin: () => 'LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id',
 }));
 
 vi.mock('../../middleware/employee-sector-access', async (importOriginal) => {

@@ -150,31 +150,31 @@ describe('platform access foundation', () => {
       String(query).includes('FROM support_access_grants'))).toBe(false);
   });
 
-  it('repete apenas uma vez uma leitura transitória e preserva papel persistido', async () => {
+  it('repete e recupera de múltiplas falhas transitórias consecutivas preservando papel persistido (Incidente #2078)', async () => {
     const { db, prepare } = createDb({
       roles: ['platform_admin'],
-      roleReadFailures: 1,
+      roleReadFailures: 3,
     });
     const state = await resolvePlatformAccessState(db, 44);
     expect(state.hasPersistedPlatformAdmin).toBe(true);
     expect(prepare.mock.calls.filter(([query]) =>
-      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(4);
   });
 
-  it('repete e recupera de erros D1_EXEC_ERROR 503 e connection lost preservando fail-closed', async () => {
+  it('repete e recupera de erros D1_EXEC_ERROR 503, RPC e database resource limit preservando fail-closed', async () => {
     const { db, prepare } = createDb({
       roles: ['platform_admin'],
-      roleReadFailures: 1,
-      roleReadError: 'D1_EXEC_ERROR: Error in D1: 503 Service Unavailable',
+      roleReadFailures: 2,
+      roleReadError: 'D1_EXEC_ERROR: Error in D1: 503 Service Unavailable: database resource limit',
     });
     const state = await resolvePlatformAccessState(db, 44);
     expect(state.hasPersistedPlatformAdmin).toBe(true);
     expect(prepare.mock.calls.filter(([query]) =>
-      String(query).includes('FROM user_platform_roles'))).toHaveLength(2);
+      String(query).includes('FROM user_platform_roles'))).toHaveLength(3);
   });
 
-  it('continua fail-closed quando o D1 falha duas vezes ou quando o schema é inválido', async () => {
-    const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 2 });
+  it('continua fail-closed quando o D1 esgota todas as tentativas de retry ou quando o schema é inválido', async () => {
+    const transient = createDb({ roles: ['platform_admin'], roleReadFailures: 6 });
     await expect(resolvePlatformAccessState(transient.db, 44)).rejects.toThrow('SQLITE_BUSY');
     resetSchemaCache();
     const schema = createDb({

@@ -5,6 +5,7 @@
 
 import {
   BACKUP_MODULES,
+  isSecretBackupColumn,
   type ModuloBackup,
   ordenarModulosPorPrioridade,
   TODOS_MODULOS,
@@ -14,11 +15,44 @@ import {
 interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
+  /** Máximo de objetos R2 que um backup COMPLETO copia numa única invocação (default 200). */
+  BACKUP_R2_COPY_MAX_OBJECTS?: string;
+  /** Expurgo de backups expirados: só executa de fato com o valor exato 'true' (default: dry-run). */
+  BACKUP_PURGE_ENABLED?: string;
+  /** Máximo de backups expirados removidos por execução diária (default 20). */
+  BACKUP_PURGE_MAX_PER_RUN?: string;
+  /** Quantos CONCLUIDO mais recentes de cada origem (triggered_by) nunca são expurgados (default 7). */
+  BACKUP_PURGE_KEEP_LATEST?: string;
 }
+
+export const BACKUP_PURGE_DEFAULT_MAX_PER_RUN = 20;
+export const BACKUP_PURGE_DEFAULT_KEEP_LATEST = 7;
+
+export interface BackupPurgeResult {
+  dryRun: boolean;
+  candidates: number;
+  purged: number;
+  objectsDeleted: number;
+  skippedUnsafe: number;
+  failed: number;
+}
+
+/**
+ * Cada objeto copiado custa get + put e depois mais um get no checksum (3 subrequests), tudo na
+ * mesma invocação do cron. Em produção o bucket tem ~45,6 mil objetos (17,5 GB): a cópia completa
+ * nunca cabe e o Worker morria no meio (mensal COMPLETO sem sucesso desde 2026-05-01), deixando
+ * cópias parciais sem manifesto no bucket. Acima do limite o backup falha ANTES de copiar.
+ */
+export const BACKUP_R2_COPY_DEFAULT_MAX_OBJECTS = 200;
 
 type AutomaticBackupType = 'DIARIO' | 'SEMANAL' | 'MENSAL';
 type BackupScope = 'SYSTEM_GLOBAL' | 'TENANT_SCOPED' | 'MODULAR' | 'GERAL';
 type BackupRow = Record<string, unknown>;
+
+interface TabelaExportada {
+  rows: BackupRow[];
+  colunasExcluidas: string[];
+}
 
 function generateUUID(): string {
   return crypto.randomUUID();
@@ -53,8 +87,176 @@ interface BackupArtifactDigest extends R2BackupObject {
   sha256: string;
 }
 
+/**
+ * Uma execução em Worker/cron não passa de poucos minutos. Linha EM_PROGRESSO mais velha que
+ * isto só existe porque o isolate foi encerrado (memória, tempo, limite de subrequests) antes
+ * de chegar ao catch que grava FALHOU. Em produção havia 132 dessas, algumas desde 2026-04-01.
+ */
+export const BACKUP_STALE_RUN_MINUTES = 60;
+
 export class BackupOrchestrator {
   constructor(private env: Env) {}
+
+  /**
+   * Converte execuções automáticas abandonadas (EM_PROGRESSO além do limite) em FALHOU.
+   * Sem isso elas parecem backups em andamento para sempre e bloqueiam o retry do dia
+   * (`obterStatusBackupAutomaticoDoDia` só reexecuta quando o último status é FALHOU).
+   * Retorna quantas linhas foram encerradas. Não toca em objetos R2.
+   */
+  async encerrarExecucoesAbandonadas(): Promise<number> {
+    const janela = `-${BACKUP_STALE_RUN_MINUTES} minutes`;
+    const criterio = `status = 'EM_PROGRESSO'
+          AND substr(triggered_by, 1, 5) = 'CRON_'
+          AND deleted_at IS NULL
+          AND created_at < datetime('now', ?)`;
+
+    await this.env.DB.prepare(
+      `INSERT INTO backups_logs (backups_controle_id, nivel, mensagem, detalhes)
+       SELECT id, 'ERROR',
+              'Execução abandonada: o Worker foi encerrado antes de concluir o backup',
+              ?
+         FROM backups_controle
+        WHERE ${criterio}`,
+    )
+      .bind(JSON.stringify({ motivo: 'STALE_EM_PROGRESSO', limite_minutos: BACKUP_STALE_RUN_MINUTES }), janela)
+      .run();
+
+    const result = await this.env.DB.prepare(
+      `UPDATE backups_controle
+          SET status = 'FALHOU', updated_at = CURRENT_TIMESTAMP
+        WHERE ${criterio}`,
+    )
+      .bind(janela)
+      .run();
+
+    const encerradas = Number(result?.meta?.changes ?? 0);
+    if (encerradas > 0) {
+      console.warn(`⚠️ ${encerradas} execução(ões) de backup abandonada(s) marcada(s) como FALHOU`);
+    }
+    return encerradas;
+  }
+
+  /**
+   * Remove do R2 (e marca deleted_at) backups cuja retenção expirou. Nada o expurgava antes:
+   * em produção havia 826 registros expirados, ~5,4 GB dos 7,35 GB registrados.
+   *
+   * Seguranças: inerte (dry-run, só conta) até BACKUP_PURGE_ENABLED='true'; nunca remove os N
+   * CONCLUIDO mais recentes de cada origem; só apaga prefixos derivados de uuid/r2_path que
+   * passam validação estrita e terminam em '/'; limite por execução; falha em um backup não
+   * marca a linha (tenta de novo na próxima).
+   */
+  async expurgarBackupsExpirados(): Promise<BackupPurgeResult> {
+    const dryRun = this.env.BACKUP_PURGE_ENABLED !== 'true';
+    const maxPerRun = this.inteiroPositivo(
+      this.env.BACKUP_PURGE_MAX_PER_RUN,
+      BACKUP_PURGE_DEFAULT_MAX_PER_RUN,
+    );
+    const keepLatest = this.inteiroPositivo(
+      this.env.BACKUP_PURGE_KEEP_LATEST,
+      BACKUP_PURGE_DEFAULT_KEEP_LATEST,
+    );
+
+    const { results } = await this.env.DB.prepare(
+      `SELECT b.id, b.uuid, b.r2_path
+         FROM backups_controle b
+        WHERE b.deleted_at IS NULL
+          AND b.status IN ('CONCLUIDO', 'FALHOU')
+          AND b.expires_at IS NOT NULL
+          AND b.r2_path LIKE 'backups/____/__/__/%'
+          AND b.expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          AND b.id NOT IN (
+            SELECT k.id
+              FROM backups_controle k
+             WHERE k.status = 'CONCLUIDO'
+               AND k.deleted_at IS NULL
+               AND k.triggered_by = b.triggered_by
+             ORDER BY k.id DESC
+             LIMIT ?
+          )
+        ORDER BY b.expires_at ASC, b.id ASC
+        LIMIT ?`,
+    )
+      .bind(keepLatest, maxPerRun)
+      .all<{ id: number; uuid: string; r2_path: string | null }>();
+
+    const resultado: BackupPurgeResult = {
+      dryRun,
+      candidates: results.length,
+      purged: 0,
+      objectsDeleted: 0,
+      skippedUnsafe: 0,
+      failed: 0,
+    };
+
+    if (dryRun) {
+      if (results.length > 0) {
+        console.warn(
+          `🧹 Expurgo de backups em dry-run: ${results.length} candidato(s) (BACKUP_PURGE_ENABLED != 'true')`,
+        );
+      }
+      return resultado;
+    }
+
+    for (const row of results) {
+      const prefixos = this.prefixosExpurgaveis(row.uuid, row.r2_path);
+      if (!prefixos) {
+        resultado.skippedUnsafe += 1;
+        await this.logBackup(row.id, 'WARN', 'Expurgo ignorado: uuid/r2_path fora do formato esperado');
+        continue;
+      }
+
+      try {
+        let removidos = 0;
+        for (const prefixo of prefixos) {
+          const chaves = (await this.listarObjetosR2PorPrefixo(prefixo)).map((o) => o.key);
+          for (let i = 0; i < chaves.length; i += 1000) {
+            await this.env.BUCKET.delete(chaves.slice(i, i + 1000));
+          }
+          removidos += chaves.length;
+        }
+
+        await this.env.DB.prepare(
+          `UPDATE backups_controle
+              SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+          .bind(row.id)
+          .run();
+        await this.logBackup(row.id, 'INFO', `Backup expirado expurgado do R2: ${removidos} objeto(s)`, {
+          registros_processados: removidos,
+        });
+        resultado.purged += 1;
+        resultado.objectsDeleted += removidos;
+      } catch (error) {
+        resultado.failed += 1;
+        await this.logBackup(row.id, 'WARN', 'Falha ao expurgar backup expirado; será tentado de novo', {
+          detalhes: JSON.stringify({ error: this.formatarErro(error) }),
+        });
+      }
+    }
+
+    console.log(
+      `🧹 Expurgo de backups: ${resultado.purged} removido(s), ${resultado.objectsDeleted} objeto(s) R2, ${resultado.failed} falha(s)`,
+    );
+    return resultado;
+  }
+
+  /** Prefixos (sempre com '/' final) de um backup; null se uuid/r2_path não passam validação. */
+  private prefixosExpurgaveis(uuid: string, r2Path: string | null): string[] | null {
+    if (!/^[A-Za-z0-9][A-Za-z0-9-]{7,}$/.test(String(uuid || ''))) return null;
+    const prefixos = [`backups/${uuid}/`];
+    if (r2Path) {
+      const match = /^backups\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9-]+)$/.exec(r2Path);
+      if (!match || match[4] !== uuid) return null;
+      prefixos.unshift(`${r2Path}/`);
+    }
+    return prefixos;
+  }
+
+  private inteiroPositivo(valor: string | undefined, padrao: number): number {
+    const n = Number(valor);
+    return Number.isInteger(n) && n > 0 ? n : padrao;
+  }
 
   /**
    * Executa backup automático (cron) com idempotência por tipo e dia UTC.
@@ -62,6 +264,19 @@ export class BackupOrchestrator {
    */
   async executarBackupAutomatico(tipo: AutomaticBackupType): Promise<void> {
     const triggeredBy = `CRON_${tipo}`;
+    try {
+      await this.encerrarExecucoesAbandonadas();
+    } catch (error) {
+      // Higiene de controle nunca pode impedir o backup do dia.
+      console.error('Falha ao encerrar execuções de backup abandonadas:', this.formatarErro(error));
+    }
+    if (tipo === 'DIARIO') {
+      try {
+        await this.expurgarBackupsExpirados();
+      } catch (error) {
+        console.error('Falha ao expurgar backups expirados:', this.formatarErro(error));
+      }
+    }
     const statusExistente = await this.obterStatusBackupAutomaticoDoDia(triggeredBy);
 
     if (statusExistente && statusExistente !== 'FALHOU') {
@@ -201,10 +416,17 @@ export class BackupOrchestrator {
 
     try {
       // Exportar tabelas principais
-      const dadosPrincipais = await this.exportarTabelas([...config.tabelas_principais]);
+      const colunasExcluidas: Record<string, string[]> = {};
+      const dadosPrincipais = await this.exportarTabelas(
+        [...config.tabelas_principais],
+        colunasExcluidas,
+      );
 
       // Exportar tabelas relacionadas
-      const dadosRelacionados = await this.exportarTabelas([...config.tabelas_relacionadas]);
+      const dadosRelacionados = await this.exportarTabelas(
+        [...config.tabelas_relacionadas],
+        colunasExcluidas,
+      );
       const tabelasExportadas = [
         ...new Set([...Object.keys(dadosPrincipais), ...Object.keys(dadosRelacionados)]),
       ];
@@ -212,7 +434,7 @@ export class BackupOrchestrator {
       // Consolidar dados
       const backupData = {
         modulo,
-        versao: '1.1',
+        versao: '1.2',
         timestamp: new Date().toISOString(),
         tabelas_principais: dadosPrincipais,
         tabelas_relacionadas: dadosRelacionados,
@@ -221,6 +443,8 @@ export class BackupOrchestrator {
             this.contarRegistros(dadosPrincipais) + this.contarRegistros(dadosRelacionados),
           total_tabelas: tabelasExportadas.length,
           tabelas_exportadas: tabelasExportadas,
+          // Colunas de credencial/segredo omitidas do export (P08-02).
+          colunas_excluidas: colunasExcluidas,
           dependencias: config.dependencias,
         },
       };
@@ -259,17 +483,24 @@ export class BackupOrchestrator {
    * Exporta dados de tabelas de forma fail-closed.
    * Tabelas sem deleted_at são exportadas integralmente; tabela ausente ou erro SQL falha o backup.
    */
-  private async exportarTabelas(tabelas: string[]): Promise<Record<string, BackupRow[]>> {
+  private async exportarTabelas(
+    tabelas: string[],
+    colunasExcluidas: Record<string, string[]> = {},
+  ): Promise<Record<string, BackupRow[]>> {
     const resultado: Record<string, BackupRow[]> = {};
 
     for (const tabela of tabelas) {
-      resultado[tabela] = await this.exportarTabela(tabela);
+      const exportada = await this.exportarTabela(tabela);
+      resultado[tabela] = exportada.rows;
+      if (exportada.colunasExcluidas.length > 0) {
+        colunasExcluidas[tabela] = exportada.colunasExcluidas;
+      }
     }
 
     return resultado;
   }
 
-  private async exportarTabela(tabela: string): Promise<BackupRow[]> {
+  private async exportarTabela(tabela: string): Promise<TabelaExportada> {
     this.validarNomeTabela(tabela);
 
     try {
@@ -281,19 +512,37 @@ export class BackupOrchestrator {
         throw new Error('tabela não existe no schema ativo');
       }
 
-      const nomesColunas = new Set(
-        colunas.map((coluna) => String(coluna.name || '').trim()).filter(Boolean),
-      );
+      const todasColunas = colunas.map((coluna) => String(coluna.name || '').trim()).filter(Boolean);
+      const nomesColunas = new Set(todasColunas);
+      const colunasExcluidas = todasColunas.filter((nome) => isSecretBackupColumn(nome));
+      const colunasExportadas = todasColunas.filter((nome) => !isSecretBackupColumn(nome));
+      if (colunasExportadas.length === 0) {
+        throw new Error('tabela sem colunas exportáveis após remover segredos');
+      }
+
       const filtroSoftDelete = nomesColunas.has('deleted_at') ? ' WHERE "deleted_at" IS NULL' : '';
-      const query = `SELECT * FROM "${tabela}"${filtroSoftDelete}`;
+      // SELECT * só quando nenhuma coluna é segredo; caso contrário lista explícita.
+      const projecao =
+        colunasExcluidas.length === 0
+          ? '*'
+          : colunasExportadas.map((nome) => this.citarIdentificador(nome)).join(', ');
+      const query = `SELECT ${projecao} FROM "${tabela}"${filtroSoftDelete}`;
       const { results } = await this.env.DB.prepare(query).all<BackupRow>();
 
-      return results;
+      return { rows: results, colunasExcluidas };
     } catch (error) {
       throw new Error(
         `Falha ao exportar tabela configurada ${tabela}: ${this.formatarErro(error)}`,
       );
     }
+  }
+
+  /**
+   * Nomes de coluna vêm do PRAGMA do próprio schema (podem ter acento, ex.: `dados_sensíveis`
+   * em produção), então não passam pela regex ASCII das tabelas: apenas aspas duplas escapadas.
+   */
+  private citarIdentificador(nome: string): string {
+    return `"${nome.replace(/"/g, '""')}"`;
   }
 
   private validarNomeTabela(tabela: string): void {
@@ -408,6 +657,16 @@ export class BackupOrchestrator {
     try {
       const bucket = this.env.BUCKET;
       const objetos = await this.listarObjetosR2(true);
+
+      const limiteObjetos = this.limiteObjetosCopiaR2();
+      if (objetos.length > limiteObjetos) {
+        // Fail-closed e barato: nada é copiado, então não sobram cópias parciais sem manifesto.
+        throw new Error(
+          `R2_BACKUP_COPY_EXCEEDS_INVOCATION_BUDGET: ${objetos.length} objetos listados, limite ${limiteObjetos}; ` +
+            'a cópia completa do R2 em uma única invocação não é suportada (use replicação/bucket separado)',
+        );
+      }
+
       const arquivosBackup: Array<{ key: string; size: number; backup_key: string }> = [];
 
       for (const objeto of objetos) {
@@ -429,6 +688,9 @@ export class BackupOrchestrator {
             size: objeto.size,
             backup_key: backupKey,
           });
+        } else {
+          // A disappearing source object cannot yield a complete R2 backup.
+          throw new Error('R2_BACKUP_SOURCE_OBJECT_MISSING');
         }
       }
 
@@ -456,6 +718,13 @@ export class BackupOrchestrator {
       });
       throw new Error(`Falha ao copiar arquivos R2 para backup: ${this.formatarErro(error)}`);
     }
+  }
+
+  private limiteObjetosCopiaR2(): number {
+    const configurado = Number(this.env.BACKUP_R2_COPY_MAX_OBJECTS);
+    return Number.isInteger(configurado) && configurado > 0
+      ? configurado
+      : BACKUP_R2_COPY_DEFAULT_MAX_OBJECTS;
   }
 
   /**

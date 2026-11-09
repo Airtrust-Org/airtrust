@@ -156,15 +156,41 @@ describe('E2E sintetico - publicacao, vinculo a edicao e estudo', () => {
 });
 
 describe('E2E sintetico - readback de certificado em matricula concluida', () => {
-  it('COMPLETED expoe certificate MISSING -> ISSUED conforme o arquivo vinculado', async () => {
-    const db = freshDb(); await publishExam(db);
+  function completedDb() {
+    const db = freshDb();
     db.exec('ALTER TABLE lms_matriculas ADD COLUMN qualificacao_historico_id INTEGER');
-    db.exec("CREATE TABLE IF NOT EXISTS qualificacoes_historico (id INTEGER PRIMARY KEY, certificado_arquivo_id INTEGER, deleted_at TEXT)");
-    db.exec("INSERT INTO qualificacoes_historico (id, certificado_arquivo_id) VALUES (900, NULL)");
+    db.exec('CREATE TABLE qualificacoes_historico (id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, certificado_arquivo_id INTEGER, deleted_at TEXT)');
     db.exec("UPDATE lms_matriculas SET status='CONCLUIDO', qualificacao_historico_id=900 WHERE id=10");
+    return db;
+  }
+
+  it('COMPLETED distingue qualificação válida sem/ com certificado, sem writes no readback', async () => {
+    const db = completedDb(); await publishExam(db);
+    db.exec('INSERT INTO qualificacoes_historico (id,empresa_id,certificado_arquivo_id) VALUES (900,6,NULL)');
     expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'MISSING' });
     db.exec('UPDATE qualificacoes_historico SET certificado_arquivo_id=55 WHERE id=900');
     expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'ISSUED' });
+    expect(count(db, 'SELECT COUNT(*) n FROM qualificacoes_historico')).toBe(1);
+  });
+
+  it('fail-closed para vínculo inexistente, excluído e de outro tenant', async () => {
+    const db = completedDb(); await publishExam(db);
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'NOT_APPLICABLE' });
+    db.exec("INSERT INTO qualificacoes_historico (id,empresa_id,certificado_arquivo_id) VALUES (900,7,55)");
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'NOT_APPLICABLE' });
+    db.exec('UPDATE qualificacoes_historico SET empresa_id=6, deleted_at=\'2026-11-07\' WHERE id=900');
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'NOT_APPLICABLE' });
+    db.exec('UPDATE qualificacoes_historico SET deleted_at=NULL WHERE id=900');
+    expect(await state(db)).toMatchObject({ state: 'COMPLETED', certificate: 'ISSUED' });
+    expect(count(db, 'SELECT COUNT(*) n FROM qualificacoes_historico')).toBe(1);
+  });
+
+  it('JWT de outro tenant ou outro aluno não obtém o estado de certificado', async () => {
+    const db = completedDb(); await publishExam(db);
+    db.exec('INSERT INTO qualificacoes_historico (id,empresa_id,certificado_arquivo_id) VALUES (900,6,55)');
+    expect((await learner(db, `${base}/matriculas/10/prova`, {}, OTHER_USER)).status).toBe(404);
+    expect([403,404]).toContain((await as(db, TENANT_B_ADMIN, 7, 'ADMIN', `${base}/matriculas/10/prova`)).status);
+    expect((await state(db)).certificate).toBe('ISSUED');
   });
 });
 

@@ -88,6 +88,89 @@ describe('ModalAlertaEAD', () => {
     });
   });
 
+  it('solicita confirmação explícita antes de reenviar alerta já registrado hoje', async () => {
+    const confirmMock = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmMock);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: 409,
+        json: async () => ({
+          success: false,
+          code: 'ALERTA_ALREADY_SENT_TODAY',
+          reenvio_permitido: true,
+          canais_ja_alertados_hoje: ['EMAIL', 'WHATSAPP'],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({
+          success: true,
+          data: { alertas: [{ tipo: 'email', status: 'enviado' }] },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ModalAlertaEAD isOpen onClose={vi.fn()}
+        qualificacao={{ id: 84, funcionario_nome: 'Pessoa Sintetica', qualificacao_nome: 'CMA' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /enviar alerta/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).reenviar_hoje).toBe(false);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).reenviar_hoje).toBe(true);
+  });
+
+  it('não reenvia se a confirmação de duplicidade for recusada', async () => {
+    const confirmMock = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirmMock);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 409,
+      json: async () => ({
+        success: false,
+        code: 'ALERTA_ALREADY_SENT_TODAY',
+        reenvio_permitido: true,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <ModalAlertaEAD isOpen onClose={vi.fn()}
+        qualificacao={{ id: 84, funcionario_nome: 'Pessoa Sintetica', qualificacao_nome: 'CMA' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /enviar alerta/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Reenvio cancelado\. Nenhum alerta adicional foi enviado\./i))
+        .toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).reenviar_hoje).toBe(false);
+  });
+
+  it('não oferece reenvio de reserva indeterminada', async () => {
+    const confirmMock = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmMock);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 409,
+      json: async () => ({
+        success: false, code: 'ALERTA_PENDING_RECONCILIATION',
+        error: 'Envio bloqueado até reconciliação da reserva de notificação',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <ModalAlertaEAD isOpen onClose={vi.fn()}
+        qualificacao={{ id: 84, funcionario_nome: 'Pessoa Sintetica', qualificacao_nome: 'CMA' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /enviar alerta/i }));
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('mostra falha final do Twilio e link para envio manual quando o WhatsApp e bloqueado apos queued', async () => {
     vi.stubGlobal(
       'fetch',

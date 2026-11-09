@@ -23,7 +23,7 @@
     "d1:migrate:dev": "wrangler d1 execute airtrust-db --env development --file=./migrations/0001_initial_schema.sql && wrangler d1 execute airtrust-db --env development --file=./migrations/0002_seed_minimo.sql && wrangler d1 execute airtrust-db --env development --file=./migrations/0003_create_usuarios.sql && wrangler d1 execute airtrust-db --env development --file=./migrations/0004_seed_usuarios.sql",
     "d1:migrate:staging": "wrangler d1 execute airtrust-db --env staging --file=./migrations/0001_initial_schema.sql && wrangler d1 execute airtrust-db --env staging --file=./migrations/0002_seed_minimo.sql && wrangler d1 execute airtrust-db --env staging --file=./migrations/0003_create_usuarios.sql && wrangler d1 execute airtrust-db --env staging --file=./migrations/0004_seed_usuarios.sql",
     "d1:migrate:prod": "bash -lc 'echo \"Direct production D1 migration is blocked. Use an approved runbook with explicit gates.\" >&2; exit 1'",
-    "d1:seed:dev": "npx -y node@20 node_modules/wrangler/bin/wrangler.js d1 execute airtrust-db-dev --env development --file=./seeds/dev-seed.sql",
+    "d1:seed:dev": "bash -c 'set -euo pipefail; f=$(mktemp); trap \"rm -f $f\" EXIT; node ../scripts/render-local-dev-password-sql.mjs ./seeds/dev-seed.sql \"$f\"; npx -y node@20 node_modules/wrangler/bin/wrangler.js d1 execute airtrust-db-dev --env development --file=\"$f\"'",
     "d1:seed:staging": "wrangler d1 execute airtrust-db --env staging --file=./seed.sql",
     "d1:seed:prod": "bash -lc 'echo \"Direct production D1 seed is blocked. Use an approved runbook with explicit gates.\" >&2; exit 1'",
     "r2:create": "wrangler r2 bucket create airtrust-files",

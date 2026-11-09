@@ -161,10 +161,25 @@ export function extrairUsuarioAuditoria(c: {
   ip_address?: string;
   user_agent?: string;
 } {
-  const user = c.get('user') as { id?: number; nome?: string; email?: string } | undefined;
-  const usuario_id = user?.id?.toString();
-  const usuario_nome = user?.nome || user?.email;
-  const ip_address = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for');
+  // Auth middleware populates userId/userEmail (not `user`). The legacy
+  // extractor silently emitted actor-less audit records for authenticated
+  // mutations, including Compliance requirement DELETEs (#2081).
+  // Never trust request headers for actor identity: only verified Context state.
+  const user = c.get('user') as { id?: number | string; nome?: string; email?: string } | undefined;
+  const authUserId = c.get('userId');
+  const authEmail = c.get('userEmail');
+  const rawId = user?.id ?? authUserId;
+  const usuario_id =
+    (typeof rawId === 'number' && Number.isSafeInteger(rawId) && rawId > 0) ||
+    (typeof rawId === 'string' && /^[1-9]\d*$/.test(rawId) && Number.isSafeInteger(Number(rawId)))
+      ? String(rawId)
+      : undefined;
+  const usuario_nome =
+    (typeof user?.nome === 'string' && user.nome.trim()) ||
+    (typeof user?.email === 'string' && user.email.trim()) ||
+    (typeof authEmail === 'string' && authEmail.trim()) ||
+    undefined;
+  const ip_address = c.req.header('cf-connecting-ip');
   const user_agent = c.req.header('user-agent');
 
   return { usuario_id, usuario_nome, ip_address, user_agent };

@@ -184,7 +184,7 @@ INSERT OR IGNORE INTO usuarios (
   deleted_at
 ) VALUES (
   'admin@airtrust.com',
-  '$2b$12$sY.Kzb1oiR74WEXj8fwN7ucKeOGDjAFLW2GE5geQ8qlmUDilYvOsW',
+  '__AIRTRUST_LOCAL_BCRYPT_HASH__',
   'Admin LMS Smoke',
   'ADMIN',
   5,
@@ -195,7 +195,7 @@ INSERT OR IGNORE INTO usuarios (
 );
 
 UPDATE usuarios
-SET password_hash = '$2b$12$sY.Kzb1oiR74WEXj8fwN7ucKeOGDjAFLW2GE5geQ8qlmUDilYvOsW',
+SET password_hash = '__AIRTRUST_LOCAL_BCRYPT_HASH__',
     perfil = 'ADMIN',
     funcionario_id = 5,
     active = 1,

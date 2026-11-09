@@ -3,7 +3,11 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  auth: () => async (c: any, next: () => Promise<void>) => {
+    c.set('userId', 101);
+    c.set('userRole', 'admin');
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', () => ({

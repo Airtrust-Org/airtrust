@@ -50,6 +50,9 @@ import {
 } from '../utils/whatsapp-templates';
 import { sendWhatsAppMessage } from '../utils/whatsapp-send';
 import { resolveTrainingAccessUrl } from '../utils/lms-training-link';
+import { maskTrainingContact } from '../services/training-communication-history';
+import { reserveTrainingAlert, commitTrainingAlertReservation } from '../services/training-alert-reservation';
+import type { TrainingAlertChannel } from '../services/training-alert-reservation';
 
 const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
@@ -615,6 +618,13 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
     const mensagemCustom = body.mensagem;
     const enviarEmailCanal = body.enviarEmail !== false; // default true
     const enviarWhatsApp = body.enviarWhatsApp !== false; // default true
+    if (body.reenviar_hoje !== undefined && typeof body.reenviar_hoje !== 'boolean') {
+      return alertasErrorResponse(c, 400, 'Confirmação de reenvio inválida', 'ALERTA_INVALID_RESEND');
+    }
+    const reenviarHoje = body.reenviar_hoje === true;
+    if (!enviarEmailCanal && !enviarWhatsApp) {
+      return alertasErrorResponse(c, 400, 'Selecione ao menos um canal', 'ALERTA_NO_CHANNEL_SELECTED');
+    }
 
     console.log('[ALERTAS] Opções:', { enviarEmailCanal, enviarWhatsApp });
 
@@ -813,8 +823,100 @@ Por favor, providencie a renovação o quanto antes.
       messageMode?: 'free-form' | 'template';
     }> = [];
 
-    // Enviar email (se tiver e se opção marcada)
-    if (enviarEmailCanal && temEmail) {
+    // Claim a durable, tenant-scoped, per-day delivery reservation BEFORE any
+    // provider call. This route previously bypassed Compliance/LMS dedup entirely.
+    // A timeout after INSERT is indeterminate: never send without confirmed claim.
+    const qualificationTypeId = Number(r.qualificacao_id);
+    if (!Number.isInteger(qualificationTypeId) || qualificationTypeId <= 0) {
+      return alertasErrorResponse(c, 422,
+        'Tipo de qualificação ausente: não é possível garantir deduplicação',
+        'ALERTA_QUALIFICATION_ID_REQUIRED');
+    }
+    const reservations: Partial<Record<TrainingAlertChannel, string>> = {};
+    const duplicateChannels: TrainingAlertChannel[] = [];
+    const pendingChannels: TrainingAlertChannel[] = [];
+    const uncertainChannels: TrainingAlertChannel[] = [];
+    const auditPendingChannels: TrainingAlertChannel[] = [];
+    const channels: TrainingAlertChannel[] = [
+      ...(enviarEmailCanal && temEmail ? ['EMAIL' as const] : []),
+      ...(enviarWhatsApp && temTelefone ? ['WHATSAPP' as const] : []),
+    ];
+
+    for (const channel of channels) {
+      try {
+        const claim = await reserveTrainingAlert(db, {
+          empresaId,
+          target: {
+            funcionario_id: Number(r.funcionario_id),
+            qualificacao_tipo_id: qualificationTypeId,
+          },
+          channel,
+          reenviarHoje,
+          destinatarioMascarado: maskTrainingContact(
+            channel === 'EMAIL'
+              ? String(r.funcionario_email || '')
+              : String(r.funcionario_telefone || ''),
+          ),
+          origem: 'COMPLIANCE',
+          manual: true,
+          qualificacaoNome: String(r.tipo_nome || r.tipo_codigo || ''),
+        });
+        if (claim.reserved) {
+          reservations[channel] = claim.key;
+        } else if (claim.reason === 'pending_indeterminate' || claim.reason === 'concurrent_conflict') {
+          pendingChannels.push(channel);
+        } else {
+          duplicateChannels.push(channel);
+        }
+      } catch (err) {
+        // The DB may have committed a reservation just before a timeout.
+        // Treat this channel as indeterminate and block external delivery.
+        logger.error('Falha ao reservar alerta manual', toError(err));
+        uncertainChannels.push(channel);
+      }
+    }
+
+    if (!reservations.EMAIL && !reservations.WHATSAPP) {
+      const code = pendingChannels.length
+        ? 'ALERTA_PENDING_RECONCILIATION'
+        : uncertainChannels.length
+          ? 'ALERTA_RESERVATION_UNCERTAIN'
+          : 'ALERTA_ALREADY_SENT_TODAY';
+      return alertasErrorResponse(c, pendingChannels.length || duplicateChannels.length ? 409 : 500,
+        code === 'ALERTA_ALREADY_SENT_TODAY'
+          ? 'Este alerta já foi enviado hoje nos canais selecionados. Confirme para reenviar.'
+          : 'Envio bloqueado até reconciliação da reserva de notificação',
+        code, {
+          canais_ja_alertados_hoje: duplicateChannels,
+          canais_pendentes: pendingChannels,
+          canais_reserva_indeterminada: uncertainChannels,
+          reenvio_permitido: duplicateChannels.length > 0
+            && pendingChannels.length === 0 && uncertainChannels.length === 0,
+        });
+    }
+
+    const finalizeReservation = async (
+      channel: TrainingAlertChannel,
+      outcome: 'enviada' | 'erro' | 'resultado_indeterminado',
+      providerMessageId?: string | null,
+      errorMessage?: string | null,
+    ) => {
+      const key = reservations[channel];
+      if (!key) return;
+      try {
+        await commitTrainingAlertReservation(db, {
+          empresaId, notificationKey: key, outcome,
+          providerMessageId: providerMessageId || null,
+          errorMessage: errorMessage || null,
+        });
+      } catch (err) {
+        auditPendingChannels.push(channel);
+        logger.error('Alerta enviado com finalização de auditoria pendente', toError(err));
+      }
+    };
+
+    // Enviar email apenas quando a reserva atômica foi adquirida.
+    if (reservations.EMAIL && enviarEmailCanal && temEmail) {
       try {
         const assunto = `🔔 ALERTA - ${tipoAlerta} ${alertTimingLabel}`;
         const corpoHtml = `
@@ -845,6 +947,7 @@ Por favor, providencie a renovação o quanto antes.
           corpoHtml,
         );
 
+        await finalizeReservation('EMAIL', 'enviada', emailResult.messageId || null);
         alertas.push({
           tipo: 'email',
           destino: r.funcionario_email as string,
@@ -856,6 +959,9 @@ Por favor, providencie a renovação o quanto antes.
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        await finalizeReservation('EMAIL',
+          msg === 'EMAIL_NOT_CONFIGURED' ? 'erro' : 'resultado_indeterminado',
+          null, msg);
         alertas.push({
           tipo: 'email',
           destino: r.funcionario_email as string,
@@ -869,7 +975,7 @@ Por favor, providencie a renovação o quanto antes.
     }
 
     // Enviar WhatsApp (se tiver telefone e se opção marcada)
-    if (enviarWhatsApp && temTelefone) {
+    if (reservations.WHATSAPP && enviarWhatsApp && temTelefone) {
       try {
         const statusCallbackUrl = new URL(TWILIO_STATUS_CALLBACK_PATH, c.req.url).toString();
         const templateKey = resolveQualificacaoAlertTemplateKey({
@@ -924,8 +1030,10 @@ Por favor, providencie a renovação o quanto antes.
             : undefined,
         );
 
+        await finalizeReservation('WHATSAPP', 'enviada', whatsappResult.providerMessageId || null);
         if (whatsappResult.provider === 'twilio' && whatsappResult.providerMessageId) {
-          await upsertWhatsAppDeliveryLog(db, {
+          try {
+            await upsertWhatsAppDeliveryLog(db, {
             empresaId,
             qualificacaoHistoricoId: Number(r.id),
             funcionarioId: Number(r.funcionario_id),
@@ -940,7 +1048,14 @@ Por favor, providencie a renovação o quanto antes.
               templateKey: whatsappResult.templateKey || null,
               templateName: whatsappResult.templateName || null,
             },
-          });
+            });
+          } catch (logError) {
+            // Provider acceptance has already been recorded by the canonical
+            // reservation. A secondary delivery-log failure must not mark it
+            // as an unsent message or allow an accidental duplicate.
+            auditPendingChannels.push('WHATSAPP');
+            logger.error('Falha ao registrar rastreamento WhatsApp', toError(logError));
+          }
         }
 
         alertas.push({
@@ -970,6 +1085,17 @@ Por favor, providencie a renovação o quanto antes.
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        // These failures occur before any provider request. Release the
+        // reservation so a corrected contact/configuration can be retried.
+        // Network/provider errors remain indeterminate (fail closed).
+        const confirmedPreDispatch = new Set([
+          'WHATSAPP_NOT_CONFIGURED',
+          'WHATSAPP_INVALID_PHONE',
+          'TWILIO_WHATSAPP_FROM_NOT_CONFIGURED',
+        ]);
+        await finalizeReservation('WHATSAPP',
+          confirmedPreDispatch.has(msg) ? 'erro' : 'resultado_indeterminado',
+          null, msg);
         alertas.push({
           tipo: 'whatsapp',
           destino: r.funcionario_telefone as string,
@@ -983,6 +1109,7 @@ Por favor, providencie a renovação o quanto antes.
     }
 
     const hasSuccess = alertas.some((a) => a.status === 'enviado');
+    const auditUncertain = [...new Set([...auditPendingChannels, ...uncertainChannels])];
 
     if (!hasSuccess) {
       const errosEnvio = alertas
@@ -1014,6 +1141,10 @@ Por favor, providencie a renovação o quanto antes.
       data: {
         mensagem,
         alertas,
+        canais_ja_alertados_hoje: duplicateChannels,
+        canais_pendentes: pendingChannels,
+        canais_reserva_indeterminada: uncertainChannels,
+        canais_auditoria_pendente: auditUncertain,
         funcionario: r.funcionario_nome,
         qualificacao: r.tipo_nome || r.tipo_codigo,
         statusVencimento,

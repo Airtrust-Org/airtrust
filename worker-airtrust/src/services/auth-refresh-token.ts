@@ -10,6 +10,7 @@
  */
 import { unauthorized } from '../lib/errors/api-error';
 import { hasRefreshTokensEmpresaIdColumn, hasUsuariosEmpresasTable } from '../utils/db-schema';
+import { hashRefreshToken, refreshTokenKeys } from './refresh-token-key';
 
 const MAX_ACTIVE_REFRESH_TOKENS_PER_USER = 8;
 
@@ -67,18 +68,20 @@ export async function persistRefreshToken(
   },
 ): Promise<void> {
   const hasEmpresaIdCol = await hasRefreshTokensEmpresaIdColumn(db);
+  // P01-02: só o hash chega ao D1; o valor cru existe apenas na resposta ao cliente.
+  const storedToken = await hashRefreshToken(payload.refreshToken);
 
   if (hasEmpresaIdCol && typeof payload.empresaId === 'number') {
     await db
       .prepare(
         'INSERT INTO refresh_tokens (user_id, token, expires_at, empresa_id) VALUES (?, ?, ?, ?)',
       )
-      .bind(payload.userId, payload.refreshToken, payload.expiresAt, payload.empresaId)
+      .bind(payload.userId, storedToken, payload.expiresAt, payload.empresaId)
       .run()
       .catch(() =>
         db
           .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-          .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+          .bind(payload.userId, storedToken, payload.expiresAt)
           .run(),
       );
   } else {
@@ -87,7 +90,7 @@ export async function persistRefreshToken(
     // schema existente". O refresh cai de volta em resolveUserEmpresaId().
     await db
       .prepare('INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)')
-      .bind(payload.userId, payload.refreshToken, payload.expiresAt)
+      .bind(payload.userId, storedToken, payload.expiresAt)
       .run();
   }
 
@@ -143,8 +146,9 @@ export async function verifyUserEmpresaMembership(
 export async function resolveAndRotateRefreshToken(
   db: D1Database,
   refreshToken: string,
-): Promise<{ userId: number; empresaId: number | null }> {
+): Promise<{ userId: number; empresaId: number | null; tokenKey: string }> {
   const hasEmpresaIdCol = await hasRefreshTokensEmpresaIdColumn(db);
+  const keys = await refreshTokenKeys(refreshToken);
 
   type RefreshTokenRecord = {
     user_id: number;
@@ -152,24 +156,26 @@ export async function resolveAndRotateRefreshToken(
     expires_at: string;
     empresa_id: number | null;
   } | null;
-  const refreshTokenRecord = await db
-    .prepare(
-      hasEmpresaIdCol
-        ? `
+  const selectSql = hasEmpresaIdCol
+    ? `
         SELECT rt.user_id, rt.revoked_at, rt.expires_at, rt.empresa_id
         FROM refresh_tokens rt
         WHERE rt.token = ?
         LIMIT 1
       `
-        : `
+    : `
         SELECT rt.user_id, rt.revoked_at, rt.expires_at
         FROM refresh_tokens rt
         WHERE rt.token = ?
         LIMIT 1
-      `,
-    )
-    .bind(refreshToken)
-    .first<RefreshTokenRecord>();
+      `;
+  let tokenKey = keys.hashed;
+  let refreshTokenRecord = await db.prepare(selectSql).bind(tokenKey).first<RefreshTokenRecord>();
+  if (!refreshTokenRecord && keys.legacyKey) {
+    // Linha emitida antes do P01-02 (valor cru). Some quando o TTL de 7 dias passar.
+    tokenKey = keys.legacyKey;
+    refreshTokenRecord = await db.prepare(selectSql).bind(tokenKey).first<RefreshTokenRecord>();
+  }
 
   if (!refreshTokenRecord) {
     throw unauthorized('Refresh token inválido', 'INVALID_REFRESH_TOKEN');
@@ -203,7 +209,7 @@ export async function resolveAndRotateRefreshToken(
     if (refreshTokenRecord.empresa_id === null || refreshTokenRecord.empresa_id === undefined) {
       await db
         .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-        .bind(refreshToken)
+        .bind(tokenKey)
         .run()
         .catch(() => null);
       throw unauthorized(
@@ -221,7 +227,7 @@ export async function resolveAndRotateRefreshToken(
     if (!stillMember) {
       await db
         .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-        .bind(refreshToken)
+        .bind(tokenKey)
         .run()
         .catch(() => null);
       throw unauthorized('Acesso à empresa desta sessão foi revogado.', 'TENANT_ACCESS_REVOKED');
@@ -242,7 +248,7 @@ export async function resolveAndRotateRefreshToken(
          AND revoked_at IS NULL
          AND expires_at > datetime('now')`,
     )
-    .bind(refreshToken)
+    .bind(tokenKey)
     .run();
 
   if (Number(casResult.meta?.changes ?? 0) !== 1) {
@@ -252,5 +258,5 @@ export async function resolveAndRotateRefreshToken(
     );
   }
 
-  return { userId: refreshTokenRecord.user_id, empresaId: pinnedEmpresaId };
+  return { userId: refreshTokenRecord.user_id, empresaId: pinnedEmpresaId, tokenKey };
 }

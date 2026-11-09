@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   auth,
   optionalAuth,
@@ -32,7 +32,7 @@ type CallCounts = {
   platformAccess: number;
 };
 
-function createDb(options: {
+type DbOptions = {
   usuarios?: UsuarioRow[];
   memberships?: Array<{ usuarioId: number; empresaId: number; role: string }>;
   blocklisted?: string[] | Set<string>;
@@ -40,13 +40,19 @@ function createDb(options: {
   blocklistReadThrows?: boolean;
   transientBlocklistFailures?: number;
   transientUserSecurityFailures?: number;
+  transientPlatformAccessFailures?: number;
   blocklistPermanentSqlError?: string;
   userSecurityPermanentSqlError?: string;
+  platformAccessPermanentSqlError?: string;
+  platformAccessReadThrows?: boolean;
   callCounts?: CallCounts;
   asyncDelayMs?: number;
-} = {}) {
+};
+
+function createDb(options: DbOptions = {}) {
   let transientFailuresRemaining = options.transientBlocklistFailures ?? 0;
   let transientUserSecurityRemaining = options.transientUserSecurityFailures ?? 0;
+  let transientPlatformAccessRemaining = options.transientPlatformAccessFailures ?? 0;
   const usuarios = options.usuarios || [];
   const memberships = options.memberships || [];
   const blocklisted = options.blocklisted instanceof Set ? options.blocklisted : new Set(options.blocklisted || []);
@@ -66,6 +72,12 @@ function createDb(options: {
             await new Promise((r) => setTimeout(r, options.asyncDelayMs));
           }
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
+          if (sql.includes('sqlite_master')) {
+            const target = statement.params[0];
+            if (target === 'user_platform_roles' || target === 'usuarios_empresas') {
+              return { found: 1 } as T;
+            }
+          }
           if (sql.includes('PRAGMA table_info')) return null as T;
 
           if (sql.includes('FROM token_blocklist')) {
@@ -120,6 +132,23 @@ function createDb(options: {
           return { success: true, meta: { changes: 0 } };
         },
         async all<T>() {
+          if (options.asyncDelayMs) {
+            await new Promise((r) => setTimeout(r, options.asyncDelayMs));
+          }
+          if (sql.includes('FROM user_platform_roles')) {
+            callCounts.platformAccess++;
+            if (options.platformAccessPermanentSqlError) {
+              throw new Error(options.platformAccessPermanentSqlError);
+            }
+            if (transientPlatformAccessRemaining > 0) {
+              transientPlatformAccessRemaining--;
+              throw new Error('transient D1 network connection error');
+            }
+            if (options.platformAccessReadThrows) {
+              throw new Error('database is locked');
+            }
+            return { results: [] } as T;
+          }
           return { results: [] } as T;
         },
       };
@@ -394,6 +423,89 @@ describe('auth() — usuário inativo e membership', () => {
   });
 });
 
+describe('auth() — infrastructure log sanitization (#2078)', () => {
+  it('never logs raw D1 exceptions containing sensitive SQL bindings or bearer secrets', async () => {
+    const secret = 'Bearer-super-secret-test-token-CPF-12345678900';
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { token } = await makeToken(7, 999002);
+      const response = await buildApp(createDb({
+        usuarios: [{ id: 7, perfil: 'ALUNO', active: 1 }],
+        memberships: [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }],
+        platformAccessPermanentSqlError: `SQLITE_ERROR: no such column: expires_at ${secret}`,
+      }), 'auth')({ headers: { Authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(503);
+      expect((await response.json() as { code: string }).code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+      const logs = JSON.stringify(spy.mock.calls);
+      expect(logs).toContain('AUTH_INFRASTRUCTURE_ERROR');
+      expect(logs).toContain('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+      expect(logs).not.toContain(secret);
+      expect(logs).not.toContain('no such column');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('auth() — platform access fail-closed e resiliência (Incidente #2078)', () => {
+  it('falha fechado (503) com PLATFORM_ACCESS_CHECK_UNAVAILABLE quando a leitura de permissões esgota retries', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+
+    const response = await buildApp(
+      createDb({ usuarios, memberships, platformAccessReadThrows: true }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+    const payload = (await response.json()) as { code?: string };
+
+    expect(response.status).toBe(503);
+    expect(payload.code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+  });
+
+  it('falha fechado imediatamente (503) sem retry quando ocorre erro permanente de schema em platform access', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const response = await buildApp(
+      createDb({
+        usuarios,
+        memberships,
+        platformAccessPermanentSqlError: 'SQLITE_ERROR: no such column: expires_at',
+        callCounts,
+      }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+    const payload = (await response.json()) as { code?: string };
+
+    expect(response.status).toBe(503);
+    expect(payload.code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
+    expect(callCounts.platformAccess).toBe(1);
+  });
+
+  it('absorve falhas transitórias consecutivas de platform access e autentica com sucesso', async () => {
+    const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
+    const memberships = [{ usuarioId: 7, empresaId: 999002, role: 'viewer' }];
+    const { token } = await makeToken(7, 999002);
+    const callCounts = { blocklist: 0, userSecurity: 0, platformAccess: 0 };
+
+    const response = await buildApp(
+      createDb({
+        usuarios,
+        memberships,
+        transientPlatformAccessFailures: 2,
+        callCounts,
+      }),
+      'auth',
+    )({ headers: { Authorization: `Bearer ${token}` } });
+
+    expect(response.status).toBe(200);
+    expect(callCounts.platformAccess).toBe(3);
+  });
+});
+
 describe('optionalAuth() — revoked token never authenticates silently', () => {
   it('proceeds without identity (never blocks) when the token jti is blocklisted', async () => {
     const usuarios: UsuarioRow[] = [{ id: 7, perfil: 'ALUNO', active: 1 }];
@@ -473,6 +585,12 @@ describe('isTransientD1Error', () => {
     expect(isTransientD1Error(new Error('sqlite_cantopen: unable to open database file'))).toBe(true);
     expect(isTransientD1Error({ name: 'D1Error', code: 'ETIMEDOUT', message: 'failed' })).toBe(true);
     expect(isTransientD1Error(new Error('wrapped error', { cause: new Error('connection lost') }))).toBe(true);
+    expect(isTransientD1Error({ message: 'D1 error', cause: { code: 'ECONNRESET' } })).toBe(true);
+    expect(isTransientD1Error({ message: 'D1 error', cause: { message: 'socket hang up' } })).toBe(true);
+    expect(isTransientD1Error(new Error('D1_EXEC_ERROR: 503 Service Unavailable: database resource limit'))).toBe(true);
+    expect(isTransientD1Error(new Error('connection channel closed'))).toBe(true);
+    expect(isTransientD1Error(new Error('remote procedure call failed'))).toBe(true);
+    expect(isTransientD1Error(new Error('too many connections'))).toBe(true);
   });
 
   it('classifies permanent SQL and schema errors as false (never transient)', () => {

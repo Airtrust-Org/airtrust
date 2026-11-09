@@ -74,11 +74,11 @@ INSERT OR IGNORE INTO usuarios (
   created_at,
   updated_at
 ) VALUES
-  (9201, 'admin.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Admin DEV', 'ADMINISTRADOR', 9101, 1, datetime('now'), datetime('now')),
-  (9202, 'gestor.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Gestor DEV', 'GESTOR', 9101, 1, datetime('now'), datetime('now')),
-  (9203, 'instrutor.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Instrutor DEV', 'INSTRUTOR', 9102, 1, datetime('now'), datetime('now')),
-  (9204, 'aluna.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Aluna DEV', 'ALUNO', 9103, 1, datetime('now'), datetime('now')),
-  (9205, 'aluno2.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Aluno DEV 2', 'ALUNO', 9104, 1, datetime('now'), datetime('now'));
+  (9201, 'admin.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Admin DEV', 'ADMINISTRADOR', 9101, 1, datetime('now'), datetime('now')),
+  (9202, 'gestor.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Gestor DEV', 'GESTOR', 9101, 1, datetime('now'), datetime('now')),
+  (9203, 'instrutor.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Instrutor DEV', 'INSTRUTOR', 9102, 1, datetime('now'), datetime('now')),
+  (9204, 'aluna.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Aluna DEV', 'ALUNO', 9103, 1, datetime('now'), datetime('now')),
+  (9205, 'aluno2.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Aluno DEV 2', 'ALUNO', 9104, 1, datetime('now'), datetime('now'));
 
 INSERT OR IGNORE INTO usuarios_empresas (
   id,
@@ -166,7 +166,7 @@ INSERT OR IGNORE INTO usuarios (
   created_at,
   updated_at
 ) VALUES
-  (9206, 'aluna3.dev@airtrust.online', '$2b$12$NAMuNHUlkSB.DxRmCJavreynBjJfSTIOHBXZfyJsVcnrT520ib8l2', 'Aluna DEV 3', 'ALUNO', 9105, 1, datetime('now'), datetime('now'));
+  (9206, 'aluna3.dev@airtrust.online', '__AIRTRUST_LOCAL_BCRYPT_HASH__', 'Aluna DEV 3', 'ALUNO', 9105, 1, datetime('now'), datetime('now'));
 
 INSERT OR IGNORE INTO usuarios_empresas (
   id,

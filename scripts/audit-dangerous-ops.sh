@@ -76,7 +76,6 @@ readonly_remote_files=(
   "scripts/clone-prod-REAL.sh"
   "scripts/clone-prod-data.sh"
   "scripts/clone-prod-to-local-COMPLETO.sh"
-  "scripts/create-test-user.sh"
   "scripts/diagnose-rubens-instrutor-role.sh"
   "scripts/extract-essencial.sh"
   "scripts/fase31_diagnostico.sh"
