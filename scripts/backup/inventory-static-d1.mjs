@@ -7,7 +7,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** Static metadata only. No database, R2, or network access. */
 export function extractCreatedTables(sql) {
   const clean = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
-  return [...clean.matchAll(/\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:["`\[]?[A-Za-z_][\w]*["`\]]?\.)?["`\[]?([A-Za-z_][\w]*)["`\]]?\s*\(/gi)].map(m => m[1]);
+  // SQLite permits both CREATE TABLE name (...) and CREATE TABLE name AS SELECT ...
+  // (also AS WITH ... SELECT). Both materialize tables and must be inventoried.
+  return [...clean.matchAll(/\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:["`\[]?[A-Za-z_][\w]*["`\]]?\.)?["`\[]?([A-Za-z_][\w]*)["`\]]?\s*(?=\(|AS\s+(?:SELECT|WITH)\b)/gi)].map(m => m[1]);
 }
 
 export function extractConfiguredTables(source) {
