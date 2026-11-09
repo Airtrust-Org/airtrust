@@ -80,6 +80,30 @@ export async function listTrainingCommunications(
   tables: { notifications: boolean; audit: boolean },
   filters: TrainingCommunicationFilters,
 ): Promise<{ rows: TrainingCommunication[]; has_more: boolean }> {
+  // #2078: a consulta completa varre TODO notificacoes_log do tenant (170k+ linhas)
+  // aplicando json_valid/json_extract em cada uma e chegou a 17 s de D1 por carga
+  // de tela, saturando o banco compartilhado com a autenticacao. Caminho rapido
+  // EXATO: pre-seleciona as N linhas mais recentes (sem tocar no JSON) e so usa o
+  // resultado quando ele comprovadamente contem a pagina inteira; senao cai na
+  // consulta completa abaixo (mesma semantica de sempre).
+  if (tables.notifications) {
+    const fast = await runCommunicationsQuery(db, empresaId, access, tables, filters, true);
+    if (fast) return fast;
+  }
+  const full = await runCommunicationsQuery(db, empresaId, access, tables, filters, false);
+  return full as { rows: TrainingCommunication[]; has_more: boolean };
+}
+
+export async function runCommunicationsQuery(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess,
+  tables: { notifications: boolean; audit: boolean },
+  filters: TrainingCommunicationFilters,
+  fast: boolean,
+): Promise<{ rows: TrainingCommunication[]; has_more: boolean } | null> {
+  const needed = Math.max(0, filters.offset) + Math.min(200, Math.max(1, filters.limit)) + 1;
+  const preLimit = needed * 6 + 200;
   const scope = employeeSectorSql(access, 'f');
   const selects: string[] = [];
   const bindings: unknown[] = [];
@@ -111,7 +135,7 @@ export async function listTrainingCommunications(
              CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
                   THEN 'LMS_ALERTA' ELSE 'COMPLIANCE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
-        FROM notificacoes_log n
+        FROM ${fast ? 'notif_pre' : 'notificacoes_log'} n
         JOIN funcionarios f ON f.empresa_id = n.empresa_id
           AND f.id = CAST(CASE WHEN json_valid(n.corpo) THEN json_extract(n.corpo, '$.funcionario_id') END AS INTEGER)
         LEFT JOIN lms_cursos c ON c.empresa_id = n.empresa_id
@@ -233,18 +257,37 @@ export async function listTrainingCommunications(
 
   const limit = Math.min(200, Math.max(1, filters.limit));
   const offset = Math.max(0, filters.offset);
-  const sql = `WITH communications AS (${selects.join(' UNION ALL ')})
+  const fastPrefix = fast
+    ? `notif_pre AS (
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND (n0.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+                 OR n0.assunto LIKE '[COMPLIANCE_GESTOR:%'
+                 OR (n0.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+                     AND n0.status IN ('pendente', 'processando')))
+          ORDER BY COALESCE(n0.enviado_em, n0.created_at) DESC, n0.id DESC
+          LIMIT ?),
+       cutoff AS (
+         SELECT CASE WHEN COUNT(*) >= ? THEN MIN(COALESCE(enviado_em, created_at)) END AS c
+           FROM notif_pre),`
+    : '';
+  const fastWhere = fast ? ` AND ((SELECT c FROM cutoff) IS NULL OR enviado_em > (SELECT c FROM cutoff))` : '';
+  const sql = `WITH ${fastPrefix ? fastPrefix + ' ' : ''}communications AS (${selects.join(' UNION ALL ')})
     SELECT * FROM communications
-     WHERE ${where.join(' AND ')}
+     WHERE ${where.join(' AND ')}${fastWhere}
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
+  const prefixBindings = fast ? [empresaId, preLimit, preLimit] : [];
   const result = await withD1Retry(() =>
     db
       .prepare(sql)
-      .bind(...bindings, ...terms, limit + 1, offset)
+      .bind(...prefixBindings, ...bindings, ...terms, limit + 1, offset)
       .all<Omit<TrainingCommunication, 'gestor'> & { gestor: number }>(),
   );
   const raw = result.results || [];
+  // Caminho rapido so vale se a pagina (+1 para has_more) esta completa dentro da
+  // janela garantida (linhas mais novas que o corte). Senao: consulta completa.
+  if (fast && raw.length < limit + 1) return null;
   return {
     rows: raw.slice(0, limit).map((row) => ({
       ...row,
