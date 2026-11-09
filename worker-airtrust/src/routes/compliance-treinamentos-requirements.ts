@@ -9,7 +9,7 @@ import {
   getEmployeeSectorAccess,
   type EmployeeSectorAccess,
 } from '../middleware/employee-sector-access';
-import type { TrainingComplianceSnapshot } from '../services/training-compliance-snapshot-builder';
+import type { TrainingComplianceSnapshot, TrainingComplianceTargetFilter } from '../services/training-compliance-snapshot-builder';
 
 type ComplianceStatus = 'CONFORME' | 'VENCENDO' | 'VENCIDO' | 'NAO_REALIZADO' | 'EM_ANDAMENTO';
 type CompliancePeople = TrainingComplianceSnapshot['people'];
@@ -19,6 +19,8 @@ type RequirementRoutesDeps = {
     db: D1Database,
     empresaId: number,
     access: EmployeeSectorAccess,
+    targetFilter?: TrainingComplianceTargetFilter,
+    options?: { coalesce?: boolean },
   ) => Promise<TrainingComplianceSnapshot>;
 };
 
@@ -153,7 +155,7 @@ export function createTrainingComplianceRequirementRoutes({ buildSnapshot }: Req
     }
     if (funcionarioId) await assertFuncionarioInScope(c.env.DB, empresaId, funcionarioId, access);
 
-    const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+    const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
     const people = snapshot.people.filter(
       (person) =>
         (!setorId || person.setor_id === setorId) &&

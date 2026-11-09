@@ -80,6 +80,30 @@ export async function listTrainingCommunications(
   tables: { notifications: boolean; audit: boolean },
   filters: TrainingCommunicationFilters,
 ): Promise<{ rows: TrainingCommunication[]; has_more: boolean }> {
+  // #2078: a consulta completa varre TODO notificacoes_log do tenant (170k+ linhas)
+  // aplicando json_valid/json_extract em cada uma e chegou a 17 s de D1 por carga
+  // de tela, saturando o banco compartilhado com a autenticacao. Caminho rapido
+  // EXATO: pre-seleciona as N linhas mais recentes (sem tocar no JSON) e so usa o
+  // resultado quando ele comprovadamente contem a pagina inteira; senao cai na
+  // consulta completa abaixo (mesma semantica de sempre).
+  if (tables.notifications) {
+    const fast = await runCommunicationsQuery(db, empresaId, access, tables, filters, true);
+    if (fast) return fast;
+  }
+  const full = await runCommunicationsQuery(db, empresaId, access, tables, filters, false);
+  return full as { rows: TrainingCommunication[]; has_more: boolean };
+}
+
+export async function runCommunicationsQuery(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess,
+  tables: { notifications: boolean; audit: boolean },
+  filters: TrainingCommunicationFilters,
+  fast: boolean,
+): Promise<{ rows: TrainingCommunication[]; has_more: boolean } | null> {
+  const needed = Math.max(0, filters.offset) + Math.min(200, Math.max(1, filters.limit)) + 1;
+  const preLimit = needed * 6 + 200;
   const scope = employeeSectorSql(access, 'f');
   const selects: string[] = [];
   const bindings: unknown[] = [];
@@ -111,7 +135,7 @@ export async function listTrainingCommunications(
              CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
                   THEN 'LMS_ALERTA' ELSE 'COMPLIANCE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
-        FROM notificacoes_log n
+        FROM ${fast ? 'notif_pre' : 'notif_src'} n
         JOIN funcionarios f ON f.empresa_id = n.empresa_id
           AND f.id = CAST(CASE WHEN json_valid(n.corpo) THEN json_extract(n.corpo, '$.funcionario_id') END AS INTEGER)
         LEFT JOIN lms_cursos c ON c.empresa_id = n.empresa_id
@@ -159,35 +183,17 @@ export async function listTrainingCommunications(
              CASE WHEN a.action IN ('LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_ALERTA_PREPARADO') THEN 'LMS_ALERTA'
                   ELSE 'LMS_CONVITE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
-        FROM audit_logs a
+        FROM audit_src a
         JOIN funcionarios f ON f.empresa_id = a.empresa_id
-          AND f.id = CAST(CASE WHEN json_valid(a.new_values) THEN json_extract(a.new_values, '$.funcionario_id') END AS INTEGER)
-        LEFT JOIN lms_cursos c ON c.id = CAST(CASE WHEN json_valid(a.new_values)
-          THEN json_extract(a.new_values, '$.curso_id') END AS INTEGER)
+          AND f.id = CAST(json_extract(a.new_values, '$.funcionario_id') AS INTEGER)
+        LEFT JOIN lms_cursos c ON c.id = CAST(json_extract(a.new_values, '$.curso_id') AS INTEGER)
           AND c.empresa_id = a.empresa_id
         JOIN (
           SELECT 'EMAIL' AS canal, '$.email_resultado' AS result_path
           UNION ALL SELECT 'WHATSAPP', '$.whatsapp_resultado'
         ) channel ON json_extract(a.new_values, channel.result_path) IS NOT NULL
-       WHERE a.empresa_id = ?
-         AND a.action IN (
-           'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
-           'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO'
-         )
-         AND (a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
-           SELECT 1 FROM audit_logs done
-           WHERE done.empresa_id = a.empresa_id
-             AND done.action = REPLACE(a.action, '_PREPARADO', '')
-             AND done.entity_type = a.entity_type
-             AND done.entity_id = a.entity_id
-             AND json_valid(done.new_values) = 1
-             AND json_extract(done.new_values, '$.tentativa_id') =
-                 json_extract(a.new_values, '$.tentativa_id')
-         ))
-         AND a.entity_type = 'lms_matriculas'
-         AND json_valid(a.new_values) = 1
-         AND ${scope.clause}`);
-    bindings.push(empresaId, ...scope.bindings);
+       WHERE ${scope.clause}`);
+    bindings.push(...scope.bindings);
   }
 
   if (!selects.length) return { rows: [], has_more: false };
@@ -233,18 +239,93 @@ export async function listTrainingCommunications(
 
   const limit = Math.min(200, Math.max(1, filters.limit));
   const offset = Math.max(0, filters.offset);
-  const sql = `WITH communications AS (${selects.join(' UNION ALL ')})
+  // Tres faixas de assunto (';' = ':' + 1) em UNION ALL: cada ramo faz SEARCH em
+  // idx_notificacoes_log_empresa_assunto (um OR unico cairia em empresa_id=? e leria
+  // todas as linhas legadas com assunto NULL; incidente #2078). Os LIKEs originais
+  // permanecem; produtores gravam os prefixos sempre em maiusculas.
+  const notifSrc = `notif_src AS (
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND n0.assunto >= '[COMPLIANCE_TREINAMENTO:' AND n0.assunto < '[COMPLIANCE_TREINAMENTO;'
+            AND n0.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+         UNION ALL
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND n0.assunto >= '[COMPLIANCE_GESTOR:' AND n0.assunto < '[COMPLIANCE_GESTOR;'
+            AND n0.assunto LIKE '[COMPLIANCE_GESTOR:%'
+         UNION ALL
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND n0.assunto >= '[LMS_MATRICULA_RESERVA:' AND n0.assunto < '[LMS_MATRICULA_RESERVA;'
+            AND n0.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+            AND n0.status IN ('pendente', 'processando'))`;
+  const fastPrefix = fast
+    ? `${notifSrc},
+       notif_pre AS (
+         SELECT * FROM notif_src
+          ORDER BY COALESCE(enviado_em, created_at) DESC, id DESC
+          LIMIT ?),
+       cutoff AS (
+         SELECT CASE WHEN COUNT(*) >= ? THEN MIN(COALESCE(enviado_em, created_at)) END AS c
+           FROM notif_pre),`
+    : tables.notifications
+      ? `${notifSrc},`
+      : '';
+  const fastWhere = fast ? ` AND ((SELECT c FROM cutoff) IS NULL OR enviado_em > (SELECT c FROM cutoff))` : '';
+  // #2078: audit_logs tem ~24k linhas por tenant e o planner escolhia
+  // `funcionarios` como tabela externa e varria o indice (empresa_id) de audit_logs
+  // para CADA funcionario (4,5M rows_read por carga). As linhas LMS relevantes
+  // (~170) sao materializadas uma unica vez pelo indice de `action`; os unary plus
+  // (+empresa_id, +entity_type) impedem o planner de preferir os indices por
+  // tenant/entidade, que leem ~24k linhas. A deduplicacao PREPARADO x final e feita
+  // sobre esse conjunto: o "done" correspondente sempre pertence a ele (mesma
+  // empresa, mesma entidade, acao final listada, JSON valido), logo o resultado e
+  // identico ao da subconsulta correlacionada anterior sobre audit_logs inteiro.
+  const auditPrefix = tables.audit
+    ? `audit_rel AS MATERIALIZED (
+         SELECT a0.id, a0.empresa_id, a0.action, a0.entity_type, a0.entity_id,
+                a0.new_values, a0.created_at
+           FROM audit_logs a0
+          WHERE a0.action IN (
+                  'LMS_MATRICULA_ALERTA', 'LMS_MATRICULA_CONVITE_EMAIL',
+                  'LMS_MATRICULA_ALERTA_PREPARADO', 'LMS_MATRICULA_CONVITE_EMAIL_PREPARADO')
+            AND +a0.empresa_id = ?
+            AND +a0.entity_type = 'lms_matriculas'
+            AND json_valid(a0.new_values) = 1),
+       audit_src AS MATERIALIZED (
+         SELECT a.* FROM audit_rel a
+          WHERE a.action NOT LIKE '%_PREPARADO' OR NOT EXISTS (
+            SELECT 1 FROM audit_rel done
+             WHERE done.action = REPLACE(a.action, '_PREPARADO', '')
+               AND done.entity_type = a.entity_type
+               AND done.entity_id = a.entity_id
+               AND json_extract(done.new_values, '$.tentativa_id') =
+                   json_extract(a.new_values, '$.tentativa_id'))),`
+    : '';
+  const sql = `WITH ${fastPrefix} ${auditPrefix} communications AS (${selects.join(' UNION ALL ')})
     SELECT * FROM communications
-     WHERE ${where.join(' AND ')}
+     WHERE ${where.join(' AND ')}${fastWhere}
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
+  const auditBindings = tables.audit ? [empresaId] : [];
+  const prefixBindings = [
+    ...(fast
+      ? [empresaId, empresaId, empresaId, preLimit, preLimit]
+      : tables.notifications
+        ? [empresaId, empresaId, empresaId]
+        : []),
+    ...auditBindings,
+  ];
   const result = await withD1Retry(() =>
     db
       .prepare(sql)
-      .bind(...bindings, ...terms, limit + 1, offset)
+      .bind(...prefixBindings, ...bindings, ...terms, limit + 1, offset)
       .all<Omit<TrainingCommunication, 'gestor'> & { gestor: number }>(),
   );
   const raw = result.results || [];
+  // Caminho rapido so vale se a pagina (+1 para has_more) esta completa dentro da
+  // janela garantida (linhas mais novas que o corte). Senao: consulta completa.
+  if (fast && raw.length < limit + 1) return null;
   return {
     rows: raw.slice(0, limit).map((row) => ({
       ...row,
