@@ -197,11 +197,6 @@ export function useImportacao(entidade: Entidade) {
         Authorization: `Bearer ${token}`,
       };
 
-      // Bypass de autenticação em desenvolvimento local
-      if (API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1')) {
-        headers['X-Dev-Auth-Bypass'] = '1';
-      }
-
       // Mapear modo para mode esperado pelo backend
       const modeMap: Record<string, string> = {
         COMPLETAR: 'UPSERT',
@@ -317,11 +312,6 @@ export function useImportacao(entidade: Entidade) {
         Authorization: `Bearer ${token}`,
       };
 
-      // Bypass de autenticação em desenvolvimento local
-      if (API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1')) {
-        headers['X-Dev-Auth-Bypass'] = '1';
-      }
-
       // Mapear modo para mode esperado pelo backend
       const modeMap: Record<string, string> = {
         COMPLETAR: 'UPSERT',
@@ -423,11 +413,6 @@ export function useImportacao(entidade: Entidade) {
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
       };
-
-      // Bypass de autenticação em desenvolvimento local
-      if (API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1')) {
-        headers['X-Dev-Auth-Bypass'] = '1';
-      }
 
       const response = await fetch(url, {
         method: 'GET',
