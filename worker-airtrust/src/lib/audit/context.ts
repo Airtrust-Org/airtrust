@@ -36,8 +36,7 @@ export function getAuditContextSnapshot(c: AuditContextLike): AuditContextSnapsh
     userRole: asString(c.get('userRole')),
     empresaId: asNumber(c.get('empresaId')),
     requestId: asString(c.get('requestId')) ?? asString(c.req?.header('X-Request-ID')),
-    ipAddress:
-      asString(c.req?.header('cf-connecting-ip')) ?? asString(c.req?.header('x-forwarded-for')),
+    ipAddress: asString(c.req?.header('cf-connecting-ip')),
     userAgent: asString(c.req?.header('user-agent')),
   };
 }
