@@ -13,6 +13,7 @@ import { runSigvoosFrmsJobs } from './sigvoos-frms';
 import { processLicenseAlerts } from '../license-alerts';
 import { cleanupExpiredRefreshTokens } from '../../services/auth-refresh-token';
 import { purgeOldCronJobRuns } from './cron-runs-retention';
+import { isCronD1Overloaded } from './job-runner';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
 const DAILY_UTC_CRON = TRAINING_ALERT_DAILY_CRON;
@@ -145,10 +146,15 @@ export async function runResilientScheduledJobs(
       return;
     }
     try {
-      await task();
+      const result = await task();
+      // The durable runner catches and returns FAILED instead of throwing.
+      // Propagate its persisted overload code before running the next D1 job.
+      const summary = result as { outcome?: unknown; errorCode?: unknown } | null;
+      if (summary?.outcome === 'FAILED' && isCronD1Overloaded(summary.errorCode)) {
+        throw new Error('D1_DB_IS_OVERLOADED');
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const overloaded = /D1(?:_ERROR)?[:_ ].*(?:DB is overloaded|Too many resources consumed)|D1_DB_IS_OVERLOADED/i.test(message);
+      const overloaded = isCronD1Overloaded(error);
       if (overloaded) saturated = true;
       const errorCode = overloaded ? 'D1_OVERLOADED' : 'CRON_STEP_FAILURE';
       failures.push({ job, error: errorCode });
