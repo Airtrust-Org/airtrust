@@ -500,7 +500,7 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     expect(item.tipo_nome).toBe('Safety Leadership Tenant 6');
   });
 
-  it('5. Proteção Cross-Tenant por ID: histórico com ID de outro tenant NÃO associa o modelo alheio', async () => {
+  it('5. Proteção Cross-Tenant por ID: histórico com ID de outro tenant NÃO associa nem expõe o modelo alheio', async () => {
     const testApp = buildTestApp(databasePath, 6);
     // Histórico 1004 do Tenant 6 tem qualificacao_id = 31 (pertencente ao Tenant 7)
     const res = await testApp.request('/qualificacoes/historico?id=1004');
@@ -510,12 +510,15 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     expect(body.data).toHaveLength(1);
 
     const item = body.data[0];
-    // O tipo 31 pertence à empresa 7, portanto a cláusula de resolução impede a associação
+    // O tipo 31 pertence à empresa 7, portanto a cláusula de resolução impede a associação:
+    // Nem tipo_id_resolvido, nem tipo_id, nem qualificacao_id expõem o ID da empresa 7!
     expect(item.tipo_id_resolvido).toBeNull();
+    expect(item.tipo_id).toBeNull();
+    expect(item.qualificacao_id).toBeNull();
     expect(item.tipo_nome).toBeNull();
   });
 
-  it('6. Modelo logicamente excluído (deleted_at IS NOT NULL) é estritamente ignorado', async () => {
+  it('6. Modelo logicamente excluído (deleted_at IS NOT NULL) é estritamente ignorado e retorna tipo_id nulo', async () => {
     const testApp = buildTestApp(databasePath, 6);
     const res = await testApp.request('/qualificacoes/historico?id=1005');
 
@@ -524,8 +527,10 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     expect(body.data).toHaveLength(1);
 
     const item = body.data[0];
-    // Modelo 60 está deletado, então tipo_id_resolvido e tipo_nome devem vir nulos
+    // O tipo 60 foi deletado via soft-delete, logo não pode ser resolvido
     expect(item.tipo_id_resolvido).toBeNull();
+    expect(item.tipo_id).toBeNull();
+    expect(item.qualificacao_id).toBeNull();
     expect(item.tipo_nome).toBeNull();
   });
 
@@ -560,20 +565,26 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     expect(updatedItem.data_vencimento).toBe('2028-01-31');
   });
 
-  it('8. Teste de Datas: ano bissexto (fevereiro 2024 -> 2026) e respeito à política de fim de mês', async () => {
+  it('8. Teste de Datas e Anos Bissextos: distinção exata entre dia nominal e fim de mês', async () => {
     const testApp = buildTestApp(databasePath, 6);
 
-    // Insere tipo sem vencimento_fim_mes (vencimento_fim_mes = 0, 24 meses)
+    // Inserção dos dois modelos:
+    // Modelo 70: vencimento_fim_mes = 0 (dia nominal de calendário, 24m)
+    // Modelo 71: vencimento_fim_mes = 1 (fim de mês civil regulatório, 24m)
     runSql(
       databasePath,
       `INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, nome, validade, vencimento_fim_mes, carga_horaria)
-       VALUES (70, 6, 'PILOT_SIM_24M', 'Simulador 24m Sem Fim Mes', 24, 0, 12);
+       VALUES 
+         (70, 6, 'SIM_NOMINAL_24M', 'Simulador Nominal 24m', 24, 0, 12),
+         (71, 6, 'SIM_FIM_MES_24M', 'Simulador Fim Mes 24m', 24, 1, 12);
        INSERT INTO qualificacoes_historico (id, empresa_id, funcionario_id, qualificacao_id, qualificacao_codigo, tipo, status, data_conclusao)
-       VALUES (1007, 6, 501, 70, 'PILOT_SIM_24M', 'Simulador', 'VALIDA', '2024-02-29');`,
+       VALUES 
+         (1007, 6, 501, 70, 'SIM_NOMINAL_24M', 'Simulador', 'VALIDA', '2024-02-29'),
+         (1008, 6, 501, 71, 'SIM_FIM_MES_24M', 'Simulador', 'VALIDA', '2024-02-29');`,
     );
 
-    // Conclusão em 29/02/2024 (ano bissexto), validade 24 meses sem fim de mês
-    const res = await testApp.request('/qualificacoes/historico/1007', {
+    // Caso A: Conclusão em 29/02/2024 (ano bissexto), vencimento_fim_mes = 0 (dia nominal)
+    const resNominal = await testApp.request('/qualificacoes/historico/1007', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -581,13 +592,40 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
         tipo_treinamento: 'Recorrente',
       }),
     });
+    expect(resNominal.status).toBe(200);
 
+    const readNominal = await testApp.request('/qualificacoes/historico?id=1007');
+    const itemNominal = ((await readNominal.json()) as any).data[0];
+    // Em dia nominal sem fim de mês (vencimento_fim_mes = 0), adição direta de 24 meses em ano não-bissexto resulta em 2026-03-01
+    expect(itemNominal.data_vencimento).toBe('2026-03-01');
+
+    // Caso B: Conclusão em 29/02/2024 (ano bissexto), vencimento_fim_mes = 1 (fim de mês)
+    const resFimMes = await testApp.request('/qualificacoes/historico/1008', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data_conclusao: '2024-02-29',
+        tipo_treinamento: 'Recorrente',
+      }),
+    });
+    expect(resFimMes.status).toBe(200);
+
+    const readFimMes = await testApp.request('/qualificacoes/historico?id=1008');
+    const itemFimMes = ((await readFimMes.json()) as any).data[0];
+    // Com vencimento_fim_mes = 1, o vencimento vai para o último dia de fevereiro de 2026: 2026-02-28
+    expect(itemFimMes.data_vencimento).toBe('2026-02-28');
+  });
+
+  it('9. Busca por tipo_id: localiza tanto registros explicitamente vinculados quanto legados associados via código', async () => {
+    const testApp = buildTestApp(databasePath, 6);
+    // Busca por tipo_id = 20 (Coordenador Tenant Alpha)
+    const res = await testApp.request('/qualificacoes/historico?tipo_id=20');
     expect(res.status).toBe(200);
-
-    const readRes = await testApp.request('/qualificacoes/historico?id=1007');
-    const item = ((await readRes.json()) as any).data[0];
-
-    // Data calculada determinística pela função de calendário
-    expect(item.data_vencimento).toBe('2026-03-01');
+    const body = (await res.json()) as any;
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    const item = body.data.find((h: any) => h.id === 1001);
+    expect(item).toBeDefined();
+    expect(item.tipo_codigo).toBe('EAD_COORDENADOR_VOO');
+    expect(item.tipo_id).toBe(20);
   });
 });

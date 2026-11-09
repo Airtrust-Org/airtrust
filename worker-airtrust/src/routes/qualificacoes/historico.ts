@@ -409,8 +409,8 @@ export const getHistoricoListHandler = safe(async (c) => {
       params.push(id);
     }
     if (tipo_id) {
-      conditions.push('qh.qualificacao_id = ?');
-      params.push(tipo_id);
+      conditions.push('(qh.qualificacao_id = ? OR (qh.qualificacao_id IS NULL AND qt.id = ?))');
+      params.push(tipo_id, tipo_id);
     }
     if (aeronave_id) {
       conditions.push(`(
@@ -614,7 +614,7 @@ export const getHistoricoListHandler = safe(async (c) => {
       f.nascimento AS funcionario_data_nascimento,
       f.modelo_aeronave_id,
       ${MODELO_AERONAVE_EXPR} AS modelo_aeronave,
-      COALESCE(qt.id, qh.qualificacao_id) AS tipo_id,
+      qt.id AS tipo_id,
       qt.id AS tipo_id_resolvido,
       qt.nome AS tipo_nome,
       COALESCE(qh.tipo, qt.nome) AS tipo,
