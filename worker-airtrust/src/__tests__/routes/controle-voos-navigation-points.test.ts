@@ -23,6 +23,12 @@ vi.mock('../../middleware/tenant', async (importOriginal) => {
   return { ...actual, getEmpresaId: (c: any) => Number(c.get('empresaId') || 0), checkPermission: () => true };
 });
 
+// O foco aqui e o filtro do catalogo; o guard de leitura (P06-01) tem teste proprio.
+vi.mock('../../middleware/controle-voos-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../middleware/controle-voos-access')>();
+  return { ...actual, requireControleVoosViewOrPilotAccess: () => async (_c: unknown, next: () => Promise<void>) => next() };
+});
+
 vi.mock('../../utils/auditoria', () => ({ registrarAuditoria: vi.fn(), extrairUsuarioAuditoria: () => ({ usuario_id: '10' }) }));
 
 import controleVoosRoutes from '../../routes/controle-voos';
