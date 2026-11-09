@@ -110,7 +110,7 @@ jobs:
         run: node scripts/ci/verify-release-gates.mjs
 
   execute:
-    name: Governed production qualification expiry
+    name: Governed production D1 qualification expiry apply with backup recovery point
     needs: guard
     runs-on: ubuntu-latest
     environment: production
