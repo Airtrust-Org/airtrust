@@ -12,6 +12,7 @@ import { runTrainingComplianceRosterJob } from './compliance-roster';
 import { runSigvoosFrmsJobs } from './sigvoos-frms';
 import { processLicenseAlerts } from '../license-alerts';
 import { cleanupExpiredRefreshTokens } from '../../services/auth-refresh-token';
+import { purgeOldCronJobRuns } from './cron-runs-retention';
 
 const TEN_MINUTE_CRON = '*/10 * * * *';
 const DAILY_UTC_CRON = TRAINING_ALERT_DAILY_CRON;
@@ -142,6 +143,9 @@ export async function runResilientScheduledJobs(
   // These daily-only jobs were silently skipped without explicit routing.
   await runStep('refresh-token-cleanup', plan.runRefreshTokenCleanup, () =>
     cleanupExpiredRefreshTokens(env.DB),
+  );
+  await runStep('cron-runs-retention', plan.runRefreshTokenCleanup, () =>
+    purgeOldCronJobRuns(env.DB),
   );
   await runStep('training-compliance-snapshots', plan.runDailyAlerts, () =>
     refreshTrainingComplianceSnapshots(env),
