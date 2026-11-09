@@ -11,7 +11,7 @@ import { getTenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import { safe } from './safe-handler';
-import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
+import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, isValidCalendarIsoDate, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
 import {
   COMPLETED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -935,6 +935,20 @@ writeRouter.put(
     // Validar campos obrigatórios
     if (!data_conclusao) {
       return c.json({ success: false, error: 'data_conclusao é obrigatória' }, 400);
+    }
+    if (!isValidCalendarIsoDate(data_conclusao)) {
+      return c.json({ success: false, error: 'data_conclusao inválida (use AAAA-MM-DD)' }, 400);
+    }
+    if (data_vencimento) {
+      if (!isValidCalendarIsoDate(data_vencimento)) {
+        return c.json({ success: false, error: 'data_vencimento inválida (use AAAA-MM-DD)' }, 400);
+      }
+      if (data_vencimento < data_conclusao) {
+        return c.json(
+          { success: false, error: 'data_vencimento não pode ser anterior à data_conclusao' },
+          400,
+        );
+      }
     }
 
     const cargaContext = await db
