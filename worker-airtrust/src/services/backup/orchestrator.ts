@@ -15,7 +15,17 @@ import {
 interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
+  /** Máximo de objetos R2 que um backup COMPLETO copia numa única invocação (default 200). */
+  BACKUP_R2_COPY_MAX_OBJECTS?: string;
 }
+
+/**
+ * Cada objeto copiado custa get + put e depois mais um get no checksum (3 subrequests), tudo na
+ * mesma invocação do cron. Em produção o bucket tem ~45,6 mil objetos (17,5 GB): a cópia completa
+ * nunca cabe e o Worker morria no meio (mensal COMPLETO sem sucesso desde 2026-05-01), deixando
+ * cópias parciais sem manifesto no bucket. Acima do limite o backup falha ANTES de copiar.
+ */
+export const BACKUP_R2_COPY_DEFAULT_MAX_OBJECTS = 200;
 
 type AutomaticBackupType = 'DIARIO' | 'SEMANAL' | 'MENSAL';
 type BackupScope = 'SYSTEM_GLOBAL' | 'TENANT_SCOPED' | 'MODULAR' | 'GERAL';
@@ -500,6 +510,16 @@ export class BackupOrchestrator {
     try {
       const bucket = this.env.BUCKET;
       const objetos = await this.listarObjetosR2(true);
+
+      const limiteObjetos = this.limiteObjetosCopiaR2();
+      if (objetos.length > limiteObjetos) {
+        // Fail-closed e barato: nada é copiado, então não sobram cópias parciais sem manifesto.
+        throw new Error(
+          `R2_BACKUP_COPY_EXCEEDS_INVOCATION_BUDGET: ${objetos.length} objetos listados, limite ${limiteObjetos}; ` +
+            'a cópia completa do R2 em uma única invocação não é suportada (use replicação/bucket separado)',
+        );
+      }
+
       const arquivosBackup: Array<{ key: string; size: number; backup_key: string }> = [];
 
       for (const objeto of objetos) {
@@ -551,6 +571,13 @@ export class BackupOrchestrator {
       });
       throw new Error(`Falha ao copiar arquivos R2 para backup: ${this.formatarErro(error)}`);
     }
+  }
+
+  private limiteObjetosCopiaR2(): number {
+    const configurado = Number(this.env.BACKUP_R2_COPY_MAX_OBJECTS);
+    return Number.isInteger(configurado) && configurado > 0
+      ? configurado
+      : BACKUP_R2_COPY_DEFAULT_MAX_OBJECTS;
   }
 
   /**
