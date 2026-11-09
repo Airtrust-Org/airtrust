@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isSecretBackupColumn } from '../../config/backup-modules';
 import { BackupOrchestrator } from '../../services/backup/orchestrator';
 import type { Env } from '../../types';
 
@@ -13,6 +14,8 @@ function bytesFromString(value: string): Uint8Array {
 
 type MockDbOptions = {
   missingTable?: string;
+  tableColumns?: Record<string, string[]>;
+  tableRows?: Record<string, Array<Record<string, unknown>>>;
 };
 
 function extractPragmaTable(sql: string): string | null {
@@ -74,8 +77,15 @@ function createMockDb(options: MockDbOptions = {}) {
         }),
         all: vi.fn(async () => {
           const table = extractPragmaTable(sql);
+          const selectedTable = sql.match(/^SELECT .+ FROM "([A-Za-z_][A-Za-z0-9_]*)"/)?.[1];
+          if (selectedTable && options.tableRows?.[selectedTable]) {
+            return { results: options.tableRows[selectedTable] };
+          }
           if (table) {
             if (table === options.missingTable) return { results: [] };
+            if (options.tableColumns?.[table]) {
+              return { results: options.tableColumns[table].map((name) => ({ name })) };
+            }
             if (table === 'system_config') {
               return { results: [{ name: 'key' }, { name: 'value' }] };
             }
@@ -303,5 +313,95 @@ describe('BackupOrchestrator integrity', () => {
     expect(state.controlScopes).toEqual(['SYSTEM_GLOBAL']);
     expect(state.controlTriggeredBy).toEqual(['CRON_DIARIO']);
     expect(state.statusUpdates).toContain('CONCLUIDO');
+  });
+
+  it('nao exporta colunas de credencial/segredo e registra quais foram omitidas (P08-02)', async () => {
+    const hashSintetico = '$2b$10$sintetico-nao-e-uma-senha-real';
+    const { orchestrator, state, r2 } = createOrchestrator({
+      tableColumns: { usuarios: ['id', 'empresa_id', 'email', 'password_hash', 'deleted_at'] },
+      tableRows: { usuarios: [{ id: 1, empresa_id: 1, email: 'a@exemplo.test', deleted_at: null }] },
+    });
+
+    await orchestrator.executarBackupManual({
+      tipo: 'MODULAR',
+      modulos: ['PESSOAS'],
+      triggered_by: 'UNIT_TEST',
+    });
+
+    const usuariosQuery = state.preparedSql.find((sql) => sql.includes('FROM "usuarios"') && sql.startsWith('SELECT'));
+    expect(usuariosQuery).toBe(
+      'SELECT "id", "empresa_id", "email", "deleted_at" FROM "usuarios" WHERE "deleted_at" IS NULL',
+    );
+    expect(usuariosQuery).not.toContain('password_hash');
+    expect(usuariosQuery).not.toContain('*');
+
+    const pessoasKey = r2.keys().find((key) => key.endsWith('/PESSOAS.json'));
+    expect(pessoasKey).toBeTruthy();
+    const conteudo = r2.text(pessoasKey as string);
+    expect(conteudo).not.toContain('"password_hash":');
+    expect(conteudo).not.toContain(hashSintetico);
+    const parsed = JSON.parse(conteudo) as { metadata: { colunas_excluidas: Record<string, string[]> } };
+    expect(parsed.metadata.colunas_excluidas).toEqual({ usuarios: ['password_hash'] });
+  });
+
+  it('preserva colunas com acento ao montar a lista explicita (dados_sensíveis existe em producao)', async () => {
+    const { orchestrator, state } = createOrchestrator({
+      tableColumns: {
+        pessoas_auditoria_acessos: ['id', 'dados_sensíveis', 'refresh_token'],
+      },
+    });
+
+    await orchestrator.executarBackupManual({
+      tipo: 'MODULAR',
+      modulos: ['COMPLIANCE'],
+      triggered_by: 'UNIT_TEST',
+    });
+
+    expect(state.preparedSql).toContain('SELECT "id", "dados_sensíveis" FROM "pessoas_auditoria_acessos"');
+  });
+
+  it('falha fechado se todas as colunas de uma tabela forem segredo', async () => {
+    const { orchestrator, state } = createOrchestrator({
+      tableColumns: { system_config: ['token', 'secret'] },
+    });
+
+    await expect(
+      orchestrator.executarBackupManual({
+        tipo: 'MODULAR',
+        modulos: ['CONFIGURACOES'],
+        triggered_by: 'UNIT_TEST',
+      }),
+    ).rejects.toThrow('tabela sem colunas exportáveis');
+    expect(state.statusUpdates).toContain('FALHOU');
+  });
+});
+
+describe('isSecretBackupColumn', () => {
+  it.each([
+    'password_hash',
+    'senha_hash',
+    'senha',
+    'refresh_token',
+    'token',
+    'api_key',
+    'client_secret',
+    'PASSWORD_HASH',
+    'private_key',
+  ])('trata %s como segredo', (nome) => {
+    expect(isSecretBackupColumn(nome)).toBe(true);
+  });
+
+  it.each([
+    'arquivo_hash',
+    'validacao_hash',
+    'hash_assinatura',
+    'logo_hash',
+    'dados_sensíveis',
+    'cpf',
+    'email',
+    'tokenizacao_ok_flag_nao_existe',
+    'id',
+  ])('mantem %s no export', (nome) => {
+    expect(isSecretBackupColumn(nome)).toBe(false);
   });
 });
