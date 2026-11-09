@@ -14,7 +14,12 @@ import type { Env } from '../../types';
  */
 
 vi.mock('../../middleware/auth', () => ({
-  auth: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  auth: () => async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+    // P07-03: a leitura individual exige identidade; estes testes exercem a rota como admin.
+    c.set('userRole', 'admin');
+    c.set('userId', 1);
+    await next();
+  },
 }));
 
 vi.mock('../../middleware/tenant', () => ({

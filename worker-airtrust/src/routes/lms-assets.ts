@@ -750,7 +750,7 @@ function buildProtectedLaunchHeaders(
     'Access-Control-Allow-Origin': resolveAllowedOrigin(origin, corsOrigins),
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache, X-EdApp-Secret',
+      'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, Expires, X-AirTrust-Bypass-Cache',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',

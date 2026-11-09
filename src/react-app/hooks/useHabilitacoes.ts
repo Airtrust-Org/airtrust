@@ -482,7 +482,6 @@ export function useUpdateHabilitacao() {
           headers: {
             Authorization: `Bearer ${getToken()}`,
             'Content-Type': 'application/json',
-            'X-Dev-Auth-Bypass': '1',
           },
           body: JSON.stringify(dados),
         });
