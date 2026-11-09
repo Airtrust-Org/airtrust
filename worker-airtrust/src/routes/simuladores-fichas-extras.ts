@@ -9,11 +9,12 @@
  *   POST /sessoes/:id/checks/resultados
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
 import { audit } from '../services/simuladores/shared';
+import { canReadFuncionarioSimuladorData } from '../services/simuladores/funcionario-read-scope';
 import { createLogger, toError } from '../utils/logger';
 import { requireOperationalAccess } from '../middleware/operational-domain-access';
 
@@ -24,6 +25,34 @@ const requireOperacoesFicha = (action: 'create' | 'update') =>
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('*', auth());
+
+
+// P07-02: leitura individual (notas/dashboard) somente do proprio funcionario,
+// de funcionarios do escopo do gestor, ou por admin/instrutor.
+async function assertCanReadFuncionario(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  empresaId: number,
+  funcionarioId: number,
+): Promise<boolean> {
+  const rawFuncionarioId = Number(c.get('funcionarioId') || 0);
+  return canReadFuncionarioSimuladorData(
+    c.env.DB,
+    {
+      empresaId,
+      userId: Number(c.get('userId') || 0),
+      userRole: c.get('userRole'),
+      funcionarioId:
+        Number.isInteger(rawFuncionarioId) && rawFuncionarioId > 0 ? rawFuncionarioId : null,
+    },
+    funcionarioId,
+  );
+}
+
+const FORBIDDEN_FUNCIONARIO_READ = {
+  success: false,
+  error: 'Sem permissão para consultar este funcionário',
+  code: 'SIMULADOR_FUNCIONARIO_READ_FORBIDDEN',
+} as const;
 
 function parseHistoricoLimit(raw: string | undefined): number {
   const parsed = Number.parseInt(raw || '', 10);
@@ -241,6 +270,9 @@ app.get('/historico-notas/ultima/:funcionarioId/:codigoManobra', async (c) => {
     const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
     const codigoManobra = c.req.param('codigoManobra');
+    if (!(await assertCanReadFuncionario(c, empresaId, parseInt(funcionarioId)))) {
+      return c.json(FORBIDDEN_FUNCIONARIO_READ, 403);
+    }
 
     // Tenant guard: verify funcionario belongs to user's empresa
     const funcionarioCheck = await c.env.DB.prepare(
@@ -287,6 +319,9 @@ app.get('/historico-notas/:funcionarioId', async (c) => {
     const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
     const limit = parseHistoricoLimit(c.req.query('limit'));
+    if (!(await assertCanReadFuncionario(c, empresaId, parseInt(funcionarioId)))) {
+      return c.json(FORBIDDEN_FUNCIONARIO_READ, 403);
+    }
 
     // Tenant guard: verify funcionario belongs to user's empresa
     const funcionarioCheck = await c.env.DB.prepare(
@@ -329,6 +364,9 @@ app.get('/dashboard/:funcionarioId', async (c) => {
   try {
     const { empresaId } = getTenantContext(c);
     const funcionarioId = c.req.param('funcionarioId');
+    if (!(await assertCanReadFuncionario(c, empresaId, parseInt(funcionarioId)))) {
+      return c.json(FORBIDDEN_FUNCIONARIO_READ, 403);
+    }
 
     // Tenant guard: verify funcionario belongs to user's empresa
     const funcionarioCheck = await c.env.DB.prepare(

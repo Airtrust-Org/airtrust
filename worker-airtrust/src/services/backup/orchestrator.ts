@@ -5,6 +5,7 @@
 
 import {
   BACKUP_MODULES,
+  isSecretBackupColumn,
   type ModuloBackup,
   ordenarModulosPorPrioridade,
   TODOS_MODULOS,
@@ -19,6 +20,11 @@ interface Env {
 type AutomaticBackupType = 'DIARIO' | 'SEMANAL' | 'MENSAL';
 type BackupScope = 'SYSTEM_GLOBAL' | 'TENANT_SCOPED' | 'MODULAR' | 'GERAL';
 type BackupRow = Record<string, unknown>;
+
+interface TabelaExportada {
+  rows: BackupRow[];
+  colunasExcluidas: string[];
+}
 
 function generateUUID(): string {
   return crypto.randomUUID();
@@ -253,10 +259,17 @@ export class BackupOrchestrator {
 
     try {
       // Exportar tabelas principais
-      const dadosPrincipais = await this.exportarTabelas([...config.tabelas_principais]);
+      const colunasExcluidas: Record<string, string[]> = {};
+      const dadosPrincipais = await this.exportarTabelas(
+        [...config.tabelas_principais],
+        colunasExcluidas,
+      );
 
       // Exportar tabelas relacionadas
-      const dadosRelacionados = await this.exportarTabelas([...config.tabelas_relacionadas]);
+      const dadosRelacionados = await this.exportarTabelas(
+        [...config.tabelas_relacionadas],
+        colunasExcluidas,
+      );
       const tabelasExportadas = [
         ...new Set([...Object.keys(dadosPrincipais), ...Object.keys(dadosRelacionados)]),
       ];
@@ -264,7 +277,7 @@ export class BackupOrchestrator {
       // Consolidar dados
       const backupData = {
         modulo,
-        versao: '1.1',
+        versao: '1.2',
         timestamp: new Date().toISOString(),
         tabelas_principais: dadosPrincipais,
         tabelas_relacionadas: dadosRelacionados,
@@ -273,6 +286,8 @@ export class BackupOrchestrator {
             this.contarRegistros(dadosPrincipais) + this.contarRegistros(dadosRelacionados),
           total_tabelas: tabelasExportadas.length,
           tabelas_exportadas: tabelasExportadas,
+          // Colunas de credencial/segredo omitidas do export (P08-02).
+          colunas_excluidas: colunasExcluidas,
           dependencias: config.dependencias,
         },
       };
@@ -311,17 +326,24 @@ export class BackupOrchestrator {
    * Exporta dados de tabelas de forma fail-closed.
    * Tabelas sem deleted_at são exportadas integralmente; tabela ausente ou erro SQL falha o backup.
    */
-  private async exportarTabelas(tabelas: string[]): Promise<Record<string, BackupRow[]>> {
+  private async exportarTabelas(
+    tabelas: string[],
+    colunasExcluidas: Record<string, string[]> = {},
+  ): Promise<Record<string, BackupRow[]>> {
     const resultado: Record<string, BackupRow[]> = {};
 
     for (const tabela of tabelas) {
-      resultado[tabela] = await this.exportarTabela(tabela);
+      const exportada = await this.exportarTabela(tabela);
+      resultado[tabela] = exportada.rows;
+      if (exportada.colunasExcluidas.length > 0) {
+        colunasExcluidas[tabela] = exportada.colunasExcluidas;
+      }
     }
 
     return resultado;
   }
 
-  private async exportarTabela(tabela: string): Promise<BackupRow[]> {
+  private async exportarTabela(tabela: string): Promise<TabelaExportada> {
     this.validarNomeTabela(tabela);
 
     try {
@@ -333,19 +355,37 @@ export class BackupOrchestrator {
         throw new Error('tabela não existe no schema ativo');
       }
 
-      const nomesColunas = new Set(
-        colunas.map((coluna) => String(coluna.name || '').trim()).filter(Boolean),
-      );
+      const todasColunas = colunas.map((coluna) => String(coluna.name || '').trim()).filter(Boolean);
+      const nomesColunas = new Set(todasColunas);
+      const colunasExcluidas = todasColunas.filter((nome) => isSecretBackupColumn(nome));
+      const colunasExportadas = todasColunas.filter((nome) => !isSecretBackupColumn(nome));
+      if (colunasExportadas.length === 0) {
+        throw new Error('tabela sem colunas exportáveis após remover segredos');
+      }
+
       const filtroSoftDelete = nomesColunas.has('deleted_at') ? ' WHERE "deleted_at" IS NULL' : '';
-      const query = `SELECT * FROM "${tabela}"${filtroSoftDelete}`;
+      // SELECT * só quando nenhuma coluna é segredo; caso contrário lista explícita.
+      const projecao =
+        colunasExcluidas.length === 0
+          ? '*'
+          : colunasExportadas.map((nome) => this.citarIdentificador(nome)).join(', ');
+      const query = `SELECT ${projecao} FROM "${tabela}"${filtroSoftDelete}`;
       const { results } = await this.env.DB.prepare(query).all<BackupRow>();
 
-      return results;
+      return { rows: results, colunasExcluidas };
     } catch (error) {
       throw new Error(
         `Falha ao exportar tabela configurada ${tabela}: ${this.formatarErro(error)}`,
       );
     }
+  }
+
+  /**
+   * Nomes de coluna vêm do PRAGMA do próprio schema (podem ter acento, ex.: `dados_sensíveis`
+   * em produção), então não passam pela regex ASCII das tabelas: apenas aspas duplas escapadas.
+   */
+  private citarIdentificador(nome: string): string {
+    return `"${nome.replace(/"/g, '""')}"`;
   }
 
   private validarNomeTabela(tabela: string): void {
