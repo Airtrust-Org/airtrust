@@ -45,7 +45,7 @@ describe('FRMS preferred operational source resilience', () => {
 
   it('restringe SIGVOOS ao mesmo tenant da jornada e do funcionário', async () => {
     fetchControleVoosOperationalRecordsMock.mockResolvedValue([]);
-    const prepare = vi.fn(() => ({
+    const prepare = vi.fn((_sql: string) => ({
       bind: vi.fn((...params: unknown[]) => {
         expect(params).toEqual([6, '2026-09-27', '2026-09-27']);
         return { all: vi.fn().mockResolvedValue({ results: [] }) };
