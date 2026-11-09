@@ -15,6 +15,8 @@ vi.mock('../../middleware/auth', () => ({
 }));
 vi.mock('../../middleware/rbac', () => ({
   requirePermission: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  // P02-07: o catalogo consulta o papel para decidir se rascunhos podem aparecer.
+  hasRole: () => false,
   requireRole: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 vi.mock('../../utils/tenant-resolution', () => ({ getEmpresaIdSafe: () => authState.empresaId }));
