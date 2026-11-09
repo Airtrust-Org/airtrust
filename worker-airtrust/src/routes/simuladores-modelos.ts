@@ -2,8 +2,7 @@
  * SIMULADORES — Modelos e Tipos de Sessão
  * Routes: GET/POST/PUT/DELETE /tipos-sessao, /tipos-sessao/:id,
  *         GET/POST/PUT/DELETE /modelos-sessao, /modelos-sessao/:id,
- *         GET /modelos-sessao/:id/manobras, POST /modelos-sessao/:id/manobras,
- *         POST /fix/modelos-periodicos
+ *         GET /modelos-sessao/:id/manobras, POST /modelos-sessao/:id/manobras
  */
 
 import { Hono } from 'hono';
@@ -1899,68 +1898,6 @@ app.delete('/modelos-sessao/:id', requirePermission('simuladores', 'deletar', 'a
     return c.json({ success: true, message: 'Modelo excluído com sucesso' });
   } catch (e: any) {
     console.error('❌ [MODELOS] Erro DELETE:', e.message);
-    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
-  }
-});
-
-// ==========================================================================
-// MANUTENÇÃO
-// ==========================================================================
-
-// POST /api/simuladores/fix/modelos-periodicos - Repair: Atualizar modelo_aeronave
-app.post('/fix/modelos-periodicos', async (c) => {
-  try {
-    const empresaId = getEmpresaIdFromRequest(c);
-    console.log('🔧 [FIX] Iniciando reparo de modelos periódicos...');
-
-    // 1. Atualizar modelos periódicos AW139 SEM modelo_aeronave
-    const result1 = await c.env.DB.prepare(
-      `UPDATE modelos_sessao 
-       SET modelo_aeronave = 'AW139'
-       WHERE tipo_sessao_id = 9
-         AND empresa_id = ?
-         AND tipo_aeronave = 'AW139'
-         AND (modelo_aeronave IS NULL OR modelo_aeronave = '')
-         AND deleted_at IS NULL`,
-    )
-      .bind(empresaId)
-      .run();
-
-    // 2. Atualizar modelos periódicos SEM tipo_aeronave (CHECK FINAL) - defaultar para AW139
-    const result2 = await c.env.DB.prepare(
-      `UPDATE modelos_sessao 
-       SET modelo_aeronave = 'AW139', tipo_aeronave = 'AW139'
-       WHERE tipo_sessao_id = 9
-         AND empresa_id = ?
-         AND (tipo_aeronave IS NULL OR tipo_aeronave = '')
-         AND deleted_at IS NULL`,
-    )
-      .bind(empresaId)
-      .run();
-
-    console.log(`✅ [FIX] Atualizado batch 1: ${result1.meta.changes} registros`);
-    console.log(`✅ [FIX] Atualizado batch 2: ${result2.meta.changes} registros`);
-
-    // Verificar resultados
-    const verificacao = await c.env.DB.prepare(
-      `SELECT COUNT(*) as total, 
-              COUNT(CASE WHEN modelo_aeronave = 'AW139' THEN 1 END) as com_codigo
-       FROM modelos_sessao
-       WHERE tipo_sessao_id = 9
-         AND empresa_id = ?
-         AND deleted_at IS NULL`,
-    )
-      .bind(empresaId)
-      .first();
-
-    return c.json({
-      success: true,
-      message: 'Modelos periódicos reparados com sucesso',
-      changes: (result1.meta.changes || 0) + (result2.meta.changes || 0),
-      verification: verificacao,
-    });
-  } catch (e: any) {
-    console.error('❌ [FIX] Erro:', e.message);
     return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
   }
 });
