@@ -17,11 +17,14 @@ type DbOptions = {
   blocklisted?: Set<string>;
   transientBlocklistFailures?: number;
   blocklistReadThrows?: boolean;
+  transientPlatformFailures?: number;
+  platformReadThrows?: boolean;
   asyncDelayMs?: number;
 };
 
 function createMockD1(options: DbOptions = {}) {
   let transientRemaining = options.transientBlocklistFailures ?? 0;
+  let transientPlatformRemaining = options.transientPlatformFailures ?? 0;
   const blocklisted = options.blocklisted || new Set<string>();
 
   return {
@@ -37,6 +40,12 @@ function createMockD1(options: DbOptions = {}) {
             await new Promise((r) => setTimeout(r, options.asyncDelayMs));
           }
           if (sql.includes("name = 'usuarios_empresas'")) return { found: 1 } as T;
+          if (sql.includes('sqlite_master')) {
+            const target = stmt.params[0];
+            if (target === 'user_platform_roles' || target === 'usuarios_empresas') {
+              return { found: 1 } as T;
+            }
+          }
           if (sql.includes('PRAGMA table_info')) return null as T;
 
           if (sql.includes('FROM token_blocklist')) {
@@ -75,12 +84,22 @@ function createMockD1(options: DbOptions = {}) {
           if (options.asyncDelayMs) {
             await new Promise((r) => setTimeout(r, options.asyncDelayMs));
           }
+          if (sql.includes('FROM user_platform_roles')) {
+            if (transientPlatformRemaining > 0) {
+              transientPlatformRemaining--;
+              throw new Error('D1_EXEC_ERROR: 503 Service Unavailable: database resource limit');
+            }
+            if (options.platformReadThrows) {
+              throw new Error('D1_ERROR: storage backend completely unavailable');
+            }
+            return { results: [] } as T;
+          }
           if (sql.includes('FROM usuarios') || sql.includes('usuarios_empresas')) {
             return {
               results: [{ id: 42, active: 1, role: 'admin', empresa_id: 6 }],
             };
           }
-          return { results: [] };
+          return { results: [] } as T;
         },
         async run() {
           return { meta: { changes: 1 } };
@@ -288,5 +307,34 @@ describe('Pendência 6 — Incidente 503 e Verificação Adversarial de Revogaç
     });
     expect(secondRes.status).toBe(401);
     expect(((await secondRes.json()) as { code: string }).code).toBe('TOKEN_REVOKED');
+  });
+
+  it('9. Incidente #2078: falhas intermitentes no platform access são absorvidas pelo retry e respondem 200', async () => {
+    // 2 falhas transitórias consecutivas de platform access (ex: 503 Service Unavailable / resource limit)
+    const db = createMockD1({ transientPlatformFailures: 2 });
+    const app = buildTestApp(db);
+    const token = await makeToken('jti-transient-platform-9');
+
+    const res = await app('/api/compliance-treinamentos/reconciliacao', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+  });
+
+  it('10. Incidente #2078 (fail-closed): indisponibilidade persistente em platform access retorna 503 PLATFORM_ACCESS_CHECK_UNAVAILABLE', async () => {
+    const db = createMockD1({ platformReadThrows: true });
+    const app = buildTestApp(db);
+    const token = await makeToken('jti-unavailable-platform-10');
+
+    const res = await app('/api/compliance-treinamentos/reconciliacao', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe('PLATFORM_ACCESS_CHECK_UNAVAILABLE');
   });
 });

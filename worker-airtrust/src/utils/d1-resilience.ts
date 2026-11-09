@@ -34,14 +34,24 @@ export function isTransientD1Error(error: unknown): boolean {
       : '';
   const name = typeof errObj?.name === 'string' ? errObj.name : '';
   const cause = errObj?.cause;
+  const causeObj = typeof cause === 'object' && cause !== null ? (cause as Record<string, unknown>) : null;
   const causeMessage =
     cause instanceof Error
       ? cause.message
       : typeof cause === 'string'
       ? cause
+      : typeof causeObj?.message === 'string'
+      ? causeObj.message
       : '';
+  const causeCode =
+    typeof causeObj?.code === 'string'
+      ? causeObj.code
+      : typeof causeObj?.code === 'number'
+      ? String(causeObj.code)
+      : '';
+  const causeName = typeof causeObj?.name === 'string' ? causeObj.name : '';
 
-  const combined = `${name} ${code} ${status} ${message} ${causeMessage}`.toLowerCase();
+  const combined = `${name} ${code} ${status} ${message} ${causeName} ${causeCode} ${causeMessage}`.toLowerCase();
 
   // 1. Erros permanentes de aplicação, sintaxe ou schema: fail-closed imediato
   if (
@@ -62,11 +72,16 @@ export function isTransientD1Error(error: unknown): boolean {
   // Resource ceilings of the current Worker invocation are deterministic.
   // Retrying in the same invocation consumes even more of the exhausted budget.
   // Keep this guard before generic D1_EXEC_ERROR / subrequest / resource matches.
+  // Specific worker invocation ceilings: subrequests, cpu time, worker memory.
   if (
     combined.includes('subrequest limit') ||
     combined.includes('maximum number of subrequests') ||
-    combined.includes('resource limit') ||
-    combined.includes('cpu time limit')
+    combined.includes('too many subrequests') ||
+    combined.includes('resource limit reached') ||
+    combined.includes('worker resource limit') ||
+    combined.includes('cpu time limit') ||
+    combined.includes('memory limit exceeded') ||
+    combined.includes('isolate memory limit')
   ) {
     return false;
   }
@@ -81,6 +96,7 @@ export function isTransientD1Error(error: unknown): boolean {
     combined.includes('unavailable') ||
     combined.includes('rate limit') ||
     combined.includes('too many requests') ||
+    combined.includes('too many connections') ||
     combined.includes('connection reset') ||
     combined.includes('connection closed') ||
     combined.includes('connection lost') ||
@@ -89,6 +105,14 @@ export function isTransientD1Error(error: unknown): boolean {
     combined.includes('fetch failed') ||
     combined.includes('failed to fetch') ||
     combined.includes('network') ||
+    combined.includes('channel closed') ||
+    combined.includes('remote procedure call') ||
+    combined.includes('rpc error') ||
+    combined.includes('transport error') ||
+    combined.includes('protocol error') ||
+    combined.includes('d1 client disconnected') ||
+    combined.includes('temporarily unavailable') ||
+    combined.includes('service unavailable') ||
     combined.includes('econnreset') ||
     combined.includes('etimedout') ||
     combined.includes('econnaborted') ||

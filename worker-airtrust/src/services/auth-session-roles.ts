@@ -1,5 +1,9 @@
 import { normalizeAirtrustRole } from '../utils/role-resolution';
-import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
+import {
+  isPlatformAdminAccess,
+  resolvePlatformAccessState,
+  type PlatformAccessState,
+} from '../lib/rbac/platform-access';
 
 /**
  * Nome do cookie same-site que carrega o perfil ativo escolhido para a sessão.
@@ -99,6 +103,7 @@ export async function resolveAvailableSessionRoles(
   userId: number,
   empresaId: number,
   fallbackRole?: unknown,
+  preloadedPlatformAccess?: PlatformAccessState,
 ): Promise<SessionRole[]> {
   const row = await db
     .prepare(
@@ -130,7 +135,8 @@ export async function resolveAvailableSessionRoles(
   // A concessão global persistida prevalece sobre qualquer papel legado,
   // vínculo setorial ou perfil adicional na empresa. Essa verificação também
   // protege um administrador que alternou para outra empresa com role ALUNO.
-  if (isPlatformAdminAccess(await resolvePlatformAccessState(db, userId))) {
+  const platformAccess = preloadedPlatformAccess ?? (await resolvePlatformAccessState(db, userId));
+  if (isPlatformAdminAccess(platformAccess)) {
     return ['ADMINISTRADOR'];
   }
 
@@ -218,8 +224,15 @@ export async function resolveRequestedSessionRole(
   empresaId: number,
   requestedRole: unknown,
   fallbackRole?: unknown,
+  preloadedPlatformAccess?: PlatformAccessState,
 ): Promise<SessionRole | null> {
   const requested = normalizeSessionRole(requestedRole);
-  const available = await resolveAvailableSessionRoles(db, userId, empresaId, fallbackRole);
+  const available = await resolveAvailableSessionRoles(
+    db,
+    userId,
+    empresaId,
+    fallbackRole,
+    preloadedPlatformAccess,
+  );
   return available.includes(requested) ? requested : null;
 }
