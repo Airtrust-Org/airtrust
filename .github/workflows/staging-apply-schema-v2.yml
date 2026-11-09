@@ -161,7 +161,20 @@ jobs:
                 ancestry.behind_by === 0;
             }
           }
-          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa || reviewedMergedMgm0570 || reviewedMergedFrms0573 || reviewedMergedPptx0574)) {
+          // #2140 (index 0576): the staging environment only admits protected main, so the
+          // reviewed squash-merge commit (or an up-to-date descendant of it) is admitted.
+          let reviewedMergedNotif0576 = false;
+          if (sameRepo && pr.merged === true && number === '2140' &&
+              process.env.CHANGE_ID === 'notificacoes-log-empresa-assunto-index-0576' &&
+              pr.merge_commit_sha?.toLowerCase() === '20e331e88ea97d67b061c2150278c1f1442b85a6') {
+            const mainRef = await github('/git/refs/heads/main');
+            if (mainRef.object?.sha?.toLowerCase() === sha) {
+              const ancestry = await github('/compare/20e331e88ea97d67b061c2150278c1f1442b85a6...' + sha);
+              reviewedMergedNotif0576 = (ancestry.status === 'ahead' || ancestry.status === 'identical') &&
+                ancestry.behind_by === 0;
+            }
+          }
+          if (!sameRepo || !(reviewedOpenHead || reviewedMergedHfa || reviewedMergedMgm0570 || reviewedMergedFrms0573 || reviewedMergedPptx0574 || reviewedMergedNotif0576)) {
             throw new Error('REVIEWED_PR_HEAD_OR_ORIGIN_MISMATCH');
           }
           if (process.env.CHANGE_ID === 'lms-scorm-qa-evidence-bindings-0568') {
