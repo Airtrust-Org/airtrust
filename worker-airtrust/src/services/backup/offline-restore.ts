@@ -77,7 +77,17 @@ export async function verifyBackupSet(
 
   const manifestJson = decoder.decode(asBytes(manifestBytes));
   if (!options.expectedManifestSha256) {
-    failures.push('SHA-256 esperado do manifesto não informado: manifesto não autenticado');
+    // Without the independent checksum from the backup control record, the
+    // manifest is unauthenticated. Do not use its keys for any artifact reads.
+    return {
+      ok: false,
+      failures: ['SHA-256 esperado do manifesto não informado: manifesto não autenticado'],
+      manifestKey,
+      manifestSha256: null,
+      drill: null,
+      moduleKeys: {},
+      moduleDigests: {},
+    };
   }
 
   const drill = await verifyBackupChecksumManifest({
