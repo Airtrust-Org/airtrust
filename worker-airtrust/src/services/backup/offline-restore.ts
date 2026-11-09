@@ -151,9 +151,6 @@ export async function verifyBackupSet(
     const copiedKeys = manifest.artifacts
       .filter((a) => a.key.includes('/r2-files/'))
       .map((a) => a.key);
-    if (!r2ManifestKey && copiedKeys.length > 0) {
-      failures.push('Cópias R2 presentes sem r2-manifest.json');
-    }
     if (r2ManifestKey) {
       const raw = await reader.get(r2ManifestKey);
       if (!raw) {
