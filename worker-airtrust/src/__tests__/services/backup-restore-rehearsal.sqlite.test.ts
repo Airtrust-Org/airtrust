@@ -428,6 +428,16 @@ describe('Ensaio sintético backup -> restore', () => {
     const base = { reader: r2Reader(r2), backupUuid: uuid, expectedManifestSha256: ctl.checksum, expectedModules: [...TODOS_MODULOS] };
     expect((await verifyBackupSet(base)).ok).toBe(true);
 
+    // The dated scope in a real generated manifest has NO trailing slash.
+    // Sibling backup UUID prefixes must not be mistaken as this backup's data.
+    const datedScope = (JSON.parse(r2.text(`backups/${uuid}/checksum-manifest.json`)) as {
+      scope_prefixes: string[];
+    }).scope_prefixes.find((prefix) => !prefix.endsWith('/'))!;
+    const siblingKey = `${datedScope}-retry/QUALIFICACOES.json`;
+    r2.store.set(siblingKey, { bytes: new TextEncoder().encode('{}'), uploaded: new Date() });
+    expect((await verifyBackupSet(base)).ok).toBe(true);
+    r2.store.delete(siblingKey);
+
     const moduloKey = r2.keys(`backups/`).find((k) => k.endsWith('/QUALIFICACOES.json'))!;
     const original = new Uint8Array(r2.bytes(moduloKey));
     const resultados: Record<string, string> = {};
