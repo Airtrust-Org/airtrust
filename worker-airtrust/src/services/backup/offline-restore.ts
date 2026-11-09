@@ -89,6 +89,14 @@ export async function verifyBackupSet(
     },
   });
   failures.push(...drill.failures);
+  // Never iterate scope prefixes or parse module pointers in an untrusted or
+  // malformed backup. A failed integrity check must remain a structured FAIL.
+  if (failures.length > 0) {
+    return {
+      ok: false, failures, manifestKey, manifestSha256: drill.manifestSha256,
+      drill, moduleKeys: {}, moduleDigests: {},
+    };
+  }
 
   let manifest: BackupChecksumManifest | null = null;
   try {
@@ -127,7 +135,11 @@ export async function verifyBackupSet(
 
     // Objetos sob o escopo do backup que o manifesto não cobre = backup incompleto/adulterado.
     for (const prefix of manifest.scope_prefixes ?? []) {
-      for (const key of await reader.list(prefix)) {
+      // The dated prefix is serialized without a trailing slash by the Worker.
+      // Listing it verbatim also includes other backups whose UUID starts with
+      // this UUID (e.g. "run-1" matching "run-1-retry"), yielding false FAILs.
+      const scopedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+      for (const key of await reader.list(scopedPrefix)) {
         if (key.endsWith('/checksum-manifest.json')) continue;
         if (!known.has(key)) failures.push(`Objeto fora do manifesto: ${key}`);
       }

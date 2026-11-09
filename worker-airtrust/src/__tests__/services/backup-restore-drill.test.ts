@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type BackupChecksumManifest,
   verifyBackupChecksumManifest,
@@ -169,5 +169,34 @@ describe('backup restore drill local integrity verification', () => {
 
     expect(report.ok).toBe(false);
     expect(report.failures).toEqual(expect.arrayContaining([expect.stringContaining('Tamanho divergente')]));
+  });
+});
+
+describe('fail-closed backup manifest validation', () => {
+  it.each([
+    { artifacts: [null], artifact_count: 1 },
+    { artifacts: [{ key: 'backups/demo/a.json', size: -1, sha256: `sha256:${'0'.repeat(64)}` }], artifact_count: 1 },
+    { scope_prefixes: [] },
+    { scope_prefixes: ['backups/other/'] },
+    { scope_prefixes: ['backups/'] },
+    { backup_uuid: '../other' },
+    { artifacts: [{ key: 'backups/other/a.json', size: 0, sha256: `sha256:${'0'.repeat(64)}` }], artifact_count: 1 },
+  ])('rejects malformed or other-backup manifests without calling the reader: %j', async (change) => {
+    const base = {
+      version: 1, backup_uuid: 'demo', algorithm: 'SHA-256',
+      generated_at: CHECKED_AT, scope_prefixes: ['backups/demo/'],
+      artifact_count: 1, total_bytes: 0,
+      artifacts: [{ key: 'backups/demo/a.json', size: 0, sha256: `sha256:${'0'.repeat(64)}` }],
+    };
+    const manifest = { ...base, ...change };
+    const readArtifact = vi.fn(async () => bytesFromString(''));
+    const report = await verifyBackupChecksumManifest({
+      manifestJson: JSON.stringify(manifest),
+      expectedManifestSha256: await sha256(JSON.stringify(manifest)),
+      readArtifact,
+    });
+    expect(report.ok).toBe(false);
+    expect(readArtifact).not.toHaveBeenCalled();
+    expect(report.failures.length).toBeGreaterThan(0);
   });
 });
