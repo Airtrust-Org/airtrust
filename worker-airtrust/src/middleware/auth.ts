@@ -32,6 +32,7 @@ import { classifyD1Failure, isTransientD1Error, withD1Retry } from '../utils/d1-
 export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePlatformAccessCache };
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
+import { isAccessTokenRevoked } from '../services/auth-session-revocation';
 
 const USUARIOS_TABLE_SQL =
   "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
@@ -116,7 +117,14 @@ export function getValidJtiCacheSize(): number {
  * Revalidação mutável crítica contra D1 imediata em cada requisição,
  * coalescendo apenas requisições em trânsito simultâneas (rajadas concorrentes).
  */
-async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAttempt?: (attempt: number, error?: unknown) => void): Promise<boolean> {
+async function isJtiBlocklisted(
+  db: D1Database,
+  jti: string,
+  exp?: number,
+  sub?: string | number,
+  iat?: number,
+  onAttempt?: (attempt: number, error?: unknown) => void,
+): Promise<boolean> {
   const inFlight = _inFlightJtiChecks.get(jti);
   if (inFlight?.promise) {
     if (onAttempt) {
@@ -134,12 +142,9 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAtt
   };
   const promise = (async () => {
     try {
-      const row = await withD1Retry(
-        () =>
-          db
-            .prepare(`SELECT 1 FROM token_blocklist WHERE jti = ? AND expires_at > datetime('now') LIMIT 1`)
-            .bind(jti)
-            .first(),
+      // P01-03: alem do jti do token, vale o marcador "sessoes do usuario revogadas ate T".
+      return await withD1Retry(
+        () => isAccessTokenRevoked(db, { jti, sub, iat }),
         7,
         80,
         (attempt, error) => {
@@ -147,7 +152,6 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAtt
           for (const listener of check.listeners) listener(check.attempts, error);
         },
       );
-      return Boolean(row);
     } finally {
       if (_inFlightJtiChecks.get(jti) === check) _inFlightJtiChecks.delete(jti);
       check.listeners.clear();
@@ -326,7 +330,9 @@ export async function validateAccessTokenSecurityState(
   // Executa as 3 validações de segurança independentes concorrentemente via Promise.allSettled
   // reduzindo latência de D1 sob rajadas e mitigando timeouts/503 em cascata (Incidente #2078).
   const [jtiResult, userSecurityResult, platformAccessResult] = await Promise.allSettled([
-    isJtiBlocklisted(db, payload.jti, payload.exp, (attempt) => { jtiAttempts = Math.max(jtiAttempts, attempt); }),
+    isJtiBlocklisted(db, payload.jti, payload.exp, payload.sub, payload.iat, (attempt) => {
+      jtiAttempts = Math.max(jtiAttempts, attempt);
+    }),
     resolveUserSecurityState(db, payload.sub, payload.empresa_id, payload.role ?? ''),
     resolvePlatformAccessState(db, payload.sub),
   ]);
@@ -820,7 +826,13 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
               return;
             }
             try {
-              const blocked = await isJtiBlocklisted(c.env.DB, payload.jti);
+              const blocked = await isJtiBlocklisted(
+                c.env.DB,
+                payload.jti,
+                payload.exp,
+                payload.sub,
+                payload.iat,
+              );
               if (blocked) {
                 await next();
                 return;
