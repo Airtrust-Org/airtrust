@@ -11,7 +11,7 @@ import { getTenantContext } from '../../middleware/tenant';
 import { requirePermission } from '../../middleware/rbac';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../../utils/auditoria';
 import { safe } from './safe-handler';
-import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, isValidCalendarIsoDate, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
+import { historicoPertenceEmpresa, invalidateMaterializedStats, ensureHistoricoSchema, ensureQualificacoesTiposTrainingSchema, normalizeTipoTreinamento, resolveCargaHorariaByTipo, calcularDataVencimento, resolveParametrosRenovacaoQualificacao, publishQualificacaoEvent } from '../../services/qualificacoes/historico-helpers';
 import {
   COMPLETED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -30,6 +30,7 @@ import {
   realizarG1SemPendente,
 } from '../../services/qualificacoes-g1-sem';
 import { requireOperationalAccess } from '../../middleware/operational-domain-access';
+import { isValidCalendarIsoDate } from '../../utils/calendar-date';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo
