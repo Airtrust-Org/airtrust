@@ -118,6 +118,7 @@ describe('resilient scheduled router', () => {
     expect(router).toContain("await runStep('training-alerts'");
     expect(router).toContain("await runStep('license-alerts', plan.runLicenseAlerts");
     expect(router).toContain("await runStep('refresh-token-cleanup', plan.runRefreshTokenCleanup");
+    expect(router).toContain("await runStep('cron-runs-retention', plan.runRefreshTokenCleanup");
     expect(router).not.toContain("await runStep('lms-reminders'");
     expect(router).toContain("await runStep('sigvoos-frms'");
     expect(router).toContain("await runStep('domain-events'");
