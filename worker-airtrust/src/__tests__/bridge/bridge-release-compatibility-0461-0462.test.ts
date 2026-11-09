@@ -355,6 +355,9 @@ describe('Bridge Release Compatibility (States A, B, C)', () => {
     });
   });
 
+  // P01-02: token legado cru (64 hex) emitido antes do hash em repouso; exercita o fallback.
+  const LEGACY_UNPINNED_TOKEN = 'ab'.repeat(32);
+
   describe('STATE B: Schema pós-0461 / pré-0462', () => {
     let rawDb: DatabaseSync;
     let db: D1Database;
@@ -366,7 +369,7 @@ describe('Bridge Release Compatibility (States A, B, C)', () => {
       // Pre-seed an unpinned token before migration
       rawDb.exec(`
         INSERT INTO refresh_tokens (user_id, token, expires_at)
-        VALUES (10, 'legacy-unpinned-token', datetime('now', '+1 day'));
+        VALUES (10, '${LEGACY_UNPINNED_TOKEN}', datetime('now', '+1 day'));
       `);
       applyMigration0461(rawDb);
       db = new BridgeSqliteD1Database(rawDb).asD1();
@@ -375,7 +378,7 @@ describe('Bridge Release Compatibility (States A, B, C)', () => {
     it('AUTH: pins refresh token to empresa_id and rejects legacy unpinned token', async () => {
       // Legacy token must be revoked
       await expect(
-        resolveAndRotateRefreshToken(db, 'legacy-unpinned-token'),
+        resolveAndRotateRefreshToken(db, LEGACY_UNPINNED_TOKEN),
       ).rejects.toThrow(/revogado/i);
 
       // New token pinned to tenant
