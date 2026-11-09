@@ -90,7 +90,7 @@ async function resolveEffectiveUserRole(
 // In-flight dedup map para consultas de blocklist (evita rajadas redundantes no D1 sob requisições concorrentes)
 // Sem manter cache positivo estático de 60s que causaria janela de revogação obsoleta entre múltiplos isolates (Issue #2014)
 type InFlightJtiCheck = {
-  promise: Promise<boolean>;
+  promise?: Promise<boolean>;
   attempts: number;
   listeners: Set<(attempt: number, error?: unknown) => void>;
 };
@@ -118,7 +118,7 @@ export function getValidJtiCacheSize(): number {
  */
 async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAttempt?: (attempt: number, error?: unknown) => void): Promise<boolean> {
   const inFlight = _inFlightJtiChecks.get(jti);
-  if (inFlight) {
+  if (inFlight?.promise) {
     if (onAttempt) {
       // Each coalesced request must receive the shared attempt count, including
       // the attempts that occurred before it joined the in-flight operation.
@@ -129,7 +129,6 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAtt
   }
 
   const check: InFlightJtiCheck = {
-    promise: undefined as unknown as Promise<boolean>,
     attempts: 0,
     listeners: new Set(onAttempt ? [onAttempt] : []),
   };
