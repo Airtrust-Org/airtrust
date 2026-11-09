@@ -143,12 +143,19 @@ export function validateManifest(manifest, { expectedPlanHash, expectedCount }) 
   check(manifest.plan_sha256 === hash, 'MANIFEST_HASH_MISMATCH');
   check(hash === expectedPlanHash, 'EXPECTED_PLAN_HASH_MISMATCH');
   check(rows.length === expectedCount, 'EXPECTED_ROW_COUNT_MISMATCH');
-  return { rows, planSha256: hash };
+  const sourceSha = manifest.source_sha ?? null;
+  check(sourceSha === null || SHA_RE.test(String(sourceSha)), 'MANIFEST_SOURCE_SHA_INVALID');
+  return { rows, planSha256: hash, sourceSha };
+}
+
+/** Rollback hash binds the source SHA together with the inverse rows. */
+function hashRollback(sourceSha, ops) {
+  return sha256Hex(JSON.stringify({ source_sha: sourceSha, rows: ops }));
 }
 
 /** Compensating manifest: same rows, inverse CAS (from = applied state, to = original state). */
 export function buildRollbackManifest(forwardManifest, { expectedPlanHash, expectedCount }) {
-  const { rows, planSha256 } = validateManifest(forwardManifest, { expectedPlanHash, expectedCount });
+  const { rows, planSha256, sourceSha } = validateManifest(forwardManifest, { expectedPlanHash, expectedCount });
   const ops = rows.map((r) => ({
     id: r.id, empresa_id: TENANT_ID, qualificacao_id: r.qualificacao_id,
     expected_status: r.expected_status, expected_completion_date: r.expected_completion_date,
@@ -157,7 +164,8 @@ export function buildRollbackManifest(forwardManifest, { expectedPlanHash, expec
   }));
   return {
     kind: ROLLBACK_KIND, empresa_id: TENANT_ID, row_count: ops.length,
-    forward_plan_sha256: planSha256, rollback_plan_sha256: hashRows(ops), rows: ops,
+    source_sha: sourceSha,
+    forward_plan_sha256: planSha256, rollback_plan_sha256: hashRollback(sourceSha, ops), rows: ops,
   };
 }
 
@@ -190,10 +198,12 @@ export function validateRollbackManifest(manifest, { expectedPlanHash, expectedC
     'ROLLBACK_ROW_COUNT');
   const ops = manifest.rows.map(canonicalRollbackOp);
   for (let i = 1; i < ops.length; i++) check(ops[i - 1].id < ops[i].id, 'ROLLBACK_NOT_SORTED_OR_DUPLICATE');
-  const hash = hashRows(ops);
+  const sourceSha = manifest.source_sha ?? null;
+  check(sourceSha === null || SHA_RE.test(String(sourceSha)), 'ROLLBACK_SOURCE_SHA_INVALID');
+  const hash = hashRollback(sourceSha, ops);
   check(manifest.rollback_plan_sha256 === hash && hash === expectedPlanHash, 'ROLLBACK_HASH_MISMATCH');
   check(ops.length === expectedCount, 'EXPECTED_ROW_COUNT_MISMATCH');
-  return { ops, planSha256: hash, forwardPlanSha256: manifest.forward_plan_sha256 };
+  return { ops, planSha256: hash, forwardPlanSha256: manifest.forward_plan_sha256, sourceSha };
 }
 
 // ---------- operations (direction-neutral CAS description) ----------
@@ -355,18 +365,21 @@ export function executeManifest({
 }) {
   check(direction === 'forward' || direction === 'rollback', 'DIRECTION_INVALID');
   check(port && typeof port.query === 'function' && typeof port.exec === 'function', 'PORT_INVALID');
-  let ops; let planSha256; let forwardPlanSha256 = null;
+  let ops; let planSha256; let forwardPlanSha256 = null; let manifestSha = null;
   if (direction === 'forward') {
     const validated = validateManifest(manifest, { expectedPlanHash, expectedCount });
     ops = forwardOps(validated.rows); planSha256 = validated.planSha256; forwardPlanSha256 = planSha256;
+    manifestSha = validated.sourceSha;
   } else {
     const validated = validateRollbackManifest(manifest, { expectedPlanHash, expectedCount });
     ops = rollbackOps(validated.ops); planSha256 = validated.planSha256;
     forwardPlanSha256 = validated.forwardPlanSha256;
+    manifestSha = validated.sourceSha;
   }
   if (apply) {
     check(ACTOR_RE.test(actor ?? ''), 'ACTOR_INVALID');
     check(SHA_RE.test(sourceSha ?? ''), 'SOURCE_SHA_INVALID');
+    check(manifestSha !== null && manifestSha === sourceSha, 'MANIFEST_SOURCE_SHA_MISMATCH');
   }
   const ids = ops.map((o) => o.id);
   const action = direction === 'forward' ? AUDIT_ACTION_APPLY : AUDIT_ACTION_ROLLBACK;

@@ -31,6 +31,7 @@ export interface RollbackManifest {
   kind: string;
   empresa_id: number;
   row_count: number;
+  source_sha: string | null;
   forward_plan_sha256: string;
   rollback_plan_sha256: string;
   rows: Array<Record<string, unknown>>;
@@ -76,11 +77,12 @@ export function buildExecutionManifest(
 export function validateManifest(
   manifest: unknown,
   options: HashAndCount,
-): { rows: ExecutionRow[]; planSha256: string };
+): { rows: ExecutionRow[]; planSha256: string; sourceSha: string | null };
 export function buildRollbackManifest(forwardManifest: unknown, options: HashAndCount): RollbackManifest;
 export function validateRollbackManifest(manifest: unknown, options: HashAndCount): {
   ops: Array<Record<string, unknown>>;
   planSha256: string;
   forwardPlanSha256: string;
+  sourceSha: string | null;
 };
 export function executeManifest(options: ExecuteOptions): ExecutionReport;

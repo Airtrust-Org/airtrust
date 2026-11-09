@@ -9,6 +9,7 @@ import {
   executeManifest,
   type ExecutionManifest,
   type ExecutorPort,
+  type RollbackManifest,
 } from '../../../../scripts/production/lib/qualification-expiry-executor.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -364,6 +365,46 @@ describe('qualification expiry governed executor (local SQLite only)', () => {
     const again = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', apply: true, actor: ACTOR, sourceSha: SHA, ...rbOpts });
     expect(again.changed).toBe(0);
     expect(audits(db, AUDIT_ACTION_ROLLBACK)).toHaveLength(1);
+  });
+
+  it('apply rejects a manifest without source_sha or bound to another commit, before any read or write', () => {
+    const p = port(db);
+    const OTHER = 'b'.repeat(40);
+    const without = buildExecutionManifest(planFor(db));
+    expect(() => executeManifest({ port: p, manifest: without, apply: true, actor: ACTOR, sourceSha: SHA, expectedPlanHash: without.plan_sha256, expectedCount: without.row_count }))
+      .toThrow('MANIFEST_SOURCE_SHA_MISMATCH');
+    expect(() => executeManifest({ port: p, manifest, apply: true, actor: ACTOR, sourceSha: OTHER, ...opts() }))
+      .toThrow('MANIFEST_SOURCE_SHA_MISMATCH');
+    const invalid = { ...manifest, source_sha: 'not-a-sha' };
+    expect(() => executeManifest({ port: p, manifest: invalid, ...opts() })).toThrow('MANIFEST_SOURCE_SHA_INVALID');
+    expect(p.statements).toHaveLength(0);
+    expect(audits(db)).toHaveLength(0);
+    // Dry-run stays possible without a bound SHA.
+    expect(executeManifest({ port: p, manifest: without, expectedPlanHash: without.plan_sha256, expectedCount: without.row_count }).pending).toBe(3);
+  });
+
+  it('rollback manifest binds the source SHA into its hash and rejects tampering', () => {
+    executeManifest({ port: port(db), manifest, apply: true, actor: ACTOR, sourceSha: SHA, ...opts() });
+    const rollback = buildRollbackManifest(manifest, opts());
+    expect(rollback.source_sha).toBe(SHA);
+    const rbOpts = { expectedPlanHash: rollback.rollback_plan_sha256, expectedCount: rollback.row_count };
+    const base = { port: port(db), direction: 'rollback' as const, ...rbOpts };
+    const resourced = { ...rollback, source_sha: 'c'.repeat(40) };
+    expect(() => executeManifest({ ...base, manifest: resourced })).toThrow('ROLLBACK_HASH_MISMATCH');
+    const nulled = { ...rollback, source_sha: null };
+    expect(() => executeManifest({ ...base, manifest: nulled })).toThrow('ROLLBACK_HASH_MISMATCH');
+    const edited = JSON.parse(JSON.stringify(rollback)) as RollbackManifest;
+    edited.rows[0].to_expiry = '2000-01-01';
+    expect(() => executeManifest({ ...base, manifest: edited })).toThrow('ROLLBACK_HASH_MISMATCH');
+    expect(() => executeManifest({ ...base, manifest: rollback, apply: true, actor: ACTOR, sourceSha: 'd'.repeat(40) }))
+      .toThrow('MANIFEST_SOURCE_SHA_MISMATCH');
+    const unbound = buildRollbackManifest({ ...manifest, source_sha: null }, opts());
+    expect(unbound.source_sha).toBeNull();
+    expect(() => executeManifest({
+      port: port(db), manifest: unbound, direction: 'rollback', apply: true, actor: ACTOR, sourceSha: SHA,
+      expectedPlanHash: unbound.rollback_plan_sha256, expectedCount: 3,
+    })).toThrow('MANIFEST_SOURCE_SHA_MISMATCH');
+    expect(audits(db, AUDIT_ACTION_ROLLBACK)).toHaveLength(0);
   });
 
   it('a manifest id belonging to another tenant is reported out of scope and never updated', () => {

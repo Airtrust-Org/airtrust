@@ -26,7 +26,7 @@ export function parseArgs(argv) {
   const out = { apply: false, direction: 'forward' };
   const seen = new Set();
   for (const arg of argv) {
-    if (arg === '--apply') { out.apply = true; continue; }
+    if (arg === '--apply') { if (out.apply) fail('UNRECOGNIZED_OR_DUPLICATE_ARGUMENT'); out.apply = true; continue; }
     const m = /^--(manifest|expected-plan-hash|expected-count|direction|emit-rollback)=(.+)$/.exec(arg);
     if (!m || seen.has(m[1])) fail('UNRECOGNIZED_OR_DUPLICATE_ARGUMENT');
     seen.add(m[1]);

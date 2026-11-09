@@ -20,6 +20,9 @@ test('defaults to dry-run and rejects unknown, duplicate or incomplete arguments
   assert.equal(parseArgs(base).apply, false);
   assert.throws(() => parseArgs([...base, '--write']), /UNRECOGNIZED_OR_DUPLICATE_ARGUMENT/);
   assert.throws(() => parseArgs([...base, '--expected-count=4']), /UNRECOGNIZED_OR_DUPLICATE_ARGUMENT/);
+  assert.throws(() => parseArgs([...base, '--apply', '--apply']), /UNRECOGNIZED_OR_DUPLICATE_ARGUMENT/);
+  assert.throws(() => parseArgs([...base, '--apply=yes']), /UNRECOGNIZED_OR_DUPLICATE_ARGUMENT/);
+  assert.throws(() => parseArgs([...base, '--direction=rollback', '--direction=forward']), /UNRECOGNIZED_OR_DUPLICATE_ARGUMENT/);
   assert.throws(() => parseArgs(base.slice(1)), /MANIFEST_REQUIRED/);
   assert.throws(() => parseArgs(['--manifest=/var/tmp/p.json', '--expected-count=3']), /EXPECTED_PLAN_HASH_REQUIRED/);
   assert.throws(() => parseArgs(['--manifest=/var/tmp/p.json', `--expected-plan-hash=${HASH}`]), /EXPECTED_COUNT_REQUIRED/);
