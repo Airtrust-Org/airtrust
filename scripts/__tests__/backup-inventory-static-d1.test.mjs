@@ -70,3 +70,14 @@ test('rejects database dumps, row content, invalid identifiers and case-insensit
     assert.throws(() => buildInventoryFromSchemaMetadata({metadata, backupSource: ''}));
   }
 });
+
+test('matches static migration and backup names case-insensitively without double counting', () => {
+  const result = buildInventory({
+    migrationFiles: [['0001.sql', 'CREATE TABLE "Funcionarios" (id INTEGER); CREATE TABLE funcionarios (id INTEGER); CREATE TABLE Missing (id INTEGER);']],
+    backupSource: "tabelas_principais: ['funcionarios', 'ABSENT']",
+  });
+  assert.equal(result.schema_tables_detected, 2);
+  assert.equal(result.schema_tables_not_in_worker_backup, 1);
+  assert.deepEqual(result.configured_tables_not_found_in_migrations, ['ABSENT']);
+  assert.deepEqual(result.tables.filter(t => t.in_worker_backup).map(t => t.table), ['Funcionarios']);
+});
