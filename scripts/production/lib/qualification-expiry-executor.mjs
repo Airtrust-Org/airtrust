@@ -203,6 +203,7 @@ function forwardOps(rows) {
     completion: r.expected_completion_date,
     from: { expiry: r.old_expiry, validity: r.old_validity_months },
     to: { expiry: r.next_expiry, validity: r.next_validity_months },
+    model: { code: r.expected_model_code, validity: r.next_validity_months, endOfMonth: r.model_end_of_month },
     row: r,
   }));
 }
@@ -212,6 +213,7 @@ function rollbackOps(ops) {
     completion: o.expected_completion_date,
     from: { expiry: o.from_expiry, validity: o.from_validity_months },
     to: { expiry: o.to_expiry, validity: o.to_validity_months },
+    model: null,
     row: null,
   }));
 }
@@ -231,7 +233,20 @@ export function casUpdateSql(op) {
    AND substr(data_conclusao, 1, 10) = ${sqlStrictText(op.completion, DATE_RE, 'SQL_DATE_INVALID')}
    AND UPPER(TRIM(status)) = ${sqlStrictText(op.status, /^[A-Z]{1,20}$/, 'SQL_STATUS_INVALID')}
    AND certificado_arquivo_id IS NULL
-   AND (arquivo_url IS NULL OR TRIM(arquivo_url) = '')`;
+   AND (arquivo_url IS NULL OR TRIM(arquivo_url) = '')${modelGuardSql(op)}`;
+}
+
+/** Forward only: the model rule the manifest was computed from must still hold at write time. */
+function modelGuardSql(op) {
+  if (!op.model) return '';
+  return `
+   AND EXISTS (SELECT 1 FROM qualificacoes_tipos t
+     WHERE t.id = qualificacoes_historico.qualificacao_id
+       AND t.empresa_id = ${TENANT_ID}
+       AND t.deleted_at IS NULL
+       AND UPPER(TRIM(t.codigo)) = ${sqlStrictText(op.model.code, MODEL_RE, 'SQL_MODEL_INVALID')}
+       AND t.validade = ${sqlInt(op.model.validity)}
+       AND COALESCE(t.vencimento_fim_mes, 0) = ${sqlInt(op.model.endOfMonth)})`;
 }
 
 /** Audit row written only if the preceding UPDATE changed a row (changes() > 0). */
@@ -265,6 +280,13 @@ function guardsMatch(live, op) {
     && Number(live.has_uploaded_certificate) !== 1;
 }
 
+function modelMatches(live, model) {
+  return !model
+    || (String(live.model_code ?? '').trim().toUpperCase() === model.code
+      && intOrNull(live.model_months) === model.validity
+      && Number(live.model_end_of_month ?? 0) === model.endOfMonth);
+}
+
 function readLive(port, ids) {
   const live = new Map();
   for (const row of port.query(buildInventorySelectSql(ids))) {
@@ -289,15 +311,18 @@ function firstBlockedReason(live) {
 }
 
 function classify({ ops, live, audits, direction, planSha256, forwardPlanSha256 }) {
-  const out = { pending: [], already: [], conflicts: [] };
+  const out = { pending: [], already: [], skipped: [], conflicts: [] };
   for (const op of ops) {
     const row = live.get(op.id);
     if (!row) { out.conflicts.push({ id: op.id, reason: 'row_missing_deleted_or_out_of_scope' }); continue; }
     const doneAction = direction === 'forward' ? AUDIT_ACTION_APPLY : AUDIT_ACTION_ROLLBACK;
     const doneHash = planSha256;
     if (stateMatches(row, op.to) && guardsMatch(row, op)) {
-      if (audits.has(`${op.id}|${doneAction}|${doneHash}`)) out.already.push(op.id);
-      else out.conflicts.push({ id: op.id, reason: 'target_state_without_audit' });
+      if (!modelMatches(row, op.model)) out.conflicts.push({ id: op.id, reason: 'model_changed_since_plan' });
+      else if (audits.has(`${op.id}|${doneAction}|${doneHash}`)) out.already.push(op.id);
+      else if (direction === 'rollback' && !audits.has(`${op.id}|${AUDIT_ACTION_APPLY}|${forwardPlanSha256}`)) {
+        out.skipped.push(op.id); // never changed by the forward plan: nothing to restore
+      } else out.conflicts.push({ id: op.id, reason: 'target_state_without_audit' });
       continue;
     }
     if (!guardsMatch(row, op)) { out.conflicts.push({ id: op.id, reason: 'guard_fields_changed_or_certificate_present' }); continue; }
@@ -352,6 +377,7 @@ export function executeManifest({
     tenant: TENANT_ID, direction, mode: apply ? 'apply' : 'dry-run',
     plan_sha256: planSha256, row_count: ops.length,
     pending: state.pending.length, already_applied: state.already.length,
+    skipped_not_applied: state.skipped.length,
     conflicts: state.conflicts, cas_conflicts: [],
     changed: 0, writes_attempted: 0, postconditions_verified: false,
   };
@@ -377,9 +403,10 @@ export function executeManifest({
   report.changed = state.pending.filter((o) => alreadyAfter.has(o.id)).length;
   report.cas_conflicts = state.pending.filter((o) => !alreadyAfter.has(o.id)).map((o) => o.id);
   report.already_applied = after.already.length;
+  report.skipped_not_applied = after.skipped.length;
   report.pending = 0;
   report.conflicts = after.conflicts;
   report.postconditions_verified = report.cas_conflicts.length === 0
-    && after.already.length === ops.length && after.conflicts.length === 0;
+    && after.already.length + after.skipped.length === ops.length && after.conflicts.length === 0;
   return report;
 }

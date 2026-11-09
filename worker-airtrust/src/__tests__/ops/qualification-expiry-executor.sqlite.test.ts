@@ -287,12 +287,83 @@ describe('qualification expiry governed executor (local SQLite only)', () => {
     const rbOpts = { expectedPlanHash: rollback.rollback_plan_sha256, expectedCount: rollback.row_count };
     // Not applied yet: live rows already sit at the rollback target but no rollback audit exists.
     const notApplied = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', ...rbOpts });
-    expect(notApplied.conflicts.map((c) => c.reason)).toEqual(Array(3).fill('target_state_without_audit'));
+    expect(notApplied.conflicts).toEqual([]);
+    expect(notApplied.skipped_not_applied).toBe(3);
+    expect(notApplied.pending).toBe(0);
 
     executeManifest({ port: port(db), manifest, apply: true, actor: ACTOR, sourceSha: SHA, ...opts() });
     db.database.exec(`UPDATE qualificacoes_historico SET data_vencimento = '2031-01-01' WHERE id = ${ids.leapExact}`);
     const edited = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', ...rbOpts });
     expect(edited.conflicts).toEqual([{ id: ids.leapExact, reason: 'row_changed_since_plan' }]);
+  });
+
+  it('a model rule change between preflight and UPDATE becomes a CAS conflict (not applied, not audited)', () => {
+    const racing = port(db, (_sql, index) => {
+      if (index === 0) db.database.exec('UPDATE qualificacoes_tipos SET validade = 36 WHERE id = 600');
+    });
+    const report = executeManifest({ port: racing, manifest, apply: true, actor: ACTOR, sourceSha: SHA, ...opts() });
+    expect(report.cas_conflicts).toEqual([ids.exact, ids.leapExact]);
+    expect(report.changed).toBe(1);
+    expect(report.postconditions_verified).toBe(false);
+    const rows = history(db);
+    expect(rows.find((r) => r.id === ids.exact)?.data_vencimento).toBe('2025-01-15');
+    expect(audits(db, AUDIT_ACTION_APPLY).map((r) => r.entity_id)).toEqual([ids.endOfMonthLeap]);
+    for (const change of [
+      'UPDATE qualificacoes_tipos SET vencimento_fim_mes = 0 WHERE id = 601',
+      "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE id = 601",
+      "UPDATE qualificacoes_tipos SET codigo = 'RENAMED' WHERE id = 601",
+    ]) {
+      const fresh = new SqliteD1Database();
+      fresh.database.exec(`ALTER TABLE qualificacoes_tipos ADD COLUMN vencimento_fim_mes INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE qualificacoes_historico ADD COLUMN certificado_arquivo_id INTEGER;
+        ALTER TABLE qualificacoes_historico ADD COLUMN arquivo_url TEXT;
+        ALTER TABLE qualificacoes_historico ADD COLUMN origem_tipo TEXT;
+        ALTER TABLE qualificacoes_historico ADD COLUMN lms_matricula_id INTEGER;
+        CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, entity_type TEXT,
+          entity_id INTEGER, old_values TEXT, new_values TEXT, empresa_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+      const freshIds = seed(fresh);
+      const m = buildExecutionManifest(planFor(fresh), { sourceSha: SHA });
+      const r = executeManifest({
+        port: port(fresh, (_sql, index) => { if (index === 1) fresh.database.exec(change); }),
+        manifest: m, apply: true, actor: ACTOR, sourceSha: SHA,
+        expectedPlanHash: m.plan_sha256, expectedCount: m.row_count,
+      });
+      expect(r.cas_conflicts).toEqual([freshIds.endOfMonthLeap]);
+      expect(r.postconditions_verified).toBe(false);
+      fresh.close();
+    }
+  });
+
+  it('does not report an applied row as success once its model changed', () => {
+    executeManifest({ port: port(db), manifest, apply: true, actor: ACTOR, sourceSha: SHA, ...opts() });
+    db.database.exec('UPDATE qualificacoes_tipos SET validade = 36 WHERE id = 600');
+    const report = executeManifest({ port: port(db), manifest, ...opts() });
+    expect(report.conflicts.map((c) => c.reason)).toEqual(['model_changed_since_plan', 'model_changed_since_plan']);
+    expect(report.postconditions_verified).toBe(false);
+  });
+
+  it('rollback after a partial forward run skips never-applied rows and restores the applied ones', () => {
+    const original = history(db);
+    const racing = port(db, (_sql, index) => {
+      if (index === 0) db.database.exec('UPDATE qualificacoes_tipos SET validade = 36 WHERE id = 600');
+    });
+    executeManifest({ port: racing, manifest, apply: true, actor: ACTOR, sourceSha: SHA, ...opts() });
+    db.database.exec('UPDATE qualificacoes_tipos SET validade = 24 WHERE id = 600');
+    const rollback = buildRollbackManifest(manifest, opts());
+    const rbOpts = { expectedPlanHash: rollback.rollback_plan_sha256, expectedCount: rollback.row_count };
+    const dry = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', ...rbOpts });
+    expect(dry.conflicts).toEqual([]);
+    expect(dry.pending).toBe(1);
+    expect(dry.skipped_not_applied).toBe(2);
+    const applied = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', apply: true, actor: ACTOR, sourceSha: SHA, ...rbOpts });
+    expect(applied.changed).toBe(1);
+    expect(applied.skipped_not_applied).toBe(2);
+    expect(applied.postconditions_verified).toBe(true);
+    expect(history(db)).toEqual(original.map((r) => ({ ...r, updated_at: history(db).find((x) => x.id === r.id)?.updated_at })));
+    expect(audits(db, AUDIT_ACTION_ROLLBACK).map((r) => r.entity_id)).toEqual([ids.endOfMonthLeap]);
+    const again = executeManifest({ port: port(db), manifest: rollback, direction: 'rollback', apply: true, actor: ACTOR, sourceSha: SHA, ...rbOpts });
+    expect(again.changed).toBe(0);
+    expect(audits(db, AUDIT_ACTION_ROLLBACK)).toHaveLength(1);
   });
 
   it('a manifest id belonging to another tenant is reported out of scope and never updated', () => {

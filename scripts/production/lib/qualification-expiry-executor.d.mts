@@ -47,6 +47,7 @@ export interface ExecutionReport {
   row_count: number;
   pending: number;
   already_applied: number;
+  skipped_not_applied: number;
   conflicts: Array<{ id: number; reason: string }>;
   cas_conflicts: number[];
   changed: number;
