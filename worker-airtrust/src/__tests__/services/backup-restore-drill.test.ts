@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { verifyBackupSet } from '../../services/backup/offline-restore';
 import {
   type BackupChecksumManifest,
   verifyBackupChecksumManifest,
@@ -169,5 +170,97 @@ describe('backup restore drill local integrity verification', () => {
 
     expect(report.ok).toBe(false);
     expect(report.failures).toEqual(expect.arrayContaining([expect.stringContaining('Tamanho divergente')]));
+  });
+});
+
+describe('fail-closed backup manifest validation', () => {
+  it.each([
+    { artifacts: [null], artifact_count: 1 },
+    { artifacts: [{ key: 'backups/demo/a.json', size: -1, sha256: `sha256:${'0'.repeat(64)}` }], artifact_count: 1 },
+    { scope_prefixes: [] },
+    { scope_prefixes: ['backups/other/'] },
+    { scope_prefixes: ['backups/'] },
+    { backup_uuid: '../other' },
+    { artifacts: [{ key: 'backups/other/a.json', size: 0, sha256: `sha256:${'0'.repeat(64)}` }], artifact_count: 1 },
+  ])('rejects malformed or other-backup manifests without calling the reader: %j', async (change) => {
+    const base = {
+      version: 1, backup_uuid: 'demo', algorithm: 'SHA-256',
+      generated_at: CHECKED_AT, scope_prefixes: ['backups/demo/'],
+      artifact_count: 1, total_bytes: 0,
+      artifacts: [{ key: 'backups/demo/a.json', size: 0, sha256: `sha256:${'0'.repeat(64)}` }],
+    };
+    const manifest = { ...base, ...change };
+    const readArtifact = vi.fn(async () => bytesFromString(''));
+    const report = await verifyBackupChecksumManifest({
+      manifestJson: JSON.stringify(manifest),
+      expectedManifestSha256: await sha256(JSON.stringify(manifest)),
+      readArtifact,
+    });
+    expect(report.ok).toBe(false);
+    expect(readArtifact).not.toHaveBeenCalled();
+    expect(report.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe('offline R2 copy catalog must fail closed', () => {
+  it.each([
+    { label: 'invalid JSON', value: '{', valid: false },
+    { label: 'null catalog', value: 'null', valid: false },
+    { label: 'missing files array', value: '{}', valid: false },
+    { label: 'invalid file entry', value: '{"arquivos":[null]}', valid: false },
+    { label: 'missing copy reference', value: '{"arquivos":[]}', valid: false },
+    { label: 'valid catalog', value: '{"arquivos":[{"backup_key":"backups/demo/r2-files/asset.txt"}]}', valid: true },
+  ])('handles $label with a structured verification result', async ({ value, valid }) => {
+    const artifactKey = 'backups/demo/r2-files/asset.txt';
+    const catalogKey = 'backups/demo/r2-manifest.json';
+    const manifestKey = 'backups/demo/checksum-manifest.json';
+    const objects = new Map<string, Uint8Array>([
+      [artifactKey, bytesFromString('synthetic')],
+      [catalogKey, bytesFromString(value)],
+    ]);
+    const artifacts = await Promise.all([...objects.entries()].map(async ([key, bytes]) => ({
+      key, size: bytes.length, sha256: await sha256(bytes),
+    })));
+    const manifest = JSON.stringify({
+      version: 1, backup_uuid: 'demo', algorithm: 'SHA-256',
+      generated_at: CHECKED_AT, scope_prefixes: ['backups/demo/'],
+      artifact_count: artifacts.length,
+      total_bytes: artifacts.reduce((sum, entry) => sum + entry.size, 0),
+      artifacts,
+    });
+    objects.set(manifestKey, bytesFromString(manifest));
+    const result = await verifyBackupSet({
+      backupUuid: 'demo',
+      expectedManifestSha256: await sha256(manifest),
+      reader: {
+        get: async (key) => objects.get(key) ?? null,
+        list: async (prefix) => [...objects.keys()].filter((key) => key.startsWith(prefix)),
+      },
+    });
+    expect(result.ok).toBe(valid);
+    expect(result.failures.length === 0).toBe(valid);
+  });
+});
+
+
+describe('backup verification requires independent authentication', () => {
+  it('never reads artifacts or lists R2 keys when expected manifest digest is absent', async () => {
+    const fixture = await createLocalDrillFixture();
+    const manifestKey = 'backups/local-drill-001/checksum-manifest.json';
+    const get = vi.fn(async (key: string) =>
+      key === manifestKey ? bytesFromString(fixture.manifestJson) : fixture.artifacts.get(key) ?? null);
+    const list = vi.fn(async () => [] as string[]);
+    const result = await verifyBackupSet({
+      backupUuid: 'local-drill-001',
+      reader: { get, list },
+      expectedManifestSha256: null,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([expect.stringContaining('não autenticado')]);
+    expect(result.moduleKeys).toEqual({});
+    expect(result.drill).toBeNull();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith(manifestKey);
+    expect(list).not.toHaveBeenCalled();
   });
 });

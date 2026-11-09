@@ -88,55 +88,53 @@ function parseManifest(manifestJson: string, failures: string[]): BackupChecksum
   }
 }
 
-function validateManifestShape(manifest: BackupChecksumManifest, failures: string[]): void {
+function validateManifestShape(manifest: BackupChecksumManifest, failures: string[]): boolean {
   if (manifest.version !== 1) {
     failures.push(`Versao de manifesto inesperada: ${String(manifest.version)}`);
   }
-
   if (manifest.algorithm !== 'SHA-256') {
     failures.push(`Algoritmo de manifesto inesperado: ${String(manifest.algorithm)}`);
   }
-
-  if (!manifest.backup_uuid || typeof manifest.backup_uuid !== 'string') {
+  if (typeof manifest.backup_uuid !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(manifest.backup_uuid)) {
     failures.push('Manifesto sem backup_uuid valido');
   }
-
-  if (!Array.isArray(manifest.artifacts)) {
+  if (!Array.isArray(manifest.scope_prefixes) || manifest.scope_prefixes.length === 0 ||
+      !manifest.scope_prefixes.every((prefix) => typeof prefix === 'string' &&
+        /^backups\/(?:\d{4}\/\d{2}\/\d{2}\/)?[A-Za-z0-9_-]+\/?$/.test(prefix) &&
+        (prefix.endsWith(`/${manifest.backup_uuid}`) || prefix.endsWith(`/${manifest.backup_uuid}/`)))) {
+    failures.push('Manifesto com scope_prefixes ausentes ou invalidos');
+  }
+  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     failures.push('Manifesto sem lista artifacts valida');
-    return;
+    return false;
   }
-
-  if (manifest.artifact_count !== manifest.artifacts.length) {
-    failures.push(
-      `artifact_count divergente: manifesto=${String(manifest.artifact_count)}, artifacts=${manifest.artifacts.length}`,
-    );
+  if (!manifest.artifacts.every((artifact) => artifact !== null &&
+      typeof artifact === 'object' && !Array.isArray(artifact) &&
+      typeof artifact.key === 'string' && artifact.key.length > 0 &&
+      typeof artifact.sha256 === 'string' &&
+      Number.isSafeInteger(artifact.size) && artifact.size >= 0)) {
+    failures.push('Manifesto com artefatos invalidos');
+    return false;
   }
-
-  const calculatedTotalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
-  if (manifest.total_bytes !== calculatedTotalBytes) {
+  if (!Number.isSafeInteger(manifest.artifact_count) || manifest.artifact_count !== manifest.artifacts.length) {
+    failures.push(`artifact_count divergente: manifesto=${String(manifest.artifact_count)}, artifacts=${manifest.artifacts.length}`);
+  }
+  const calculatedTotalBytes = manifest.artifacts.reduce((sum, artifact) => sum + artifact.size, 0);
+  if (!Number.isSafeInteger(calculatedTotalBytes) || !Number.isSafeInteger(manifest.total_bytes) ||
+      manifest.total_bytes !== calculatedTotalBytes) {
     failures.push(`total_bytes divergente: manifesto=${String(manifest.total_bytes)}, artifacts=${calculatedTotalBytes}`);
   }
-
   const seenKeys = new Set<string>();
   for (const artifact of manifest.artifacts) {
-    if (!artifact.key || typeof artifact.key !== 'string') {
-      failures.push('Artefato sem key valida');
-      continue;
-    }
-
-    if (seenKeys.has(artifact.key)) {
-      failures.push(`Artefato duplicado no manifesto: ${artifact.key}`);
-    }
+    if (seenKeys.has(artifact.key)) failures.push(`Artefato duplicado no manifesto: ${artifact.key}`);
     seenKeys.add(artifact.key);
-
-    if (!Number.isFinite(artifact.size) || artifact.size < 0) {
-      failures.push(`Artefato com tamanho invalido no manifesto: ${artifact.key}`);
-    }
-
-    if (!isSha256(artifact.sha256)) {
-      failures.push(`Artefato com SHA-256 invalido no manifesto: ${artifact.key}`);
+    if (!isSha256(artifact.sha256)) failures.push(`Artefato com SHA-256 invalido no manifesto: ${artifact.key}`);
+    if (!Array.isArray(manifest.scope_prefixes) || !manifest.scope_prefixes.some((prefix) =>
+      typeof prefix === 'string' && artifact.key.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`))) {
+      failures.push(`Artefato fora do escopo do manifesto: ${artifact.key}`);
     }
   }
+  return failures.length === 0;
 }
 
 export async function verifyBackupChecksumManifest(
@@ -170,9 +168,19 @@ export async function verifyBackupChecksumManifest(
     };
   }
 
-  validateManifestShape(manifest, failures);
+  // Reject malformed or out-of-scope manifests without making any object reads.
+  // This is an offline DR tool, but its reader may point to an authorized bucket.
+  if (!validateManifestShape(manifest, failures)) {
+    return {
+      ok: false,
+      checkedAt: options.checkedAt || new Date().toISOString(),
+      backupUuid: typeof manifest.backup_uuid === 'string' ? manifest.backup_uuid : null,
+      manifestSha256, expectedManifestSha256, artifactCount: 0, totalBytes: 0,
+      failures, artifacts,
+    };
+  }
 
-  for (const artifact of Array.isArray(manifest.artifacts) ? manifest.artifacts : []) {
+  for (const artifact of manifest.artifacts) {
     const artifactFailures: string[] = [];
     const expectedSize = Number(artifact.size);
     let actualSize: number | null = null;

@@ -77,7 +77,17 @@ export async function verifyBackupSet(
 
   const manifestJson = decoder.decode(asBytes(manifestBytes));
   if (!options.expectedManifestSha256) {
-    failures.push('SHA-256 esperado do manifesto não informado: manifesto não autenticado');
+    // Without the independent checksum from the backup control record, the
+    // manifest is unauthenticated. Do not use its keys for any artifact reads.
+    return {
+      ok: false,
+      failures: ['SHA-256 esperado do manifesto não informado: manifesto não autenticado'],
+      manifestKey,
+      manifestSha256: null,
+      drill: null,
+      moduleKeys: {},
+      moduleDigests: {},
+    };
   }
 
   const drill = await verifyBackupChecksumManifest({
@@ -89,6 +99,14 @@ export async function verifyBackupSet(
     },
   });
   failures.push(...drill.failures);
+  // Never iterate scope prefixes or parse module pointers in an untrusted or
+  // malformed backup. A failed integrity check must remain a structured FAIL.
+  if (failures.length > 0) {
+    return {
+      ok: false, failures, manifestKey, manifestSha256: drill.manifestSha256,
+      drill, moduleKeys: {}, moduleDigests: {},
+    };
+  }
 
   let manifest: BackupChecksumManifest | null = null;
   try {
@@ -127,24 +145,53 @@ export async function verifyBackupSet(
 
     // Objetos sob o escopo do backup que o manifesto não cobre = backup incompleto/adulterado.
     for (const prefix of manifest.scope_prefixes ?? []) {
-      for (const key of await reader.list(prefix)) {
+      // The dated prefix is serialized without a trailing slash by the Worker.
+      // Listing it verbatim also includes other backups whose UUID starts with
+      // this UUID (e.g. "run-1" matching "run-1-retry"), yielding false FAILs.
+      const scopedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+      for (const key of await reader.list(scopedPrefix)) {
         if (key.endsWith('/checksum-manifest.json')) continue;
         if (!known.has(key)) failures.push(`Objeto fora do manifesto: ${key}`);
       }
     }
 
-    // O catálogo/cópia de R2 só vale se cada arquivo copiado está no manifesto.
+    // O catálogo de cópias R2 é não confiável até validar formato e referências.
+    // Um JSON inválido não pode abortar o ensaio por exceção nem produzir falso PASS.
     const r2ManifestKey = manifest.artifacts.find((a) => a.key.endsWith('/r2-manifest.json'))?.key;
+    const copiedKeys = manifest.artifacts
+      .filter((a) => a.key.includes('/r2-files/'))
+      .map((a) => a.key);
     if (r2ManifestKey) {
       const raw = await reader.get(r2ManifestKey);
-      if (raw) {
-        const r2Manifest = JSON.parse(decoder.decode(asBytes(raw))) as {
-          arquivos?: Array<{ backup_key: string }>;
-        };
-        for (const file of r2Manifest.arquivos ?? []) {
-          if (!known.has(file.backup_key)) {
-            failures.push(`Arquivo R2 copiado fora do manifesto: ${file.backup_key}`);
+      if (!raw) {
+        failures.push('Catálogo R2 ausente após verificação');
+      } else {
+        try {
+          const catalog = JSON.parse(decoder.decode(asBytes(raw))) as unknown;
+          if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog) ||
+              !('arquivos' in catalog) || !Array.isArray(catalog.arquivos)) {
+            failures.push('Catálogo R2 inválido: arquivos ausentes ou malformados');
+          } else {
+            const entries = catalog.arquivos as unknown[];
+            const listed = new Set<string>();
+            for (const entry of entries) {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
+                  !('backup_key' in entry) || typeof entry.backup_key !== 'string') {
+                failures.push('Catálogo R2 com entrada inválida');
+                continue;
+              }
+              if (listed.has(entry.backup_key)) failures.push('Catálogo R2 com chave duplicada');
+              listed.add(entry.backup_key);
+              if (!known.has(entry.backup_key) || !entry.backup_key.includes('/r2-files/')) {
+                failures.push(`Arquivo R2 copiado fora do manifesto: ${entry.backup_key}`);
+              }
+            }
+            for (const key of copiedKeys) {
+              if (!listed.has(key)) failures.push(`Cópia R2 sem referência no catálogo: ${key}`);
+            }
           }
+        } catch {
+          failures.push('Catálogo R2 contém JSON inválido');
         }
       }
     }
