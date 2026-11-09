@@ -37,6 +37,47 @@ function utcStamp() {
     .replace(/\.\d{3}Z$/, 'Z');
 }
 
+/**
+ * Shared CLI execution path, with an injectable runner only for synthetic tests.
+ * Production target/clean-main checks remain in main(), before this function.
+ * The entire D1 export is read-only: restores only to a disposable local SQLite.
+ */
+export function performProductionD1BackupProof({
+  outFile,
+  target,
+  configPath,
+  env,
+  cwd = REPO_ROOT,
+  run = runCommand,
+  inspect = inspectDumpWithSqlite,
+}) {
+  mkdirSync(dirname(outFile), { recursive: true });
+  let inspected;
+  try {
+    run(
+      'npx',
+      buildD1ExportArgs({
+        database: PRODUCTION_TARGET.database_name,
+        configPath,
+        env,
+        outputPath: outFile,
+      }),
+      { cwd },
+    );
+    inspected = inspect(outFile);
+    return buildBackupReport({
+      outFile,
+      target,
+      gitHead: run('git', ['rev-parse', 'HEAD'], { cwd }).trim(),
+      inspected,
+    });
+  } finally {
+    if (inspected?.scratchDir) {
+      rmSync(inspected.scratchDir, { recursive: true, force: true });
+    }
+  }
+}
+
 function main() {
   const configPath = resolve(arg('--config') || 'worker-airtrust/wrangler.toml');
   const env = String(arg('--env') || 'production');
@@ -52,38 +93,23 @@ function main() {
   assertProductionTarget(target);
   assertCleanMain({ cwd: REPO_ROOT });
 
-  mkdirSync(dirname(outFile), { recursive: true });
-
-  try {
-    runCommand(
-      'npx',
-      buildD1ExportArgs({
-        database: PRODUCTION_TARGET.database_name,
-        configPath,
-        env,
-        outputPath: outFile,
-      }),
-      { cwd: REPO_ROOT },
+  const report = performProductionD1BackupProof({
+    outFile,
+    target,
+    configPath,
+    env,
+  });
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  if (!report.ok) {
+    process.stderr.write(
+      `D1_RESTORE_INTEGRITY_FAILED: integrity=${report.restored_sqlite.integrity_check} ` +
+        `foreign_key_violations=${report.restored_sqlite.foreign_key_check_count}\n`,
     );
-    const inspected = inspectDumpWithSqlite(outFile);
-    const report = buildBackupReport({
-      outFile,
-      target,
-      gitHead: runCommand('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }).trim(),
-      inspected,
-    });
-
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    if (!report.ok) {
-      process.stderr.write(
-        `D1_RESTORE_INTEGRITY_FAILED: integrity=${report.restored_sqlite.integrity_check} ` +
-          `foreign_key_violations=${report.restored_sqlite.foreign_key_check_count}\n`,
-      );
-      process.exitCode = 1;
-    }
-  } finally {
-    rmSync(inspected.scratchDir, { recursive: true, force: true });
+    process.exitCode = 1;
   }
+
 }
 
-main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main();
+}

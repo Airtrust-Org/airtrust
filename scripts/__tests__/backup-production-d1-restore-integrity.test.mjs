@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { buildBackupReport, inspectDumpWithSqlite } from '../production/lib/backup-d1-readonly.mjs';
+import { performProductionD1BackupProof } from '../production/backup-production-d1-readonly.mjs';
 
 const sqliteAvailable = spawnSync('sqlite3', ['-version'], { encoding: 'utf8' }).status === 0;
 
@@ -19,6 +20,7 @@ function withDump(name, sql, callback) {
   }
 }
 
+// source_reference: synthetic SQLite fixtures only; INSERT statements never run against remote D1.
 const schema = `
 PRAGMA foreign_keys=OFF;
 CREATE TABLE parent(id INTEGER PRIMARY KEY);
@@ -65,4 +67,72 @@ test('maintenance workflow requires zero foreign key violations before uploading
   const workflow = readFileSync(new URL('../../.github/workflows/d1-production-backup-restore-drill.yml', import.meta.url), 'utf8');
   assert.match(workflow, /foreign_key_check_count == 0/);
   assert.match(workflow, /integrity_check == "ok"/);
+});
+
+function cliWithSyntheticRunner({ file, content, onInspect, failGit = false }) {
+  return performProductionD1BackupProof({
+    outFile: file,
+    target: { database_name: 'synthetic-local' },
+    configPath: 'synthetic-test-config',
+    env: 'production',
+    run: (command, _args) => {
+      if (command === 'npx') {
+        writeFileSync(file, content);
+        return '';
+      }
+      if (command === 'git') {
+        if (failGit) throw new Error('synthetic git head unavailable');
+        return `${'a'.repeat(40)}\n`;
+      }
+      throw new Error(`unexpected external command ${command}`);
+    },
+    inspect: (dump) => {
+      const inspected = inspectDumpWithSqlite(dump);
+      onInspect(inspected);
+      return inspected;
+    },
+  });
+}
+
+test('CLI shared execution path exits with success proof and removes local restored copy', { skip: !sqliteAvailable }, () => {
+  withDump('cli valid.sql', '', (file) => {
+    let scratch = '';
+    const report = cliWithSyntheticRunner({
+      file,
+      content: schema + 'INSERT INTO child VALUES(2, 1);\n',
+      onInspect: (inspected) => { scratch = inspected.scratchDir; },
+    });
+    assert.equal(report.ok, true);
+    assert.ok(scratch);
+    assert.equal(existsSync(scratch), false);
+  });
+});
+
+test('CLI shared execution path reports invalid FK restore and still removes local restored copy', { skip: !sqliteAvailable }, () => {
+  withDump('cli orphan.sql', '', (file) => {
+    let scratch = '';
+    const report = cliWithSyntheticRunner({
+      file,
+      content: schema + 'INSERT INTO child VALUES(2, 999);\n',
+      onInspect: (inspected) => { scratch = inspected.scratchDir; },
+    });
+    assert.equal(report.ok, false);
+    assert.equal(report.restored_sqlite.foreign_key_check_count, 1);
+    assert.ok(scratch);
+    assert.equal(existsSync(scratch), false);
+  });
+});
+
+test('CLI cleanup executes when a post-restore operation fails', { skip: !sqliteAvailable }, () => {
+  withDump('cli git failure.sql', '', (file) => {
+    let scratch = '';
+    assert.throws(() => cliWithSyntheticRunner({
+      file,
+      content: schema + 'INSERT INTO child VALUES(2, 1);\n',
+      onInspect: (inspected) => { scratch = inspected.scratchDir; },
+      failGit: true,
+    }), /synthetic git head unavailable/);
+    assert.ok(scratch);
+    assert.equal(existsSync(scratch), false);
+  });
 });
