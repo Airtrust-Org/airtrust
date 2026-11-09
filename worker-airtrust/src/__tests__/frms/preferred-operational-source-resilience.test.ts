@@ -57,6 +57,26 @@ describe('FRMS preferred operational source resilience', () => {
     });
   });
 
+  it('usa Controle de Voos quando prepare do legado lança erro síncrono', async () => {
+    fetchControleVoosOperationalRecordsMock.mockResolvedValue([cv()]);
+    const db = { prepare: vi.fn(() => { throw new Error('LEGACY_SCHEMA_SYNC_FAILURE'); }) } as unknown as D1Database;
+    const rows = await loadPreferredOperationalJourneys(db, 6, '2026-09-27', '2026-09-27');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].operational_data_source).toBe('CONTROLE_VOOS');
+    expect(fetchControleVoosOperationalRecordsMock).toHaveBeenCalledOnce();
+  });
+
+  it('usa SIGVOOS quando a consulta CV lança erro síncrono', async () => {
+    fetchControleVoosOperationalRecordsMock.mockImplementation(() => { throw new Error('CV_SYNC_FAILURE'); });
+    const db = dbWithLegacyResult(Promise.resolve({ results: [{
+      data: '2026-09-27', tripulante_id: 7, hora_apresentacao: '06:45',
+      hora_termino: '13:00', horas_voo_minutos: 150, duracao_jornada_minutos: 375,
+    }] }));
+    const rows = await loadPreferredOperationalJourneys(db, 6, '2026-09-27', '2026-09-27');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].operational_data_source).toBe('SIGVOOS');
+  });
+
   it('mantém SIGVOOS como fallback quando Controle de Voos falha', async () => {
     fetchControleVoosOperationalRecordsMock.mockRejectedValue(new Error('cv unavailable'));
     const db = dbWithLegacyResult(Promise.resolve({

@@ -265,7 +265,7 @@ export async function loadPreferredOperationalJourneys(
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('INVALID_TENANT');
   const canonical = buildCanonicalOperationalSourceSql('j.origem');
 
-  const legacyPromise = db.prepare(
+  const legacyPromise = Promise.resolve().then(() => db.prepare(
     `SELECT CAST(j.tripulante_id AS INTEGER) AS tripulante_id,
             j.data,
             j.hora_apresentacao,
@@ -280,11 +280,11 @@ export async function loadPreferredOperationalJourneys(
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
       WHERE j.deleted_at IS NULL AND f.deleted_at IS NULL AND f.empresa_id = ?
         AND j.data BETWEEN ? AND ? AND ${canonical}`,
-  ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>();
+  ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>());
 
   const [legacyResult, cvResult] = await Promise.allSettled([
     legacyPromise,
-    fetchControleVoosOperationalRecords(db, empresaId, from, to),
+    Promise.resolve().then(() => fetchControleVoosOperationalRecords(db, empresaId, from, to)),
   ]);
 
   if (legacyResult.status === 'rejected') {
