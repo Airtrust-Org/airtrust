@@ -634,7 +634,7 @@ app.get('/funcionarios/requisitos-lote', requireRole('admin'), async (c) => {
   }
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
   const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
   const data = ids.map((id) => {
     const person = peopleById.get(id);
@@ -651,7 +651,7 @@ app.get('/funcionarios/:id', async (c) => {
   if (!funcionarioId) throw new ApiError('Funcionário inválido', 400);
   const access = await getEmployeeSectorAccess(c, empresaId);
   await assertFuncionarioInScope(c.env.DB, empresaId, funcionarioId, access);
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { funcionarioId });
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { funcionarioId }, { coalesce: true });
   const person = snapshot.people.find((item) => item.id === funcionarioId);
   if (!person) throw new ApiError('Funcionário não encontrado', 404);
   return c.json({
@@ -685,7 +685,7 @@ app.get('/pessoas', requireRole('admin', 'manager'), async (c) => {
     throw new ApiError('Status de compliance inválido', 400);
   }
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId });
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId }, { coalesce: true });
   const data = snapshot.people
     .filter((person) => {
       const matchesRequirement =
@@ -718,7 +718,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
   const [snapshot, activeEnrollments] = await Promise.all([
-    buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId }),
+    buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId }, { coalesce: true }),
     loadLmsEnrollments(c.env.DB, empresaId),
   ]);
   const people = snapshot.people.filter(
@@ -735,7 +735,7 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
 app.get('/setores', requireRole('admin', 'manager'), async (c) => {
   const empresaId = getEmpresaId(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
   const requestedSetorId = asPositiveInt(c.req.query('setor_id'));
   const people = snapshot.people.filter(
     (person) => (!requestedSetorId || person.setor_id === requestedSetorId) && matchesSearchText(person.nome, c.req.query('q')),
@@ -949,7 +949,7 @@ app.get('/reconciliacao', requireRole('admin', 'manager'), async (c) => {
 
   try {
     const targetFilter = setorId || funcaoId ? { setorId, funcaoId } : undefined;
-    const snapshot = await buildSnapshot(db, empresaId, access, targetFilter);
+    const snapshot = await buildSnapshot(db, empresaId, access, targetFilter, { coalesce: true });
     const people = (snapshot?.people || []).filter(
       (person) =>
         (!setorId || person.setor_id === setorId) &&
@@ -1345,7 +1345,7 @@ app.get('/resumo', requireRole('admin', 'manager'), async (c) => {
   const funcaoId = asPositiveInt(c.req.query('funcao_id'));
   const aeronaveModelo = normalizeAircraftModel(c.req.query('aeronave_modelo'));
   const q = normalizeSearchText(c.req.query('q'));
-  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId });
+  const snapshot = await buildSnapshot(c.env.DB, empresaId, access, { setorId, funcaoId }, { coalesce: true });
   const people = snapshot.people.filter(
     (p) =>
       (!setorId || p.setor_id === setorId) &&

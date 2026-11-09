@@ -732,19 +732,71 @@ export type TrainingComplianceTargetFilter = {
   funcionarioId?: number | null;
 };
 
-export async function buildSnapshot(
-  db: D1Database,
-  empresaId: number,
-  access: EmployeeSectorAccess,
-  targetFilter?: TrainingComplianceTargetFilter,
-) {
-  const today = getTodayIsoSaoPaulo();
+type SnapshotSources = {
+  allEmployees: Awaited<ReturnType<typeof loadEmployees>>;
+  rules: Awaited<ReturnType<typeof loadRules>>;
+  historyMap: Awaited<ReturnType<typeof loadQualificationEvidence>>;
+  lmsMap: Awaited<ReturnType<typeof loadLmsEvidence>>;
+};
+
+// #2078: a tela de Compliance dispara varios endpoints ao mesmo tempo e cada um
+// reexecutava as 4 leituras pesadas (todas dependem apenas de empresa_id e do dia;
+// filtros de acesso/setor/funcao sao aplicados em memoria). Sob essa rajada o D1
+// ficava saturado (database_capacity) e ate a checagem de revogacao do JWT, que
+// entra na mesma fila, estourava. Coalescemos SOMENTE leituras identicas em voo
+// (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
+const _inFlightSnapshotSources = new WeakMap<D1Database, Map<string, Promise<SnapshotSources>>>();
+
+async function loadSnapshotSources(db: D1Database, empresaId: number, today: string): Promise<SnapshotSources> {
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
     loadEmployees(db, empresaId, today),
     loadRules(db, empresaId, today),
     loadQualificationEvidence(db, empresaId),
     loadLmsEvidence(db, empresaId),
   ]);
+  return { allEmployees, rules, historyMap, lmsMap };
+}
+
+export function loadSnapshotSourcesCoalesced(
+  db: D1Database,
+  empresaId: number,
+  today: string,
+): Promise<SnapshotSources> {
+  let perDb = _inFlightSnapshotSources.get(db);
+  if (!perDb) {
+    perDb = new Map();
+    _inFlightSnapshotSources.set(db, perDb);
+  }
+  const key = `${empresaId}:${today}`;
+  const existing = perDb.get(key);
+  if (existing) return existing;
+  const map = perDb;
+  let promise!: Promise<SnapshotSources>;
+  promise = (async () => {
+    try {
+      return await loadSnapshotSources(db, empresaId, today);
+    } finally {
+      if (map.get(key) === promise) map.delete(key);
+    }
+  })();
+  map.set(key, promise);
+  return promise;
+}
+
+export async function buildSnapshot(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess,
+  targetFilter?: TrainingComplianceTargetFilter,
+  // coalesce: SOMENTE para endpoints de leitura (GET). Leituras pos-escrita
+  // (POST/PUT, servicos de matricula/reconciliacao, cron) ficam sempre frescas
+  // para nunca entrar numa leitura em voo anterior a gravacao.
+  options?: { coalesce?: boolean },
+) {
+  const today = getTodayIsoSaoPaulo();
+  const { allEmployees, rules, historyMap, lmsMap } = options?.coalesce
+    ? await loadSnapshotSourcesCoalesced(db, empresaId, today)
+    : await loadSnapshotSources(db, empresaId, today);
   let employees = filterEmployeesByAccess(allEmployees, access);
   if (targetFilter?.setorId != null) {
     employees = employees.filter((employee) => employee.setor_id === targetFilter.setorId);

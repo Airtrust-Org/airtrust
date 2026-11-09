@@ -3,6 +3,7 @@ import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { readSameDayTrainingAlerts } from '../../services/training-alert-same-day';
 import {
   listTrainingCommunications,
+  runCommunicationsQuery,
   maskTrainingContact,
   type TrainingCommunicationFilters,
 } from '../../services/training-communication-history';
@@ -281,7 +282,7 @@ describe('consolidated training communication history', () => {
       { notifications: false, audit: true }, { limit: 100, offset: 0 });
     expect(result.rows).toHaveLength(100);
     expect(result.rows.every((row) => row.status_envio === 'enviada')).toBe(true);
-    const sql = calls.find((call) => call.includes('WITH communications AS')) || '';
+    const sql = calls.find((call) => call.includes('communications AS (')) || '';
     expect(sql).toContain('done.entity_id = a.entity_id');
     const plan = db.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 101, 0) as
       Array<{ detail: string }>;
@@ -318,5 +319,48 @@ it('bloqueia reenvio do dia quando há PREPARADO pendente; falha final não bloq
     expect(maskTrainingContact('someone@example.com')).toBe('s***@example.com');
     expect(maskTrainingContact('+55 (21) 99999-8888')).toBe('***8888');
     expect(maskTrainingContact(null)).toBe(null);
+  });
+
+  describe('caminho rapido top-N exato (#2078)', () => {
+    const tables = { notifications: true, audit: true };
+    function seedVolume() {
+      db.database.exec(`
+        WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 1500)
+        INSERT INTO notificacoes_log(id,empresa_id,tipo,destinatario,assunto,corpo,status,enviado_em,created_at)
+        SELECT 1000+n, CASE WHEN n % 11 = 0 THEN 2 ELSE 1 END,
+               'EMAIL_COMPLIANCE','x@example.com',
+               CASE WHEN n % 7 = 0 THEN '[OUTRO:1]' WHEN n % 5 = 0 THEN '[COMPLIANCE_GESTOR:1]' ELSE '[COMPLIANCE_TREINAMENTO:100]' END,
+               CASE WHEN n % 9 = 0 THEN 'nao-json'
+                    WHEN n % 13 = 0 THEN '{"funcionario_id":999999,"qualificacao_nome":"orfao"}'
+                    ELSE '{"funcionario_id":' || (1000 + (n % 2)) || ',"qualificacao_tipo_id":100,"qualificacao_nome":"MGO"}' END,
+               'enviada',
+               CASE WHEN n % 17 = 0 THEN NULL ELSE datetime('2026-10-01 00:00:00', '+' || (n % 400) || ' minutes') END,
+               datetime('2026-10-01 00:00:00', '+' || (n % 300) || ' minutes')
+        FROM seq;
+      `);
+    }
+    it('rapido e completo retornam exatamente as mesmas linhas e has_more', async () => {
+      seedVolume();
+      for (const [limit, offset] of [[50, 0], [50, 50], [30, 200], [100, 0]]) {
+        const f = { limit, offset };
+        const fast = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, true);
+        const full = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, false);
+        expect(fast).not.toBeNull();
+        expect(fast).toEqual(full);
+      }
+    });
+    it('quando a janela nao cobre a pagina, devolve null e a API cai na consulta completa', async () => {
+      seedVolume();
+      const f = { limit: 100, offset: 0, funcionario_q: 'nome-inexistente-xyz' };
+      expect(await runCommunicationsQuery(db.asD1(), 1, all, tables, f, true)).toBeNull();
+      const viaApi = await listTrainingCommunications(db.asD1(), 1, all, tables, f);
+      const full = await runCommunicationsQuery(db.asD1(), 1, all, tables, f, false);
+      expect(viaApi).toEqual(full);
+    });
+    it('isolamento: nunca devolve notificacao de outra empresa', async () => {
+      seedVolume();
+      const r = await listTrainingCommunications(db.asD1(), 2, all, tables, { limit: 50, offset: 0 });
+      expect(r.rows.every((row) => row.funcionario_id >= 2000 || row.id.startsWith('lms:'))).toBe(true);
+    });
   });
 });

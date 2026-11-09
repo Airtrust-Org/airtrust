@@ -92,7 +92,7 @@ function createDb() {
     prepare: vi.fn((query: string) => ({
       bind: (...args: unknown[]) => ({
         all: async () => {
-          if (query.includes('WITH communications AS')) {
+          if (query.includes('communications AS (')) {
             return { results: historyRows };
           }
           if (query.includes('SELECT m.id,m.funcionario_id,m.curso_id')) {
