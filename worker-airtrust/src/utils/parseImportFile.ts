@@ -54,6 +54,11 @@ export async function parseImportFile(
  * Parse CSV com Papa Parse
  */
 function parseCSV(file: ArrayBuffer | string): Promise<ParseResult> {
+  const byteLength = typeof file === 'string' ? new TextEncoder().encode(file).byteLength : (file as ArrayBuffer).byteLength;
+  if (byteLength > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+    return Promise.reject(new Error(`Arquivo CSV excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`));
+  }
+
   return new Promise((resolve, reject) => {
     const fileString =
       typeof file === 'string' ? file : new TextDecoder('utf-8').decode(file as ArrayBuffer);
@@ -102,13 +107,55 @@ function decodeXmlEntities(s: string): string {
 }
 
 /**
+ * Limites de segurança para importação de arquivos (P00-03: mitigação de Zip Bomb e buffer overflow)
+ */
+export const IMPORT_FILE_LIMITS = {
+  maxCompressedBytes: 10 * 1024 * 1024,      // 10 MB máximo de arquivo de entrada
+  maxUncompressedBytes: 30 * 1024 * 1024,    // 30 MB máximo total descompactado acumulado
+  maxEntryBytes: 20 * 1024 * 1024,           // 20 MB máximo por entrada individual
+};
+
+/**
  * Parse XLSX usando fflate (Workers-compatible) — sem dependência externa xlsx
  */
 function parseXLSX(file: ArrayBuffer): ParseResult {
+  if (file.byteLength > IMPORT_FILE_LIMITS.maxCompressedBytes) {
+    throw new Error(`Arquivo XLSX excede o tamanho máximo de ${IMPORT_FILE_LIMITS.maxCompressedBytes / (1024 * 1024)} MB`);
+  }
+
   let zipEntries: Record<string, Uint8Array>;
+  let totalUncompressed = 0;
   try {
-    zipEntries = unzipSync(new Uint8Array(file));
-  } catch {
+    zipEntries = unzipSync(new Uint8Array(file), {
+      filter(fileInfo) {
+        const name = fileInfo.name.toLowerCase();
+        // Filtrar estritamente as entradas necessárias para ler a planilha XLSX
+        const isNeeded =
+          name === 'xl/sharedstrings.xml' ||
+          name === 'xl/worksheets/sheet1.xml' ||
+          name === 'xl/workbook.xml';
+
+        if (!isNeeded) {
+          return false;
+        }
+
+        // fflate define originalSize como o tamanho descomprimido da entrada (P1 Codex review)
+        const uncompressedSize = fileInfo.originalSize ?? fileInfo.size;
+        totalUncompressed += uncompressedSize;
+        if (totalUncompressed > IMPORT_FILE_LIMITS.maxUncompressedBytes) {
+          throw new Error('Limite de descompressão excedido (possível Zip Bomb)');
+        }
+        if (uncompressedSize > IMPORT_FILE_LIMITS.maxEntryBytes) {
+          throw new Error('Entrada da planilha excede o limite máximo permitido');
+        }
+        return true;
+      },
+    });
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('Limite de descompressão') || msg.includes('Entrada da planilha')) {
+      throw err;
+    }
     throw new Error('Arquivo XLSX inválido ou corrompido');
   }
 
