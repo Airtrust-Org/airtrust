@@ -57,6 +57,22 @@ import type { TrainingAlertChannel } from '../services/training-alert-reservatio
 const app = new Hono<{ Bindings: Env }>();
 const TWILIO_STATUS_CALLBACK_PATH = '/api/alertas/whatsapp/status-callback';
 
+/** Days to expiry are calendar days in Sao Paulo, independent of Worker UTC time and DST. */
+export function getManualAlertDaysUntilDueDate(
+  dueDateValue: unknown,
+  referenceDate: Date = new Date(),
+): number | null {
+  if (typeof dueDateValue !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dueDateValue)) {
+    return null;
+  }
+  const dueMs = Date.parse(`${dueDateValue}T00:00:00.000Z`);
+  if (!Number.isFinite(dueMs) || new Date(dueMs).toISOString().slice(0, 10) !== dueDateValue) {
+    return null;
+  }
+  const todayMs = Date.parse(`${getTodayIsoSaoPaulo(referenceDate)}T00:00:00.000Z`);
+  return Math.round((dueMs - todayMs) / 86_400_000);
+}
+
 /** Encode untrusted database values before interpolating them into email HTML. */
 export function escapeAlertEmailHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => {
@@ -755,14 +771,10 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
 
     if (r.data_vencimento) {
       const parsedVencimento = new Date(String(r.data_vencimento));
-      if (!Number.isNaN(parsedVencimento.getTime())) {
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        parsedVencimento.setHours(0, 0, 0, 0);
+      const diasAteVencimento = getManualAlertDaysUntilDueDate(String(r.data_vencimento));
+      if (diasAteVencimento !== null && !Number.isNaN(parsedVencimento.getTime())) {
         dataVencimento = parsedVencimento;
-        diasDiferenca = Math.floor(
-          (parsedVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-        );
+        diasDiferenca = diasAteVencimento;
 
         if (diasDiferenca < 0) {
           statusVencimento = `Vencida há ${Math.abs(diasDiferenca)} dias`;
