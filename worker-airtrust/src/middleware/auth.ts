@@ -89,7 +89,12 @@ async function resolveEffectiveUserRole(
 
 // In-flight dedup map para consultas de blocklist (evita rajadas redundantes no D1 sob requisições concorrentes)
 // Sem manter cache positivo estático de 60s que causaria janela de revogação obsoleta entre múltiplos isolates (Issue #2014)
-const _inFlightJtiChecks = new Map<string, Promise<boolean>>();
+type InFlightJtiCheck = {
+  promise: Promise<boolean>;
+  attempts: number;
+  listeners: Set<(attempt: number, error?: unknown) => void>;
+};
+const _inFlightJtiChecks = new Map<string, InFlightJtiCheck>();
 
 export function resetBlocklistCache(): void {
   _inFlightJtiChecks.clear();
@@ -114,9 +119,20 @@ export function getValidJtiCacheSize(): number {
 async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAttempt?: (attempt: number, error?: unknown) => void): Promise<boolean> {
   const inFlight = _inFlightJtiChecks.get(jti);
   if (inFlight) {
-    return inFlight;
+    if (onAttempt) {
+      // Each coalesced request must receive the shared attempt count, including
+      // the attempts that occurred before it joined the in-flight operation.
+      onAttempt(inFlight.attempts);
+      inFlight.listeners.add(onAttempt);
+    }
+    return inFlight.promise;
   }
 
+  const check: InFlightJtiCheck = {
+    promise: undefined as unknown as Promise<boolean>,
+    attempts: 0,
+    listeners: new Set(onAttempt ? [onAttempt] : []),
+  };
   const promise = (async () => {
     try {
       const row = await withD1Retry(
@@ -127,15 +143,20 @@ async function isJtiBlocklisted(db: D1Database, jti: string, exp?: number, onAtt
             .first(),
         7,
         80,
-        onAttempt,
+        (attempt, error) => {
+          check.attempts = Math.max(check.attempts, attempt);
+          for (const listener of check.listeners) listener(check.attempts, error);
+        },
       );
       return Boolean(row);
     } finally {
-      _inFlightJtiChecks.delete(jti);
+      if (_inFlightJtiChecks.get(jti) === check) _inFlightJtiChecks.delete(jti);
+      check.listeners.clear();
     }
   })();
 
-  _inFlightJtiChecks.set(jti, promise);
+  check.promise = promise;
+  _inFlightJtiChecks.set(jti, check);
   return promise;
 }
 
