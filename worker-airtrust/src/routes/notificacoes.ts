@@ -279,7 +279,11 @@ const logEmployeeJoinSql = `
    AND qh.deleted_at IS NULL
   LEFT JOIN funcionarios f
     ON f.id = CASE
-      WHEN nl.qualificacao_historico_id IS NOT NULL THEN qh.funcionario_id
+      -- Foreign/deleted history must not fall back to a CPF from this tenant.
+      WHEN nl.qualificacao_historico_id IS NOT NULL AND qh.id IS NULL THEN NULL
+      WHEN qh.funcionario_id IS NOT NULL THEN qh.funcionario_id
+      -- Legacy imports may have tenant-owned histories with a NULL employee id:
+      -- resolve by CPF only when exactly one active employee matches this tenant.
       ELSE (
         SELECT CASE WHEN COUNT(*) = 1 THEN MIN(f_unique.id) ELSE NULL END
           FROM funcionarios f_unique

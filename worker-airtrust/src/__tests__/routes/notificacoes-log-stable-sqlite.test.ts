@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types';
 
 vi.mock('../../middleware/auth', () => ({
@@ -18,10 +18,21 @@ vi.mock('../../middleware/tenant', () => ({
   getEmpresaId: (c: any) => Number(c.get('empresaId')),
   isPlatformAdminContext: () => false,
 }));
+const scope = vi.hoisted(() => ({ restricted: false }));
 vi.mock('../../middleware/employee-sector-access', () => ({
-  getEmployeeSectorAccess: async () => ({ mode: 'all', setorIds: [], funcionarioId: null }),
-  appendEmployeeSectorFilter: () => undefined,
+  getEmployeeSectorAccess: async () => scope.restricted
+    ? { mode: 'restricted', setorIds: [3], funcionarioId: null }
+    : { mode: 'all', setorIds: [], funcionarioId: null },
+  appendEmployeeSectorFilter: (
+    conditions: string[], bindings: unknown[], access: { mode: string }, alias: string,
+  ) => {
+    if (access.mode === 'restricted') {
+      conditions.push(`${alias}.setor_id = ?`);
+      bindings.push(3);
+    }
+  },
 }));
+afterEach(() => { scope.restricted = false; });
 
 import notificacoesRoutes from '../../routes/notificacoes';
 
@@ -37,7 +48,7 @@ function createDb() {
       funcionario_cpf TEXT, tipo TEXT, destinatario TEXT, assunto TEXT, corpo TEXT,
       status TEXT, erro_mensagem TEXT, enviado_em TEXT, created_at TEXT
     );
-    CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, cpf TEXT, nome TEXT, deleted_at TEXT);
+    CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, cpf TEXT, nome TEXT, setor_id INTEGER, deleted_at TEXT);
     CREATE TABLE qualificacoes_historico (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
       qualificacao_codigo TEXT, deleted_at TEXT
@@ -46,12 +57,13 @@ function createDb() {
       id INTEGER PRIMARY KEY, empresa_id INTEGER, codigo TEXT, nome TEXT, categoria TEXT, deleted_at TEXT
     );
     INSERT INTO funcionarios VALUES
-       (1,6,'111','Primeiro duplicado',NULL),
-       (2,6,'111','Segundo duplicado',NULL),
-       (4,6,'444','Funcionaria correta',NULL),
-       (7,7,'777','Outro tenant',NULL);
+       (1,6,'111','Primeiro duplicado',8,NULL),
+       (2,6,'111','Segundo duplicado',8,NULL),
+       (4,6,'444','Funcionaria correta',3,NULL),
+       (7,7,'777','Outro tenant',7,NULL);
     INSERT INTO qualificacoes_historico VALUES
        (10,6,4,'CRM',NULL),
+       (11,6,NULL,'CRM',NULL),
        (20,7,7,'CRM',NULL);
     INSERT INTO qualificacoes_tipos VALUES
        (100,6,'CRM','CRM antigo','TREINAMENTO',NULL),
@@ -62,7 +74,8 @@ function createDb() {
        (2,6,NULL,NULL,'111','EMAIL','dest','two','body','erro',NULL,'2026-11-09','2026-11-09 12:00:00'),
        (3,6,NULL,10,'444','EMAIL','dest','three','body','enviada',NULL,'2026-11-09','2026-11-09 12:00:00'),
        (4,6,NULL,20,'111','EMAIL','dest','four','body','pendente',NULL,'2026-11-09','2026-11-09 12:00:00'),
-       (5,7,NULL,20,'777','EMAIL','dest','other','body','enviada',NULL,'2026-11-09','2026-11-09 12:00:00');
+       (5,7,NULL,20,'777','EMAIL','dest','other','body','enviada',NULL,'2026-11-09','2026-11-09 12:00:00'),
+       (6,6,NULL,11,'444','EMAIL','dest','legacy','body','enviada',NULL,'2026-11-09','2026-11-09 12:00:00');
   `);
   return db;
 }
@@ -96,15 +109,29 @@ describe('P04-07 real SQLite notification log stable pagination and tenant-safe 
       const response = await request(createEnv(db), 6);
       expect(response.status).toBe(200);
       const result = await response.json() as any;
-      expect(result.data.map((r: any) => r.id)).toEqual([4, 3, 2, 1]);
-      expect(result.meta.stats).toMatchObject({ total: 4, enviadas: 2, erros: 1, pendentes: 1 });
+      expect(result.data.map((r: any) => r.id)).toEqual([6, 4, 3, 2, 1]);
+      expect(result.meta.stats).toMatchObject({ total: 5, enviadas: 3, erros: 1, pendentes: 1 });
       const realHistory = result.data.find((r: any) => r.id === 3);
       expect(realHistory.funcionario_nome).toBe('Funcionaria correta');
       expect(realHistory.qualificacao_nome).toBe('CRM vigente');
       expect(result.data.find((r: any) => r.id === 4).funcionario_nome).toBeNull();
       expect(result.data.find((r: any) => r.id === 1).funcionario_nome).toBeNull();
+      expect(result.data.find((r: any) => r.id === 6).funcionario_nome).toBe('Funcionaria correta');
     } finally { db.close(); }
   });
+  it('keeps tenant-owned CPF-only legacy histories visible to sector-restricted managers', async () => {
+    const db = createDb();
+    try {
+      scope.restricted = true;
+      const response = await request(createEnv(db), 6);
+      expect(response.status).toBe(200);
+      const result = await response.json() as any;
+      expect(result.data.map((r: any) => r.id)).toEqual([6, 3]);
+      expect(result.meta.stats).toMatchObject({ total: 2, enviadas: 2, erros: 0, pendentes: 0 });
+      expect(result.data.every((r: any) => r.funcionario_nome === 'Funcionaria correta')).toBe(true);
+    } finally { db.close(); }
+  });
+
   it('pages deterministic ties without duplication or cross-company disclosure', async () => {
     const db = createDb();
     try {
@@ -112,8 +139,8 @@ describe('P04-07 real SQLite notification log stable pagination and tenant-safe 
       const first = await (await request(env, 6, 2, 0)).json() as any;
       const second = await (await request(env, 6, 2, 2)).json() as any;
       const other = await (await request(env, 7)).json() as any;
-      expect(first.data.map((r: any) => r.id)).toEqual([4, 3]);
-      expect(second.data.map((r: any) => r.id)).toEqual([2, 1]);
+      expect(first.data.map((r: any) => r.id)).toEqual([6, 4]);
+      expect(second.data.map((r: any) => r.id)).toEqual([3, 2]);
       expect(other.data.map((r: any) => r.id)).toEqual([5]);
       expect(other.meta.stats.total).toBe(1);
     } finally { db.close(); }
