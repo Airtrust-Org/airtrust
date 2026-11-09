@@ -110,8 +110,6 @@ function cleanText(value: unknown, max = 4000): string {
 function getRequestIp(c: any): string | null {
   return (
     c.req.header('CF-Connecting-IP') ||
-    c.req.header('X-Real-IP') ||
-    c.req.header('X-Forwarded-For') ||
     null
   );
 }

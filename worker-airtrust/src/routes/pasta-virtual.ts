@@ -831,7 +831,7 @@ app.delete('/delete/:id', auth(), requireRole('admin'), async (c) => {
         acao: 'DELETE',
         registro_id: id,
         usuario_id: userId,
-        ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+        ip_address: c.req.header('cf-connecting-ip'),
         user_agent: c.req.header('user-agent'),
       });
     } catch {
@@ -1202,7 +1202,7 @@ app.post('/upload', auth(), async (c) => {
         registro_id: result.meta.last_row_id,
         usuario_id: userId,
         dados_novos: { nome_arquivo: nomeArquivoPersistido, tipo: fileType, r2_key: r2Key },
-        ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+        ip_address: c.req.header('cf-connecting-ip'),
         user_agent: c.req.header('user-agent'),
       });
     } catch {
@@ -1494,7 +1494,7 @@ app.post('/:id/rename-canonical', auth(), requireRole('admin'), async (c) => {
       r2_key: documento.r2_key,
       motivo: 'RENOMEACAO_CANONICA',
     },
-    ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+    ip_address: c.req.header('cf-connecting-ip'),
     user_agent: c.req.header('user-agent'),
   });
 
@@ -1563,7 +1563,7 @@ app.delete('/:id', auth(), requireRole('admin'), async (c) => {
         registro_id: id,
         usuario_id: userId,
         dados_anteriores: { nome_arquivo: documento.nome_arquivo, r2_key: documento.r2_key },
-        ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+        ip_address: c.req.header('cf-connecting-ip'),
         user_agent: c.req.header('user-agent'),
       });
     } catch {
