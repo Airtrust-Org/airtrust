@@ -745,17 +745,17 @@ type SnapshotSources = {
 // ficava saturado (database_capacity) e ate a checagem de revogacao do JWT, que
 // entra na mesma fila, estourava. Coalescemos SOMENTE leituras identicas em voo
 // (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
-const _inFlightSnapshotSources = new WeakMap<object, Map<string, Promise<SnapshotSources>>>();
+const _inFlightSnapshotSources = new WeakMap<D1Database, Map<string, Promise<SnapshotSources>>>();
 
 export function loadSnapshotSourcesCoalesced(
   db: D1Database,
   empresaId: number,
   today: string,
 ): Promise<SnapshotSources> {
-  let perDb = _inFlightSnapshotSources.get(db as unknown as object);
+  let perDb = _inFlightSnapshotSources.get(db);
   if (!perDb) {
     perDb = new Map();
-    _inFlightSnapshotSources.set(db as unknown as object, perDb);
+    _inFlightSnapshotSources.set(db, perDb);
   }
   const key = `${empresaId}:${today}`;
   const existing = perDb.get(key);
