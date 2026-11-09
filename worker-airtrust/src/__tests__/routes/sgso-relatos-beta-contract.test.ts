@@ -20,7 +20,8 @@ vi.mock('../../middleware/auth', () => ({
   },
 }));
 
-vi.mock('../../middleware/tenant', () => ({
+vi.mock('../../middleware/tenant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../middleware/tenant')>()),
   getEmpresaId: () => 77,
 }));
 

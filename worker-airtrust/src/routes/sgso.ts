@@ -20,7 +20,7 @@ import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
-import { getEmpresaId } from '../middleware/tenant';
+import { getEmpresaId, normalizeTenantRole } from '../middleware/tenant';
 import sgsoNextGenRoutes from './sgso-next-gen';
 import sgsoAuditoriasNcsRoutes from './sgso-auditorias-ncs';
 import sgsoHfaIntegrationRoutes from './sgso-hfa-integration';
@@ -42,6 +42,20 @@ sgso.route('/hfa', sgsoHfaIntegrationRoutes);
 
 function getUid(c: AppCtx): number {
   return Number(c.get('userId') ?? 0);
+}
+
+/**
+ * Leitura de relatos (P10-02): administração e gestão (os mesmos papéis que já
+ * podem escrever no fluxo SGSO) leem todos os relatos do tenant; qualquer outro
+ * papel lê apenas os relatos que ele mesmo registrou (inclusive os anônimos,
+ * que continuam redigidos na resposta). A política espelha a de /relprev.
+ */
+function relatoReadScope(c: AppCtx): { clause: string; bindings: number[] } {
+  const role = normalizeTenantRole((c.get as (key: string) => unknown)('userRole'));
+  if (role === 'admin' || role === 'manager') {
+    return { clause: '1 = 1', bindings: [] };
+  }
+  return { clause: 'r.created_by = ?', bindings: [getUid(c)] };
 }
 
 function uuid(): string {
@@ -358,8 +372,9 @@ sgso.get('/relatos', async (c) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
 
-    let where = 'r.empresa_id = ? AND r.deleted_at IS NULL';
-    const params: (string | number)[] = [empresaId];
+    const readScope = relatoReadScope(c as AppCtx);
+    let where = `r.empresa_id = ? AND r.deleted_at IS NULL AND ${readScope.clause}`;
+    const params: (string | number)[] = [empresaId, ...readScope.bindings];
     if (status) {
       where += ' AND r.status = ?';
       params.push(status);
@@ -413,6 +428,7 @@ sgso.get('/relatos/:id', async (c) => {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
     const { id } = c.req.param();
+    const readScope = relatoReadScope(c as AppCtx);
     const relatoColumns = await getTableColumns(db, 'sgso_relatos');
     const hasGsoResponsavel = relatoColumns.has('gso_responsavel_id');
     const hasAeronaveId = relatoColumns.has('aeronave_id');
@@ -427,9 +443,10 @@ sgso.get('/relatos/:id', async (c) => {
          LEFT JOIN funcionarios f ON f.id = r.relator_id AND f.deleted_at IS NULL
          ${hasGsoResponsavel ? 'LEFT JOIN funcionarios g ON g.id = r.gso_responsavel_id AND g.deleted_at IS NULL' : ''}
          ${hasAeronaveId ? 'LEFT JOIN aeronaves a ON a.id = r.aeronave_id AND a.deleted_at IS NULL' : ''}
-         WHERE r.id = ? AND r.empresa_id = ? AND r.deleted_at IS NULL`,
+         WHERE r.id = ? AND r.empresa_id = ? AND r.deleted_at IS NULL
+           AND ${readScope.clause}`,
       )
-      .bind(id, empresaId)
+      .bind(id, empresaId, ...readScope.bindings)
       .first<Record<string, unknown>>();
 
     if (!relato) {
@@ -574,6 +591,7 @@ sgso.get('/relatos/:id/historico', async (c) => {
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
     const { id } = c.req.param();
+    const readScope = relatoReadScope(c as AppCtx);
 
     const rows = await db
       .prepare(
@@ -584,9 +602,10 @@ sgso.get('/relatos/:id/historico', async (c) => {
           AND r.deleted_at IS NULL
          LEFT JOIN funcionarios f ON f.id = h.alterado_por
          WHERE h.relato_id = ? AND h.empresa_id = ?
+           AND ${readScope.clause}
          ORDER BY h.alterado_em ASC`,
       )
-      .bind(id, empresaId)
+      .bind(id, empresaId, ...readScope.bindings)
       .all<Record<string, unknown>>();
 
     const data = rows.results.map((row) => {
@@ -1027,7 +1046,7 @@ sgso.patch('/acoes/:id', requireRole('admin', 'manager'), async (c) => {
 // ─────────────────────────────────────────────────────────────
 
 // POST /api/sgso/relatos/:id/comentarios
-sgso.post('/relatos/:id/comentarios', async (c) => {
+sgso.post('/relatos/:id/comentarios', requireRole('admin', 'manager'), async (c) => {
   try {
     const empresaId = getEmpresaId(c as any);
     const uid = getUid(c);

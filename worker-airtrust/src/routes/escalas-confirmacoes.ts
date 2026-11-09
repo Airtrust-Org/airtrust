@@ -18,7 +18,7 @@ confirmacoes.post('/minha-escala/confirmar', auth(), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaIdSafe(c);
   const userId = String((c as unknown as { get: (key: string) => unknown }).get('userId') || '');
-  const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || '';
+  const ip = c.req.header('CF-Connecting-IP') || '';
 
   try {
     const body = await c.req.json();
