@@ -28,6 +28,7 @@ import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/p
 import { isManagerPerfil } from '../services/setores-gestores';
 import { persistRefreshToken, resolveAndRotateRefreshToken } from '../services/auth-refresh-token';
 import { recordSuccessfulLogin } from '../services/auth-last-login';
+import { refreshTokenKeys } from '../services/refresh-token-key';
 
 // Tipar variáveis adicionadas ao contexto pelo middleware auth()
 type AuthVars = {
@@ -1222,7 +1223,10 @@ authRoutes.post(
       // P0-AUTH-001/P1-AUTH-002: valida o refresh token (revogado/expirado/
       // legado sem tenant/membership revogada) e rotaciona atomicamente via
       // CAS para prevenir replay. Ver services/auth-refresh-token.ts.
-      const { empresaId: pinnedEmpresaId } = await resolveAndRotateRefreshToken(db, refreshToken);
+      const { empresaId: pinnedEmpresaId, tokenKey: refreshTokenKey } = await resolveAndRotateRefreshToken(
+        db,
+        refreshToken,
+      );
 
       const { activeWhere } = await getUsuariosSchema(db);
 
@@ -1245,7 +1249,7 @@ authRoutes.post(
         LIMIT 1
       `,
         )
-        .bind(refreshToken)
+        .bind(refreshTokenKey)
         .first<TokenRecord>();
 
       if (!tokenRecord) {
@@ -1354,10 +1358,20 @@ authRoutes.post('/logout', async (c) => {
       // Revogação crítica: falha aqui impede o logout de retornar sucesso
       // (propaga para o catch externo -> 500), pois o refresh token
       // continuaria utilizável.
-      await db
+      const logoutKeys = await refreshTokenKeys(refreshToken);
+      let revokedKey = logoutKeys.hashed;
+      const revokeResult = await db
         .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
-        .bind(refreshToken)
+        .bind(revokedKey)
         .run();
+      if (Number(revokeResult.meta?.changes ?? 0) === 0 && logoutKeys.legacyKey) {
+        // Sessão emitida antes do P01-02 (valor cru no D1).
+        revokedKey = logoutKeys.legacyKey;
+        await db
+          .prepare('UPDATE refresh_tokens SET revoked_at = datetime("now") WHERE token = ?')
+          .bind(revokedKey)
+          .run();
+      }
 
       // Defesa secundária, best-effort: blocklistar o access token jti
       // associado ao refresh token revogado (coluna access_token_jti pode
@@ -1369,7 +1383,7 @@ authRoutes.post('/logout', async (c) => {
       try {
         const tokenRow = await db
           .prepare('SELECT access_token_jti FROM refresh_tokens WHERE token = ?')
-          .bind(refreshToken)
+          .bind(revokedKey)
           .first<{ access_token_jti: string | null }>();
         if (tokenRow?.access_token_jti) {
           await blocklistAccessTokenJti(db, tokenRow.access_token_jti);
