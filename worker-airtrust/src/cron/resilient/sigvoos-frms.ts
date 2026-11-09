@@ -20,7 +20,7 @@ import {
   markCronJobItemSucceeded,
   recoverStaleCronJobItems,
 } from '../job-state';
-import { runCronJobWithLease, type CronJobLogger } from './job-runner';
+import { isCronD1Overloaded, runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 const DISPATCH_JOB = 'sigvoos-dispatch';
 const INGEST_JOB = 'sigvoos-ingest';
@@ -539,6 +539,10 @@ export async function runTenantIngestion(
   });
 
   if (result.outcome === 'FAILED') {
+    // Database saturation is infrastructure degradation, not a tenant sync
+    // failure. Avoid an alert write to the already overloaded D1, and stop
+    // dispatch rather than attempting another tenant in the same tick.
+    if (isCronD1Overloaded(result.errorCode)) throw new Error('D1_DB_IS_OVERLOADED');
     await notifyFailureOnce(
       db,
       empresaId,
@@ -645,7 +649,7 @@ async function runFrmsQueueScope(
     return;
   }
 
-  await runCronJobWithLease({
+  const queueResult = await runCronJobWithLease({
     db,
     jobName: FRMS_JOB,
     scopeKey,
@@ -711,6 +715,21 @@ async function runFrmsQueueScope(
           processed++;
         } catch (error) {
           failed++;
+          if (isCronD1Overloaded(error)) {
+            // Once D1 has saturated, stop this queue immediately. A failed
+            // retry-state write still leaves PROCESSING recoverable by the
+            // existing stale-item recovery; never mark the work SUCCEEDED.
+            await markCronJobItemFailed(db, {
+              jobName: FRMS_JOB,
+              scopeKey,
+              itemKey: item.item_key,
+              stage: 'FRMS_REPROCESS_DEFERRED_D1',
+              errorCode: 'FRMS_D1_OVERLOADED',
+              errorMessage: 'D1 overloaded; operation deferred',
+              retryDelaySeconds: 300,
+            });
+            throw new Error('D1_DB_IS_OVERLOADED');
+          }
           const exhausted = item.attempts >= 7;
           await markCronJobItemFailed(db, {
             jobName: FRMS_JOB,
@@ -748,6 +767,9 @@ async function runFrmsQueueScope(
       };
     },
   });
+  if (queueResult.outcome === 'FAILED' && isCronD1Overloaded(queueResult.errorCode)) {
+    throw new Error('D1_DB_IS_OVERLOADED');
+  }
 }
 
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
@@ -774,7 +796,10 @@ export async function runSigvoosFrmsJobs(
   logger: CronJobLogger,
   now = new Date(),
 ): Promise<void> {
-  await dispatchSigvoosTenants(db, env, logger, now);
+  const dispatch = await dispatchSigvoosTenants(db, env, logger, now);
+  if (dispatch.outcome === 'FAILED' && isCronD1Overloaded(dispatch.errorCode)) {
+    throw new Error('D1_DB_IS_OVERLOADED');
+  }
   await dispatchFrmsQueues(db, env, logger);
 }
 

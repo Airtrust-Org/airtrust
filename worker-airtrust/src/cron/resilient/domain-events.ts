@@ -1,5 +1,5 @@
 import { processarEventosParaModulo } from '../../shared/handlers';
-import { runCronJobWithLease, type CronJobLogger } from './job-runner';
+import { isCronD1Overloaded, runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 const JOB_NAME = 'domain-events-dispatch';
 const SCOPE_KEY = 'global';
@@ -109,8 +109,18 @@ export async function runDomainEventDispatchJob(db: D1Database, logger: CronJobL
             );
             eventsProcessed += Number(result.processados || 0);
             eventErrors += Number(result.erros || 0);
+            // The domain-event processor may catch an overloaded handler error
+            // and report it as ERR in acoes, without throwing. Stop fan-out
+            // on that returned failure too; never log the raw action text.
+            if (result.acoes?.some((action) => isCronD1Overloaded(action))) {
+              throw new Error('D1_DB_IS_OVERLOADED');
+            }
             if (Number(result.erros || 0) > 0) tenantFailed = true;
-          } catch {
+          } catch (error) {
+            // Retain the previous cursor and abort the tick on infrastructure
+            // saturation. Processing all remaining modules/tenants would cause
+            // a retry storm and compete with live auth/JTI reads.
+            if (isCronD1Overloaded(error)) throw new Error('D1_DB_IS_OVERLOADED');
             tenantFailed = true;
             eventErrors += 1;
           }
