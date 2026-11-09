@@ -6,7 +6,7 @@ export interface FakeR2Hooks {
   /** Chamado antes de cada get; retornar 'missing' simula objeto que sumiu entre list e get. */
   beforeGet?: (key: string) => 'missing' | void;
   /** Chamado antes de cada put; lançar simula falha de gravação/encerramento do isolate. */
-  beforePut?: (key: string, putCount: number) => void;
+  beforePut?: (key: string, putCount: number) => void | Promise<void>;
   /** Tamanho de página do list (default 1000, como R2). */
   pageSize?: number;
 }
@@ -52,7 +52,7 @@ export class FakeR2Bucket {
     options?: { customMetadata?: unknown },
   ) {
     this.ops.put += 1;
-    this.hooks.beforePut?.(key, this.ops.put);
+    await this.hooks.beforePut?.(key, this.ops.put);
     const bytes =
       typeof value === 'string'
         ? new TextEncoder().encode(value)
