@@ -88,7 +88,7 @@ export async function auditFrms(
       usuario_id: userId,
       dados_anteriores: dados?.antes,
       dados_novos: dados?.depois,
-      ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+      ip_address: c.req.header('cf-connecting-ip'),
       user_agent: c.req.header('user-agent'),
     });
   } catch {

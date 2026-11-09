@@ -639,7 +639,7 @@ router.post('/frms-maintenance-checkin', async (c) => {
       requires_operational_review: assessment.requiresOperationalReview,
       scoring_version: assessment.scoringVersion,
     },
-    ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+    ip_address: c.req.header('cf-connecting-ip'),
     user_agent: c.req.header('user-agent'),
   });
 

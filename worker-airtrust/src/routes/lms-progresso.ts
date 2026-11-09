@@ -59,7 +59,7 @@ async function logLmsProgressAudit(
       entityId: params.matriculaId,
       oldValues: params.oldValues,
       newValues: params.newValues,
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+      ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
   } catch {
@@ -370,7 +370,7 @@ app.post('/xapi/statements', async (c) => {
         scoreFinal: mergedScore,
         action: 'LMS_MATRICULA_CONCLUIDA',
         actorUserId: getCallerUserId(c),
-        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+        ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
         userAgent: c.req.header('user-agent') ?? undefined,
       });
       if (result.qualificacaoHistoricoId) {

@@ -87,7 +87,7 @@ async function logInviteAudit(
       entityId: matriculaId,
       newValues: values,
       empresaId: getEmpresaIdSafe(c),
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+      ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
     return true;

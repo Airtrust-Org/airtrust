@@ -68,7 +68,7 @@ function toBytes(content: string | ArrayBuffer | Uint8Array): Uint8Array {
   return new Uint8Array(content);
 }
 
-async function sha256Hex(content: string | ArrayBuffer | Uint8Array): Promise<string> {
+export async function sha256Hex(content: string | ArrayBuffer | Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', toBytes(content));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

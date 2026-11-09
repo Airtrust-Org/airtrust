@@ -1527,7 +1527,7 @@ app.post('/scorm/commit', async (c) => {
         scoreFinal: effectiveScoreRaw,
         action: 'LMS_MATRICULA_CONCLUIDA',
         actorUserId: getCallerUserId(c),
-        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+        ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
         userAgent: c.req.header('user-agent') ?? undefined,
       });
       if (result.qualificacaoHistoricoId) {
@@ -1896,7 +1896,7 @@ app.post('/:id/finalizar', async (c) => {
       progressoPct: 100,
       action: 'LMS_MATRICULA_FINALIZADA_MANUAL',
       actorUserId: getCallerUserId(c),
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+      ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
       userAgent: c.req.header('user-agent') ?? undefined,
     });
     if (result.qualificacaoHistoricoId) {
@@ -2199,7 +2199,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         progressoPct: 100,
         action: 'LMS_MATRICULA_CONCLUIDA',
         actorUserId: getCallerUserId(c),
-        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+        ipAddress: c.req.header('cf-connecting-ip') ?? undefined,
         userAgent: c.req.header('user-agent') ?? undefined,
       });
       qualificacaoHistoricoId =
@@ -2412,7 +2412,7 @@ async function insertProgressRecoveryAuditLog(
       params.matriculaId,
       JSON.stringify(params.before),
       JSON.stringify(params.after),
-      c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      c.req.header('cf-connecting-ip') ?? null,
       c.req.header('user-agent') ?? null,
       params.empresaId,
       getCallerUserId(c) ?? null,

@@ -68,6 +68,8 @@ vi.mock('../../services/qualificacoes/historico-helpers', () => ({
     status: 'CONCLUIDA',
   }),
   publishQualificacaoEvent: publishQualificacaoEventMock,
+  buildQualificacoesTipoResolutionJoin: (empresaIdRef: string = 'f.empresa_id', tableAlias: string = 'qt') =>
+    `LEFT JOIN qualificacoes_tipos ${tableAlias} ON ${tableAlias}.id = qh.qualificacao_id`,
 }));
 
 import writeRouter from '../../routes/qualificacoes/historico-write';
