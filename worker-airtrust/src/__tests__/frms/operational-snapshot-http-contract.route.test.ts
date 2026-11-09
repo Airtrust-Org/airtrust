@@ -23,6 +23,7 @@ const emptySummary = {
   dados_estimados: 0, inconsistencias: 0, sem_fatorizacao: 0,
   quinzena_incompleta: 0, quinzena_atencao: 0, quinzena_critica: 0,
 };
+type ResponseBody = { success: boolean; meta: { scope: string; forced_funcionario_id?: number } };
 const mockedList = vi.mocked(listFrmsOperationalSnapshot);
 const mockedAccess = vi.mocked(canSeeFrmsTeamScopeForContext);
 
@@ -56,7 +57,7 @@ describe('FRMS operational snapshot HTTP/tenant/RBAC contract (P02 boundary)', (
     const { request } = createRequest();
     const response = await request('data_inicio=2026-11-08&data_fim=2026-11-09&empresa_id=6');
     expect(response.status).toBe(200);
-    expect((await response.json()).meta.scope).toBe('team');
+    expect(((await response.json()) as ResponseBody).meta.scope).toBe('team');
     expect(mockedList).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       empresaId: 999013, dataInicio: '2026-11-08', dataFim: '2026-11-09',
     }));
@@ -67,7 +68,7 @@ describe('FRMS operational snapshot HTTP/tenant/RBAC contract (P02 boundary)', (
     const { request, calls } = createRequest();
     const response = await request('data_inicio=2026-11-08&data_fim=2026-11-09&funcionario_id=999');
     expect(response.status).toBe(200);
-    expect((await response.json()).meta).toEqual({ scope: 'self', forced_funcionario_id: 41 });
+    expect(((await response.json()) as ResponseBody).meta).toEqual({ scope: 'self', forced_funcionario_id: 41 });
     expect(calls[0].sql).toContain('empresa_id = ?');
     expect(calls[0].binds).toEqual([41, 999013]);
     expect(mockedList).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
@@ -80,7 +81,7 @@ describe('FRMS operational snapshot HTTP/tenant/RBAC contract (P02 boundary)', (
     const { request } = createRequest(async () => null);
     const response = await request();
     expect(response.status).toBe(404);
-    expect((await response.json()).success).toBe(false);
+    expect(((await response.json()) as ResponseBody).success).toBe(false);
     expect(mockedList).not.toHaveBeenCalled();
   });
 
