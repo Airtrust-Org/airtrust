@@ -24,6 +24,10 @@ import {
 } from '../services/funcionario-natural-keys';
 import { chainQualificationLineageForFuncionarioGroups } from '../services/importacao/lineageChaining';
 import {
+  resyncTipoHistoricoValidity,
+  shouldResyncTipoValidity,
+} from '../services/qualificacoes-tipos-history-resync';
+import {
   isCanonicalSectorFunctionPair,
   resolveCanonicalFunction,
   resolveCanonicalSector,
@@ -54,6 +58,16 @@ interface ImportResult {
   deleted?: number;
   errors: ImportError[];
 }
+
+/**
+ * Modo "substituir" apaga o historico do tenant antes de reimportar, mas nunca
+ * historicos derivados do LMS (lms_matricula_id/ciclo): a matricula CONCLUIDA
+ * ficaria apontando para uma qualificacao apagada e a conclusao real some das
+ * telas (#1492). Esses registros so saem pelo fluxo proprio de exclusao.
+ */
+export const SUBSTITUIR_HISTORICO_DELETE_SQL = `UPDATE qualificacoes_historico SET deleted_at = datetime('now')
+  WHERE deleted_at IS NULL AND empresa_id = ?
+    AND lms_matricula_id IS NULL AND lms_matricula_ciclo_id IS NULL`;
 
 type ImportAction = 'inserted' | 'updated';
 
@@ -611,12 +625,7 @@ app.post('/historico', auth(), requireRole('admin', 'manager'), async (c) => {
       mode,
       deleteStatement:
         mode === 'substituir'
-          ? db
-              .prepare(
-                `UPDATE qualificacoes_historico SET deleted_at = datetime('now')
-                 WHERE deleted_at IS NULL AND empresa_id = ?`,
-              )
-              .bind(empresaId)
+          ? db.prepare(SUBSTITUIR_HISTORICO_DELETE_SQL).bind(empresaId)
           : null,
       entries,
       errors,
@@ -662,12 +671,16 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
     const empresaId = getTenantContext(c).empresaId;
     const errors: ImportError[] = [];
     const existentes = await db
-      .prepare(`SELECT id, codigo FROM qualificacoes_tipos WHERE empresa_id = ?`)
+      .prepare(`SELECT id, codigo, validade FROM qualificacoes_tipos WHERE empresa_id = ?`)
       .bind(empresaId)
-      .all<{ id: string; codigo: string }>();
+      .all<{ id: string; codigo: string; validade: number | null }>();
     const existentesByCodigo = new Map(
       (existentes.results || []).map((row) => [String(row.codigo), row.id]),
     );
+    const validadeAnteriorById = new Map(
+      (existentes.results || []).map((row) => [Number(row.id), row.validade]),
+    );
+    const tiposComValidadeAlterada = new Set<number>();
 
     const entries: StatementEntry[] = [];
     const seenCodes = new Set<string>();
@@ -688,6 +701,14 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
 
       const existenteId = existentesByCodigo.get(codigo);
       if (existenteId) {
+        if (
+          shouldResyncTipoValidity(
+            validadeAnteriorById.get(Number(existenteId)),
+            row['Validade (meses)'],
+          )
+        ) {
+          tiposComValidadeAlterada.add(Number(existenteId));
+        }
         entries.push({
           linha,
           action: 'updated',
@@ -754,6 +775,22 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
       entries,
       errors,
     });
+    // Validade do modelo alterada pela planilha: reflete nos historicos vinculados
+    // (mesma regra do PATCH /qualificacoes/tipos/:id) para as telas nao divergirem.
+    if (!execution.blocked && !execution.transactionFailed) {
+      for (const tipoId of tiposComValidadeAlterada) {
+        try {
+          await resyncTipoHistoricoValidity(db, empresaId, tipoId);
+        } catch (resyncError) {
+          errors.push({
+            linha: 0,
+            erro: `Validade do tipo ${tipoId} atualizada, mas o reflexo nos históricos falhou: ${
+              resyncError instanceof Error ? resyncError.message : String(resyncError)
+            }`,
+          });
+        }
+      }
+    }
     const result: ImportResult = {
       success: errors.length === 0,
       mode,

@@ -11,6 +11,10 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { z } from 'zod';
 import { QUALIFICACOES_TIPOS_COLUMNS, normalizeCode } from './columnMappings';
 import { validateQualificacaoTipoRow, type ValidationError } from './validators';
+import {
+  resyncTipoHistoricoValidity,
+  shouldResyncTipoValidity,
+} from '../qualificacoes-tipos-history-resync';
 
 // ===== SCHEMA NORMALIZADO (EXATAMENTE como tabela de importação) =====
 
@@ -136,10 +140,10 @@ export class QualificacaoTipoImportacaoService {
         // Verificar se já existe (incluindo soft deleted)
         const existing = await this.db
           .prepare(
-            'SELECT id, deleted_at FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?',
+            'SELECT id, deleted_at, validade FROM qualificacoes_tipos WHERE UPPER(codigo) = UPPER(?) AND empresa_id = ?',
           )
           .bind(codigo, empresaId)
-          .first<{ id: number; deleted_at: string | null }>();
+          .first<{ id: number; deleted_at: string | null; validade: number | null }>();
 
         if (existing && mode === 'INSERT' && !existing.deleted_at) {
           result.skipped++;
@@ -180,6 +184,12 @@ export class QualificacaoTipoImportacaoService {
               empresaId,
             )
             .run();
+
+          // Validade do modelo mudou: reflete nos historicos vinculados (mesma
+          // regra do PATCH de tipos) para Matriz/Ficha/Compliance nao divergirem.
+          if (shouldResyncTipoValidity(existing.validade, validade)) {
+            await resyncTipoHistoricoValidity(this.db, empresaId, Number(existing.id));
+          }
 
           result.updated++;
         } else {
