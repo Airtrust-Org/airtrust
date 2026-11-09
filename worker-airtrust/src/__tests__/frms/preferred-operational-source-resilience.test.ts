@@ -74,6 +74,45 @@ describe('FRMS preferred operational source resilience', () => {
     expect(rows[0].operational_data_source).toBe('SIGVOOS');
   });
 
+  it('não registra mensagens brutas do D1/CV nos logs quando o fallback funciona', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      fetchControleVoosOperationalRecordsMock.mockResolvedValue([cv()]);
+      const secret = 'SQL contains confidential operational data / Bearer sensitive-token';
+      const db = dbWithLegacyResult(Promise.reject(new Error(secret)));
+      const rows = await loadPreferredOperationalJourneys(db, 6, '2026-09-27', '2026-09-27');
+      expect(rows).toHaveLength(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('SIGVOOS fallback unavailable'),
+        expect.objectContaining({ reason: 'SOURCE_QUERY_FAILED' }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(secret);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('não registra mensagens brutas de erro do Controle de Voos', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const secret = 'tripulante confidential record / Bearer sensitive-token';
+      fetchControleVoosOperationalRecordsMock.mockRejectedValue(new Error(secret));
+      const db = dbWithLegacyResult(Promise.resolve({ results: [{
+        data: '2026-09-27', tripulante_id: 7, hora_apresentacao: '06:45',
+        hora_termino: '13:00', horas_voo_minutos: 150, duracao_jornada_minutos: 375,
+      }] }));
+      const rows = await loadPreferredOperationalJourneys(db, 6, '2026-09-27', '2026-09-27');
+      expect(rows).toHaveLength(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Controle de Voos unavailable'),
+        expect.objectContaining({ reason: 'SOURCE_QUERY_FAILED' }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(secret);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('falha explicitamente apenas quando as duas fontes operacionais estão indisponíveis', async () => {
     fetchControleVoosOperationalRecordsMock.mockRejectedValue(new Error('cv unavailable'));
     const db = dbWithLegacyResult(Promise.reject(new Error('legacy unavailable')));
