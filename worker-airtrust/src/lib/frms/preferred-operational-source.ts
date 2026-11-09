@@ -265,7 +265,7 @@ export async function loadPreferredOperationalJourneys(
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('INVALID_TENANT');
   const canonical = buildCanonicalOperationalSourceSql('j.origem');
 
-  const legacyPromise = db.prepare(
+  const legacyPromise = Promise.resolve().then(() => db.prepare(
     `SELECT CAST(j.tripulante_id AS INTEGER) AS tripulante_id,
             j.data,
             j.hora_apresentacao,
@@ -279,12 +279,13 @@ export async function loadPreferredOperationalJourneys(
        FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER)
       WHERE j.deleted_at IS NULL AND f.deleted_at IS NULL AND f.empresa_id = ?
+        AND j.empresa_id = f.empresa_id
         AND j.data BETWEEN ? AND ? AND ${canonical}`,
-  ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>();
+  ).bind(empresaId, from, to).all<LegacySigvoosOperationalJourney>());
 
   const [legacyResult, cvResult] = await Promise.allSettled([
     legacyPromise,
-    fetchControleVoosOperationalRecords(db, empresaId, from, to),
+    Promise.resolve().then(() => fetchControleVoosOperationalRecords(db, empresaId, from, to)),
   ]);
 
   if (legacyResult.status === 'rejected') {
@@ -292,9 +293,8 @@ export async function loadPreferredOperationalJourneys(
       empresaId,
       from,
       to,
-      error: legacyResult.reason instanceof Error
-        ? legacyResult.reason.message
-        : String(legacyResult.reason ?? ''),
+      // Raw D1 errors can include SQL fragments and operational identifiers.
+      reason: 'SOURCE_QUERY_FAILED',
     });
   }
   if (cvResult.status === 'rejected') {
@@ -302,9 +302,8 @@ export async function loadPreferredOperationalJourneys(
       empresaId,
       from,
       to,
-      error: cvResult.reason instanceof Error
-        ? cvResult.reason.message
-        : String(cvResult.reason ?? ''),
+      // Preserve source availability without logging untrusted exception details.
+      reason: 'SOURCE_QUERY_FAILED',
     });
   }
 
