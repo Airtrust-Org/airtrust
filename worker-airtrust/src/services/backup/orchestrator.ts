@@ -17,6 +17,24 @@ interface Env {
   BUCKET: R2Bucket;
   /** Máximo de objetos R2 que um backup COMPLETO copia numa única invocação (default 200). */
   BACKUP_R2_COPY_MAX_OBJECTS?: string;
+  /** Expurgo de backups expirados: só executa de fato com o valor exato 'true' (default: dry-run). */
+  BACKUP_PURGE_ENABLED?: string;
+  /** Máximo de backups expirados removidos por execução diária (default 20). */
+  BACKUP_PURGE_MAX_PER_RUN?: string;
+  /** Quantos CONCLUIDO mais recentes de cada origem (triggered_by) nunca são expurgados (default 7). */
+  BACKUP_PURGE_KEEP_LATEST?: string;
+}
+
+export const BACKUP_PURGE_DEFAULT_MAX_PER_RUN = 20;
+export const BACKUP_PURGE_DEFAULT_KEEP_LATEST = 7;
+
+export interface BackupPurgeResult {
+  dryRun: boolean;
+  candidates: number;
+  purged: number;
+  objectsDeleted: number;
+  skippedUnsafe: number;
+  failed: number;
 }
 
 /**
@@ -119,6 +137,128 @@ export class BackupOrchestrator {
   }
 
   /**
+   * Remove do R2 (e marca deleted_at) backups cuja retenção expirou. Nada o expurgava antes:
+   * em produção havia 826 registros expirados, ~5,4 GB dos 7,35 GB registrados.
+   *
+   * Seguranças: inerte (dry-run, só conta) até BACKUP_PURGE_ENABLED='true'; nunca remove os N
+   * CONCLUIDO mais recentes de cada origem; só apaga prefixos derivados de uuid/r2_path que
+   * passam validação estrita e terminam em '/'; limite por execução; falha em um backup não
+   * marca a linha (tenta de novo na próxima).
+   */
+  async expurgarBackupsExpirados(): Promise<BackupPurgeResult> {
+    const dryRun = this.env.BACKUP_PURGE_ENABLED !== 'true';
+    const maxPerRun = this.inteiroPositivo(
+      this.env.BACKUP_PURGE_MAX_PER_RUN,
+      BACKUP_PURGE_DEFAULT_MAX_PER_RUN,
+    );
+    const keepLatest = this.inteiroPositivo(
+      this.env.BACKUP_PURGE_KEEP_LATEST,
+      BACKUP_PURGE_DEFAULT_KEEP_LATEST,
+    );
+
+    const { results } = await this.env.DB.prepare(
+      `SELECT b.id, b.uuid, b.r2_path
+         FROM backups_controle b
+        WHERE b.deleted_at IS NULL
+          AND b.status IN ('CONCLUIDO', 'FALHOU')
+          AND b.expires_at IS NOT NULL
+          AND b.r2_path LIKE 'backups/____/__/__/%'
+          AND b.expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          AND b.id NOT IN (
+            SELECT k.id
+              FROM backups_controle k
+             WHERE k.status = 'CONCLUIDO'
+               AND k.deleted_at IS NULL
+               AND k.triggered_by = b.triggered_by
+             ORDER BY k.id DESC
+             LIMIT ?
+          )
+        ORDER BY b.expires_at ASC, b.id ASC
+        LIMIT ?`,
+    )
+      .bind(keepLatest, maxPerRun)
+      .all<{ id: number; uuid: string; r2_path: string | null }>();
+
+    const resultado: BackupPurgeResult = {
+      dryRun,
+      candidates: results.length,
+      purged: 0,
+      objectsDeleted: 0,
+      skippedUnsafe: 0,
+      failed: 0,
+    };
+
+    if (dryRun) {
+      if (results.length > 0) {
+        console.warn(
+          `🧹 Expurgo de backups em dry-run: ${results.length} candidato(s) (BACKUP_PURGE_ENABLED != 'true')`,
+        );
+      }
+      return resultado;
+    }
+
+    for (const row of results) {
+      const prefixos = this.prefixosExpurgaveis(row.uuid, row.r2_path);
+      if (!prefixos) {
+        resultado.skippedUnsafe += 1;
+        await this.logBackup(row.id, 'WARN', 'Expurgo ignorado: uuid/r2_path fora do formato esperado');
+        continue;
+      }
+
+      try {
+        let removidos = 0;
+        for (const prefixo of prefixos) {
+          const chaves = (await this.listarObjetosR2PorPrefixo(prefixo)).map((o) => o.key);
+          for (let i = 0; i < chaves.length; i += 1000) {
+            await this.env.BUCKET.delete(chaves.slice(i, i + 1000));
+          }
+          removidos += chaves.length;
+        }
+
+        await this.env.DB.prepare(
+          `UPDATE backups_controle
+              SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND deleted_at IS NULL`,
+        )
+          .bind(row.id)
+          .run();
+        await this.logBackup(row.id, 'INFO', `Backup expirado expurgado do R2: ${removidos} objeto(s)`, {
+          registros_processados: removidos,
+        });
+        resultado.purged += 1;
+        resultado.objectsDeleted += removidos;
+      } catch (error) {
+        resultado.failed += 1;
+        await this.logBackup(row.id, 'WARN', 'Falha ao expurgar backup expirado; será tentado de novo', {
+          detalhes: JSON.stringify({ error: this.formatarErro(error) }),
+        });
+      }
+    }
+
+    console.log(
+      `🧹 Expurgo de backups: ${resultado.purged} removido(s), ${resultado.objectsDeleted} objeto(s) R2, ${resultado.failed} falha(s)`,
+    );
+    return resultado;
+  }
+
+  /** Prefixos (sempre com '/' final) de um backup; null se uuid/r2_path não passam validação. */
+  private prefixosExpurgaveis(uuid: string, r2Path: string | null): string[] | null {
+    if (!/^[A-Za-z0-9][A-Za-z0-9-]{7,}$/.test(String(uuid || ''))) return null;
+    const prefixos = [`backups/${uuid}/`];
+    if (r2Path) {
+      const match = /^backups\/(\d{4})\/(\d{2})\/(\d{2})\/([A-Za-z0-9-]+)$/.exec(r2Path);
+      if (!match || match[4] !== uuid) return null;
+      prefixos.unshift(`${r2Path}/`);
+    }
+    return prefixos;
+  }
+
+  private inteiroPositivo(valor: string | undefined, padrao: number): number {
+    const n = Number(valor);
+    return Number.isInteger(n) && n > 0 ? n : padrao;
+  }
+
+  /**
    * Executa backup automático (cron) com idempotência por tipo e dia UTC.
    * O escopo é explicitamente sistêmico: não representa exportação de tenant.
    */
@@ -129,6 +269,13 @@ export class BackupOrchestrator {
     } catch (error) {
       // Higiene de controle nunca pode impedir o backup do dia.
       console.error('Falha ao encerrar execuções de backup abandonadas:', this.formatarErro(error));
+    }
+    if (tipo === 'DIARIO') {
+      try {
+        await this.expurgarBackupsExpirados();
+      } catch (error) {
+        console.error('Falha ao expurgar backups expirados:', this.formatarErro(error));
+      }
     }
     const statusExistente = await this.obterStatusBackupAutomaticoDoDia(triggeredBy);
 
