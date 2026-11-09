@@ -40,8 +40,8 @@ export function registerPublicRoutes(app: PublicApp) {
 
   /**
    * POST /api/public/translate
-   * Tradução pública para fallback de i18n em runtime.
-   * Uso principal: traduzir textos residuais hardcoded para EN quando idioma ativo = en-US.
+   * Descontinuado por privacidade: não encaminha dados arbitrários para terceiros.
+   * A interface usa exclusivamente o catálogo estático de i18n.
    */
   app.post('/api/public/translate', publicTranslateRateLimit, async (c) => {
     const body = (await c.req.json().catch(() => null)) as {
@@ -51,97 +51,19 @@ export function registerPublicRoutes(app: PublicApp) {
     } | null;
 
     const rawText = String(body?.text || '').trim();
-    const from = String(body?.from || 'pt').toLowerCase();
-    const to = String(body?.to || 'en').toLowerCase();
 
     if (!rawText) {
       return c.json({ success: false, error: 'text is required' }, 400);
     }
 
-    // Limite conservador para evitar abuso/custos inesperados
-    if (rawText.length > 500) {
-      return c.json({
-        success: true,
-        data: {
-          translatedText: rawText,
-          source: from,
-          target: to,
-          skipped: 'text_too_long',
-        },
-      });
-    }
+    // Fail-closed: this legacy endpoint accepted arbitrary DOM text, including employee data,
+    // and forwarded it to a non-contracted third party. All supported UI translations now
+    // use a bundled, developer-reviewed catalog; never send request text off-platform.
+    return c.json({
+      success: false,
+      code: 'UNSAFE_DYNAMIC_TRANSLATION_DISABLED',
+      error: 'Arbitrary text translation is disabled for privacy. Use the i18n catalog.',
+    }, 410);
 
-    if (from === to) {
-      return c.json({
-        success: true,
-        data: {
-          translatedText: rawText,
-          source: from,
-          target: to,
-        },
-      });
-    }
-
-    try {
-      const url = new URL('https://translate.googleapis.com/translate_a/single');
-      url.searchParams.set('client', 'gtx');
-      url.searchParams.set('sl', from || 'auto');
-      url.searchParams.set('tl', to || 'en');
-      url.searchParams.set('dt', 't');
-      url.searchParams.set('q', rawText);
-
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json,text/plain,*/*',
-        },
-      });
-
-      if (!response.ok) {
-        return c.json({
-          success: true,
-          data: {
-            translatedText: rawText,
-            source: from,
-            target: to,
-            fallback: true,
-          },
-        });
-      }
-
-      const payload = (await response.json()) as unknown;
-
-      let translatedText = rawText;
-      if (Array.isArray(payload) && Array.isArray(payload[0])) {
-        translatedText = (payload[0] as unknown[])
-          .map((part) => {
-            if (Array.isArray(part) && typeof part[0] === 'string') return part[0];
-            return '';
-          })
-          .join('')
-          .trim();
-      }
-
-      if (!translatedText) translatedText = rawText;
-
-      return c.json({
-        success: true,
-        data: {
-          translatedText,
-          source: from,
-          target: to,
-        },
-      });
-    } catch {
-      return c.json({
-        success: true,
-        data: {
-          translatedText: rawText,
-          source: from,
-          target: to,
-          fallback: true,
-        },
-      });
-    }
   });
 }
