@@ -93,6 +93,14 @@ describe('qualification expiry governed executor (local SQLite only)', () => {
 
   beforeEach(() => {
     db = new SqliteD1Database();
+    // Production-shaped columns the shared helper does not declare.
+    db.database.exec(`
+      ALTER TABLE qualificacoes_tipos ADD COLUMN vencimento_fim_mes INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE qualificacoes_historico ADD COLUMN certificado_arquivo_id INTEGER;
+      ALTER TABLE qualificacoes_historico ADD COLUMN arquivo_url TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN origem_tipo TEXT;
+      ALTER TABLE qualificacoes_historico ADD COLUMN lms_matricula_id INTEGER;
+    `);
     db.database.exec(`CREATE TABLE audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
