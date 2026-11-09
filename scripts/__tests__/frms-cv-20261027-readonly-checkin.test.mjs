@@ -110,11 +110,19 @@ test('adjacent check-in is classified by the Sao Paulo day it was really submitt
   // label 28/10 but sent 27/10 22:30 BRT -> date-attribution defect candidate
   f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-28', created_at: '2026-10-28 01:30:00', active: 1});
   let r = reconcileDailyCrewCheckins(f);
-  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {submittedOnAuditDay: 1, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0});
+  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {labelAheadOfSubmission: 1, retrospectiveD1Inconclusive: 0, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0});
   // legitimately sent on 28/10 -> pending is real
   f.checkins[f.checkins.length - 1].created_at = '2026-10-28 12:00:00';
   r = reconcileDailyCrewCheckins(f);
-  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {submittedOnAuditDay: 0, submittedOnOwnLabelDay: 1, submittedOtherDay: 0, createdAtUnavailable: 0});
+  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {labelAheadOfSubmission: 0, retrospectiveD1Inconclusive: 0, submittedOnOwnLabelDay: 1, submittedOtherDay: 0, createdAtUnavailable: 0});
   assert.deepEqual(r.roles.SIC, {assigned: 1, received: 0, pending: 1});
   assert.doesNotMatch(JSON.stringify(r), /created_at|funcionario_id/);
+});
+
+test('legitimate retrospective D-1 submission (label 26/10, sent 27/10) is never reported as a date defect', () => {
+  const f = fixture();
+  f.checkins.push({funcionario_id: 11, data_checkin: '2026-10-26', created_at: '2026-10-27 14:00:00', active: 1});
+  const r = reconcileDailyCrewCheckins(f);
+  assert.deepEqual(r.adjacentCheckinSubmissionDayBrt, {labelAheadOfSubmission: 0, retrospectiveD1Inconclusive: 1, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0});
+  assert.deepEqual(r.roles.SIC, {assigned: 1, received: 0, pending: 1});
 });

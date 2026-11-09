@@ -89,6 +89,7 @@ O relatório `AIRTRUST_FRMS_CICLO3_RELATORIO_COMPROVACOES.md` **não deve ser us
 ## 5. SIC de 27/10/2026
 
 Fatos (run #42560410082): 2 voos, 2 pessoas distintas, PIC 1/1 recebido, SIC 0/1; sem vínculo inválido e sem duplicidade; há check-in em dia adjacente em 1 caso. A rota de check-in usa `reference_date || data_checkin || operationalToday`; até a #1871 (29/10) o padrão era UTC. A UI envia a data explicitamente, logo a hipótese de bug de data **não está provada nem refutada**. Esta PR estende o script read-only existente com `adjacentCheckinSubmissionDayBrt` (dia BRT em que o check-in adjacente foi realmente enviado, só agregados):
-- `submittedOnAuditDay > 0` ⇒ defeito de atribuição de data (a corrigir em código);
+- `labelAheadOfSubmission > 0` (rótulo 28/10, enviado em 27/10 BRT) ⇒ defeito de atribuição de data (a corrigir em código);
+- `retrospectiveD1Inconclusive` (rótulo 26/10, enviado em 27/10) ⇒ **inconclusivo**: a rota permite envio retrospectivo D−1 com justificativa (`RETROSPECTIVE_D1`), que não é persistida na linha; não prova defeito e a pendência de 27/10 permanece real;
 - `submittedOnOwnLabelDay > 0` ⇒ envio legítimo em outro dia; a pendência é real e deve permanecer.
 Executar exige nova autorização read-only para o SHA da `main` posterior a esta PR.

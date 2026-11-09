@@ -81,14 +81,18 @@ export function reconcileDailyCrewCheckins({ flights = [], crew = [], checkins =
   // Date-attribution discriminator for assigned crew still pending on the audit day: when was the
   // adjacent-day check-in actually submitted (America/Sao_Paulo)? Aggregates only, no identifiers.
   const pendingIds = [...allAssigned].filter(id => !received.has(id));
-  const adjacentAttribution = { submittedOnAuditDay: 0, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0 };
+  const adjacentAttribution = { labelAheadOfSubmission: 0, retrospectiveD1Inconclusive: 0, submittedOnOwnLabelDay: 0, submittedOtherDay: 0, createdAtUnavailable: 0 };
   for (const id of pendingIds) {
     for (const ch of checkins) {
       if (positiveId(ch.funcionario_id) !== id || Number(ch.active) !== 1) continue;
       if (ch.data_checkin !== PREVIOUS_DATE && ch.data_checkin !== NEXT_DATE) continue;
       const submitted = saoPauloDateOf(ch.created_at);
       if (!submitted) adjacentAttribution.createdAtUnavailable += 1;
-      else if (submitted === AUDIT_DATE) adjacentAttribution.submittedOnAuditDay += 1;
+      // Label 28/10 sent on 27/10 (BRT): label ahead of the real day, the signature of a UTC-default date.
+      else if (submitted === AUDIT_DATE && ch.data_checkin === NEXT_DATE) adjacentAttribution.labelAheadOfSubmission += 1;
+      // Label 26/10 sent on 27/10: may be a supported RETROSPECTIVE_D1 submission (late-submission reason is not persisted
+      // in the row), so it is NOT evidence of misattribution and the 27/10 pending status stays real.
+      else if (submitted === AUDIT_DATE && ch.data_checkin === PREVIOUS_DATE) adjacentAttribution.retrospectiveD1Inconclusive += 1;
       else if (submitted === ch.data_checkin) adjacentAttribution.submittedOnOwnLabelDay += 1;
       else adjacentAttribution.submittedOtherDay += 1;
     }
@@ -111,7 +115,7 @@ export function reconcileDailyCrewCheckins({ flights = [], crew = [], checkins =
     sameDayDuplicateCheckinEmployees: [...received].filter(id =>
       checkins.filter(ch => positiveId(ch.funcionario_id) === id && ch.data_checkin === AUDIT_DATE && Number(ch.active) === 1).length > 1
     ).length,
-    interpretation: 'submittedOnAuditDay>0 would indicate a date-attribution defect (check-in sent on the audit day but labelled adjacent); submittedOnOwnLabelDay indicates a legitimate adjacent-day submission, i.e. the pending status is real. Persistence evidence only. No verdict about fitness, compliance, or root cause of a missing submission.',
+    interpretation: 'labelAheadOfSubmission>0 would indicate a date-attribution defect (labelled 28/10 but sent on 27/10 BRT); retrospectiveD1Inconclusive (labelled 26/10, sent 27/10) can be a supported retrospective submission and proves nothing; submittedOnOwnLabelDay indicates a legitimate adjacent-day submission, i.e. the pending status is real. Persistence evidence only. No verdict about fitness, compliance, or root cause of a missing submission.',
   };
 }
 async function queryProduction(sql, params) {
