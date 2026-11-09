@@ -516,7 +516,7 @@ async function handleRematriculation(
         matriculaId,
         JSON.stringify({ ...existing, scorm_progress: progressSnapshot ?? null }),
         auditNewValues,
-        c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+        c.req.header('cf-connecting-ip') ?? null,
         c.req.header('user-agent') ?? null,
         empresaId,
         matriculaId,
