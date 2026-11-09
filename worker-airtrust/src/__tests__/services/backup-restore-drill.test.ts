@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { verifyBackupSet } from '../../services/backup/offline-restore';
 import {
   type BackupChecksumManifest,
   verifyBackupChecksumManifest,
@@ -198,5 +199,45 @@ describe('fail-closed backup manifest validation', () => {
     expect(report.ok).toBe(false);
     expect(readArtifact).not.toHaveBeenCalled();
     expect(report.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe('offline R2 copy catalog must fail closed', () => {
+  it.each([
+    { label: 'invalid JSON', value: '{', valid: false },
+    { label: 'null catalog', value: 'null', valid: false },
+    { label: 'missing files array', value: '{}', valid: false },
+    { label: 'invalid file entry', value: '{"arquivos":[null]}', valid: false },
+    { label: 'missing copy reference', value: '{"arquivos":[]}', valid: false },
+    { label: 'valid catalog', value: '{"arquivos":[{"backup_key":"backups/demo/r2-files/asset.txt"}]}', valid: true },
+  ])('handles $label with a structured verification result', async ({ value, valid }) => {
+    const artifactKey = 'backups/demo/r2-files/asset.txt';
+    const catalogKey = 'backups/demo/r2-manifest.json';
+    const manifestKey = 'backups/demo/checksum-manifest.json';
+    const objects = new Map<string, Uint8Array>([
+      [artifactKey, bytesFromString('synthetic')],
+      [catalogKey, bytesFromString(value)],
+    ]);
+    const artifacts = await Promise.all([...objects.entries()].map(async ([key, bytes]) => ({
+      key, size: bytes.length, sha256: await sha256(bytes),
+    })));
+    const manifest = JSON.stringify({
+      version: 1, backup_uuid: 'demo', algorithm: 'SHA-256',
+      generated_at: CHECKED_AT, scope_prefixes: ['backups/demo/'],
+      artifact_count: artifacts.length,
+      total_bytes: artifacts.reduce((sum, entry) => sum + entry.size, 0),
+      artifacts,
+    });
+    objects.set(manifestKey, bytesFromString(manifest));
+    const result = await verifyBackupSet({
+      backupUuid: 'demo',
+      expectedManifestSha256: await sha256(manifest),
+      reader: {
+        get: async (key) => objects.get(key) ?? null,
+        list: async (prefix) => [...objects.keys()].filter((key) => key.startsWith(prefix)),
+      },
+    });
+    expect(result.ok).toBe(valid);
+    expect(result.failures.length === 0).toBe(valid);
   });
 });
