@@ -425,7 +425,14 @@ nextGen.get('/relprev/submissoes/:id/workflow', requireRole('admin', 'manager'),
     const empresaId = getEmpresaId(c as any);
     const db = c.env.DB;
     const { id } = c.req.param();
-    const eventos = await db
+    const relatoPrivacidade = await db
+      .prepare(
+        `SELECT anonimo, created_by FROM sgso_relatos
+          WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(id, empresaId)
+      .first<{ anonimo: number | null; created_by: number | null }>();
+    const eventosRows = await db
       .prepare(
         `SELECT * FROM sgso_relato_workflow_eventos
          WHERE relato_id = ? AND empresa_id = ?
@@ -434,6 +441,16 @@ nextGen.get('/relprev/submissoes/:id/workflow', requireRole('admin', 'manager'),
       )
       .bind(id, empresaId)
       .all<Record<string, unknown>>();
+    // Relato anônimo: os eventos gerados no envio (RECEBIMENTO/CLASSIFICACAO_IA) gravam o
+    // autor do envio como ator. Esse id não sai pela API (a trilha interna segue em D1).
+    const eventos =
+      Number(relatoPrivacidade?.anonimo) === 1
+        ? eventosRows.results.map((evento) =>
+            Number(evento.ator_id) === Number(relatoPrivacidade?.created_by)
+              ? { ...evento, ator_id: null }
+              : evento,
+          )
+        : eventosRows.results;
     const notificacoes = await db
       .prepare(
         `SELECT * FROM sgso_relato_notificacoes
@@ -445,7 +462,7 @@ nextGen.get('/relprev/submissoes/:id/workflow', requireRole('admin', 'manager'),
       .all<Record<string, unknown>>();
     return c.json({
       success: true,
-      data: { eventos: eventos.results, notificacoes: notificacoes.results },
+      data: { eventos, notificacoes: notificacoes.results },
     });
   } catch (error) {
     const errType = error instanceof Error ? error.name : 'UnknownError';
