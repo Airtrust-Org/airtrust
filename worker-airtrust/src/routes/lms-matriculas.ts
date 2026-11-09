@@ -6,6 +6,7 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
+import { completedCancelBlock } from '../services/lms-matricula-cancel-guard';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -2172,7 +2173,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
     }
   }
   // ────────────────────────────────────────────────────────────────────────────
-
+  const cancelBlock = await completedCancelBlock(db, empresaId, matriculaId, status, existing); if (cancelBlock) return c.json(cancelBlock, 409); // #1492
   const dataConclusao = status === 'CONCLUIDO' || status === 'REPROVADO' ? now : null;
   let qualificacaoHistoricoId = existing.qualificacao_historico_id;
 
@@ -2241,7 +2242,6 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         .bind(observacoes, matriculaId, empresaId)
         .run();
     }
-
 
   } else {
     await db
