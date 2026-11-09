@@ -7,6 +7,7 @@ import { getEmpresaId } from '../middleware/tenant';
 import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { getSchemaColumns } from '../utils/db-schema';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 const matrizTreinamento = new Hono<{ Bindings: Env }>();
 
@@ -639,7 +640,8 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
       if (h.tipo_id) historicoMap.set(h.tipo_id, h);
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    // Dia operacional de Sao Paulo (mesmo do Compliance), nao a data UTC.
+    const today = getTodayIsoSaoPaulo();
 
     const data = requisitos.map((r) => {
       const hist = historicoMap.get(r.qualificacao_tipo_id);

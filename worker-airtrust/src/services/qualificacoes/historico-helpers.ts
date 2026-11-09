@@ -543,3 +543,40 @@ export async function historicoPertenceEmpresa(
       renovada: number;
     }>();
 }
+
+/**
+ * Cláusula SQL canônica para resolução determinística de tipo de qualificação.
+ *
+ * Garante:
+ * 1. Cardinalidade 1:1 estrita: nenhum produto cartesiano ou duplicação de linhas.
+ * 2. Precedência determinística:
+ *    - 1º: Vínculo explícito válido por ID (qh.qualificacao_id) pertencente ao tenant ou global
+ *    - 2º: Vínculo por código (qh.qualificacao_codigo) pertencente ao tenant (empresa_id = ${empresaIdRef})
+ *    - 3º: Vínculo por código no catálogo global (empresa_id = 1)
+ *    - 4º: Desempate determinístico (id DESC)
+ * 3. Isolamento multi-tenant:
+ *    - Bloqueia associação por ID ou código a modelos pertencentes a outro tenant.
+ * 4. Exclusão lógica:
+ *    - Ignora modelos com deleted_at IS NOT NULL.
+ */
+export function buildQualificacoesTipoResolutionJoin(
+  empresaIdRef: string = 'f.empresa_id',
+  tableAlias: string = 'qt',
+  historyAlias: string = 'qh',
+): string {
+  return `LEFT JOIN qualificacoes_tipos ${tableAlias} ON ${tableAlias}.id = (
+    SELECT qt_cand.id
+      FROM qualificacoes_tipos qt_cand
+     WHERE qt_cand.deleted_at IS NULL
+       AND (
+         (${historyAlias}.qualificacao_id IS NOT NULL AND qt_cand.id = ${historyAlias}.qualificacao_id AND (qt_cand.empresa_id = ${empresaIdRef} OR qt_cand.empresa_id = 1))
+         OR
+         (${historyAlias}.qualificacao_id IS NULL AND ${historyAlias}.qualificacao_codigo IS NOT NULL AND qt_cand.codigo = ${historyAlias}.qualificacao_codigo AND (qt_cand.empresa_id = ${empresaIdRef} OR qt_cand.empresa_id = 1))
+       )
+     ORDER BY
+       CASE WHEN qt_cand.empresa_id = 1 THEN 1 ELSE 0 END ASC,
+       qt_cand.id DESC
+     LIMIT 1
+  )`;
+}
+

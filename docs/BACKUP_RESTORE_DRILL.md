@@ -108,3 +108,21 @@ Um restore drill real em staging deve ser uma fase separada, com autorizacao exp
 8. destruir o ambiente temporario apos aprovacao do relatorio.
 
 Para N3/N4, esse drill ainda precisa incluir `record_hash`, `manifest_hash`, chain, export fiscal verificavel e matriz de rastreabilidade requisito -> tabela -> teste -> evidencia.
+
+
+## Ensaio sintetico backup -> restore (local, automatizado)
+
+`worker-airtrust/src/__tests__/services/backup-restore-rehearsal.sqlite.test.ts` executa o `BackupOrchestrator` real contra SQLite real (`node:sqlite`) e um R2 em memoria, com dados sinteticos de duas empresas nas 43 tabelas configuradas em `BACKUP_MODULES`. Nao toca em rede, D1 nem R2 reais.
+
+Cenarios: C1 caminho feliz (manifesto autenticado pelo SHA-256 de `backups_controle`, SHA-256 por objeto recomputado com `node:crypto`, copias R2 byte-identicas, restore em SQLite isolado e checksum por tabela igual); C2 isolamento entre empresas (restore filtrado por `empresa_id` nao traz linha da outra; `TENANT_SCOPED` recusado sem tocar D1/R2); C3 objeto R2 que some durante a copia; C4 falha no meio com retry do mesmo dia; C5 isolate encerrado (promessa pendurada) e varredura de execucao abandonada; C6 corrupcao pos-gravacao (byte, truncamento, remocao, objeto extra, manifesto adulterado) e recusa de restore de backup nao verificado; C7 restore nao sobrescreve, recusa deriva de schema e e atomico; C8 cobertura de tabelas.
+
+Para gravar o relatorio do ensaio: `BACKUP_REHEARSAL_REPORT=/caminho/relatorio.json npx vitest run src/__tests__/services/backup-restore-rehearsal.sqlite.test.ts`.
+
+O utilitario `services/backup/offline-restore.ts` (`verifyBackupSet`, `restoreVerifiedBackupIntoScratch`) e **somente para ensaio/DR em banco descartavel**: nao e importado por rota, cron ou entrypoint (ha teste que garante isso), exige backup verificado, destino vazio e schema compativel, e faz tudo em uma transacao.
+
+### Limites (o que este ensaio NAO prova)
+
+- Nao restaura a partir do R2 real de producao nem le nenhum backup real.
+- O JSON do backup in-Worker cobre 43 de ~353 tabelas, omite linhas soft-deleted e omite colunas de segredo (`usuarios.password_hash`): **nao** recupera credenciais, LMS, FRMS, escalas, SGSO etc. O DR de producao e o export/Time Travel do D1 (workflow `d1-production-backup-restore-drill.yml`, manual), nao este artefato.
+- Nao mede tempo/memoria/subrequests do Worker com o volume real (45,6 mil objetos, ~46 MB de JSON por diario).
+- Nao cobre FKs, triggers nem integridade de dominio de producao; o schema do ensaio e sintetico.
