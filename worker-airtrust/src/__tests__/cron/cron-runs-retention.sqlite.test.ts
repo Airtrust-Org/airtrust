@@ -13,7 +13,7 @@ function fixture() {
   opened.push(db);
   db.database.exec(`
     CREATE TABLE cron_job_runs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, job_name TEXT NOT NULL, scope_key TEXT NOT NULL,
+      id TEXT PRIMARY KEY, job_name TEXT NOT NULL, scope_key TEXT NOT NULL,
       lease_owner TEXT, outcome TEXT, started_at TEXT, finished_at TEXT, duration_ms INTEGER,
       processed_count INTEGER, failed_count INTEGER, cursor_before TEXT, cursor_after TEXT,
       error_code TEXT, metadata_json TEXT, created_at TEXT, updated_at TEXT
@@ -22,11 +22,19 @@ function fixture() {
   return db;
 }
 
-function addRun(db: SqliteD1Database, job: string, scope: string, ageDays: number, finished = true) {
+// Como em producao (migration 0451): `id` e UUID TEXT, sem ordem cronologica.
+function addRun(
+  db: SqliteD1Database,
+  job: string,
+  scope: string,
+  ageDays: number,
+  finished = true,
+  id: string = crypto.randomUUID(),
+) {
   const ts = `datetime('now','-${ageDays} days')`;
   db.database.exec(
-    `INSERT INTO cron_job_runs (job_name, scope_key, outcome, started_at, finished_at, created_at)
-     VALUES ('${job}','${scope}','SUCCESS',${ts},${finished ? ts : 'NULL'},${ts})`,
+    `INSERT INTO cron_job_runs (id, job_name, scope_key, outcome, started_at, finished_at, created_at)
+     VALUES ('${id}','${job}','${scope}','SUCCEEDED',${ts},${finished ? ts : 'NULL'},${ts})`,
   );
 }
 
@@ -58,6 +66,17 @@ describe('P13-08 retencao de cron_job_runs', () => {
       { scope_key: 'A', n: 1 },
       { scope_key: 'B', n: 1 },
     ]);
+  });
+
+  it('a ultima execucao e a mais recente por data, nao a de maior UUID', async () => {
+    const db = fixture();
+    // A mais antiga tem UUID lexicograficamente MAIOR que a mais recente.
+    addRun(db, 'rare', 'S', 200, true, 'ffffffff-0000-4000-8000-000000000001');
+    addRun(db, 'rare', 'S', 100, true, '00000000-0000-4000-8000-000000000001');
+    const removed = await purgeOldCronJobRuns(db as unknown as D1Database, 60);
+    expect(removed).toBe(1);
+    const kept = db.database.prepare('SELECT id FROM cron_job_runs').all() as Array<{ id: string }>;
+    expect(kept).toEqual([{ id: '00000000-0000-4000-8000-000000000001' }]);
   });
 
   it('nunca remove execucao ainda em andamento (sem finished_at)', async () => {

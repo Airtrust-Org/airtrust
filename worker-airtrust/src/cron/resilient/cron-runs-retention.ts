@@ -4,8 +4,9 @@
  * `cron_job_state`; as execucoes sao historico de diagnostico.
  *
  * Remove execucoes terminadas ha mais de `retentionDays`, preservando sempre a
- * execucao mais recente de cada (job_name, scope_key) para nao perder a ultima
- * evidencia de escopos que rodam raramente. Lotes limitados para nao criar uma
+ * execucao mais recente (por `started_at`, nunca por `id`: o `id` e um UUID
+ * TEXT sem ordem cronologica) de cada (job_name, scope_key) para nao perder a
+ * ultima evidencia de escopos que rodam raramente. Lotes limitados para nao criar uma
  * transacao longa no D1; o proximo tick diario continua de onde parou.
  */
 export const CRON_RUNS_RETENTION_DAYS = 60;
@@ -26,10 +27,14 @@ export async function purgeOldCronJobRuns(
            FROM cron_job_runs r
           WHERE r.finished_at IS NOT NULL
             AND datetime(r.finished_at) < datetime('now', ?)
-            AND r.id NOT IN (
-              SELECT MAX(l.id) FROM cron_job_runs l GROUP BY l.job_name, l.scope_key
+            AND EXISTS (
+              SELECT 1 FROM cron_job_runs n
+               WHERE n.job_name = r.job_name
+                 AND n.scope_key = r.scope_key
+                 AND (n.started_at > r.started_at
+                      OR (n.started_at = r.started_at AND n.id > r.id))
             )
-          ORDER BY r.id
+          ORDER BY r.started_at, r.id
           LIMIT ?
        )`,
     )
