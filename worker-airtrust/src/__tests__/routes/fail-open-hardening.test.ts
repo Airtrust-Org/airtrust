@@ -11,7 +11,8 @@ vi.mock('../../middleware/auth', () => ({
   auth: () => async (c: MockContext, next: () => Promise<void>) => {
     const empresaId = Number(c.env?.__mockEmpresaId ?? 1);
     c.set('userId', 1);
-    c.set('userRole', 'manager');
+    // P07-03: leitura individual de requisitos exige papel com escopo; admin cobre o fluxo valido.
+    c.set('userRole', 'admin');
     c.set('empresaId', empresaId);
     await next();
   },
