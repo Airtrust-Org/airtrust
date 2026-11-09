@@ -611,14 +611,16 @@ export class BackupOrchestrator {
   }
 
   /**
-   * Backup leve de metadados R2 — lista objetos e salva manifest sem copiar arquivos
+   * Backup leve de metadados R2 — cataloga apenas objetos operacionais, nao
+   * arquivos dos proprios backups. Evita incluir backups antigos e manifests
+   * recursivamente a cada rodada, como ja faz a copia R2 completa.
    */
   private async backupMetadadosR2(controlId: number, backupUuid: string): Promise<void> {
     await this.logBackup(controlId, 'INFO', 'Iniciando backup de metadados R2');
 
     try {
       const bucket = this.env.BUCKET;
-      const objetos = await this.listarObjetosR2();
+      const objetos = await this.listarObjetosR2(true);
 
       const manifest = {
         timestamp: new Date().toISOString(),
