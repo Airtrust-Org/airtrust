@@ -528,4 +528,35 @@ describe('PATCH /:id/status — qualification gate', () => {
     expect(res.status).toBe(200);
     expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
   });
+
+  // ── 9. CONCLUIDO com qualificacao viva nao pode virar CANCELADO (#1492) ──────
+
+  it('rejeita 409 ao cancelar matricula CONCLUIDA com qualificacao vigente no historico', async () => {
+    const concluida = { ...scormMatriculaWithQual, status: 'CONCLUIDO', qualificacao_historico_id: 77 };
+    const { db, writes } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => concluida }],
+      ['FROM qualificacoes_historico', { first: () => ({ found: 1 }) }],
+    ]);
+
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CANCELADO' });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('LMS_COMPLETED_WITH_QUALIFICATION');
+    expect(writes).toHaveLength(0);
+  });
+
+  it('permite cancelar matricula CONCLUIDA sem qualificacao vigente', async () => {
+    const concluida = { ...scormMatriculaWithQual, status: 'CONCLUIDO', qualificacao_historico_id: null };
+    const { db } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', { first: () => concluida }],
+      ['FROM qualificacoes_historico', { first: () => null }],
+      ['data_conclusao = COALESCE', {}],
+      ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => ({ ...concluida, status: 'CANCELADO' }) }],
+    ]);
+
+    const res = await patchStatus(makeApp(), db, 200, { status: 'CANCELADO' });
+
+    expect(res.status).toBe(200);
+  });
 });
