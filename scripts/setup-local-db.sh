@@ -264,12 +264,19 @@ for column_name in empresa_id hora_dormiu hora_acordou sono_efetivo_min fonte_so
   require_sqlite_column "frms_jornada" "$column_name"
 done
 
-info "Aplicando seed sintético de desenvolvimento..."
-if sqlite3 "$SQLITE_FILE" < "$SEED_FILE" 2>/dev/null; then
+info "Aplicando seed sintético de desenvolvimento (bcrypt gerado na execução)..."
+LOCAL_SEED_RENDERED="$(mktemp "${TMPDIR:-/tmp}/airtrust-dev-seed-XXXXXX.sql")"
+chmod 600 "$LOCAL_SEED_RENDERED"
+trap 'rm -f "$LOCAL_SEED_RENDERED"' EXIT
+node "$SCRIPT_DIR/render-local-dev-password-sql.mjs" "$SEED_FILE" "$LOCAL_SEED_RENDERED" \
+  || error "Falha ao gerar credencial do seed local; seed bloqueado"
+if sqlite3 "$SQLITE_FILE" < "$LOCAL_SEED_RENDERED" 2>/dev/null; then
   success "Seed aplicado"
 else
   warn "Seed parcialmente aplicado (alguns registros já existiam — normal em re-runs)"
 fi
+rm -f "$LOCAL_SEED_RENDERED"
+trap - EXIT
 
 # 0413 seeds NOTECHS per existing tenant. The synthetic dev tenant is created by
 # dev-seed.sql after migrations, so replay this idempotent migration once to seed it too.
