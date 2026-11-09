@@ -27,6 +27,7 @@ import { isAdminRole, normalizeAirtrustRole } from '../utils/role-resolution';
 import { isPlatformAdminAccess, resolvePlatformAccessState } from '../lib/rbac/platform-access';
 import { isManagerPerfil } from '../services/setores-gestores';
 import { persistRefreshToken, resolveAndRotateRefreshToken } from '../services/auth-refresh-token';
+import { recordSuccessfulLogin } from '../services/auth-last-login';
 import { refreshTokenKeys } from '../services/refresh-token-key';
 import { revokeAllUserAccessTokens } from '../services/auth-session-revocation';
 
@@ -1122,6 +1123,11 @@ authRoutes.post(
         logStep('refresh_token_failed', { error: toError(refreshErr).message });
         throw refreshErr;
       }
+
+      // N-03: trilha de ultimo acesso, melhor esforco (nunca bloqueia o login).
+      await recordSuccessfulLogin(db, authenticatedUser.id, (lastLoginErr) =>
+        logStep('last_login_failed', { error: toError(lastLoginErr).message }),
+      );
 
       // Retornar tokens e dados do usuário
       return c.json({

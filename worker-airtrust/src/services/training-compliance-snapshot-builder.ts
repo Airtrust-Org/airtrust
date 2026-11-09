@@ -360,6 +360,48 @@ export async function loadRules(
   }));
 }
 
+/**
+ * Compliance evidence query. The rows are produced by an unordered
+ * materialized CTE and sorted by the outer SELECT: when the ORDER BY (which
+ * references join columns) shares a query block with the canonical-code join,
+ * production SQLite stops using the automatic index on that join and rescans
+ * the tenant types for every history row (rows_read ~485k, #2078).
+ */
+export function buildQualificationEvidenceSql(parts: {
+  typeIdentityCte: string;
+  typeIdentityJoins: string;
+  resolvedTipoSelect: string;
+  modalitySelect: string;
+  profileSql: { select: string; joins: string };
+  dataCol: string;
+  vencSelect: string;
+  updatedExpr: string;
+  empresaExpr: string;
+  deletedExpr: string;
+  statusExpr: string;
+}): string {
+  const ctes = [
+    parts.typeIdentityCte,
+    `qualification_evidence_rows AS MATERIALIZED (
+        SELECT qh.id AS id, qh.funcionario_id AS funcionario_id, ${parts.resolvedTipoSelect} AS tipo_id,
+               qh.${parts.dataCol} AS data_realizacao, ${parts.vencSelect} AS data_vencimento,
+               ${parts.modalitySelect} AS modalidade, ${parts.profileSql.select} AS perfil_competencia,
+               COALESCE(qh.${parts.dataCol}, ${parts.updatedExpr}, ${parts.vencSelect}) AS sort_date
+          FROM qualificacoes_historico qh
+          JOIN funcionarios f ON f.id = qh.funcionario_id
+          ${parts.typeIdentityJoins}
+          ${parts.profileSql.joins}
+         WHERE ${parts.empresaExpr}
+           ${parts.deletedExpr}
+           AND NOT (${sqlStatusEqualsAny(parts.statusExpr, CANCELLED_STATUS_VALUES)})
+           AND NOT (${sqlStatusEqualsAny(parts.statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)}))`,
+  ].filter(Boolean);
+  return `WITH ${ctes.join(',\n')}
+    SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento, modalidade, perfil_competencia
+      FROM qualification_evidence_rows
+     ORDER BY funcionario_id, tipo_id, datetime(sort_date) DESC, id DESC`;
+}
+
 export async function loadQualificationEvidence(
   db: D1Database,
   empresaId: number,
@@ -388,28 +430,19 @@ export async function loadQualificationEvidence(
   const modalitySelect = trainingComplianceHistoricalModalitySql(
     cols.has('formato_codigo'), qualificationTypeCols.has('tipo'), cols.has('qualificacao_codigo'), qualificationTypeCols.has('categoria'),
   );
-  const { joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
+  const { cteSql: typeIdentityCte, joins: typeIdentityJoins, resolvedTypeSql: resolvedTipoSelect } = trainingComplianceHistoryIdentitySql(
     tipoCol, cols.has('qualificacao_codigo'), qualificationTypeCols.has('ativo'),
+    ['tipo', 'categoria'].filter((name) => qualificationTypeCols.has(name)),
   );
   const profileSql = await buildQualificationEvidenceProfileSql(db, cols);
 
+  const evidenceSql = buildQualificationEvidenceSql({
+    typeIdentityCte, typeIdentityJoins, resolvedTipoSelect, modalitySelect, profileSql,
+    dataCol, vencSelect, updatedExpr, empresaExpr, deletedExpr, statusExpr,
+  });
   const { results } = await withD1Retry(() =>
     db
-      .prepare(
-        `SELECT qh.id, qh.funcionario_id, ${resolvedTipoSelect} AS tipo_id,
-              qh.${dataCol} AS data_realizacao, ${vencSelect} AS data_vencimento,
-              ${modalitySelect} AS modalidade, ${profileSql.select} AS perfil_competencia
-         FROM qualificacoes_historico qh
-         JOIN funcionarios f ON f.id = qh.funcionario_id
-         ${typeIdentityJoins}
-         ${profileSql.joins}
-        WHERE ${empresaExpr}
-          ${deletedExpr}
-          AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
-          AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
-        ORDER BY qh.funcionario_id, ${resolvedTipoSelect},
-                 datetime(COALESCE(qh.${dataCol}, ${updatedExpr}, ${vencSelect})) DESC, qh.id DESC`,
-      )
+      .prepare(evidenceSql)
       .bind(empresaId)
       .all<{
         id: number;
@@ -732,19 +765,71 @@ export type TrainingComplianceTargetFilter = {
   funcionarioId?: number | null;
 };
 
-export async function buildSnapshot(
-  db: D1Database,
-  empresaId: number,
-  access: EmployeeSectorAccess,
-  targetFilter?: TrainingComplianceTargetFilter,
-) {
-  const today = getTodayIsoSaoPaulo();
+type SnapshotSources = {
+  allEmployees: Awaited<ReturnType<typeof loadEmployees>>;
+  rules: Awaited<ReturnType<typeof loadRules>>;
+  historyMap: Awaited<ReturnType<typeof loadQualificationEvidence>>;
+  lmsMap: Awaited<ReturnType<typeof loadLmsEvidence>>;
+};
+
+// #2078: a tela de Compliance dispara varios endpoints ao mesmo tempo e cada um
+// reexecutava as 4 leituras pesadas (todas dependem apenas de empresa_id e do dia;
+// filtros de acesso/setor/funcao sao aplicados em memoria). Sob essa rajada o D1
+// ficava saturado (database_capacity) e ate a checagem de revogacao do JWT, que
+// entra na mesma fila, estourava. Coalescemos SOMENTE leituras identicas em voo
+// (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
+const _inFlightSnapshotSources = new WeakMap<D1Database, Map<string, Promise<SnapshotSources>>>();
+
+async function loadSnapshotSources(db: D1Database, empresaId: number, today: string): Promise<SnapshotSources> {
   const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
     loadEmployees(db, empresaId, today),
     loadRules(db, empresaId, today),
     loadQualificationEvidence(db, empresaId),
     loadLmsEvidence(db, empresaId),
   ]);
+  return { allEmployees, rules, historyMap, lmsMap };
+}
+
+export function loadSnapshotSourcesCoalesced(
+  db: D1Database,
+  empresaId: number,
+  today: string,
+): Promise<SnapshotSources> {
+  let perDb = _inFlightSnapshotSources.get(db);
+  if (!perDb) {
+    perDb = new Map();
+    _inFlightSnapshotSources.set(db, perDb);
+  }
+  const key = `${empresaId}:${today}`;
+  const existing = perDb.get(key);
+  if (existing) return existing;
+  const map = perDb;
+  let promise!: Promise<SnapshotSources>;
+  promise = (async () => {
+    try {
+      return await loadSnapshotSources(db, empresaId, today);
+    } finally {
+      if (map.get(key) === promise) map.delete(key);
+    }
+  })();
+  map.set(key, promise);
+  return promise;
+}
+
+export async function buildSnapshot(
+  db: D1Database,
+  empresaId: number,
+  access: EmployeeSectorAccess,
+  targetFilter?: TrainingComplianceTargetFilter,
+  // coalesce: SOMENTE para endpoints de leitura (GET). Leituras pos-escrita
+  // (POST/PUT, servicos de matricula/reconciliacao, cron) ficam sempre frescas
+  // para nunca entrar numa leitura em voo anterior a gravacao.
+  options?: { coalesce?: boolean },
+) {
+  const today = getTodayIsoSaoPaulo();
+  const { allEmployees, rules, historyMap, lmsMap } = options?.coalesce
+    ? await loadSnapshotSourcesCoalesced(db, empresaId, today)
+    : await loadSnapshotSources(db, empresaId, today);
   let employees = filterEmployeesByAccess(allEmployees, access);
   if (targetFilter?.setorId != null) {
     employees = employees.filter((employee) => employee.setor_id === targetFilter.setorId);
