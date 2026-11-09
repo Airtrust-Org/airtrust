@@ -39,11 +39,45 @@ export function inspectDumpWithSqlite(dumpPath, { run = runCommand } = {}) {
     if (!Number.isSafeInteger(fkViolationCount) || fkViolationCount < 0) {
       throw new Error('D1_RESTORE_FOREIGN_KEY_CHECK_INVALID');
     }
+    // Aggregates only schema-level FK metadata. Never read or export rowid,
+    // child key values, tenant identifiers, or other production row data.
+    const groupSql = [
+      'SELECT "table" AS child_table, parent AS parent_table,',
+      'fkid AS constraint_id, COUNT(*) AS violations',
+      'FROM pragma_foreign_key_check',
+      'GROUP BY "table", parent, fkid',
+      'ORDER BY violations DESC, child_table, parent_table, constraint_id;',
+    ].join(' ');
+    const groupJson = String(run('sqlite3', ['-json', restoredDb, groupSql])).trim();
+    const groups = groupJson ? JSON.parse(groupJson) : [];
+    if (!Array.isArray(groups) || groups.length > 10000) {
+      throw new Error('D1_RESTORE_FK_GROUPS_INVALID');
+    }
+    const safeSchemaName = (name) => {
+      if (typeof name !== 'string') throw new Error('D1_RESTORE_FK_GROUP_NAME_INVALID');
+      return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : '[nonstandard_identifier]';
+    };
+    const fkGroups = groups.map(group => {
+      if (!group || !Number.isSafeInteger(group.constraint_id) || group.constraint_id < 0 ||
+          !Number.isSafeInteger(group.violations) || group.violations <= 0) {
+        throw new Error('D1_RESTORE_FK_GROUP_INVALID');
+      }
+      return {
+        child_table: safeSchemaName(group.child_table),
+        parent_table: safeSchemaName(group.parent_table),
+        constraint_id: group.constraint_id,
+        violations: group.violations,
+      };
+    });
+    if (fkGroups.reduce((total, group) => total + group.violations, 0) !== fkViolationCount) {
+      throw new Error('D1_RESTORE_FK_GROUPS_COUNT_MISMATCH');
+    }
     return {
       scratchDir,
       restoredDb,
       integrity_check: integrityCheck,
       foreign_key_check_count: fkViolationCount,
+      foreign_key_violation_groups: fkGroups,
     };
   } catch (error) {
     rmSync(scratchDir, { recursive: true, force: true });
@@ -65,6 +99,7 @@ export function buildBackupReport({ outFile, target, gitHead, inspected }) {
     restored_sqlite: {
       integrity_check: inspected.integrity_check,
       foreign_key_check_count: inspected.foreign_key_check_count,
+      foreign_key_violation_groups: inspected.foreign_key_violation_groups ?? [],
     },
     policy: {
       outside_git: true,
