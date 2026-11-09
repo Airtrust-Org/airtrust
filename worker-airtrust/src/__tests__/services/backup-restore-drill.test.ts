@@ -241,3 +241,26 @@ describe('offline R2 copy catalog must fail closed', () => {
     expect(result.failures.length === 0).toBe(valid);
   });
 });
+
+
+describe('backup verification requires independent authentication', () => {
+  it('never reads artifacts or lists R2 keys when expected manifest digest is absent', async () => {
+    const fixture = await createLocalDrillFixture();
+    const manifestKey = 'backups/local-drill-001/checksum-manifest.json';
+    const get = vi.fn(async (key: string) =>
+      key === manifestKey ? bytesFromString(fixture.manifestJson) : fixture.artifacts.get(key) ?? null);
+    const list = vi.fn(async () => [] as string[]);
+    const result = await verifyBackupSet({
+      backupUuid: 'local-drill-001',
+      reader: { get, list },
+      expectedManifestSha256: null,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([expect.stringContaining('não autenticado')]);
+    expect(result.moduleKeys).toEqual({});
+    expect(result.drill).toBeNull();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith(manifestKey);
+    expect(list).not.toHaveBeenCalled();
+  });
+});
