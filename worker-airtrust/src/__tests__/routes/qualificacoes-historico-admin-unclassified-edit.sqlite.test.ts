@@ -433,3 +433,32 @@ describe('PATCH /:id/reagendar (mesma excecao de update)', () => {
     expect(readRow(id).data_conclusao).toBe(future);
   });
 });
+
+describe('datas do PUT /historico/:id (integridade)', () => {
+  it.each([
+    ['banana', undefined],
+    ['2025-02-30', undefined],
+    ['2025-13-01', undefined],
+    ['10/03/2025', undefined],
+    ['2025-03-10T00:00:00Z', undefined],
+    ['2025-03-10', 'nao-e-data'],
+    ['2025-03-10', '2025-03-09'], // vencimento antes da realização
+  ])('rejeita data_conclusao=%s data_vencimento=%s com 400 e não grava', async (conclusao, vencimento) => {
+    const id = insertRow({ conclusao: '2024-01-10', vencimento: '2025-01-10' });
+    const body: Record<string, unknown> = { data_conclusao: conclusao };
+    if (vencimento !== undefined) body.data_vencimento = vencimento;
+    const res = await put(id, body, ADMIN);
+    expect(res.status).toBe(400);
+    const stored = readRow(id);
+    expect(stored.data_conclusao).toBe('2024-01-10');
+    expect(stored.data_vencimento).toBe('2025-01-10');
+  });
+
+  it('aceita vencimento explícito válido (override) e vencimento igual à realização', async () => {
+    const id = insertRow({});
+    expect((await put(id, { data_conclusao: '2025-03-10', data_vencimento: '2025-09-10' }, ADMIN)).status).toBe(200);
+    expect(readRow(id).data_vencimento).toBe('2025-09-10');
+    expect((await put(id, { data_conclusao: '2025-03-10', data_vencimento: '2025-03-10' }, ADMIN)).status).toBe(200);
+    expect(readRow(id).data_vencimento).toBe('2025-03-10');
+  });
+});
