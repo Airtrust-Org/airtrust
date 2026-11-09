@@ -145,6 +145,8 @@ export function createTrainingComplianceIntelligenceRoutes({
                     COALESCE(enviado_em, created_at) AS event_at
                FROM notificacoes_log
               WHERE empresa_id = ?
+                -- Faixa indexavel (idx_notificacoes_log_empresa_assunto); ';' = ':' + 1.
+                AND assunto >= '[COMPLIANCE_TREINAMENTO:' AND assunto < '[COMPLIANCE_TREINAMENTO;'
                 AND assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
                 AND (assunto NOT LIKE '[COMPLIANCE_TREINAMENTO:RESERVA:%'
                   OR status IN ('pendente', 'processando'))

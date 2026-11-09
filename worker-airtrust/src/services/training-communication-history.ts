@@ -135,7 +135,7 @@ export async function runCommunicationsQuery(
              CASE WHEN n.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
                   THEN 'LMS_ALERTA' ELSE 'COMPLIANCE' END AS origem,
              f.setor_id AS setor_id, f.funcao_id AS funcao_id
-        FROM ${fast ? 'notif_pre' : 'notificacoes_log'} n
+        FROM ${fast ? 'notif_pre' : 'notif_src'} n
         JOIN funcionarios f ON f.empresa_id = n.empresa_id
           AND f.id = CAST(CASE WHEN json_valid(n.corpo) THEN json_extract(n.corpo, '$.funcionario_id') END AS INTEGER)
         LEFT JOIN lms_cursos c ON c.empresa_id = n.empresa_id
@@ -257,27 +257,49 @@ export async function runCommunicationsQuery(
 
   const limit = Math.min(200, Math.max(1, filters.limit));
   const offset = Math.max(0, filters.offset);
-  const fastPrefix = fast
-    ? `notif_pre AS (
+  // Tres faixas de assunto (';' = ':' + 1) em UNION ALL: cada ramo faz SEARCH em
+  // idx_notificacoes_log_empresa_assunto (um OR unico cairia em empresa_id=? e leria
+  // todas as linhas legadas com assunto NULL; incidente #2078). Os LIKEs originais
+  // permanecem; produtores gravam os prefixos sempre em maiusculas.
+  const notifSrc = `notif_src AS (
          SELECT n0.* FROM notificacoes_log n0
           WHERE n0.empresa_id = ?
-            AND (n0.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
-                 OR n0.assunto LIKE '[COMPLIANCE_GESTOR:%'
-                 OR (n0.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
-                     AND n0.status IN ('pendente', 'processando')))
-          ORDER BY COALESCE(n0.enviado_em, n0.created_at) DESC, n0.id DESC
+            AND n0.assunto >= '[COMPLIANCE_TREINAMENTO:' AND n0.assunto < '[COMPLIANCE_TREINAMENTO;'
+            AND n0.assunto LIKE '[COMPLIANCE_TREINAMENTO:%'
+         UNION ALL
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND n0.assunto >= '[COMPLIANCE_GESTOR:' AND n0.assunto < '[COMPLIANCE_GESTOR;'
+            AND n0.assunto LIKE '[COMPLIANCE_GESTOR:%'
+         UNION ALL
+         SELECT n0.* FROM notificacoes_log n0
+          WHERE n0.empresa_id = ?
+            AND n0.assunto >= '[LMS_MATRICULA_RESERVA:' AND n0.assunto < '[LMS_MATRICULA_RESERVA;'
+            AND n0.assunto LIKE '[LMS_MATRICULA_RESERVA:%'
+            AND n0.status IN ('pendente', 'processando'))`;
+  const fastPrefix = fast
+    ? `${notifSrc},
+       notif_pre AS (
+         SELECT * FROM notif_src
+          ORDER BY COALESCE(enviado_em, created_at) DESC, id DESC
           LIMIT ?),
        cutoff AS (
          SELECT CASE WHEN COUNT(*) >= ? THEN MIN(COALESCE(enviado_em, created_at)) END AS c
            FROM notif_pre),`
-    : '';
+    : tables.notifications
+      ? `${notifSrc},`
+      : '';
   const fastWhere = fast ? ` AND ((SELECT c FROM cutoff) IS NULL OR enviado_em > (SELECT c FROM cutoff))` : '';
-  const sql = `WITH ${fastPrefix ? fastPrefix + ' ' : ''}communications AS (${selects.join(' UNION ALL ')})
+  const sql = `WITH ${fastPrefix} communications AS (${selects.join(' UNION ALL ')})
     SELECT * FROM communications
      WHERE ${where.join(' AND ')}${fastWhere}
      ORDER BY enviado_em DESC, id DESC
      LIMIT ? OFFSET ?`;
-  const prefixBindings = fast ? [empresaId, preLimit, preLimit] : [];
+  const prefixBindings = fast
+    ? [empresaId, empresaId, empresaId, preLimit, preLimit]
+    : tables.notifications
+      ? [empresaId, empresaId, empresaId]
+      : [];
   const result = await withD1Retry(() =>
     db
       .prepare(sql)
