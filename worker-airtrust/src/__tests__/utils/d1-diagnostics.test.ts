@@ -17,6 +17,11 @@ describe('D1 diagnostics #2078', () => {
     expect(classifyD1Failure(new Error('D1_EXEC_ERROR: 503 database resource limit'))).toBe('database_capacity');
   });
 
+  it('identifies Workers cross-request/runtime-context failures without echoing text', () => {
+    expect(classifyD1Failure(new Error('Cannot perform I/O on behalf of a different request'))).toBe('worker_runtime_context');
+    expect(classifyD1Failure(new Error('The Workers runtime canceled this request'))).toBe('worker_runtime_context');
+  });
+
   it('reports actual attempts for transient recovery without exposing errors to telemetry', async () => {
     const seen: number[] = [];
     let count = 0;

@@ -148,6 +148,7 @@ export function classifyD1Failure(error: unknown): string {
   const value = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   const text = value.toLowerCase();
   if (/no such (table|column)|syntax error|constraint failed/.test(text)) return 'schema_or_sql';
+  if (/different request|cross-request|never generate a response|hung|canceled|cancelled/.test(text)) return 'worker_runtime_context';
   if (/subrequest limit|too many subrequests|cpu time limit|memory limit exceeded/.test(text)) return 'worker_limit';
   if (/database resource limit|too many connections|rate limit|overload/.test(text)) return 'database_capacity';
   if (/timeout|timed out|deadline exceeded|etimedout/.test(text)) return 'timeout';
