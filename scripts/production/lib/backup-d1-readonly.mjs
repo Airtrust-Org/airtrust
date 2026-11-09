@@ -25,21 +25,25 @@ export function inspectDumpWithSqlite(dumpPath, { run = runCommand } = {}) {
   const scratchDir = mkdtempSync(join(tmpdir(), 'airtrust-d1-backup-'));
   const restoredDb = join(scratchDir, 'restore.sqlite');
   try {
-    run('sqlite3', [restoredDb], {
-      input: `.read ${dumpPath}\n`,
+    // sqlite3 dot-command paths must be quoted (runner temp paths may contain
+    // spaces). -bail prevents returning a misleading partial restore on SQL errors.
+    run('sqlite3', ['-bail', restoredDb], {
+      input: `.read ${JSON.stringify(dumpPath)}\n`,
     });
     const integrityCheck = run('sqlite3', [restoredDb, 'PRAGMA integrity_check;']).trim();
-    const fkCheckLines = String(
-      run('sqlite3', [restoredDb], { input: 'PRAGMA foreign_key_check;\n' }),
-    )
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    // Count, never emit row-level foreign key violations: they can reveal
+    // production record identifiers and may exceed subprocess stdout buffers.
+    const fkViolationCount = Number(
+      String(run('sqlite3', ['-bail', restoredDb, 'SELECT COUNT(*) FROM pragma_foreign_key_check;'])).trim(),
+    );
+    if (!Number.isSafeInteger(fkViolationCount) || fkViolationCount < 0) {
+      throw new Error('D1_RESTORE_FOREIGN_KEY_CHECK_INVALID');
+    }
     return {
       scratchDir,
       restoredDb,
       integrity_check: integrityCheck,
-      foreign_key_check_count: fkCheckLines.length,
+      foreign_key_check_count: fkViolationCount,
     };
   } catch (error) {
     rmSync(scratchDir, { recursive: true, force: true });
@@ -49,7 +53,7 @@ export function inspectDumpWithSqlite(dumpPath, { run = runCommand } = {}) {
 
 export function buildBackupReport({ outFile, target, gitHead, inspected }) {
   return {
-    ok: inspected.integrity_check === 'ok',
+    ok: inspected.integrity_check === 'ok' && inspected.foreign_key_check_count === 0,
     generated_at: new Date().toISOString(),
     git_head: gitHead,
     target,
