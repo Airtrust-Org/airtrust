@@ -20,7 +20,7 @@ import {
 } from '../../middleware/employee-sector-access';
 import { forbidden } from '../../middleware/error-handler';
 import { safe } from './safe-handler';
-import { buildVencimentoStatusPredicates, buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr } from '../../services/qualificacoes/historico-helpers';
+import { buildVencimentoStatusPredicates, buildOrderByClause, generateETag, getCacheTtlMs, histCache, type StatsCacheData, ensureHistoricoSchema, ensureModelosAeronaveModeloColumn, SORTABLE_COLUMNS, MODELO_AERONAVE_EXPR, resolveHistoricoReadExpiry, buildCategoriaResolutionJoinClause, categoriaCandidatosAtivosExpr, buildQualificacoesTipoResolutionJoin } from '../../services/qualificacoes/historico-helpers';
 import {
   CANCELLED_STATUS_VALUES,
   isPlannedQualificationStatus,
@@ -290,11 +290,13 @@ export const getHistoricoListHandler = safe(async (c) => {
     );
     const categoriaCandidatosAtivos = categoriaCandidatosAtivosExpr(hasCategoriaEmpresaId);
 
+    const tipoJoinClause = buildQualificacoesTipoResolutionJoin('f.empresa_id', 'qt', 'qh');
+
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      ${tipoJoinClause}
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
       ${categoriaJoinClause}`;
 
@@ -612,7 +614,8 @@ export const getHistoricoListHandler = safe(async (c) => {
       f.nascimento AS funcionario_data_nascimento,
       f.modelo_aeronave_id,
       ${MODELO_AERONAVE_EXPR} AS modelo_aeronave,
-      qh.qualificacao_id AS tipo_id,
+      COALESCE(qt.id, qh.qualificacao_id) AS tipo_id,
+      qt.id AS tipo_id_resolvido,
       qt.nome AS tipo_nome,
       COALESCE(qh.tipo, qt.nome) AS tipo,
       COALESCE(qh.qualificacao_codigo, qt.codigo) AS tipo_codigo,
@@ -843,11 +846,13 @@ router.get(
       hasCategoriaEmpresaId,
     );
 
+    const tipoJoinClause = buildQualificacoesTipoResolutionJoin('f.empresa_id', 'qt', 'qh');
+
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      ${tipoJoinClause}
       ${categoriaJoinClause}`;
 
     // Item 1 (read-side filtering — contagem): once RBAC is active, a
@@ -940,9 +945,11 @@ router.get(
       hasCategoriaEmpresaId,
     );
 
+    const tipoJoinClause = buildQualificacoesTipoResolutionJoin('f.empresa_id', 'qt', 'qh');
+
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.deleted_at IS NULL
+      ${tipoJoinClause}
       ${categoriaJoinClause}`;
 
     const whereClauses: string[] = [

@@ -1301,7 +1301,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         presentation_time_source: 'CREW_REPORTED',
         ...kssProvenanceEventFields(input.kssProvenance),
       },
-      ip_address: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
+      ip_address: c.req.header('cf-connecting-ip'),
       user_agent: c.req.header('user-agent'),
     });
     await registrarAcaoAdmin(c.env.DB, {
@@ -1316,7 +1316,7 @@ router.post('/fadiga-checkin', requireFatigueCheckinAccess, async (c) => {
         nivel_fadiga: finalNivel,
         computed_risk_level: dailyRiskLevel,
       },
-      ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || undefined,
+      ipAddress: c.req.header('cf-connecting-ip') || undefined,
       userAgent: c.req.header('user-agent') || undefined,
     });
     const contextoPiloto = await computeContextoPiloto(

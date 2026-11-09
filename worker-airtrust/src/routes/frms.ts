@@ -2126,7 +2126,7 @@ frmsRoutes.get(
     try {
       const userId = Number(c.get('userId') || 0);
       const userAgent = c.req.header('user-agent') ?? null;
-      const ipAddress = c.req.header('CF-Connecting-IP') ?? c.req.header('x-forwarded-for') ?? null;
+      const ipAddress = c.req.header('CF-Connecting-IP') ?? null;
 
       await c.env.DB.prepare(
         `INSERT INTO auditoria_avancada_v2 (tabela, acao, registro_id, dados_novos, created_at)

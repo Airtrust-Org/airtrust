@@ -375,7 +375,7 @@ app.post('/fichas/:id/assinar', async (c) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Real-IP') || 'unknown';
+    const ip = c.req.header('CF-Connecting-IP') || 'unknown';
     const ts = new Date().toISOString();
     let ns = f.status;
 

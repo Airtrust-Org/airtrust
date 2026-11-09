@@ -179,7 +179,7 @@ export function extrairUsuarioAuditoria(c: {
     (typeof user?.email === 'string' && user.email.trim()) ||
     (typeof authEmail === 'string' && authEmail.trim()) ||
     undefined;
-  const ip_address = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for');
+  const ip_address = c.req.header('cf-connecting-ip');
   const user_agent = c.req.header('user-agent');
 
   return { usuario_id, usuario_nome, ip_address, user_agent };
