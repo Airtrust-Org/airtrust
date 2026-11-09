@@ -3412,7 +3412,8 @@ export default function Qualificacoes() {
           }
           onSuccess={async () => {
             // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
-            await carregarHistorico();
+            // Recarrega a lista e invalida Compliance/Ficha/dashboards (criar e editar).
+            await recarregarHistoricoEStats();
             setShowModal(false);
             setEditingQualificacao(null);
           }}
@@ -4134,7 +4135,8 @@ export default function Qualificacoes() {
           }
           onSuccess={async () => {
             // ⚡ ATUALIZAÇÃO IMEDIATA - CRÍTICO PARA COMPLIANCE
-            await carregarHistorico();
+            // Recarrega a lista e invalida Compliance/Ficha/dashboards, como confirmar/cancelar/excluir.
+            await recarregarHistoricoEStats();
             setModalEditarAberto(false);
             setRegistroSelecionado(null);
           }}

@@ -207,6 +207,9 @@ function createMatrizMockDb() {
   return { prepare } as unknown as D1Database;
 }
 
+// P03-04: o 1o teste paga o custo do import das rotas; sob carga da suite ampla estourava os 5000 ms padrao.
+vi.setConfig({ testTimeout: 30_000 });
+
 describe('VENCENDO_30 consistencia cross-module', () => {
   it('compliance reporta em_risco (nao nao_conforme) para qualificacao vencendo em 15 dias', async () => {
     const complianceRouter = (await import('../../routes/compliance')).default;
