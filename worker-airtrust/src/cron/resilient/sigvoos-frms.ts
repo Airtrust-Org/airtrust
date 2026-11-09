@@ -715,6 +715,21 @@ async function runFrmsQueueScope(
           processed++;
         } catch (error) {
           failed++;
+          if (isCronD1Overloaded(error)) {
+            // Once D1 has saturated, stop this queue immediately. A failed
+            // retry-state write still leaves PROCESSING recoverable by the
+            // existing stale-item recovery; never mark the work SUCCEEDED.
+            await markCronJobItemFailed(db, {
+              jobName: FRMS_JOB,
+              scopeKey,
+              itemKey: item.item_key,
+              stage: 'FRMS_REPROCESS_DEFERRED_D1',
+              errorCode: 'FRMS_D1_OVERLOADED',
+              errorMessage: 'D1 overloaded; operation deferred',
+              retryDelaySeconds: 300,
+            });
+            throw new Error('D1_DB_IS_OVERLOADED');
+          }
           const exhausted = item.attempts >= 7;
           await markCronJobItemFailed(db, {
             jobName: FRMS_JOB,
