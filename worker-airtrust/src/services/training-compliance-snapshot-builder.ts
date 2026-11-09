@@ -732,6 +732,53 @@ export type TrainingComplianceTargetFilter = {
   funcionarioId?: number | null;
 };
 
+type SnapshotSources = {
+  allEmployees: Awaited<ReturnType<typeof loadEmployees>>;
+  rules: Awaited<ReturnType<typeof loadRules>>;
+  historyMap: Awaited<ReturnType<typeof loadQualificationEvidence>>;
+  lmsMap: Awaited<ReturnType<typeof loadLmsEvidence>>;
+};
+
+// #2078: a tela de Compliance dispara varios endpoints ao mesmo tempo e cada um
+// reexecutava as 4 leituras pesadas (todas dependem apenas de empresa_id e do dia;
+// filtros de acesso/setor/funcao sao aplicados em memoria). Sob essa rajada o D1
+// ficava saturado (database_capacity) e ate a checagem de revogacao do JWT, que
+// entra na mesma fila, estourava. Coalescemos SOMENTE leituras identicas em voo
+// (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
+const _inFlightSnapshotSources = new WeakMap<object, Map<string, Promise<SnapshotSources>>>();
+
+export function loadSnapshotSourcesCoalesced(
+  db: D1Database,
+  empresaId: number,
+  today: string,
+): Promise<SnapshotSources> {
+  let perDb = _inFlightSnapshotSources.get(db as unknown as object);
+  if (!perDb) {
+    perDb = new Map();
+    _inFlightSnapshotSources.set(db as unknown as object, perDb);
+  }
+  const key = `${empresaId}:${today}`;
+  const existing = perDb.get(key);
+  if (existing) return existing;
+  const map = perDb;
+  let promise!: Promise<SnapshotSources>;
+  promise = (async () => {
+    try {
+      const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
+        loadEmployees(db, empresaId, today),
+        loadRules(db, empresaId, today),
+        loadQualificationEvidence(db, empresaId),
+        loadLmsEvidence(db, empresaId),
+      ]);
+      return { allEmployees, rules, historyMap, lmsMap };
+    } finally {
+      if (map.get(key) === promise) map.delete(key);
+    }
+  })();
+  map.set(key, promise);
+  return promise;
+}
+
 export async function buildSnapshot(
   db: D1Database,
   empresaId: number,
@@ -739,12 +786,7 @@ export async function buildSnapshot(
   targetFilter?: TrainingComplianceTargetFilter,
 ) {
   const today = getTodayIsoSaoPaulo();
-  const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
-    loadEmployees(db, empresaId, today),
-    loadRules(db, empresaId, today),
-    loadQualificationEvidence(db, empresaId),
-    loadLmsEvidence(db, empresaId),
-  ]);
+  const { allEmployees, rules, historyMap, lmsMap } = await loadSnapshotSourcesCoalesced(db, empresaId, today);
   let employees = filterEmployeesByAccess(allEmployees, access);
   if (targetFilter?.setorId != null) {
     employees = employees.filter((employee) => employee.setor_id === targetFilter.setorId);
