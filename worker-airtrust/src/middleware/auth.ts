@@ -251,6 +251,31 @@ export type AccessTokenSecurityState = {
 };
 
 /**
+ * Log sanitizado estruturado para falhas de infraestrutura de autenticação/D1.
+ * Restrição estrita de governança: ZERO PII (sem tokens, emails, nomes ou identificadores de usuário).
+ */
+function logAuthInfrastructureError(
+  code: string,
+  error: unknown,
+  context: { stage: string; durationMs: number },
+): void {
+  const errMessage = error instanceof Error ? error.message : String(error);
+  const errName = error instanceof Error ? error.name : 'UnknownError';
+  console.error(`[AUTH] Falha ao executar ${context.stage}: ${errMessage}`);
+  console.error(
+    '[AUTH_INFRASTRUCTURE_ERROR]',
+    JSON.stringify({
+      code,
+      stage: context.stage,
+      errorClass: errName,
+      errorMessage: errMessage,
+      durationMs: context.durationMs,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+/**
  * Revalida um access JWT já assinado contra o estado mutável de segurança.
  * Usado tanto pelo middleware auth() quanto por superfícies públicas que
  * precisam aceitar Authorization bearer sem pular logout, desativação de
@@ -271,36 +296,46 @@ export async function validateAccessTokenSecurityState(
     return unauthorized('Token sem identificador. Faça login novamente.', 'TOKEN_JTI_REQUIRED');
   }
 
-  let blocked: boolean;
-  try {
-    blocked = await isJtiBlocklisted(db, payload.jti, payload.exp);
-  } catch (e) {
-    console.error('[AUTH] Falha ao consultar token_blocklist:', (e as Error).message);
+  const startTime = Date.now();
+
+  // Executa as 3 validações de segurança independentes concorrentemente via Promise.allSettled
+  // reduzindo latência de D1 sob rajadas e mitigando timeouts/503 em cascata (Incidente #2078).
+  const [jtiResult, userSecurityResult, platformAccessResult] = await Promise.allSettled([
+    isJtiBlocklisted(db, payload.jti, payload.exp),
+    resolveUserSecurityState(db, payload.sub, payload.empresa_id, payload.role ?? ''),
+    resolvePlatformAccessState(db, payload.sub),
+  ]);
+
+  // 1. Falha de infraestrutura na consulta de revogação JTI -> 503 fail-closed
+  if (jtiResult.status === 'rejected') {
+    logAuthInfrastructureError('AUTH_REVOCATION_CHECK_UNAVAILABLE', jtiResult.reason, {
+      stage: 'token_blocklist',
+      durationMs: Date.now() - startTime,
+    });
     return serviceUnavailable(
       'Não foi possível verificar a revogação do token. Tente novamente.',
       'AUTH_REVOCATION_CHECK_UNAVAILABLE',
     );
   }
-  if (blocked) {
+
+  // 2. Token revogado -> 401
+  if (jtiResult.value) {
     return unauthorized('Token revogado. Faça login novamente.', 'TOKEN_REVOKED');
   }
 
-  let security: UserSecurityState;
-  try {
-    security = await resolveUserSecurityState(
-      db,
-      payload.sub,
-      payload.empresa_id,
-      payload.role ?? '',
-    );
-  } catch (e) {
-    console.error('[AUTH] Falha ao verificar estado do usuário:', (e as Error).message);
+  // 3. Falha de infraestrutura no status da conta do usuário -> 503 fail-closed
+  if (userSecurityResult.status === 'rejected') {
+    logAuthInfrastructureError('AUTH_USER_STATE_CHECK_UNAVAILABLE', userSecurityResult.reason, {
+      stage: 'user_security_state',
+      durationMs: Date.now() - startTime,
+    });
     return serviceUnavailable(
       'Não foi possível verificar o status da conta. Tente novamente.',
       'AUTH_USER_STATE_CHECK_UNAVAILABLE',
     );
   }
 
+  const security = userSecurityResult.value;
   if (!security.found || !security.active) {
     return unauthorized(
       'Usuário inativo ou não encontrado. Faça login novamente.',
@@ -308,26 +343,23 @@ export async function validateAccessTokenSecurityState(
     );
   }
 
-  // A autorização global vem EXCLUSIVAMENTE da concessão persistida.
-  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
-  // O tenantMiddleware valida a existência e atividade da empresa selecionada.
-  let platformAdmin = false;
-  let platformAccessState: PlatformAccessState | undefined;
-  try {
-    platformAccessState = await withD1Retry(
-      () => resolvePlatformAccessState(db, payload.sub),
-      7,
-      80,
-    );
-    platformAdmin = isPlatformAdminAccess(platformAccessState);
-  } catch (e) {
-    console.error('[AUTH] Falha ao validar autorização global:', (e as Error).message);
+  // 4. Falha de infraestrutura na autorização global / platform access -> 503 fail-closed
+  if (platformAccessResult.status === 'rejected') {
+    logAuthInfrastructureError('PLATFORM_ACCESS_CHECK_UNAVAILABLE', platformAccessResult.reason, {
+      stage: 'platform_access_state',
+      durationMs: Date.now() - startTime,
+    });
     return serviceUnavailable(
       'Não foi possível validar as permissões da conta. Tente novamente.',
       'PLATFORM_ACCESS_CHECK_UNAVAILABLE',
     );
   }
 
+  const platformAccessState = platformAccessResult.value;
+  const platformAdmin = isPlatformAdminAccess(platformAccessState);
+
+  // 5. A autorização global vem EXCLUSIVAMENTE da concessão persistida.
+  // Nunca confiar em role/empresa recebidos do JWT para elevar privilégios.
   if (!security.hasMembership && !platformAdmin) {
     return unauthorized(
       'Usuário sem vínculo válido com o tenant do token.',
@@ -689,9 +721,13 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
           Number(payload.empresa_id ?? 0),
           selectedSessionRole,
           security.role,
+          security.platformAccessState,
         );
       } catch (e) {
-        console.error('[AUTH] Falha ao validar perfil ativo da sessão:', (e as Error).message);
+        logAuthInfrastructureError('AUTH_SESSION_ROLE_CHECK_UNAVAILABLE', e, {
+          stage: 'session_role_validation',
+          durationMs: 0,
+        });
         return serviceUnavailable(
           'Não foi possível validar o perfil ativo da sessão. Tente novamente.',
           'AUTH_SESSION_ROLE_CHECK_UNAVAILABLE',
