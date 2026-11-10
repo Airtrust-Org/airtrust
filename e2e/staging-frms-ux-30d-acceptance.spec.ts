@@ -79,7 +79,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     const ready = await page.waitForFunction(() =>
       !window.location.pathname.startsWith('/login') ||
       Array.from(document.querySelectorAll('button')).some((button) =>
-       /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)(?:\\b|$)/i.test(
+       /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)(?:\b|$)/i.test(
           (button.textContent || '').trim(),
         )),
     undefined, { timeout: timeoutMs }).then(() => true).catch(() => false);
@@ -87,7 +87,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     if (!new URL(page.url()).pathname.startsWith('/login')) return true;
 
     const managerOrAdmin = page.getByRole('button', {
-      name: /entrar como (administrador(?: geral| da empresa)?|gestor|manager)(?:\\b|$)/i,
+      name: /entrar como (administrador(?: geral| da empresa)?|gestor|manager)(?:\b|$)/i,
     }).first();
     if (!(await managerOrAdmin.isVisible().catch(() => false))) {
       throw new Error('FRMS_QA_AUTHORIZED_OPERATIONAL_PROFILE_NOT_PRESENT');
