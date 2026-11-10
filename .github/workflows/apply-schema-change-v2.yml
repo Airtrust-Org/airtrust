@@ -177,12 +177,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           D1_LEGACY_QH_ARCHIVE_SHA256: ${{ secrets.D1_LEGACY_QH_ARCHIVE_SHA256 }}
+          D1_LEGACY_QH_ARCHIVED_ROWSET_SHA256: ${{ secrets.D1_LEGACY_QH_ARCHIVED_ROWSET_SHA256 }}
         run: |
           set -euo pipefail
           # The secret attests a real, restore-verified OFF-D1 private archive.
           # A hash alone is not a backup; evidence and location live in #2155.
           [[ "$D1_LEGACY_QH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
             echo 'D1_LEGACY_QH_INDEPENDENT_ARCHIVE_PROOF_MISSING' >&2
+            exit 1
+          }
+          [[ "$D1_LEGACY_QH_ARCHIVED_ROWSET_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo 'D1_LEGACY_QH_ARCHIVED_ROWSET_PROOF_MISSING' >&2
             exit 1
           }
           preflight="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
@@ -231,6 +236,10 @@ jobs:
               process.exit(1);
             }
             const digest = crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+            if (digest !== process.env.D1_LEGACY_QH_ARCHIVED_ROWSET_SHA256) {
+              console.error("D1_LEGACY_QH_SOURCE_CHANGED_SINCE_INDEPENDENT_ARCHIVE");
+              process.exit(1);
+            }
             fs.appendFileSync(process.env.GITHUB_OUTPUT, "rows_sha256=" + digest + "\n");
           ' "$rows_file"
 
