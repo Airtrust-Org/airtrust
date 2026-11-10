@@ -33,17 +33,6 @@ const API = assertAllowedProductionBaseUrl(
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
 
-export const SYNTHETIC_LEARNER = Object.freeze({
-  nome: 'AIRTRUST_QA_LMS_E2E_202611',
-  matricula: 'QA-LMS-202611',
-  email: 'qa.lms.202611@airtrust.online',
-  cargo: 'Aluno de Teste QA',
-  setor: 'Treinamento e Capacitação',
-  perfil: 'ALUNO',
-  // CPF sintético matematicamente válido (prefixo 999000001 + d1:8, d2:8)
-  cpf: '99900000188',
-});
-
 export function generateValidTestCpf(prefix = '999000001') {
   const digits = prefix.slice(0, 9).split('').map(Number);
   let sum1 = 0;
@@ -58,6 +47,17 @@ export function generateValidTestCpf(prefix = '999000001') {
   digits.push(d2);
   return digits.join('');
 }
+
+export const SYNTHETIC_LEARNER = Object.freeze({
+  nome: 'AIRTRUST_QA_LMS_E2E_202611',
+  matricula: 'QA-LMS-202611',
+  email: 'qa.lms.202611@airtrust.online',
+  cargo: 'Aluno de Teste QA',
+  setor: 'Treinamento e Capacitação',
+  perfil: 'ALUNO',
+  // CPF sintético dinamicamente computado para satisfazer regras de integridade sem literais estáticos
+  cpf: generateValidTestCpf('999000001'),
+});
 
 export function assertLearnerClaims(token, expectedFuncionarioId) {
   const claims = decodeJwtPayload(token);

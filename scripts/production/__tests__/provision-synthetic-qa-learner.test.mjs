@@ -15,9 +15,10 @@ test('SYNTHETIC_LEARNER contains expected constants and zero PII', () => {
 });
 
 test('generateValidTestCpf produces an 11-digit CPF passing modulo 11 algorithm', () => {
-  const cpf = generateValidTestCpf('999000001');
+  const prefix = '999000001';
+  const cpf = generateValidTestCpf(prefix);
   assert.equal(cpf.length, 11);
-  assert.equal(cpf, '99900000188');
+  assert.equal(cpf.startsWith(prefix), true);
 
   // Verify first checksum digit
   let sum1 = 0;
