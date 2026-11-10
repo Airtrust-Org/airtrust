@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  enrollLearner,
   evaluateHomologationVerdict,
+  resolveAdminToken,
   runHomologation,
   setupAuthenticatedContext,
 } from '../lms-learner-e2e-homologation.mjs';
@@ -10,6 +12,8 @@ test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologat
   assert.equal(typeof runHomologation, 'function');
   assert.equal(typeof evaluateHomologationVerdict, 'function');
   assert.equal(typeof setupAuthenticatedContext, 'function');
+  assert.equal(typeof enrollLearner, 'function');
+  assert.equal(typeof resolveAdminToken, 'function');
 });
 
 test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass', () => {
@@ -138,4 +142,101 @@ test('setupAuthenticatedContext adds access cookies and requests scoped asset se
   assert.equal(addedCookies[0].value, 'mock-jwt-token-123');
   assert.equal(requestedEndpoint?.endsWith('/api/lms/assets/session'), true);
   assert.equal(requestedOptions?.data?.matricula_id, 42);
+});
+
+test('enrollLearner reuses existing active enrollment from minhas-ead', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 88, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 193);
+    assert.equal(id, 88);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('enrollLearner falls back to admin token on 403 sector restricted', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), headers: opts?.headers });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true, data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (String(url).endsWith('/api/lms/matriculas')) {
+        const auth = opts?.headers?.Authorization || '';
+        if (auth.includes('learner-token')) {
+          return new Response(
+            JSON.stringify({ success: false, code: 'LMS_SELF_ENROLLMENT_NOT_ALLOWED' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (auth.includes('admin-token')) {
+          return new Response(JSON.stringify({ success: true, data: { id: 99 } }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 44, 193, 'admin-token');
+    assert.equal(id, 99);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('enrollLearner reactivates cancelled enrollment on 409 LMS_REMATRICULATION_REQUIRED', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true, data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (String(url).endsWith('/api/lms/matriculas')) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'LMS_REMATRICULATION_REQUIRED',
+            data: { matricula_id: 77 },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/77/rematricular')) {
+        return new Response(
+          JSON.stringify({ success: true, data: { matricula_id: 77, status: 'NAO_INICIADO' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 193, 'admin-token');
+    assert.equal(id, 77);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
