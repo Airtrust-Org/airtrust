@@ -10,6 +10,22 @@ const DAY = '2026-10-13';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
+const OPERATIONAL_PROFILE_TEXT = /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)(?:\b|$)/i;
+const OPERATIONAL_PROFILE_ACCESSIBLE = /entrar como (administrador(?: geral| da empresa)?|gestor|manager)(?:\b|$)/i;
+
+test('reconhece a opção Manager renderizada com descrição, sem aceitar Aluno / Instrutor', async ({ page }) => {
+  // Mirrors the real two-span profile button shown by LoginSimple.
+  await page.setContent([
+    '<button><span>Entrar como Manager</span><span>Gestão operacional da empresa e dos setores autorizados.</span></button>',
+    '<button><span>Entrar como Aluno / Instrutor</span><span>Seus treinamentos e suas atividades.</span></button>',
+  ].join(''));
+  const buttons = await page.locator('button').allTextContents();
+  expect(buttons.filter(label => OPERATIONAL_PROFILE_TEXT.test(label.trim()))).toHaveLength(1);
+  await expect(page.getByRole('button', { name: OPERATIONAL_PROFILE_ACCESSIBLE })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: OPERATIONAL_PROFILE_ACCESSIBLE })).toContainText('Manager');
+});
+
+
 async function captureMain(page: Page, name: string, heading: string) {
   // The static boot fallback is itself a <main>. Never accept it as an
   // operational page or use mere URL presence as evidence of rendering.
@@ -79,7 +95,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     const ready = await page.waitForFunction(() =>
       !window.location.pathname.startsWith('/login') ||
       Array.from(document.querySelectorAll('button')).some((button) =>
-       /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)(?:\b|$)/i.test(
+       OPERATIONAL_PROFILE_TEXT.test(
           (button.textContent || '').trim(),
         )),
     undefined, { timeout: timeoutMs }).then(() => true).catch(() => false);
@@ -87,7 +103,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     if (!new URL(page.url()).pathname.startsWith('/login')) return true;
 
     const managerOrAdmin = page.getByRole('button', {
-      name: /entrar como (administrador(?: geral| da empresa)?|gestor|manager)(?:\b|$)/i,
+      name: OPERATIONAL_PROFILE_ACCESSIBLE,
     }).first();
     if (!(await managerOrAdmin.isVisible().catch(() => false))) {
       throw new Error('FRMS_QA_AUTHORIZED_OPERATIONAL_PROFILE_NOT_PRESENT');
