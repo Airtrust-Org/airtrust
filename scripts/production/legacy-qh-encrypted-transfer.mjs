@@ -1,8 +1,8 @@
+#!/usr/bin/env node
 // source_reference: issue #2155 and reviewed 0577 migration plan; historical QH backup.
 // operational_decision: reconstruct records in an OFFLINE SQLite file only, never production D1.
 // dry_run_required: encrypted archive must be restored and verified before any production cleanup.
 // rollback_plan_required: preserve independent encrypted archive and D1 recovery point; see Schema V2 plan.
-#!/usr/bin/env node
 // Transfer the historical qualification scratch rows only as RSA+AES-GCM
 // ciphertext. Plaintext is never uploaded to GitHub or printed in logs.
 // Production reads happen exclusively in the separately gated workflow.
