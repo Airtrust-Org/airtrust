@@ -71,7 +71,6 @@ export async function resyncTipoHistoricoValidity(
     nome: tipo.nome,
     categoria: tipo.categoria,
     validade: tipo.validade,
-    vencimentoFimMes: tipo.vencimento_fim_mes,
     cargaHoraria: tipo.carga_horaria,
     cargaHorariaInicial: tipo.carga_horaria_inicial,
     cargaHorariaRecorrente: tipo.carga_horaria_recorrente,

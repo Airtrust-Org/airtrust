@@ -247,9 +247,9 @@ const createTipoSchema = z
     carga_horaria_inicial: z.number().nullable().optional(),
     carga_horaria_recorrente: z.number().nullable().optional(),
     validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
-    // Regra de negócio (migration 0122): tipos operacionais vencem no dia exato (0);
-    // somente tipos médicos (CMA/ASO/Médico/Saúde) vencem no fim do mês (1).
-    vencimento_fim_mes: z.number().optional().default(0),
+    // Legado: todo vencimento vence NO DIA. O campo é aceito (clientes antigos) mas
+    // IGNORADO: o modo "fim do mês" não pode mais ser ativado pela API.
+    vencimento_fim_mes: z.number().optional(),
     observacoes: z.string().nullable().optional(),
     ativo: z.union([z.boolean(), z.number()]).optional().default(true),
     is_check: z.union([z.boolean(), z.number()]).optional().default(false),
@@ -272,6 +272,7 @@ const updateTipoSchema = z.object({
   carga_horaria_inicial: z.number().nullable().optional(),
   carga_horaria_recorrente: z.number().nullable().optional(),
   validade: z.number().positive('Validade deve ser maior que zero').nullable().optional(),
+  // Legado ignorado (ver createSchema): vence sempre no dia.
   vencimento_fim_mes: z.number().optional().nullable(),
   observacoes: z.string().nullable().optional(),
   ativo: z.union([z.boolean(), z.number()]).optional(),
@@ -1053,7 +1054,8 @@ router.post(
       data.carga_horaria_recorrente == null ? null : Number(data.carga_horaria_recorrente);
     const conteudoProgramatico = data.conteudo_programatico?.trim() || null;
     const referencias = data.referencias?.trim() || null;
-    const vencimentoFimMes = data.vencimento_fim_mes ? 1 : 0;
+    // vencimento_fim_mes é legado e sempre gravado como 0 (vence no dia).
+    const vencimentoFimMes = 0;
     const ativo = data.ativo === false ? 0 : 1;
     const isCheck = data.is_check ? 1 : 0;
 
@@ -1549,14 +1551,6 @@ router.put(
         binds.push(tipoNovo);
       }
     }
-    if (data.vencimento_fim_mes !== undefined) {
-      const draftVal = data.vencimento_fim_mes ? 1 : 0;
-      const atualVal = rowAtual.vencimento_fim_mes ? 1 : 0;
-      if (draftVal !== atualVal) {
-        updateParts.push('vencimento_fim_mes = ?');
-        binds.push(draftVal);
-      }
-    }
     if (data.observacoes !== undefined) {
       const draftObs = normalizeStr(data.observacoes);
       const atualObs = normalizeStr(rowAtual.observacoes);
@@ -1625,10 +1619,7 @@ router.put(
         formato_id: rowAtual.formato_id,
         formato_codigo: rowAtual.formato_codigo,
         validade: validadeFinal,
-        vencimento_fim_mes:
-          data.vencimento_fim_mes !== undefined
-            ? (data.vencimento_fim_mes ? 1 : 0)
-            : rowAtual.vencimento_fim_mes,
+        vencimento_fim_mes: rowAtual.vencimento_fim_mes,
         carga_horaria:
           data.carga_horaria_recorrente !== undefined
             ? data.carga_horaria_recorrente
@@ -1695,7 +1686,6 @@ router.put(
           nome: tipoAtualizado.nome,
           categoria: tipoAtualizado.categoria,
           validade: tipoAtualizado.validade,
-          vencimentoFimMes: tipoAtualizado.vencimento_fim_mes,
           cargaHoraria: tipoAtualizado.carga_horaria,
           cargaHorariaInicial: tipoAtualizado.carga_horaria_inicial,
           cargaHorariaRecorrente: tipoAtualizado.carga_horaria_recorrente,
@@ -1809,19 +1799,12 @@ router.put(
         nome: rowAtual?.nome || null,
         categoria: rowAtual?.categoria || null,
         validade: rowAtual?.validade ?? null,
-        vencimento_fim_mes: rowAtual?.vencimento_fim_mes ?? null,
       },
       dados_novos: {
         codigo: data.codigo ? normalizeTipoCodigo(data.codigo) : rowAtual?.codigo || null,
         nome: data.nome?.trim() || rowAtual?.nome || null,
         categoria: categoriaFinal || null,
         validade: validadeFinal,
-        vencimento_fim_mes:
-          data.vencimento_fim_mes !== undefined
-            ? data.vencimento_fim_mes
-              ? 1
-              : 0
-            : (rowAtual?.vencimento_fim_mes ?? null),
         historicos_recalculados: historicosSincronizados,
         historicos_ignorados: historicosIgnorados,
       },

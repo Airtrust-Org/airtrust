@@ -331,7 +331,6 @@ export default function Qualificacoes() {
     carga_horaria?: number | null;
     carga_horaria_inicial?: number | null;
     carga_horaria_recorrente?: number | null;
-    vencimento_fim_mes?: number; // 0 = dia exato, 1 = fim do mês
     is_check?: number | boolean | null;
     created_at?: string;
     updated_at?: string | null;
@@ -2005,7 +2004,6 @@ export default function Qualificacoes() {
                     carga_horaria: null,
                     carga_horaria_inicial: null,
                     carga_horaria_recorrente: null,
-                    vencimento_fim_mes: 0,
                     is_check: 0,
                     area_id: modelosPrefs.areaFilter ? Number(modelosPrefs.areaFilter) : null,
                     setores: [],
@@ -2603,7 +2601,6 @@ export default function Qualificacoes() {
                                     carga_horaria_recorrente:
                                       (row as { carga_horaria_recorrente?: number | null })
                                         .carga_horaria_recorrente ?? null,
-                                    vencimento_fim_mes: (row as any).vencimento_fim_mes ?? 0,
                                     is_check: (row as { is_check?: number | boolean | null })
                                       .is_check
                                       ? 1
@@ -4484,7 +4481,6 @@ export default function Qualificacoes() {
                       categoria: '',
                       validade: null,
                       ativo: 1,
-                      vencimento_fim_mes: 0,
                       conteudo_programatico: null,
                       carga_horaria: null,
                       carga_horaria_inicial: null,
@@ -4511,7 +4507,6 @@ export default function Qualificacoes() {
                     categoria: '',
                     validade: null,
                     ativo: 1,
-                    vencimento_fim_mes: 0,
                     conteudo_programatico: null,
                     carga_horaria: null,
                     carga_horaria_inicial: null,
@@ -4538,7 +4533,6 @@ export default function Qualificacoes() {
                     categoria: '',
                     validade: null,
                     ativo: 1,
-                    vencimento_fim_mes: 0,
                     conteudo_programatico: null,
                     carga_horaria: null,
                     carga_horaria_inicial: null,
@@ -4659,26 +4653,6 @@ export default function Qualificacoes() {
                     : prev,
                 )
               }
-            />
-          </FormField>
-
-          <FormField label="Vencimento">
-            <Select
-              value={editingTipo?.vencimento_fim_mes?.toString() || '0'}
-              onChange={(e) =>
-                setEditingTipo((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        vencimento_fim_mes: parseInt((e.target as HTMLSelectElement).value, 10),
-                      }
-                    : prev,
-                )
-              }
-              options={[
-                { value: '0', label: 'No dia exato' },
-                { value: '1', label: 'No fim do mês' },
-              ]}
             />
           </FormField>
 

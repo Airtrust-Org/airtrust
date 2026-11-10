@@ -31,6 +31,7 @@ import {
 } from '../../services/qualificacoes-g1-sem';
 import { requireOperationalAccess } from '../../middleware/operational-domain-access';
 import { isValidCalendarIsoDate } from '../../utils/calendar-date';
+import { resolveCmaValidityForEmployee } from '../../utils/cma-validity';
 import { reconcileQualificationLineageAtomic } from '../../services/qualification-history-atomic';
 
 // Qualificação histórico domain varies per row (via categoria.dominio_codigo
@@ -324,24 +325,14 @@ writeRouter.post(
       let validadeMeses = original.tipo_validade ?? original.hist_validade_meses ?? null;
       if (validadeMeses === 0) validadeMeses = null;
 
-      // Regra CMA semestral: pilotos com mais de 60 anos têm validade de 6 meses
-      const codigoCMACheck =
-        original.qualificacao_codigo || original.codigo || original.tipo_codigo;
-      if (codigoCMACheck === 'CMA') {
-        const funcBirth = await db
-          .prepare(
-            'SELECT nascimento AS data_nascimento FROM funcionarios WHERE id = ? AND deleted_at IS NULL',
-          )
-          .bind(original.funcionario_id)
-          .first<{ data_nascimento: string | null }>();
-        if (funcBirth?.data_nascimento) {
-          const refDate = new Date((novaDataRealizacao ?? '') + 'T00:00:00Z');
-          const birthDate = new Date(funcBirth.data_nascimento + 'T00:00:00Z');
-          const sixtiethBirthday = new Date(birthDate);
-          sixtiethBirthday.setFullYear(sixtiethBirthday.getFullYear() + 60);
-          if (sixtiethBirthday <= refDate) validadeMeses = 6;
-        }
-      }
+      // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+      const cmaValidityRenovacao = await resolveCmaValidityForEmployee(db, {
+        codigo: original.qualificacao_codigo || original.codigo || original.tipo_codigo,
+        empresaId: tenantCtx.empresaId,
+        funcionarioId: original.funcionario_id,
+        dataRealizacao: novaDataRealizacao,
+      });
+      if (cmaValidityRenovacao) validadeMeses = cmaValidityRenovacao.months;
 
       const renovacaoResolvida =
         validadeMeses !== null
@@ -462,6 +453,7 @@ writeRouter.post(
           nova_data_conclusao: novaDataRealizacao,
           nova_data_vencimento: novaDataVencimento,
           validade_meses: validadeMeses,
+          aviso_validade_cma: cmaValidityRenovacao?.warning ?? null,
           tipo_treinamento: tipoTreinamento,
           carga_horaria: cargaHorariaEfetiva,
         },
@@ -585,7 +577,7 @@ writeRouter.post(
     // Buscar qualificacao_id pelo código
     const tipo = await db
       .prepare(
-        `SELECT id, categoria, categoria_id, validade, vencimento_fim_mes, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
+        `SELECT id, categoria, categoria_id, validade, carga_horaria, carga_horaria_inicial, carga_horaria_recorrente
            FROM qualificacoes_tipos
           WHERE codigo = ? AND empresa_id = ? AND deleted_at IS NULL`,
       )
@@ -595,7 +587,6 @@ writeRouter.post(
         categoria: string;
         categoria_id: number | null;
         validade: number | null;
-        vencimento_fim_mes: number | null;
         carga_horaria: number | null;
         carga_horaria_inicial: number | null;
         carga_horaria_recorrente: number | null;
@@ -648,30 +639,20 @@ writeRouter.post(
       statusFinal = QUALIFICACAO_STATUS.PLANEJADA;
     }
 
-    // Inserir registro — data_vencimento NULL (cálculo dinâmico), validade_meses só se override CMA >60
-    // Regra CMA semestral: pilotos > 60 anos → validade 6 meses, caso contrário NULL (usa tipo)
-    let validadeMesesInsert: number | null = null;
-    if (qualificacao_codigo === 'CMA') {
-      const funcBirth2 = await db
-        .prepare(
-          'SELECT nascimento AS data_nascimento FROM funcionarios WHERE id = ? AND deleted_at IS NULL',
-        )
-        .bind(funcionario_id)
-        .first<{ data_nascimento: string | null }>();
-      if (funcBirth2?.data_nascimento) {
-        const refDate2 = new Date(data_conclusao + 'T00:00:00Z');
-        const birthDate2 = new Date(funcBirth2.data_nascimento + 'T00:00:00Z');
-        const sixtiethBirthday2 = new Date(birthDate2);
-        sixtiethBirthday2.setFullYear(sixtiethBirthday2.getFullYear() + 60);
-        if (sixtiethBirthday2 <= refDate2) validadeMesesInsert = 6;
-      }
-    }
+    // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos;
+    // sem data de nascimento: 12 meses com aviso). Persistida em validade_meses.
+    const cmaValidity = await resolveCmaValidityForEmployee(db, {
+      codigo: qualificacao_codigo,
+      empresaId: tenantCtx.empresaId,
+      funcionarioId: funcionario_id!,
+      dataRealizacao: data_conclusao,
+    });
+    const validadeMesesInsert: number | null = cmaValidity?.months ?? null;
 
     const dataVencimentoFinal = calcularDataVencimento({
       dataConclusao: data_conclusao,
       dataVencimento: data_vencimento,
       validadeMeses: validadeMesesInsert ?? validade_meses,
-      vencimentoFimMes: tipo.vencimento_fim_mes ?? 0,
     });
 
     const instrutorResolution = await resolveInstrutorNomePorPayload(db, tenantCtx.empresaId, {
@@ -879,7 +860,8 @@ Alternativamente, edite ou exclua o registro existente antes de criar um novo.`,
         status: statusFinal,
         registro_anterior_renovado_id: registroAnteriorRenovadoId,
         data_vencimento: dataVencimentoFinal,
-        validade_meses,
+        validade_meses: validadeMesesInsert ?? validade_meses,
+        aviso_validade_cma: cmaValidity?.warning ?? null,
         carga_horaria: cargaHorariaEfetiva,
       },
     });
@@ -951,9 +933,9 @@ writeRouter.put(
 
     const cargaContext = await db
       .prepare(
-        `SELECT qh.tipo_treinamento, qh.carga_horaria,
+        `SELECT qh.tipo_treinamento, qh.carga_horaria, qh.funcionario_id,
                 qh.validade_meses, qh.data_vencimento, qh.qualificacao_codigo,
-                qt.id AS tipo_id_resolvido, qt.validade AS tipo_validade, qt.vencimento_fim_mes,
+                qt.id AS tipo_id_resolvido, qt.validade AS tipo_validade,
                 qt.carga_horaria, qt.carga_horaria_inicial, qt.carga_horaria_recorrente
            FROM qualificacoes_historico qh
            ${buildQualificacoesTipoResolutionJoin('qh.empresa_id', 'qt', 'qh')}
@@ -968,14 +950,22 @@ writeRouter.put(
         qualificacao_codigo: string | null;
         tipo_id_resolvido: number | null;
         tipo_validade: number | null;
-        vencimento_fim_mes: number | null;
+        funcionario_id: number | null;
         carga_horaria_inicial: number | null;
         carga_horaria_recorrente: number | null;
       }>();
 
-    // Regra atual do modelo é canônica; CMA semestral tem exceção por idade.
-    const isCmaSemestral = String(cargaContext?.qualificacao_codigo || '').trim().toUpperCase() === 'CMA' && Number(cargaContext?.validade_meses) === 6;
-    const validadeMesesEfetiva = isCmaSemestral ? 6 : (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
+    // Regra atual do modelo é canônica; CMA usa validade por idade na data de realização.
+    const cmaValidityEdicao = cargaContext?.funcionario_id
+      ? await resolveCmaValidityForEmployee(db, {
+          codigo: cargaContext.qualificacao_codigo,
+          empresaId: tenantCtx.empresaId,
+          funcionarioId: cargaContext.funcionario_id,
+          dataRealizacao: data_conclusao,
+        })
+      : null;
+    const validadeMesesEfetiva =
+      cmaValidityEdicao?.months ?? (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
     const tipoTreinamentoFinal =
       (Number(validadeMesesEfetiva ?? 0) === 6
         ? 'SEMESTRAL'
@@ -994,7 +984,6 @@ writeRouter.put(
           dataConclusao: data_conclusao,
           dataVencimento: data_vencimento,
           validadeMeses: validadeMesesEfetiva,
-          vencimentoFimMes: cargaContext?.vencimento_fim_mes ?? 0,
         });
 
     await db
@@ -1002,6 +991,7 @@ writeRouter.put(
         `UPDATE qualificacoes_historico
          SET data_conclusao = ?,
              data_vencimento = ?,
+             ${cmaValidityEdicao ? `validade_meses = ${cmaValidityEdicao.months},` : ''}
              instrutor = ?,
              observacoes = ?,
              tipo_treinamento = ?,
@@ -1207,7 +1197,7 @@ writeRouter.patch(
     const cargaContext = await db
       .prepare(
         `SELECT qh.validade_meses, qt.validade AS tipo_validade,
-                qh.data_vencimento, qh.qualificacao_codigo, qt.vencimento_fim_mes
+                qh.data_vencimento, qh.qualificacao_codigo, qh.funcionario_id
            FROM qualificacoes_historico qh
            ${buildQualificacoesTipoResolutionJoin('qh.empresa_id', 'qt', 'qh')}
           WHERE qh.id = ? AND qh.empresa_id = ? AND qh.deleted_at IS NULL`,
@@ -1218,19 +1208,26 @@ writeRouter.patch(
         tipo_validade: number | null;
         data_vencimento: string | null;
         qualificacao_codigo: string | null;
-        vencimento_fim_mes: number | null;
+        funcionario_id: number | null;
       }>();
 
-    // A validade atual do modelo prevalece sobre o snapshot legado, salvo CMA semestral.
-    const isCmaSemestral = String(cargaContext?.qualificacao_codigo || '').trim().toUpperCase() === 'CMA' && Number(cargaContext?.validade_meses) === 6;
-    const validadeMesesEfetiva = isCmaSemestral ? 6 : (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
+    // A validade atual do modelo prevalece sobre o snapshot legado; CMA usa validade por idade.
+    const cmaValidityReagendamento = cargaContext?.funcionario_id
+      ? await resolveCmaValidityForEmployee(db, {
+          codigo: cargaContext.qualificacao_codigo,
+          empresaId: tenantCtx.empresaId,
+          funcionarioId: cargaContext.funcionario_id,
+          dataRealizacao: novaDataPlanejada,
+        })
+      : null;
+    const validadeMesesEfetiva =
+      cmaValidityReagendamento?.months ?? (cargaContext?.tipo_validade ?? cargaContext?.validade_meses ?? null);
     const dataVencimentoFinal = isG1SemQualificacaoCode(cargaContext?.qualificacao_codigo)
       ? (cargaContext?.data_vencimento ?? null)
       : calcularDataVencimento({
           dataConclusao: novaDataPlanejada,
           dataVencimento: null,
           validadeMeses: validadeMesesEfetiva,
-          vencimentoFimMes: cargaContext?.vencimento_fim_mes ?? 0,
         });
 
     await db

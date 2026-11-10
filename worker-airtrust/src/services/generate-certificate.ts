@@ -256,7 +256,6 @@ export async function generateCertificateForHistorico(
         ${tiposHasCargaRecorrente ? 'qt.carga_horaria_recorrente' : 'NULL'} AS carga_horaria_recorrente,
         qt.conteudo_programatico AS conteudo_programatico,
         qt.descricao AS qualificacao_descricao,
-        COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
         qc.nome AS categoria_qualificacao_canonica
       FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON qh.funcionario_id = f.id AND f.deleted_at IS NULL AND f.empresa_id = ?
@@ -370,14 +369,13 @@ export async function generateCertificateForHistorico(
   const tipoTreinamentoCertificado =
     normalizeTipoTreinamento(qualificacao.tipo_treinamento) ||
     (validadeMeses === 6 ? 'SEMESTRAL' : 'RECORRENTE');
-  const vencimentoFimMes = Number(qualificacao.vencimento_fim_mes || 0) === 1 ? 1 : 0;
   const dataVencimentoPersistido = String(qualificacao.data_vencimento || '')
     .trim()
     .split('T')[0];
   const dataVencimentoCertificado =
     dataVencimentoPersistido ||
     (dataConclusaoCertificado && validadeMeses > 0
-      ? calcularDataVencimento(dataConclusaoCertificado, validadeMeses, vencimentoFimMes)
+      ? calcularDataVencimento(dataConclusaoCertificado, validadeMeses)
       : '');
   const cargaHorariaCertificado = resolveCargaHorariaCertificado({
     tipoTreinamento: tipoTreinamentoCertificado,

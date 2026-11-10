@@ -22,39 +22,27 @@ describe('qualificacoes-expiration', () => {
   const mesPassado = '2023-12-15';
 
   describe('calcularDataVencimento', () => {
-    it('deve calcular vencimento no dia exato (modo 0)', () => {
-      const resultado = calcularDataVencimento(dataBase, 12, 0);
-      expect(resultado).toBe('2025-01-15');
+    it('vence no dia (12 meses)', () => {
+      expect(calcularDataVencimento(dataBase, 12)).toBe('2025-01-15');
     });
 
-    it('deve calcular vencimento no fim do mês (modo 1)', () => {
-      const resultado = calcularDataVencimento(dataBase, 12, 1);
-      expect(resultado).toBe('2025-01-31');
-    });
-
-    it('deve calcular vencimento em 3 meses (dia exato)', () => {
-      const resultado = calcularDataVencimento(dataBase, 3, 0);
-      expect(resultado).toBe('2024-04-15');
-    });
-
-    it('deve calcular vencimento em 3 meses (fim do mês)', () => {
-      const resultado = calcularDataVencimento(dataBase, 3, 1);
-      expect(resultado).toBe('2024-04-30');
+    it('vence no dia (3 meses)', () => {
+      expect(calcularDataVencimento(dataBase, 3)).toBe('2024-04-15');
     });
 
     it('deve lançar erro para data inválida', () => {
-      expect(() => calcularDataVencimento('invalid-date', 12, 0)).toThrow();
+      expect(() => calcularDataVencimento('invalid-date', 12)).toThrow();
     });
 
     it('deve lançar erro para validade inválida', () => {
-      expect(() => calcularDataVencimento(dataBase, 0, 0)).toThrow();
-      expect(() => calcularDataVencimento(dataBase, -1, 0)).toThrow();
+      expect(() => calcularDataVencimento(dataBase, 0)).toThrow();
+      expect(() => calcularDataVencimento(dataBase, -1)).toThrow();
     });
 
-    it('deve considerar fevereiro corretamente (fim de mês)', () => {
-      // Jan 15, 2024 + 1 mês + fim do mês = Feb 29 (2024 é bissexto)
-      const resultado = calcularDataVencimento('2024-01-15', 1, 1);
-      expect(resultado).toBe('2024-02-29');
+    it('limita ao ultimo dia do mes-alvo sem rolar para o mes seguinte', () => {
+      expect(calcularDataVencimento('2024-01-31', 1)).toBe('2024-02-29');
+      expect(calcularDataVencimento('2025-01-31', 1)).toBe('2025-02-28');
+      expect(calcularDataVencimento('2024-02-29', 24)).toBe('2026-02-28');
     });
   });
 
@@ -116,17 +104,17 @@ describe('qualificacoes-expiration', () => {
 
   describe('calcularValidade', () => {
     it('deve retornar objeto completo com cálculos', () => {
-      const resultado = calcularValidade(dataBase, 12, 0);
+      const resultado = calcularValidade(dataBase, 12);
       expect(resultado).toHaveProperty('data_conclusao', dataBase);
       expect(resultado).toHaveProperty('data_vencimento', '2025-01-15');
       expect(resultado).toHaveProperty('validade_meses', 12);
-      expect(resultado).toHaveProperty('vencimento_fim_mes', 0);
+      expect(resultado).not.toHaveProperty('vencimento_fim_mes');
       expect(resultado).toHaveProperty('dias_validade');
       expect(resultado).toHaveProperty('status');
     });
 
     it('deve calcular dias corretamente', () => {
-      const resultado = calcularValidade(dataBase, 12, 0);
+      const resultado = calcularValidade(dataBase, 12);
       // 12 meses = ~365 dias
       expect(resultado.dias_validade).toBeGreaterThan(360);
       expect(resultado.dias_validade).toBeLessThan(370);

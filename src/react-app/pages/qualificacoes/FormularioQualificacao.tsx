@@ -6,7 +6,7 @@ import { Upload, FileText, X } from 'lucide-react';
 import SeletorFuncionario from '../../components/SeletorFuncionario';
 import { toast } from 'sonner';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
-import { tryAddCalendarMonthsClamped, tryEndOfTargetMonth } from '@/shared/utils/validade-meses';
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 
 interface FormularioQualificacaoProps {
   qualificacao?: any;
@@ -27,7 +27,6 @@ const FormularioQualificacao = ({
     data_conclusao: '',
     data_vencimento: '',
     validade_meses: 12,
-    vencimento_tipo: 'DIA_EXATO' as 'DIA_EXATO' | 'FIM_DO_MES',
     observacoes: '',
   });
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -55,17 +54,9 @@ const FormularioQualificacao = ({
     }
   };
 
-  const calcularVencimento = (
-    dataConclusao: string,
-    validadeMeses: number,
-    vencimentoTipo: 'DIA_EXATO' | 'FIM_DO_MES',
-  ): string => {
-    // Regra canonica compartilhada com o Worker (dia exato limitado ao fim do mes-alvo).
-    return (
-      (vencimentoTipo === 'FIM_DO_MES'
-        ? tryEndOfTargetMonth(dataConclusao, validadeMeses)
-        : tryAddCalendarMonthsClamped(dataConclusao, validadeMeses)) ?? ''
-    );
+  const calcularVencimento = (dataConclusao: string, validadeMeses: number): string => {
+    // Regra canonica compartilhada com o Worker: vence no dia (limitado ao fim do mes-alvo).
+    return tryAddCalendarMonthsClamped(dataConclusao, validadeMeses) ?? '';
   };
 
   const handleDataConclusaoChange = (dataConclusao: string) => {
@@ -73,11 +64,7 @@ const FormularioQualificacao = ({
 
     // Calcular vencimento automaticamente se tiver data de conclusão
     if (dataConclusao && formData.validade_meses) {
-      newFormData.data_vencimento = calcularVencimento(
-        dataConclusao,
-        formData.validade_meses,
-        formData.vencimento_tipo,
-      );
+      newFormData.data_vencimento = calcularVencimento(dataConclusao, formData.validade_meses);
     }
 
     setFormData(newFormData);

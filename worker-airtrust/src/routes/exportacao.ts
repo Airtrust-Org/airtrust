@@ -47,7 +47,6 @@ interface QualificacaoExportRow {
   qualificacao_codigo: string | null;
   categoria: string | null;
   validade_meses: string | number | null;
-  vencimento_fim_mes: string | number | null;
   data_realizacao: string | null;
   data_vencimento_persistida: string | null;
   renovada: string | number | null;
@@ -288,7 +287,6 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
         COALESCE(qh.qualificacao_codigo, qt.codigo)                        AS qualificacao_codigo,
         COALESCE(qh.categoria, qt.categoria)                               AS categoria,
         COALESCE(qt.validade, qh.validade_meses)                       AS validade_meses,
-        qt.vencimento_fim_mes                                              AS vencimento_fim_mes,
         qh.data_conclusao                                                  AS data_realizacao,
         qh.data_vencimento                                                AS data_vencimento_persistida,
         qh.renovada,
@@ -340,7 +338,6 @@ app.get('/qualificacoes-historico', auth(), async (c) => {
           dataRealizacao: r.data_realizacao,
           codigoQualificacao: r.qualificacao_codigo,
           nascimentoFuncionario: r.funcionario_nascimento,
-          vencimentoFimMes: r.vencimento_fim_mes,
         });
 
       // Derivar status — mesma lógica do historico.ts

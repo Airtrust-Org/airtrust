@@ -1,13 +1,12 @@
 /**
- * #1492 / #2158: regra canonica de validade em meses (dia preservado, limitado ao
- * ultimo dia do mes-alvo; "fim do mes" distinto). Mesma resposta em todos os
+ * #1492 / #2158: regra canonica de validade em meses (vence NO DIA: dia preservado,
+ * limitado ao ultimo dia do mes-alvo; o modo "fim do mes" foi removido). Mesma resposta em todos os
  * consumidores do Worker + SQL. Rode tambem com TZ=America/Sao_Paulo e
  * TZ=Pacific/Auckland: o resultado nao pode depender do fuso.
  */
 import { describe, expect, it } from 'vitest';
 import {
   addCalendarMonthsClamped,
-  endOfTargetMonth,
   parseCivilDay,
   tryAddCalendarMonthsClamped,
 } from '../../../../src/shared/utils/validade-meses';
@@ -19,28 +18,27 @@ import { computeRequirement, type Rule } from '../../services/training-complianc
 import { sqlAddMonthsClamped } from '../sql-add-months';
 import { SqliteD1Database } from '../../__tests__/helpers/qualification-history-sqlite-d1';
 
-/** [conclusao, meses, diaExato, fimDoMes] */
-const CASES: Array<[string, number, string, string]> = [
-  ['2024-02-29', 24, '2026-02-28', '2026-02-28'],
-  ['2025-01-31', 1, '2025-02-28', '2025-02-28'],
-  ['2024-01-31', 1, '2024-02-29', '2024-02-29'],
-  ['2024-04-30', 1, '2024-05-30', '2024-05-31'],
-  ['2024-02-29', 12, '2025-02-28', '2025-02-28'],
-  ['2024-02-29', 48, '2028-02-29', '2028-02-29'],
-  ['2023-08-31', 6, '2024-02-29', '2024-02-29'],
-  ['2023-08-31', 3, '2023-11-30', '2023-11-30'],
-  ['2024-12-15', 1, '2025-01-15', '2025-01-31'],
-  ['2024-11-30', 3, '2025-02-28', '2025-02-28'],
-  ['2024-01-15', 12, '2025-01-15', '2025-01-31'],
-  ['2025-10-31', 24, '2027-10-31', '2027-10-31'],
-  ['2024-03-31', 11, '2025-02-28', '2025-02-28'],
-  ['2024-05-31', 120, '2034-05-31', '2034-05-31'],
+/** [conclusao, meses, vencimentoNoDia] */
+const CASES: Array<[string, number, string]> = [
+  ['2024-02-29', 24, '2026-02-28'],
+  ['2025-01-31', 1, '2025-02-28'],
+  ['2024-01-31', 1, '2024-02-29'],
+  ['2024-04-30', 1, '2024-05-30'],
+  ['2024-02-29', 12, '2025-02-28'],
+  ['2024-02-29', 48, '2028-02-29'],
+  ['2023-08-31', 6, '2024-02-29'],
+  ['2023-08-31', 3, '2023-11-30'],
+  ['2024-12-15', 1, '2025-01-15'],
+  ['2024-11-30', 3, '2025-02-28'],
+  ['2024-01-15', 12, '2025-01-15'],
+  ['2025-10-31', 24, '2027-10-31'],
+  ['2024-03-31', 11, '2025-02-28'],
+  ['2024-05-31', 120, '2034-05-31'],
 ];
 
 describe('funcao canonica', () => {
-  it.each(CASES)('%s + %im => dia exato %s, fim do mes %s', (data, meses, exato, fim) => {
+  it.each(CASES)('%s + %im => vence no dia %s', (data, meses, exato) => {
     expect(addCalendarMonthsClamped(data, meses)).toBe(exato);
-    expect(endOfTargetMonth(data, meses)).toBe(fim);
   });
 
   it('aceita sufixo de hora e rejeita datas inexistentes/mal formadas', () => {
@@ -56,7 +54,6 @@ describe('funcao canonica', () => {
   it('meses <= 0, nao inteiros ou fora do intervalo lancam', () => {
     for (const m of [0, -1, 1.5, Number.NaN, Infinity]) {
       expect(() => addCalendarMonthsClamped('2024-01-15', m)).toThrow();
-      expect(() => endOfTargetMonth('2024-01-15', m)).toThrow();
       expect(tryAddCalendarMonthsClamped('2024-01-15', m)).toBeNull();
     }
     expect(() => addCalendarMonthsClamped('2024-01-15', 12 * 9000)).toThrow();
@@ -65,7 +62,7 @@ describe('funcao canonica', () => {
 
 describe('consumidores do Worker usam a mesma regra', () => {
   const tipo = (fim: number) => ({
-    codigo: 'X', nome: 'X', categoria: null, validade: 1, vencimentoFimMes: fim,
+    codigo: 'X', nome: 'X', categoria: null, validade: 1, vencimento_fim_mes: fim,
     cargaHoraria: null, cargaHorariaInicial: null, cargaHorariaRecorrente: null,
   });
   const syncInput = (dataConclusao: string) => ({
@@ -90,16 +87,15 @@ describe('consumidores do Worker usam a mesma regra', () => {
     origem: 'QUALIFICACAO' as const, origem_id: 1, origem_titulo: null, modalidade: 'PRESENCIAL',
   });
 
-  it.each(CASES)('%s + %im', (data, meses, exato, fim) => {
-    for (const [flag, esperado] of [[0, exato], [1, fim]] as const) {
-      expect(util(data, meses, flag)).toBe(esperado);
-      expect(historico({ dataConclusao: data, validadeMeses: meses, vencimentoFimMes: flag })).toBe(esperado);
+  it.each(CASES)('%s + %im', (data, meses, esperado) => {
+    // A coluna legada vencimento_fim_mes (0 ou 1) e IGNORADA em todos os consumidores.
+    for (const flag of [0, 1]) {
+      expect(util(data, meses)).toBe(esperado);
+      expect(historico({ dataConclusao: data, validadeMeses: meses })).toBe(esperado);
       expect(
         resolveHistoricoDataVencimento(tipo(flag), syncInput(data), meses),
       ).toBe(esperado);
-      expect(
-        calculateQualificationExpiry({ completionDate: data, validityMonths: meses, endOfMonth: flag === 1 }),
-      ).toBe(esperado);
+      expect(calculateQualificationExpiry({ completionDate: data, validityMonths: meses })).toBe(esperado);
       expect(
         computeRequirement(rule(flag, meses), [evidence(data)] as never, [], { today: '2090-01-01' })
           .data_validade,
@@ -108,10 +104,10 @@ describe('consumidores do Worker usam a mesma regra', () => {
   });
 
   it('contratos de erro/nulo preservados', () => {
-    expect(() => util('2024-01-15', 0, 0)).toThrow();
-    expect(() => util('invalid', 1, 0)).toThrow();
-    expect(historico({ dataConclusao: 'x', validadeMeses: 1, vencimentoFimMes: 0 })).toBeNull();
-    expect(historico({ dataConclusao: '2024-01-31', validadeMeses: 0, vencimentoFimMes: 0 })).toBeNull();
+    expect(() => util('2024-01-15', 0)).toThrow();
+    expect(() => util('invalid', 1)).toThrow();
+    expect(historico({ dataConclusao: 'x', validadeMeses: 1 })).toBeNull();
+    expect(historico({ dataConclusao: '2024-01-31', validadeMeses: 0 })).toBeNull();
   });
 });
 
@@ -157,9 +153,8 @@ describe('paridade SQL x TypeScript', () => {
 
 describe('independencia de fuso', () => {
   it('resultado identico qualquer TZ do processo (rodar com TZ=Pacific/Auckland e America/Sao_Paulo)', () => {
-    for (const [data, meses, exato, fim] of CASES) {
+    for (const [data, meses, exato] of CASES) {
       expect(addCalendarMonthsClamped(data, meses)).toBe(exato);
-      expect(endOfTargetMonth(data, meses)).toBe(fim);
     }
   });
 });

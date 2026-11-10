@@ -13,7 +13,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'FAP 14 - Exame em Rota - AW139',
         categoria: 'CHECK',
         validade: 12,
-        vencimentoFimMes: 0,
         cargaHoraria: null,
         cargaHorariaInicial: null,
         cargaHorariaRecorrente: null,
@@ -43,7 +42,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'CRM',
         categoria: 'TREINAMENTO TEORICO',
         validade: 12,
-        vencimentoFimMes: 1,
         cargaHoraria: 8,
         cargaHorariaInicial: 20,
         cargaHorariaRecorrente: 8,
@@ -57,7 +55,7 @@ describe('qualificacoes-tipos-sync', () => {
     );
 
     expect(snapshot.validadeMeses).toBe(12);
-    expect(snapshot.dataVencimento).toBe('2026-04-30');
+    expect(snapshot.dataVencimento).toBe('2026-04-15');
     expect(snapshot.cargaHoraria).toBe(8);
   });
 
@@ -68,7 +66,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'Certificado Medico Aeronautico',
         categoria: 'EXAME',
         validade: 12,
-        vencimentoFimMes: 0,
         cargaHoraria: null,
         cargaHorariaInicial: null,
         cargaHorariaRecorrente: null,
@@ -105,7 +102,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'Curso Interno Geral',
         categoria: 'Outros',
         validade: null,
-        vencimentoFimMes: 0,
         cargaHoraria: null,
         cargaHorariaInicial: null,
         cargaHorariaRecorrente: null,
@@ -129,7 +125,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'Curso Interno Geral',
         categoria: 'Outros',
         validade: null,
-        vencimentoFimMes: 0,
         cargaHoraria: null,
         cargaHorariaInicial: null,
         cargaHorariaRecorrente: null,
@@ -154,7 +149,6 @@ describe('qualificacoes-tipos-sync', () => {
         nome: 'Manual Geral de Manutencao',
         categoria: 'EAD',
         validade: 24,
-        vencimentoFimMes: 0,
         cargaHoraria: null,
         cargaHorariaInicial: null,
         cargaHorariaRecorrente: null,

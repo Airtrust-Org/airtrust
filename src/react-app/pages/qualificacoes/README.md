@@ -176,7 +176,6 @@ interface TipoQualificacao {
   nome: string;
   tipo: 'TREINAMENTO' | 'EXAME' | 'CHECK';
   validade_meses: number;
-  vencimento_tipo: 'DIA_EXATO' | 'FIM_DO_MES';
   categoria?: string;
 }
 ```

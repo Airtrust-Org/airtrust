@@ -5,7 +5,7 @@
  * Owner decisions of 10/11/2026 prepared here (nothing is executed by this script):
  *  (4) every active tenant-6 qualification model with validade NULL/<=0 gets 24 months;
  *  (3) live histories linked to those models (also with certificates) follow the model
- *      (canonical clamp: exact-day keeps the day clamped to the month end, end-of-month mode = last day);
+ *      (canonical clamp: every expiry is no-dia - keeps the day clamped to the month end; the legacy end-of-month flag is ignored);
  *  (5) 6 orphan histories pointing to soft-deleted OUT_NR11/OUT_NR35/OUT_LGPD types are relinked to NR-11/NR-35/LGPD,
  *      the other 12 (soft-deleted OUT_* types) are soft-deleted (deleted_at only, certificate files stay in R2).
  *
