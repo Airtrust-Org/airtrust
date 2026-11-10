@@ -23,6 +23,8 @@ import {
   resolveNextSigvoosDay,
   shouldRunSigvoosAtCurrentHour,
   FRMS_REPROCESS_BATCH,
+  FRMS_QUEUE_SCOPE_BATCH,
+  buildRunnableFrmsQueueScopesQuery,
   SIGVOOS_TENANT_BATCH,
   SIGVOOS_TRIPULANTE_ENQUEUE_BATCH,
 } from '../../cron/resilient/sigvoos-frms';
@@ -193,7 +195,19 @@ describe('bounded cron discovery', () => {
   it('mantém caps pequenos para SIGVOOS e FRMS', () => {
     expect(SIGVOOS_TENANT_BATCH).toBeLessThanOrEqual(25);
     expect(SIGVOOS_TRIPULANTE_ENQUEUE_BATCH).toBeLessThanOrEqual(100);
-    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(25);
+    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(5);
+    expect(FRMS_QUEUE_SCOPE_BATCH).toBeLessThanOrEqual(2);
+  });
+
+  it('seleciona somente filas FRMS prontas e preserva recuperação de itens PROCESSING obsoletos', () => {
+    const sql = compactSql(buildRunnableFrmsQueueScopesQuery());
+    expect(sql).toContain("status IN ('PENDING', 'FAILED')");
+    expect(sql).toContain("available_at <= datetime('now')");
+    expect(sql).toContain("status = 'PROCESSING'");
+    expect(sql).toContain("updated_at < datetime('now', '-30 minutes')");
+    expect(sql).toContain('UNION');
+    expect(sql).toContain('ORDER BY scope_key ASC LIMIT ?');
+    expect(sql).not.toContain("status != 'SUCCEEDED'");
   });
 });
 
