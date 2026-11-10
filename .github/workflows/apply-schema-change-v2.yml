@@ -185,7 +185,7 @@ jobs:
             echo 'D1_LEGACY_QH_INDEPENDENT_ARCHIVE_PROOF_MISSING' >&2
             exit 1
           }
-          preflight="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "
+          preflight="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
             SELECT
               (SELECT COUNT(*) FROM \"_backup_qh_tmp\") AS source_rows,
               (SELECT COUNT(*) FROM pragma_foreign_key_check) AS global_violations,
@@ -219,7 +219,7 @@ jobs:
           # Never print rows: they contain historical qualification records.
           rows_file="$RUNNER_TEMP/dr-legacy-qh-before-rows.json"
           trap 'rm -f "$rows_file"' EXIT
-          npx wrangler d1 execute airtrust-db --env production --remote --json \
+          npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json \
             --command 'SELECT * FROM "_backup_qh_tmp" ORDER BY id;' > "$rows_file"
           node -e '
             const fs = require("fs");
@@ -1022,7 +1022,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$EXPECTED_ROWSET_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
-          postflight="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "
+          postflight="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
             SELECT
               (SELECT COUNT(*) FROM \"_archive_qh_fk_20261110\") AS archived_rows,
               (SELECT COUNT(*) FROM sqlite_master WHERE name='_backup_qh_tmp') AS former_source_present,
@@ -1046,7 +1046,7 @@ jobs:
           '
           rows_file="$RUNNER_TEMP/dr-legacy-qh-after-rows.json"
           trap 'rm -f "$rows_file"' EXIT
-          npx wrangler d1 execute airtrust-db --env production --remote --json \
+          npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json \
             --command 'SELECT * FROM "_archive_qh_fk_20261110" ORDER BY id;' > "$rows_file"
           node -e '
             const fs = require("fs");
