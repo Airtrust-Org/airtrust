@@ -78,8 +78,8 @@ async function assertPinnedProduction() {
 
 async function getLearnerSession() {
   const email = String(process.env.QA_LEARNER_EMAIL || 'qa.lms.202611@airtrust.online').trim();
-  const password = String(process.env.QA_LEARNER_PASSWORD || 'AirTrust_QA_202611_Lms!');
-  assert(email && password, 'LEARNER_CREDENTIALS_MISSING');
+  const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
+  assert(email && password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
 
   const logged = await login(API, email, password);
   let token = extractAccessToken(logged);
@@ -174,10 +174,11 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
         (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
       );
       if (match && Number(match.id) > 0) {
-        // Se a matrícula já estiver em status CONCLUIDO (ex: ciclo concluído em execução ou navegador anterior),
-        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e evitar concorrência.
-        if (String(match.status || '').toUpperCase() === 'CONCLUIDO') {
-          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} já concluída em ciclo anterior. Rematriculando em novo ciclo auditado para isolamento...`);
+        // Se a matrícula já possuir progresso ou histórico prévio (ex: CONCLUIDO, EM_ANDAMENTO por outro navegador ou ciclo anterior),
+        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e percurso integral a partir do zero (0%).
+        const currentStatus = String(match.status || '').toUpperCase();
+        if (currentStatus !== 'NAO_INICIADO' && currentStatus !== 'CANCELADO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
           const authToUse = adminToken || token;
           const remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
             method: 'POST',
@@ -190,8 +191,8 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
           if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
             return Number(remat.json.data.matricula_id);
           }
-        } else if (match.status !== 'CANCELADO') {
-          console.log(`[LMS_HOMOLOGATION] Matrícula ativa pré-existente reutilizada: id=${match.id}`);
+        } else if (currentStatus === 'NAO_INICIADO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula virgem (NAO_INICIADO) reutilizada: id=${match.id}`);
           return Number(match.id);
         }
       }

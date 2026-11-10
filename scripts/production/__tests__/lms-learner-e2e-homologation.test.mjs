@@ -174,7 +174,7 @@ test('enrollLearner reuses existing active enrollment from minhas-ead', async ()
         return new Response(
           JSON.stringify({
             success: true,
-            data: [{ id: 88, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+            data: [{ id: 88, curso_id: 67, status: 'NAO_INICIADO', deleted_at: null }],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
@@ -537,6 +537,42 @@ test('adversarial: enrollLearner triggers rematricular when course is already CO
 
     const id = await enrollLearner('learner-token', 67, 193);
     assert.equal(id, 671);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, 'POST');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('adversarial: enrollLearner triggers rematricular when enrollment is EM_ANDAMENTO (isolamento de navegador)', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 670, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/670/rematricular')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 672, status: 'NAO_INICIADO', ciclo: 3 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 193);
+    assert.equal(id, 672);
     assert.equal(calls.length, 2);
     assert.equal(calls[1].method, 'POST');
   } finally {
