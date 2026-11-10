@@ -126,6 +126,8 @@ jobs:
       HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
       QA_LEARNER_EMAIL: qa.lms.202611@airtrust.online
       QA_LEARNER_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       HOMOLOGATION_COURSE_TIMEOUT_MS: '45000'
     steps:
       - uses: actions/checkout@v7

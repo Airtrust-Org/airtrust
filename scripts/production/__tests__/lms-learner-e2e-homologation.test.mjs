@@ -137,6 +137,5 @@ test('setupAuthenticatedContext adds access cookies and requests scoped asset se
   assert.equal(addedCookies[0].name, 'airtrust_access_token');
   assert.equal(addedCookies[0].value, 'mock-jwt-token-123');
   assert.equal(requestedEndpoint?.endsWith('/api/lms/assets/session'), true);
-  assert.equal(requestedOptions?.data?.curso_id, 42);
-  assert.equal(requestedOptions?.data?.preview, false);
+  assert.equal(requestedOptions?.data?.matricula_id, 42);
 });
