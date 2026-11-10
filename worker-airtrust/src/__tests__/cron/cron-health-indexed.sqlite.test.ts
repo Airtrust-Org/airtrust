@@ -35,6 +35,11 @@ describe('cron health D1 overloaded mitigation (#2149)', () => {
     items.run('frms-reprocess', 'empresa:0002', 'ready', 'PENDING', '2026-01-01 00:00:00');
     items.run('frms-reprocess', 'empresa:0003', 'delayed', 'FAILED', '2999-01-01 00:00:00');
     items.run('frms-reprocess', 'empresa:0004', 'stale', 'PROCESSING', '2026-01-01 00:00:00');
+    // A stale durable state alone is insufficient: the PROCESSING item itself
+    // must be older than the 30-minute recovery threshold.
+    db.database.prepare(`UPDATE cron_job_items
+      SET updated_at = datetime('now', '-40 minutes')
+      WHERE job_name = 'frms-reprocess' AND scope_key = 'empresa:0004'`).run();
     db.database.prepare(`INSERT INTO cron_job_state (job_name, scope_key, last_started_at, last_success_at)
       VALUES ('frms-reprocess', 'empresa:0004', datetime('now', '-40 minutes'), datetime('now', '-1 hour'))`).run();
 
