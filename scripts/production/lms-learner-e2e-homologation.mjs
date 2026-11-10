@@ -109,12 +109,31 @@ async function getLearnerSession() {
   return { token, funcionarioId, email };
 }
 
-async function listCourses(token) {
+async function listCourses(learnerToken) {
+  let catalogToken = learnerToken;
+  const adminEmail = String(
+    process.env.PROD_SMOKE_EMAIL || process.env.QA_EXAMINER_ADMIN_EMAIL || '',
+  ).trim();
+  const adminPassword = String(
+    process.env.PROD_SMOKE_PASSWORD || process.env.QA_EXAMINER_ADMIN_PASSWORD || '',
+  );
+
+  if (adminEmail && adminPassword) {
+    try {
+      const logged = await login(API, adminEmail, adminPassword);
+      let t = extractAccessToken(logged);
+      const sel = await selectEmpresa(API, t, TARGET_COMPANY_ID);
+      if (sel.status === 200) catalogToken = extractAccessToken(sel.json);
+    } catch (err) {
+      console.warn('[LMS_HOMOLOGATION] Fallback para token de aluno na listagem do catálogo:', err.message);
+    }
+  }
+
   const out = [];
   const limit = 200;
   for (let page = 1; page <= 20; page += 1) {
     const r = await fetchJson(`${API}/api/lms/cursos?page=${page}&limit=${limit}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${catalogToken}` },
     });
     assert(r.status === 200, `LMS_COURSES_HTTP_${r.status}`);
     const rows = Array.isArray(r.json?.data) ? r.json.data : [];
@@ -152,7 +171,7 @@ async function getMatriculaDetail(token, matriculaId) {
   return res.json?.data || {};
 }
 
-export async function setupAuthenticatedContext(context, token, cursoId = null) {
+export async function setupAuthenticatedContext(context, token, matriculaId = null) {
   const apiHost = new URL(API).hostname;
   const appHost = new URL(APP).hostname;
   const domains = [apiHost, appHost].filter((v, i, a) => a.indexOf(v) === i);
@@ -170,15 +189,15 @@ export async function setupAuthenticatedContext(context, token, cursoId = null) 
     ]);
   }
 
-  if (cursoId) {
+  if (matriculaId) {
     const assetRes = await context.request.post(`${API}/api/lms/assets/session`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      data: { curso_id: cursoId, preview: false },
+      data: { matricula_id: matriculaId },
     });
-    assert(assetRes.ok(), `ASSET_SESSION_HTTP_${cursoId}_${assetRes.status()}`);
+    assert(assetRes.ok(), `ASSET_SESSION_HTTP_${matriculaId}_${assetRes.status()}`);
   }
 }
 
@@ -270,7 +289,7 @@ async function drivePptxCourseInBrowser({
     ignoreHTTPSErrors: true,
   });
 
-  await setupAuthenticatedContext(context, token, course.id);
+  await setupAuthenticatedContext(context, token, matriculaId);
 
   let page = await context.newPage();
   await page.addInitScript((jwt) => {
@@ -379,7 +398,7 @@ async function drivePptxCourseInBrowser({
   // Reopen in real browser to verify no status or progress downgrade
   const reopenBrowser = await browserEngine.launch({ headless: true });
   const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
-  await setupAuthenticatedContext(reopenContext, token, course.id);
+  await setupAuthenticatedContext(reopenContext, token, matriculaId);
   const reopenPage = await reopenContext.newPage();
   await reopenPage.addInitScript((jwt) => {
     try {
@@ -443,7 +462,7 @@ async function driveScormCourseInBrowser({
   });
 
   // Setup authenticated cookies & scoped asset session in Playwright context
-  await setupAuthenticatedContext(context, token, course.id);
+  await setupAuthenticatedContext(context, token, matriculaId);
 
   let page = await context.newPage();
   const launchUrl = `${API}/api/lms/scorm/launch/${matriculaId}`;
@@ -626,7 +645,7 @@ async function driveScormCourseInBrowser({
   // Real browser reopen check in new isolated session
   const reopenBrowser = await browserEngine.launch({ headless: true });
   const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
-  await setupAuthenticatedContext(reopenContext, token, course.id);
+  await setupAuthenticatedContext(reopenContext, token, matriculaId);
   const reopenPage = await reopenContext.newPage();
   await reopenPage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
   await reopenPage.waitForTimeout(1000);
