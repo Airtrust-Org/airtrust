@@ -1,0 +1,197 @@
+name: Production LMS Learner Homologation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: 'Exact Worker SHA currently deployed to production'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type AIRTRUST_PRODUCTION_LMS_LEARNER_HOMOLOGATION'
+        required: true
+        type: string
+      course_ids:
+        description: 'Optional comma-separated active course IDs for focused run (empty for all)'
+        required: false
+        type: string
+        default: ''
+      action:
+        description: 'all (provision + certify), provision (account only), certify (e2e only)'
+        required: false
+        type: choice
+        options:
+          - all
+          - provision
+          - certify
+        default: all
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: write
+
+concurrency:
+  group: production-lms-learner-homologation
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PROD_API_BASE_URL: https://api.airtrust.online
+  TARGET_COMPANY_ID: '6'
+
+jobs:
+  guard:
+    name: Guard production LMS learner homologation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      expected_sha: ${{ steps.validate.outputs.expected_sha }}
+      course_ids: ${{ steps.validate.outputs.course_ids }}
+      action: ${{ steps.validate.outputs.action }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Validate dispatch request
+        id: validate
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_SHA: ${{ inputs.expected_production_sha }}
+          COURSE_IDS: ${{ inputs.course_ids }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_ONLY >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_PRODUCTION_LMS_LEARNER_HOMOLOGATION' ]] || { echo CONFIRMATION_REJECTED >&2; exit 1; }
+          expected="${EXPECTED_SHA,,}"
+          [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          git cat-file -e "$expected^{commit}"
+          git merge-base --is-ancestor "$expected" HEAD
+
+          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
+          echo "course_ids=$COURSE_IDS" >> "$GITHUB_OUTPUT"
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release gates for exact production SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ steps.validate.outputs.expected_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+  provision:
+    name: Provision synthetic QA learner
+    needs: guard
+    if: needs.guard.outputs.action == 'all' || needs.guard.outputs.action == 'provision'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Provision synthetic learner account
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
+          QA_LEARNER_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: node scripts/production/provision-synthetic-qa-learner.mjs --apply
+
+  certify:
+    name: Authenticated learner E2E
+    needs: [guard, provision]
+    if: always() && needs.guard.result == 'success' && (needs.guard.outputs.action == 'all' || needs.guard.outputs.action == 'certify') && (needs.provision.result == 'success' || needs.provision.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
+      HOMOLOGATION_BROWSER: ${{ matrix.browser }}
+      HOMOLOGATION_COURSE_IDS: ${{ needs.guard.outputs.course_ids }}
+      HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
+      QA_LEARNER_EMAIL: qa.lms.202611@airtrust.online
+      QA_LEARNER_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      HOMOLOGATION_COURSE_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright system dependencies
+        timeout-minutes: 8
+        run: npx playwright install-deps ${{ matrix.browser }}
+      - name: Install Playwright browser
+        timeout-minutes: 8
+        run: npx playwright install ${{ matrix.browser }}
+      - name: Run authenticated learner E2E homologation
+        id: certify
+        shell: bash
+        run: |
+          set +e
+          node scripts/production/lms-learner-e2e-homologation.mjs
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          test -s "$HOMOLOGATION_REPORT_PATH"
+
+      - name: Publish homologation step summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -s "$HOMOLOGATION_REPORT_PATH" ]]; then
+            echo "## LMS Learner Homologation — $HOMOLOGATION_BROWSER" >> "$GITHUB_STEP_SUMMARY"
+            echo "Report missing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const r = JSON.parse(fs.readFileSync(process.env.HOMOLOGATION_REPORT_PATH, 'utf8'));
+          console.log(`## Matriz de Homologação LMS — ${r.browser.toUpperCase()}`);
+          console.log('');
+          console.log(`- **Total de Cursos Testados:** \`${r.total_courses}\``);
+          console.log(`- **PASS:** \`${r.pass_count}\``);
+          console.log(`- **FAIL:** \`${r.fail_count}\``);
+          console.log(`- **BLOQUEADO:** \`${r.blocked_count}\``);
+          console.log('');
+          console.log('| ID | Título | Tipo | Edição / SHA | Política | Matrícula | Percurso | Retomada | Fixações | Finalização | Pós-Conclusão | Qualificação | Certificado | Sem Downgrade | Status | Evidência |');
+          console.log('| ---: | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | --- |');
+          for (const item of r.results) {
+            const sha = String(item.edition_sha || 'n/a').slice(0, 8);
+            console.log(`| ${item.course_id} | ${item.titulo} | ${item.tipo_conteudo} | \`${sha}\` | ${item.policy} | ${item.matricula_ok ? 'OK' : 'Falha'} | ${item.percurso_ok ? 'OK' : 'Falha'} | ${item.resumed_ok ? 'OK' : 'Falha'} | ${item.avaliacao_ok ? 'OK' : 'Falha'} | ${item.finalizacao_ok ? 'OK' : 'Falha'} | ${item.status_pos_conclusao} | ${item.qualificacao_gerada} | ${item.certificado_emitido} | ${item.reabertura_sem_downgrade ? 'OK' : 'Falha'} | **${item.status}** | ${item.reason || 'Concluído'} |`);
+          }
+          NODE
+
+      - name: Upload sanitized homologation artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-learner-homologation-${{ matrix.browser }}-${{ needs.guard.outputs.expected_sha }}
+          path: ${{ env.HOMOLOGATION_REPORT_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce zero failure gate
+        shell: bash
+        run: |
+          rc="${{ steps.certify.outputs.rc }}"
+          if [[ -n "$rc" && "$rc" -ne 0 ]]; then
+            echo "LMS homologation failed with return code $rc" >&2
+            exit "$rc"
+          fi
