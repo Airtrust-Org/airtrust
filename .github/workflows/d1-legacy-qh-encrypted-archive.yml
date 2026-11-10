@@ -1,0 +1,125 @@
+name: D1 Legacy QH Archive — Encrypted Read-only
+
+# Targeted 525-row D1 read. No full-database export, schema change, or D1 write.
+# The only uploaded artifact is RSA+AES-GCM encrypted; private key stays off CI.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA reviewed for this read-only operation
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_QH_ARCHIVE_ONLY_525
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-production-legacy-qh-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Verify and encrypt historic QH rows without production writes
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate source SHA and manual scope
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$CONFIRMATION" == 'AIRTRUST_QH_ARCHIVE_ONLY_525' ]]
+
+      - name: Checkout exact main
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install declared Wrangler dependency
+        run: npm ci
+
+      - name: Guard read-only token and archive public key
+        env:
+          CLOUDFLARE_D1_BACKUP_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ARCHIVE_PUBLIC_KEY_B64: ${{ vars.D1_QH_ARCHIVE_PUBLIC_KEY_PEM_B64 }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_D1_BACKUP_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          [[ -n "$ARCHIVE_PUBLIC_KEY_B64" ]] || { echo 'DR_QH_PUBLIC_KEY_MISSING' >&2; exit 1; }
+          ARCHIVE_PUBLIC_KEY_B64="$ARCHIVE_PUBLIC_KEY_B64" node -e '
+            const crypto=require("crypto");
+            const pem=Buffer.from(process.env.ARCHIVE_PUBLIC_KEY_B64,"base64").toString("utf8");
+            const pub=crypto.createPublicKey(pem);
+            if(pub.asymmetricKeyType!=="rsa" || pub.asymmetricKeyDetails.modulusLength<3072) {
+              throw Error("DR_QH_PUBLIC_KEY_TOO_WEAK");
+            }
+          '
+
+      - name: Verify exactly one known historic FK residue
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          result="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "
+            SELECT
+              (SELECT COUNT(*) FROM \"_backup_qh_tmp\") AS source_rows,
+              (SELECT COUNT(*) FROM pragma_foreign_key_check) AS total_violations,
+              (SELECT COUNT(*) FROM pragma_foreign_key_check
+                WHERE \"table\"='_backup_qh_tmp' AND parent='funcionarios_backup' AND fkid=0) AS expected_violations,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='funcionarios_backup') AS parent_present,
+              (SELECT COUNT(*) FROM sqlite_master
+                WHERE sql LIKE '%_backup_qh_tmp%' AND name != '_backup_qh_tmp'
+                  AND tbl_name != '_backup_qh_tmp') AS dependent_objects;
+          ")"
+          printf '%s' "$result" | node -e '
+            let d="";
+            process.stdin.on("data",c=>d+=c);
+            process.stdin.on("end",()=>{
+              const r=JSON.parse(d)?.[0]?.results?.[0];
+              if (!r || r.source_rows!==525 || r.total_violations!==525 ||
+                  r.expected_violations!==525 || r.parent_present!==0 ||
+                  r.dependent_objects!==0) {
+                console.error("DR_QH_SCHEMA_OR_FK_DRIFT");
+                process.exit(1);
+              }
+            });
+          '
+
+      - name: Read only 525 rows and upload encrypted package
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ARCHIVE_PUBLIC_KEY_B64: ${{ vars.D1_QH_ARCHIVE_PUBLIC_KEY_PEM_B64 }}
+        run: |
+          set -euo pipefail
+          rows_file="$RUNNER_TEMP/dr-qh-plaintext-rows.json"
+          encrypted_file="$RUNNER_TEMP/encrypted-legacy-qh.json"
+          trap 'rm -f "$rows_file"' EXIT
+          npx wrangler d1 execute airtrust-db --env production --remote --json \
+            --command 'SELECT id,funcionario_id,qualificacao_id,tipo_codigo,codigo,categoria,validade,numero_certificado,orgao_emissor,observacoes,arquivo_url,created_at,updated_at,deleted_at FROM "_backup_qh_tmp" ORDER BY id;' > "$rows_file"
+          node scripts/production/legacy-qh-encrypted-transfer.mjs pack \
+            "$rows_file" "$ARCHIVE_PUBLIC_KEY_B64" "$encrypted_file"
+          test -s "$encrypted_file"
+
+      - name: Upload encrypted archive only
+        uses: actions/upload-artifact@v7
+        with:
+          name: d1-legacy-qh-encrypted-${{ github.sha }}
+          path: ${{ runner.temp }}/encrypted-legacy-qh.json
+          if-no-files-found: error
+          retention-days: 30
