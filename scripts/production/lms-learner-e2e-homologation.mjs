@@ -283,22 +283,24 @@ export async function setupAuthenticatedContext(context, token, matriculaId = nu
   }
 }
 
-async function checkLearnerQualifications(token, funcionarioId, cursoId) {
+export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null) {
   const res = await fetchJson(`${API}/api/qualificacoes/funcionario/${funcionarioId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (res.status === 200 && Array.isArray(res.json?.data)) {
     const list = res.json.data;
-    // Look for qualification related to this course or latest completed
-    const matching = list.find(
-      (q) => Number(q.lms_curso_id || 0) === cursoId || String(q.status || '').toUpperCase() === 'CONCLUIDA',
-    );
-    return matching || list[0] || null;
+    if (qualificacaoHistoricoId) {
+      const exact = list.find((q) => Number(q.id) === Number(qualificacaoHistoricoId));
+      if (exact) return exact;
+    }
+    // Look for qualification related to this course
+    const matching = list.find((q) => Number(q.lms_curso_id || 0) === cursoId);
+    return matching || null;
   }
   return null;
 }
 
-async function checkCertificate(token, qualificacaoHistoricoId) {
+export async function checkCertificate(token, qualificacaoHistoricoId) {
   if (!qualificacaoHistoricoId) return null;
   const res = await fetchJson(`${API}/api/certificados/historico/${qualificacaoHistoricoId}/certificados`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -474,7 +476,7 @@ async function drivePptxCourseInBrowser({
 
   // Qualification and Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
-  const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
   // Reopen in real browser to verify no status or progress downgrade
@@ -593,10 +595,10 @@ async function driveScormCourseInBrowser({
       break;
     }
 
-    // Interruption & resume checkpoint at step 4
-    if (!checkpointTested && steps === 4) {
+    // Interruption & resume checkpoint
+    if (!checkpointTested && steps >= 3 && Boolean(runtimeState?.location)) {
       checkpointTested = true;
-      const savedLocation = runtimeState?.location;
+      const savedLocation = runtimeState.location;
       // Close page and re-open in authenticated context
       await page.close();
       const resumePage = await context.newPage();
@@ -604,14 +606,19 @@ async function driveScormCourseInBrowser({
       const resumeIframe = resumePage.locator('#scorm-frame');
       await resumeIframe.waitFor({ state: 'attached', timeout: 15_000 }).catch(() => null);
 
-      const restoredLocation = await resumePage.evaluate(() => {
-        const api = window.API || window.API_1484_11;
-        if (!api) return null;
-        return api.LMSGetValue ? api.LMSGetValue('cmi.core.lesson_location') : api.GetValue('cmi.location');
-      }).catch(() => null);
-
-      if (savedLocation && restoredLocation === savedLocation) {
-        resumedVerified = true;
+      await resumePage.waitForTimeout(1500);
+      let restoredLocation = null;
+      for (let retries = 0; retries < 10; retries += 1) {
+        restoredLocation = await resumePage.evaluate(() => {
+          const api = window.API || window.API_1484_11;
+          if (!api) return null;
+          return api.LMSGetValue ? api.LMSGetValue('cmi.core.lesson_location') : api.GetValue('cmi.location');
+        }).catch(() => null);
+        if (savedLocation && String(restoredLocation) === String(savedLocation)) {
+          resumedVerified = true;
+          break;
+        }
+        await resumePage.waitForTimeout(500);
       }
       // Continue on the resumed page
       page = resumePage;
@@ -714,14 +721,35 @@ async function driveScormCourseInBrowser({
   await page.waitForTimeout(1000);
   await browser.close();
 
-  // Verification in backend
-  const detail = await getMatriculaDetail(token, matriculaId);
+  // Call official finalization endpoint for learner
+  try {
+    const finalizeRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/finalizar`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log(`[LMS_HOMOLOGATION] Finalizar matrícula #${matriculaId} HTTP ${finalizeRes.status}:`, JSON.stringify(finalizeRes.json?.data || finalizeRes.json?.error || {}));
+  } catch (err) {
+    console.warn(`[LMS_HOMOLOGATION] Falha ao chamar finalizar para matrícula #${matriculaId}:`, err.message);
+  }
+
+  // Poll for completion persistence in backend (up to 8s)
+  let detail = await getMatriculaDetail(token, matriculaId);
+  for (let poll = 0; poll < 8; poll += 1) {
+    if (String(detail.status).toUpperCase() === 'CONCLUIDO' && Number(detail.progresso_pct || 0) === 100) {
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+    detail = await getMatriculaDetail(token, matriculaId);
+  }
   const isConcluido = String(detail.status).toUpperCase() === 'CONCLUIDO';
   const progress100 = Number(detail.progresso_pct || 0) === 100;
 
   // Qualification & Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
-  const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
   // Real browser reopen check in new isolated session

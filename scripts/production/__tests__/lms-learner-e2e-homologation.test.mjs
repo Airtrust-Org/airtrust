@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  checkCertificate,
+  checkLearnerQualifications,
   enrollLearner,
   evaluateHomologationVerdict,
   resolveAdminToken,
@@ -14,6 +16,8 @@ test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologat
   assert.equal(typeof setupAuthenticatedContext, 'function');
   assert.equal(typeof enrollLearner, 'function');
   assert.equal(typeof resolveAdminToken, 'function');
+  assert.equal(typeof checkLearnerQualifications, 'function');
+  assert.equal(typeof checkCertificate, 'function');
 });
 
 test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass', () => {
@@ -283,5 +287,70 @@ test('resolveAdminToken rejects admin token when tenant selection fails (TENANT_
     else delete process.env.PROD_SMOKE_EMAIL;
     if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
     else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
+test('checkLearnerQualifications prioritizes qualificacaoHistoricoId and course matching', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/qualificacoes/funcionario/193')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [
+              { id: 10, lms_curso_id: 50, status: 'CONCLUIDA' },
+              { id: 20, lms_curso_id: 67, status: 'CONCLUIDA' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const exact = await checkLearnerQualifications('token', 193, 50, 20);
+    assert.equal(exact?.id, 20);
+
+    const byCourse = await checkLearnerQualifications('token', 193, 67);
+    assert.equal(byCourse?.id, 20);
+
+    const notFound = await checkLearnerQualifications('token', 193, 999);
+    assert.equal(notFound, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkCertificate validates PDF buffer and computes sha256', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/certificados/historico/20/certificados')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 701 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/701')) {
+        const dummyPdf = Buffer.from('%PDF-1.4 dummy certificate content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 20);
+    assert.equal(cert?.id, 701);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
