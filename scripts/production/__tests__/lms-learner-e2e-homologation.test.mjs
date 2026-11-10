@@ -240,3 +240,48 @@ test('enrollLearner reactivates cancelled enrollment on 409 LMS_REMATRICULATION_
     globalThis.fetch = originalFetch;
   }
 });
+
+test('resolveAdminToken rejects admin token when tenant selection fails (TENANT_ACCESS_DENIED)', async () => {
+  const originalFetch = globalThis.fetch;
+  const prevEmail = process.env.PROD_SMOKE_EMAIL;
+  const prevPass = process.env.PROD_SMOKE_PASSWORD;
+  try {
+    process.env.PROD_SMOKE_EMAIL = 'admin@example.com';
+    process.env.PROD_SMOKE_PASSWORD = 'password123';
+
+    const makeJwt = (payload) => {
+      const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.fake_sig`;
+    };
+
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        return new Response(
+          JSON.stringify({
+            token: makeJwt({ id: 1, role: 'admin', empresa_id: 99 }),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/auth/select-empresa')) {
+        return new Response(
+          JSON.stringify({
+            error: 'Acesso negado para a empresa selecionada',
+            code: 'TENANT_ACCESS_DENIED',
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const token = await resolveAdminToken();
+    assert.equal(token, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevEmail !== undefined) process.env.PROD_SMOKE_EMAIL = prevEmail;
+    else delete process.env.PROD_SMOKE_EMAIL;
+    if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
+    else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});

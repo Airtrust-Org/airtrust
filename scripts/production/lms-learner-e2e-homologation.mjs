@@ -125,12 +125,18 @@ export async function resolveAdminToken() {
   try {
     const logged = await login(API, adminEmail, adminPassword);
     let t = extractAccessToken(logged);
-    const sel = await selectEmpresa(API, t, TARGET_COMPANY_ID);
-    if (sel.status === 200) t = extractAccessToken(sel.json);
+    const claimsBefore = decodeJwtPayload(t);
+    if (Number(claimsBefore?.empresa_id) !== TARGET_COMPANY_ID) {
+      const sel = await selectEmpresa(API, t, TARGET_COMPANY_ID);
+      assert(sel.status === 200, `SELECT_EMPRESA_HTTP_${sel.status}`);
+      t = extractAccessToken(sel.json);
+    }
+    const claimsAfter = decodeJwtPayload(t);
+    assert(Number(claimsAfter?.empresa_id) === TARGET_COMPANY_ID, 'ADMIN_TOKEN_TENANT_MISMATCH');
     cachedAdminToken = t;
     return t;
   } catch (err) {
-    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa:', err.message);
+    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa no tenant alvo:', err.message);
     return null;
   }
 }
