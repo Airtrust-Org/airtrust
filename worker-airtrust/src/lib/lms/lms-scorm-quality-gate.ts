@@ -176,9 +176,37 @@ function exactIdParity(expected: string[], actual: string[]): boolean {
  * Slides whose primary kind is an image, hotspot or image sequence still need
  * a real local visual asset (checked separately).
  */
+const NON_RENDERED_STRUCTURAL_KEYS = new Set([
+  'id', 'kind', 'type', 'source', 'src', 'media', 'generated',
+  'icon', 'color', 'correct', 'required', 'requiredDecision',
+  'index', 'ordinal', 'score', 'metadata',
+]);
+
+function meaningfulVisualContent(value: unknown, depth = 0): boolean {
+  if (depth > 5) return false;
+  if (typeof value === 'string') return /[\p{L}\p{N}]/u.test(value.trim());
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(item => meaningfulVisualContent(item, depth + 1));
+  }
+  const record = asRecord(value);
+  if (!record) return false;
+  return Object.entries(record).some(([key, nested]) =>
+    !NON_RENDERED_STRUCTURAL_KEYS.has(key) && meaningfulVisualContent(nested, depth + 1));
+}
+
 function hasStructuredVisual(slide: Record<string, unknown>): boolean {
+  // Count only genuinely populated structures, never padded empty arrays.
+  // For grouped checklists, a heading alone is insufficient without items.
   const list = (key: string, minimum: number): boolean =>
-    Array.isArray(slide[key]) && slide[key].length >= minimum;
+    Array.isArray(slide[key]) && slide[key].length >= minimum &&
+    slide[key].every(item => meaningfulVisualContent(item));
+  const groups = (): boolean => list('groups', 2) &&
+    (slide.groups as unknown[]).every(group => {
+      const record = asRecord(group);
+      return record !== null && Array.isArray(record.items) &&
+        record.items.length > 0 && record.items.every(item => meaningfulVisualContent(item));
+    });
   switch (slide.kind) {
     case 'cover':
       return typeof slide.title === 'string' && slide.title.trim().length > 0 &&
@@ -197,7 +225,7 @@ function hasStructuredVisual(slide: Record<string, unknown>): boolean {
     case 'warning':
       return list('items', 2);
     case 'checklist_groups':
-      return list('groups', 2);
+      return groups();
     case 'scenario':
       return slide.requiredDecision === true &&
         typeof slide.question === 'string' && slide.question.trim().length > 0 &&

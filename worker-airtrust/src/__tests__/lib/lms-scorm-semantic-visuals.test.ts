@@ -60,6 +60,44 @@ describe('M8 visual gate: existing structured layout counts as semantic visual',
     expect(result.errors.join(' ')).toContain('1 tela(s) sem recurso visual local');
   });
 
+  it.each([
+    { kind: 'cards', cards: ['', ''] },
+    { kind: 'checklist', items: [null, null] },
+    { kind: 'checklist_groups', groups: [{}, {}] },
+    { kind: 'checklist_groups', groups: [
+      { title: 'Primeiro grupo', items: [] },
+      { title: 'Segundo grupo', items: [] },
+    ] },
+    { kind: 'scenario', requiredDecision: true, question: 'Qual alternativa?',
+      scenarioOptions: [{ text: '' }, { text: ' ' }] },
+    { kind: 'practice', practiceOptions: [{ correct: true }, { correct: false }] },
+    { kind: 'process', steps: [{ label: '' }, { label: '' }] },
+    { kind: 'compare', columns: [{}, {}] },
+    { kind: 'matrix', rows: [[null], [null]], headers: ['Coluna 1', 'Coluna 2'] },
+  ])('rejects padded placeholders, not merely empty arrays (%s)', candidate => {
+    const fake = { id: 'padded', title: 'Visual incompleto', ...candidate };
+    const result = validateModernM8AuditContract(fixture([...baseSlides, fake]));
+    expect(result.status).toBe('FAIL');
+    expect(result.errors.join(' ')).toContain('1 tela(s) sem recurso visual local');
+  });
+
+  it('accepts nested populated card, process and group content', () => {
+    const populated: Slide[] = [
+      { id: 'nested-cards', kind: 'cards', title: 'Cartões',
+        cards: [{ title: 'Aprovação MEL', body: 'Cumprir procedimento' },
+          { title: 'Controle', body: 'Verificar equipamento' }] },
+      { id: 'nested-groups', kind: 'checklist_groups', title: 'Revisões',
+        groups: [{ title: 'Abertura', items: ['Inspecionar registro'] },
+          { title: 'Fechamento', items: ['Assinar documento'] }] },
+      { id: 'nested-steps', kind: 'process', title: 'Fluxo',
+        steps: [{ label: 'Analisar', description: 'Verificar item' },
+          { label: 'Decidir', description: 'Registrar decisão' }] },
+    ];
+    const result = validateModernM8AuditContract(fixture([...baseSlides, ...populated]));
+    expect(result.status).toBe('PASS');
+    expect(result.errors).toHaveLength(0);
+  });
+
   it('still requires real local media for image slides', () => {
     const result = validateModernM8AuditContract(fixture(baseSlides, { includeImage: false }));
     expect(result.status).toBe('FAIL');
