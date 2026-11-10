@@ -7,6 +7,7 @@
  */
 
 import { Hono } from 'hono';
+import { chunkByBindBudget } from '../utils/d1-bind-chunks';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
@@ -38,7 +39,7 @@ type DeduplicateRecordRow = {
   created_at: string | null;
 };
 
-type DeduplicateCandidateGroup = {
+export type DeduplicateCandidateGroup = {
   funcionario_id: number;
   qualificacao_chave: string;
   qualificacao_id: number | null;
@@ -215,7 +216,6 @@ async function buildDeduplicateCandidates(
 // `id IN (...)` chunks and run through db.batch — one all-or-nothing transaction
 // instead of one UPDATE per row, so a mid-run failure can't leave half the
 // duplicates removed and half still active.
-const DEDUPLICATE_IDS_PER_STATEMENT = 200;
 
 function buildDeduplicateRenovacaoDeRepointSql(idCount: number): string {
   const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
@@ -246,6 +246,93 @@ function buildDeduplicateRenovacaoDeSelfNullSql(idCount: number): string {
 }
 
 /**
+ * #1492: um duplicado removido pode ser o historico derivado do LMS. Sem
+ * religar, a matricula CONCLUIDA (e seu ciclo) ficaria apontando para uma
+ * qualificacao deletada. Repointa matricula/ciclo para o sobrevivente do grupo
+ * (mesma realizacao real) e herda o vinculo LMS quando o sobrevivente nao tem.
+ */
+export function buildDeduplicateLmsRepointSql(
+  idCount: number,
+): { matricula: string; ciclo: string; heranca: string } {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return {
+    matricula: `
+      UPDATE lms_matriculas
+      SET qualificacao_historico_id = ?, updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND qualificacao_historico_id IN (${placeholders})`,
+    ciclo: `
+      UPDATE lms_matricula_ciclos
+      SET qualificacao_historico_id = ?, updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND qualificacao_historico_id IN (${placeholders})`,
+    heranca: `
+      UPDATE qualificacoes_historico
+      SET lms_matricula_id = COALESCE(lms_matricula_id, (
+            SELECT r.lms_matricula_id FROM qualificacoes_historico r
+             WHERE r.empresa_id = ? AND r.id IN (${placeholders})
+               AND r.lms_matricula_id IS NOT NULL ORDER BY r.id LIMIT 1)),
+          lms_matricula_ciclo_id = COALESCE(lms_matricula_ciclo_id, (
+            SELECT r.lms_matricula_ciclo_id FROM qualificacoes_historico r
+             WHERE r.empresa_id = ? AND r.id IN (${placeholders})
+               AND r.lms_matricula_ciclo_id IS NOT NULL ORDER BY r.id LIMIT 1)),
+          updated_at = datetime('now')
+      WHERE empresa_id = ? AND id = ? AND deleted_at IS NULL`,
+  };
+}
+
+/**
+ * Monta todos os statements do batch atomico. Toda lista de ids e fatiada pelo
+ * orcamento de binds do D1 (100 parametros por statement): o teto antigo de
+ * 200 ids por UPDATE e o bind duplicado da heranca LMS estouravam em grupos
+ * grandes de duplicatas.
+ */
+export function buildDeduplicateStatements(
+  db: D1Database,
+  groups: DeduplicateCandidateGroup[],
+  empresaId: number,
+): D1PreparedStatement[] {
+  const statements: D1PreparedStatement[] = [];
+  for (const group of groups) {
+    if (group.remover_ids.length === 0) continue;
+    for (const ids of chunkByBindBudget(group.remover_ids, 3)) {
+      statements.push(
+        db
+          .prepare(buildDeduplicateRenovacaoDeRepointSql(ids.length))
+          .bind(group.manter_id, empresaId, group.manter_id, ...ids),
+      );
+    }
+    for (const ids of chunkByBindBudget(group.remover_ids, 2)) {
+      statements.push(
+        db
+          .prepare(buildDeduplicateRenovacaoDeSelfNullSql(ids.length))
+          .bind(empresaId, group.manter_id, ...ids),
+      );
+    }
+    // Heranca: ids entram duas vezes (+4 fixos) => fatias de 40 (84 binds).
+    for (const ids of chunkByBindBudget(group.remover_ids, 60)) {
+      statements.push(
+        db
+          .prepare(buildDeduplicateLmsRepointSql(ids.length).heranca)
+          .bind(empresaId, ...ids, empresaId, ...ids, empresaId, group.manter_id),
+      );
+    }
+    for (const ids of chunkByBindBudget(group.remover_ids, 2)) {
+      const lms = buildDeduplicateLmsRepointSql(ids.length);
+      statements.push(
+        db.prepare(lms.matricula).bind(group.manter_id, empresaId, ...ids),
+        db.prepare(lms.ciclo).bind(group.manter_id, empresaId, ...ids),
+      );
+    }
+  }
+  const allIds = groups.flatMap((group) => group.remover_ids);
+  for (const chunk of chunkByBindBudget(allIds, 1)) {
+    statements.push(db.prepare(buildDeduplicateSoftDeleteSql(chunk.length)).bind(empresaId, ...chunk));
+  }
+  return statements;
+}
+
+/**
  * Soft-deleta os duplicados de cada grupo, mas primeiro repointa qualquer
  * renovacao_de que apontava para um dos ids removidos — sem isso,
  * qualificacoes_historico.deleted_at != NULL ficaria referenciado por uma
@@ -265,31 +352,11 @@ async function softDeleteManyByEmpresa(
   const allIds = groups.flatMap((group) => group.remover_ids);
   if (allIds.length === 0) return 0;
 
-  const statements: D1PreparedStatement[] = [];
-
-  for (const group of groups) {
-    if (group.remover_ids.length === 0) continue;
-    statements.push(
-      db
-        .prepare(buildDeduplicateRenovacaoDeRepointSql(group.remover_ids.length))
-        .bind(group.manter_id, empresaId, group.manter_id, ...group.remover_ids),
-    );
-    statements.push(
-      db
-        .prepare(buildDeduplicateRenovacaoDeSelfNullSql(group.remover_ids.length))
-        .bind(empresaId, group.manter_id, ...group.remover_ids),
-    );
-  }
-
-  for (let offset = 0; offset < allIds.length; offset += DEDUPLICATE_IDS_PER_STATEMENT) {
-    const chunk = allIds.slice(offset, offset + DEDUPLICATE_IDS_PER_STATEMENT);
-    statements.push(
-      db.prepare(buildDeduplicateSoftDeleteSql(chunk.length)).bind(empresaId, ...chunk),
-    );
-  }
+  const statements = buildDeduplicateStatements(db, groups, empresaId);
+  const deleteStatementCount = chunkByBindBudget(allIds, 1).length;
 
   const results = await db.batch(statements);
-  const deleteResultsStart = results.length - Math.ceil(allIds.length / DEDUPLICATE_IDS_PER_STATEMENT);
+  const deleteResultsStart = results.length - deleteStatementCount;
   return results.slice(deleteResultsStart).reduce(
     (sum, result) => sum + Number((result.meta as { changes?: number } | undefined)?.changes || 0),
     0,

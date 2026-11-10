@@ -559,4 +559,49 @@ describe('PATCH /:id/status — qualification gate', () => {
 
     expect(res.status).toBe(200);
   });
+  // ── 10. DELETE /:id (cancelar) tem a mesma guarda (#1492) ───────────────────
+
+  function deleteMatricula(app: Hono<{ Bindings: Env }>, db: D1Database, id: number) {
+    return app.fetch(
+      new Request(`http://localhost/${id}`, { method: 'DELETE' }),
+      { DB: db } as Env,
+      {} as ExecutionContext,
+    );
+  }
+
+  it('DELETE rejeita 409 em matricula CONCLUIDA com qualificacao vigente e nao escreve', async () => {
+    const { db, writes } = createMockDb([
+      ['SELECT status, qualificacao_historico_id FROM lms_matriculas', { first: () => ({ status: 'CONCLUIDO', qualificacao_historico_id: 77 }) }],
+      [
+        'FROM lms_matriculas m',
+        { first: () => ({ id: 200, status: 'CONCLUIDO', funcionario_id: 10, qualificacao_historico_id: 77, curso_titulo: 'X' }) },
+      ],
+      ['FROM qualificacoes_historico', { first: () => ({ found: 1 }) }],
+    ]);
+
+    const res = await deleteMatricula(makeApp(), db, 200);
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('LMS_COMPLETED_WITH_QUALIFICATION');
+    expect(writes).toHaveLength(0);
+  });
+
+  it('DELETE continua cancelando matricula nao concluida', async () => {
+    const { db, writes } = createMockDb([
+      ['SELECT status, qualificacao_historico_id FROM lms_matriculas', { first: () => ({ status: 'NAO_INICIADO', qualificacao_historico_id: null }) }],
+      [
+        'FROM lms_matriculas m',
+        { first: () => ({ id: 200, status: 'NAO_INICIADO', funcionario_id: 10, qualificacao_historico_id: null, curso_titulo: 'X' }) },
+      ],
+      ["UPDATE lms_matriculas SET status = 'CANCELADO'", {}],
+      ['notificacoes_inapp', {}],
+      ['audit_logs', {}],
+    ]);
+
+    const res = await deleteMatricula(makeApp(), db, 200);
+
+    expect(res.status).toBe(200);
+    expect(writes.some((w) => w.includes("UPDATE lms_matriculas SET status = 'CANCELADO'"))).toBe(true);
+  });
 });
