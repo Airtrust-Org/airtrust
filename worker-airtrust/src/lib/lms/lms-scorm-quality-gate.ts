@@ -167,6 +167,59 @@ function exactIdParity(expected: string[], actual: string[]): boolean {
 }
 
 /**
+ * Rendered, structured teaching content is a semantic visual too. The M8
+ * authoring contract must not force stock imagery onto an already illustrated
+ * card, matrix, process, checklist or decision screen. These kinds are only
+ * accepted when their actual renderer inputs are present; merely claiming
+ * a kind, a caption, a release flag or a model.auditClosure never suffices.
+ *
+ * Slides whose primary kind is an image, hotspot or image sequence still need
+ * a real local visual asset (checked separately).
+ */
+function hasStructuredVisual(slide: Record<string, unknown>): boolean {
+  const list = (key: string, minimum: number): boolean =>
+    Array.isArray(slide[key]) && slide[key].length >= minimum;
+  switch (slide.kind) {
+    case 'cover':
+      return typeof slide.title === 'string' && slide.title.trim().length > 0 &&
+        list('outcomes', 2);
+    case 'objectives':
+    case 'route':
+    case 'cards':
+    case 'section':
+      return list('cards', 2);
+    case 'compare':
+      return list('columns', 2);
+    case 'matrix':
+      return list('rows', 2) && list('headers', 2);
+    case 'checklist':
+    case 'rules':
+    case 'warning':
+      return list('items', 2);
+    case 'checklist_groups':
+      return list('groups', 2);
+    case 'scenario':
+      return slide.requiredDecision === true &&
+        typeof slide.question === 'string' && slide.question.trim().length > 0 &&
+        list('scenarioOptions', 2);
+    case 'practice':
+      return list('practiceOptions', 2);
+    case 'process':
+    case 'timeline':
+    case 'topic_sequence':
+      return list('steps', 2);
+    case 'concept_map':
+      return list('nodes', 2);
+    case 'rule_exception':
+      return list('rules', 1) && list('exceptions', 1);
+    case 'bowtie':
+      return list('threats', 1) && list('barriers', 1);
+    default:
+      return false;
+  }
+}
+
+/**
  * Additional fail-closed contract for AirTrust's modern M8 authoring model.
  * Legacy packages are intentionally untouched: the checks activate only when
  * course-model.js explicitly declares AIRTRUST_TRAINING_MODEL_M8.
@@ -214,7 +267,7 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
     const refs: string[] = [];
     collectAssetRefs(slide, refs);
     const visualRefs = refs.filter((ref) => VISUAL_ASSET_RE.test(ref));
-    if (!visualRefs.length) slidesWithoutVisual += 1;
+    if (!visualRefs.length && !hasStructuredVisual(slide)) slidesWithoutVisual += 1;
     for (const ref of refs) {
       const normalized = normalizeAssetRef(ref);
       if (!normalized) continue;
@@ -225,7 +278,7 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
       }
     }
   }
-  if (slidesWithoutVisual) errors.push(`M8: ${slidesWithoutVisual} tela(s) sem recurso visual local`);
+  if (slidesWithoutVisual) errors.push(`M8: ${slidesWithoutVisual} tela(s) sem recurso visual local ou elemento visual estruturado`);
   if (externalAssets.size) errors.push(`M8: dependência(s) de mídia externa não permitida(s): ${[...externalAssets].slice(0, 5).join(', ')}`);
   if (missingAssets.size) errors.push(`M8: asset(s) de mídia ausente(s): ${[...missingAssets].slice(0, 5).join(', ')}`);
 
