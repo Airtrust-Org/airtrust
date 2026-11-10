@@ -28,7 +28,7 @@ function query(database, sql) {
 }
 function outsideRepo(path) {
   const rel = relative(REPO, path);
-  return rel !== '' && rel !== '..' && !rel.startsWith('..' + sep);
+  return rel === '..' || rel.startsWith('..' + sep);
 }
 export function prepareLegacyQhArchive({ sourceDb, archiveDir }) {
   const source = realpathSync(resolve(sourceDb));
