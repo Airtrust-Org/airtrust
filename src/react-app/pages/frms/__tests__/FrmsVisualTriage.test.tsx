@@ -148,6 +148,30 @@ describe('FRMS triagem visual sem inventar métricas', () => {
     expect(panel.getByText('Tendência crescente')).toBeInTheDocument();
   });
 
+  it('separa indicadores de qualidade de coleta dos agravantes operacionais sem mudar pontos', () => {
+    const item = baseline();
+    item.fortnight_indicator!.agravantes_aplicados = [
+      { codigo: 'SEQUENCIA_5_DIAS_OU_MAIS', descricao: 'Sequência de jornadas', impacto_score: 14 },
+      { codigo: 'CHECKIN_PENDENTE_NO_PERIODO', descricao: 'Check-in ausente', impacto_score: 10 },
+      { codigo: 'DADO_ESTIMADO_NO_PERIODO', descricao: 'Dado estimado', impacto_score: 7 },
+    ];
+    item.fortnight_indicator!.atenuadores_aplicados = [
+      { codigo: 'DADOS_COMPLETOS_DO_PERIODO', descricao: 'Dados completos', impacto_score: -4 },
+    ];
+    render(<FrmsScoreExplanation item={item} />);
+    const panel = within(screen.getByLabelText('Composição do índice'));
+    expect(panel.getByRole('note')).toHaveTextContent('sem calibração científica');
+    const quality = within(panel.getByLabelText('Qualidade e conformidade da coleta'));
+    expect(quality.getByText('Check-in ausente')).toBeInTheDocument();
+    expect(quality.getByText('Dado estimado')).toBeInTheDocument();
+    expect(quality.getByText('Dados completos')).toBeInTheDocument();
+    expect(quality.getByText('+10,0 pt')).toBeInTheDocument();
+    expect(quality.getByText('+7,0 pt')).toBeInTheDocument();
+    expect(quality.getByText('-4,0 pt')).toBeInTheDocument();
+    expect(quality.getByText(/não são medidas fisiológicas/i)).toBeInTheDocument();
+    expect(panel.getByText('Sequência de jornadas')).toBeInTheDocument();
+  });
+
   it('não transforma fonte parcial em índice zero ou porcentagem de confiança inventada', () => {
     const a = baseline();
     a.fortnight_indicator = {
