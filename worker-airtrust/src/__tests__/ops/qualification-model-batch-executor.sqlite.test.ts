@@ -193,6 +193,17 @@ describe('qualification model batch executor (local SQLite only)', () => {
     expect(summary.orphans.certificates.soft_delete_with_uploaded_file).toBe(1);
   });
 
+  it('resolves relink targets only inside tenant 6: another tenant reusing the code neither wins nor makes it ambiguous', () => {
+    db.database.exec("INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, nome, categoria, validade) VALUES (710, 1, 'NR-11', 'NR-11 outro tenant', 'EAD', 12)");
+    const { body } = makePlan(db);
+    expect(body.relinks.map((r) => [r.id, r.to.qualificacao_id])).toEqual([[4970, 700], [5275, 702]]);
+    // a truly ambiguous in-scope target is still refused
+    db.database.exec("INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, nome, categoria, validade) VALUES (711, 6, 'NR-11', 'NR-11 duplicado', 'EAD', 24)");
+    const ambiguous = makePlan(db);
+    expect(ambiguous.body.relinks.map((r) => r.id)).toEqual([5275]);
+    expect(ambiguous.summary.orphans.excluded).toMatchObject({ target_type_missing_or_ambiguous: 1 });
+  });
+
   it('produces a deterministic manifest hash regardless of read order', () => {
     expect(makePlan(db, true).manifest.plan_sha256).toBe(makePlan(db).manifest.plan_sha256);
     expect(hashBody(makePlan(db).body)).toBe(manifest.plan_sha256);
@@ -376,6 +387,22 @@ describe('qualification model batch executor (local SQLite only)', () => {
       forward(port(db), { apply: true, actor: ACTOR, sourceSha: SHA });
       db.database.exec("UPDATE qualificacoes_historico SET data_vencimento = '2035-05-05' WHERE id = 2");
       expect(back(port(db)).conflicts).toContainEqual({ kind: 'history', id: 2, reason: 'row_changed_since_plan' });
+    });
+
+    it('recovers after a partial forward run: applied ops are rolled back, untouched ops count as satisfied', () => {
+      const failing = port(db, (_sql, index) => { if (index === 2) throw new Error('SIMULATED_D1_FAILURE'); });
+      expect(() => forward(failing, { apply: true, actor: ACTOR, sourceSha: SHA })).toThrow('SIMULATED_D1_FAILURE');
+      expect(audits(db)).toHaveLength(2);
+      const report = back(port(db), { apply: true, actor: ACTOR, sourceSha: SHA });
+      expect(report.changed).toBe(2);
+      expect(report.skipped_not_applied).toBe(manifest.row_count - 2);
+      expect(report.already_applied + report.skipped_not_applied).toBe(manifest.row_count);
+      expect(report.postconditions_verified).toBe(true);
+      expect(tipos(db).filter((t) => t.validade === 24 && [600, 601, 603].includes(t.id as number))).toEqual([]);
+      const readback = back(port(db));
+      expect(readback.pending).toBe(0);
+      expect(readback.already_applied + readback.skipped_not_applied).toBe(manifest.row_count);
+      expect(readback.conflicts).toEqual([]);
     });
 
     it('is bound to the original SHA and its own hash', () => {

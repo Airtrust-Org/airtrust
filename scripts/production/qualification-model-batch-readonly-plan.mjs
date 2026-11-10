@@ -194,7 +194,8 @@ export function buildBatchPlan(inventory, { today } = {}) {
   const collided = new Set(inventory.collisions.map(Number));
   const targetByCode = new Map();
   for (const t of inventory.targets) {
-    if (Number(t.deleted) === 1) continue;
+    // only tenant-6 models resolve for tenant 6; other tenants may legitimately reuse the same code
+    if (Number(t.deleted) === 1 || Number(t.empresa_id) !== TENANT_ID) continue;
     const list = targetByCode.get(t.codigo) ?? [];
     list.push(t);
     targetByCode.set(t.codigo, list);
@@ -222,7 +223,6 @@ export function buildBatchPlan(inventory, { today } = {}) {
       const candidates = targetByCode.get(targetCode) ?? [];
       const target = candidates.length === 1 ? candidates[0] : null;
       if (!target) { bump(orphanExcluded, 'target_type_missing_or_ambiguous'); continue; }
-      if (Number(target.empresa_id) !== TENANT_ID) { bump(orphanExcluded, 'target_type_not_tenant_6'); continue; }
       const targetValidity = asInt(target.validade) ?? 0;
       // a target that is itself in the batch would be set to 24; any other target must already hold a positive validity
       const planned = modelById.get(Number(target.id));

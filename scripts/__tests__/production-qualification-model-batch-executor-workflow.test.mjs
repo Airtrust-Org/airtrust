@@ -74,6 +74,7 @@ test('dry-run steps use the dry-run confirmation and the readback demands pendin
   assert.match(workflow, /DRY_RUN_CONFLICTS_ABORT/);
   assert.match(workflow, /READBACK_PENDING_NOT_ZERO/);
   assert.match(workflow, /READBACK_ALREADY_APPLIED_MISMATCH/);
+  assert.match(workflow, /\.already_applied \+ \.skipped_not_applied/);
   assert.match(workflow, /READBACK_CONFLICTS/);
   assert.match(workflow, /ROLLBACK_HASH_INPUT_MISMATCH/);
 });

@@ -303,7 +303,7 @@ jobs:
           node "$EXECUTOR" "${args[@]}" --expected-count="$EXPECTED_COUNT" > "$RUNNER_TEMP/modelbatch/out/readback-report.json"
           r="$RUNNER_TEMP/modelbatch/out/readback-report.json"
           [[ "$(jq -r .pending "$r")" == 0 ]] || { echo READBACK_PENDING_NOT_ZERO >&2; exit 1; }
-          [[ "$(jq -r .already_applied "$r")" == "$EXPECTED_COUNT" ]] || { echo READBACK_ALREADY_APPLIED_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r '.already_applied + .skipped_not_applied' "$r")" == "$EXPECTED_COUNT" ]] || { echo READBACK_ALREADY_APPLIED_MISMATCH >&2; exit 1; }
           [[ "$(jq -r .conflict_count "$r")" == 0 ]] || { echo READBACK_CONFLICTS >&2; exit 1; }
 
       - name: Publish counts-only summary
