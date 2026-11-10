@@ -543,3 +543,72 @@ test('adversarial: enrollLearner triggers rematricular when course is already CO
     globalThis.fetch = originalFetch;
   }
 });
+
+test('adversarial: evaluateAssessmentPolicy fails when score is below cut even if status is passed (contradictory score)', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'passed',
+    scoreRaw: 20,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when policy is EXTERNAL and externalProofVerified is false', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'EXTERNAL',
+    lessonStatus: 'passed',
+    externalProofVerified: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'EXTERNAL_PROOF_MISSING');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when policy is UNKNOWN', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'UNRECOGNIZED_POLICY',
+    lessonStatus: 'completed',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'UNKNOWN_ASSESSMENT_POLICY');
+});
+
+test('adversarial: evaluateCoursePath fails when units jump (skipping intermediate units)', () => {
+  // Learner visited only unit 1 and unit 45 (e.g. via direct jump), but totalUnits is 45
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: new Set([1, 45]),
+    atLastUnit: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateCoursePath fails when totalUnits is 0 or negative', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 0,
+    visitedUnits: 0,
+    atLastUnit: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INVALID_TOTAL_UNITS');
+});
+
+test('evaluateCoursePath passes with distinctUnitsVisited set covering all units', () => {
+  const all45 = new Set(Array.from({ length: 45 }, (_, i) => i + 1));
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: all45,
+    atLastUnit: true,
+    totalActivities: 2,
+    completedActivities: 2,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});

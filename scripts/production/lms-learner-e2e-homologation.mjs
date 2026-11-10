@@ -350,6 +350,7 @@ export function evaluateAssessmentPolicy({
   scoreRaw = null,
   scoreScaled = null,
   masteryScore = null,
+  externalProofVerified = false,
 }) {
   const normStatus = String(lessonStatus || '').trim().toLowerCase();
   const normalizedPolicy = String(policy || 'FORMATIVE').trim().toUpperCase();
@@ -386,13 +387,17 @@ export function evaluateAssessmentPolicy({
       const scaled = scoreScaled != null && Number.isFinite(Number(scoreScaled)) ? Number(scoreScaled) : null;
 
       let scorePassed = false;
+      let scoreEvaluated = false;
       if (raw != null) {
+        scoreEvaluated = true;
         scorePassed = raw >= cut;
       } else if (scaled != null) {
+        scoreEvaluated = true;
         scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
       }
 
-      if (!scorePassed && normStatus !== 'passed') {
+      // If score is evaluated and is below cut, it MUST FAIL even if lessonStatus says 'passed' (contradictory score)
+      if (scoreEvaluated && !scorePassed) {
         return {
           ok: false,
           policy: 'SCORED',
@@ -401,6 +406,18 @@ export function evaluateAssessmentPolicy({
           masteryScore: cut,
           status: normStatus,
           reason: 'SCORE_BELOW_MASTERY',
+        };
+      }
+
+      if (!scoreEvaluated && normStatus !== 'passed') {
+        return {
+          ok: false,
+          policy: 'SCORED',
+          scoreRaw,
+          scoreScaled,
+          masteryScore: cut,
+          status: normStatus,
+          reason: 'ASSESSMENT_NOT_PASSED',
         };
       }
     }
@@ -417,14 +434,41 @@ export function evaluateAssessmentPolicy({
     };
   }
 
+  if (normalizedPolicy === 'PPTX_SLIDES') {
+    const ok = normStatus === 'completed' || normStatus === 'passed';
+    return {
+      ok,
+      policy: 'PPTX_SLIDES',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'PPTX_NOT_CONCLUDED',
+    };
+  }
+
+  if (normalizedPolicy === 'EXTERNAL') {
+    const ok = Boolean(externalProofVerified);
+    return {
+      ok,
+      policy: 'EXTERNAL',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'EXTERNAL_PROOF_MISSING',
+    };
+  }
+
+  // Any other unknown/unsupported policy fails closed
   return {
-    ok: true,
+    ok: false,
     policy: normalizedPolicy,
     scoreRaw,
     scoreScaled,
     masteryScore,
     status: normStatus,
-    reason: null,
+    reason: 'UNKNOWN_ASSESSMENT_POLICY',
   };
 }
 
@@ -432,26 +476,33 @@ export function evaluateCoursePath({
   contentType = 'scorm',
   totalUnits = 0,
   visitedUnits = 0,
+  distinctUnitsVisited = null,
   atLastUnit = false,
   completedActivities = 0,
   totalActivities = 0,
 }) {
-  if (contentType === 'pptx') {
-    const ok = totalUnits > 0 && visitedUnits >= totalUnits && atLastUnit;
-    return {
-      ok,
-      totalUnits,
-      visitedUnits,
-      atLastUnit,
-      reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
-    };
-  }
-
-  if (totalUnits > 0 && (!atLastUnit || visitedUnits < totalUnits)) {
+  if (!totalUnits || totalUnits <= 0) {
     return {
       ok: false,
       totalUnits,
       visitedUnits,
+      atLastUnit,
+      reason: 'INVALID_TOTAL_UNITS',
+    };
+  }
+
+  let uniqueVisitedCount = visitedUnits;
+  if (distinctUnitsVisited instanceof Set) {
+    uniqueVisitedCount = distinctUnitsVisited.size;
+  } else if (Array.isArray(distinctUnitsVisited)) {
+    uniqueVisitedCount = new Set(distinctUnitsVisited).size;
+  }
+
+  if (uniqueVisitedCount < totalUnits || !atLastUnit) {
+    return {
+      ok: false,
+      totalUnits,
+      visitedUnits: uniqueVisitedCount,
       atLastUnit,
       reason: 'INCOMPLETE_COURSE_PATH',
     };
@@ -466,13 +517,12 @@ export function evaluateCoursePath({
     };
   }
 
-  const ok = visitedUnits > 0 && atLastUnit;
   return {
-    ok,
+    ok: true,
     totalUnits,
-    visitedUnits,
-    atLastUnit,
-    reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
+    visitedUnits: uniqueVisitedCount,
+    atLastUnit: true,
+    reason: null,
   };
 }
 
@@ -657,10 +707,12 @@ async function drivePptxCourseInBrowser({
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
 
+  const pptxVisitedSet = new Set(Array.from({ length: totalSlides }, (_, i) => i + 1));
   const pathVerdict = evaluateCoursePath({
     contentType: 'pptx',
     totalUnits: totalSlides,
     visitedUnits: totalSlides,
+    distinctUnitsVisited: pptxVisitedSet,
     atLastUnit: true,
   });
   const assessmentVerdict = evaluateAssessmentPolicy({
@@ -765,6 +817,18 @@ async function driveScormCourseInBrowser({
   let quizzesAnswered = 0;
   let lastRuntimeState = null;
 
+  // Track distinct visited units and verified decision indices
+  const distinctUnitsVisited = new Set();
+  const resolvedDecisionIndices = new Set();
+
+  // Scoped in-memory driver state (NO DOM attribute mutations)
+  let currentSlideUnit = 0;
+  let submittedInCurrentSlide = false;
+  const clickedGateKeysInCurrentSlide = new Set();
+  const clickedTouchKeysInCurrentSlide = new Set();
+  let slideStallSteps = 0;
+  let lastStallSignature = '';
+
   const started = Date.now();
 
   while (Date.now() - started < COURSE_TIMEOUT_MS && steps < MAX_STEPS) {
@@ -792,6 +856,7 @@ async function driveScormCourseInBrowser({
         if (marker) {
           const cur = Number(marker[1]);
           const tot = marker[2] ? Number(marker[2]) : null;
+          if (cur > 0) distinctUnitsVisited.add(cur);
           if (cur > maxVisitedUnit) maxVisitedUnit = cur;
           if (tot && tot > totalUnitsDetected) totalUnitsDetected = tot;
         }
@@ -848,7 +913,13 @@ async function driveScormCourseInBrowser({
     } catch { /* ignore media inspection errors */ }
 
     // Evaluate action inside real Frame instance
-    const action = await frame.evaluate(({ plan, requiredIndices }) => {
+    const action = await frame.evaluate(({
+      plan,
+      requiredIndices,
+      submittedInSlide,
+      clickedGates,
+      clickedTouches,
+    }) => {
       const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
       const visible = (el) => {
         if (!el) return false;
@@ -875,7 +946,7 @@ async function driveScormCourseInBrowser({
         if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
       }
 
-      const atLastUnit = (domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
+      const atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
 
       // 1. Check for authentic user completion/finish button in the frame UI
       const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
@@ -888,17 +959,19 @@ async function driveScormCourseInBrowser({
           type: 'final-button',
           domCurrent,
           domTotal,
-          atLastUnit: true,
+          atLastUnit: atLastUnit || Boolean(domTotal > 0 && domCurrent >= domTotal),
         };
       }
 
-      // 2. Interactive Gate items: hotspots, section map tabs, mandatory criteria
+      // 2. Interactive Gate items: hotspots, section map tabs, mandatory criteria (tracked in driver memory)
       const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], button.spot, .section-map-tab')).find((el) => {
-        return visible(el) && !el.disabled && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
+        const key = el.getAttribute('data-gate') || clean(el.innerText || el.getAttribute('aria-label') || '');
+        return visible(el) && !el.disabled && !clickedGates.includes(key) && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
       });
       if (unvisitedGate) {
+        const gateKey = unvisitedGate.getAttribute('data-gate') || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
         unvisitedGate.click();
-        return { type: 'gate-item', domCurrent, domTotal, atLastUnit };
+        return { type: 'gate-item', gateKey, domCurrent, domTotal, atLastUnit };
       }
 
       // 3. Scenario options and interactive decision choices
@@ -925,14 +998,15 @@ async function driveScormCourseInBrowser({
         return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
       }
 
-      // 5. Explicit touch targets
+      // 5. Explicit touch targets (tracked in driver memory)
       const touchTarget = Array.from(document.querySelectorAll('[data-touch], .touchable')).find((el) => {
-        return visible(el) && !el.disabled && el.getAttribute('data-airtrust-touched') !== 'true';
+        const key = el.getAttribute('data-touch') || el.id || clean(el.innerText);
+        return visible(el) && !el.disabled && !clickedTouches.includes(key);
       });
       if (touchTarget) {
-        touchTarget.setAttribute('data-airtrust-touched', 'true');
+        const touchKey = touchTarget.getAttribute('data-touch') || touchTarget.id || clean(touchTarget.innerText);
         touchTarget.click();
-        return { type: 'touch-target', domCurrent, domTotal, atLastUnit };
+        return { type: 'touch-target', touchKey, domCurrent, domTotal, atLastUnit };
       }
 
       // 6. Accordion handling: details & summary
@@ -967,13 +1041,12 @@ async function driveScormCourseInBrowser({
         return { type: 'checklist-checkbox', domCurrent, domTotal, atLastUnit };
       }
 
-      // 8. Submit / Confirm buttons (with single-submission guard to prevent loops)
+      // 8. Submit / Confirm buttons (tracked via driver memory without mutating DOM attributes)
       const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
         const txt = clean(el.innerText || el.value).toLowerCase();
-        return visible(el) && !el.disabled && el.getAttribute('data-airtrust-submitted') !== 'true' && /(confirmar|responder|verificar|submit)/i.test(txt);
+        return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
       });
       if (submitBtn) {
-        submitBtn.setAttribute('data-airtrust-submitted', 'true');
         submitBtn.click();
         return { type: 'submit', domCurrent, domTotal, atLastUnit };
       }
@@ -1001,11 +1074,45 @@ async function driveScormCourseInBrowser({
       }
 
       return { type: 'none', domCurrent, domTotal, atLastUnit };
-    }, { plan: answerPlan, requiredIndices: requiredDecisionSlideIndices }).catch(() => ({ type: 'error' }));
+    }, {
+      plan: answerPlan,
+      requiredIndices: requiredDecisionSlideIndices,
+      submittedInSlide: submittedInCurrentSlide,
+      clickedGates: Array.from(clickedGateKeysInCurrentSlide),
+      clickedTouches: Array.from(clickedTouchKeysInCurrentSlide),
+    }).catch(() => ({ type: 'error' }));
 
-    if (action?.domCurrent && action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+    if (action?.domCurrent) {
+      distinctUnitsVisited.add(action.domCurrent);
+      if (action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+      if (action.domCurrent !== currentSlideUnit) {
+        currentSlideUnit = action.domCurrent;
+        submittedInCurrentSlide = false;
+        clickedGateKeysInCurrentSlide.clear();
+        clickedTouchKeysInCurrentSlide.clear();
+        slideStallSteps = 0;
+      }
+    }
     if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
-    if (action?.atLastUnit) finalAtLastUnit = true;
+    if (action?.atLastUnit && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+      finalAtLastUnit = true;
+    }
+
+    if (action?.type === 'gate-item' && action.gateKey) {
+      clickedGateKeysInCurrentSlide.add(action.gateKey);
+    }
+    if (action?.type === 'touch-target' && action.touchKey) {
+      clickedTouchKeysInCurrentSlide.add(action.touchKey);
+    }
+    if (action?.type === 'submit') {
+      submittedInCurrentSlide = true;
+    }
+    if (action?.type === 'scenario-option' || action?.type === 'assessment-answer') {
+      if (action.domCurrent > 0) {
+        resolvedDecisionIndices.add(action.domCurrent);
+      }
+    }
+
     if (
       action?.type === 'quiz-choice' ||
       action?.type === 'submit' ||
@@ -1016,9 +1123,24 @@ async function driveScormCourseInBrowser({
     ) {
       quizzesAnswered += 1;
     }
+
+    // Driver stall detection: fail if 30 iterations produce identical state without progress
+    const stallSig = `${action?.domCurrent}:${action?.type}:${distinctUnitsVisited.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
+    if (stallSig === lastStallSignature) {
+      slideStallSteps += 1;
+      if (slideStallSteps >= 30) {
+        throw new Error(`DRIVER_STALL_AT_UNIT_${action?.domCurrent || 'UNKNOWN'}`);
+      }
+    } else {
+      lastStallSignature = stallSig;
+      slideStallSteps = 0;
+    }
+
     if (action?.type === 'final-button') {
       finalButtonClicked = true;
-      finalAtLastUnit = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
       await page.waitForTimeout(1000);
       break;
     }
@@ -1028,7 +1150,9 @@ async function driveScormCourseInBrowser({
     if (overlayClose) {
       await overlayClose.click().catch(() => null);
       finalButtonClicked = true;
-      finalAtLastUnit = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
       break;
     }
 
@@ -1080,9 +1204,10 @@ async function driveScormCourseInBrowser({
   const pathVerdict = evaluateCoursePath({
     contentType: 'scorm',
     totalUnits: totalUnitsDetected,
-    visitedUnits: maxVisitedUnit,
-    atLastUnit: finalAtLastUnit || isConcluido,
-    completedActivities: quizzesAnswered,
+    visitedUnits: distinctUnitsVisited.size,
+    distinctUnitsVisited,
+    atLastUnit: (finalAtLastUnit || isConcluido) && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected,
+    completedActivities: resolvedDecisionIndices.size,
     totalActivities: requiredDecisionSlideIndices.length,
   });
 
@@ -1127,9 +1252,12 @@ async function driveScormCourseInBrowser({
     audit_evidence: {
       units_visited: maxVisitedUnit,
       total_units: totalUnitsDetected,
+      distinct_units_visited_count: distinctUnitsVisited.size,
       actions_count: steps,
       resume_tested: checkpointTested,
       resume_verified: resumedVerified || totalUnitsDetected <= 1,
+      resolved_decisions_count: resolvedDecisionIndices.size,
+      required_decisions_count: requiredDecisionSlideIndices.length,
       assessment: {
         policy: course.scorm_assessment_policy || 'FORMATIVE',
         status: lastRuntimeState?.lessonStatus || null,
