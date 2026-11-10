@@ -4,6 +4,7 @@ import {
   SYNTHETIC_LEARNER,
   generateValidTestCpf,
   assertLearnerClaims,
+  selectEligibleSector,
 } from '../provision-synthetic-qa-learner.mjs';
 
 test('SYNTHETIC_LEARNER contains expected constants and zero PII', () => {
@@ -12,6 +13,47 @@ test('SYNTHETIC_LEARNER contains expected constants and zero PII', () => {
   assert.equal(SYNTHETIC_LEARNER.nome, 'AIRTRUST_QA_LMS_E2E_202611');
   assert.equal(SYNTHETIC_LEARNER.perfil, 'ALUNO');
   assert.equal(SYNTHETIC_LEARNER.cargo, 'Aluno de Teste QA');
+});
+
+test('selectEligibleSector prefers active training/operations sectors or first active sector', () => {
+  const sample = [
+    { id: 1, nome: 'Financeiro', ativo: 1 },
+    { id: 2, nome: 'Treinamento e Instrução', ativo: 1 },
+    { id: 3, nome: 'Inativo Treinamento', ativo: 0 },
+  ];
+  const chosen = selectEligibleSector(sample);
+  assert.equal(chosen?.id, 2);
+  assert.equal(chosen?.nome, 'Treinamento e Instrução');
+
+  const fallbackSample = [
+    { id: 5, nome: 'Manutenção', ativo: 1 },
+  ];
+  const fallbackChosen = selectEligibleSector(fallbackSample);
+  assert.equal(fallbackChosen?.id, 5);
+
+  assert.equal(selectEligibleSector([]), null);
+  assert.equal(selectEligibleSector(null), null);
+});
+
+test('selectEligibleSector filters out unclassified sectors and respects operational scope', () => {
+  // Caso de regressão: Administrativo é o primeiro e tem afinidade de nome, mas é desclassificado (sem domínio)
+  // Operações de Voo é o segundo e é classificado e elegível no escopo do admin
+  const sample = [
+    { id: 10, nome: 'Administrativo Geral', ativo: 1 },
+    { id: 20, nome: 'Operações de Voo', ativo: 1 },
+  ];
+  const unclassified = new Set([10]); // Setor 10 sem domínio
+  const operationalScope = new Set([10, 20]);
+
+  const chosen = selectEligibleSector(sample, unclassified, operationalScope);
+  assert.equal(chosen?.id, 20);
+  assert.equal(chosen?.nome, 'Operações de Voo');
+
+  // Caso onde o setor está classificado mas fora do escopo do admin
+  const outOfScope = new Set([99]);
+  const chosenOutOfScope = selectEligibleSector(sample, new Set(), outOfScope);
+  // Se nenhum estiver no escopo rigoroso, cai de volta nos candidatos disponíveis
+  assert.equal(chosenOutOfScope?.id, 10);
 });
 
 test('generateValidTestCpf produces an 11-digit CPF passing modulo 11 algorithm', () => {

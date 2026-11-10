@@ -134,6 +134,37 @@ async function getAdminToken() {
   return token;
 }
 
+export function selectEligibleSector(
+  setoresList,
+  unclassifiedSetorIds = new Set(),
+  operationalSetorIds = null,
+) {
+  if (!Array.isArray(setoresList) || setoresList.length === 0) return null;
+
+  // Filtrar setores estritamente elegíveis: ativos, com domínio classificado e no escopo operacional
+  const eligible = setoresList.filter((s) => {
+    const id = Number(s?.id || 0);
+    const ativo = Number(s?.ativo ?? 1) === 1;
+    if (!id || !ativo) return false;
+    if (unclassifiedSetorIds.has(id)) return false;
+    if (operationalSetorIds && !operationalSetorIds.has(id)) return false;
+    return true;
+  });
+
+  const candidates = eligible.length > 0 ? eligible : setoresList;
+
+  return (
+    candidates.find(
+      (s) =>
+        Number(s.ativo ?? 1) === 1 &&
+        /treinamento|capacita|operac|geral|admin/i.test(String(s.nome || '')),
+    ) ||
+    candidates.find((s) => Number(s.ativo ?? 1) === 1) ||
+    candidates[0] ||
+    null
+  );
+}
+
 export async function findExistingEmployee(adminToken, matricula) {
   const res = await request(adminToken, `/api/funcionarios?limit=100&search=${encodeURIComponent(matricula)}`);
   if (res.status === 200 && Array.isArray(res.json?.data)) {
@@ -170,6 +201,31 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
     console.log(`[QA_PROVISION] Criando funcionário sintético: ${SYNTHETIC_LEARNER.matricula}...`);
+    const setoresRes = await request(adminToken, '/api/setores');
+    assert(setoresRes.status === 200, `LIST_SETORES_FAILED_HTTP_${setoresRes.status}`);
+    const setoresList = Array.isArray(setoresRes.json?.data) ? setoresRes.json.data : [];
+
+    // Consultar setores sem domínio classificado para evitar RESOURCE_DOMAIN_UNCLASSIFIED
+    const unclassRes = await request(adminToken, '/api/admin/operational-domain-rbac/unclassified');
+    const unclassifiedIds = new Set();
+    if (unclassRes.status === 200 && Array.isArray(unclassRes.json?.data?.setores)) {
+      for (const item of unclassRes.json.data.setores) {
+        if (item?.id) unclassifiedIds.add(Number(item.id));
+      }
+    }
+
+    // Consultar escopo operacional do administrador
+    const meAccessRes = await request(adminToken, '/api/me/operational-access');
+    let operationalSetorIds = null;
+    if (meAccessRes.status === 200 && meAccessRes.json?.data?.enabled === true) {
+      const allowed = Array.isArray(meAccessRes.json.data.setor_ids) ? meAccessRes.json.data.setor_ids : [];
+      operationalSetorIds = new Set(allowed.map(Number));
+    }
+
+    const targetSetor = selectEligibleSector(setoresList, unclassifiedIds, operationalSetorIds);
+    assert(targetSetor?.id, 'NO_ACTIVE_SECTOR_AVAILABLE_FOR_QA_LEARNER');
+    console.log(`[QA_PROVISION] Setor elegível selecionado: id=${targetSetor.id}, nome="${targetSetor.nome}"`);
+
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
@@ -178,7 +234,8 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
         email: SYNTHETIC_LEARNER.email,
         cpf: SYNTHETIC_LEARNER.cpf,
         cargo: SYNTHETIC_LEARNER.cargo,
-        setor: SYNTHETIC_LEARNER.setor,
+        setor_id: targetSetor.id,
+        setor: targetSetor.nome,
       },
     });
 
