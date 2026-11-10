@@ -95,7 +95,7 @@ export function canonicalRow(row) {
   check(row.model_end_of_month === 0 || row.model_end_of_month === 1, 'MANIFEST_ROW_EOM');
   check(validDate(row.next_expiry), 'MANIFEST_ROW_NEXT_EXPIRY');
   // Tamper check: the target date must be what the model rule produces for this completion date.
-  check(expectedExpiry(row.expected_completion_date, nextValidity, row.model_end_of_month === 1)
+  check(expectedExpiry(row.expected_completion_date, nextValidity)
     === row.next_expiry, 'MANIFEST_ROW_EXPIRY_RULE_MISMATCH');
   check((row.expected_certificate_id ?? null) === null, 'MANIFEST_ROW_HAS_CERTIFICATE');
   check(oldExpiry !== row.next_expiry || oldValidity !== nextValidity, 'MANIFEST_ROW_NOOP');
@@ -255,8 +255,7 @@ function modelGuardSql(op) {
        AND t.empresa_id = ${TENANT_ID}
        AND t.deleted_at IS NULL
        AND UPPER(TRIM(t.codigo)) = ${sqlStrictText(op.model.code, MODEL_RE, 'SQL_MODEL_INVALID')}
-       AND t.validade = ${sqlInt(op.model.validity)}
-       AND COALESCE(t.vencimento_fim_mes, 0) = ${sqlInt(op.model.endOfMonth)})`;
+       AND t.validade = ${sqlInt(op.model.validity)})`; // vencimento_fim_mes legado: ignorado
 }
 
 /** Audit row written only if the preceding UPDATE changed a row (changes() > 0). */
@@ -293,8 +292,7 @@ function guardsMatch(live, op) {
 function modelMatches(live, model) {
   return !model
     || (String(live.model_code ?? '').trim().toUpperCase() === model.code
-      && intOrNull(live.model_months) === model.validity
-      && Number(live.model_end_of_month ?? 0) === model.endOfMonth);
+      && intOrNull(live.model_months) === model.validity);
 }
 
 function readLive(port, ids) {

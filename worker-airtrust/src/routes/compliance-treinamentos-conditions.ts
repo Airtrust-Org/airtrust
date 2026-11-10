@@ -1,4 +1,4 @@
-import { sqlAddMonthsClamped } from '../utils/sql-add-months';
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../utils/sql-add-months';
 import { Hono } from 'hono';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -92,7 +92,7 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
   for(const row of results||[]){
     if(Number(row.course_count)!==1||!row.course_id){summary.unavailable_course+=1;continue;}
     const valid=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
-      SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND qt.validade IS NOT NULL AND qh.data_conclusao IS NOT NULL AND ${sqlAddMonthsClamped('qh.data_conclusao', 'qt.validade')}>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
+      SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND (${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade')}) IS NOT NULL AND qh.data_conclusao IS NOT NULL AND ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade'))}>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
     if(valid?.ok){summary.skipped_valid_evidence+=1;continue;}
     const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,row.course_id,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
     if(existing){

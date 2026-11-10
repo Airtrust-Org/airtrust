@@ -1,4 +1,4 @@
-import { sqlAddMonthsClamped } from '../../utils/sql-add-months';
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../../utils/sql-add-months';
 import { isCmaCode, resolveCmaValidity } from '../../utils/cma-validity';
 /**
  * QUALIFICACOES - MÓDULO HISTÓRICO
@@ -473,7 +473,7 @@ export const getHistoricoListHandler = safe(async (c) => {
 
     // Sem o fallback de 12: quando validade_meses e qt.validade são NULL, a expressão
     // retorna NULL (sem vencimento). Registros com NULL validade não aparecem como VENCIDA.
-    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', 'COALESCE(qh.validade_meses, qt.validade)')})`;
+    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade'))})`;
 
     // Compartilhado por filtros e totais: usar uma só regra de vencimento em data civil BRT.
     const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);
@@ -623,8 +623,8 @@ export const getHistoricoListHandler = safe(async (c) => {
       COALESCE(qh.categoria, qt.categoria) AS tipo_categoria,
       qh.validade_meses AS historico_validade_meses,
       qt.validade AS tipo_validade_atual,
-      COALESCE(qh.validade_meses, qt.validade) AS qualificacao_validade,
-      COALESCE(qh.validade_meses, qt.validade) AS validade_meses,
+      ${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade')} AS qualificacao_validade,
+      ${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade')} AS validade_meses,
       qh.data_conclusao AS data_realizacao,
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,

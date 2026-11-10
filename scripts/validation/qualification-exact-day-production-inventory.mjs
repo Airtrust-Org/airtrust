@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Read-only production inventory for qualification histories whose model is configured
-// as exact-day (vencimento_fim_mes=0) but whose persisted expiry has the strong
+// as exact-day (every type is exact-day; legacy vencimento_fim_mes is ignored) but whose persisted expiry has the strong
 // signature of the previously forced month-end renewal bug.
 //
 // Output is structural only: no employee names, CPF, email, notes, document paths,
@@ -98,7 +98,7 @@ const rows = query(`
     qh.data_vencimento AS current_expiry,
     qh.validade_meses AS historico_validade_meses,
     qt.validade AS current_type_validade_meses,
-    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes,
+    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes, -- LEGADO: apenas relato; ignorado (todo vencimento vence no dia)
     qh.renovacao_de AS renovacao_de,
     qh.origem_tipo AS origem_tipo,
     qh.lms_matricula_id AS lms_matricula_id,
@@ -119,7 +119,6 @@ const rows = query(`
   WHERE qh.deleted_at IS NULL
     AND qh.data_conclusao IS NOT NULL
     AND qh.data_vencimento IS NOT NULL
-    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
     AND COALESCE(qh.validade_meses, qt.validade, 0) > 0
   ORDER BY qh.empresa_id, qh.qualificacao_id, qh.id
 `, 'exact_day_population');

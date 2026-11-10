@@ -135,13 +135,13 @@ export async function writeScormEditionHandoff(
         'data_inicio',m.data_inicio,'data_conclusao',m.data_conclusao,
         'data_expiracao',m.data_expiracao,'ultimo_slide',m.ultimo_slide,
         'ultima_pagina',m.ultima_pagina),
-        'cycle',(SELECT json_object('status',cy.status,'progresso_pct',cy.progresso_pct,
+        'cycle',json((SELECT json_object('status',cy.status,'progresso_pct',cy.progresso_pct,
           'score_final',cy.score_final,'tentativas',cy.tentativas,'data_matricula',cy.data_matricula,
           'data_inicio',cy.data_inicio,'data_conclusao',cy.data_conclusao,
           'data_expiracao',cy.data_expiracao,'qualificacao_historico_id',cy.qualificacao_historico_id,
           'observacoes',cy.observacoes,'created_at',cy.created_at,'updated_at',cy.updated_at)
           FROM lms_matricula_ciclos cy WHERE cy.id=? AND cy.matricula_id=m.id
-            AND cy.empresa_id=m.empresa_id),
+            AND cy.empresa_id=m.empresa_id)),
         'previous_package_sha256',?),
       (SELECT json_object('id',p.id,'lesson_status',p.lesson_status,'completion_status',p.completion_status,
          'success_status',p.success_status,'score_raw',p.score_raw,'score_max',p.score_max,

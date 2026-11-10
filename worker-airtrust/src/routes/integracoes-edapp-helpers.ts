@@ -1,4 +1,4 @@
-import { sqlAddMonthsClamped } from '../utils/sql-add-months';
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../utils/sql-add-months';
 /**
  * INTEGRACOES EDAPP — Shared Helpers
  * Used by integracoes_edapp.ts and integracoes-edapp-eventos.ts
@@ -373,19 +373,16 @@ export function resolveEdAppCompletionDate(dataCompletedAt?: string): string {
 
 export function buildEdAppQualificacaoVencimentoExpr(rowAlias?: string): string {
   const prefix = rowAlias ? `${rowAlias}.` : '';
+  const tipoCodigo = `(SELECT qt.codigo FROM qualificacoes_tipos qt WHERE qt.id = ${prefix}qualificacao_id AND qt.deleted_at IS NULL)`;
+  const tipoValidade = `(SELECT qt.validade FROM qualificacoes_tipos qt WHERE qt.id = ${prefix}qualificacao_id AND qt.deleted_at IS NULL)`;
+  // CMA depende da idade: sem validade_meses persistido nao ha fallback (nem o default de 12 meses).
   return `COALESCE(
     ${prefix}data_vencimento,
     ${sqlAddMonthsClamped(
       `${prefix}data_conclusao`,
       `COALESCE(
-        ${prefix}validade_meses,
-        (
-          SELECT qt.validade
-          FROM qualificacoes_tipos qt
-          WHERE qt.id = ${prefix}qualificacao_id
-            AND qt.deleted_at IS NULL
-        ),
-        12
+        ${sqlEffectiveValidityMonths(`${prefix}validade_meses`, tipoCodigo, tipoValidade)},
+        CASE WHEN UPPER(TRIM(COALESCE(${tipoCodigo}, ''))) = 'CMA' THEN NULL ELSE 12 END
       )`,
     )}
   )`;

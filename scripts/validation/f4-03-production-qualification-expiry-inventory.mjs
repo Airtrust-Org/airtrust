@@ -84,7 +84,6 @@ const broad = query(`
     AND qh.observacoes LIKE '%LMS%'
     AND qh.data_conclusao IS NOT NULL
     AND qh.data_vencimento IS NOT NULL
-    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
     AND qh.data_vencimento = date(qh.data_conclusao, '+' || CAST(qt.validade AS TEXT) || ' months')
   GROUP BY COALESCE(qh.empresa_id, 0), COALESCE(qt.codigo, 'UNKNOWN')
   ORDER BY empresa_id, qualification_code
@@ -100,7 +99,7 @@ const structural = query(`
     qh.data_vencimento AS current_expiry,
     qh.validade_meses AS historico_validade_meses,
     qt.validade AS current_type_validade_meses,
-    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes,
+    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes, -- LEGADO: apenas relato; ignorado (todo vencimento vence no dia)
     qh.certificado_arquivo_id AS certificado_arquivo_id,
     CASE
       WHEN qh.arquivo_url IS NULL OR TRIM(qh.arquivo_url) = '' THEN 0
@@ -122,7 +121,6 @@ const structural = query(`
     AND qh.observacoes LIKE '%LMS%'
     AND qh.data_conclusao IS NOT NULL
     AND qh.data_vencimento IS NOT NULL
-    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
     AND qh.data_vencimento = date(qh.data_conclusao, '+' || CAST(qt.validade AS TEXT) || ' months')
   ORDER BY qh.id
 `, 'broad_structural_candidates');
@@ -137,7 +135,6 @@ const intendedLms = query(`
     AND (qh.origem_tipo = 'LMS' OR qh.lms_matricula_id IS NOT NULL)
     AND qh.data_conclusao IS NOT NULL
     AND qh.data_vencimento IS NOT NULL
-    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
 `, 'intended_lms_population');
 
 const auditSchema = query(`
