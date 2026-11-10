@@ -774,31 +774,25 @@ async function runFrmsQueueScope(
 }
 
 /**
- * Discover only work that can make progress now. The old status != SUCCEEDED
- * scan revisited delayed retries and fresh PROCESSING rows every tick, causing
- * unnecessary D1 reads. Keep stale PROCESSING rows eligible for lease recovery.
- * The pending/failed arm is backed by idx_cron_job_items_pending (0451).
+ * The primary key (job_name, scope_key, item_key) provides ordered discovery.
+ * LIMIT must be applied to the scan itself: a UNION of pending and PROCESSING
+ * arms materializes the full history (including completed items) before LIMIT,
+ * amplifying D1 load. Keep delayed retries and stale PROCESSING scopes visible
+ * so that the existing lease recovery cannot strand a queue indefinitely.
  */
-export function buildRunnableFrmsQueueScopesQuery(): string {
-  return `SELECT scope_key FROM (
-            SELECT scope_key FROM cron_job_items
-             WHERE job_name = ?
-               AND status IN ('PENDING', 'FAILED')
-               AND available_at <= datetime('now')
-            UNION
-            SELECT scope_key FROM cron_job_items
-             WHERE job_name = ?
-               AND status = 'PROCESSING'
-               AND updated_at < datetime('now', '-30 minutes')
-          )
-          ORDER BY scope_key ASC
-          LIMIT ?`;
+export function buildBoundedFrmsQueueScopesQuery(): string {
+  return `SELECT DISTINCT scope_key
+            FROM cron_job_items
+           WHERE job_name = ?
+             AND status != 'SUCCEEDED'
+           ORDER BY scope_key ASC
+           LIMIT ?`;
 }
 
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
   const scopes = await db
-    .prepare(buildRunnableFrmsQueueScopesQuery())
-    .bind(FRMS_JOB, FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
+    .prepare(buildBoundedFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
     .all<{ scope_key: string }>();
 
   for (const row of scopes.results || []) {
