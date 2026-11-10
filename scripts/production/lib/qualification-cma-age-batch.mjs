@@ -187,11 +187,13 @@ const completionGuard = (spec) => `substr(data_conclusao, 1, 10) = ${sqlText(spe
 
 /** Completed age on the realization date, computed inside SQL from the employee birth date (NULL when unavailable/invalid). */
 export function ageSql(h, f) {
-  return `CASE WHEN ${f}.nascimento IS NOT NULL AND date(substr(${f}.nascimento, 1, 10)) = substr(${f}.nascimento, 1, 10)
-        AND substr(${h}.data_conclusao, 1, 10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-        AND date(substr(${h}.data_conclusao, 1, 10)) = substr(${h}.data_conclusao, 1, 10)
-       THEN CAST(strftime('%Y', substr(${h}.data_conclusao, 1, 10)) AS INTEGER) - CAST(strftime('%Y', substr(${f}.nascimento, 1, 10)) AS INTEGER)
-            - (strftime('%m-%d', substr(${h}.data_conclusao, 1, 10)) < strftime('%m-%d', substr(${f}.nascimento, 1, 10)))
+  // Mirrors parseCivilDay (src/shared/utils/validade-meses.ts): YYYY-MM-DD, optionally followed by "T" or " " + anything; no other suffix.
+  const valid = (col) => `(trim(${col}) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+        AND (length(trim(${col})) = 10 OR substr(trim(${col}), 11, 1) IN ('T', ' '))
+        AND date(substr(trim(${col}), 1, 10)) = substr(trim(${col}), 1, 10))`;
+  return `CASE WHEN ${valid(`${f}.nascimento`)} AND ${valid(`${h}.data_conclusao`)}
+       THEN CAST(strftime('%Y', substr(trim(${h}.data_conclusao), 1, 10)) AS INTEGER) - CAST(strftime('%Y', substr(trim(${f}.nascimento), 1, 10)) AS INTEGER)
+            - (strftime('%m-%d', substr(trim(${h}.data_conclusao), 1, 10)) < strftime('%m-%d', substr(trim(${f}.nascimento), 1, 10)))
        ELSE NULL END`;
 }
 

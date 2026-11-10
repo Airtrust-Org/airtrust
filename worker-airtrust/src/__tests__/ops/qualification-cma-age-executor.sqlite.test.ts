@@ -184,6 +184,35 @@ describe('qualification CMA age batch (local SQLite only)', () => {
     for (const [hid, age] of expectations) expect(byId.get(hid)).toBe(age);
   });
 
+  it('birth date with an invalid suffix is treated as missing (aligned with parseCivilDay) and never altered', () => {
+    const cases: Array<[string, boolean]> = [
+      ['1960-01-01invalid', false], ['1960-01-01x', false], ['1960-01-011', false],
+      ['1960-01-01', true], ['1960-01-01T00:00:00Z', true], ['1960-01-01 00:00:00', true],
+    ];
+    db.database.exec('DELETE FROM qualificacoes_historico; DELETE FROM funcionarios;');
+    let id = 300;
+    for (const [birth, valid] of cases) {
+      const emp = id++;
+      db.database.exec(`INSERT INTO funcionarios (id, empresa_id, nascimento) VALUES (${emp}, 6, '${birth}')`);
+      db.database.exec(`INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_id, data_conclusao, data_vencimento, validade_meses, status, empresa_id)
+        VALUES (${emp}, ${emp}, 1, '2024-05-10', '2025-05-10', 12, 'CONCLUIDA', 6)`);
+      expect(completedAgeYears(birth, '2024-05-10') !== null).toBe(valid);
+    }
+    const { summary, manifest: m } = makePlan(db);
+    expect(summary.ids_by_class.birth_date_missing).toEqual([300, 301, 302]);
+    expect(m?.histories.map((x) => x.id)).toEqual([303, 304, 305]);
+    // the CAS guard also refuses a row whose birth date turned invalid after planning
+    const stale = { ...m!, source_sha: SHA };
+    db.database.exec("UPDATE funcionarios SET nascimento = '1960-01-01invalid' WHERE id = 303");
+    const p = port(db);
+    let error: (Error & { report?: { conflicts: Array<{ id: number; reason: string }> } }) | undefined;
+    try {
+      executeManifest({ port: p, manifest: stale, direction: 'forward', expectedPlanHash: stale.plan_sha256, expectedCount: stale.row_count, apply: true, actor: ACTOR, sourceSha: SHA });
+    } catch (e) { error = e as Error; }
+    expect(error?.report?.conflicts).toEqual([{ id: 303, reason: 'age_changed_since_plan' }]);
+    expect(p.statements).toEqual([]);
+  });
+
   it('classifyCmaRow is pure: missing birth keeps the default and never emits an operation', () => {
     const base = { id: 1, qualificacao_id: 1, status: 'CONCLUIDA', completion: '2024-05-10', old_expiry: '2025-05-10', old_validity: 12, employee_in_tenant: true };
     expect(classifyCmaRow({ ...base, age_years: null })).toMatchObject({ cls: 'birth_date_missing', exact_expiry_12: '2025-05-10' });

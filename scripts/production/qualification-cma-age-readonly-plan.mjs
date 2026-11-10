@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { wranglerExecutor } from './lib/executors.mjs';
 import {
-  CMA_CODE, REALIZED_STATUSES, TENANT_ID, buildExecutionManifest, classifyCmaRow, isValidDate,
+  CMA_CODE, REALIZED_STATUSES, TENANT_ID, ageSql, buildExecutionManifest, classifyCmaRow, isValidDate,
 } from './lib/qualification-cma-age-batch.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -50,12 +50,7 @@ export function readInventory(port) {
   const histories = port.query(`SELECT h.id, h.qualificacao_id, UPPER(TRIM(COALESCE(h.status, ''))) AS status,
   substr(h.data_conclusao, 1, 10) AS data_conclusao, h.data_vencimento, h.validade_meses,
   CASE WHEN f.id IS NULL THEN 0 ELSE 1 END AS employee_in_tenant,
-  CASE WHEN f.id IS NOT NULL AND f.nascimento IS NOT NULL AND date(substr(f.nascimento, 1, 10)) = substr(f.nascimento, 1, 10)
-        AND substr(h.data_conclusao, 1, 10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-        AND date(substr(h.data_conclusao, 1, 10)) = substr(h.data_conclusao, 1, 10)
-       THEN CAST(strftime('%Y', substr(h.data_conclusao, 1, 10)) AS INTEGER) - CAST(strftime('%Y', substr(f.nascimento, 1, 10)) AS INTEGER)
-            - (strftime('%m-%d', substr(h.data_conclusao, 1, 10)) < strftime('%m-%d', substr(f.nascimento, 1, 10)))
-       ELSE NULL END AS age_years
+  ${ageSql('h', 'f')} AS age_years
  FROM qualificacoes_historico h
  LEFT JOIN funcionarios f ON f.id = h.funcionario_id AND f.deleted_at IS NULL AND f.empresa_id = ${TENANT_ID}
  WHERE h.empresa_id = ${TENANT_ID} AND h.deleted_at IS NULL AND h.qualificacao_id IN (${list}) ORDER BY h.id`);
