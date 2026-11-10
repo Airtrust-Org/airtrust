@@ -8,7 +8,6 @@ import { publishDomainEvent, type DomainEventTipo } from '../../shared/domainEve
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
 import {
   tryAddCalendarMonthsClamped,
-  tryEndOfTargetMonth,
 } from '../../../../src/shared/utils/validade-meses';
 
 export function inferModeloCodigoFromQualificacao(
@@ -193,26 +192,22 @@ export function calcularDataVencimento(params: {
   dataConclusao?: string | null;
   dataVencimento?: string | null;
   validadeMeses?: number | null;
-  vencimentoFimMes?: number | null;
 }): string | null {
   if (params.dataVencimento) return params.dataVencimento;
 
   const dataConclusao = String(params.dataConclusao || '').trim();
   const validadeMeses = toPositiveNumber(params.validadeMeses);
-  const vencimentoFimMes = Number(params.vencimentoFimMes || 0) === 1 ? 1 : 0;
 
   if (!dataConclusao || !validadeMeses) return null;
 
-  return vencimentoFimMes === 1
-    ? tryEndOfTargetMonth(dataConclusao, validadeMeses)
-    : tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
+  // Vence no dia (clamp ao ultimo dia do mes-alvo). vencimento_fim_mes e legado e ignorado.
+  return tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 export function resolveHistoricoReadExpiry(params: {
   dataVencimento?: string | null;
   dataConclusao?: string | null;
   validadeMeses?: number | null;
-  vencimentoFimMes?: number | null;
   codigoQualificacao?: string | null;
 }): string | null {
   if (params.dataVencimento) return params.dataVencimento;
@@ -220,7 +215,6 @@ export function resolveHistoricoReadExpiry(params: {
   return calcularDataVencimento({
     dataConclusao: params.dataConclusao,
     validadeMeses: params.validadeMeses,
-    vencimentoFimMes: params.vencimentoFimMes,
   });
 }
 
@@ -242,7 +236,6 @@ export function resolveParametrosRenovacaoQualificacao(params: {
   const dataVencimento = calcularDataVencimento({
     dataConclusao: params.dataConclusao,
     validadeMeses,
-    vencimentoFimMes: codigoQualificacao === 'G1-SEM' ? 0 : 1,
   });
 
   return {

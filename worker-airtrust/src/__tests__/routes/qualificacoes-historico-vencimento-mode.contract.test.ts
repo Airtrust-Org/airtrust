@@ -3,20 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync('src/routes/qualificacoes/historico-atomic-write.ts', 'utf8');
 
-describe('qualificacoes historico atomic expiry-mode contract', () => {
-  it('loads vencimento_fim_mes from the qualification model for create and renewal', () => {
-    expect(source.match(/validade, vencimento_fim_mes, carga_horaria/g)).toHaveLength(2);
-    expect(source).toContain('vencimento_fim_mes: number | string | null;');
+describe('qualificacoes historico atomic expiry contract (vence no dia)', () => {
+  it('does not load or branch on the legacy vencimento_fim_mes flag', () => {
+    expect(source).not.toContain('vencimento_fim_mes');
+    expect(source).not.toContain('shouldExpireAtEndOfMonth');
+    expect(source).not.toContain('endOfMonth');
   });
 
-  it('uses the configured model flag instead of forcing generic renewals to month-end', () => {
-    expect(source).toContain(
-      'function shouldExpireAtEndOfMonth(type: QualificationTypeRow, qualificationCode: string): boolean',
-    );
-    expect(source).toContain("if (qualificationCode === 'G1-SEM') return false;");
-    expect(source).toContain('return Number(type.vencimento_fim_mes || 0) === 1;');
-    expect(source.match(/endOfMonth: shouldExpireAtEndOfMonth\(type, qualificationCode\)/g)).toHaveLength(2);
-    expect(source).not.toContain("endOfMonth: qualificationCode !== 'G1-SEM'");
-    expect(source).not.toContain('endOfMonth: false,\n    });\n\n    let status');
+  it('delegates validity (including CMA by age) to resolveEffectiveValidityMonths for create and renewal', () => {
+    expect(source.match(/resolveEffectiveValidityMonths\(\{/g)).toHaveLength(2);
+    expect(source.match(/aviso_validade_cma: cmaValidityWarning\(/g)).toHaveLength(2);
   });
 });

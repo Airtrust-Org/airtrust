@@ -6,18 +6,20 @@
  * circular).
  *
  * Regra aprovada pelo proprietário:
- *  - modo "dia exato": soma meses de calendário preservando o dia e, quando o
- *    mês-alvo não tem esse dia, recua para o último dia válido do mês-alvo
- *    (29/02/2024 + 24m = 28/02/2026; 31/01/2025 + 1m = 28/02/2025;
- *    31/01/2024 + 1m = 29/02/2024; 30/04/2024 + 1m = 30/05/2024).
+ *  - TODOS os vencimentos vencem NO DIA: soma meses de calendário preservando
+ *    o dia e, quando o mês-alvo não tem esse dia, recua para o último dia
+ *    válido do mês-alvo (29/02/2024 + 24m = 28/02/2026; 31/01/2025 + 1m =
+ *    28/02/2025; 31/01/2024 + 1m = 29/02/2024; 30/04/2024 + 1m = 30/05/2024).
  *    Nunca "rola" para o mês seguinte (31/01 + 1m != 03/03).
- *  - modo "fim do mês": último dia do mês-alvo (inalterado).
+ *  - O antigo modo "fim do mês" foi removido do cálculo; a coluna
+ *    qualificacoes_tipos.vencimento_fim_mes é apenas legada e IGNORADA.
  *
  * Toda aritmética é UTC com componentes inteiros: independe do fuso do runtime.
  * Datas de entrada são dias civis `YYYY-MM-DD` (sufixo `T...`/` ...` é ignorado).
  *
- * Exceções regulatórias (ANAC data-base, CMA, ASO, CHT, G1-SEM) NÃO usam esta
- * fórmula genérica para decidir *quantos* meses somar; apenas a soma em si.
+ * Exceções regulatórias (ANAC data-base, CMA por idade, G1-SEM) decidem
+ * *quantos* meses somar; a soma em si é sempre esta. ASO e CHT seguem a regra
+ * do dia.
  */
 
 const ISO_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/;
@@ -73,25 +75,10 @@ export function addCalendarMonthsClamped(dateValue: string, months: number): str
   return format(year, month1, Math.min(base.day, daysInMonth(year, month1)));
 }
 
-/** Último dia do mês-alvo (modo "fim do mês"). Mesmos contratos de erro. */
-export function endOfTargetMonth(dateValue: string, months: number): string {
-  const { year, month1 } = resolveTarget(dateValue, months);
-  return format(year, month1, daysInMonth(year, month1));
-}
-
 /** Variante que não lança: retorna null para entrada inválida. */
 export function tryAddCalendarMonthsClamped(dateValue: unknown, months: unknown): string | null {
   try {
     return addCalendarMonthsClamped(dateValue as string, months as number);
-  } catch {
-    return null;
-  }
-}
-
-/** Variante que não lança do modo "fim do mês". */
-export function tryEndOfTargetMonth(dateValue: unknown, months: unknown): string | null {
-  try {
-    return endOfTargetMonth(dateValue as string, months as number);
   } catch {
     return null;
   }

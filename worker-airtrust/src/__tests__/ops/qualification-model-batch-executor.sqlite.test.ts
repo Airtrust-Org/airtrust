@@ -146,10 +146,10 @@ describe('qualification model batch executor (local SQLite only)', () => {
   });
   afterEach(() => db.close());
 
-  it('clamps month additions (exact-day keeps/clamps the day, end-of-month mode returns the last day)', () => {
+  it('clamps month additions: every expiry is no-dia and the legacy end-of-month argument is ignored', () => {
     expect(addMonthsClamped('2024-02-29', 24, false)).toBe('2026-02-28');
     expect(addMonthsClamped('2024-01-31', 1, false)).toBe('2024-02-29');
-    expect(addMonthsClamped('2024-02-10', 24, true)).toBe('2026-02-28');
+    expect(addMonthsClamped('2024-02-10', 24, true)).toBe('2026-02-10');
     expect(addMonthsClamped('2024-11-30', 3, false)).toBe('2025-02-28');
     expect(addMonthsClamped('not-a-date', 24)).toBeNull();
   });
@@ -174,7 +174,7 @@ describe('qualification model batch executor (local SQLite only)', () => {
     const byId = new Map(body.histories.map((x) => [x.id, x]));
     expect(byId.get(1)?.next_expiry).toBe('2026-02-28'); // leap day, exact-day clamp
     expect(byId.get(3)?.status).toBe(''); // NULL status with dates counts as realized
-    expect(byId.get(6)?.next_expiry).toBe('2026-01-31'); // end-of-month model
+    expect(byId.get(6)?.next_expiry).toBe('2026-01-15'); // legacy end-of-month flag ignored: no-dia
     expect(byId.has(4)).toBe(false); // CANCELADA
     expect(byId.has(5)).toBe(false); // NULL data_conclusao
     expect(byId.has(7)).toBe(false); // already 24 months with the expected expiry
@@ -239,7 +239,7 @@ describe('qualification model batch executor (local SQLite only)', () => {
     expect(tipos(db).find((t) => t.id === 602)?.validade).toBeNull(); // blocked shared model
     expect(tipos(db).find((t) => t.id === 604)?.validade).toBeNull(); // other tenant
     expect(history(db, 1)).toMatchObject({ data_vencimento: '2026-02-28', validade_meses: 24 });
-    expect(history(db, 6)).toMatchObject({ data_vencimento: '2026-01-31', validade_meses: 24 });
+    expect(history(db, 6)).toMatchObject({ data_vencimento: '2026-01-15', validade_meses: 24 });
     expect(history(db, 7)).toMatchObject({ data_vencimento: '2026-08-01', validade_meses: 24 }); // already consistent, untouched
     expect(history(db, 4).data_vencimento).toBeNull(); // CANCELADA untouched
     expect(history(db, 20).data_vencimento).toBeNull(); // other tenant untouched

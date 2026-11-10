@@ -19,7 +19,6 @@ import { completeLmsMatricula, LmsCompletionRejectedError, recoverEadCertificate
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 import { describeLmsQualificationFailure } from '../services/lms-qualification-failure-domain';
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
-import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import {
   ensureMatriculaCycle,
   hasActiveMatriculaCycle,
@@ -417,7 +416,7 @@ app.get('/:id', async (c) => {
               AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL LIMIT 1) AS active_lms_cycle_started_at,
           c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
           qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
-          qt.validade AS qualificacao_validade, qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes, h.id AS h5p_conteudo_id,
+          qt.validade AS qualificacao_validade, h.id AS h5p_conteudo_id,
         f.nome AS funcionario_nome
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
@@ -1191,8 +1190,7 @@ app.post('/scorm/commit', async (c) => {
         c.id AS curso_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir, c.tipo_conteudo, c.scorm_package_r2_prefix,
         c.qualificacao_tipo_id, c.titulo AS curso_titulo,
         qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
-        qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
-        qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
+        qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
@@ -1218,7 +1216,6 @@ app.post('/scorm/commit', async (c) => {
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
-      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
   const scormAtual = await db
     .prepare(
@@ -1521,7 +1518,6 @@ app.post('/scorm/commit', async (c) => {
         qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
         qualificacaoCategoria: matricula.qualificacao_categoria,
         validade: matricula.qualificacao_validade,
-        vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
         dataConclusao: dataConclusao as string,
         existingHistoricoId: matricula.qualificacao_historico_id,
         progressoPct,
@@ -1732,8 +1728,7 @@ app.post('/:id/finalizar', async (c) => {
               c.id AS curso_id, c.scorm_package_r2_prefix, c.tipo_conteudo, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL},
               c.titulo AS curso_titulo,
               qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
-              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
-              qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
+              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
          LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
@@ -1758,7 +1753,6 @@ app.post('/:id/finalizar', async (c) => {
       qualificacao_nome: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
-      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
 
   const scormAtual = await db
@@ -1891,7 +1885,6 @@ app.post('/:id/finalizar', async (c) => {
       qualificacaoNome: matricula.qualificacao_nome ?? matricula.curso_titulo,
       qualificacaoCategoria: matricula.qualificacao_categoria,
       validade: matricula.qualificacao_validade,
-      vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
       dataConclusao,
       existingHistoricoId: matricula.qualificacao_historico_id,
       progressoPct: 100,
@@ -2016,8 +2009,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
               c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
-              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
-              qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
+              qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
          LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id AND qt.deleted_at IS NULL
@@ -2041,7 +2033,6 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       qualificacao_codigo: string | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
-      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
 
@@ -2194,7 +2185,6 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
         qualificacaoNome: existing.qualificacao_nome ?? existing.curso_titulo,
         qualificacaoCategoria: existing.qualificacao_categoria,
         validade: existing.qualificacao_validade,
-        vencimentoFimMes: existing.qualificacao_vencimento_fim_mes,
         dataConclusao: dataConclusao as string,
         existingHistoricoId: existing.qualificacao_historico_id,
         progressoPct: 100,

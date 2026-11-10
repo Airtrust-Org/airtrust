@@ -67,13 +67,13 @@ describe('resyncTipoHistoricoValidity', () => {
     expect(row(4)).toEqual({ v: 12, d: '2026-01-15' });
   });
 
-  it('respeita vencimento_fim_mes e e idempotente', async () => {
+  it('ignora vencimento_fim_mes legado (vence no dia) e e idempotente', async () => {
     addHistory(1, 6, 'CONCLUIDA', '2025-01-15', '2026-01-15');
     sqlite.database.exec(
       'UPDATE qualificacoes_tipos SET validade = 6, vencimento_fim_mes = 1 WHERE id = 10',
     );
     expect((await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10)).updated).toBe(1);
-    expect(row(1)).toEqual({ v: 6, d: '2025-07-31' });
+    expect(row(1)).toEqual({ v: 6, d: '2025-07-15' });
     expect((await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10)).updated).toBe(0);
   });
 

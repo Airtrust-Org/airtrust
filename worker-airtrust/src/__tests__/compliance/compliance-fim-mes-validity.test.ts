@@ -1,6 +1,6 @@
 /**
- * #1492: o Compliance recalculava o vencimento pela validade do modelo sem
- * respeitar vencimento_fim_mes (Ficha/historico usam calcularDataVencimento).
+ * #1492 + decisao do proprietario (todos os vencimentos vencem NO DIA): o Compliance usa o mesmo
+ * calculo do historico/Ficha e IGNORA a coluna legada vencimento_fim_mes.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeRequirement, type Rule } from '../../services/training-compliance-snapshot-builder';
@@ -30,13 +30,13 @@ const history = (data_realizacao: string): Evidence => ({
 
 afterEach(() => vi.useRealTimers());
 
-describe('computeRequirement com vencimento_fim_mes', () => {
-  it('modelo fim do mes vence no ultimo dia do mes (2025-01-15 + 12m = 2026-01-31)', () => {
+describe('computeRequirement ignora vencimento_fim_mes (vence no dia)', () => {
+  it('flag legada = 1 vence no mesmo dia (2025-01-15 + 12m = 2026-01-15), nao no fim do mes', () => {
     const result = computeRequirement(
       rule({ vencimento_fim_mes: 1 }), [history('2025-01-15')], [], { today: '2026-01-20' },
     );
-    expect(result.data_validade).toBe('2026-01-31');
-    expect(result.status_compliance).toBe('VENCENDO');
+    expect(result.data_validade).toBe('2026-01-15');
+    expect(result.status_compliance).toBe('VENCIDO');
   });
 
   it('modelo dia exato continua vencendo no mesmo dia (2025-01-15 + 12m = 2026-01-15)', () => {

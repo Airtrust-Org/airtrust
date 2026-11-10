@@ -31,7 +31,6 @@ interface CertificateValidationRow {
   qualificacao_carga_inicial: number | string | null;
   qualificacao_carga_recorrente: number | string | null;
   qualificacao_validade: number | string | null;
-  vencimento_fim_mes: number | string | null;
   empresa_nome: string;
 }
 
@@ -106,7 +105,6 @@ async function buildValidationPayload(
   if (certHash !== expectedHash) return null;
 
   const validadeMesesNumero = Number(cert.validade_meses || cert.qualificacao_validade || 0);
-  const vencimentoFimMes = Number(cert.vencimento_fim_mes || 0) === 1 ? 1 : 0;
   const cargaHorariaAtual = resolveCargaHorariaCertificado({
     tipoTreinamento: cert.tipo_treinamento,
     cargaHistorico: cert.carga_horaria,
@@ -120,7 +118,7 @@ async function buildValidationPayload(
   const dataVencimentoAtual =
     dataVencimentoPersistido ||
     (validadeMesesNumero > 0
-      ? calcularDataVencimento(dataConclusao, validadeMesesNumero, vencimentoFimMes)
+      ? calcularDataVencimento(dataConclusao, validadeMesesNumero)
       : null);
 
   const situacaoOperacionalAtual: 'VALIDA' | 'VENCIDA' | 'INDETERMINADA' = !dataVencimentoAtual
@@ -236,7 +234,6 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
              qt.carga_horaria_inicial AS qualificacao_carga_inicial,
              qt.carga_horaria_recorrente AS qualificacao_carga_recorrente,
              qt.validade AS qualificacao_validade,
-             COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
              e.nome AS empresa_nome
            FROM qualificacoes_historico qh
            INNER JOIN documentos d ON d.id = qh.certificado_arquivo_id
@@ -313,7 +310,6 @@ validacao.get('/:hash', rateLimiter(rateLimitPresets.certificateValidation), asy
            qt.carga_horaria_inicial AS qualificacao_carga_inicial,
            qt.carga_horaria_recorrente AS qualificacao_carga_recorrente,
            qt.validade AS qualificacao_validade,
-           COALESCE(qt.vencimento_fim_mes, 0) AS vencimento_fim_mes,
            e.nome AS empresa_nome
          FROM qualificacoes_historico qh
          INNER JOIN documentos d ON d.id = qh.certificado_arquivo_id

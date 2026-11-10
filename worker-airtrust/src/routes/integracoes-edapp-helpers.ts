@@ -1027,7 +1027,7 @@ export async function createQualificacao(
   const tipoQualificacao = await db
     .prepare(
       `
-    SELECT id, validade, COALESCE(vencimento_fim_mes, 0) as vencimento_fim_mes
+    SELECT id, validade
     FROM qualificacoes_tipos
     WHERE codigo = ?
       AND (? IS NULL OR empresa_id = ?)
@@ -1035,7 +1035,7 @@ export async function createQualificacao(
   `,
     )
     .bind(qualificacaoCodigo, empresaId ?? null, empresaId ?? null)
-    .first<{ id: number; validade: number | null; vencimento_fim_mes: number | null }>();
+    .first<{ id: number; validade: number | null }>();
 
   if (!tipoQualificacao) {
     return {
@@ -1049,10 +1049,9 @@ export async function createQualificacao(
     typeof tipoQualificacao.validade === 'number' && tipoQualificacao.validade > 0
       ? tipoQualificacao.validade
       : null;
-  const vencimentoFimMes = Number(tipoQualificacao.vencimento_fim_mes || 0) === 1 ? 1 : 0;
   const dataVencimento = validadeMeses === null
     ? null
-    : calcularDataVencimento(dataConclusao, validadeMeses, vencimentoFimMes);
+    : calcularDataVencimento(dataConclusao, validadeMeses);
 
   const qualificacaoExistente = await db
     .prepare(

@@ -1,7 +1,5 @@
-import {
-  addCalendarMonthsClamped,
-  endOfTargetMonth,
-} from '../../../src/shared/utils/validade-meses';
+import { addCalendarMonthsClamped } from '../../../src/shared/utils/validade-meses';
+import { isCmaCode, resolveCmaValidity } from '../utils/cma-validity';
 /**
  * Atomic qualification history mutations.
  *
@@ -143,20 +141,20 @@ export function resolveEffectiveValidityMonths(params: {
   completionDate: string;
 }): number | null {
   const validity = normalizeValidityMonths(params.typeValidityMonths);
-  if (normalizeCode(params.qualificationCode) !== 'CMA' || !params.birthDate) return validity;
+  if (!isCmaCode(params.qualificationCode)) return validity;
 
-  const completion = parseIsoDate(params.completionDate, 'data_conclusao');
-  const birth = parseIsoDate(params.birthDate, 'data_nascimento');
-  const sixtiethBirthday = new Date(birth);
-  sixtiethBirthday.setUTCFullYear(sixtiethBirthday.getUTCFullYear() + 60);
-  return sixtiethBirthday.getTime() <= completion.getTime() ? 6 : validity;
+  // CMA: validade por idade (12 meses; 6 a partir dos 60 anos), fonte única.
+  parseIsoDate(params.completionDate, 'data_conclusao');
+  return resolveCmaValidity({
+    dataRealizacao: params.completionDate,
+    dataNascimento: params.birthDate,
+  }).months;
 }
 
 export function calculateQualificationExpiry(params: {
   completionDate: string;
   explicitExpiryDate?: string | null;
   validityMonths: unknown;
-  endOfMonth?: boolean;
 }): string | null {
   const completion = parseIsoDate(params.completionDate, 'data_conclusao');
 
@@ -179,9 +177,7 @@ export function calculateQualificationExpiry(params: {
   if (validityMonths === null) return null;
 
   const completionDay = completion.toISOString().slice(0, 10);
-  return params.endOfMonth
-    ? endOfTargetMonth(completionDay, validityMonths)
-    : addCalendarMonthsClamped(completionDay, validityMonths);
+  return addCalendarMonthsClamped(completionDay, validityMonths);
 }
 
 function assertPositiveInteger(value: number, fieldName: string): void {
