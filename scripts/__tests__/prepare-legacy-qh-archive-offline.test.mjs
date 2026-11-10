@@ -75,3 +75,40 @@ test('refuses overwriting existing independent archives', { skip: !sqliteAvailab
     assert.throws(() => prepareLegacyQhArchive({ sourceDb: f.source, archiveDir: f.output }), /LEGACY_QH_ARCHIVE_DIR_EXISTS/);
   } finally { cleanup(f.root); }
 });
+
+test('reviewed 0577 SQL preserves all 525 rows and eliminates only the orphan FK', { skip: !sqliteAvailable }, () => {
+  const f = fixture();
+  try {
+    const before = spawnSync('sqlite3', ['-json', f.source, 'SELECT * FROM "_backup_qh_tmp" ORDER BY id;'], {encoding:'utf8'});
+    assert.equal(before.status, 0);
+    const migration = readFileSync(new URL('../../worker-airtrust/schema-v2/changes/0577_dr_legacy_qh_fk_archive.sql', import.meta.url), 'utf8');
+    sql(f.source, 'PRAGMA foreign_keys=ON;\n' + migration);
+    const after = spawnSync('sqlite3', ['-json', f.source, 'SELECT * FROM "_archive_qh_fk_20261110" ORDER BY id;'], {encoding:'utf8'});
+    assert.equal(after.status, 0);
+    assert.deepEqual(JSON.parse(after.stdout), JSON.parse(before.stdout));
+    assert.equal(spawnSync('sqlite3', [f.source, 'SELECT COUNT(*) FROM pragma_foreign_key_check;'], {encoding:'utf8'}).stdout.trim(), '0');
+    assert.equal(spawnSync('sqlite3', [f.source, "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('_backup_qh_tmp', '_archive_qh_guard_20261110');"], {encoding:'utf8'}).stdout.trim(), '0');
+    assert.equal(spawnSync('sqlite3', [f.source, 'PRAGMA integrity_check;'], {encoding:'utf8'}).stdout.trim(), 'ok');
+  } finally { cleanup(f.root); }
+});
+
+test('reviewed 0577 SQL blocks an unexpected 524-row source before destructive DROP', { skip: !sqliteAvailable }, () => {
+  const f = fixture('', 524);
+  try {
+    const migration = readFileSync(new URL('../../worker-airtrust/schema-v2/changes/0577_dr_legacy_qh_fk_archive.sql', import.meta.url), 'utf8');
+    const attempt = spawnSync('sqlite3', ['-batch', '-bail', f.source], { input: 'PRAGMA foreign_keys=ON;\n' + migration, encoding: 'utf8' });
+    assert.notEqual(attempt.status, 0);
+    assert.equal(spawnSync('sqlite3', [f.source, 'SELECT COUNT(*) FROM "_backup_qh_tmp";'], {encoding:'utf8'}).stdout.trim(), '524');
+    assert.equal(spawnSync('sqlite3', [f.source, "SELECT COUNT(*) FROM sqlite_master WHERE name='_archive_qh_fk_20261110';"], {encoding:'utf8'}).stdout.trim(), '0');
+  } finally { cleanup(f.root); }
+});
+
+test('production Schema V2 retains independent archive interlock and FK readbacks', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/apply-schema-change-v2.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /D1_LEGACY_QH_INDEPENDENT_ARCHIVE_PROOF_MISSING/);
+  assert.match(workflow, /inputs\.change_id == 'dr-legacy-qh-fk-archive-0577'/);
+  assert.match(workflow, /source_rows !== 525/);
+  assert.match(workflow, /expected_violations !== 525/);
+  assert.match(workflow, /remaining_fk_violations !== 0/);
+  assert.match(workflow, /D1_LEGACY_QH_ARCHIVE_ROWSET_MISMATCH/);
+});
