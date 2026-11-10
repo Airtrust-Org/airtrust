@@ -38,6 +38,11 @@ describe('cron health D1 overloaded mitigation (#2149)', () => {
     db.database.prepare(`INSERT INTO cron_job_state (job_name, scope_key, last_started_at, last_success_at)
       VALUES ('frms-reprocess', 'empresa:0004', datetime('now', '-40 minutes'), datetime('now', '-1 hour'))`).run();
 
+    // A historical failed state without stale PROCESSING must never consume
+    // the two-scope recovery budget or starve ready work.
+    db.database.prepare(`INSERT INTO cron_job_state (job_name, scope_key, last_started_at, last_success_at)
+      VALUES ('frms-reprocess', 'empresa:0001', datetime('now', '-40 minutes'), NULL)`).run();
+
     const readyPlan = db.database.prepare(`EXPLAIN QUERY PLAN ${buildReadyFrmsQueueScopesQuery()}`)
       .all('frms-reprocess', 2) as Array<{ detail: string }>;
     const stalePlan = db.database.prepare(`EXPLAIN QUERY PLAN ${buildStaleFrmsQueueScopesQuery()}`)
