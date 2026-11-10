@@ -109,8 +109,10 @@ async function getLearnerSession() {
   return { token, funcionarioId, email };
 }
 
-async function listCourses(learnerToken) {
-  let catalogToken = learnerToken;
+let cachedAdminToken = null;
+
+export async function resolveAdminToken() {
+  if (cachedAdminToken) return cachedAdminToken;
   const adminEmail = String(
     process.env.PROD_SMOKE_EMAIL || process.env.QA_EXAMINER_ADMIN_EMAIL || '',
   ).trim();
@@ -118,16 +120,30 @@ async function listCourses(learnerToken) {
     process.env.PROD_SMOKE_PASSWORD || process.env.QA_EXAMINER_ADMIN_PASSWORD || '',
   );
 
-  if (adminEmail && adminPassword) {
-    try {
-      const logged = await login(API, adminEmail, adminPassword);
-      let t = extractAccessToken(logged);
+  if (!adminEmail || !adminPassword) return null;
+
+  try {
+    const logged = await login(API, adminEmail, adminPassword);
+    let t = extractAccessToken(logged);
+    const claimsBefore = decodeJwtPayload(t);
+    if (Number(claimsBefore?.empresa_id) !== TARGET_COMPANY_ID) {
       const sel = await selectEmpresa(API, t, TARGET_COMPANY_ID);
-      if (sel.status === 200) catalogToken = extractAccessToken(sel.json);
-    } catch (err) {
-      console.warn('[LMS_HOMOLOGATION] Fallback para token de aluno na listagem do catálogo:', err.message);
+      assert(sel.status === 200, `SELECT_EMPRESA_HTTP_${sel.status}`);
+      t = extractAccessToken(sel.json);
     }
+    const claimsAfter = decodeJwtPayload(t);
+    assert(Number(claimsAfter?.empresa_id) === TARGET_COMPANY_ID, 'ADMIN_TOKEN_TENANT_MISMATCH');
+    cachedAdminToken = t;
+    return t;
+  } catch (err) {
+    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa no tenant alvo:', err.message);
+    return null;
   }
+}
+
+async function listCourses(learnerToken) {
+  const adminToken = await resolveAdminToken();
+  const catalogToken = adminToken || learnerToken;
 
   const out = [];
   const limit = 200;
@@ -147,8 +163,27 @@ async function listCourses(learnerToken) {
     : active;
 }
 
-async function enrollLearner(token, cursoId, funcionarioId) {
-  const res = await fetchJson(`${API}/api/lms/matriculas`, {
+export async function enrollLearner(token, cursoId, funcionarioId, adminToken = null) {
+  // 1. Verificar se o aluno já possui matrícula ativa pré-existente
+  try {
+    const existingRes = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (existingRes.status === 200 && Array.isArray(existingRes.json?.data)) {
+      const match = existingRes.json.data.find(
+        (m) => Number(m.curso_id) === Number(cursoId) && m.status !== 'CANCELADO' && !m.deleted_at,
+      );
+      if (match && Number(match.id) > 0) {
+        console.log(`[LMS_HOMOLOGATION] Matrícula ativa pré-existente reutilizada: id=${match.id}`);
+        return Number(match.id);
+      }
+    }
+  } catch (err) {
+    console.warn(`[LMS_HOMOLOGATION] Aviso ao consultar minhas-ead: ${err.message}`);
+  }
+
+  // 2. Tentar auto-matrícula normal pelo aluno
+  let res = await fetchJson(`${API}/api/lms/matriculas`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -157,10 +192,57 @@ async function enrollLearner(token, cursoId, funcionarioId) {
     body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
   });
 
-  assert(res.status === 200 || res.status === 201, `ENROLL_FAILED_HTTP_${cursoId}_${res.status}`);
-  const matriculaId = Number(res.json?.data?.id || 0);
-  assert(matriculaId > 0, `ENROLL_ID_INVALID:${cursoId}`);
-  return matriculaId;
+  if (res.status === 200 || res.status === 201) {
+    const matriculaId = Number(res.json?.data?.id || 0);
+    assert(matriculaId > 0, `ENROLL_ID_INVALID:${cursoId}`);
+    return matriculaId;
+  }
+
+  // 3. Fallback administrativo caso auto-matrícula seja restrita por setor (403)
+  if (res.status === 403 && adminToken) {
+    console.log(`[LMS_HOMOLOGATION] Auto-matrícula restrita pelo setor. Atribuindo via gestão...`);
+    res = await fetchJson(`${API}/api/lms/matriculas`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
+    });
+    if (res.status === 200 || res.status === 201) {
+      const matriculaId = Number(res.json?.data?.id || 0);
+      assert(matriculaId > 0, `ENROLL_ID_INVALID:${cursoId}`);
+      return matriculaId;
+    }
+  }
+
+  // 4. Tratar matrícula cancelada anterior (LMS_REMATRICULATION_REQUIRED - 409)
+  if (res.status === 409 && res.json?.code === 'LMS_REMATRICULATION_REQUIRED') {
+    const targetMatriculaId = Number(res.json?.data?.matricula_id || 0);
+    const authToUse = adminToken || token;
+    if (targetMatriculaId > 0) {
+      console.log(`[LMS_HOMOLOGATION] Reativando matrícula cancelada id=${targetMatriculaId} via rematrícula autorizada...`);
+      const remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToUse}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
+      });
+      if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
+        return Number(remat.json.data.matricula_id);
+      }
+    }
+  }
+
+  // 5. Tratar conflito que retorna id existente
+  if (res.status === 409 && Number(res.json?.data?.id || 0) > 0) {
+    return Number(res.json.data.id);
+  }
+
+  const errDetail = res.json?.code || res.json?.error || JSON.stringify(res.json);
+  throw new Error(`ENROLL_FAILED_HTTP_${cursoId}_${res.status}:${errDetail}`);
 }
 
 async function getMatriculaDetail(token, matriculaId) {
@@ -694,6 +776,7 @@ export async function runHomologation() {
   const learner = await getLearnerSession();
   console.log(`[LMS_HOMOLOGATION] Aluno autenticado: ${learner.email} (funcionario_id: ${learner.funcionarioId})`);
 
+  const adminToken = await resolveAdminToken();
   const courses = await listCourses(learner.token);
   console.log(`[LMS_HOMOLOGATION] Cursos elegíveis no catálogo para teste: ${courses.length}`);
 
@@ -751,7 +834,7 @@ export async function runHomologation() {
 
     try {
       // 1. Enroll learner
-      const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId);
+      const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId, adminToken);
       console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
 
       // 2. Drive course by content type in real browser
