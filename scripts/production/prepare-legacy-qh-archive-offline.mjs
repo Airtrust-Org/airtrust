@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CHILD = '_backup_qh_tmp';
 const PARENT = 'funcionarios_backup';
-const ARCHIVE = '_archive_qh_fk_20261110';
 const EXPECTED = 525;
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 
