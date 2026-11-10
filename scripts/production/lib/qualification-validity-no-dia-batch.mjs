@@ -108,14 +108,14 @@ function canonicalBody(source) {
   const histories = sortedById(source.histories.map(canonicalHistory), 'id', 'MANIFEST_HISTORIES_NOT_SORTED_OR_DUPLICATE');
   const modelIds = new Set(models.map((m) => m.tipo_id));
   for (const f of flags) check(!modelIds.has(f.tipo_id), 'MANIFEST_TYPE_IN_MODEL_AND_FLAG');
-  const flagIds = new Set(flags.map((f) => f.tipo_id));
   const scopeValidity = new Map(VALIDITY_MODEL_SCOPE.map((m) => [m.tipo_id, m.code]));
   const scopeFlag = new Map(FLAG_MODEL_SCOPE.map((m) => [m.tipo_id, m.code]));
   for (const m of models) check(scopeValidity.get(m.tipo_id) === m.code, 'MANIFEST_MODEL_OUTSIDE_OWNER_SCOPE');
   for (const f of flags) check(scopeFlag.get(f.tipo_id) === f.code, 'MANIFEST_FLAG_OUTSIDE_OWNER_SCOPE');
   for (const h of histories) {
     if (h.group === 'validity') check(scopeValidity.get(h.qualificacao_id) === h.model_code, 'MANIFEST_HISTORY_OUTSIDE_OWNER_SCOPE');
-    else check(scopeFlag.get(h.qualificacao_id) === h.model_code && flagIds.has(h.qualificacao_id), 'MANIFEST_HISTORY_FLAG_NOT_IN_BATCH');
+    // history-only corrections are allowed when the model flag is already 0 (the live-state guard in the executor requires flag 0 or a pending flag op)
+    else check(scopeFlag.get(h.qualificacao_id) === h.model_code, 'MANIFEST_HISTORY_OUTSIDE_OWNER_SCOPE');
   }
   return { models, flags, histories };
 }

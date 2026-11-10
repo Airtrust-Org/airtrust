@@ -179,6 +179,21 @@ describe('qualification validity no-dia batch executor (local SQLite only)', () 
     expect(m.histories.some((x) => x.qualificacao_id === 18)).toBe(false);
   });
 
+  it('plans history-only corrections when the flag is already 0 and applies them under the live-state guard', () => {
+    db.database.exec(`UPDATE qualificacoes_tipos SET vencimento_fim_mes = 0 WHERE id = 18;
+      UPDATE qualificacoes_historico SET data_vencimento = '2026-01-31' WHERE id = 20`);
+    const plan = makePlan(db);
+    expect(plan.manifest.flags.map((f) => f.code)).toEqual(['G2', 'G1-SEM']);
+    expect(plan.manifest.histories.find((x) => x.id === 20)).toMatchObject({ group: 'flag', next_expiry: '2026-01-15' });
+    const m = { ...plan.manifest, source_sha: SHA };
+    const report = executeManifest({
+      port: port(db), manifest: m, expectedPlanHash: m.plan_sha256, expectedCount: m.row_count,
+      apply: true, actor: ACTOR, sourceSha: SHA,
+    });
+    expect(report.postconditions_verified).toBe(true);
+    expect(history(db, 20).data_vencimento).toBe('2026-01-15');
+  });
+
   it('blocks models shared with another tenant, with a code mismatch or with unexpected validity', () => {
     db.database.exec(`
       INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_id, qualificacao_codigo, data_conclusao, status, empresa_id)
