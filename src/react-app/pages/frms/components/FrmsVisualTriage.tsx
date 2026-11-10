@@ -192,11 +192,22 @@ function ModifierBar({ modifier, max, good }: { modifier: FrmsFortnightModifier;
   </div>;
 }
 
+/** These legacy score modifiers describe collection/completeness, not physiology.
+ * Keep their original points visible while preventing a biological reading. */
+const FRMS_DATA_QUALITY_MODIFIER_CODES = new Set([
+  'CHECKIN_PENDENTE_NO_PERIODO',
+  'DADO_ESTIMADO_NO_PERIODO',
+  'DADOS_COMPLETOS_DO_PERIODO',
+]);
+
 export function FrmsScoreExplanation({ item }: { item: FrmsOperationalSnapshotItem }) {
   const f = verifiedIndicator(item);
-  const aggravants = (f?.agravantes_aplicados || []).filter(p => p?.descricao);
-  const attenuators = (f?.atenuadores_aplicados || []).filter(p => p?.descricao);
-  const all = [...aggravants, ...attenuators];
+  const appliedAggravants = (f?.agravantes_aplicados || []).filter(p => p?.descricao);
+  const appliedAttenuators = (f?.atenuadores_aplicados || []).filter(p => p?.descricao);
+  const all = [...appliedAggravants, ...appliedAttenuators];
+  const qualityModifiers = all.filter(p => FRMS_DATA_QUALITY_MODIFIER_CODES.has(p.codigo));
+  const aggravants = appliedAggravants.filter(p => !FRMS_DATA_QUALITY_MODIFIER_CODES.has(p.codigo));
+  const attenuators = appliedAttenuators.filter(p => !FRMS_DATA_QUALITY_MODIFIER_CODES.has(p.codigo));
   const max = Math.max(1, ...all.map(x => Number.isFinite(x.impacto_score) ? Math.abs(x.impacto_score) : 0));
   const trend = f?.tendencia;
   return <section aria-label="Composição do índice" className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
@@ -209,6 +220,11 @@ export function FrmsScoreExplanation({ item }: { item: FrmsOperationalSnapshotIt
         </span> : null}
     </div>
     <div className="mt-3"><FrmsScoreMeter item={item} /></div>
+    <p className="mt-2 text-xs text-slate-600 dark:text-slate-300" role="note">
+      Pontuação interna de triagem ainda sem calibração científica individual. Mistura exposição operacional,
+      sinais de fadiga e qualidade da coleta; não mede probabilidade de acidente, não comprova aptidão
+      e não substitui limites legais ou decisão humana.
+    </p>
     {f?.limite_referencia && Number.isFinite(f.limite_referencia.pct_atingido) ? (
       <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-900">
         <div className="flex justify-between gap-2">
@@ -231,6 +247,15 @@ export function FrmsScoreExplanation({ item }: { item: FrmsOperationalSnapshotIt
           {attenuators.length > 0 && <div className="space-y-2">
             <p className="flex items-center gap-1 text-xs font-bold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Fatores favoráveis / atenuadores</p>
             {attenuators.map((m, i) => <ModifierBar key={m.codigo + i} modifier={m} max={max} good />)}
+          </div>}
+          {qualityModifiers.length > 0 && <div className="space-y-2" aria-label="Qualidade e conformidade da coleta">
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Qualidade e conformidade da coleta — não são medidas fisiológicas</p>
+            {qualityModifiers.map((m, i) =>
+              <ModifierBar key={m.codigo + i} modifier={m} max={max} good={m.impacto_score < 0} />)}
+            <p className="text-[11px] text-slate-500">
+              Estes pontos integram o índice legado, mas check-in pendente ou dado estimado representam
+              incerteza e pendência de coleta, não intensidade de fadiga medida.
+            </p>
           </div>}
           <p className="text-[11px] text-slate-500">Impactos em pontos informados pelo motor. Não representam sozinhos a fórmula completa nem garantem aptidão.</p>
         </div>}
