@@ -661,9 +661,8 @@ export function computeRequirement(
         // Mesmo calculo do historico/Ficha: modelo "fim do mes" vence no ultimo dia do mes.
         data_validade = calcularDataVencimento(realizationDay, months, 1);
       } else {
-        const base = new Date(`${realizationDay}T12:00:00Z`);
-        base.setUTCMonth(base.getUTCMonth() + months);
-        data_validade = base.toISOString().slice(0, 10);
+        // Dia exato: soma canonica com limite no ultimo dia do mes-alvo.
+        data_validade = realizationDay ? calcularDataVencimento(realizationDay, months, 0) : null;
       }
     }
     if (!data_validade) {

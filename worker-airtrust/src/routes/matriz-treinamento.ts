@@ -1,3 +1,4 @@
+import { tryAddCalendarMonthsClamped } from '../../../src/shared/utils/validade-meses';
 import { Hono } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import { auth } from '../middleware/auth';
@@ -678,9 +679,10 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
         if (hist.data_vencimento) {
           data_validade = hist.data_vencimento.slice(0, 10);
         } else if (r.validade_meses) {
-          const base = new Date(hist.ultima_data);
-          base.setMonth(base.getMonth() + r.validade_meses);
-          data_validade = base.toISOString().split('T')[0];
+          data_validade = tryAddCalendarMonthsClamped(
+            String(hist.ultima_data).slice(0, 10),
+            r.validade_meses,
+          );
         }
 
         if (data_validade) {

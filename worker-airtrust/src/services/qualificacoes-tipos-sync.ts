@@ -1,3 +1,7 @@
+import {
+  tryAddCalendarMonthsClamped,
+  tryEndOfTargetMonth,
+} from '../../../src/shared/utils/validade-meses';
 type TipoTreinamento = 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
 export type QualificacaoTipoSnapshot = {
@@ -79,21 +83,9 @@ function calcularDataVencimentoSnapshot(
   validadeMeses: number,
   vencimentoFimMes: number | null,
 ): string | null {
-  const dataBase = new Date(`${dataConclusao}T00:00:00Z`);
-
-  if (Number.isNaN(dataBase.getTime()) || validadeMeses <= 0) {
-    return null;
-  }
-
-  if (Number(vencimentoFimMes || 0) === 1) {
-    const year = dataBase.getUTCFullYear();
-    const month = dataBase.getUTCMonth();
-    const endOfMonth = new Date(Date.UTC(year, month + validadeMeses + 1, 0));
-    return endOfMonth.toISOString().slice(0, 10);
-  }
-
-  dataBase.setUTCMonth(dataBase.getUTCMonth() + validadeMeses);
-  return dataBase.toISOString().slice(0, 10);
+  return Number(vencimentoFimMes || 0) === 1
+    ? tryEndOfTargetMonth(dataConclusao, validadeMeses)
+    : tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 export function resolveHistoricoValidadeMeses(
