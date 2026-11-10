@@ -210,6 +210,8 @@ describe('bounded cron discovery', () => {
     expect(stale).toContain('FROM cron_job_state');
     expect(stale).toContain("last_started_at < datetime('now', '-30 minutes')");
     expect(stale).toContain('last_started_at > last_success_at');
+    expect(stale).toContain('EXISTS ( SELECT 1 FROM cron_job_items AS pending_recovery');
+    expect(stale).toContain("pending_recovery.status = 'PROCESSING'");
     expect(stale).toContain('ORDER BY scope_key ASC LIMIT ?');
     expect(ready + stale).not.toContain('UNION');
     expect(ready + stale).not.toContain("status != 'SUCCEEDED'");
