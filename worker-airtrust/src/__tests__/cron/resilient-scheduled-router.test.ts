@@ -24,7 +24,7 @@ import {
   shouldRunSigvoosAtCurrentHour,
   FRMS_REPROCESS_BATCH,
   FRMS_QUEUE_SCOPE_BATCH,
-  buildRunnableFrmsQueueScopesQuery,
+  buildBoundedFrmsQueueScopesQuery,
   SIGVOOS_TENANT_BATCH,
   SIGVOOS_TRIPULANTE_ENQUEUE_BATCH,
 } from '../../cron/resilient/sigvoos-frms';
@@ -199,15 +199,14 @@ describe('bounded cron discovery', () => {
     expect(FRMS_QUEUE_SCOPE_BATCH).toBeLessThanOrEqual(2);
   });
 
-  it('seleciona somente filas FRMS prontas e preserva recuperação de itens PROCESSING obsoletos', () => {
-    const sql = compactSql(buildRunnableFrmsQueueScopesQuery());
-    expect(sql).toContain("status IN ('PENDING', 'FAILED')");
-    expect(sql).toContain("available_at <= datetime('now')");
-    expect(sql).toContain("status = 'PROCESSING'");
-    expect(sql).toContain("updated_at < datetime('now', '-30 minutes')");
-    expect(sql).toContain('UNION');
+  it('limita descoberta na origem sem UNION que materializa todo o histórico', () => {
+    const sql = compactSql(buildBoundedFrmsQueueScopesQuery());
+    expect(sql).toContain("WHERE job_name = ? AND status != 'SUCCEEDED'");
     expect(sql).toContain('ORDER BY scope_key ASC LIMIT ?');
-    expect(sql).not.toContain("status != 'SUCCEEDED'");
+    expect(sql).not.toContain('UNION');
+    expect(sql).not.toContain('SELECT scope_key FROM (');
+    // Delayed FAILED and stale PROCESSING remain discoverable for recovery.
+    expect(sql).not.toContain("status IN ('PENDING', 'FAILED')");
   });
 });
 
