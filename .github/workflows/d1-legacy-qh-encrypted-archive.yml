@@ -75,7 +75,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          result="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "
+          result="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
             SELECT
               (SELECT COUNT(*) FROM \"_backup_qh_tmp\") AS source_rows,
               (SELECT COUNT(*) FROM pragma_foreign_key_check) AS total_violations,
@@ -110,7 +110,7 @@ jobs:
           rows_file="$RUNNER_TEMP/dr-qh-plaintext-rows.json"
           encrypted_file="$RUNNER_TEMP/encrypted-legacy-qh.json"
           trap 'rm -f "$rows_file"' EXIT
-          npx wrangler d1 execute airtrust-db --env production --remote --json \
+          npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json \
             --command 'SELECT id,funcionario_id,qualificacao_id,tipo_codigo,codigo,categoria,validade,numero_certificado,orgao_emissor,observacoes,arquivo_url,created_at,updated_at,deleted_at FROM "_backup_qh_tmp" ORDER BY id;' > "$rows_file"
           node scripts/production/legacy-qh-encrypted-transfer.mjs pack \
             "$rows_file" "$ARCHIVE_PUBLIC_KEY_B64" "$encrypted_file"
