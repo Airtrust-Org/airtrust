@@ -774,29 +774,56 @@ async function runFrmsQueueScope(
 }
 
 /**
- * The primary key (job_name, scope_key, item_key) provides ordered discovery.
- * LIMIT must be applied to the scan itself: a UNION of pending and PROCESSING
- * arms materializes the full history (including completed items) before LIMIT,
- * amplifying D1 load. Keep delayed retries and stale PROCESSING scopes visible
- * so that the existing lease recovery cannot strand a queue indefinitely.
+ * 0451's partial index contains pending/failed work, but excludes completed
+ * history. The previous global NOT-SUCCEEDED scan and a UNION with PROCESSING
+ * each revisit every completed item as the table grows. Bound each indexed
+ * source before returning a scope. Delayed retries are not runnable yet.
  */
-export function buildBoundedFrmsQueueScopesQuery(): string {
+export function buildReadyFrmsQueueScopesQuery(): string {
   return `SELECT DISTINCT scope_key
-            FROM cron_job_items
+            FROM cron_job_items INDEXED BY idx_cron_job_items_pending
            WHERE job_name = ?
-             AND status != 'SUCCEEDED'
+             AND status IN ('PENDING', 'FAILED')
+             AND available_at <= datetime('now')
+           ORDER BY scope_key ASC
+           LIMIT ?`;
+}
+
+/**
+ * A crashed Worker can leave PROCESSING items behind. Their durable lease
+ * state is indexed by (job_name, scope_key), so stale scopes can be revisited
+ * without scanning every completed item to search for PROCESSING rows.
+ * runFrmsQueueScope still enforces its normal 30-minute stale-item guard.
+ */
+export function buildStaleFrmsQueueScopesQuery(): string {
+  return `SELECT scope_key
+            FROM cron_job_state
+           WHERE job_name = ?
+             AND last_started_at < datetime('now', '-30 minutes')
+             AND (last_success_at IS NULL OR last_started_at > last_success_at)
            ORDER BY scope_key ASC
            LIMIT ?`;
 }
 
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
-  const scopes = await db
-    .prepare(buildBoundedFrmsQueueScopesQuery())
+  // Sequential reads avoid concurrent D1 bursts in a saturated 10-minute tick.
+  const ready = await db
+    .prepare(buildReadyFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
+    .all<{ scope_key: string }>();
+  const stale = await db
+    .prepare(buildStaleFrmsQueueScopesQuery())
     .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
     .all<{ scope_key: string }>();
 
-  for (const row of scopes.results || []) {
-    await runFrmsQueueScope(db, env, row.scope_key, logger);
+  // Prefer stale recovery, then ready work. Deduplicate scopes and keep the
+  // hard cap independent of the number of pending historical items.
+  const scopes = [...new Set([
+    ...(stale.results || []).map((row) => row.scope_key),
+    ...(ready.results || []).map((row) => row.scope_key),
+  ])].slice(0, FRMS_QUEUE_SCOPE_BATCH);
+  for (const scopeKey of scopes) {
+    await runFrmsQueueScope(db, env, scopeKey, logger);
   }
 }
 
