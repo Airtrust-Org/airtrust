@@ -345,14 +345,14 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
 }
 
 export function evaluateAssessmentPolicy({
-  policy = 'FORMATIVE',
+  policy = null,
   lessonStatus = '',
   scoreRaw = null,
   scoreScaled = null,
   masteryScore = null,
 }) {
   const normStatus = String(lessonStatus || '').trim().toLowerCase();
-  const normalizedPolicy = String(policy || 'FORMATIVE').trim().toUpperCase();
+  const normalizedPolicy = typeof policy === 'string' ? policy.trim().toUpperCase() : '';
 
   if (normalizedPolicy === 'FORMATIVE') {
     const ok = normStatus === 'completed' || normStatus === 'passed';
@@ -392,7 +392,7 @@ export function evaluateAssessmentPolicy({
         scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
       }
 
-      if (!scorePassed && normStatus !== 'passed') {
+      if (!scorePassed) {
         return {
           ok: false,
           policy: 'SCORED',
@@ -417,14 +417,24 @@ export function evaluateAssessmentPolicy({
     };
   }
 
+  if (normalizedPolicy === 'PPTX_SLIDES') {
+    const ok = normStatus === 'completed';
+    return {
+      ok, policy: normalizedPolicy, scoreRaw, scoreScaled, masteryScore, status: normStatus,
+      reason: ok ? null : 'PPTX_NOT_COMPLETED',
+    };
+  }
+
   return {
-    ok: true,
+    ok: false,
     policy: normalizedPolicy,
     scoreRaw,
     scoreScaled,
     masteryScore,
     status: normStatus,
-    reason: null,
+    reason: normalizedPolicy === 'EXTERNAL'
+      ? 'EXTERNAL_ASSESSMENT_NOT_ATTESTED'
+      : 'ASSESSMENT_POLICY_UNSUPPORTED',
   };
 }
 
@@ -447,7 +457,11 @@ export function evaluateCoursePath({
     };
   }
 
-  if (totalUnits > 0 && (!atLastUnit || visitedUnits < totalUnits)) {
+  if (!Number.isSafeInteger(totalUnits) || totalUnits < 1) {
+    return { ok: false, totalUnits, visitedUnits, atLastUnit, reason: 'COURSE_TOTAL_UNVERIFIED' };
+  }
+
+  if (!atLastUnit || visitedUnits < totalUnits) {
     return {
       ok: false,
       totalUnits,
@@ -477,8 +491,8 @@ export function evaluateCoursePath({
 }
 
 export function evaluateHomologationVerdict({
-  percurso_ok = true,
-  avaliacao_ok = true,
+  percurso_ok = false,
+  avaliacao_ok = false,
   isConcluido,
   progress100,
   resumedVerified,
@@ -760,6 +774,7 @@ async function driveScormCourseInBrowser({
   let finalStatusReached = false;
   let finalButtonClicked = false;
   let maxVisitedUnit = 0;
+  const visitedUnitIds = new Set();
   let totalUnitsDetected = 0;
   let finalAtLastUnit = false;
   let quizzesAnswered = 0;
@@ -941,7 +956,10 @@ async function driveScormCourseInBrowser({
       return { type: 'none', domCurrent, domTotal, atLastUnit };
     }, { plan: answerPlan, requiredIndices: requiredDecisionSlideIndices }).catch(() => ({ type: 'error' }));
 
-    if (action?.domCurrent && action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+    if (Number.isSafeInteger(action?.domCurrent) && action.domCurrent > 0) {
+      visitedUnitIds.add(action.domCurrent);
+      if (action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+    }
     if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
     if (action?.atLastUnit) finalAtLastUnit = true;
     if (action?.type === 'quiz-choice' || action?.type === 'submit') quizzesAnswered += 1;
@@ -1009,7 +1027,7 @@ async function driveScormCourseInBrowser({
   const pathVerdict = evaluateCoursePath({
     contentType: 'scorm',
     totalUnits: totalUnitsDetected,
-    visitedUnits: maxVisitedUnit,
+    visitedUnits: visitedUnitIds.size,
     atLastUnit: finalAtLastUnit || isConcluido,
     completedActivities: quizzesAnswered,
     totalActivities: requiredDecisionSlideIndices.length,
@@ -1054,7 +1072,8 @@ async function driveScormCourseInBrowser({
     status: verdict.pass ? 'PASS' : 'FAIL',
     reason: verdict.reason,
     audit_evidence: {
-      units_visited: maxVisitedUnit,
+      units_visited: visitedUnitIds.size,
+      visited_unit_ids: [...visitedUnitIds].sort((a, b) => a - b),
       total_units: totalUnitsDetected,
       actions_count: steps,
       resume_tested: checkpointTested,
@@ -1171,7 +1190,7 @@ export async function runHomologation() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   runHomologation()
     .then((summary) => {
-      process.exit(summary.fail_count > 0 ? 1 : 0);
+      process.exit(summary.total_courses === 0 || summary.fail_count > 0 || summary.blocked_count > 0 ? 1 : 0);
     })
     .catch((err) => {
       console.error('FATAL_HOMOLOGATION_ERROR:', err);
