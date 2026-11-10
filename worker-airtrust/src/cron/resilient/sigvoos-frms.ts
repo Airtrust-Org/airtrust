@@ -28,7 +28,8 @@ const FRMS_JOB = 'frms-reprocess';
 const GLOBAL_SCOPE = 'global';
 export const SIGVOOS_TENANT_BATCH = 25;
 export const SIGVOOS_TRIPULANTE_ENQUEUE_BATCH = 100;
-export const FRMS_REPROCESS_BATCH = 25;
+export const FRMS_REPROCESS_BATCH = 5;
+export const FRMS_QUEUE_SCOPE_BATCH = 2;
 
 interface SigvoosConfigCursorRow {
   empresa_id: number | null;
@@ -772,17 +773,32 @@ async function runFrmsQueueScope(
   }
 }
 
+/**
+ * Discover only work that can make progress now. The old status != SUCCEEDED
+ * scan revisited delayed retries and fresh PROCESSING rows every tick, causing
+ * unnecessary D1 reads. Keep stale PROCESSING rows eligible for lease recovery.
+ * The pending/failed arm is backed by idx_cron_job_items_pending (0451).
+ */
+export function buildRunnableFrmsQueueScopesQuery(): string {
+  return `SELECT scope_key FROM (
+            SELECT scope_key FROM cron_job_items
+             WHERE job_name = ?
+               AND status IN ('PENDING', 'FAILED')
+               AND available_at <= datetime('now')
+            UNION
+            SELECT scope_key FROM cron_job_items
+             WHERE job_name = ?
+               AND status = 'PROCESSING'
+               AND updated_at < datetime('now', '-30 minutes')
+          )
+          ORDER BY scope_key ASC
+          LIMIT ?`;
+}
+
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
   const scopes = await db
-    .prepare(
-      `SELECT DISTINCT scope_key
-         FROM cron_job_items
-        WHERE job_name = ?
-          AND status != 'SUCCEEDED'
-        ORDER BY scope_key ASC
-        LIMIT 50`,
-    )
-    .bind(FRMS_JOB)
+    .prepare(buildRunnableFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
     .all<{ scope_key: string }>();
 
   for (const row of scopes.results || []) {
