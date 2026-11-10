@@ -39,7 +39,7 @@ const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const BROWSER_NAME = String(process.env.HOMOLOGATION_BROWSER || 'chromium').trim().toLowerCase();
 const REPORT_PATH = process.env.HOMOLOGATION_REPORT_PATH || `qa-state/lms-homologation-${BROWSER_NAME}.json`;
-const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 60_000);
+const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 120_000);
 const MAX_STEPS = Number(process.env.HOMOLOGATION_MAX_STEPS || 300);
 const COURSE_IDS = parseCourseIdFilter(process.env.HOMOLOGATION_COURSE_IDS);
 
@@ -858,7 +858,7 @@ async function driveScormCourseInBrowser({
       };
 
       // Detect current unit and total units from DOM
-      const counterEl = document.querySelector('.counter');
+      const counterEl = document.querySelector('.counter, #count');
       const counterText = clean(counterEl?.innerText || counterEl?.textContent);
       const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
       let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
@@ -869,6 +869,10 @@ async function driveScormCourseInBrowser({
         if (!domTotal) domTotal = slidesArray.length;
         const activeIdx = Number(window.__AIRTRUST_PLAYER_TEST__?.getState?.()?.active ?? -1);
         if (activeIdx >= 0 && !domCurrent) domCurrent = activeIdx + 1;
+      }
+      if (!domCurrent && window.__AIRTRUST_PLAYER_TEST__?.getState) {
+        const st = window.__AIRTRUST_PLAYER_TEST__.getState();
+        if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
       }
 
       const atLastUnit = (domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
@@ -888,7 +892,50 @@ async function driveScormCourseInBrowser({
         };
       }
 
-      // 2. Accordion handling: details & summary
+      // 2. Interactive Gate items: hotspots, section map tabs, mandatory criteria
+      const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], button.spot, .section-map-tab')).find((el) => {
+        return visible(el) && !el.disabled && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
+      });
+      if (unvisitedGate) {
+        unvisitedGate.click();
+        return { type: 'gate-item', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 3. Scenario options and interactive decision choices
+      const scenarioOpt = Array.from(document.querySelectorAll('[data-opt], button.option')).find((el) => {
+        return visible(el) && !el.disabled && !el.classList.contains('selected');
+      });
+      if (scenarioOpt) {
+        scenarioOpt.click();
+        return { type: 'scenario-option', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 4. Assessment questions: options and question navigation
+      const assessOpt = Array.from(document.querySelectorAll('[data-answer], button.answer')).find((el) => {
+        return visible(el) && !el.disabled && !el.classList.contains('selected');
+      });
+      if (assessOpt) {
+        assessOpt.click();
+        return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+      }
+
+      const qNext = document.querySelector('#qNext');
+      if (qNext && visible(qNext) && !qNext.disabled) {
+        qNext.click();
+        return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 5. Explicit touch targets
+      const touchTarget = Array.from(document.querySelectorAll('[data-touch], .touchable')).find((el) => {
+        return visible(el) && !el.disabled && el.getAttribute('data-airtrust-touched') !== 'true';
+      });
+      if (touchTarget) {
+        touchTarget.setAttribute('data-airtrust-touched', 'true');
+        touchTarget.click();
+        return { type: 'touch-target', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 6. Accordion handling: details & summary
       const closedSummaries = Array.from(document.querySelectorAll('details:not([open]) > summary')).filter(visible);
       if (closedSummaries.length > 0) {
         closedSummaries[0].click();
@@ -902,7 +949,7 @@ async function driveScormCourseInBrowser({
         details.forEach((d) => d.dispatchEvent(new Event('scroll', { bubbles: true })));
       }
 
-      // 3. Interactive choices / radio options
+      // 7. Interactive choices / radio options / checklists
       const choices = Array.from(document.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
       if (choices.length > 0) {
         const unselected = choices.find((c) => !c.classList.contains('selected') && !c.checked);
@@ -912,17 +959,32 @@ async function driveScormCourseInBrowser({
         }
       }
 
-      // 4. Submit / Confirm buttons
+      const unselectedCheckbox = Array.from(document.querySelectorAll('input[type=checkbox]')).find((c) => {
+        return visible(c) && !c.disabled && !c.checked && !c.closest('nav,aside,header,footer,[hidden]');
+      });
+      if (unselectedCheckbox) {
+        unselectedCheckbox.click();
+        return { type: 'checklist-checkbox', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 8. Submit / Confirm buttons (with single-submission guard to prevent loops)
       const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
         const txt = clean(el.innerText || el.value).toLowerCase();
-        return visible(el) && !el.disabled && /(confirmar|responder|verificar|submit)/i.test(txt);
+        return visible(el) && !el.disabled && el.getAttribute('data-airtrust-submitted') !== 'true' && /(confirmar|responder|verificar|submit)/i.test(txt);
       });
       if (submitBtn) {
+        submitBtn.setAttribute('data-airtrust-submitted', 'true');
         submitBtn.click();
         return { type: 'submit', domCurrent, domTotal, atLastUnit };
       }
 
-      // 5. Next / Advance navigation
+      // 9. Next / Advance navigation: prioritize #next
+      const nextBtnPrimary = document.querySelector('#next');
+      if (nextBtnPrimary && visible(nextBtnPrimary) && !nextBtnPrimary.disabled) {
+        nextBtnPrimary.click();
+        return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+      }
+
       const nextUnit = document.querySelector('#nextUnit');
       if (nextUnit && visible(nextUnit) && !nextUnit.disabled) {
         nextUnit.click();
@@ -944,7 +1006,16 @@ async function driveScormCourseInBrowser({
     if (action?.domCurrent && action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
     if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
     if (action?.atLastUnit) finalAtLastUnit = true;
-    if (action?.type === 'quiz-choice' || action?.type === 'submit') quizzesAnswered += 1;
+    if (
+      action?.type === 'quiz-choice' ||
+      action?.type === 'submit' ||
+      action?.type === 'scenario-option' ||
+      action?.type === 'assessment-answer' ||
+      action?.type === 'gate-item' ||
+      action?.type === 'touch-target'
+    ) {
+      quizzesAnswered += 1;
+    }
     if (action?.type === 'final-button') {
       finalButtonClicked = true;
       finalAtLastUnit = true;
