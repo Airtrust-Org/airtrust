@@ -34,6 +34,7 @@ import {
 const API = assertAllowedProductionBaseUrl(
   process.env.PROD_API_BASE_URL || 'https://api.airtrust.online',
 );
+const APP = String(process.env.PROD_APP_BASE_URL || 'https://airtrust.online').replace(/\/+$/, '');
 const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const BROWSER_NAME = String(process.env.HOMOLOGATION_BROWSER || 'chromium').trim().toLowerCase();
@@ -151,17 +152,34 @@ async function getMatriculaDetail(token, matriculaId) {
   return res.json?.data || {};
 }
 
-async function requestAssetSession(token, cursoId) {
-  const res = await fetchJson(`${API}/api/lms/assets/session`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ curso_id: cursoId }),
-  });
-  assert(res.status === 200, `ASSET_SESSION_HTTP_${cursoId}_${res.status}`);
-  return res.json?.data || {};
+export async function setupAuthenticatedContext(context, token, cursoId = null) {
+  const apiHost = new URL(API).hostname;
+  const appHost = new URL(APP).hostname;
+  const domains = [apiHost, appHost].filter((v, i, a) => a.indexOf(v) === i);
+  for (const domain of domains) {
+    await context.addCookies([
+      {
+        name: 'airtrust_access_token',
+        value: token,
+        domain,
+        path: '/',
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax',
+      },
+    ]);
+  }
+
+  if (cursoId) {
+    const assetRes = await context.request.post(`${API}/api/lms/assets/session`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: { curso_id: cursoId, preview: false },
+    });
+    assert(assetRes.ok(), `ASSET_SESSION_HTTP_${cursoId}_${assetRes.status()}`);
+  }
 }
 
 async function checkLearnerQualifications(token, funcionarioId, cursoId) {
@@ -214,8 +232,8 @@ export function evaluateHomologationVerdict({
   qual,
   cert,
 }) {
-  const qualValid = !qualExpected || (qual && qual.id && String(qual.status || '').toUpperCase() === 'CONCLUIDA');
-  const certValid = !cert || cert.validPdf === true;
+  const qualValid = !qualExpected || Boolean(qual && qual.id && String(qual.status || '').toUpperCase() === 'CONCLUIDA');
+  const certValid = !qualExpected || Boolean(cert && cert.validPdf === true && cert.sizeBytes > 0);
   const pass = Boolean(
     isConcluido &&
     progress100 &&
@@ -237,65 +255,142 @@ export function evaluateHomologationVerdict({
 }
 
 // ---------------------------------------------------------------------------
-// PPTX Functional Homologation
+// PPTX Functional Homologation in Real Browser
 // ---------------------------------------------------------------------------
-async function homologatePptxCourse({ token, course, matriculaId, funcionarioId }) {
-  const evidenceRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/pptx-evidence`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function drivePptxCourseInBrowser({
+  browserEngine,
+  token,
+  course,
+  matriculaId,
+  funcionarioId,
+}) {
+  const browser = await browserEngine.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    ignoreHTTPSErrors: true,
   });
-  assert(evidenceRes.status === 200, `PPTX_EVIDENCE_INIT_HTTP_${evidenceRes.status}`);
-  const initial = evidenceRes.json?.data || {};
-  const totalSlides = Number(initial.total_slides || 0);
-  const assetEtag = String(initial.asset_etag || '');
+
+  await setupAuthenticatedContext(context, token, course.id);
+
+  let page = await context.newPage();
+  await page.addInitScript((jwt) => {
+    try {
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+    } catch {}
+  }, token);
+
+  const playerUrl = `${APP}/lms/player/pptx/${matriculaId}`;
+  await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
+
+  // Guard against viewer loading failure
+  const viewerFailed = await page.evaluate(() => {
+    const text = document.body?.innerText || '';
+    return /não disponível|falha ao carregar|arquivo corrompido/i.test(text);
+  });
+  if (viewerFailed) {
+    await browser.close();
+    throw new Error('PPTX_VIEWER_LOAD_FAILED');
+  }
+
+  // Wait for slide display
+  await page.waitForSelector('.aspect-video, button[aria-label^="Slide 1"]', { timeout: 20_000 });
+
+  // Determine slide count
+  const totalSlides = await page.evaluate(() => {
+    const dots = document.querySelectorAll('button[aria-label^="Slide "]');
+    if (dots.length > 0) return dots.length;
+    const footer = document.querySelector('.aspect-video')?.parentElement?.innerText || '';
+    const match = footer.match(/Slide \d+ de (\d+)/i);
+    return match ? Number(match[1]) : 1;
+  });
   assert(totalSlides > 0, 'PPTX_TOTAL_SLIDES_ZERO');
-  assert(assetEtag, 'PPTX_ASSET_ETAG_MISSING');
 
   let resumedVerified = false;
   const checkpointSlide = Math.floor(totalSlides / 2);
 
-  // Traverse slides sequentially with required minimum interval
   for (let idx = 0; idx < totalSlides; idx += 1) {
-    if (idx === checkpointSlide && checkpointSlide > 0) {
-      // Interruption & resume checkpoint
-      const checkRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/pptx-evidence`, {
-        headers: { Authorization: `Bearer ${token}` },
+    // Dwell time on current slide: player requires ~1.7s to submit evidence
+    await page.waitForTimeout(2000);
+
+    if (idx === checkpointSlide && checkpointSlide > 0 && !resumedVerified) {
+      // Test interruption and resume
+      await page.close();
+      const resumePage = await context.newPage();
+      await resumePage.addInitScript((jwt) => {
+        try {
+          localStorage.setItem('airtrust_access_token', jwt);
+          localStorage.setItem('token', jwt);
+        } catch {}
+      }, token);
+      await resumePage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      await resumePage.waitForSelector('.aspect-video', { timeout: 15_000 });
+
+      const restoredSlide = await resumePage.evaluate(() => {
+        const active = document.querySelector('button[aria-label^="Slide "].h-2\\.5');
+        const label = active?.getAttribute('aria-label');
+        const m = label?.match(/Slide (\d+)/i);
+        return m ? Number(m[1]) - 1 : null;
       });
-      const checkData = checkRes.json?.data || {};
-      if (checkData.next_slide === idx && Array.isArray(checkData.visited_indexes)) {
+
+      if (restoredSlide === checkpointSlide || restoredSlide === checkpointSlide - 1) {
         resumedVerified = true;
       }
+      page = resumePage;
+      await page.waitForTimeout(1000);
     }
 
-    await delay(1250); // Minimum slide interval enforcement
-    const recordRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/pptx-evidence`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ slide_index: idx, asset_etag: assetEtag }),
-    });
-    assert(recordRes.status === 200, `PPTX_RECORD_SLIDE_${idx}_HTTP_${recordRes.status}`);
+    if (idx < totalSlides - 1) {
+      // Advance to next slide via Next button
+      const nextBtn = page.locator('button:has-text("Próximo")').first();
+      await nextBtn.waitFor({ state: 'visible', timeout: 10_000 });
+      for (let w = 0; w < 10; w += 1) {
+        if (!(await nextBtn.isDisabled())) break;
+        await page.waitForTimeout(500);
+      }
+      await nextBtn.click();
+    }
   }
 
-  // Finalize PPTX course
-  const finalizeRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/finalizar`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  assert(finalizeRes.status === 200, `PPTX_FINALIZE_HTTP_${finalizeRes.status}`);
+  // At the final slide, wait for and click Conclude button
+  const concludeBtn = page.locator('button:has-text("Concluir curso")').first();
+  await concludeBtn.waitFor({ state: 'visible', timeout: 10_000 });
+  for (let w = 0; w < 10; w += 1) {
+    if (!(await concludeBtn.isDisabled())) break;
+    await page.waitForTimeout(500);
+  }
+  await concludeBtn.click();
 
-  // Verification post-conclusion
-  const finalDetail = await getMatriculaDetail(token, matriculaId);
-  const isConcluido = String(finalDetail.status).toUpperCase() === 'CONCLUIDO';
-  const progress100 = Number(finalDetail.progresso_pct || 0) === 100;
+  // Wait for Concluído status indicator
+  await page.locator('text=Concluído').first().waitFor({ state: 'visible', timeout: 12_000 });
+  await page.waitForTimeout(1000);
+  await browser.close();
+
+  // Verification in backend
+  const detail = await getMatriculaDetail(token, matriculaId);
+  const isConcluido = String(detail.status).toUpperCase() === 'CONCLUIDO';
+  const progress100 = Number(detail.progresso_pct || 0) === 100;
 
   // Qualification and Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
-  // Reopening check
+  // Reopen in real browser to verify no status or progress downgrade
+  const reopenBrowser = await browserEngine.launch({ headless: true });
+  const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
+  await setupAuthenticatedContext(reopenContext, token, course.id);
+  const reopenPage = await reopenContext.newPage();
+  await reopenPage.addInitScript((jwt) => {
+    try {
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+    } catch {}
+  }, token);
+  await reopenPage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
+  await reopenPage.waitForSelector('text=Concluído, text=Status: concluído', { timeout: 15_000 }).catch(() => null);
+  await reopenBrowser.close();
+
   const reopenDetail = await getMatriculaDetail(token, matriculaId);
   const reopenNoDowngrade =
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
@@ -315,13 +410,14 @@ async function homologatePptxCourse({ token, course, matriculaId, funcionarioId 
     course_id: course.id,
     titulo: course.titulo,
     tipo_conteudo: 'pptx',
+    edition_sha: 'n/a',
     policy: 'PPTX_SLIDES',
     matricula_ok: true,
     percurso_ok: true,
     resumed_ok: resumedVerified || totalSlides <= 1,
     avaliacao_ok: true,
     finalizacao_ok: isConcluido && progress100,
-    status_pos_conclusao: finalDetail.status,
+    status_pos_conclusao: detail.status,
     qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
     certificado_emitido: cert ? `SIM (${cert.sha256.slice(0, 12)}...)` : 'N/A',
     reabertura_sem_downgrade: reopenNoDowngrade,
@@ -346,32 +442,21 @@ async function driveScormCourseInBrowser({
     ignoreHTTPSErrors: true,
   });
 
-  // Inject session cookie & localStorage auth
-  await context.addCookies([
-    {
-      name: 'airtrust_access_token',
-      value: token,
-      domain: new URL(API).hostname,
-      path: '/',
-      httpOnly: false,
-      secure: true,
-      sameSite: 'Lax',
-    },
-  ]);
+  // Setup authenticated cookies & scoped asset session in Playwright context
+  await setupAuthenticatedContext(context, token, course.id);
 
   let page = await context.newPage();
   const launchUrl = `${API}/api/lms/scorm/launch/${matriculaId}`;
 
-  // Step 1: Request asset session before launch
-  await requestAssetSession(token, course.id);
-
   // Navigate to launch URL
   await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
 
-  // Wait for SCORM frame
-  const scormFrameLocator = page.frameLocator('iframe#scorm-frame');
-  const frameElement = await page.waitForSelector('iframe#scorm-frame', { timeout: 15_000 }).catch(() => null);
-  assert(frameElement, 'SCORM_IFRAME_NOT_FOUND');
+  // Wait for SCORM frame element and resolve active Frame
+  const iframeLocator = page.locator('#scorm-frame');
+  await iframeLocator.waitFor({ state: 'attached', timeout: 15_000 });
+  const iframeHandle = await iframeLocator.elementHandle();
+  const initialFrame = await iframeHandle?.contentFrame();
+  assert(initialFrame, 'SCORM_IFRAME_NOT_FOUND');
 
   // Extract answer plan from package manifest/model
   const pkgVersions = await fetchJson(`${API}/api/lms/cursos/${course.id}/scorm-package-versions`, {
@@ -411,11 +496,12 @@ async function driveScormCourseInBrowser({
     if (!checkpointTested && steps === 4) {
       checkpointTested = true;
       const savedLocation = runtimeState?.location;
-      // Close page and re-open
+      // Close page and re-open in authenticated context
       await page.close();
       const resumePage = await context.newPage();
       await resumePage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-      await resumePage.waitForSelector('iframe#scorm-frame', { timeout: 10_000 }).catch(() => null);
+      const resumeIframe = resumePage.locator('#scorm-frame');
+      await resumeIframe.waitFor({ state: 'attached', timeout: 15_000 }).catch(() => null);
 
       const restoredLocation = await resumePage.evaluate(() => {
         const api = window.API || window.API_1484_11;
@@ -430,8 +516,13 @@ async function driveScormCourseInBrowser({
       page = resumePage;
     }
 
-    // Interactive traversal inside SCORM frame
-    const frame = page.frameLocator('iframe#scorm-frame');
+    // Interactive traversal inside SCORM frame: resolve active Frame instance
+    const frameEl = await page.$('#scorm-frame');
+    const frame = await frameEl?.contentFrame();
+    if (!frame) {
+      await page.waitForTimeout(300);
+      continue;
+    }
 
     // Handle visible videos
     try {
@@ -441,7 +532,7 @@ async function driveScormCourseInBrowser({
       }
     } catch { /* ignore media inspection errors */ }
 
-    // Evaluate action inside frame
+    // Evaluate action inside real Frame instance
     const action = await frame.evaluate(({ plan, requiredIndices }) => {
       const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
       const visible = (el) => {
@@ -532,20 +623,10 @@ async function driveScormCourseInBrowser({
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
-  // Real browser reopen check
+  // Real browser reopen check in new isolated session
   const reopenBrowser = await browserEngine.launch({ headless: true });
   const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
-  await reopenContext.addCookies([
-    {
-      name: 'airtrust_access_token',
-      value: token,
-      domain: new URL(API).hostname,
-      path: '/',
-      httpOnly: false,
-      secure: true,
-      sameSite: 'Lax',
-    },
-  ]);
+  await setupAuthenticatedContext(reopenContext, token, course.id);
   const reopenPage = await reopenContext.newPage();
   await reopenPage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
   await reopenPage.waitForTimeout(1000);
@@ -654,10 +735,11 @@ export async function runHomologation() {
       const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId);
       console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
 
-      // 2. Drive course by content type
+      // 2. Drive course by content type in real browser
       let outcome;
       if (course.tipo_conteudo === 'pptx') {
-        outcome = await homologatePptxCourse({
+        outcome = await drivePptxCourseInBrowser({
+          browserEngine: engine,
           token: learner.token,
           course,
           matriculaId,

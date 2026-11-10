@@ -186,3 +186,12 @@ jobs:
           path: ${{ env.HOMOLOGATION_REPORT_PATH }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Enforce zero failure gate
+        shell: bash
+        run: |
+          rc="${{ steps.certify.outputs.rc }}"
+          if [[ -n "$rc" && "$rc" -ne 0 ]]; then
+            echo "LMS homologation failed with return code $rc" >&2
+            exit "$rc"
+          fi
