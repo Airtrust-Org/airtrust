@@ -386,6 +386,12 @@ describe('Ensaio sintético backup -> restore', () => {
     expect(primeira.checksum).toBeNull();
     expect(r2.keys('backups/cron-mensal-2026-11-09/checksum-manifest.json')).toEqual([]);
 
+    // SQLite CURRENT_TIMESTAMP uses the real UTC clock, not vi.useFakeTimers().
+    // Match the persisted fixture date to the simulated 2026-11-09 cron day;
+    // otherwise this test fails after midnight UTC, despite valid retry logic.
+    d1.database.exec(
+      "UPDATE backups_controle SET created_at = '2026-11-09 05:00:00' WHERE uuid = 'cron-mensal-2026-11-09'",
+    );
     await orchestrator.executarBackupAutomatico('MENSAL'); // retry do mesmo dia
     const retry = d1.database
       .prepare("SELECT uuid, status, r2_checksum_sha256 AS checksum FROM backups_controle WHERE uuid LIKE 'cron-mensal-2026-11-09-retry-%'")
