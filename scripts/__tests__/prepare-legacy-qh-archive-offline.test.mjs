@@ -115,5 +115,8 @@ test('production Schema V2 retains independent archive interlock and FK readback
   assert.match(workflow, /expected_violations !== 525/);
   assert.match(workflow, /remaining_fk_violations !== 0/);
   assert.match(workflow, /D1_LEGACY_QH_ARCHIVE_ROWSET_MISMATCH/);
+  assert.match(workflow, /D1_LEGACY_QH_ARCHIVED_ROWSET_SHA256/);
+  assert.match(workflow, /D1_LEGACY_QH_ARCHIVED_ROWSET_PROOF_MISSING/);
+  assert.match(workflow, /D1_LEGACY_QH_SOURCE_CHANGED_SINCE_INDEPENDENT_ARCHIVE/);
   assert.ok((workflow.split('--config worker-airtrust/wrangler.toml --env production --remote --json').slice(1)).length >= 4);
 });
