@@ -169,6 +169,71 @@ jobs:
           [[ "$baseline_total" == '1' ]] || { echo 'baseline must exist and be active.' >&2; exit 1; }
           [[ "$change_total" == '0' ]] || { echo 'change is already applied.' >&2; exit 1; }
 
+      - name: Preflight DR legacy qualification FK cleanup 0577
+        if: ${{ inputs.change_id == 'dr-legacy-qh-fk-archive-0577' }}
+        id: legacy_qh_preflight
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_LEGACY_QH_ARCHIVE_SHA256: ${{ secrets.D1_LEGACY_QH_ARCHIVE_SHA256 }}
+        run: |
+          set -euo pipefail
+          # The secret attests a real, restore-verified OFF-D1 private archive.
+          # A hash alone is not a backup; evidence and location live in #2155.
+          [[ "$D1_LEGACY_QH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo 'D1_LEGACY_QH_INDEPENDENT_ARCHIVE_PROOF_MISSING' >&2
+            exit 1
+          }
+          preflight="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
+            SELECT
+              (SELECT COUNT(*) FROM \"_backup_qh_tmp\") AS source_rows,
+              (SELECT COUNT(*) FROM pragma_foreign_key_check) AS global_violations,
+              (SELECT COUNT(*) FROM pragma_foreign_key_check
+                WHERE \"table\"='_backup_qh_tmp' AND parent='funcionarios_backup' AND fkid=0) AS expected_violations,
+              (SELECT COUNT(*) FROM pragma_foreign_key_list('_backup_qh_tmp')) AS source_fk_count,
+              (SELECT COUNT(*) FROM pragma_foreign_key_list('_backup_qh_tmp')
+                WHERE \"table\"='funcionarios_backup' AND \"from\"='funcionario_id' AND \"to\"='id') AS expected_fk_count,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='funcionarios_backup') AS missing_parent_present,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='_archive_qh_fk_20261110') AS archive_table_present,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='_archive_qh_guard_20261110') AS guard_table_present,
+              (SELECT COUNT(*) FROM sqlite_master
+                WHERE sql LIKE '%_backup_qh_tmp%' AND name != '_backup_qh_tmp'
+                  AND tbl_name != '_backup_qh_tmp') AS external_schema_dependencies;
+          ")"
+          printf '%s' "$preflight" | node -e '
+            let text = "";
+            process.stdin.on("data", c => text += c);
+            process.stdin.on("end", () => {
+              const row = JSON.parse(text)?.[0]?.results?.[0];
+              if (!row || row.source_rows !== 525 || row.global_violations !== 525 ||
+                  row.expected_violations !== 525 || row.source_fk_count !== 1 ||
+                  row.expected_fk_count !== 1 || row.missing_parent_present !== 0 ||
+                  row.archive_table_present !== 0 || row.guard_table_present !== 0 ||
+                  row.external_schema_dependencies !== 0) {
+                console.error("D1_LEGACY_QH_SCHEMA_OR_DATA_DRIFT");
+                process.exit(1);
+              }
+            });
+          '
+          # Never print rows: they contain historical qualification records.
+          rows_file="$RUNNER_TEMP/dr-legacy-qh-before-rows.json"
+          trap 'rm -f "$rows_file"' EXIT
+          npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json \
+            --command 'SELECT * FROM "_backup_qh_tmp" ORDER BY id;' > "$rows_file"
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const rows = data?.[0]?.results;
+            if (!Array.isArray(rows) || rows.length !== 525) {
+              console.error("D1_LEGACY_QH_ROWSET_CHANGED");
+              process.exit(1);
+            }
+            const digest = crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "rows_sha256=" + digest + "\n");
+          ' "$rows_file"
+
       - name: Preflight RDV 0438 production physical state
         if: ${{ inputs.change_id == '0438-rdv-coordination-workflow-production' }}
         shell: bash
@@ -946,6 +1011,56 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0489-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate DR legacy qualification FK cleanup 0577
+        if: ${{ inputs.change_id == 'dr-legacy-qh-fk-archive-0577' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_ROWSET_SHA256: ${{ steps.legacy_qh_preflight.outputs.rows_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_ROWSET_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          postflight="$(npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json --command "
+            SELECT
+              (SELECT COUNT(*) FROM \"_archive_qh_fk_20261110\") AS archived_rows,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='_backup_qh_tmp') AS former_source_present,
+              (SELECT COUNT(*) FROM sqlite_master WHERE name='_archive_qh_guard_20261110') AS guard_present,
+              (SELECT COUNT(*) FROM pragma_foreign_key_check) AS remaining_fk_violations,
+              (SELECT COUNT(*) FROM airtrust_schema_changes_v2
+                WHERE change_id='dr-legacy-qh-fk-archive-0577') AS ledger_rows;
+          ")"
+          printf '%s' "$postflight" | node -e '
+            let text = "";
+            process.stdin.on("data", c => text += c);
+            process.stdin.on("end", () => {
+              const row = JSON.parse(text)?.[0]?.results?.[0];
+              if (!row || row.archived_rows !== 525 || row.former_source_present !== 0 ||
+                  row.guard_present !== 0 || row.remaining_fk_violations !== 0 ||
+                  row.ledger_rows !== 1) {
+                console.error("D1_LEGACY_QH_POSTCONDITIONS_FAILED");
+                process.exit(1);
+              }
+            });
+          '
+          rows_file="$RUNNER_TEMP/dr-legacy-qh-after-rows.json"
+          trap 'rm -f "$rows_file"' EXIT
+          npx wrangler d1 execute airtrust-db --config worker-airtrust/wrangler.toml --env production --remote --json \
+            --command 'SELECT * FROM "_archive_qh_fk_20261110" ORDER BY id;' > "$rows_file"
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const rows = data?.[0]?.results;
+            if (!Array.isArray(rows) || rows.length !== 525 ||
+                crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex") !==
+                  process.env.EXPECTED_ROWSET_SHA256) {
+              console.error("D1_LEGACY_QH_ARCHIVE_ROWSET_MISMATCH");
+              process.exit(1);
+            }
+            console.log("D1_LEGACY_QH_ARCHIVE_ROWS_VERIFIED=525; GLOBAL_FK_VIOLATIONS=0");
+          ' "$rows_file"
 
       - name: Post-validate simulator planning curriculum 0490
         if: ${{ inputs.change_id == 'simulator-planning-curriculum-metadata-0490' }}
