@@ -15,6 +15,7 @@ import { HistoricoQualificacaoInput } from '@/react-app/schemas/qualificacoes';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
 import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { isCmaCode, resolveCmaValidity } from '@/shared/utils/cma-validity';
 
 interface Props {
   isOpen: boolean;
@@ -44,6 +45,7 @@ interface Funcionario {
   nome: string;
   matricula?: string;
   cpf?: string;
+  nascimento?: string | null;
   is_instrutor?: number | boolean;
 }
 
@@ -125,6 +127,7 @@ export function ModalAtribuirQualificacao({
     error: errorCategorias,
   } = useCategoriasQualificacao(isOpen);
   const [validadeMeses, setValidadeMeses] = useState<number | null>(null);
+  const [cmaAviso, setCmaAviso] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const loading = loadingTipos || loadingFuncionarios || loadingCategorias;
   const todosTipos = useMemo(() => tiposData as TipoQualificacaoResumo[], [tiposData]);
@@ -281,24 +284,49 @@ export function ModalAtribuirQualificacao({
       const tipoSelecionado = todosTipos.find((t) => t.codigo === form.qualificacao_codigo);
 
       if (tipoSelecionado && tipoSelecionado.validade) {
-        // Regra canonica compartilhada com o Worker (limite no fim do mes-alvo).
-        const vencimento = tryAddCalendarMonthsClamped(
-          form.data_realizacao,
-          tipoSelecionado.validade,
-        );
+        // CMA: validade por idade na data de realizacao (12 meses; 6 a partir dos 60 anos),
+        // mesma regra do Worker. Sem data de nascimento: 12 meses com aviso.
+        let meses = tipoSelecionado.validade;
+        let aviso: string | null = null;
+        if (isCmaCode(form.qualificacao_codigo)) {
+          const funcionarioId = parseInt(form.funcionario_id, 10);
+          const funcionarioSelecionado = funcionariosData.find(
+            (f: Funcionario) => f.id === funcionarioId,
+          ) as { nascimento?: string | null } | undefined;
+          const nascimento = funcionarioSelecionado?.nascimento ?? null;
+          const cma = resolveCmaValidity({
+            dataRealizacao: form.data_realizacao,
+            dataNascimento: nascimento,
+          });
+          meses = cma.months;
+          aviso = cma.warning;
+        }
+        setCmaAviso(aviso);
+
+        // Regra canonica compartilhada com o Worker: vence no dia (limite no fim do mes-alvo).
+        const vencimento = tryAddCalendarMonthsClamped(form.data_realizacao, meses);
 
         setForm((prev) => ({
           ...prev,
           data_vencimento: vencimento ?? '',
         }));
-        setValidadeMeses(tipoSelecionado.validade);
+        setValidadeMeses(meses);
       } else {
+        setCmaAviso(null);
         setValidadeMeses(null);
       }
     } else {
+      setCmaAviso(null);
       setValidadeMeses(null);
     }
-  }, [form.data_realizacao, form.qualificacao_codigo, isG1SemSelected, todosTipos]);
+  }, [
+    form.data_realizacao,
+    form.qualificacao_codigo,
+    form.funcionario_id,
+    funcionariosData,
+    isG1SemSelected,
+    todosTipos,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -544,6 +572,7 @@ export function ModalAtribuirQualificacao({
                 {validadeMeses && (
                   <p className="mt-1 text-xs text-blue-600">ℹ️ Validade: {validadeMeses} meses</p>
                 )}
+                {cmaAviso && <p className="mt-1 text-xs text-amber-600">⚠️ {cmaAviso}</p>}
                 {form.qualificacao_codigo && (
                   <p className="mt-1 text-xs text-gray-600">Código: {form.qualificacao_codigo}</p>
                 )}

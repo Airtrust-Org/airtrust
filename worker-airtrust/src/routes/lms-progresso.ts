@@ -14,7 +14,6 @@ import { ApiError } from '../middleware/error-handler';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
 import { completeLmsMatricula, LmsCompletionRejectedError } from '../services/lms-completion';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
-import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { syncMatriculaCycleFromMatricula } from '../services/lms-matricula-cycle';
 import { activeXapiAll } from '../services/lms-active-xapi-read';
 import {
@@ -218,8 +217,7 @@ app.post('/xapi/statements', async (c) => {
         qt.nome AS qualificacao_nome,
         qt.categoria_id AS qualificacao_categoria_id,
         qt.categoria AS qualificacao_categoria,
-        qt.validade AS qualificacao_validade,
-        qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
+        qt.validade AS qualificacao_validade
       FROM lms_matriculas m
       JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = c.qualificacao_tipo_id AND qt.empresa_id = m.empresa_id
@@ -245,7 +243,6 @@ app.post('/xapi/statements', async (c) => {
       qualificacao_categoria_id: number | null;
       qualificacao_categoria: string | null;
       qualificacao_validade: number | null;
-      qualificacao_vencimento_fim_mes: VencimentoMode | null;
     }>();
 
   if (!matricula) throw new ApiError('Matrícula não encontrada', 404);
@@ -363,7 +360,6 @@ app.post('/xapi/statements', async (c) => {
         qualificacaoCategoriaId: matricula.qualificacao_categoria_id,
         qualificacaoCategoria: matricula.qualificacao_categoria,
         validade: matricula.qualificacao_validade,
-        vencimentoFimMes: matricula.qualificacao_vencimento_fim_mes,
         dataConclusao: dataConclusaoQualificacao,
         existingHistoricoId: matricula.qualificacao_historico_id,
         progressoPct: 100,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
-import { tryAddCalendarMonthsClamped, tryEndOfTargetMonth } from '@/shared/utils/validade-meses';
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 
 type HistoricoQualificacao = {
   id: number;
@@ -17,7 +17,6 @@ type HistoricoQualificacao = {
   data_vencimento?: string;
   observacoes?: string;
   validade_meses?: number;
-  vencimento_fim_mes?: number;
   renovada?: number | boolean; // Flag de renovação
 };
 
@@ -69,13 +68,9 @@ export default function ModalEditarQualificacaoSimples({
 
     const calcularVencimento = () => {
       // Regra canonica compartilhada com o Worker (UTC, sem deriva de fuso):
-      // fim do mes => ultimo dia do mes-alvo; dia exato => dia preservado e
-      // limitado ao ultimo dia do mes-alvo.
+      // vence no dia, limitado ao ultimo dia do mes-alvo.
       const meses = registro.validade_meses || 0;
-      const vencimento =
-        registro.vencimento_fim_mes === 1
-          ? tryEndOfTargetMonth(dataRealizacao, meses)
-          : tryAddCalendarMonthsClamped(dataRealizacao, meses);
+      const vencimento = tryAddCalendarMonthsClamped(dataRealizacao, meses);
       if (vencimento) setDataVencimentoPreview(vencimento);
     };
 
@@ -200,7 +195,6 @@ export default function ModalEditarQualificacaoSimples({
               </p>
               <p className="text-sm text-green-600 mt-1">
                 Validade: {registro.validade_meses} meses
-                {registro.vencimento_fim_mes === 1 && ' (fim do mês)'}
               </p>
             </div>
           )}

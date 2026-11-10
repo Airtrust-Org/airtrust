@@ -28,17 +28,17 @@ export function auditAction(kind, direction) {
 /** Statuses that count as a realized qualification (owner decision 1: NULL status with dates is a real completion). */
 export const REALIZED_STATUSES = new Set(['', 'CONCLUIDA', 'CONCLUIDO', 'RENOVADA', 'VALIDA', 'VENCIDA', 'PROXIMA_VENCIMENTO']);
 
-const HASH_RE = /^[0-9a-f]{64}$/;
-const SHA_RE = /^[0-9a-f]{40}$/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const RAW_TEXT_RE = /^[0-9A-Za-z:.+\- ]{1,40}$/;
+export const HASH_RE = /^[0-9a-f]{64}$/;
+export const SHA_RE = /^[0-9a-f]{40}$/;
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const RAW_TEXT_RE = /^[0-9A-Za-z:.+\- ]{1,40}$/;
 const NAME_TEXT_RE = /^[0-9A-Za-zÀ-ÿ _.,\-/()]{1,120}$/;
-const CODE_RE = /^[A-Z0-9_-]{1,64}$/;
-const STATUS_RE = /^[A-Z_]{0,20}$/;
-const ACTOR_RE = /^[A-Za-z0-9_.@-]{1,64}$/;
+export const CODE_RE = /^[A-Z0-9_-]{1,64}$/;
+export const STATUS_RE = /^[A-Z_]{0,20}$/;
+export const ACTOR_RE = /^[A-Za-z0-9_.@-]{1,64}$/;
 
-const fail = (code) => { throw new Error(code); };
-const check = (value, code) => { if (!value) fail(code); };
+export const fail = (code) => { throw new Error(code); };
+export const check = (value, code) => { if (!value) fail(code); };
 
 export function sha256Hex(text) {
   return createHash('sha256').update(text).digest('hex');
@@ -52,39 +52,42 @@ export function isValidDate(value) {
 }
 
 /**
- * Exact-day mode keeps the day and clamps it to the last valid day of the target month
- * (2024-02-29 + 24m -> 2026-02-28). End-of-month mode returns the last day of the target month.
+ * Every expiry is "no dia": keep the day and clamp it to the last valid day of the target month
+ * (2024-02-29 + 24m -> 2026-02-28; 2025-01-31 + 1m -> 2025-02-28). Owner decision (follow-up of #2158):
+ * the legacy end-of-month mode is gone from the calculation, so the third parameter is accepted only for
+ * call-site compatibility and IGNORED (qualificacoes_tipos.vencimento_fim_mes is a legacy column).
  */
-export function addMonthsClamped(date, months, endOfMonth = false) {
+// eslint-disable-next-line no-unused-vars
+export function addMonthsClamped(date, months, _endOfMonth = false) {
   if (!isValidDate(date) || !Number.isInteger(months) || months < 1 || months > 600) return null;
   const [y, m, d] = date.split('-').map(Number);
   const total = (m - 1) + months;
   const year = y + Math.floor(total / 12);
   const month = total % 12;
   const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  const day = endOfMonth ? last : Math.min(d, last);
+  const day = Math.min(d, last);
   return `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 // ---------- literal rendering (validated first; no free text reaches SQL) ----------
-function sqlInt(value) {
+export function sqlInt(value) {
   check(Number.isSafeInteger(value), 'SQL_INT_INVALID');
   return String(value);
 }
-function sqlNullableInt(value) { return value === null ? 'NULL' : sqlInt(value); }
-function sqlText(value, re, code) {
+export function sqlNullableInt(value) { return value === null ? 'NULL' : sqlInt(value); }
+export function sqlText(value, re, code) {
   check(typeof value === 'string' && re.test(value), code);
   return `'${value}'`;
 }
-function sqlNullableText(value, re = RAW_TEXT_RE) {
+export function sqlNullableText(value, re = RAW_TEXT_RE) {
   return value === null ? 'NULL' : sqlText(value, re, 'SQL_TEXT_INVALID');
 }
-function intOrNull(value, code) {
+export function intOrNull(value, code) {
   if (value === null || value === undefined) return null;
   check(typeof value === 'number' && Number.isSafeInteger(value), code);
   return value;
 }
-function nullableText(value, re, code) {
+export function nullableText(value, re, code) {
   if (value === null || value === undefined) return null;
   check(typeof value === 'string' && re.test(value), code);
   return value;

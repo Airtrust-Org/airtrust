@@ -9,7 +9,6 @@ export type TipoSaveDraft = {
   carga_horaria_inicial?: number | string | null;
   carga_horaria_recorrente?: number | string | null;
   ativo?: number | boolean | null;
-  vencimento_fim_mes?: number | boolean | null;
   is_check?: number | boolean | null;
   validade?: number | string | null;
   descricao?: string | null;
@@ -55,7 +54,6 @@ export function buildTipoPayload(editingTipo: TipoSaveDraft): Record<string, unk
         ? Number(editingTipo.carga_horaria_recorrente)
         : null,
     ativo: editingTipo.ativo ?? 1,
-    vencimento_fim_mes: editingTipo.vencimento_fim_mes ?? 0,
     is_check: editingTipo.is_check ? 1 : 0,
     validade:
       editingTipo.validade != null && Number(editingTipo.validade) > 0

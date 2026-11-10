@@ -7,7 +7,7 @@
  * - data_conclusao
  *
  * TODOS OS OUTROS DADOS SÃO CALCULADOS AUTOMATICAMENTE:
- * - data_vencimento: calculado via qualificacao.validade + vencimento_fim_mes
+ * - data_vencimento: calculado via qualificacao.validade (vence no dia; CMA por idade; vencimento_fim_mes legado ignorado)
  * - funcionario_nome: via JOIN com funcionarios
  * - qualificacao_nome: via JOIN com qualificacoes_tipos
  * - carga_horaria: via JOIN com qualificacoes_tipos
@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { QUALIFICACOES_HISTORICO_COLUMNS, normalizeCode, normalizeCPF } from './columnMappings';
 import { validateQualificacaoHistoricoRow, type ValidationError } from './validators';
 import { calcularDataVencimento } from '../../utils/qualificacoes-expiration';
+import { isCmaCode, resolveCmaValidity } from '../../utils/cma-validity';
 import { chainQualificationLineageForGroups } from './lineageChaining';
 
 // ===== SCHEMA SIMPLIFICADO (3 campos APENAS) =====
@@ -99,7 +100,7 @@ export class QualificacaoHistoricoImportacaoService {
 
         const validCPFsResult = await this.db
           .prepare(
-            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
+            `SELECT cpf, nascimento FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
           .bind(...batch, empresaId)
           .all<{ cpf: string }>();
@@ -257,6 +258,7 @@ export class QualificacaoHistoricoImportacaoService {
 
     // Revalidar CPFs existentes no tenant após auto-create para evitar inserção cross-tenant
     const tenantCPFs = new Set<string>();
+    const nascimentoPorCpf = new Map<string, string | null>();
     if (allCPFs.length > 0) {
       const CPF_BATCH = 100;
       for (let i = 0; i < allCPFs.length; i += CPF_BATCH) {
@@ -264,13 +266,16 @@ export class QualificacaoHistoricoImportacaoService {
         const placeholders = batch.map(() => '?').join(',');
         const existentes = await this.db
           .prepare(
-            `SELECT cpf FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
+            `SELECT cpf, nascimento FROM funcionarios WHERE cpf IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
           .bind(...batch, empresaId)
-          .all<{ cpf: string }>();
+          .all<{ cpf: string; nascimento: string | null }>();
         (existentes.results || []).forEach((item) => {
           const normalized = normalizeCPF(item.cpf);
-          if (normalized) tenantCPFs.add(normalized);
+          if (normalized) {
+            tenantCPFs.add(normalized);
+            nascimentoPorCpf.set(normalized, item.nascimento ?? null);
+          }
         });
       }
     }
@@ -432,10 +437,16 @@ export class QualificacaoHistoricoImportacaoService {
       // Calcular data_vencimento
       let dataVencimento: string | null = null;
       if (tipoQualificacao?.validade) {
+        // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+        const cmaValidity = isCmaCode(codigo)
+          ? resolveCmaValidity({
+              dataRealizacao: String(row.data_conclusao),
+              dataNascimento: nascimentoPorCpf.get(cpf) ?? null,
+            })
+          : null;
         dataVencimento = calcularDataVencimento(
           String(row.data_conclusao),
-          tipoQualificacao.validade,
-          1,
+          cmaValidity?.months ?? tipoQualificacao.validade,
         );
       }
 

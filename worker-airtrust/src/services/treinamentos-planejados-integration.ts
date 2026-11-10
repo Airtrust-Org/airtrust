@@ -13,6 +13,7 @@ import {
   sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { resolveCmaValidityForEmployee } from '../utils/cma-validity';
 import { syncTreinamentoToEscalaEventos } from '../shared/syncEscalaEventosExternos';
 import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 
@@ -23,7 +24,6 @@ type EventoContextRow = {
   qualificacao_codigo: string | null;
   qualificacao_categoria: string | null;
   qualificacao_validade: number | null;
-  qualificacao_vencimento_fim_mes: number | null;
   qualificacao_carga_horaria: number | null;
   qualificacao_carga_horaria_inicial: number | null;
   qualificacao_carga_horaria_recorrente: number | null;
@@ -182,7 +182,6 @@ async function loadEventoContext(
                 qt.codigo AS qualificacao_codigo,
                 qt.categoria AS qualificacao_categoria,
                 qt.validade AS qualificacao_validade,
-                COALESCE(qt.vencimento_fim_mes, 1) AS qualificacao_vencimento_fim_mes,
                 qt.carga_horaria AS qualificacao_carga_horaria,
                 qt.carga_horaria_inicial AS qualificacao_carga_horaria_inicial,
                 qt.carga_horaria_recorrente AS qualificacao_carga_horaria_recorrente,
@@ -452,6 +451,26 @@ async function updateParticipanteHistoricoLink(
     .run();
 }
 
+/** Validade efetiva: CMA usa a regra por idade (12/6 meses); demais tipos usam a validade do modelo. */
+async function resolveValidadeMesesEfetiva(
+  db: D1Database,
+  params: {
+    empresaId: number;
+    codigo: string | null;
+    funcionarioId: number;
+    dataRealizacao: string;
+    validadeMeses: number | null;
+  },
+): Promise<number | null> {
+  const cma = await resolveCmaValidityForEmployee(db, {
+    codigo: params.codigo,
+    empresaId: params.empresaId,
+    funcionarioId: params.funcionarioId,
+    dataRealizacao: params.dataRealizacao,
+  });
+  return cma?.months ?? params.validadeMeses;
+}
+
 async function upsertHistoricoPlanejadoForParticipante(
   db: D1Database,
   empresaId: number,
@@ -486,10 +505,16 @@ async function upsertHistoricoPlanejadoForParticipante(
       : typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
         ? evento.qualificacao_validade
         : null;
-  const vencimentoFimMes = Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1;
-  const dataVencimento = validadeMeses === null
+  const validadeMesesEfetiva = await resolveValidadeMesesEfetiva(db, {
+    empresaId,
+    codigo: evento.qualificacao_codigo,
+    funcionarioId: participante.funcionario_id,
+    dataRealizacao: evento.data_prevista,
+    validadeMeses,
+  });
+  const dataVencimento = validadeMesesEfetiva === null
     ? null
-    : calcularDataVencimento(evento.data_prevista, validadeMeses, vencimentoFimMes);
+    : calcularDataVencimento(evento.data_prevista, validadeMesesEfetiva);
   const instrutor = evento.instrutor_guerra || evento.instrutor_nome || null;
 
   let existing: HistoricoPlanejadoRow | null = null;
@@ -694,13 +719,16 @@ async function concluirHistoricoPlanejado(
         typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
           ? evento.qualificacao_validade
           : null;
-      const dataVencimentoCorrigida = validadeMesesCorrigida === null
+      const validadeMesesCorrigidaEfetiva = await resolveValidadeMesesEfetiva(db, {
+        empresaId,
+        codigo: evento.qualificacao_codigo,
+        funcionarioId: participante.funcionario_id,
+        dataRealizacao: dataConclusaoCorrigida,
+        validadeMeses: validadeMesesCorrigida,
+      });
+      const dataVencimentoCorrigida = validadeMesesCorrigidaEfetiva === null
         ? null
-        : calcularDataVencimento(
-            dataConclusaoCorrigida,
-            validadeMesesCorrigida,
-            Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
-          );
+        : calcularDataVencimento(dataConclusaoCorrigida, validadeMesesCorrigidaEfetiva);
       await db
         .prepare(
           `UPDATE qualificacoes_historico
@@ -745,13 +773,16 @@ async function concluirHistoricoPlanejado(
     typeof evento.qualificacao_validade === 'number' && evento.qualificacao_validade > 0
       ? evento.qualificacao_validade
       : null;
-  const dataVencimento = validadeMeses === null
+  const validadeMesesEfetiva = await resolveValidadeMesesEfetiva(db, {
+    empresaId,
+    codigo: evento.qualificacao_codigo,
+    funcionarioId: participante.funcionario_id,
+    dataRealizacao: dataConclusao,
+    validadeMeses,
+  });
+  const dataVencimento = validadeMesesEfetiva === null
     ? null
-    : calcularDataVencimento(
-        dataConclusao,
-        validadeMeses,
-        Number(evento.qualificacao_vencimento_fim_mes || 0) === 0 ? 0 : 1,
-      );
+    : calcularDataVencimento(dataConclusao, validadeMesesEfetiva);
 
   // M5: ao concluir um treinamento (inclusive retroativo), só pode ser marcado como
   // RENOVADO um histórico ANTERIOR à nova conclusão. Sem o filtro de data, uma

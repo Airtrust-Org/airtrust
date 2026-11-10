@@ -1,20 +1,18 @@
 /**
  * Utilities para cálculos de vencimento de qualificações
- * Suporta dois modos: dia exato (0) ou fim do mês (1)
+ * Regra única: todo vencimento vence NO DIA (mês+N, com clamp ao último dia
+ * do mês-alvo). O antigo modo "fim do mês" foi removido; a coluna
+ * qualificacoes_tipos.vencimento_fim_mes é legada e ignorada pelo cálculo.
  *
  * @module utils/qualificacoes-expiration
  */
 
 import { isValidDate } from './security';
-import {
-  addCalendarMonthsClamped,
-  endOfTargetMonth,
-} from '../../../src/shared/utils/validade-meses';
+import { addCalendarMonthsClamped } from '../../../src/shared/utils/validade-meses';
 
 /**
- * Modo de vencimento de qualificação
- * 0 = Vence no dia exato
- * 1 = Vence no último dia do mês
+ * @deprecated Coluna legada qualificacoes_tipos.vencimento_fim_mes: o cálculo a
+ * ignora (todo vencimento vence no dia). Mantido só para tipar linhas do banco.
  */
 export type VencimentoMode = 0 | 1;
 
@@ -25,32 +23,24 @@ export interface ValidadeCalculo {
   data_conclusao: string; // ISO date YYYY-MM-DD
   data_vencimento: string; // ISO date YYYY-MM-DD (calculada)
   validade_meses: number;
-  vencimento_fim_mes: VencimentoMode;
   dias_validade: number;
   status: 'vigente' | 'vencida' | 'expirando';
 }
 
 /**
- * Calcula data de vencimento baseada em data de conclusão
- * Suporta dois modos: dia exato ou fim do mês
+ * Calcula data de vencimento baseada em data de conclusão.
+ * Vence NO DIA: preserva o dia e limita ao último dia do mês-alvo.
  *
  * @param dataConclusao - Data de conclusão (ISO format: YYYY-MM-DD)
  * @param validadeMeses - Número de meses de validade
- * @param vencimentoFimMes - Modo de vencimento (0=dia exato, 1=fim do mês)
  * @returns Data de vencimento em formato ISO (YYYY-MM-DD)
  *
  * @example
- * // Qualificação médica (vence fim do mês)
- * calcularDataVencimento('2024-01-15', 12, 1) // 2025-01-31
- *
- * // Qualificação operacional (vence dia exato)
- * calcularDataVencimento('2024-01-15', 12, 0) // 2025-01-15
+ * calcularDataVencimento('2024-01-15', 12) // 2025-01-15
+ * calcularDataVencimento('2025-01-31', 1) // 2025-02-28
+ * calcularDataVencimento('2024-02-29', 24) // 2026-02-28
  */
-export function calcularDataVencimento(
-  dataConclusao: string,
-  validadeMeses: number,
-  vencimentoFimMes: VencimentoMode = 1,
-): string {
+export function calcularDataVencimento(dataConclusao: string, validadeMeses: number): string {
   if (!isValidDate(dataConclusao)) {
     throw new Error(`Data de conclusão inválida: ${dataConclusao}`);
   }
@@ -59,15 +49,7 @@ export function calcularDataVencimento(
     throw new Error(`Validade deve ser maior que 0: ${validadeMeses}`);
   }
 
-  // Aritmética de mês/dia canônica e UTC-only (src/shared/utils/validade-meses.ts):
-  // - fim do mês: último dia do mês-alvo, sem overflow;
-  // - dia exato: preserva o dia e limita ao último dia válido do mês-alvo
-  //   (31/01/2025 + 1m = 28/02/2025), nunca rola para o mês seguinte.
-  // Ver worker-airtrust/src/utils/__tests__/qualificacoes-expiration.test.ts.
-  if (vencimentoFimMes === 1) {
-    return endOfTargetMonth(dataConclusao, validadeMeses);
-  }
-
+  // Aritmética de mês/dia canônica e UTC-only (src/shared/utils/validade-meses.ts).
   return addCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
@@ -127,21 +109,19 @@ export function determinarStatus(
  *
  * @param dataConclusao - Data de conclusão (ISO format)
  * @param validadeMeses - Número de meses
- * @param vencimentoFimMes - Modo de vencimento
  * @param diasExpirando - Dias para alertar (default: 30)
  * @returns Objeto com cálculos completos
  */
 export function calcularValidade(
   dataConclusao: string,
   validadeMeses: number,
-  vencimentoFimMes: VencimentoMode = 1,
   diasExpirando: number = 30,
 ): ValidadeCalculo {
   if (!isValidDate(dataConclusao)) {
     throw new Error(`Data de conclusão inválida: ${dataConclusao}`);
   }
 
-  const dataVencimento = calcularDataVencimento(dataConclusao, validadeMeses, vencimentoFimMes);
+  const dataVencimento = calcularDataVencimento(dataConclusao, validadeMeses);
   const diasValidade = calcularDiasAteVencimento(dataVencimento, dataConclusao);
   const status = determinarStatus(dataVencimento, diasExpirando);
 
@@ -149,7 +129,6 @@ export function calcularValidade(
     data_conclusao: dataConclusao,
     data_vencimento: dataVencimento,
     validade_meses: validadeMeses,
-    vencimento_fim_mes: vencimentoFimMes,
     dias_validade: diasValidade,
     status,
   };

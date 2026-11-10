@@ -166,7 +166,6 @@ describe('qualificacoes historico write router', () => {
             data_vencimento: '2026-07-15',
             qualificacao_codigo: 'SIM',
             tipo_validade: 24,
-            vencimento_fim_mes: 1,
             carga_horaria_inicial: 4,
             carga_horaria_recorrente: 8,
           }),
@@ -260,7 +259,6 @@ describe('qualificacoes historico write router', () => {
     expect(modelRead?.args).toEqual([123, 1]);
     expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
       validadeMeses: 24,
-      vencimentoFimMes: 1,
     }));
     const retryCall = calls.find(
       (call) => call.method === 'run' && call.query.includes('SET instrutor = ?,'),
@@ -290,7 +288,6 @@ describe('qualificacoes historico write router', () => {
             id: 19,
             categoria: 'OPS',
             validade: 12,
-            vencimento_fim_mes: 1,
             carga_horaria: 8,
             carga_horaria_inicial: 8,
             carga_horaria_recorrente: 8,
@@ -356,7 +353,6 @@ describe('qualificacoes historico write router', () => {
       1,
     ]);
     expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
-      vencimentoFimMes: 1,
       validadeMeses: 12,
     }));
     expect(publishQualificacaoEventMock).toHaveBeenCalledWith(
@@ -468,7 +464,6 @@ describe('qualificacoes historico write router', () => {
           first: () => ({
             validade_meses: 12,
             tipo_validade: 24,
-            vencimento_fim_mes: 1,
             data_vencimento: null,
             qualificacao_codigo: 'CRM',
           }),
@@ -516,11 +511,10 @@ describe('qualificacoes historico write router', () => {
     const readCall = calls.find((call) => call.method === 'first' && call.query.includes('qt.validade AS tipo_validade'));
     expect(readCall?.args).toEqual([654, 1]);
     expect(readCall?.query).toContain('qh.empresa_id = ?');
-    expect(readCall?.query).toContain('qt.vencimento_fim_mes');
+    expect(readCall?.query).not.toContain('vencimento_fim_mes');
     expect(readCall?.query).not.toContain('qt.validade_meses');
     expect(calcularDataVencimentoMock).toHaveBeenCalledWith(expect.objectContaining({
       validadeMeses: 24,
-      vencimentoFimMes: 1,
       dataConclusao: '2099-05-10',
     }));
   });

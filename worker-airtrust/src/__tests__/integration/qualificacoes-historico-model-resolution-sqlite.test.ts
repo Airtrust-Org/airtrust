@@ -534,10 +534,10 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     expect(item.tipo_nome).toBeNull();
   });
 
-  it('7. PUT/PATCH: alteração de Inicial para Recorrente e cálculo exato de 24 meses com fim de mês', async () => {
+  it('7. PUT/PATCH: alteração de Inicial para Recorrente e cálculo exato de 24 meses no dia', async () => {
     const testApp = buildTestApp(databasePath, 6);
 
-    // Conclusão em 2026-01-15 com modelo de 24 meses e vencimento_fim_mes = 1 -> 2028-01-31
+    // Conclusão em 2026-01-15 com modelo de 24 meses; vencimento_fim_mes = 1 (legado) é ignorado -> 2028-01-15
     const updateRes = await testApp.request('/qualificacoes/historico/1001', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -562,15 +562,15 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
     // Carga horária recorrente do modelo 20 é 10h (a inicial é 20h)
     expect(updatedItem.carga_horaria).toBe(10);
     // Vencimento de 24 meses com fim do mês para 2026-01-15 é 2028-01-31
-    expect(updatedItem.data_vencimento).toBe('2028-01-31');
+    expect(updatedItem.data_vencimento).toBe('2028-01-15');
   });
 
-  it('8. Teste de Datas e Anos Bissextos: distinção exata entre dia nominal e fim de mês', async () => {
+  it('8. Teste de Datas e Anos Bissextos: flag legada vencimento_fim_mes é ignorada (sempre no dia)', async () => {
     const testApp = buildTestApp(databasePath, 6);
 
     // Inserção dos dois modelos:
     // Modelo 70: vencimento_fim_mes = 0 (dia nominal de calendário, 24m)
-    // Modelo 71: vencimento_fim_mes = 1 (fim de mês civil regulatório, 24m)
+    // Modelo 71: vencimento_fim_mes = 1 (flag legada, IGNORADA: vence no dia como o 70)
     runSql(
       databasePath,
       `INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, nome, validade, vencimento_fim_mes, carga_horaria)
@@ -613,7 +613,7 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
 
     const readFimMes = await testApp.request('/qualificacoes/historico?id=1008');
     const itemFimMes = ((await readFimMes.json()) as any).data[0];
-    // Com vencimento_fim_mes = 1, o vencimento vai para o último dia de fevereiro de 2026: 2026-02-28
+    // vencimento_fim_mes = 1 é legado e ignorado: mesmo resultado do dia nominal (2026-02-28)
     expect(itemFimMes.data_vencimento).toBe('2026-02-28');
   });
 
