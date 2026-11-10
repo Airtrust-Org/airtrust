@@ -57,6 +57,6 @@ test('workflow only uploads encrypted package and enforces protected scope',()=>
   assert.match(yml,/AIRTRUST_QH_ARCHIVE_ONLY_525/);
   assert.match(yml,/--command 'SELECT id,funcionario_id/);
   assert.match(yml,/Upload encrypted archive only/);
-  assert.equal((yml.match(/--config worker-airtrust\\/wrangler\\.toml --env production --remote --json/g) ?? []).length, 2);
+  assert.equal((yml.split('--config worker-airtrust/wrangler.toml --env production --remote --json').slice(1)).length, 2);
   assert.doesNotMatch(yml,/upload-artifact[\s\S]*dr-qh-plaintext-rows\.json/);
 });
