@@ -793,6 +793,8 @@ export function buildReadyFrmsQueueScopesQuery(): string {
  * A crashed Worker can leave PROCESSING items behind. Their durable lease
  * state is indexed by (job_name, scope_key), so stale scopes can be revisited
  * without scanning every completed item to search for PROCESSING rows.
+ * An indexed EXISTS check prevents a former failed state without any stale
+ * PROCESSING items from monopolizing the small per-tick scope budget.
  * runFrmsQueueScope still enforces its normal 30-minute stale-item guard.
  */
 export function buildStaleFrmsQueueScopesQuery(): string {
@@ -801,6 +803,13 @@ export function buildStaleFrmsQueueScopesQuery(): string {
            WHERE job_name = ?
              AND last_started_at < datetime('now', '-30 minutes')
              AND (last_success_at IS NULL OR last_started_at > last_success_at)
+             AND EXISTS (
+               SELECT 1 FROM cron_job_items AS pending_recovery
+                WHERE pending_recovery.job_name = cron_job_state.job_name
+                  AND pending_recovery.scope_key = cron_job_state.scope_key
+                  AND pending_recovery.status = 'PROCESSING'
+                  AND pending_recovery.updated_at <= datetime('now', '-30 minutes')
+             )
            ORDER BY scope_key ASC
            LIMIT ?`;
 }
