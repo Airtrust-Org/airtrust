@@ -8,7 +8,7 @@
 // Production reads happen exclusively in the separately gated workflow.
 import { spawnSync } from 'node:child_process';
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, privateDecrypt, publicEncrypt, randomBytes, constants } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -122,6 +122,7 @@ export function restoreEncryptedLegacyQh({ envelope, privateKeyPem, outputDir })
       restored.rows.map(row => `INSERT INTO "_backup_qh_tmp" (${FIELDS.map(x=>'"'+x+'"').join(',')})
 VALUES (${FIELDS.map(key=>quoteSql(row[key])).join(',')});`).join('\n');
     runSqlite(db, '', {input:sql});
+    chmodSync(db, 0o600);
     const after = JSON.parse(runSqlite(db, `SELECT * FROM "_backup_qh_tmp" ORDER BY id;`, {json:true}));
     if (after.length !== 525 || sha(Buffer.from(JSON.stringify(after))) !== restored.rowset_sha256 ||
         runSqlite(db, 'PRAGMA integrity_check;').trim() !== 'ok') fail('LEGACY_QH_ARCHIVE_RESTORE_VERIFY_FAILED');
