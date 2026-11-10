@@ -246,6 +246,42 @@ function buildDeduplicateRenovacaoDeSelfNullSql(idCount: number): string {
 }
 
 /**
+ * #1492: um duplicado removido pode ser o historico derivado do LMS. Sem
+ * religar, a matricula CONCLUIDA (e seu ciclo) ficaria apontando para uma
+ * qualificacao deletada. Repointa matricula/ciclo para o sobrevivente do grupo
+ * (mesma realizacao real) e herda o vinculo LMS quando o sobrevivente nao tem.
+ */
+export function buildDeduplicateLmsRepointSql(
+  idCount: number,
+): { matricula: string; ciclo: string; heranca: string } {
+  const placeholders = Array.from({ length: idCount }, () => '?').join(', ');
+  return {
+    matricula: `
+      UPDATE lms_matriculas
+      SET qualificacao_historico_id = ?, updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND qualificacao_historico_id IN (${placeholders})`,
+    ciclo: `
+      UPDATE lms_matricula_ciclos
+      SET qualificacao_historico_id = ?, updated_at = datetime('now')
+      WHERE empresa_id = ?
+        AND qualificacao_historico_id IN (${placeholders})`,
+    heranca: `
+      UPDATE qualificacoes_historico
+      SET lms_matricula_id = COALESCE(lms_matricula_id, (
+            SELECT r.lms_matricula_id FROM qualificacoes_historico r
+             WHERE r.empresa_id = ? AND r.id IN (${placeholders})
+               AND r.lms_matricula_id IS NOT NULL ORDER BY r.id LIMIT 1)),
+          lms_matricula_ciclo_id = COALESCE(lms_matricula_ciclo_id, (
+            SELECT r.lms_matricula_ciclo_id FROM qualificacoes_historico r
+             WHERE r.empresa_id = ? AND r.id IN (${placeholders})
+               AND r.lms_matricula_ciclo_id IS NOT NULL ORDER BY r.id LIMIT 1)),
+          updated_at = datetime('now')
+      WHERE empresa_id = ? AND id = ? AND deleted_at IS NULL`,
+  };
+}
+
+/**
  * Soft-deleta os duplicados de cada grupo, mas primeiro repointa qualquer
  * renovacao_de que apontava para um dos ids removidos — sem isso,
  * qualificacoes_historico.deleted_at != NULL ficaria referenciado por uma
@@ -278,6 +314,21 @@ async function softDeleteManyByEmpresa(
       db
         .prepare(buildDeduplicateRenovacaoDeSelfNullSql(group.remover_ids.length))
         .bind(empresaId, group.manter_id, ...group.remover_ids),
+    );
+    const lms = buildDeduplicateLmsRepointSql(group.remover_ids.length);
+    statements.push(
+      db
+        .prepare(lms.heranca)
+        .bind(
+          empresaId,
+          ...group.remover_ids,
+          empresaId,
+          ...group.remover_ids,
+          empresaId,
+          group.manter_id,
+        ),
+      db.prepare(lms.matricula).bind(group.manter_id, empresaId, ...group.remover_ids),
+      db.prepare(lms.ciclo).bind(group.manter_id, empresaId, ...group.remover_ids),
     );
   }
 

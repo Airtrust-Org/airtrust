@@ -1123,13 +1123,19 @@ app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), asyn
 
   const existing = await db
     .prepare(
-      `SELECT m.id, m.status, m.funcionario_id, c.titulo AS curso_titulo
+      `SELECT m.id, m.status, m.funcionario_id, m.qualificacao_historico_id, c.titulo AS curso_titulo
          FROM lms_matriculas m
          JOIN lms_cursos c ON c.id = m.curso_id AND c.empresa_id = m.empresa_id
         WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL`,
     )
     .bind(matriculaId, empresaId)
-    .first<{ id: number; status: string; funcionario_id: number; curso_titulo: string }>();
+    .first<{
+      id: number;
+      status: string;
+      funcionario_id: number;
+      qualificacao_historico_id: number | null;
+      curso_titulo: string;
+    }>();
   if (!existing) throw new ApiError('Matrícula não encontrada', 404);
 
   if (!hasRole(c, 'admin')) {
@@ -1138,6 +1144,11 @@ app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), asyn
       await assertFuncionarioInScope(db, empresaId, existing.funcionario_id, access);
     }
   }
+
+  // #1492: cancelar nao pode invalidar uma conclusao com qualificacao vigente
+  // (mesma guarda do PATCH /:id/status).
+  const deleteBlock = await completedCancelBlock(db, empresaId, matriculaId, 'CANCELADO', existing);
+  if (deleteBlock) return c.json(deleteBlock, 409);
 
   await db
     .prepare(
