@@ -1,3 +1,4 @@
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -135,9 +136,10 @@ function isQualificacaoRenovada(qual: QualItem): boolean {
 }
 
 function addMonthsYmd(base: Date, months: number): string {
-  const d = new Date(base.getTime());
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().split('T')[0];
+  // Regra canonica de validade (dia preservado, limitado ao fim do mes-alvo), UTC-only.
+  // `base` vem de `${yyyy-mm-dd}T12:00:00` local: usa o dia civil local, nao o instante UTC.
+  const ymd = `${String(base.getFullYear()).padStart(4, '0')}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+  return tryAddCalendarMonthsClamped(ymd, months) ?? '';
 }
 
 /** Idade (anos completos) na data de realização do exame */
