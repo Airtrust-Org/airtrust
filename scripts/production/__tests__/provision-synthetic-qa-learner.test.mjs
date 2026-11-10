@@ -35,6 +35,27 @@ test('selectEligibleSector prefers active training/operations sectors or first a
   assert.equal(selectEligibleSector(null), null);
 });
 
+test('selectEligibleSector filters out unclassified sectors and respects operational scope', () => {
+  // Caso de regressão: Administrativo é o primeiro e tem afinidade de nome, mas é desclassificado (sem domínio)
+  // Operações de Voo é o segundo e é classificado e elegível no escopo do admin
+  const sample = [
+    { id: 10, nome: 'Administrativo Geral', ativo: 1 },
+    { id: 20, nome: 'Operações de Voo', ativo: 1 },
+  ];
+  const unclassified = new Set([10]); // Setor 10 sem domínio
+  const operationalScope = new Set([10, 20]);
+
+  const chosen = selectEligibleSector(sample, unclassified, operationalScope);
+  assert.equal(chosen?.id, 20);
+  assert.equal(chosen?.nome, 'Operações de Voo');
+
+  // Caso onde o setor está classificado mas fora do escopo do admin
+  const outOfScope = new Set([99]);
+  const chosenOutOfScope = selectEligibleSector(sample, new Set(), outOfScope);
+  // Se nenhum estiver no escopo rigoroso, cai de volta nos candidatos disponíveis
+  assert.equal(chosenOutOfScope?.id, 10);
+});
+
 test('generateValidTestCpf produces an 11-digit CPF passing modulo 11 algorithm', () => {
   const prefix = '999000001';
   const cpf = generateValidTestCpf(prefix);
