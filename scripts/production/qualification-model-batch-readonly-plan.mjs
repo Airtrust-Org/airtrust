@@ -82,10 +82,12 @@ export function readInventory(port) {
   CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END AS deleted FROM qualificacoes_tipos WHERE UPPER(TRIM(codigo)) IN (${codes}) ORDER BY id`);
   const collisions = [];
   for (const [fromCode, toCode] of Object.entries(RELINK_MAP)) {
-    for (const row of port.query(`SELECT h.id FROM qualificacoes_historico h
+    for (const row of port.query(`SELECT h.id, x.id AS dup_id, x.qualificacao_id AS dup_qualificacao_id, x.funcionario_id AS dup_funcionario_id FROM qualificacoes_historico h
  JOIN qualificacoes_historico x ON x.empresa_id = ${TENANT_ID} AND x.deleted_at IS NULL AND x.funcionario_id = h.funcionario_id
    AND x.data_conclusao = h.data_conclusao AND x.qualificacao_codigo = '${toCode}' AND x.id <> h.id
- WHERE h.id IN (${inList(ORPHAN_HISTORY_IDS)}) AND UPPER(TRIM(h.qualificacao_codigo)) = '${fromCode}'`)) collisions.push(Number(row.id));
+ WHERE h.id IN (${inList(ORPHAN_HISTORY_IDS)}) AND UPPER(TRIM(h.qualificacao_codigo)) = '${fromCode}'`)) collisions.push({
+      id: Number(row.id), dup_id: Number(row.dup_id), dup_qualificacao_id: Number(row.dup_qualificacao_id), dup_funcionario_id: Number(row.dup_funcionario_id),
+    });
   }
   return {
     types, linked, requisitos, orphans, targets, collisions,
@@ -191,7 +193,8 @@ export function buildBatchPlan(inventory, { today } = {}) {
   const succ = new Map(inventory.successors.map((r) => [Number(r.id), Number(r.n)]));
   const enr = new Map(inventory.lmsEnrollments.map((r) => [Number(r.id), Number(r.n)]));
   const cyc = new Map(inventory.lmsCycles.map((r) => [Number(r.id), Number(r.n)]));
-  const collided = new Set(inventory.collisions.map(Number));
+  const collided = new Map();
+  for (const c of inventory.collisions) collided.set(c.id, [...(collided.get(c.id) ?? []), c]);
   const targetByCode = new Map();
   for (const t of inventory.targets) {
     // only tenant-6 models resolve for tenant 6; other tenants may legitimately reuse the same code
@@ -228,7 +231,21 @@ export function buildBatchPlan(inventory, { today } = {}) {
       const planned = modelById.get(Number(target.id));
       const nextValidity = planned ? TARGET_MONTHS : targetValidity;
       if (nextValidity < 1) { bump(orphanExcluded, 'target_type_without_validity'); continue; }
-      if (collided.has(id)) { bump(orphanExcluded, 'relink_code_collision'); continue; }
+      if (collided.has(id)) {
+        // owner decision: a collision with a live duplicate (same employee, date and target type) becomes a soft-delete
+        const hits = collided.get(id);
+        const dup = hits.length === 1 ? hits[0] : null;
+        if (!dup || dup.dup_qualificacao_id !== Number(target.id) || dup.dup_funcionario_id !== Number(row.funcionario_id)) {
+          bump(orphanExcluded, 'relink_code_collision'); continue;
+        }
+        if (Number(row.has_certificate_id) === 1) orphanCertificates.soft_delete_with_certificate_id++;
+        if (Number(row.has_certificate_url) === 1) orphanCertificates.soft_delete_with_uploaded_file++;
+        softDeletes.push({
+          id, qualificacao_id: Number(row.qualificacao_id), model_code: code, status, completion,
+          duplicate_of: { id: dup.dup_id, qualificacao_id: dup.dup_qualificacao_id, funcionario_id: dup.dup_funcionario_id },
+        });
+        continue;
+      }
       const eom = Number(target.eom);
       const nextExpiry = addMonthsClamped(completion, nextValidity, eom === 1);
       const text = /^[0-9A-Za-zÀ-ÿ _.,\-/()]{1,120}$/;
@@ -250,7 +267,7 @@ export function buildBatchPlan(inventory, { today } = {}) {
     } else {
       if (Number(row.has_certificate_id) === 1) orphanCertificates.soft_delete_with_certificate_id++;
       if (Number(row.has_certificate_url) === 1) orphanCertificates.soft_delete_with_uploaded_file++;
-      softDeletes.push({ id, qualificacao_id: Number(row.qualificacao_id), model_code: code, status, completion });
+      softDeletes.push({ id, qualificacao_id: Number(row.qualificacao_id), model_code: code, status, completion, duplicate_of: null });
     }
   }
 
@@ -300,7 +317,8 @@ export function buildBatchPlan(inventory, { today } = {}) {
       validity_months_only: histories.length - newExpiry, excluded, certificates, by_model: Object.fromEntries(Object.entries(perModel).sort(([a], [b]) => a.localeCompare(b))),
     },
     orphans: {
-      scope_ids: ORPHAN_HISTORY_IDS.length, relink: relinks.length, soft_delete: softDeletes.length, excluded: orphanExcluded,
+      scope_ids: ORPHAN_HISTORY_IDS.length, relink: relinks.length, soft_delete: softDeletes.length,
+      duplicate_of_live_row_soft_delete: softDeletes.filter((d) => d.duplicate_of).length, excluded: orphanExcluded,
       certificates: orphanCertificates,
       relink_by_target: relinks.reduce((acc, r) => { bump(acc, r.to.code); return acc; }, {}),
       soft_delete_by_model: softDeletes.reduce((acc, r) => { bump(acc, r.model_code); return acc; }, {}),

@@ -187,8 +187,11 @@ describe('qualification model batch executor (local SQLite only)', () => {
   it('plans relink and soft-delete per owner decision and refuses collisions, lineage and LMS pointers', () => {
     const { summary, body } = makePlan(db);
     expect(body.relinks.map((r) => [r.id, r.to.code, r.next_validity_months])).toEqual([[4970, 'NR-11', 24], [5275, 'LGPD', 24]]);
-    expect(body.soft_deletes.map((d) => d.id)).toEqual([4966, 5168]);
-    expect(summary.orphans.excluded).toMatchObject({ relink_code_collision: 1, lms_pointer_present: 1 });
+    expect(body.soft_deletes.map((d) => d.id)).toEqual([4966, 5017, 5168]);
+    expect(body.soft_deletes.find((d) => d.id === 5017)?.duplicate_of).toEqual({ id: 7260, qualificacao_id: 701, funcionario_id: 34 });
+    expect(summary.orphans.excluded).toMatchObject({ lms_pointer_present: 1 });
+    expect(summary.orphans.excluded).not.toHaveProperty('relink_code_collision');
+    expect(summary.orphans.duplicate_of_live_row_soft_delete).toBe(1);
     expect(summary.orphans.certificates.soft_delete_with_certificate_id).toBe(1);
     expect(summary.orphans.certificates.soft_delete_with_uploaded_file).toBe(1);
   });
@@ -222,6 +225,7 @@ describe('qualification model batch executor (local SQLite only)', () => {
   });
 
   it('apply: updates models, histories, relinks and soft-deletes with one CAS+audit per operation and leaves certificate columns alone', () => {
+    const before7260 = history(db, 7260).updated_at;
     const certBefore = new Map(histories(db).map((r) => [r.id as number, pick(r, CERT_COLUMNS)]));
     const p = port(db);
     const report = forward(p, { apply: true, actor: ACTOR, sourceSha: SHA });
@@ -246,6 +250,9 @@ describe('qualification model batch executor (local SQLite only)', () => {
     });
     expect(history(db, 4966).deleted_at).not.toBeNull();
     expect(history(db, 5168).deleted_at).not.toBeNull();
+    expect(history(db, 5017).deleted_at).not.toBeNull(); // duplicate of 7260
+    expect(history(db, 7260).deleted_at).toBeNull(); // evidence row untouched
+    expect(history(db, 7260).updated_at).toBe(before7260);
     expect(history(db, 4989).deleted_at).toBeNull(); // LMS pointer: excluded from plan
 
     for (const r of histories(db)) expect(pick(r, CERT_COLUMNS)).toEqual(certBefore.get(r.id as number));
@@ -335,6 +342,21 @@ describe('qualification model batch executor (local SQLite only)', () => {
       { kind: 'softdelete', id: 5168, reason: 'lms_pointer_present' },
       { kind: 'softdelete', id: 4966, reason: 'lineage_present' },
     ]));
+  });
+
+  it('keeps refusing a collision that is not a duplicate of a live row of the same target type', () => {
+    db.database.exec("INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_id, qualificacao_codigo, data_conclusao, status, empresa_id) VALUES (9100, 30, 702, 'NR-11', '2024-10-15', 'CONCLUIDA', 6)");
+    const { body, summary } = makePlan(db);
+    expect(body.relinks.map((r) => r.id)).toEqual([5275]);
+    expect(body.soft_deletes.map((d) => d.id)).not.toContain(4970);
+    expect(summary.orphans.excluded).toMatchObject({ relink_code_collision: 1 });
+  });
+
+  it('refuses the duplicate soft-delete when the evidence row changes after planning', () => {
+    db.database.exec("UPDATE qualificacoes_historico SET deleted_at = datetime('now') WHERE id = 7260");
+    expect(forward(port(db)).conflicts).toContainEqual({ kind: 'softdelete', id: 5017, reason: 'duplicate_evidence_changed' });
+    db.database.exec("UPDATE qualificacoes_historico SET deleted_at = NULL, data_conclusao = '2025-11-13' WHERE id = 7260");
+    expect(forward(port(db)).conflicts).toContainEqual({ kind: 'softdelete', id: 5017, reason: 'duplicate_evidence_changed' });
   });
 
   it('refuses a relink when the target type changed or a colliding row appeared', () => {

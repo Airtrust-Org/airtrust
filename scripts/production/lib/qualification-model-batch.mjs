@@ -161,7 +161,19 @@ export function canonicalSoftDelete(row) {
   const base = commonHistory(row, 'SOFT_DELETE');
   check(Number.isSafeInteger(row.qualificacao_id) && row.qualificacao_id > 0, 'SOFT_DELETE_ROW_MODEL');
   check(typeof row.model_code === 'string' && CODE_RE.test(row.model_code), 'SOFT_DELETE_ROW_MODEL_CODE');
-  return { id: base.id, qualificacao_id: row.qualificacao_id, model_code: row.model_code, status: base.status, completion: base.completion };
+  // owner decision on a colliding orphan: soft-delete only as a duplicate of a live row (same employee, date and target type)
+  let duplicateOf = null;
+  if (row.duplicate_of !== null && row.duplicate_of !== undefined) {
+    const d = row.duplicate_of;
+    check(Number.isSafeInteger(d.id) && d.id > 0 && d.id !== base.id, 'SOFT_DELETE_DUPLICATE_ID');
+    check(Number.isSafeInteger(d.qualificacao_id) && d.qualificacao_id > 0, 'SOFT_DELETE_DUPLICATE_MODEL');
+    check(Number.isSafeInteger(d.funcionario_id) && d.funcionario_id > 0, 'SOFT_DELETE_DUPLICATE_EMPLOYEE');
+    duplicateOf = { id: d.id, qualificacao_id: d.qualificacao_id, funcionario_id: d.funcionario_id };
+  }
+  return {
+    id: base.id, qualificacao_id: row.qualificacao_id, model_code: row.model_code, status: base.status,
+    completion: base.completion, duplicate_of: duplicateOf,
+  };
 }
 
 function sortedById(rows, key, code) {
@@ -183,6 +195,8 @@ function canonicalBody(source) {
     check(!seen.has(row.id), 'MANIFEST_HISTORY_IN_MULTIPLE_OPERATIONS');
     seen.add(row.id);
   }
+  // the evidence row of a duplicate soft-delete must itself stay untouched by the batch
+  for (const row of softDeletes) check(!row.duplicate_of || !seen.has(row.duplicate_of.id), 'MANIFEST_DUPLICATE_EVIDENCE_TOUCHED');
   // history operations may only follow a model operation of this very manifest (same code and end-of-month mode)
   const byModel = new Map(models.map((m) => [m.tipo_id, m]));
   for (const h of histories) {
@@ -294,6 +308,18 @@ function modelExists(alias, tipoIdSql, { code, validity, endOfMonth }) {
        AND COALESCE(${alias}.vencimento_fim_mes, 0) = ${sqlInt(endOfMonth)})`;
 }
 
+function duplicateGuard(spec) {
+  const d = spec.duplicate_of;
+  if (!d) return '';
+  return `
+   AND EXISTS (SELECT 1 FROM qualificacoes_historico d
+     WHERE d.id = ${sqlInt(d.id)} AND d.empresa_id = ${TENANT_ID} AND d.deleted_at IS NULL
+       AND d.funcionario_id = qualificacoes_historico.funcionario_id
+       AND d.funcionario_id = ${sqlInt(d.funcionario_id)}
+       AND d.data_conclusao = qualificacoes_historico.data_conclusao
+       AND d.qualificacao_id = ${sqlInt(d.qualificacao_id)})`;
+}
+
 /** One CAS UPDATE. Never writes certificate columns, data_conclusao, status or lms pointers. */
 export function casUpdateSql(op) {
   const { spec, from, to } = op;
@@ -370,7 +396,7 @@ export function casUpdateSql(op) {
        AND t.deleted_at IS NOT NULL AND UPPER(TRIM(t.codigo)) = ${sqlText(spec.model_code, CODE_RE, 'SQL_MODEL_INVALID')})
    AND NOT EXISTS (SELECT 1 FROM qualificacoes_historico s WHERE s.renovacao_de = qualificacoes_historico.id AND s.deleted_at IS NULL)
    AND NOT EXISTS (SELECT 1 FROM lms_matriculas m WHERE m.qualificacao_historico_id = qualificacoes_historico.id)
-   AND NOT EXISTS (SELECT 1 FROM lms_matricula_ciclos c WHERE c.qualificacao_historico_id = qualificacoes_historico.id)`;
+   AND NOT EXISTS (SELECT 1 FROM lms_matricula_ciclos c WHERE c.qualificacao_historico_id = qualificacoes_historico.id)${duplicateGuard(spec)}`;
   }
   return `UPDATE qualificacoes_historico
    SET deleted_at = NULL, updated_at = datetime('now')
@@ -476,7 +502,7 @@ function guardsMatch(op, live) {
   return Number(live.qualificacao_id) === spec.qualificacao_id;
 }
 
-function forwardExtraConflict(op, live, models, collisions, pendingModels) {
+function forwardExtraConflict(op, live, models, collisions, pendingModels, dups) {
   const validityReady = (m, want) => num(m.validade) === want || pendingModels.has(Number(m.id));
   const spec = op.spec;
   if (op.kind === 'history') {
@@ -494,11 +520,17 @@ function forwardExtraConflict(op, live, models, collisions, pendingModels) {
     if (Number(live.lms_enrollments) > 0 || Number(live.lms_cycles) > 0) return 'lms_pointer_present';
     const m = models.get(spec.qualificacao_id);
     if (!m || Number(m.deleted) !== 1 || m.code !== spec.model_code) return 'orphan_model_not_deleted';
+    if (spec.duplicate_of) {
+      const d = dups.get(spec.duplicate_of.id);
+      if (!d || Number(d.deleted) !== 0 || Number(d.qualificacao_id) !== spec.duplicate_of.qualificacao_id
+        || Number(d.funcionario_id) !== spec.duplicate_of.funcionario_id || Number(d.funcionario_id) !== Number(live.funcionario_id)
+        || String(d.completion ?? '') !== spec.completion) return 'duplicate_evidence_changed';
+    }
   }
   return null;
 }
 
-function classify({ ops, live, models, audits, collisions, direction, planSha256, forwardPlanSha256 }) {
+function classify({ ops, live, models, audits, collisions, dups, direction, planSha256, forwardPlanSha256 }) {
   const out = { pending: [], already: [], skipped: [], conflicts: [] };
   const pendingModels = new Set();
   for (const op of ops) {
@@ -521,7 +553,7 @@ function classify({ ops, live, models, audits, collisions, direction, planSha256
     }
     if (!stateMatches(op, row, op.from)) { out.conflicts.push({ kind: op.kind, id: op.id, reason: 'row_changed_since_plan' }); continue; }
     if (direction === 'forward') {
-      const reason = forwardExtraConflict(op, row, models, collisions, pendingModels);
+      const reason = forwardExtraConflict(op, row, models, collisions, pendingModels, dups);
       if (reason) { out.conflicts.push({ kind: op.kind, id: op.id, reason }); continue; }
     } else if (!audits.has(forwardKey)) {
       out.conflicts.push({ kind: op.kind, id: op.id, reason: 'not_applied_by_forward_plan' });
@@ -542,7 +574,10 @@ function snapshot(port, ops, direction) {
   }
   const histIds = ops.filter((o) => o.kind !== 'model').map((o) => o.id);
   const relinks = direction === 'forward' ? ops.filter((o) => o.kind === 'relink') : [];
+  const dupIds = direction === 'forward'
+    ? ops.filter((o) => o.kind === 'softdelete' && o.spec.duplicate_of).map((o) => o.spec.duplicate_of.id) : [];
   return {
+    dups: readHistories(port, dupIds),
     live: readHistories(port, histIds), models: readModels(port, [...modelIds]),
     collisions: readCollisions(port, relinks), audits: readAudits(port, ops),
   };

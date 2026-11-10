@@ -21,7 +21,10 @@ export interface RelinkRow {
   from: LinkState; to: LinkState; old_expiry: string | null; next_expiry: string;
   old_validity_months: number | null; next_validity_months: number; end_of_month: number;
 }
-export interface SoftDeleteRow { id: number; qualificacao_id: number; model_code: string; status: string; completion: string }
+export interface SoftDeleteRow {
+  id: number; qualificacao_id: number; model_code: string; status: string; completion: string;
+  duplicate_of?: { id: number; qualificacao_id: number; funcionario_id: number } | null;
+}
 
 export interface BatchBody {
   models: ModelRow[]; relinks: RelinkRow[]; histories: HistoryRow[]; soft_deletes: SoftDeleteRow[];
