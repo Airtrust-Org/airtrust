@@ -6,6 +6,7 @@ import { Upload, FileText, X } from 'lucide-react';
 import SeletorFuncionario from '../../components/SeletorFuncionario';
 import { toast } from 'sonner';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
+import { tryAddCalendarMonthsClamped, tryEndOfTargetMonth } from '@/shared/utils/validade-meses';
 
 interface FormularioQualificacaoProps {
   qualificacao?: any;
@@ -59,17 +60,12 @@ const FormularioQualificacao = ({
     validadeMeses: number,
     vencimentoTipo: 'DIA_EXATO' | 'FIM_DO_MES',
   ): string => {
-    const data = new Date(dataConclusao + 'T00:00:00Z');
-    data.setUTCMonth(data.getUTCMonth() + validadeMeses);
-
-    if (vencimentoTipo === 'FIM_DO_MES') {
-      const ano = data.getUTCFullYear();
-      const mes = data.getUTCMonth();
-      const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0));
-      return ultimoDia.toISOString().split('T')[0];
-    }
-
-    return data.toISOString().split('T')[0];
+    // Regra canonica compartilhada com o Worker (dia exato limitado ao fim do mes-alvo).
+    return (
+      (vencimentoTipo === 'FIM_DO_MES'
+        ? tryEndOfTargetMonth(dataConclusao, validadeMeses)
+        : tryAddCalendarMonthsClamped(dataConclusao, validadeMeses)) ?? ''
+    );
   };
 
   const handleDataConclusaoChange = (dataConclusao: string) => {

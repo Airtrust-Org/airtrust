@@ -596,8 +596,9 @@ describe('Subagente A & B — Resolução Determinística de Modelos e Datas em 
 
     const readNominal = await testApp.request('/qualificacoes/historico?id=1007');
     const itemNominal = ((await readNominal.json()) as any).data[0];
-    // Em dia nominal sem fim de mês (vencimento_fim_mes = 0), adição direta de 24 meses em ano não-bissexto resulta em 2026-03-01
-    expect(itemNominal.data_vencimento).toBe('2026-03-01');
+    // Dia nominal (vencimento_fim_mes = 0): regra canonica (#2158) preserva o dia e limita ao
+    // ultimo dia do mes-alvo; 29/02/2024 + 24m = 28/02/2026 (nao rola para 01/03/2026).
+    expect(itemNominal.data_vencimento).toBe('2026-02-28');
 
     // Caso B: Conclusão em 29/02/2024 (ano bissexto), vencimento_fim_mes = 1 (fim de mês)
     const resFimMes = await testApp.request('/qualificacoes/historico/1008', {

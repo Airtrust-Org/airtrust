@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped } from '../../utils/sql-add-months';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -163,7 +164,7 @@ describe('qualificacoes historico status sort contract', () => {
     const statsSql = calls.find((call) => call.method === 'first' && call.query.includes('as validas,') && call.query.includes('as vencidas,'))?.query || '';
     expect(statsSql).not.toBe('');
     expect(statsSql).not.toContain("julianday('now')");
-    const vencimentoExpr = "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
+    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', 'COALESCE(qh.validade_meses, qt.validade)')})`;
     const predicates = buildVencimentoStatusPredicates(vencimentoExpr);
     expect(statsSql).toContain(`AND ${predicates.valida} THEN 1 ELSE 0 END) as validas`);
     expect(statsSql).toContain(`AND (${predicates.vencendo}) THEN 1 ELSE 0 END) as vencendo`);

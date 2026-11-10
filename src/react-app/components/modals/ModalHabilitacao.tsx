@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { API_BASE_URL } from '@/react-app/config/api';
 import { X } from 'lucide-react';
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 
 interface Props {
   isOpen: boolean;
@@ -175,13 +176,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
    * data_conclusao + validade_meses
    */
   const calcularDataVencimento = (dataConclusao: string, meses: number): string => {
-    try {
-      const data = new Date(dataConclusao + 'T00:00:00Z');
-      data.setMonth(data.getMonth() + meses);
-      return data.toISOString().split('T')[0];
-    } catch {
-      return '';
-    }
+    return tryAddCalendarMonthsClamped(dataConclusao, meses) ?? '';
   };
 
   /**
