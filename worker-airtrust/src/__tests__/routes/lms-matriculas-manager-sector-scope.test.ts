@@ -290,6 +290,7 @@ describe('LMS matrículas — manager sector-scope enforcement', () => {
     hasRoleMock.mockReturnValue(true); // admin
 
     const { db, writes } = createMockDb([
+      ['SELECT status, qualificacao_historico_id FROM lms_matriculas', { first: () => ({ status: 'NAO_INICIADO', qualificacao_historico_id: null }) }],
       ['FROM lms_matriculas m', { first: () => matriculaOutOfScope }],
       ["SET status = 'CANCELADO'", {}],
       ['INSERT OR IGNORE INTO notificacoes_inapp', {}],

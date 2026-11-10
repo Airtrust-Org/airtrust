@@ -39,3 +39,12 @@ export async function completedCancelBlock(
     data: { matricula_id: matriculaId, status_atual: existing.status },
   };
 }
+
+/** Variante para rotas que nao carregaram status/ponteiro da matricula (DELETE /:id). */
+export async function completedCancelBlockById(db: D1Database, empresaId: number, matriculaId: number) {
+  const row = await db
+    .prepare('SELECT status, qualificacao_historico_id FROM lms_matriculas WHERE id = ? AND empresa_id = ? LIMIT 1')
+    .bind(matriculaId, empresaId)
+    .first<{ status: string; qualificacao_historico_id: number | null }>();
+  return row ? completedCancelBlock(db, empresaId, matriculaId, 'CANCELADO', row) : null;
+}

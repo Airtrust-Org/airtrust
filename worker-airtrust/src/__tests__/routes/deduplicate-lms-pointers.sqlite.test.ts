@@ -53,3 +53,53 @@ describe('buildDeduplicateLmsRepointSql', () => {
     ]);
   });
 });
+
+describe('buildDeduplicateStatements respeita o limite de binds do D1', () => {
+  for (const total of [50, 120]) {
+    it(`grupo com ${total} registros (${total - 1} removidos): nenhum statement passa de 100 binds`, async () => {
+      const { buildDeduplicateStatements } = await import('../../routes/deduplicate');
+      const sizes: number[] = [];
+      const db = {
+        prepare: () => ({
+          bind: (...values: unknown[]) => {
+            sizes.push(values.length);
+            return {};
+          },
+        }),
+      } as unknown as D1Database;
+      const removeIds = Array.from({ length: total - 1 }, (_, i) => 1000 + i);
+      const statements = buildDeduplicateStatements(
+        db,
+        [
+          {
+            funcionario_id: 1,
+            qualificacao_chave: 'X',
+            qualificacao_id: 1,
+            qualificacao_codigo: 'X',
+            data_conclusao_dia: '2026-01-01',
+            total,
+            manter_id: 1,
+            remover_ids: removeIds,
+          },
+        ],
+        6,
+      );
+      expect(statements.length).toBe(sizes.length);
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(100);
+    });
+  }
+
+  it('heranca em fatias ainda religa o vinculo LMS (SQLite real)', async () => {
+    const sql = buildDeduplicateLmsRepointSql(1);
+    sqlite.database.exec(
+      `INSERT INTO qualificacoes_historico (id, funcionario_id, qualificacao_codigo, data_conclusao, status, empresa_id)
+       VALUES (12, 1, 'X', '2026-01-01T11:00', 'CONCLUIDA', 6)`,
+    );
+    await sqlite.prepare(sql.heranca).bind(6, 12, 6, 12, 6, 11).run();
+    await sqlite.prepare(sql.heranca).bind(6, 10, 6, 10, 6, 11).run();
+    const keeper = sqlite.database
+      .prepare('SELECT lms_matricula_id AS m FROM qualificacoes_historico WHERE id = 11')
+      .get() as { m: number };
+    expect(keeper.m).toBe(500);
+  });
+});

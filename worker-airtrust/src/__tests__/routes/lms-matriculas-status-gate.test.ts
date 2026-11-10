@@ -571,6 +571,7 @@ describe('PATCH /:id/status — qualification gate', () => {
 
   it('DELETE rejeita 409 em matricula CONCLUIDA com qualificacao vigente e nao escreve', async () => {
     const { db, writes } = createMockDb([
+      ['SELECT status, qualificacao_historico_id FROM lms_matriculas', { first: () => ({ status: 'CONCLUIDO', qualificacao_historico_id: 77 }) }],
       [
         'FROM lms_matriculas m',
         { first: () => ({ id: 200, status: 'CONCLUIDO', funcionario_id: 10, qualificacao_historico_id: 77, curso_titulo: 'X' }) },
@@ -588,6 +589,7 @@ describe('PATCH /:id/status — qualification gate', () => {
 
   it('DELETE continua cancelando matricula nao concluida', async () => {
     const { db, writes } = createMockDb([
+      ['SELECT status, qualificacao_historico_id FROM lms_matriculas', { first: () => ({ status: 'NAO_INICIADO', qualificacao_historico_id: null }) }],
       [
         'FROM lms_matriculas m',
         { first: () => ({ id: 200, status: 'NAO_INICIADO', funcionario_id: 10, qualificacao_historico_id: null, curso_titulo: 'X' }) },
