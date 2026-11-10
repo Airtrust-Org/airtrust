@@ -24,6 +24,8 @@ test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologat
 
 test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: true,
@@ -38,6 +40,8 @@ test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass',
 
 test('evaluateHomologationVerdict rejects PASS when resume verification fails', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: false,
@@ -54,6 +58,8 @@ test('evaluateHomologationVerdict fails when lesson location stays empty and res
   // Simulates a course where traversal finishes and backend marks CONCLUIDO,
   // but no nonempty lesson location was ever exposed to verify resumption.
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: false,
@@ -68,6 +74,8 @@ test('evaluateHomologationVerdict fails when lesson location stays empty and res
 
 test('evaluateHomologationVerdict rejects PASS when certificate PDF is invalid', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: true,
@@ -82,6 +90,8 @@ test('evaluateHomologationVerdict rejects PASS when certificate PDF is invalid',
 
 test('evaluateHomologationVerdict rejects PASS when expected qualification is missing', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: true,
@@ -96,6 +106,8 @@ test('evaluateHomologationVerdict rejects PASS when expected qualification is mi
 
 test('evaluateHomologationVerdict rejects PASS when reopen has progress downgrade', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: true,
     resumedVerified: true,
@@ -110,6 +122,8 @@ test('evaluateHomologationVerdict rejects PASS when reopen has progress downgrad
 
 test('evaluateHomologationVerdict rejects PASS when progress is below 100', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: true,
     progress100: false,
     resumedVerified: true,
@@ -124,6 +138,8 @@ test('evaluateHomologationVerdict rejects PASS when progress is below 100', () =
 
 test('evaluateHomologationVerdict rejects PASS when completion status is not reached', () => {
   const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
     isConcluido: false,
     progress100: true,
     resumedVerified: true,
@@ -591,23 +607,17 @@ test('adversarial: evaluateAssessmentPolicy fails when score is below cut even i
   assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
 });
 
-test('adversarial: evaluateAssessmentPolicy fails when policy is EXTERNAL and externalProofVerified is false', () => {
-  const result = evaluateAssessmentPolicy({
-    policy: 'EXTERNAL',
-    lessonStatus: 'passed',
-    externalProofVerified: false,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'EXTERNAL_PROOF_MISSING');
+test('adversarial: missing, unknown and external assessment policies do not certify', () => {
+  assert.equal(evaluateAssessmentPolicy({ lessonStatus: 'completed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'UNKNOWN', lessonStatus: 'passed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'completed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'passed', externalProofVerified: false }).reason, 'EXTERNAL_ASSESSMENT_NOT_ATTESTED');
+  assert.equal(evaluateAssessmentPolicy({ policy: 'UNRECOGNIZED_POLICY', lessonStatus: 'completed' }).reason, 'ASSESSMENT_POLICY_UNSUPPORTED');
 });
 
-test('adversarial: evaluateAssessmentPolicy fails when policy is UNKNOWN', () => {
-  const result = evaluateAssessmentPolicy({
-    policy: 'UNRECOGNIZED_POLICY',
-    lessonStatus: 'completed',
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'UNKNOWN_ASSESSMENT_POLICY');
+test('PPTX_SLIDES policy remains explicitly supported when backend completed', () => {
+  assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'completed' }).ok, true);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'incomplete' }).ok, false);
 });
 
 test('adversarial: evaluateCoursePath fails when units jump (skipping intermediate units)', () => {
@@ -623,15 +633,13 @@ test('adversarial: evaluateCoursePath fails when units jump (skipping intermedia
   assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
 });
 
-test('adversarial: evaluateCoursePath fails when totalUnits is 0 or negative', () => {
-  const result = evaluateCoursePath({
-    contentType: 'scorm',
-    totalUnits: 0,
-    visitedUnits: 0,
-    atLastUnit: true,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'INVALID_TOTAL_UNITS');
+test('adversarial: unknown total and skipped slides never prove full course path', () => {
+  const unknown = evaluateCoursePath({ contentType: 'scorm', totalUnits: 0, visitedUnits: 1, atLastUnit: true });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.reason, 'COURSE_TOTAL_UNVERIFIED');
+  const skipped = evaluateCoursePath({ contentType: 'scorm', totalUnits: 45, visitedUnits: 2, atLastUnit: true });
+  assert.equal(skipped.ok, false);
+  assert.equal(skipped.reason, 'INCOMPLETE_COURSE_PATH');
 });
 
 test('evaluateCoursePath passes with distinctUnitsVisited set covering all units', () => {
@@ -647,4 +655,13 @@ test('evaluateCoursePath passes with distinctUnitsVisited set covering all units
   });
   assert.equal(result.ok, true);
   assert.equal(result.reason, null);
+});
+
+test('adversarial: missing path or assessment evidence is not defaulted to PASS', () => {
+  const actual = evaluateHomologationVerdict({
+    isConcluido: true, progress100: true, resumedVerified: true,
+    reopenNoDowngrade: true, qualExpected: false, qual: null, cert: null,
+  });
+  assert.equal(actual.pass, false);
+  assert.equal(actual.reason, 'INCOMPLETE_COURSE_PATH');
 });

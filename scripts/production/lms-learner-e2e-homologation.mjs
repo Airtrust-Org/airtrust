@@ -346,7 +346,7 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
 }
 
 export function evaluateAssessmentPolicy({
-  policy = 'FORMATIVE',
+  policy = null,
   lessonStatus = '',
   scoreRaw = null,
   scoreScaled = null,
@@ -354,7 +354,7 @@ export function evaluateAssessmentPolicy({
   externalProofVerified = false,
 }) {
   const normStatus = String(lessonStatus || '').trim().toLowerCase();
-  const normalizedPolicy = String(policy || 'FORMATIVE').trim().toUpperCase();
+  const normalizedPolicy = typeof policy === 'string' ? policy.trim().toUpperCase() : '';
 
   if (normalizedPolicy === 'FORMATIVE') {
     const ok = normStatus === 'completed' || normStatus === 'passed';
@@ -397,8 +397,7 @@ export function evaluateAssessmentPolicy({
         scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
       }
 
-      // If score is evaluated and is below cut, it MUST FAIL even if lessonStatus says 'passed' (contradictory score)
-      if (scoreEvaluated && !scorePassed) {
+      if (!scorePassed) {
         return {
           ok: false,
           policy: 'SCORED',
@@ -436,15 +435,15 @@ export function evaluateAssessmentPolicy({
   }
 
   if (normalizedPolicy === 'PPTX_SLIDES') {
-    const ok = normStatus === 'completed' || normStatus === 'passed';
+    const ok = normStatus === 'completed';
     return {
       ok,
-      policy: 'PPTX_SLIDES',
+      policy: normalizedPolicy,
       scoreRaw,
       scoreScaled,
       masteryScore,
       status: normStatus,
-      reason: ok ? null : 'PPTX_NOT_CONCLUDED',
+      reason: ok ? null : 'PPTX_NOT_COMPLETED',
     };
   }
 
@@ -457,11 +456,10 @@ export function evaluateAssessmentPolicy({
       scoreScaled,
       masteryScore,
       status: normStatus,
-      reason: ok ? null : 'EXTERNAL_PROOF_MISSING',
+      reason: ok ? null : 'EXTERNAL_ASSESSMENT_NOT_ATTESTED',
     };
   }
 
-  // Any other unknown/unsupported policy fails closed
   return {
     ok: false,
     policy: normalizedPolicy,
@@ -469,7 +467,7 @@ export function evaluateAssessmentPolicy({
     scoreScaled,
     masteryScore,
     status: normStatus,
-    reason: 'UNKNOWN_ASSESSMENT_POLICY',
+    reason: 'ASSESSMENT_POLICY_UNSUPPORTED',
   };
 }
 
@@ -477,27 +475,38 @@ export function evaluateCoursePath({
   contentType = 'scorm',
   totalUnits = 0,
   visitedUnits = 0,
+  visitedUnitIds = null,
   distinctUnitsVisited = null,
   atLastUnit = false,
   completedActivities = 0,
   totalActivities = 0,
 }) {
-  if (!totalUnits || totalUnits <= 0) {
+  if (contentType === 'pptx') {
+    const ok = totalUnits > 0 && visitedUnits >= totalUnits && atLastUnit;
     return {
-      ok: false,
+      ok,
       totalUnits,
       visitedUnits,
       atLastUnit,
-      reason: 'INVALID_TOTAL_UNITS',
+      reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
     };
   }
 
-  let uniqueVisitedCount = visitedUnits;
-  if (distinctUnitsVisited instanceof Set) {
-    uniqueVisitedCount = distinctUnitsVisited.size;
-  } else if (Array.isArray(distinctUnitsVisited)) {
-    uniqueVisitedCount = new Set(distinctUnitsVisited).size;
+  if (!Number.isSafeInteger(totalUnits) || totalUnits < 1) {
+    return { ok: false, totalUnits, visitedUnits, atLastUnit, reason: 'COURSE_TOTAL_UNVERIFIED' };
   }
+
+  const unitSet = visitedUnitIds instanceof Set
+    ? visitedUnitIds
+    : distinctUnitsVisited instanceof Set
+      ? distinctUnitsVisited
+      : Array.isArray(visitedUnitIds)
+        ? new Set(visitedUnitIds)
+        : Array.isArray(distinctUnitsVisited)
+          ? new Set(distinctUnitsVisited)
+          : null;
+
+  const uniqueVisitedCount = unitSet ? unitSet.size : visitedUnits;
 
   if (uniqueVisitedCount < totalUnits || !atLastUnit) {
     return {
@@ -512,6 +521,9 @@ export function evaluateCoursePath({
   if (totalActivities > 0 && completedActivities < totalActivities) {
     return {
       ok: false,
+      totalUnits,
+      visitedUnits: uniqueVisitedCount,
+      atLastUnit,
       totalActivities,
       completedActivities,
       reason: 'MANDATORY_ACTIVITIES_INCOMPLETE',
@@ -523,13 +535,15 @@ export function evaluateCoursePath({
     totalUnits,
     visitedUnits: uniqueVisitedCount,
     atLastUnit: true,
+    completedActivities,
+    totalActivities,
     reason: null,
   };
 }
 
 export function evaluateHomologationVerdict({
-  percurso_ok = true,
-  avaliacao_ok = true,
+  percurso_ok = false,
+  avaliacao_ok = false,
   isConcluido,
   progress100,
   resumedVerified,
@@ -771,6 +785,7 @@ async function drivePptxCourseInBrowser({
 async function driveScormCourseInBrowser({
   browserEngine,
   token,
+  adminToken = null,
   course,
   matriculaId,
   funcionarioId,
@@ -797,9 +812,9 @@ async function driveScormCourseInBrowser({
   const initialFrame = await iframeHandle?.contentFrame();
   assert(initialFrame, 'SCORM_IFRAME_NOT_FOUND');
 
-  // Extract answer plan from package manifest/model
+  // Extract answer plan from package manifest/model (reading with adminToken when available due to RBAC)
   const pkgVersions = await fetchJson(`${API}/api/lms/cursos/${course.id}/scorm-package-versions`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${adminToken || token}` },
   });
   const activeVer = Array.isArray(pkgVersions.json?.data)
     ? pkgVersions.json.data.find((v) => String(v?.status || '').toUpperCase() === 'ACTIVE')
@@ -813,13 +828,13 @@ async function driveScormCourseInBrowser({
   let finalStatusReached = false;
   let finalButtonClicked = false;
   let maxVisitedUnit = 0;
+  const visitedUnitIds = new Set();
   let totalUnitsDetected = 0;
   let finalAtLastUnit = false;
   let quizzesAnswered = 0;
   let lastRuntimeState = null;
 
-  // Track distinct visited units and verified decision indices
-  const distinctUnitsVisited = new Set();
+  // Track verified decision indices
   const resolvedDecisionIndices = new Set();
 
   // Scoped in-memory driver state (NO DOM attribute mutations)
@@ -857,7 +872,7 @@ async function driveScormCourseInBrowser({
         if (marker) {
           const cur = Number(marker[1]);
           const tot = marker[2] ? Number(marker[2]) : null;
-          if (cur > 0) distinctUnitsVisited.add(cur);
+          if (cur > 0) visitedUnitIds.add(cur);
           if (cur > maxVisitedUnit) maxVisitedUnit = cur;
           if (tot && tot > totalUnitsDetected) totalUnitsDetected = tot;
         }
@@ -1083,8 +1098,8 @@ async function driveScormCourseInBrowser({
       clickedTouches: Array.from(clickedTouchKeysInCurrentSlide),
     }).catch(() => ({ type: 'error' }));
 
-    if (action?.domCurrent) {
-      distinctUnitsVisited.add(action.domCurrent);
+    if (Number.isSafeInteger(action?.domCurrent) && action.domCurrent > 0) {
+      visitedUnitIds.add(action.domCurrent);
       if (action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
       if (action.domCurrent !== currentSlideUnit) {
         currentSlideUnit = action.domCurrent;
@@ -1126,7 +1141,7 @@ async function driveScormCourseInBrowser({
     }
 
     // Driver stall detection: fail if 30 iterations produce identical state without progress
-    const stallSig = `${action?.domCurrent}:${action?.type}:${distinctUnitsVisited.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
+    const stallSig = `${action?.domCurrent}:${action?.type}:${visitedUnitIds.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
     if (stallSig === lastStallSignature) {
       slideStallSteps += 1;
       if (slideStallSteps >= 30) {
@@ -1205,8 +1220,8 @@ async function driveScormCourseInBrowser({
   const pathVerdict = evaluateCoursePath({
     contentType: 'scorm',
     totalUnits: totalUnitsDetected,
-    visitedUnits: distinctUnitsVisited.size,
-    distinctUnitsVisited,
+    visitedUnits: visitedUnitIds.size,
+    visitedUnitIds,
     atLastUnit: (finalAtLastUnit || isConcluido) && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected,
     completedActivities: resolvedDecisionIndices.size,
     totalActivities: requiredDecisionSlideIndices.length,
@@ -1251,9 +1266,10 @@ async function driveScormCourseInBrowser({
     status: verdict.pass ? 'PASS' : 'FAIL',
     reason: verdict.reason,
     audit_evidence: {
-      units_visited: maxVisitedUnit,
+      units_visited: visitedUnitIds.size,
+      visited_unit_ids: [...visitedUnitIds].sort((a, b) => a - b),
       total_units: totalUnitsDetected,
-      distinct_units_visited_count: distinctUnitsVisited.size,
+      distinct_units_visited_count: visitedUnitIds.size,
       actions_count: steps,
       resume_tested: checkpointTested,
       resume_verified: resumedVerified || totalUnitsDetected <= 1,
@@ -1313,6 +1329,7 @@ export async function runHomologation() {
         outcome = await driveScormCourseInBrowser({
           browserEngine: engine,
           token: learner.token,
+          adminToken,
           course,
           matriculaId,
           funcionarioId: learner.funcionarioId,
@@ -1371,7 +1388,7 @@ export async function runHomologation() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   runHomologation()
     .then((summary) => {
-      process.exit(summary.fail_count > 0 ? 1 : 0);
+      process.exit(summary.total_courses === 0 || summary.fail_count > 0 || summary.blocked_count > 0 ? 1 : 0);
     })
     .catch((err) => {
       console.error('FATAL_HOMOLOGATION_ERROR:', err);
