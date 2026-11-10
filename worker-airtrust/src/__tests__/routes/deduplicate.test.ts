@@ -101,7 +101,11 @@ function createMockDb(dataByTenant: Record<number, TenantDataset>) {
           },
           run: async () => {
             calls.push({ query, args, method: 'run' });
-            if (query.includes('UPDATE qualificacoes_historico') && query.includes('id IN (')) {
+            if (
+              query.includes('UPDATE qualificacoes_historico') &&
+              query.includes('id IN (') &&
+              query.includes("deleted_at = datetime('now')")
+            ) {
               // bind order for the batched removal is (empresaId, ...ids) — see
               // softDeleteManyByEmpresa in routes/deduplicate.ts.
               const empresaId = Number(args[0]);
@@ -324,6 +328,8 @@ describe('deduplicate route guards', () => {
     // ids 102/103 well under the 200-per-statement limit): three statements,
     // still exactly one atomic db.batch call — not per-row sequential writes.
     expect(batchSizes).toHaveLength(1);
-    expect(batchSizes[0]).toBe(3);
+    // (renovacao_de repoint + self-null + LMS link inherit + LMS matricula
+    // and ciclo repoint + one delete chunk = 6 statements.)
+    expect(batchSizes[0]).toBe(6);
   });
 });

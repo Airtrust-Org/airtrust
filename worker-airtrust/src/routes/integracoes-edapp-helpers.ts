@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped } from '../utils/sql-add-months';
 /**
  * INTEGRACOES EDAPP — Shared Helpers
  * Used by integracoes_edapp.ts and integracoes-edapp-eventos.ts
@@ -374,9 +375,9 @@ export function buildEdAppQualificacaoVencimentoExpr(rowAlias?: string): string 
   const prefix = rowAlias ? `${rowAlias}.` : '';
   return `COALESCE(
     ${prefix}data_vencimento,
-    date(
-      ${prefix}data_conclusao,
-      '+' || COALESCE(
+    ${sqlAddMonthsClamped(
+      `${prefix}data_conclusao`,
+      `COALESCE(
         ${prefix}validade_meses,
         (
           SELECT qt.validade
@@ -385,8 +386,8 @@ export function buildEdAppQualificacaoVencimentoExpr(rowAlias?: string): string 
             AND qt.deleted_at IS NULL
         ),
         12
-      ) || ' months'
-    )
+      )`,
+    )}
   )`;
 }
 

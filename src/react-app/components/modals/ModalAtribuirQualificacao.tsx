@@ -12,9 +12,9 @@ import { useFuncionariosAtivos } from '@/react-app/hooks/qualificacoes/useFuncio
 import { useTiposQualificacao } from '@/react-app/hooks/qualificacoes/useTiposQualificacao';
 import { useCategoriasQualificacao } from '@/react-app/hooks/qualificacoes/useCategoriasQualificacao';
 import { HistoricoQualificacaoInput } from '@/react-app/schemas/qualificacoes';
-import { dateToHTMLFormat } from '@/react-app/utils/dateUtils';
 import { showAlertDialog } from '@/react-app/utils/confirmDialog';
 import { emitirEventoModulo } from '@/react-app/lib/moduloBus';
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 
 interface Props {
   isOpen: boolean;
@@ -281,14 +281,15 @@ export function ModalAtribuirQualificacao({
       const tipoSelecionado = todosTipos.find((t) => t.codigo === form.qualificacao_codigo);
 
       if (tipoSelecionado && tipoSelecionado.validade) {
-        // Usar T00:00:00 para interpretar como horário local
-        const dataRealizacao = new Date(form.data_realizacao + 'T00:00:00');
-        const dataVencimento = new Date(dataRealizacao);
-        dataVencimento.setMonth(dataVencimento.getMonth() + tipoSelecionado.validade);
+        // Regra canonica compartilhada com o Worker (limite no fim do mes-alvo).
+        const vencimento = tryAddCalendarMonthsClamped(
+          form.data_realizacao,
+          tipoSelecionado.validade,
+        );
 
         setForm((prev) => ({
           ...prev,
-          data_vencimento: dateToHTMLFormat(dataVencimento),
+          data_vencimento: vencimento ?? '',
         }));
         setValidadeMeses(tipoSelecionado.validade);
       } else {

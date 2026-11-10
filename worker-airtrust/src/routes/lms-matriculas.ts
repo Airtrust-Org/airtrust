@@ -6,7 +6,7 @@
  * - Endpoint de commit SCORM (runtime state)
  * - Geração automática de qualificação ao concluir
  */
-import { completedCancelBlock } from '../services/lms-matricula-cancel-guard';
+import { completedCancelBlock, completedCancelBlockById } from '../services/lms-matricula-cancel-guard';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -1139,7 +1139,7 @@ app.delete('/:id', requirePermission('lms', 'deletar', 'admin', 'manager'), asyn
     }
   }
 
-  await db
+  const deleteBlock = await completedCancelBlockById(db, empresaId, matriculaId); if (deleteBlock) return c.json(deleteBlock, 409); /* #1492 */ await db
     .prepare(
       "UPDATE lms_matriculas SET status = 'CANCELADO', deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND empresa_id = ?",
     )
