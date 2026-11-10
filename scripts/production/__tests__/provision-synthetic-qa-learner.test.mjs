@@ -4,6 +4,7 @@ import {
   SYNTHETIC_LEARNER,
   generateValidTestCpf,
   assertLearnerClaims,
+  selectEligibleSector,
 } from '../provision-synthetic-qa-learner.mjs';
 
 test('SYNTHETIC_LEARNER contains expected constants and zero PII', () => {
@@ -12,6 +13,26 @@ test('SYNTHETIC_LEARNER contains expected constants and zero PII', () => {
   assert.equal(SYNTHETIC_LEARNER.nome, 'AIRTRUST_QA_LMS_E2E_202611');
   assert.equal(SYNTHETIC_LEARNER.perfil, 'ALUNO');
   assert.equal(SYNTHETIC_LEARNER.cargo, 'Aluno de Teste QA');
+});
+
+test('selectEligibleSector prefers active training/operations sectors or first active sector', () => {
+  const sample = [
+    { id: 1, nome: 'Financeiro', ativo: 1 },
+    { id: 2, nome: 'Treinamento e Instrução', ativo: 1 },
+    { id: 3, nome: 'Inativo Treinamento', ativo: 0 },
+  ];
+  const chosen = selectEligibleSector(sample);
+  assert.equal(chosen?.id, 2);
+  assert.equal(chosen?.nome, 'Treinamento e Instrução');
+
+  const fallbackSample = [
+    { id: 5, nome: 'Manutenção', ativo: 1 },
+  ];
+  const fallbackChosen = selectEligibleSector(fallbackSample);
+  assert.equal(fallbackChosen?.id, 5);
+
+  assert.equal(selectEligibleSector([]), null);
+  assert.equal(selectEligibleSector(null), null);
 });
 
 test('generateValidTestCpf produces an 11-digit CPF passing modulo 11 algorithm', () => {

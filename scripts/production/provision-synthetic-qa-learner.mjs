@@ -134,6 +134,16 @@ async function getAdminToken() {
   return token;
 }
 
+export function selectEligibleSector(setoresList) {
+  if (!Array.isArray(setoresList) || setoresList.length === 0) return null;
+  return (
+    setoresList.find((s) => Number(s.ativo ?? 1) === 1 && /treinamento|capacita|operac|geral|admin/i.test(String(s.nome || ''))) ||
+    setoresList.find((s) => Number(s.ativo ?? 1) === 1) ||
+    setoresList[0] ||
+    null
+  );
+}
+
 export async function findExistingEmployee(adminToken, matricula) {
   const res = await request(adminToken, `/api/funcionarios?limit=100&search=${encodeURIComponent(matricula)}`);
   if (res.status === 200 && Array.isArray(res.json?.data)) {
@@ -170,6 +180,13 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
     console.log(`[QA_PROVISION] Criando funcionário sintético: ${SYNTHETIC_LEARNER.matricula}...`);
+    const setoresRes = await request(adminToken, '/api/setores');
+    assert(setoresRes.status === 200, `LIST_SETORES_FAILED_HTTP_${setoresRes.status}`);
+    const setoresList = Array.isArray(setoresRes.json?.data) ? setoresRes.json.data : [];
+    const targetSetor = selectEligibleSector(setoresList);
+    assert(targetSetor?.id, 'NO_ACTIVE_SECTOR_AVAILABLE_FOR_QA_LEARNER');
+    console.log(`[QA_PROVISION] Setor elegível selecionado: id=${targetSetor.id}, nome="${targetSetor.nome}"`);
+
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
@@ -178,7 +195,8 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
         email: SYNTHETIC_LEARNER.email,
         cpf: SYNTHETIC_LEARNER.cpf,
         cargo: SYNTHETIC_LEARNER.cargo,
-        setor: SYNTHETIC_LEARNER.setor,
+        setor_id: targetSetor.id,
+        setor: targetSetor.nome,
       },
     });
 
