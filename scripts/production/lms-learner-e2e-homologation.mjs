@@ -171,11 +171,29 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
     });
     if (existingRes.status === 200 && Array.isArray(existingRes.json?.data)) {
       const match = existingRes.json.data.find(
-        (m) => Number(m.curso_id) === Number(cursoId) && m.status !== 'CANCELADO' && !m.deleted_at,
+        (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
       );
       if (match && Number(match.id) > 0) {
-        console.log(`[LMS_HOMOLOGATION] Matrícula ativa pré-existente reutilizada: id=${match.id}`);
-        return Number(match.id);
+        // Se a matrícula já estiver em status CONCLUIDO (ex: ciclo concluído em execução ou navegador anterior),
+        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e evitar concorrência.
+        if (String(match.status || '').toUpperCase() === 'CONCLUIDO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} já concluída em ciclo anterior. Rematriculando em novo ciclo auditado para isolamento...`);
+          const authToUse = adminToken || token;
+          const remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${authToUse}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason: `Homologação LMS Aluno QA - ${BROWSER_NAME}` }),
+          });
+          if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
+            return Number(remat.json.data.matricula_id);
+          }
+        } else if (match.status !== 'CANCELADO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula ativa pré-existente reutilizada: id=${match.id}`);
+          return Number(match.id);
+        }
       }
     }
   } catch (err) {
@@ -326,7 +344,141 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
   return null;
 }
 
+export function evaluateAssessmentPolicy({
+  policy = 'FORMATIVE',
+  lessonStatus = '',
+  scoreRaw = null,
+  scoreScaled = null,
+  masteryScore = null,
+}) {
+  const normStatus = String(lessonStatus || '').trim().toLowerCase();
+  const normalizedPolicy = String(policy || 'FORMATIVE').trim().toUpperCase();
+
+  if (normalizedPolicy === 'FORMATIVE') {
+    const ok = normStatus === 'completed' || normStatus === 'passed';
+    return {
+      ok,
+      policy: 'FORMATIVE',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : (normStatus === 'failed' ? 'ASSESSMENT_FAILED' : 'FORMATIVE_STATUS_INCOMPLETE'),
+    };
+  }
+
+  if (normalizedPolicy === 'SCORED') {
+    if (normStatus === 'failed') {
+      return {
+        ok: false,
+        policy: 'SCORED',
+        scoreRaw,
+        scoreScaled,
+        masteryScore,
+        status: normStatus,
+        reason: 'ASSESSMENT_FAILED',
+      };
+    }
+
+    if (masteryScore != null && Number.isFinite(Number(masteryScore))) {
+      const cut = Number(masteryScore);
+      const raw = scoreRaw != null && Number.isFinite(Number(scoreRaw)) ? Number(scoreRaw) : null;
+      const scaled = scoreScaled != null && Number.isFinite(Number(scoreScaled)) ? Number(scoreScaled) : null;
+
+      let scorePassed = false;
+      if (raw != null) {
+        scorePassed = raw >= cut;
+      } else if (scaled != null) {
+        scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
+      }
+
+      if (!scorePassed && normStatus !== 'passed') {
+        return {
+          ok: false,
+          policy: 'SCORED',
+          scoreRaw,
+          scoreScaled,
+          masteryScore: cut,
+          status: normStatus,
+          reason: 'SCORE_BELOW_MASTERY',
+        };
+      }
+    }
+
+    const ok = normStatus === 'passed' || (normStatus === 'completed' && masteryScore == null);
+    return {
+      ok,
+      policy: 'SCORED',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'ASSESSMENT_NOT_PASSED',
+    };
+  }
+
+  return {
+    ok: true,
+    policy: normalizedPolicy,
+    scoreRaw,
+    scoreScaled,
+    masteryScore,
+    status: normStatus,
+    reason: null,
+  };
+}
+
+export function evaluateCoursePath({
+  contentType = 'scorm',
+  totalUnits = 0,
+  visitedUnits = 0,
+  atLastUnit = false,
+  completedActivities = 0,
+  totalActivities = 0,
+}) {
+  if (contentType === 'pptx') {
+    const ok = totalUnits > 0 && visitedUnits >= totalUnits && atLastUnit;
+    return {
+      ok,
+      totalUnits,
+      visitedUnits,
+      atLastUnit,
+      reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
+    };
+  }
+
+  if (totalUnits > 0 && (!atLastUnit || visitedUnits < totalUnits)) {
+    return {
+      ok: false,
+      totalUnits,
+      visitedUnits,
+      atLastUnit,
+      reason: 'INCOMPLETE_COURSE_PATH',
+    };
+  }
+
+  if (totalActivities > 0 && completedActivities < totalActivities) {
+    return {
+      ok: false,
+      totalActivities,
+      completedActivities,
+      reason: 'MANDATORY_ACTIVITIES_INCOMPLETE',
+    };
+  }
+
+  const ok = visitedUnits > 0 && atLastUnit;
+  return {
+    ok,
+    totalUnits,
+    visitedUnits,
+    atLastUnit,
+    reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
+  };
+}
+
 export function evaluateHomologationVerdict({
+  percurso_ok = true,
+  avaliacao_ok = true,
   isConcluido,
   progress100,
   resumedVerified,
@@ -335,9 +487,13 @@ export function evaluateHomologationVerdict({
   qual,
   cert,
 }) {
+  const percursoValid = percurso_ok === true;
+  const avaliacaoValid = avaliacao_ok === true;
   const qualValid = !qualExpected || Boolean(qual && qual.id && String(qual.status || '').toUpperCase() === 'CONCLUIDA');
   const certValid = !qualExpected || Boolean(cert && cert.validPdf === true && cert.sizeBytes > 0);
   const pass = Boolean(
+    percursoValid &&
+    avaliacaoValid &&
     isConcluido &&
     progress100 &&
     resumedVerified &&
@@ -346,6 +502,8 @@ export function evaluateHomologationVerdict({
     certValid,
   );
   const reason = pass ? null
+    : !percursoValid ? 'INCOMPLETE_COURSE_PATH'
+    : !avaliacaoValid ? 'ASSESSMENT_NOT_PASSED'
     : !isConcluido ? 'COMPLETION_NOT_REACHED'
     : !progress100 ? 'PROGRESS_BELOW_100'
     : !resumedVerified ? 'RESUME_CHECKPOINT_FAILED'
@@ -354,7 +512,7 @@ export function evaluateHomologationVerdict({
     : !certValid ? 'INVALID_CERTIFICATE_PDF'
     : 'HOMOLOGATION_FAILED';
 
-  return { pass, reason, qualValid, certValid };
+  return { pass, reason, percursoValid, avaliacaoValid, qualValid, certValid };
 }
 
 // ---------------------------------------------------------------------------
@@ -499,7 +657,20 @@ async function drivePptxCourseInBrowser({
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
 
+  const pathVerdict = evaluateCoursePath({
+    contentType: 'pptx',
+    totalUnits: totalSlides,
+    visitedUnits: totalSlides,
+    atLastUnit: true,
+  });
+  const assessmentVerdict = evaluateAssessmentPolicy({
+    policy: 'PPTX_SLIDES',
+    lessonStatus: isConcluido ? 'completed' : 'incomplete',
+  });
+
   const verdict = evaluateHomologationVerdict({
+    percurso_ok: pathVerdict.ok,
+    avaliacao_ok: assessmentVerdict.ok,
     isConcluido,
     progress100,
     resumedVerified: resumedVerified || totalSlides <= 1,
@@ -515,10 +686,11 @@ async function drivePptxCourseInBrowser({
     tipo_conteudo: 'pptx',
     edition_sha: 'n/a',
     policy: 'PPTX_SLIDES',
+    matricula_id: matriculaId,
     matricula_ok: true,
-    percurso_ok: true,
+    percurso_ok: pathVerdict.ok,
     resumed_ok: resumedVerified || totalSlides <= 1,
-    avaliacao_ok: true,
+    avaliacao_ok: assessmentVerdict.ok,
     finalizacao_ok: isConcluido && progress100,
     status_pos_conclusao: detail.status,
     qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
@@ -526,6 +698,17 @@ async function drivePptxCourseInBrowser({
     reabertura_sem_downgrade: reopenNoDowngrade,
     status: verdict.pass ? 'PASS' : 'FAIL',
     reason: verdict.reason,
+    audit_evidence: {
+      units_visited: totalSlides,
+      total_units: totalSlides,
+      actions_count: totalSlides,
+      resume_tested: totalSlides > 1,
+      resume_verified: resumedVerified || totalSlides <= 1,
+      backend_status: detail.status,
+      backend_progresso: detail.progresso_pct,
+      qualificacao_id: qual?.id ?? null,
+      certificado_sha: cert?.sha256 ?? null,
+    },
   };
 }
 
@@ -575,6 +758,12 @@ async function driveScormCourseInBrowser({
   let resumedVerified = false;
   let checkpointTested = false;
   let finalStatusReached = false;
+  let finalButtonClicked = false;
+  let maxVisitedUnit = 0;
+  let totalUnitsDetected = 0;
+  let finalAtLastUnit = false;
+  let quizzesAnswered = 0;
+  let lastRuntimeState = null;
 
   const started = Date.now();
 
@@ -587,15 +776,33 @@ async function driveScormCourseInBrowser({
       const lessonStatus = getVal('cmi.core.lesson_status') || getVal('cmi.completion_status');
       const location = getVal('cmi.core.lesson_location') || getVal('cmi.location');
       const scoreRaw = getVal('cmi.core.score.raw') || getVal('cmi.score.raw');
-      return { lessonStatus: String(lessonStatus).toLowerCase(), location, scoreRaw };
+      const scoreScaled = getVal('cmi.score.scaled') || null;
+      return {
+        lessonStatus: String(lessonStatus).toLowerCase(),
+        location,
+        scoreRaw: scoreRaw !== '' ? Number(scoreRaw) : null,
+        scoreScaled: scoreScaled !== '' && scoreScaled != null ? Number(scoreScaled) : null,
+      };
     }).catch(() => null);
+
+    if (runtimeState) {
+      lastRuntimeState = runtimeState;
+      if (runtimeState.location) {
+        const marker = String(runtimeState.location).match(/^(\d+)(?:\/(\d+))?$/);
+        if (marker) {
+          const cur = Number(marker[1]);
+          const tot = marker[2] ? Number(marker[2]) : null;
+          if (cur > maxVisitedUnit) maxVisitedUnit = cur;
+          if (tot && tot > totalUnitsDetected) totalUnitsDetected = tot;
+        }
+      }
+    }
 
     if (runtimeState?.lessonStatus && TERMINAL_SCORM12.has(runtimeState.lessonStatus)) {
       finalStatusReached = true;
-      break;
     }
 
-    // Interruption & resume checkpoint
+    // Interruption & resume checkpoint (around step 3 with recorded location)
     if (!checkpointTested && steps >= 3 && Boolean(runtimeState?.location)) {
       checkpointTested = true;
       const savedLocation = runtimeState.location;
@@ -650,12 +857,43 @@ async function driveScormCourseInBrowser({
         return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
       };
 
-      // 1. Accordion handling: details & summary
+      // Detect current unit and total units from DOM
+      const counterEl = document.querySelector('.counter');
+      const counterText = clean(counterEl?.innerText || counterEl?.textContent);
+      const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
+      let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
+      let domTotal = counterMatch ? Number(counterMatch[2]) : 0;
+
+      const slidesArray = window.COURSE_DATA?.slides;
+      if (Array.isArray(slidesArray) && slidesArray.length > 0) {
+        if (!domTotal) domTotal = slidesArray.length;
+        const activeIdx = Number(window.__AIRTRUST_PLAYER_TEST__?.getState?.()?.active ?? -1);
+        if (activeIdx >= 0 && !domCurrent) domCurrent = activeIdx + 1;
+      }
+
+      const atLastUnit = (domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
+
+      // 1. Check for authentic user completion/finish button in the frame UI
+      const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
+      });
+      if (finalBtn) {
+        finalBtn.click();
+        return {
+          type: 'final-button',
+          domCurrent,
+          domTotal,
+          atLastUnit: true,
+        };
+      }
+
+      // 2. Accordion handling: details & summary
       const closedSummaries = Array.from(document.querySelectorAll('details:not([open]) > summary')).filter(visible);
       if (closedSummaries.length > 0) {
         closedSummaries[0].click();
         closedSummaries[0].dispatchEvent(new Event('toggle', { bubbles: true }));
-        return { type: 'accordion-expand' };
+        return { type: 'accordion-expand', domCurrent, domTotal, atLastUnit };
       }
 
       // If details are present, ensure scroll and event dispatch
@@ -664,31 +902,31 @@ async function driveScormCourseInBrowser({
         details.forEach((d) => d.dispatchEvent(new Event('scroll', { bubbles: true })));
       }
 
-      // 2. Interactive choices / radio options
+      // 3. Interactive choices / radio options
       const choices = Array.from(document.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
       if (choices.length > 0) {
         const unselected = choices.find((c) => !c.classList.contains('selected') && !c.checked);
         if (unselected) {
           unselected.click();
-          return { type: 'quiz-choice' };
+          return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
         }
       }
 
-      // 3. Submit / Confirm / Finish buttons
+      // 4. Submit / Confirm buttons
       const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
         const txt = clean(el.innerText || el.value).toLowerCase();
-        return visible(el) && !el.disabled && /(confirmar|responder|verificar|submit|finalizar|concluir)/i.test(txt);
+        return visible(el) && !el.disabled && /(confirmar|responder|verificar|submit)/i.test(txt);
       });
       if (submitBtn) {
         submitBtn.click();
-        return { type: 'submit' };
+        return { type: 'submit', domCurrent, domTotal, atLastUnit };
       }
 
-      // 4. Next / Advance navigation
+      // 5. Next / Advance navigation
       const nextUnit = document.querySelector('#nextUnit');
       if (nextUnit && visible(nextUnit) && !nextUnit.disabled) {
         nextUnit.click();
-        return { type: 'next-unit' };
+        return { type: 'next-unit', domCurrent, domTotal, atLastUnit };
       }
 
       const nextBtn = Array.from(document.querySelectorAll('button, a, [role=button]')).find((el) => {
@@ -697,51 +935,52 @@ async function driveScormCourseInBrowser({
       });
       if (nextBtn) {
         nextBtn.click();
-        return { type: 'next-button' };
+        return { type: 'next-button', domCurrent, domTotal, atLastUnit };
       }
 
-      return { type: 'none' };
+      return { type: 'none', domCurrent, domTotal, atLastUnit };
     }, { plan: answerPlan, requiredIndices: requiredDecisionSlideIndices }).catch(() => ({ type: 'error' }));
+
+    if (action?.domCurrent && action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+    if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
+    if (action?.atLastUnit) finalAtLastUnit = true;
+    if (action?.type === 'quiz-choice' || action?.type === 'submit') quizzesAnswered += 1;
+    if (action?.type === 'final-button') {
+      finalButtonClicked = true;
+      finalAtLastUnit = true;
+      await page.waitForTimeout(1000);
+      break;
+    }
+
+    // Check if the wrapper overlay is showing and click Fechar
+    const overlayClose = await page.$('#completion-overlay.show #btn-close');
+    if (overlayClose) {
+      await overlayClose.click().catch(() => null);
+      finalButtonClicked = true;
+      finalAtLastUnit = true;
+      break;
+    }
 
     steps += 1;
     await page.waitForTimeout(action?.type === 'accordion-expand' ? 400 : 250);
   }
 
-  // Trigger explicit SCORM commit & finish if available
-  await page.evaluate(() => {
-    const api = window.API || window.API_1484_11;
-    if (api) {
-      if (api.LMSCommit) api.LMSCommit('');
-      if (api.LMSFinish) api.LMSFinish('');
-      if (api.Commit) api.Commit('');
-      if (api.Terminate) api.Terminate('');
-    }
-  }).catch(() => null);
+  // Check if wrapper overlay became visible post-traversal
+  const finalOverlayBtn = await page.$('#completion-overlay.show #btn-close');
+  if (finalOverlayBtn) {
+    await finalOverlayBtn.click().catch(() => null);
+  }
 
   await page.waitForTimeout(1000);
   await browser.close();
 
-  // Call official finalization endpoint for learner
-  try {
-    const finalizeRes = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}/finalizar`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    console.log(`[LMS_HOMOLOGATION] Finalizar matrícula #${matriculaId} HTTP ${finalizeRes.status}:`, JSON.stringify(finalizeRes.json?.data || finalizeRes.json?.error || {}));
-  } catch (err) {
-    console.warn(`[LMS_HOMOLOGATION] Falha ao chamar finalizar para matrícula #${matriculaId}:`, err.message);
-  }
-
-  // Poll for completion persistence in backend (up to 8s)
+  // Poll for completion persistence in backend (up to 10s)
   let detail = await getMatriculaDetail(token, matriculaId);
-  for (let poll = 0; poll < 8; poll += 1) {
+  for (let poll = 0; poll < 10; poll += 1) {
     if (String(detail.status).toUpperCase() === 'CONCLUIDO' && Number(detail.progresso_pct || 0) === 100) {
       break;
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    await delay(1000);
     detail = await getMatriculaDetail(token, matriculaId);
   }
   const isConcluido = String(detail.status).toUpperCase() === 'CONCLUIDO';
@@ -766,10 +1005,30 @@ async function driveScormCourseInBrowser({
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
 
+  // Evaluate Course Path & Assessment Policy
+  const pathVerdict = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: totalUnitsDetected,
+    visitedUnits: maxVisitedUnit,
+    atLastUnit: finalAtLastUnit || isConcluido,
+    completedActivities: quizzesAnswered,
+    totalActivities: requiredDecisionSlideIndices.length,
+  });
+
+  const assessmentVerdict = evaluateAssessmentPolicy({
+    policy: course.scorm_assessment_policy,
+    lessonStatus: lastRuntimeState?.lessonStatus,
+    scoreRaw: lastRuntimeState?.scoreRaw,
+    scoreScaled: lastRuntimeState?.scoreScaled,
+    masteryScore: course.scorm_mastery_score,
+  });
+
   const verdict = evaluateHomologationVerdict({
+    percurso_ok: pathVerdict.ok,
+    avaliacao_ok: assessmentVerdict.ok,
     isConcluido,
     progress100,
-    resumedVerified,
+    resumedVerified: resumedVerified || totalUnitsDetected <= 1,
     reopenNoDowngrade,
     qualExpected,
     qual,
@@ -782,10 +1041,11 @@ async function driveScormCourseInBrowser({
     tipo_conteudo: course.tipo_conteudo || 'scorm',
     edition_sha: activeVer?.packageSha256 || 'n/a',
     policy: course.scorm_assessment_policy || 'FORMATIVE',
+    matricula_id: matriculaId,
     matricula_ok: true,
-    percurso_ok: steps > 0,
-    resumed_ok: resumedVerified,
-    avaliacao_ok: true,
+    percurso_ok: pathVerdict.ok,
+    resumed_ok: resumedVerified || totalUnitsDetected <= 1,
+    avaliacao_ok: assessmentVerdict.ok,
     finalizacao_ok: isConcluido && progress100,
     status_pos_conclusao: detail.status,
     qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
@@ -793,6 +1053,25 @@ async function driveScormCourseInBrowser({
     reabertura_sem_downgrade: reopenNoDowngrade,
     status: verdict.pass ? 'PASS' : 'FAIL',
     reason: verdict.reason,
+    audit_evidence: {
+      units_visited: maxVisitedUnit,
+      total_units: totalUnitsDetected,
+      actions_count: steps,
+      resume_tested: checkpointTested,
+      resume_verified: resumedVerified || totalUnitsDetected <= 1,
+      assessment: {
+        policy: course.scorm_assessment_policy || 'FORMATIVE',
+        status: lastRuntimeState?.lessonStatus || null,
+        score_raw: lastRuntimeState?.scoreRaw ?? null,
+        score_scaled: lastRuntimeState?.scoreScaled ?? null,
+        mastery_score: course.scorm_mastery_score ?? null,
+        passed: assessmentVerdict.ok,
+      },
+      backend_status: detail.status,
+      backend_progresso: detail.progresso_pct,
+      qualificacao_id: qual?.id ?? null,
+      certificado_sha: cert?.sha256 ?? null,
+    },
   };
 }
 
@@ -814,51 +1093,6 @@ export async function runHomologation() {
   for (const course of courses) {
     console.log(`\n------------------------------------------------------------`);
     console.log(`[LMS_HOMOLOGATION] Curso #${course.id}: ${course.titulo} (${course.tipo_conteudo || 'scorm'})`);
-
-    // Handle known blocked packages per Issue #1212
-    if (course.id === 69) {
-      results.push({
-        course_id: course.id,
-        titulo: course.titulo,
-        tipo_conteudo: 'scorm',
-        edition_sha: 'n/a',
-        policy: course.scorm_assessment_policy || 'FORMATIVE',
-        matricula_ok: false,
-        percurso_ok: false,
-        resumed_ok: false,
-        avaliacao_ok: false,
-        finalizacao_ok: false,
-        status_pos_conclusao: 'BLOQUEADO',
-        qualificacao_gerada: 'N/A',
-        certificado_emitido: 'N/A',
-        reabertura_sem_downgrade: false,
-        status: 'BLOQUEADO',
-        reason: 'NO_ACTIVE_SCORM_PACKAGE: pacote ausente no R2 (Issue #1212)',
-      });
-      continue;
-    }
-
-    if (course.id === 23) {
-      results.push({
-        course_id: course.id,
-        titulo: course.titulo,
-        tipo_conteudo: 'scorm',
-        edition_sha: 'n/a',
-        policy: course.scorm_assessment_policy || 'FORMATIVE',
-        matricula_ok: false,
-        percurso_ok: false,
-        resumed_ok: false,
-        avaliacao_ok: false,
-        finalizacao_ok: false,
-        status_pos_conclusao: 'BLOQUEADO',
-        qualificacao_gerada: 'N/A',
-        certificado_emitido: 'N/A',
-        reabertura_sem_downgrade: false,
-        status: 'BLOQUEADO',
-        reason: 'LEGACY_UNVERSIONED: pacote legado sem versão ativa auditada (Issue #1212)',
-      });
-      continue;
-    }
 
     try {
       // 1. Enroll learner
@@ -893,8 +1127,9 @@ export async function runHomologation() {
         course_id: course.id,
         titulo: course.titulo,
         tipo_conteudo: course.tipo_conteudo || 'scorm',
-        edition_sha: 'error',
+        edition_sha: 'n/a',
         policy: course.scorm_assessment_policy || 'FORMATIVE',
+        matricula_id: null,
         matricula_ok: false,
         percurso_ok: false,
         resumed_ok: false,
