@@ -23,6 +23,9 @@ import {
   resolveNextSigvoosDay,
   shouldRunSigvoosAtCurrentHour,
   FRMS_REPROCESS_BATCH,
+  FRMS_QUEUE_SCOPE_BATCH,
+  buildReadyFrmsQueueScopesQuery,
+  buildStaleFrmsQueueScopesQuery,
   SIGVOOS_TENANT_BATCH,
   SIGVOOS_TRIPULANTE_ENQUEUE_BATCH,
 } from '../../cron/resilient/sigvoos-frms';
@@ -193,7 +196,25 @@ describe('bounded cron discovery', () => {
   it('mantém caps pequenos para SIGVOOS e FRMS', () => {
     expect(SIGVOOS_TENANT_BATCH).toBeLessThanOrEqual(25);
     expect(SIGVOOS_TRIPULANTE_ENQUEUE_BATCH).toBeLessThanOrEqual(100);
-    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(25);
+    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(5);
+    expect(FRMS_QUEUE_SCOPE_BATCH).toBeLessThanOrEqual(2);
+  });
+
+  it('descobre filas prontas pelo índice parcial e retoma escopos com lease obsoleto', () => {
+    const ready = compactSql(buildReadyFrmsQueueScopesQuery());
+    const stale = compactSql(buildStaleFrmsQueueScopesQuery());
+    expect(ready).toContain('INDEXED BY idx_cron_job_items_pending');
+    expect(ready).toContain("status IN ('PENDING', 'FAILED')");
+    expect(ready).toContain("available_at <= datetime('now')");
+    expect(ready).toContain('ORDER BY scope_key ASC LIMIT ?');
+    expect(stale).toContain('FROM cron_job_state');
+    expect(stale).toContain("last_started_at < datetime('now', '-30 minutes')");
+    expect(stale).toContain('last_started_at > last_success_at');
+    expect(stale).toContain('EXISTS ( SELECT 1 FROM cron_job_items AS pending_recovery');
+    expect(stale).toContain("pending_recovery.status = 'PROCESSING'");
+    expect(stale).toContain('ORDER BY scope_key ASC LIMIT ?');
+    expect(ready + stale).not.toContain('UNION');
+    expect(ready + stale).not.toContain("status != 'SUCCEEDED'");
   });
 });
 
