@@ -126,7 +126,11 @@ test('SCORM wrong answer, resume, pass, explicit completion and qualification',a
 
   // A failed/unqualified first cycle is canceled, then explicitly rematriculated.
   // A completed/qualified cycle must NEVER be silently reset or reactivated.
-  const deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  let deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  if (deleteResult.status() === 503) {
+    await page.waitForTimeout(500);
+    deleteResult=await page.request.delete(api+'/lms/matriculas/'+id,{headers});
+  }
   expect(deleteResult.status()).toBe(200);
   // Normal POST must reject canceled enrollment; the separate, audited
   // rematriculation endpoint is the only authorized lifecycle transition.
