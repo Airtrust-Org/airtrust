@@ -10,6 +10,24 @@ const DAY = '2026-10-13';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
+const OPERATIONAL_PROFILE_LABEL = /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)$/i;
+
+test('reconhece a opção Manager renderizada com descrição, sem aceitar Aluno / Instrutor', async ({ page }) => {
+  // Mirrors the real two-span profile button shown by LoginSimple.
+  await page.setContent([
+    '<button><span>Entrar como Manager</span><span>Gestão operacional da empresa e dos setores autorizados.</span></button>',
+    '<button><span>Entrar como Aluno / Instrutor</span><span>Seus treinamentos e suas atividades.</span></button>',
+  ].join(''));
+  const labels = await page.locator('button > span:first-child').allTextContents();
+  expect(labels.filter(label => OPERATIONAL_PROFILE_LABEL.test(label.trim()))).toHaveLength(1);
+  const managementChoice = page.locator('button').filter({
+    has: page.locator('span').filter({ hasText: OPERATIONAL_PROFILE_LABEL }),
+  });
+  await expect(managementChoice).toHaveCount(1);
+  await expect(managementChoice).toContainText('Manager');
+});
+
+
 async function captureMain(page: Page, name: string, heading: string) {
   // The static boot fallback is itself a <main>. Never accept it as an
   // operational page or use mere URL presence as evidence of rendering.
@@ -76,18 +94,17 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     // A tenant-scoped ADMIN may legitimately be offered an operational
     // profile chooser before navigation. Choose only an actual manager/admin
     // role shown by the server-driven UI, never an unrelated learner role.
-    const ready = await page.waitForFunction(() =>
+    const ready = await page.waitForFunction((labelPattern) =>
       !window.location.pathname.startsWith('/login') ||
-      Array.from(document.querySelectorAll('button')).some((button) =>
-       /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor)/i.test(
-          (button.textContent || '').trim(),
-        )),
-    undefined, { timeout: timeoutMs }).then(() => true).catch(() => false);
+      Array.from(document.querySelectorAll('button > span:first-child')).some((span) =>
+        new RegExp(labelPattern, 'i').test((span.textContent || '').trim()),
+      ),
+    OPERATIONAL_PROFILE_LABEL.source, { timeout: timeoutMs }).then(() => true).catch(() => false);
     if (!ready) return false;
     if (!new URL(page.url()).pathname.startsWith('/login')) return true;
 
-    const managerOrAdmin = page.getByRole('button', {
-      name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
+    const managerOrAdmin = page.locator('button').filter({
+      has: page.locator('span').filter({ hasText: OPERATIONAL_PROFILE_LABEL }),
     }).first();
     if (!(await managerOrAdmin.isVisible().catch(() => false))) {
       throw new Error('FRMS_QA_AUTHORIZED_OPERATIONAL_PROFILE_NOT_PRESENT');
