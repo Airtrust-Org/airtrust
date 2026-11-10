@@ -99,7 +99,7 @@ const structural = query(`
     qh.data_vencimento AS current_expiry,
     qh.validade_meses AS historico_validade_meses,
     qt.validade AS current_type_validade_meses,
-    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes, -- LEGADO: apenas relato; ignorado (todo vencimento vence no dia)
+    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes,
     qh.certificado_arquivo_id AS certificado_arquivo_id,
     CASE
       WHEN qh.arquivo_url IS NULL OR TRIM(qh.arquivo_url) = '' THEN 0

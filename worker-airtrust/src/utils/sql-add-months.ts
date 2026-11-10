@@ -30,6 +30,9 @@ export function sqlAddMonthsClamped(dateSql: string, monthsSql: string): string 
  *   (sem vencimento calculável) em vez de um valor fixo do modelo.
  * - Demais tipos: `validade_meses` -> `qualificacoes_tipos.validade`.
  *
+ * `cmaMonthsSql` (opcional) substitui o ramo CMA, p.ex. `sqlCmaAgeValidityMonths`,
+ * para chamadores que aplicam a regra de idade (listagem de histórico).
+ *
  * `qualificacoes_tipos.vencimento_fim_mes` é legada e ignorada. Os argumentos
  * são fragmentos SQL (aliases), nunca entrada de usuário.
  */
@@ -37,9 +40,25 @@ export function sqlEffectiveValidityMonths(
   historicoValidadeSql: string,
   tipoCodigoSql: string,
   tipoValidadeSql: string,
+  cmaMonthsSql?: string,
 ): string {
+  const cmaBranch = cmaMonthsSql ?? historicoValidadeSql;
   return `CASE
-    WHEN UPPER(TRIM(COALESCE(${tipoCodigoSql}, ''))) = 'CMA' THEN ${historicoValidadeSql}
+    WHEN UPPER(TRIM(COALESCE(${tipoCodigoSql}, ''))) = 'CMA' THEN ${cmaBranch}
     ELSE COALESCE(${historicoValidadeSql}, ${tipoValidadeSql})
+  END`;
+}
+
+/**
+ * Espelho SQL de `resolveCmaValidity` (src/shared/utils/cma-validity.ts): 6 meses
+ * a partir de 60 anos completos na data de realização; 12 meses caso contrário
+ * (inclui nascimento ausente/inválido, como o padrão da regra TS).
+ */
+export function sqlCmaAgeValidityMonths(realizacaoSql: string, nascimentoSql: string): string {
+  return `CASE
+    WHEN date(${nascimentoSql}) IS NOT NULL AND date(${realizacaoSql}) IS NOT NULL
+      AND (CAST(strftime('%Y', ${realizacaoSql}) AS INTEGER) - CAST(strftime('%Y', ${nascimentoSql}) AS INTEGER)
+        - (strftime('%m-%d', ${realizacaoSql}) < strftime('%m-%d', ${nascimentoSql}))) >= 60
+    THEN 6 ELSE 12
   END`;
 }

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
 import { buildEdAppQualificacaoVencimentoExpr } from '../../routes/integracoes-edapp-helpers';
-import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../../utils/sql-add-months';
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths, sqlCmaAgeValidityMonths } from '../../utils/sql-add-months';
+import { resolveCmaValidity } from '../../../../src/shared/utils/cma-validity';
 
 describe('vencimento SQL fallbacks: CMA depende de validade_meses persistido', () => {
   const dbs: SqliteD1Database[] = [];
@@ -51,5 +52,24 @@ describe('vencimento SQL fallbacks: CMA depende de validade_meses persistido', (
     db.exec("INSERT INTO qualificacoes_historico VALUES (12, 2, '2024-02-29', NULL, NULL)");
     expect(viaJoin(db, 12)).toBe('2026-02-28');
     expect(viaEdapp(db, 12)).toBe('2026-02-28');
+  });
+
+  it('historico: CMA sem validade persistida usa a regra de idade, igual ao enriquecimento TS', () => {
+    const db = setup();
+    const cases: Array<[string, string | null]> = [
+      ['2026-03-10', '1960-03-10'], // exatamente 60 anos
+      ['2026-03-09', '1960-03-10'], // 59 anos
+      ['2026-03-10', '1990-01-01'],
+      ['2026-03-10', null], // nascimento ausente -> 12
+      ['2026-01-31', '1950-05-05'],
+    ];
+    for (const [conclusao, nasc] of cases) {
+      const ageSql = sqlCmaAgeValidityMonths(`'${conclusao}'`, nasc ? `'${nasc}'` : 'NULL');
+      const expected = resolveCmaValidity({ dataRealizacao: conclusao, dataNascimento: nasc }).months;
+      const months = one(db, `SELECT ${sqlEffectiveValidityMonths('NULL', "'CMA'", '12', ageSql)} AS v`);
+      expect(Number(months)).toBe(expected);
+      const venc = one(db, `SELECT ${sqlAddMonthsClamped(`'${conclusao}'`, sqlEffectiveValidityMonths('NULL', "'CMA'", '12', ageSql))} AS v`);
+      expect(venc).not.toBeNull();
+    }
   });
 });

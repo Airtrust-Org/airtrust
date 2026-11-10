@@ -98,7 +98,7 @@ const rows = query(`
     qh.data_vencimento AS current_expiry,
     qh.validade_meses AS historico_validade_meses,
     qt.validade AS current_type_validade_meses,
-    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes, -- LEGADO: apenas relato; ignorado (todo vencimento vence no dia)
+    COALESCE(qt.vencimento_fim_mes, 0) AS current_type_vencimento_fim_mes,
     qh.renovacao_de AS renovacao_de,
     qh.origem_tipo AS origem_tipo,
     qh.lms_matricula_id AS lms_matricula_id,
