@@ -48,6 +48,22 @@ test('evaluateHomologationVerdict rejects PASS when resume verification fails', 
   assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
 });
 
+test('evaluateHomologationVerdict fails when lesson location stays empty and resume is unverified', () => {
+  // Simulates a course where traversal finishes and backend marks CONCLUIDO,
+  // but no nonempty lesson location was ever exposed to verify resumption.
+  const result = evaluateHomologationVerdict({
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: false,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 202, status: 'CONCLUIDA' },
+    cert: { id: 77, validPdf: true, sha256: 'def', sizeBytes: 2048 },
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
+});
+
 test('evaluateHomologationVerdict rejects PASS when certificate PDF is invalid', () => {
   const result = evaluateHomologationVerdict({
     isConcluido: true,

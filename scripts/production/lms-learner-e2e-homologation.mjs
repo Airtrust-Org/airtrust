@@ -769,7 +769,7 @@ async function driveScormCourseInBrowser({
   const verdict = evaluateHomologationVerdict({
     isConcluido,
     progress100,
-    resumedVerified: resumedVerified || !checkpointTested,
+    resumedVerified,
     reopenNoDowngrade,
     qualExpected,
     qual,
@@ -784,7 +784,7 @@ async function driveScormCourseInBrowser({
     policy: course.scorm_assessment_policy || 'FORMATIVE',
     matricula_ok: true,
     percurso_ok: steps > 0,
-    resumed_ok: resumedVerified || !checkpointTested,
+    resumed_ok: resumedVerified,
     avaliacao_ok: true,
     finalizacao_ok: isConcluido && progress100,
     status_pos_conclusao: detail.status,
