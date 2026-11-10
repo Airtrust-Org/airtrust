@@ -1,3 +1,7 @@
+// source_reference: synthetic SQLite fixtures only; no production SQL operations.
+// operational_decision: assert archive and cleanup guards against fabricated orphan rows.
+// dry_run_required: all test DML stays in a disposable local SQLite fixture.
+// rollback_plan_required: delete the disposable fixture directory; never contact D1.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
