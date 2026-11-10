@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
+import { buildReadyFrmsQueueScopesQuery, buildStaleFrmsQueueScopesQuery } from '../../cron/resilient/sigvoos-frms';
 import {
   buildCronHealthQuery,
   collectCronHealthSnapshot,
@@ -22,6 +23,36 @@ function fixture() {
 }
 
 describe('cron health D1 overloaded mitigation (#2149)', () => {
+  it('não varre histórico concluído ao descobrir filas elegíveis, e mantém retomada por estado durável', () => {
+    const db = fixture();
+    const items = db.database.prepare(`INSERT INTO cron_job_items
+      (job_name, scope_key, item_key, status, available_at)
+      VALUES (?, ?, ?, ?, ?)`);
+    // A grande maioria dos itens de cron é histórico já concluído.
+    for (let i = 0; i < 5000; i++) {
+      items.run('frms-reprocess', 'empresa:0001', String(i), 'SUCCEEDED', '2026-01-01 00:00:00');
+    }
+    items.run('frms-reprocess', 'empresa:0002', 'ready', 'PENDING', '2026-01-01 00:00:00');
+    items.run('frms-reprocess', 'empresa:0003', 'delayed', 'FAILED', '2999-01-01 00:00:00');
+    items.run('frms-reprocess', 'empresa:0004', 'stale', 'PROCESSING', '2026-01-01 00:00:00');
+    db.database.prepare(`INSERT INTO cron_job_state (job_name, scope_key, last_started_at, last_success_at)
+      VALUES ('frms-reprocess', 'empresa:0004', datetime('now', '-40 minutes'), datetime('now', '-1 hour'))`).run();
+
+    const readyPlan = db.database.prepare(`EXPLAIN QUERY PLAN ${buildReadyFrmsQueueScopesQuery()}`)
+      .all('frms-reprocess', 2) as Array<{ detail: string }>;
+    const stalePlan = db.database.prepare(`EXPLAIN QUERY PLAN ${buildStaleFrmsQueueScopesQuery()}`)
+      .all('frms-reprocess', 2) as Array<{ detail: string }>;
+    expect(readyPlan.map((row) => row.detail).join(' ')).toContain('idx_cron_job_items_pending');
+    expect(stalePlan.map((row) => row.detail).join(' ')).toContain('PRIMARY KEY');
+
+    const ready = db.database.prepare(buildReadyFrmsQueueScopesQuery())
+      .all('frms-reprocess', 2) as Array<{ scope_key: string }>;
+    const stale = db.database.prepare(buildStaleFrmsQueueScopesQuery())
+      .all('frms-reprocess', 2) as Array<{ scope_key: string }>;
+    expect(ready.map((row) => row.scope_key)).toEqual(['empresa:0002']);
+    expect(stale.map((row) => row.scope_key)).toEqual(['empresa:0004']);
+  });
+
   it('scopes run history to indexed two-run lookups and preserves backlog, exhausted retry and stalled cursor', async () => {
     const db = fixture();
     const states = db.database.prepare(`INSERT INTO cron_job_state (job_name, scope_key, last_started_at, updated_at, consecutive_failures, last_error_code)
