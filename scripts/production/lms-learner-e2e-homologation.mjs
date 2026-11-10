@@ -205,6 +205,37 @@ async function checkCertificate(token, qualificacaoHistoricoId) {
   return null;
 }
 
+export function evaluateHomologationVerdict({
+  isConcluido,
+  progress100,
+  resumedVerified,
+  reopenNoDowngrade,
+  qualExpected,
+  qual,
+  cert,
+}) {
+  const qualValid = !qualExpected || (qual && qual.id && String(qual.status || '').toUpperCase() === 'CONCLUIDA');
+  const certValid = !cert || cert.validPdf === true;
+  const pass = Boolean(
+    isConcluido &&
+    progress100 &&
+    resumedVerified &&
+    reopenNoDowngrade &&
+    qualValid &&
+    certValid,
+  );
+  const reason = pass ? null
+    : !isConcluido ? 'COMPLETION_NOT_REACHED'
+    : !progress100 ? 'PROGRESS_BELOW_100'
+    : !resumedVerified ? 'RESUME_CHECKPOINT_FAILED'
+    : !reopenNoDowngrade ? 'STATUS_OR_PROGRESS_DOWNGRADE_ON_REOPEN'
+    : !qualValid ? 'EXPECTED_QUALIFICATION_NOT_GENERATED'
+    : !certValid ? 'INVALID_CERTIFICATE_PDF'
+    : 'HOMOLOGATION_FAILED';
+
+  return { pass, reason, qualValid, certValid };
+}
+
 // ---------------------------------------------------------------------------
 // PPTX Functional Homologation
 // ---------------------------------------------------------------------------
@@ -260,6 +291,7 @@ async function homologatePptxCourse({ token, course, matriculaId, funcionarioId 
   const progress100 = Number(finalDetail.progresso_pct || 0) === 100;
 
   // Qualification and Certificate
+  const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
@@ -268,6 +300,16 @@ async function homologatePptxCourse({ token, course, matriculaId, funcionarioId 
   const reopenNoDowngrade =
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
+
+  const verdict = evaluateHomologationVerdict({
+    isConcluido,
+    progress100,
+    resumedVerified: resumedVerified || totalSlides <= 1,
+    reopenNoDowngrade,
+    qualExpected,
+    qual,
+    cert,
+  });
 
   return {
     course_id: course.id,
@@ -283,8 +325,8 @@ async function homologatePptxCourse({ token, course, matriculaId, funcionarioId 
     qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
     certificado_emitido: cert ? `SIM (${cert.sha256.slice(0, 12)}...)` : 'N/A',
     reabertura_sem_downgrade: reopenNoDowngrade,
-    status: isConcluido && progress100 && reopenNoDowngrade ? 'PASS' : 'FAIL',
-    reason: isConcluido ? null : 'PPTX_FINALIZATION_STATUS_NOT_CONCLUIDO',
+    status: verdict.pass ? 'PASS' : 'FAIL',
+    reason: verdict.reason,
   };
 }
 
@@ -317,7 +359,7 @@ async function driveScormCourseInBrowser({
     },
   ]);
 
-  const page = await context.newPage();
+  let page = await context.newPage();
   const launchUrl = `${API}/api/lms/scorm/launch/${matriculaId}`;
 
   // Step 1: Request asset session before launch
@@ -486,14 +528,43 @@ async function driveScormCourseInBrowser({
   const progress100 = Number(detail.progresso_pct || 0) === 100;
 
   // Qualification & Certificate
+  const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id);
   const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
 
-  // Reopening check
+  // Real browser reopen check
+  const reopenBrowser = await browserEngine.launch({ headless: true });
+  const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
+  await reopenContext.addCookies([
+    {
+      name: 'airtrust_access_token',
+      value: token,
+      domain: new URL(API).hostname,
+      path: '/',
+      httpOnly: false,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  const reopenPage = await reopenContext.newPage();
+  await reopenPage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
+  await reopenPage.waitForTimeout(1000);
+  await reopenBrowser.close();
+
   const reopenDetail = await getMatriculaDetail(token, matriculaId);
   const reopenNoDowngrade =
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
+
+  const verdict = evaluateHomologationVerdict({
+    isConcluido,
+    progress100,
+    resumedVerified: resumedVerified || !checkpointTested,
+    reopenNoDowngrade,
+    qualExpected,
+    qual,
+    cert,
+  });
 
   return {
     course_id: course.id,
@@ -510,8 +581,8 @@ async function driveScormCourseInBrowser({
     qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
     certificado_emitido: cert ? `SIM (${cert.sha256.slice(0, 12)}...)` : 'N/A',
     reabertura_sem_downgrade: reopenNoDowngrade,
-    status: isConcluido && progress100 && reopenNoDowngrade ? 'PASS' : 'FAIL',
-    reason: isConcluido ? null : 'SCORM_COMPLETION_NOT_PERSISTED_IN_BACKEND',
+    status: verdict.pass ? 'PASS' : 'FAIL',
+    reason: verdict.reason,
   };
 }
 
