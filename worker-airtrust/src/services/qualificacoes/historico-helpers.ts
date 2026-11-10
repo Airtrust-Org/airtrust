@@ -6,6 +6,10 @@
 import type { Env } from '../../types';
 import { publishDomainEvent, type DomainEventTipo } from '../../shared/domainEvents';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
+import {
+  tryAddCalendarMonthsClamped,
+  tryEndOfTargetMonth,
+} from '../../../../src/shared/utils/validade-meses';
 
 export function inferModeloCodigoFromQualificacao(
   codigo: string | null | undefined,
@@ -199,18 +203,9 @@ export function calcularDataVencimento(params: {
 
   if (!dataConclusao || !validadeMeses) return null;
 
-  const dataBase = new Date(`${dataConclusao}T00:00:00Z`);
-  if (Number.isNaN(dataBase.getTime())) return null;
-
-  if (vencimentoFimMes === 1) {
-    const year = dataBase.getUTCFullYear();
-    const month = dataBase.getUTCMonth();
-    const endOfMonth = new Date(Date.UTC(year, month + validadeMeses + 1, 0));
-    return endOfMonth.toISOString().slice(0, 10);
-  }
-
-  dataBase.setUTCMonth(dataBase.getUTCMonth() + validadeMeses);
-  return dataBase.toISOString().slice(0, 10);
+  return vencimentoFimMes === 1
+    ? tryEndOfTargetMonth(dataConclusao, validadeMeses)
+    : tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 export function resolveHistoricoReadExpiry(params: {

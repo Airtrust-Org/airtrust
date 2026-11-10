@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped } from '../../utils/sql-add-months';
 /**
  * QUALIFICACOES - MÓDULO HISTÓRICO
  * Gestão de histórico de qualificações com filtros, stats e paginação
@@ -471,8 +472,7 @@ export const getHistoricoListHandler = safe(async (c) => {
 
     // Sem o fallback de 12: quando validade_meses e qt.validade são NULL, a expressão
     // retorna NULL (sem vencimento). Registros com NULL validade não aparecem como VENCIDA.
-    const vencimentoExpr =
-      "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
+    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', 'COALESCE(qh.validade_meses, qt.validade)')})`;
 
     // Compartilhado por filtros e totais: usar uma só regra de vencimento em data civil BRT.
     const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);

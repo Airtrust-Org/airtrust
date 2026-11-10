@@ -6,6 +6,10 @@
  */
 
 import { isValidDate } from './security';
+import {
+  addCalendarMonthsClamped,
+  endOfTargetMonth,
+} from '../../../src/shared/utils/validade-meses';
 
 /**
  * Modo de vencimento de qualificação
@@ -55,38 +59,16 @@ export function calcularDataVencimento(
     throw new Error(`Validade deve ser maior que 0: ${validadeMeses}`);
   }
 
-  const data = new Date(dataConclusao + 'T00:00:00Z');
-  const dataVencimento = new Date(data);
-
-  // Toda a aritmética de mês/dia usa os métodos UTC (setUTCMonth/getUTCMonth/
-  // setUTCDate), nunca os locais (setMonth/getMonth/setDate). O ancoramento
-  // acima já é em UTC meia-noite; misturar com métodos de hora local faz a
-  // data derivar um dia em qualquer fuso atrás de UTC (inclusive
-  // America/Sao_Paulo) sempre que a mudança de mês cai perto da virada —
-  // ex.: 2024-01-15 + 1 mês, fim do mês, virava 2024-03-01 em vez de
-  // 2024-02-29 quando calculado em UTC-3. Ver
-  // worker-airtrust/src/utils/__tests__/qualificacoes-expiration.test.ts.
-
-  // Modo "fim do mês": aritmética do mês-alvo sem overflow. Somar meses ao dia
-  // original antes de ir ao fim do mês estoura (2025-01-31 + 1 mês => 31/fev =>
-  // 03/mar => +1 => abr/03 => dia 0 => 31/mar, em vez de 28/fev).
-  // Date.UTC(y, m + meses + 1, 0) é o último dia do mês-alvo.
+  // Aritmética de mês/dia canônica e UTC-only (src/shared/utils/validade-meses.ts):
+  // - fim do mês: último dia do mês-alvo, sem overflow;
+  // - dia exato: preserva o dia e limita ao último dia válido do mês-alvo
+  //   (31/01/2025 + 1m = 28/02/2025), nunca rola para o mês seguinte.
+  // Ver worker-airtrust/src/utils/__tests__/qualificacoes-expiration.test.ts.
   if (vencimentoFimMes === 1) {
-    const fim = new Date(
-      Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + validadeMeses + 1, 0),
-    );
-    return fim.toISOString().slice(0, 10);
+    return endOfTargetMonth(dataConclusao, validadeMeses);
   }
 
-  // Modo dia exato (comportamento inalterado): soma meses ao dia original.
-  dataVencimento.setUTCMonth(dataVencimento.getUTCMonth() + validadeMeses);
-
-  // Retorna em formato ISO (YYYY-MM-DD)
-  const ano = dataVencimento.getUTCFullYear();
-  const mes = String(dataVencimento.getUTCMonth() + 1).padStart(2, '0');
-  const dia = String(dataVencimento.getUTCDate()).padStart(2, '0');
-
-  return `${ano}-${mes}-${dia}`;
+  return addCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 /**

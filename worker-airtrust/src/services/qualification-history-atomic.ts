@@ -1,3 +1,7 @@
+import {
+  addCalendarMonthsClamped,
+  endOfTargetMonth,
+} from '../../../src/shared/utils/validade-meses';
 /**
  * Atomic qualification history mutations.
  *
@@ -174,17 +178,10 @@ export function calculateQualificationExpiry(params: {
   const validityMonths = normalizeValidityMonths(params.validityMonths);
   if (validityMonths === null) return null;
 
-  if (params.endOfMonth) {
-    return new Date(
-      Date.UTC(completion.getUTCFullYear(), completion.getUTCMonth() + validityMonths + 1, 0),
-    )
-      .toISOString()
-      .slice(0, 10);
-  }
-
-  const expiry = new Date(completion);
-  expiry.setUTCMonth(expiry.getUTCMonth() + validityMonths);
-  return expiry.toISOString().slice(0, 10);
+  const completionDay = completion.toISOString().slice(0, 10);
+  return params.endOfMonth
+    ? endOfTargetMonth(completionDay, validityMonths)
+    : addCalendarMonthsClamped(completionDay, validityMonths);
 }
 
 function assertPositiveInteger(value: number, fieldName: string): void {

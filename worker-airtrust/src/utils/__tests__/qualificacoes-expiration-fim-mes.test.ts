@@ -53,13 +53,13 @@ describe('calcularDataVencimento — fim do mês sem overflow', () => {
   });
 });
 
-describe('calcularDataVencimento — dia exato inalterado', () => {
+describe('calcularDataVencimento — dia exato (limite no fim do mes-alvo, #2158)', () => {
   it.each([
     ['2025-01-15', 12, '2026-01-15'],
     ['2024-01-15', 1, '2024-02-15'],
-    ['2025-01-31', 1, '2025-03-03'], // roll-forward preservado
-    ['2024-01-31', 1, '2024-03-02'],
-    ['2024-02-29', 12, '2025-03-01'],
+    ['2025-01-31', 1, '2025-02-28'],
+    ['2024-01-31', 1, '2024-02-29'],
+    ['2024-02-29', 12, '2025-02-28'],
   ])('%s + %i meses => %s', (data, meses, esperado) => {
     expect(calcularDataVencimento(data, meses, 0)).toBe(esperado);
   });

@@ -1,3 +1,5 @@
+import { addCalendarMonthsClamped } from './validade-meses';
+
 
 const validarDadosImportacao = async (dados: any[], db: any): Promise<any[]> => {
   const erros: any[] = [];
@@ -170,8 +172,6 @@ export function normalizarMatricula(matricula: string): string {
 }
 
 export function calcularDataVencimento(dataConlusao: string, treinamentoCodigo: string): string {
-  const data = new Date(dataConlusao);
-  
   const regrasVencimento: Record<string, number> = {
     'CMA': 12,    // CMA vence em 12 meses
     'ICAO': 24,   // ICAO vence em 24 meses
@@ -184,9 +184,7 @@ export function calcularDataVencimento(dataConlusao: string, treinamentoCodigo: 
   const prefixo = treinamentoCodigo.split('-')[0] || 'DEFAULT';
   const mesesVencimento = regrasVencimento[prefixo.toUpperCase()] || regrasVencimento['DEFAULT'];
   
-  data.setMonth(data.getMonth() + mesesVencimento);
-  
-  return data.toISOString().split('T')[0];
+  return addCalendarMonthsClamped(dataConlusao, mesesVencimento);
 }
 
 export function calcularDiasParaVencimento(dataVencimento: string): number {
