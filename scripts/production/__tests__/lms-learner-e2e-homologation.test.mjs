@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  checkCertificate,
+  checkLearnerQualifications,
   enrollLearner,
+  evaluateAssessmentPolicy,
+  evaluateCoursePath,
   evaluateHomologationVerdict,
   resolveAdminToken,
   runHomologation,
@@ -14,6 +18,8 @@ test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologat
   assert.equal(typeof setupAuthenticatedContext, 'function');
   assert.equal(typeof enrollLearner, 'function');
   assert.equal(typeof resolveAdminToken, 'function');
+  assert.equal(typeof checkLearnerQualifications, 'function');
+  assert.equal(typeof checkCertificate, 'function');
 });
 
 test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass', () => {
@@ -39,6 +45,22 @@ test('evaluateHomologationVerdict rejects PASS when resume verification fails', 
     qualExpected: false,
     qual: null,
     cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
+});
+
+test('evaluateHomologationVerdict fails when lesson location stays empty and resume is unverified', () => {
+  // Simulates a course where traversal finishes and backend marks CONCLUIDO,
+  // but no nonempty lesson location was ever exposed to verify resumption.
+  const result = evaluateHomologationVerdict({
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: false,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 202, status: 'CONCLUIDA' },
+    cert: { id: 77, validPdf: true, sha256: 'def', sizeBytes: 2048 },
   });
   assert.equal(result.pass, false);
   assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
@@ -283,5 +305,241 @@ test('resolveAdminToken rejects admin token when tenant selection fails (TENANT_
     else delete process.env.PROD_SMOKE_EMAIL;
     if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
     else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
+test('checkLearnerQualifications prioritizes qualificacaoHistoricoId and course matching', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/qualificacoes/funcionario/193')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [
+              { id: 10, lms_curso_id: 50, status: 'CONCLUIDA' },
+              { id: 20, lms_curso_id: 67, status: 'CONCLUIDA' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const exact = await checkLearnerQualifications('token', 193, 50, 20);
+    assert.equal(exact?.id, 20);
+
+    const byCourse = await checkLearnerQualifications('token', 193, 67);
+    assert.equal(byCourse?.id, 20);
+
+    const notFound = await checkLearnerQualifications('token', 193, 999);
+    assert.equal(notFound, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkCertificate validates PDF buffer and computes sha256', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/certificados/historico/20/certificados')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 701 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/701')) {
+        const dummyPdf = Buffer.from('%PDF-1.4 dummy certificate content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 20);
+    assert.equal(cert?.id, 701);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial Tests: Course Path, Assessment Policy & Homologation Gate
+// ---------------------------------------------------------------------------
+
+test('adversarial: evaluateCoursePath fails when learner stops halfway', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 25,
+    atLastUnit: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateCoursePath fails when learner does not reach last unit', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 49,
+    atLastUnit: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateCoursePath fails when mandatory activities are incomplete', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 30,
+    visitedUnits: 30,
+    atLastUnit: true,
+    totalActivities: 5,
+    completedActivities: 3,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'MANDATORY_ACTIVITIES_INCOMPLETE');
+});
+
+test('evaluateCoursePath passes when full journey and mandatory activities are completed', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 49,
+    atLastUnit: true,
+    totalActivities: 4,
+    completedActivities: 4,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when scored course has lesson_status=failed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'failed',
+    scoreRaw: 50,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'ASSESSMENT_FAILED');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when scored course score is below mastery cut', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'incomplete',
+    scoreRaw: 70,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when formative course status is incomplete', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'FORMATIVE',
+    lessonStatus: 'incomplete',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'FORMATIVE_STATUS_INCOMPLETE');
+});
+
+test('evaluateAssessmentPolicy passes for formative course when lesson_status is completed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'FORMATIVE',
+    lessonStatus: 'completed',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('evaluateAssessmentPolicy passes for scored course when score meets cut and status is passed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'passed',
+    scoreRaw: 85,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('adversarial: evaluateHomologationVerdict fails when percurso_ok is false', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: false,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateHomologationVerdict fails when avaliacao_ok is false', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: false,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'ASSESSMENT_NOT_PASSED');
+});
+
+test('adversarial: enrollLearner triggers rematricular when course is already CONCLUIDO', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 670, curso_id: 67, status: 'CONCLUIDO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/670/rematricular')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 671, status: 'NAO_INICIADO', ciclo: 2 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 193);
+    assert.equal(id, 671);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, 'POST');
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

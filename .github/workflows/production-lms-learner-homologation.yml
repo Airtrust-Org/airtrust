@@ -105,7 +105,7 @@ jobs:
           PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
           PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
           EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
-          QA_LEARNER_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+          QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD || secrets.PROD_SMOKE_PASSWORD }}
         run: node scripts/production/provision-synthetic-qa-learner.mjs --apply
 
   certify:
@@ -117,6 +117,7 @@ jobs:
     timeout-minutes: 50
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         browser: [chromium, webkit]
     env:
@@ -125,7 +126,7 @@ jobs:
       HOMOLOGATION_COURSE_IDS: ${{ needs.guard.outputs.course_ids }}
       HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
       QA_LEARNER_EMAIL: qa.lms.202611@airtrust.online
-      QA_LEARNER_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD || secrets.PROD_SMOKE_PASSWORD }}
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       HOMOLOGATION_COURSE_TIMEOUT_MS: '45000'
