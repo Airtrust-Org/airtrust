@@ -297,6 +297,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     .bind(empresaId, funcionarioId, condicaoId)
     .first<{ id: number }>();
   let id = Number(current?.id || 0);
+  const wasExisting = Boolean(id);
   if (id) {
     await db
       .prepare(
@@ -325,7 +326,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
   await registrarAuditoria({
     db,
     tabela: 'funcionarios_compliance_condicoes',
-    acao: 'INSERT',
+    acao: wasExisting ? 'UPDATE' : 'INSERT',
     registro_id: id,
     dados_novos: {
       empresa_id: empresaId,

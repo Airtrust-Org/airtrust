@@ -28,3 +28,8 @@ test('screen never claims full success when automatic enrollment remains unconfi
  assert.match(ui,/UNMAPPED_MANDATORY_QUALIFICATION/);
  assert.match(ui,/matrícula automática não confirmada/);
 });
+
+test('reassigning existing designation records an UPDATE, not fabricated INSERT',()=>{
+ assert.match(route,/const wasExisting = Boolean\(id\)/);
+ assert.match(route,/acao: wasExisting \? 'UPDATE' : 'INSERT'/);
+});
