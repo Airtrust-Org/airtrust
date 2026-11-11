@@ -47,11 +47,18 @@ jobs:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
       - uses: actions/checkout@v7
-      - name: install ripgrep
+      - name: ensure ripgrep is available
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ripgrep
+          set -euo pipefail
+          # ubuntu-latest already ships rg. Do not turn a working release gate
+          # into a DNS-dependent apt transaction when the binary is present.
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ripgrep
+          fi
+          command -v rg
+          rg --version
       - uses: actions/setup-node@v7
         with:
           node-version-file: '.node-version'
