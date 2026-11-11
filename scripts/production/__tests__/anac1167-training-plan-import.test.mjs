@@ -1,3 +1,7 @@
+// source_reference: reviewed ANAC 1167/2026 private manifest, tenant 6 (2026-10-08).
+// operational_decision: only seven owner-authorized future solo classes via authenticated API; never D1 SQL mutation.
+// dry_run_required: same-SHA read-only preflight and candidate fingerprint before apply.
+// rollback_plan_required: GitHub Actions captures D1 Time Travel recovery point; API readback checks full integration.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
