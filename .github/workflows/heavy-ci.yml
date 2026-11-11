@@ -302,8 +302,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3
+          # The Playwright Noble container may be unable to resolve Ubuntu apt
+          # mirrors. Use the actual Python stdlib SQLite engine as a CLI shim
+          # for this disposable LMS-only fixture, never skip a SQL assertion.
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            command -v python3 >/dev/null 2>&1 || { echo PYTHON3_SQLITE_ENGINE_REQUIRED >&2; exit 1; }
+            install -m 0755 scripts/ci/sqlite3-python-compat.py /usr/local/bin/sqlite3
+          fi
+          node --test scripts/ci/sqlite3-python-compat.test.mjs
           npm ci
           npm --prefix worker-airtrust ci
       - name: Verify synthetic LMS exam browser flow in Chromium and WebKit
