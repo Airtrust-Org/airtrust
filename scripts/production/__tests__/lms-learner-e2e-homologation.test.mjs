@@ -14,6 +14,7 @@ import {
   determineSlideAction,
   enrollLearner,
   assignSyntheticQaCourse,
+  clickCanonicalLearnerRegistration,
   assertQaLearnerIdentity,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
@@ -1678,4 +1679,55 @@ test('QA admin assignment: mismatched readback fails closed without further muta
     assert.equal(posts, 1);
     assert.equal(requests, 3);
   } finally { globalThis.fetch = old; }
+});
+
+test('canonical learner registration waits for enabled student consent button', async () => {
+  let checks = 0;
+  let clicks = 0;
+  const control = {
+    isVisible: async () => true,
+    isEnabled: async () => (++checks) >= 3,
+    click: async () => { clicks += 1; },
+  };
+  const page = {
+    getByRole: (role, opts) => {
+      assert.equal(role, 'button');
+      assert.ok(['Registrar no AirTrust', 'Confirmar conclusão'].includes(opts.name));
+      return {
+        count: async () => opts.name === 'Registrar no AirTrust' ? 1 : 0,
+        nth: () => control,
+      };
+    },
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 2000), true);
+  assert.equal(clicks, 1);
+  assert.equal(checks, 3);
+});
+
+test('canonical learner registration refuses disabled, hidden or absent controls', async () => {
+  let clicks = 0;
+  const page = {
+    getByRole: () => ({
+      count: async () => 2,
+      nth: (n) => ({
+        isVisible: async () => n === 1,
+        isEnabled: async () => false,
+        click: async () => { clicks += 1; },
+      }),
+    }),
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 0), false);
+  assert.equal(clicks, 0);
+});
+
+test('canonical learner registration never clicks unrecognized buttons or fabricates a completion request', async () => {
+  const names = [];
+  const page = {
+    getByRole: (_, opts) => {
+      names.push(opts.name);
+      return { count: async () => 0, nth: () => { throw new Error('NO_CONTROL'); } };
+    },
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 0), false);
+  assert.deepEqual(names, ['Registrar no AirTrust', 'Confirmar conclusão']);
 });
