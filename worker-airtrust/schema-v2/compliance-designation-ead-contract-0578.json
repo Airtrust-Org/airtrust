@@ -1,0 +1,8 @@
+{
+  "changeId": "compliance-designation-ead-contract-0578",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0578_compliance_designations_ead_contract.sql",
+  "fileHash": "1d0a8adf2acaac0a6b3717edfe898fea7b382fa94c0cee694bb9f9aa824d7a94",
+  "planPath": "worker-airtrust/schema-v2/plans/compliance-designation-ead-contract-0578.md",
+  "planHash": "189e768d2e9637bbd73304eb721edba6a2112330d9fab72c5e3914df574c343a"
+}

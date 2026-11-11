@@ -139,9 +139,18 @@ export function TrainingComplianceConditionsEditor() {
     },
     onSuccess: async (result) => {
       const enrolled=Number(result.auto_enrollment?.created||0)+Number(result.auto_enrollment?.reactivated||0);
-      showToast.success(enrolled>0?`Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`:'Designação atribuída ao funcionário.');
-      if(Number(result.auto_enrollment?.unavailable_course||0)>0) showToast.warning('Designação salva, mas existe treinamento sem um único curso EAD publicado e vinculado.');
-      else if(result.auto_enrollment_warning) showToast.warning('Designação salva, mas a matrícula automática precisará ser reconciliada.');
+      const incomplete=Boolean(result.auto_enrollment_warning) || Number(result.auto_enrollment?.unavailable_course||0)>0;
+      if(!incomplete) showToast.success(enrolled>0?
+        `Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`:
+        'Designação atribuída ao funcionário.');
+      if(result.auto_enrollment_warning==='UNMAPPED_MANDATORY_QUALIFICATION')
+        showToast.warning('Designação registrada, mas existe qualificação obrigatória sem curso vinculado. Verifique se exige treinamento EAD.');
+      else if(result.auto_enrollment_warning==='NO_EAD_POLICY')
+        showToast.warning('Designação registrada, mas a regra obrigatória não habilita matrícula EAD automática.');
+      else if(Number(result.auto_enrollment?.unavailable_course||0)>0)
+        showToast.warning('Designação registrada, mas não há um único curso EAD publicado e vinculado.');
+      else if(result.auto_enrollment_warning)
+        showToast.warning('Designação registrada com pendência: matrícula automática não confirmada; reconciliação necessária.');
       setReason(''); await invalidate();
     },
     onError: (error) =>

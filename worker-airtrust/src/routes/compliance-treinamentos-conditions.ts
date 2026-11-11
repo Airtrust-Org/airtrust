@@ -86,7 +86,7 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
     LEFT JOIN lms_cursos lc ON lc.empresa_id=f.empresa_id AND lc.qualificacao_tipo_id=qt.id AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL
     WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
       AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
+      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND tr_assigned.modalidade_requerida='EAD' AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
       AND ${predicate}
     GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
   for(const row of results||[]){
@@ -230,6 +230,39 @@ app.post('/condicoes', requireRole('admin'), async (c) => {
   return c.json({ success: true, data: { id } }, 201);
 });
 
+/**
+ * A designation may create a mandatory Compliance obligation even when no
+ * course-enrollment policy exists. Report this explicit mismatch instead of
+ * treating a zero-enrollment result as an implicit success. Read-only, scoped
+ * to the selected tenant and condition. Never infer equivalence by course name.
+ */
+async function inspectAssignedConditionEnrollmentContract(
+  db:D1Database, empresaId:number, condicaoId:number,
+):Promise<'NO_EAD_POLICY'|'UNMAPPED_MANDATORY_QUALIFICATION'|null>{
+  const row=await db.prepare(`SELECT
+    SUM(CASE WHEN UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+      AND NOT EXISTS(SELECT 1 FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
+        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
+        AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL)
+      THEN 1 ELSE 0 END) no_course,
+    SUM(CASE WHEN UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+      AND EXISTS(SELECT 1 FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
+        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
+        AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL)
+      AND (COALESCE(tr.auto_matricular_ead,0)<>1
+        OR COALESCE(tr.modalidade_requerida,'')<>'EAD') THEN 1 ELSE 0 END) no_policy
+    FROM treinamento_requisitos tr
+    JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id AND qt.empresa_id=tr.empresa_id
+      AND qt.ativo=1 AND qt.deleted_at IS NULL
+    WHERE tr.empresa_id=? AND tr.condicao_id=? AND tr.ativo=1
+      AND tr.deleted_at IS NULL AND tr.obrigatoriedade='OBRIGATORIA'`)
+    .bind(empresaId,condicaoId)
+    .first<{no_course:number|null;no_policy:number|null}>();
+  if(Number(row?.no_course||0)>0) return 'UNMAPPED_MANDATORY_QUALIFICATION';
+  if(Number(row?.no_policy||0)>0) return 'NO_EAD_POLICY';
+  return null;
+}
+
 app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -307,8 +340,16 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     ...extrairUsuarioAuditoria(c),
   });
   let autoEnrollment:AutoEnrollmentSummary|null=null; let autoEnrollmentWarning:string|null=null;
-  try{autoEnrollment=await autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId);}
-  catch(error){console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';}
+  try{
+    autoEnrollment=await autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId);
+    // Missing or disabled contract is not a completed LMS synchronization.
+    // Persist the authorized designation but make the gap visible and traceable.
+    const contractGap=await inspectAssignedConditionEnrollmentContract(db,empresaId,condicaoId);
+    if(contractGap) autoEnrollmentWarning=contractGap;
+  } catch(error){
+    console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});
+    autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';
+  }
   return c.json({success:true,data:{id,auto_enrollment:autoEnrollment,auto_enrollment_warning:autoEnrollmentWarning}},201);
 });
 
