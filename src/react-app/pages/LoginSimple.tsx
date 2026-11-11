@@ -109,10 +109,9 @@ export default function LoginPage() {
     : '/';
 
   const loadSessionProfiles = async (): Promise<SessionRole[]> => {
-    const response = await fetchSessionProfilesBounded(
+    const { response, payload } = await fetchSessionProfilesBounded<SessionProfilesResponse>(
       `${API_BASE_URL}/me/operational-access/session-profiles`, fetchWithAuth,
     );
-    const payload = (await response.json().catch(() => ({}))) as SessionProfilesResponse;
 
     if (!response.ok || !payload.success || !payload.data) {
       throw new Error(payload.error || 'Não foi possível identificar os perfis disponíveis.');

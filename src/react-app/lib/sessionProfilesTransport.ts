@@ -6,11 +6,11 @@
  */
 export type SessionProfilesFetcher = (url: string, options: RequestInit) => Promise<Response>;
 
-export async function fetchSessionProfilesBounded(
+export async function fetchSessionProfilesBounded<T>(
   url: string,
   fetcher: SessionProfilesFetcher,
   timeoutMs = 12_000,
-): Promise<Response> {
+): Promise<{ response: Response; payload: T }> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error('SESSION_PROFILES_TIMEOUT_INVALID');
   }
@@ -27,7 +27,10 @@ export async function fetchSessionProfilesBounded(
 
     try {
       return await Promise.race([
-        fetcher(url, { method: 'GET', cache: 'no-store', signal: controller.signal }),
+        (async () => {
+          const response = await fetcher(url, { method: 'GET', cache: 'no-store', signal: controller.signal });
+          return { response, payload: (await response.json()) as T };
+        })(),
         deadline,
       ]);
     } catch (error) {
