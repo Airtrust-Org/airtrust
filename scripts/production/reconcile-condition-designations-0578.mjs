@@ -84,7 +84,8 @@ export async function main(){
    })
   });
   check(response.status===201&&response.json?.success===true,'DESIGNATION_RECONCILE_HTTP_'+response.status);
-  check(!response.json.data?.auto_enrollment_warning,'DEFERRED_ENROLLMENT_AFTER_ASSIGNMENT');
+  check(!response.json.data?.auto_enrollment_warning && response.json.data?.auto_enrollment !== null
+    && Number(response.json.data?.auto_enrollment?.unavailable_course||0)===0,'DEFERRED_ENROLLMENT_AFTER_ASSIGNMENT');
   check(Number(response.json.data?.id)===Number(a.id),'DESIGNATION_ID_CHANGED');
   executed++;
  }

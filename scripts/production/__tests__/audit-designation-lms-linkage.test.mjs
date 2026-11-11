@@ -16,7 +16,10 @@ test('read-only audit distinguishes EAD, manual, unavailable and deliberately un
 });
 test('assignment API reports lack of automatic contract and preserves tenant isolation',()=>{
  assert.match(route,/inspectAssignedConditionEnrollmentContract/);
- assert.match(route,/tr\.empresa_id=\?/);
+ assert.match(route,/f\.empresa_id=\?/);
+ assert.match(route,/higherPriority/);
+ assert.match(route,/vigencia_inicio/);
+ assert.match(route,/vigencia_fim/);
  assert.match(route,/lc\.empresa_id=tr\.empresa_id/);
  assert.match(route,/qt\.categoria/);
  assert.match(route,/autoEnrollmentWarning=contractGap/);
@@ -32,4 +35,10 @@ test('screen never claims full success when automatic enrollment remains unconfi
 test('reassigning existing designation records an UPDATE, not fabricated INSERT',()=>{
  assert.match(route,/const wasExisting = Boolean\(id\)/);
  assert.match(route,/acao: wasExisting \? 'UPDATE' : 'INSERT'/);
+});
+
+test('backfill rejects ambiguous mapping before claim of success',()=>{
+ const backfill=readFileSync(new URL('../reconcile-condition-designations-0578.mjs',import.meta.url),'utf8');
+ assert.match(backfill,/unavailable_course/);
+ assert.match(backfill,/auto_enrollment !== null/);
 });

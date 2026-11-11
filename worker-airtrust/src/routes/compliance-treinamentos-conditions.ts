@@ -19,6 +19,8 @@ import { stampLmsEnrollmentEvidenceProfile } from '../services/training-complian
 import { classifyComplianceEnrollmentFailure } from '../services/training-compliance-rule-enrollment';
 import {
   trainingComplianceEffectiveRequirementPredicateSql,
+  trainingComplianceRuleApplicabilitySql,
+  trainingComplianceRulePrioritySql,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
 } from '../services/training-compliance-rule-engine';
@@ -237,29 +239,43 @@ app.post('/condicoes', requireRole('admin'), async (c) => {
  * to the selected tenant and condition. Never infer equivalence by course name.
  */
 async function inspectAssignedConditionEnrollmentContract(
-  db:D1Database, empresaId:number, condicaoId:number,
+  db:D1Database, empresaId:number, funcionarioId:number, condicaoId:number,
 ):Promise<'NO_EAD_POLICY'|'UNMAPPED_MANDATORY_QUALIFICATION'|null>{
-  const row=await db.prepare(`SELECT
-    SUM(CASE WHEN UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND NOT EXISTS(SELECT 1 FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
-        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
-        AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL)
-      THEN 1 ELSE 0 END) no_course,
-    SUM(CASE WHEN UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND EXISTS(SELECT 1 FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
-        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
-        AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL)
-      AND (COALESCE(tr.auto_matricular_ead,0)<>1
-        OR COALESCE(tr.modalidade_requerida,'')<>'EAD') THEN 1 ELSE 0 END) no_policy
-    FROM treinamento_requisitos tr
+  const today=getTodayIsoSaoPaulo();
+  const applies=trainingComplianceRuleApplicabilitySql('tr','f');
+  const higherApplies=trainingComplianceRuleApplicabilitySql('higher','f');
+  const priority=trainingComplianceRulePrioritySql('tr');
+  const higherPriority=trainingComplianceRulePrioritySql('higher');
+  // Inspect only the current effective winner for this employee and qualification.
+  // A future/expired/superseded rule must never generate a false enrollment warning.
+  const {results}=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+    SELECT tr.qualificacao_tipo_id,tr.auto_matricular_ead,tr.modalidade_requerida,
+      (SELECT COUNT(*) FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
+        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id AND lc.ativo=1
+        AND lc.publicado=1 AND lc.deleted_at IS NULL) course_count
+    FROM funcionarios f
+    JOIN treinamento_requisitos tr ON tr.empresa_id=f.empresa_id
     JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id AND qt.empresa_id=tr.empresa_id
       AND qt.ativo=1 AND qt.deleted_at IS NULL
-    WHERE tr.empresa_id=? AND tr.condicao_id=? AND tr.ativo=1
-      AND tr.deleted_at IS NULL AND tr.obrigatoriedade='OBRIGATORIA'`)
-    .bind(empresaId,condicaoId)
-    .first<{no_course:number|null;no_policy:number|null}>();
-  if(Number(row?.no_course||0)>0) return 'UNMAPPED_MANDATORY_QUALIFICATION';
-  if(Number(row?.no_policy||0)>0) return 'NO_EAD_POLICY';
+    WHERE f.id=? AND f.empresa_id=? AND f.ativo=1 AND f.deleted_at IS NULL
+      AND tr.condicao_id=? AND tr.ativo=1 AND tr.deleted_at IS NULL
+      AND tr.obrigatoriedade='OBRIGATORIA'
+      AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+      AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND ${applies}
+      AND NOT EXISTS(SELECT 1 FROM treinamento_requisitos higher
+        WHERE higher.empresa_id=tr.empresa_id AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
+          AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
+          AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND ${higherApplies}
+          AND (${higherPriority}>${priority} OR (${higherPriority}=${priority} AND higher.id>tr.id)))`)
+    .bind(today,funcionarioId,empresaId,condicaoId)
+    .all<{qualificacao_tipo_id:number;auto_matricular_ead:number|null;modalidade_requerida:string|null;course_count:number}>();
+  if((results||[]).some(x=>Number(x.course_count)===0)) return 'UNMAPPED_MANDATORY_QUALIFICATION';
+  if((results||[]).some(x=>Number(x.course_count)!==1 || Number(x.auto_matricular_ead)!==1
+      || x.modalidade_requerida!=='EAD')) return 'NO_EAD_POLICY';
   return null;
 }
 
@@ -345,7 +361,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     autoEnrollment=await autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId);
     // Missing or disabled contract is not a completed LMS synchronization.
     // Persist the authorized designation but make the gap visible and traceable.
-    const contractGap=await inspectAssignedConditionEnrollmentContract(db,empresaId,condicaoId);
+    const contractGap=await inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId);
     if(contractGap) autoEnrollmentWarning=contractGap;
   } catch(error){
     console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});
