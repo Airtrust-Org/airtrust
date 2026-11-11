@@ -1241,6 +1241,60 @@ async function readWrapperRuntimeState(wrapper) {
   }).catch(() => null);
 }
 
+/**
+ * After a React player reload, a visible completion button is NOT proof that
+ * its wrapper postMessage listener exists yet. Wait until the actual SCORM
+ * wrapper and SCO are attached, initialized and readable before consenting.
+ */
+export async function waitForCanonicalScormWrapperReady(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const wrapper = await resolveScormWrapper(page);
+    const sco = await resolveScormContentFrame(page);
+    if (wrapper && sco) {
+      const runtime = await readWrapperRuntimeState(wrapper);
+      const loaded = await wrapper.evaluate(() =>
+        document.readyState === 'complete' &&
+        Boolean(window.API || window.API_1484_11) &&
+        Boolean(document.querySelector('#scorm-frame')?.contentWindow),
+      ).catch(() => false);
+      if (loaded && runtime) return true;
+    }
+    if (Date.now() >= deadline) break;
+    await delay(500);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+/**
+ * Click only the canonical, enabled learner registration control. It may be
+ * rendered asynchronously after the SCO has saved its terminal evidence.
+ * Returning false is an explicit failure to observe learner consent, never
+ * permission to synthesize a server-side completion or certificate.
+ */
+export async function clickCanonicalLearnerRegistration(page, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  const labels = ['Registrar no AirTrust', 'Confirmar conclusão'];
+  do {
+    for (const label of labels) {
+      const controls = page.getByRole('button', { name: label, exact: true });
+      const count = Math.min(await controls.count().catch(() => 0), 4);
+      for (let index = 0; index < count; index += 1) {
+        const control = controls.nth(index);
+        if (!await control.isVisible().catch(() => false) ||
+            !await control.isEnabled().catch(() => false)) continue;
+        try {
+          await control.click({ timeout: 3_000 });
+          return true;
+        } catch { /* Recheck the real control after a React rerender. */ }
+      }
+    }
+    if (Date.now() >= deadline) break;
+    await delay(500);
+  } while (Date.now() < deadline);
+  return false;
+}
+
 async function driveScormCourseInBrowser({
   browserEngine,
   token,
@@ -1325,6 +1379,7 @@ async function driveScormCourseInBrowser({
   let checkpointTested = false;
   let finalStatusReached = false;
   let finalButtonClicked = false;
+  let registrationAttempted = false;
   let maxVisitedUnit = 0;
   const visitedUnitIds = new Set();
   let totalUnitsDetected = canonicalTotal || 0;
@@ -2051,13 +2106,9 @@ async function driveScormCourseInBrowser({
       }
 
       // Check for LmsPlayer "Registrar no AirTrust" or "Confirmar conclusão" button
-      const playerRegisterBtn = await page.waitForSelector(
-        'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
-        { timeout: 5000 }
-      ).catch(() => null);
-      if (playerRegisterBtn && await playerRegisterBtn.isVisible().catch(() => false) && !await playerRegisterBtn.isDisabled().catch(() => true)) {
-        console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno...');
-        await playerRegisterBtn.click().catch(() => null);
+      registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      if (registrationAttempted) {
+        console.log('[LMS_HOMOLOGATION] Confirmação canônica do aluno acionada na interface...');
         await page.waitForTimeout(2000);
       }
 
@@ -2085,14 +2136,9 @@ async function driveScormCourseInBrowser({
       if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
         finalAtLastUnit = true;
       }
-      const playerRegisterBtn = await page.waitForSelector(
-        'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
-        { timeout: 4000 }
-      ).catch(() => null);
-      if (playerRegisterBtn && await playerRegisterBtn.isVisible().catch(() => false) && !await playerRegisterBtn.isDisabled().catch(() => true)) {
-        console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno...');
-        await playerRegisterBtn.click().catch(() => null);
-        await page.waitForTimeout(2000);
+      if (!registrationAttempted) {
+        registrationAttempted = await clickCanonicalLearnerRegistration(page, 10_000);
+        if (registrationAttempted) await page.waitForTimeout(2000);
       }
       break;
     }
@@ -2106,14 +2152,23 @@ async function driveScormCourseInBrowser({
   if (finalOverlayBtn) {
     await finalOverlayBtn.click().catch(() => null);
   }
-  const finalPlayerBtn = await page.waitForSelector(
-    'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
-    { timeout: 5000 }
-  ).catch(() => null);
-  if (finalPlayerBtn && await finalPlayerBtn.isVisible().catch(() => false) && !await finalPlayerBtn.isDisabled().catch(() => true)) {
-    console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno pós-percurso...');
-    await finalPlayerBtn.click().catch(() => null);
-    await page.waitForTimeout(2000);
+  if (!registrationAttempted && finalButtonClicked && finalAtLastUnit &&
+      totalUnitsDetected > 0 && visitedUnitIds.size === totalUnitsDetected) {
+    registrationAttempted = await clickCanonicalLearnerRegistration(page, 10_000);
+    if (!registrationAttempted && targetUrl === playerUrl) {
+      // A legitimate finished SCO can become ready only after a persisted
+      // server readback. Reopen the actual learner UI (not the API) and require
+      // its enabled, explicitly clicked completion control.
+      console.log('[LMS_HOMOLOGATION] Reabrindo player para localizar confirmação canônica...');
+      await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+      const wrapperReady = await waitForCanonicalScormWrapperReady(page, 20_000);
+      if (wrapperReady) {
+        registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      } else {
+        console.log('[LMS_HOMOLOGATION] Wrapper SCORM não pronto após reabertura; nenhuma confirmação sintética enviada.');
+      }
+    }
+    if (registrationAttempted) await page.waitForTimeout(2000);
   }
 
   // Re-sample final runtime state from wrapper before closing
