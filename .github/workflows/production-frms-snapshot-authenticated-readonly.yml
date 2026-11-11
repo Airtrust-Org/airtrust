@@ -1,0 +1,126 @@
+name: Production FRMS Snapshot Authenticated Readonly Browser
+
+# Production-only smoke for an existing authorized tenant-6 account.
+# No staging, deploy, D1 write, mutation API, trace, screenshot or PII output.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_worker_sha:
+        description: Deployed production Worker SHA (40 hex)
+        required: true
+        type: string
+      expected_pages_sha:
+        description: Deployed production Pages SHA (40 hex)
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_FRMS_PRODUCTION_BROWSER_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: frms-production-authenticated-snapshot-readonly
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Verify immutable production deployment and release gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Require matching Worker and Pages with protected main
+        shell: bash
+        env:
+          EXPECTED_WORKER: ${{ inputs.expected_worker_sha }}
+          EXPECTED_PAGES: ${{ inputs.expected_pages_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_FRMS_PRODUCTION_BROWSER_READONLY ]] || exit 1
+          [[ "$EXPECTED_WORKER" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$EXPECTED_PAGES" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$EXPECTED_WORKER" HEAD
+          git merge-base --is-ancestor "$EXPECTED_PAGES" HEAD
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$EXPECTED_WORKER" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$EXPECTED_PAGES" node scripts/ci/verify-release-gates.mjs
+          node --input-type=module <<'NODE'
+          const worker = process.env.EXPECTED_WORKER;
+          const pages = process.env.EXPECTED_PAGES;
+          const v = await fetch('https://api.airtrust.online/api/version', {
+            signal: AbortSignal.timeout(15000),
+            headers: { 'Cache-Control': 'no-store' },
+          });
+          if (!v.ok || (await v.json())?.data?.sourceSha !== worker) {
+            throw new Error('FRMS_PRODUCTION_WORKER_SHA_MISMATCH');
+          }
+          const home = await fetch('https://airtrust.online/login', {
+            signal: AbortSignal.timeout(15000),
+            headers: { 'Cache-Control': 'no-store' },
+          });
+          if (!home.ok || !(await home.text()).includes(pages.slice(0, 7))) {
+            throw new Error('FRMS_PRODUCTION_PAGES_SHA_MISMATCH');
+          }
+          console.log('FRMS_PRODUCTION_PROVENANCE_PASS');
+          NODE
+
+  browser:
+    name: Real tenant-6 FRMS browser snapshot, no writes
+    needs: provenance
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require existing production-only QA credentials
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo FRMS_PRODUCTION_QA_CREDENTIALS_MISSING; exit 1; }
+          [[ "$E2E_EMAIL" != *staging.airtrust.invalid* ]] || { echo STAGING_IDENTITY_BLOCKED; exit 1; }
+      - run: npm ci
+      - name: Compile the exact readonly browser test before execution
+        run: >-
+          npx --no-install tsc --noEmit --skipLibCheck
+          --target es2022 --module nodenext --moduleResolution nodenext
+          --esModuleInterop --types node
+          e2e/production-frms-snapshot-readonly.spec.ts
+      - name: Install Chromium only
+        run: npx playwright install --with-deps chromium
+      - name: Verify existing production QA token tenant is 6
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { login, extractAccessToken, decodeJwtPayload } from './scripts/smoke-auth-common.mjs';
+          const payload = await login('https://api.airtrust.online', process.env.E2E_EMAIL, process.env.E2E_PASSWORD);
+          const claims = decodeJwtPayload(extractAccessToken(payload));
+          if (Number(claims?.empresa_id) !== 6) throw new Error('FRMS_PRODUCTION_QA_TENANT_6_NOT_PROVED');
+          console.log('FRMS_PRODUCTION_QA_TENANT_6_PASS');
+          NODE
+      - name: Test actual production FRMS UI, strict 0 retries
+        run: >-
+          npx playwright test e2e/production-frms-snapshot-readonly.spec.ts
+          --project=chromium --no-deps --retries=0 --fail-on-flaky-tests
+          --trace=off --reporter=list
