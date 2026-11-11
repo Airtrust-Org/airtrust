@@ -58,6 +58,32 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function saveIncrementalReport(results = [], metadata = {}, targetPath = REPORT_PATH) {
+  const total = results.length;
+  const passCount = results.filter((r) => r.status === 'PASS').length;
+  const failCount = results.filter((r) => r.status === 'FAIL').length;
+  const blockedCount = results.filter((r) => r.status === 'BLOQUEADO').length;
+
+  const summary = {
+    browser: BROWSER_NAME,
+    total_courses: total,
+    pass_count: passCount,
+    fail_count: failCount,
+    blocked_count: blockedCount,
+    updated_at: new Date().toISOString(),
+    ...metadata,
+    results,
+  };
+
+  try {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, JSON.stringify(summary, null, 2), 'utf8');
+  } catch (err) {
+    console.warn(`[LMS_HOMOLOGATION] Falha ao salvar relatório incremental: ${err?.message || err}`);
+  }
+  return summary;
+}
+
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
@@ -339,11 +365,11 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
 
   // 4. Tratar matrícula cancelada anterior (LMS_REMATRICULATION_REQUIRED - 409)
   if (res.status === 409 && res.json?.code === 'LMS_REMATRICULATION_REQUIRED') {
-    const targetMatriculaId = Number(res.json?.data?.matricula_id || 0);
+    const targetMatriculaId = Number(res.json?.data?.matricula_id || res.json?.data?.id || res.json?.matricula_id || 0);
     const authToUse = adminToken || token;
     if (targetMatriculaId > 0) {
       console.log(`[LMS_HOMOLOGATION] Reativando matrícula cancelada id=${targetMatriculaId} via rematrícula autorizada...`);
-      const remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
+      let remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${authToUse}`,
@@ -351,8 +377,32 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
         },
         body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
       });
-      if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
-        return Number(remat.json.data.matricula_id);
+      if (remat.status === 409 && adminToken) {
+        // Se a matrícula possui qualificação vinculada, reverter conclusão antes de rematricular
+        const rev = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/reverter`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reason: 'Homologação LMS Aluno QA 202611 - Reversão prévia para rematrícula autorizada',
+            classification: 'CORRECAO',
+          }),
+        }).catch(() => null);
+        if (rev && rev.status === 200) {
+          remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
+          });
+        }
+      }
+      if (remat.status === 200 && Number(remat.json?.data?.matricula_id || remat.json?.data?.id || 0) > 0) {
+        return Number(remat.json.data.matricula_id || remat.json.data.id);
       }
     }
   }
@@ -422,13 +472,14 @@ export async function setupAuthenticatedContext(context, token, matriculaId = nu
   }
 }
 
-export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null, maxRetries = 1, delayMs = 500) {
+export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null, maxRetries = 1, delayMs = 200) {
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     if (attempt > 0 && delayMs > 0) {
       await delay(delayMs);
     }
     const res = await fetchJson(`${API}/api/qualificacoes/funcionario/${funcionarioId}`, {
       headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
     });
     if (res.status === 200 && Array.isArray(res.json?.data)) {
       const list = res.json.data;
@@ -445,14 +496,16 @@ export async function checkLearnerQualifications(token, funcionarioId, cursoId, 
   return null;
 }
 
-export async function checkCertificate(token, qualificacaoHistoricoId, maxRetries = 10, delayMs = 1500) {
+export async function checkCertificate(token, qualificacaoHistoricoId, maxRetries = 15, delayMs = 1500) {
   if (!qualificacaoHistoricoId) return null;
+  const httpSignal = () => (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20_000) : undefined);
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     if (attempt > 0 && delayMs > 0) {
       await delay(delayMs);
     }
     const res = await fetchJson(`${API}/api/certificados/historico/${qualificacaoHistoricoId}/certificados`, {
       headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
     });
     if (res.status === 200 && Array.isArray(res.json?.data) && res.json.data.length > 0) {
       const cert = res.json.data[0];
@@ -460,6 +513,7 @@ export async function checkCertificate(token, qualificacaoHistoricoId, maxRetrie
       // Download endpoint returns JSON metadata containing the streaming URL: { data: { url } }
       const downloadRes = await fetch(`${API}/api/certificados/download/${certId}`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: httpSignal(),
       });
       let streamUrl = `${API}/api/pasta-virtual/stream/${certId}`;
       if (downloadRes.ok) {
@@ -485,6 +539,7 @@ export async function checkCertificate(token, qualificacaoHistoricoId, maxRetrie
       }
       const streamRes = await fetch(streamUrl, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: httpSignal(),
       });
       if (streamRes.ok) {
         const buffer = Buffer.from(await streamRes.arrayBuffer());
@@ -900,9 +955,9 @@ async function drivePptxCourseInBrowser({
 
   // Qualification and Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
-  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id, 10, 1000);
   const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
-  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId) : null;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId, 20, 1500) : null;
 
   // Reopen in real browser to verify no status or progress downgrade
   const reopenBrowser = await browserEngine.launch({ headless: true });
@@ -994,7 +1049,7 @@ export function determineSlideAction(doc, {
   const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
   const visible = (el) => {
     if (!el) return false;
-    if (el.getAttribute && (el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('hidden'))) return false;
+    if (el.getAttribute && (el.getAttribute('aria-hidden') === 'true' || (el.hasAttribute && el.hasAttribute('hidden')))) return false;
     if (el.style) {
       if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
     }
@@ -1052,6 +1107,24 @@ export function determineSlideAction(doc, {
   if (returnToJourneyBtn) {
     returnToJourneyBtn.click?.();
     return { type: 'return-to-journey', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 0d. Required interaction cards (e.g. "Interação obrigatória (0/4)")
+  const docText = clean(doc.body?.innerText || doc.body?.textContent || '');
+  const requiredMatch = docText.match(/intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i);
+  if (requiredMatch && Number(requiredMatch[1]) < Number(requiredMatch[2])) {
+    const rawCards = Array.from(doc.querySelectorAll('[data-touch], .touchable, [data-gate], [data-gate-id], .card, .interactive-card, [role=button], li, div')).filter((el) => {
+      if (!visible(el) || el.disabled) return false;
+      if (el.matches?.('button#next, button#prev, #nextBtn, #prevBtn, aside, nav, header, footer')) return false;
+      const key = el.getAttribute?.('data-touch') || el.getAttribute?.('data-gate') || el.id || clean(el.innerText || el.textContent);
+      if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+      const txt = clean(el.innerText || el.textContent);
+      return txt.length >= 6 && txt.length <= 400;
+    });
+    if (rawCards.length > 0) {
+      rawCards[0].click?.();
+      return { type: 'required-card', domCurrent, domTotal, atLastUnit };
+    }
   }
 
   // 1. Scenario options: stop selecting once an option is chosen in the scenario
@@ -1331,11 +1404,16 @@ async function driveScormCourseInBrowser({
   const started = Date.now();
 
   let effectiveMaxSteps = Math.max(MAX_STEPS, (totalUnitsDetected || canonicalTotal || 100) * 4);
+  let effectiveCourseTimeoutMs = Math.max(
+    COURSE_TIMEOUT_MS,
+    (totalUnitsDetected || canonicalTotal || 0) * 1500 + 60_000,
+  );
 
-  while (Date.now() - started < COURSE_TIMEOUT_MS && steps < effectiveMaxSteps) {
+  while (Date.now() - started < effectiveCourseTimeoutMs && steps < effectiveMaxSteps) {
     steps += 1;
     if (totalUnitsDetected > 0) {
       effectiveMaxSteps = Math.max(effectiveMaxSteps, totalUnitsDetected * 4);
+      effectiveCourseTimeoutMs = Math.max(COURSE_TIMEOUT_MS, totalUnitsDetected * 1500 + 60_000);
     }
     const wrapper = await resolveScormWrapper(page);
     const runtimeState = await readWrapperRuntimeState(wrapper);
@@ -1524,6 +1602,145 @@ async function driveScormCourseInBrowser({
       });
       if (returnToJourneyBtn) {
         return result(returnToJourneyBtn, 'return-to-journey');
+      }
+
+      // 1d. Required Interaction Cards ("Interação obrigatória (0/4)")
+      const requiredInteractionMatch = clean(document.body?.innerText || '').match(
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+      );
+      if (
+        requiredInteractionMatch &&
+        Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
+      ) {
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch], .touchable'),
+        ).filter((el) => {
+          if (el.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return false;
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          const text = clean(el.textContent);
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none' &&
+            style.opacity !== '0' &&
+            el.getAttribute('aria-hidden') !== 'true' &&
+            text.length > 0 &&
+            text.length <= 800
+          );
+        }).map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          const touch = clean(el.getAttribute('data-touch'));
+          return {
+            el,
+            signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+
+        const explicitCandidate = explicitRequiredItems.find((item) => !clickedGates.includes(item.signature) && !clickedTouches.includes(item.signature));
+        if (explicitCandidate) {
+          return result(explicitCandidate.el, 'required-card', { gateKey: explicitCandidate.signature });
+        }
+
+        const scope = Array.from(document.body.querySelectorAll('*'));
+        const rawCandidates = scope.filter((el) => {
+          if (!visible(el)) return false;
+          if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+          if (el.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return false;
+          const style = window.getComputedStyle(el);
+          const dataKeys = Object.keys(el.dataset || {}).join(' ');
+          const className = clean(el.className);
+          const rect = el.getBoundingClientRect();
+          const interactiveHint =
+            style.cursor === 'pointer' ||
+            el.tabIndex >= 0 ||
+            el.hasAttribute('onclick') ||
+            /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardGeometryHint =
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.75 &&
+            rect.height <= window.innerHeight * 0.8;
+          const cardShapeHint =
+            cardGeometryHint &&
+            (
+              parseFloat(style.borderTopWidth || '0') > 0 ||
+              style.boxShadow !== 'none' ||
+              parseFloat(style.borderRadius || '0') >= 8
+            ) &&
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li,p'));
+          const structuredCardHint =
+            cardGeometryHint &&
+            Boolean(el.querySelector('li')) &&
+            Array.from(el.querySelectorAll('li')).length >= 2;
+          const text = clean(el.textContent);
+          return (interactiveHint || cardShapeHint || structuredCardHint) && text.length > 0 && text.length <= 800;
+        });
+
+        const candidates = rawCandidates.filter((el) =>
+          !rawCandidates.some((other) => other !== el && other.contains(el))
+        );
+        const requiredTotal = Number(requiredInteractionMatch[2]);
+        if (candidates.length < requiredTotal) {
+          const badge = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => {
+              const text = clean(el.textContent);
+              return text.length > 0 && text.length <= 240 && /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*(\d+)\)/i.test(text);
+            })
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+              return (ar.width * ar.height) - (br.width * br.height);
+            })[0] || null;
+          const badgeBottom = badge ? badge.getBoundingClientRect().bottom : 0;
+          const structuralGroups = Array.from(document.body.querySelectorAll('*'))
+            .map((parent) => {
+              if (parent.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return null;
+              const children = Array.from(parent.children).filter((el) => {
+                if (!visible(el)) return false;
+                if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+                const text = clean(el.textContent);
+                const rect = el.getBoundingClientRect();
+                return (
+                  text.length >= 12 &&
+                  text.length <= 800 &&
+                  rect.top >= badgeBottom - 8 &&
+                  rect.width >= 100 &&
+                  rect.height >= 60 &&
+                  rect.width <= window.innerWidth * 0.75 &&
+                  rect.height <= window.innerHeight * 0.8
+                );
+              });
+              if (children.length !== requiredTotal) return null;
+              const tops = children.map((el) => el.getBoundingClientRect().top);
+              const heights = children.map((el) => el.getBoundingClientRect().height);
+              const maxHeight = Math.max(...heights, 1);
+              if (Math.max(...tops) - Math.min(...tops) > Math.max(90, maxHeight * 0.6)) return null;
+              const pr = parent.getBoundingClientRect();
+              return { children, area: pr.width * pr.height };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.area - b.area);
+          const structuralCards = structuralGroups[0]?.children || [];
+          for (const el of structuralCards) {
+            if (!candidates.includes(el)) candidates.push(el);
+          }
+        }
+        const candidateItems = candidates.map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          return {
+            el,
+            signature: ['required-card', index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+        const requiredCandidate = candidateItems.find((item) => !clickedGates.includes(item.signature) && !clickedTouches.includes(item.signature));
+        if (requiredCandidate) {
+          return result(requiredCandidate.el, 'required-card', { gateKey: requiredCandidate.signature });
+        }
       }
 
       // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id, and unclicked interactive elements
@@ -1785,7 +2002,7 @@ async function driveScormCourseInBrowser({
       finalAtLastUnit = true;
     }
 
-    if (action?.type === 'gate-item' && action.gateKey) {
+    if ((action?.type === 'gate-item' || action?.type === 'required-card') && action.gateKey) {
       clickedGateKeysInCurrentSlide.add(action.gateKey);
     }
     if (action?.type === 'touch-target' && action.touchKey) {
@@ -1810,6 +2027,7 @@ async function driveScormCourseInBrowser({
       action?.type === 'scenario-option' ||
       action?.type === 'assessment-answer' ||
       action?.type === 'gate-item' ||
+      action?.type === 'required-card' ||
       action?.type === 'touch-target' ||
       action?.type === 'pending-scenario-review' ||
       action?.type === 'return-to-journey'
@@ -1832,11 +2050,27 @@ async function driveScormCourseInBrowser({
       break;
     }
 
-    // Driver stall detection: fail if 30 iterations produce identical state without progress
+    // If no action was resolved on this turn, scroll content container to trigger any scroll-bound unlocks
+    if (action?.type === 'none') {
+      await frame.evaluate(() => {
+        try {
+          window.scrollTo(0, document.body.scrollHeight);
+          const scrollables = document.querySelectorAll('*');
+          for (const el of scrollables) {
+            if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {
+              el.scrollTop = el.scrollHeight;
+            }
+          }
+        } catch {}
+      }).catch(() => null);
+      await page.waitForTimeout(400);
+    }
+
+    // Driver stall detection: fail if 60 iterations produce identical state without progress
     const stallSig = `${action?.domCurrent}:${action?.type}:${visitedUnitIds.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
     if (stallSig === lastStallSignature) {
       slideStallSteps += 1;
-      if (slideStallSteps >= 30) {
+      if (slideStallSteps >= 60) {
         if (action?.atLastUnit || (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected)) {
           console.log(`[LMS_HOMOLOGATION] Última unidade alcançada (${maxVisitedUnit}/${totalUnitsDetected}). Finalizando curso...`);
           finalButtonClicked = true;
@@ -1960,9 +2194,9 @@ async function driveScormCourseInBrowser({
 
   // Qualification & Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
-  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id, 10, 1000);
   const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
-  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId) : null;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId, 20, 1500) : null;
 
   // Real browser reopen check in new isolated session
   const reopenBrowser = await browserEngine.launch({ headless: true });
@@ -2083,89 +2317,105 @@ export async function runHomologation() {
   const engine = BROWSER_NAME === 'webkit' ? webkit : chromium;
   const results = [];
 
-  for (const course of courses) {
-    console.log(`\n------------------------------------------------------------`);
-    console.log(`[LMS_HOMOLOGATION] Curso #${course.id}: ${course.titulo} (${course.tipo_conteudo || 'scorm'})`);
+  // Initialize report file on disk immediately so artifact upload always succeeds
+  saveIncrementalReport(results, {
+    browser: BROWSER_NAME,
+    expected_sha: EXPECTED_SHA,
+  });
 
-    try {
-      // Re-authenticate session for each course to prevent JWT token expiration (1800s / 30m TTL)
+  const onSignal = () => {
+    console.log(`\n[LMS_HOMOLOGATION] Interrupção detectada. Salvando relatório de progresso...`);
+    saveIncrementalReport(results, {
+      browser: BROWSER_NAME,
+      expected_sha: EXPECTED_SHA,
+      interrupted: true,
+    });
+    process.exit(1);
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  try {
+    for (const course of courses) {
+      console.log(`\n------------------------------------------------------------`);
+      console.log(`[LMS_HOMOLOGATION] Curso #${course.id}: ${course.titulo} (${course.tipo_conteudo || 'scorm'})`);
+
       try {
-        learner = await getLearnerSession();
-        adminToken = await resolveAdminToken(true);
-      } catch (authErr) {
-        console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, authErr.message);
-      }
+        // Re-authenticate session for each course to prevent JWT token expiration (1800s / 30m TTL)
+        try {
+          learner = await getLearnerSession();
+          adminToken = await resolveAdminToken(true);
+        } catch (authErr) {
+          console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, authErr.message);
+        }
 
-      // 1. Enroll learner
-      const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId, adminToken);
-      console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
+        // 1. Enroll learner
+        const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId, adminToken);
+        console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
 
-      // 2. Drive course by content type in real browser
-      let outcome;
-      if (course.tipo_conteudo === 'pptx') {
-        outcome = await drivePptxCourseInBrowser({
-          browserEngine: engine,
-          token: learner.token,
-          course,
-          matriculaId,
-          funcionarioId: learner.funcionarioId,
+        // 2. Drive course by content type in real browser
+        let outcome;
+        if (course.tipo_conteudo === 'pptx') {
+          outcome = await drivePptxCourseInBrowser({
+            browserEngine: engine,
+            token: learner.token,
+            course,
+            matriculaId,
+            funcionarioId: learner.funcionarioId,
+          });
+        } else {
+          outcome = await driveScormCourseInBrowser({
+            browserEngine: engine,
+            token: learner.token,
+            adminToken,
+            course,
+            matriculaId,
+            funcionarioId: learner.funcionarioId,
+          });
+        }
+
+        console.log(`[LMS_HOMOLOGATION] Resultado: ${outcome.status} ${outcome.reason ? `(${outcome.reason})` : ''}`);
+        results.push(outcome);
+      } catch (err) {
+        console.error(`[LMS_HOMOLOGATION] Erro ao testar curso #${course.id}:`, err.message);
+        results.push({
+          course_id: course.id,
+          titulo: course.titulo,
+          tipo_conteudo: course.tipo_conteudo || 'scorm',
+          edition_sha: 'n/a',
+          policy: course.scorm_assessment_policy || 'FORMATIVE',
+          matricula_id: null,
+          matricula_ok: false,
+          percurso_ok: false,
+          resumed_ok: false,
+          avaliacao_ok: false,
+          finalizacao_ok: false,
+          status_pos_conclusao: 'ERRO',
+          qualificacao_gerada: 'N/A',
+          certificado_emitido: 'N/A',
+          reabertura_sem_downgrade: false,
+          status: 'FAIL',
+          reason: err.message,
         });
-      } else {
-        outcome = await driveScormCourseInBrowser({
-          browserEngine: engine,
-          token: learner.token,
-          adminToken,
-          course,
-          matriculaId,
-          funcionarioId: learner.funcionarioId,
+      } finally {
+        saveIncrementalReport(results, {
+          browser: BROWSER_NAME,
+          expected_sha: EXPECTED_SHA,
         });
       }
-
-      console.log(`[LMS_HOMOLOGATION] Resultado: ${outcome.status} ${outcome.reason ? `(${outcome.reason})` : ''}`);
-      results.push(outcome);
-    } catch (err) {
-      console.error(`[LMS_HOMOLOGATION] Erro ao testar curso #${course.id}:`, err.message);
-      results.push({
-        course_id: course.id,
-        titulo: course.titulo,
-        tipo_conteudo: course.tipo_conteudo || 'scorm',
-        edition_sha: 'n/a',
-        policy: course.scorm_assessment_policy || 'FORMATIVE',
-        matricula_id: null,
-        matricula_ok: false,
-        percurso_ok: false,
-        resumed_ok: false,
-        avaliacao_ok: false,
-        finalizacao_ok: false,
-        status_pos_conclusao: 'ERRO',
-        qualificacao_gerada: 'N/A',
-        certificado_emitido: 'N/A',
-        reabertura_sem_downgrade: false,
-        status: 'FAIL',
-        reason: err.message,
-      });
     }
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
   }
 
-  // Summary counts
-  const total = results.length;
-  const passCount = results.filter((r) => r.status === 'PASS').length;
-  const failCount = results.filter((r) => r.status === 'FAIL').length;
-  const blockedCount = results.filter((r) => r.status === 'BLOQUEADO').length;
-
-  const summary = {
+  const summary = saveIncrementalReport(results, {
     browser: BROWSER_NAME,
-    total_courses: total,
-    pass_count: passCount,
-    fail_count: failCount,
-    blocked_count: blockedCount,
-    results,
-  };
+    expected_sha: EXPECTED_SHA,
+  });
 
-  fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
-  fs.writeFileSync(REPORT_PATH, JSON.stringify(summary, null, 2), 'utf8');
-  console.log(`\n[LMS_HOMOLOGATION] Relatório salvo em: ${REPORT_PATH}`);
-  console.log(`[LMS_HOMOLOGATION] PASS: ${passCount} | FAIL: ${failCount} | BLOQUEADO: ${blockedCount}`);
+  console.log(`\n[LMS_HOMOLOGATION] Relatório final salvo em: ${REPORT_PATH}`);
+  console.log(`[LMS_HOMOLOGATION] PASS: ${summary.pass_count} | FAIL: ${summary.fail_count} | BLOQUEADO: ${summary.blocked_count}`);
 
   return summary;
 }

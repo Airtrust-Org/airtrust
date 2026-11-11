@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildLearnerAuthPayload,
   checkCertificate,
@@ -14,6 +17,7 @@ import {
   resolveEffectiveLessonStatus,
   resolveScormContentFrame,
   runHomologation,
+  saveIncrementalReport,
   setupAuthenticatedContext,
 } from '../lms-learner-e2e-homologation.mjs';
 
@@ -1508,5 +1512,137 @@ test('regression: unvisited gate selection excludes assessment and scenario answ
   assert.ok(unvisitedGate);
   assert.equal(unvisitedGate.innerText, 'Card de Informação 1');
 });
+
+test('saveIncrementalReport writes incremental JSON and correctly computes pass/fail/blocked summary', () => {
+  const tmpPath = path.join(os.tmpdir(), `lms-test-report-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  try {
+    const mockResults = [
+      { course_id: 1, status: 'PASS' },
+      { course_id: 2, status: 'FAIL' },
+      { course_id: 3, status: 'BLOQUEADO' },
+      { course_id: 4, status: 'PASS' },
+    ];
+    const summary = saveIncrementalReport(mockResults, { browser: 'chromium', expected_sha: 'testsha' }, tmpPath);
+    assert.equal(summary.total_courses, 4);
+    assert.equal(summary.pass_count, 2);
+    assert.equal(summary.fail_count, 1);
+    assert.equal(summary.blocked_count, 1);
+    assert.equal(summary.browser, 'chromium');
+
+    assert.ok(fs.existsSync(tmpPath));
+    const fileContent = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+    assert.equal(fileContent.total_courses, 4);
+    assert.equal(fileContent.pass_count, 2);
+    assert.equal(fileContent.fail_count, 1);
+    assert.equal(fileContent.blocked_count, 1);
+    assert.equal(fileContent.results.length, 4);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
+test('determineSlideAction recognizes mandatory interaction cards under /interação obrigatória (0/N)/', () => {
+  let card1Clicked = false;
+  let card2Clicked = false;
+  const card1 = {
+    innerText: 'Card de Segurança Operacional 1',
+    getAttribute: (attr) => (attr === 'data-gate' ? 'card_1' : null),
+    hasAttribute: () => false,
+    click: () => { card1Clicked = true; },
+    disabled: false,
+    matches: () => false,
+  };
+  const card2 = {
+    innerText: 'Card de Segurança Operacional 2',
+    getAttribute: (attr) => (attr === 'data-gate' ? 'card_2' : null),
+    hasAttribute: () => false,
+    click: () => { card2Clicked = true; },
+    disabled: false,
+    matches: () => false,
+  };
+  const mockDoc = {
+    body: {
+      innerText: 'Atenção: Interação obrigatória (0/2) antes de avançar.',
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('.card') || sel.includes('[data-gate]')) {
+        return [card1, card2];
+      }
+      return [];
+    },
+    querySelector: () => null,
+  };
+
+  const action1 = determineSlideAction(mockDoc, { clickedGates: [] });
+  assert.equal(action1.type, 'required-card');
+  assert.equal(card1Clicked, true);
+  assert.equal(card2Clicked, false);
+
+  const action2 = determineSlideAction(mockDoc, { clickedGates: ['card_1'] });
+  assert.equal(action2.type, 'required-card');
+  assert.equal(card2Clicked, true);
+});
+
+test('enrollLearner retries rematricular with reversal when 409 LMS_COMPLETION_REVERSAL_REQUIRED is returned', async () => {
+  const originalFetch = globalThis.fetch;
+  let reversalCalled = false;
+  let rematricularCalls = 0;
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const u = String(url);
+      if (u.includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true, data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (u.endsWith('/api/lms/matriculas') && options.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            code: 'LMS_REMATRICULATION_REQUIRED',
+            message: 'Matrícula anterior cancelada',
+            data: { matricula_id: 555 },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (u.includes('/api/lms/matriculas/555/rematricular')) {
+        rematricularCalls += 1;
+        if (rematricularCalls === 1) {
+          // First attempt returns 409 requiring reversal
+          return new Response(
+            JSON.stringify({ code: 'LMS_COMPLETION_REVERSAL_REQUIRED', message: 'Reverta a conclusão antes' }),
+            { status: 409, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        // Second attempt after reversal succeeds
+        return new Response(
+          JSON.stringify({ success: true, data: { matricula_id: 555, status: 'NAO_INICIADO' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (u.includes('/api/lms/matriculas/555/reverter')) {
+        const body = options.body ? JSON.parse(options.body) : {};
+        if (!body.reason || body.reason.length < 10 || body.classification !== 'CORRECAO') {
+          return new Response(
+            JSON.stringify({ code: 'LMS_COMPLETION_REVERSAL_INVALID', message: 'Classificação inválida' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        reversalCalled = true;
+        return new Response(
+          JSON.stringify({ success: true, data: { id: 555, status: 'EM_ANDAMENTO' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      throw new Error(`Unexpected URL in test: ${u}`);
+    };
+
+    const matriculaId = await enrollLearner('learner-token', 55, 194, 'admin-token');
+    assert.equal(matriculaId, 555);
+    assert.equal(reversalCalled, true);
+    assert.equal(rematricularCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
