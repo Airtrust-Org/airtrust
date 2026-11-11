@@ -40,3 +40,11 @@ export function qaRunLearners(runId, attempt, cpfGenerator) {
     })];
   }));
 }
+
+
+export function qaProvisionSelection(runId, attempt, browser, cpfGenerator) {
+  const learners = qaRunLearners(runId, attempt, cpfGenerator);
+  if (browser == null || browser === '') return learners;
+  if (!Object.hasOwn(learners, browser)) throw new Error('QA_BROWSER_NOT_ALLOWLISTED');
+  return { [browser]: learners[browser] };
+}

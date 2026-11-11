@@ -141,6 +141,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      # A re-run of failed certify jobs increments github.run_attempt but does
+      # not re-run a previously successful provision job. Always provision the
+      # exact current attempt/browser before accessing any course.
+      - name: Provision isolated learner for current browser and attempt
+        env:
+          QA_PROVISION_BROWSER: ${{ matrix.browser }}
+          EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
+        run: node scripts/production/provision-synthetic-qa-learner.mjs --apply
       - name: Install Playwright system dependencies
         timeout-minutes: 8
         run: npx playwright install-deps ${{ matrix.browser }}

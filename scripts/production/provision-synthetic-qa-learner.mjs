@@ -17,7 +17,7 @@
  * - Zero PII: dados 100% sintéticos.
  */
 
-import { qaRunLearners, qaRunEmail, qaRunCpfCandidate, assertQaRunScope } from './qa-run-identity.mjs';
+import { qaRunLearners, qaProvisionSelection, qaRunEmail, qaRunCpfCandidate, assertQaRunScope } from './qa-run-identity.mjs';
 
 import {
   assert,
@@ -417,7 +417,10 @@ export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerP
   assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
   await assertPinnedProduction();
   const adminToken = await getAdminToken();
-  const learners = qaRunLearners(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, generateValidTestCpf);
+  const learners = qaProvisionSelection(
+    process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT,
+    process.env.QA_PROVISION_BROWSER, generateValidTestCpf,
+  );
   const results = {};
   for (const [key, def] of Object.entries(learners)) {
     console.log(`\n============================================================`);

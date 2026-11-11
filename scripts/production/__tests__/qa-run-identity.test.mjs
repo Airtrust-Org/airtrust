@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertQaRunScope, qaRunEmail, qaRunLearners, qaRunCpfCandidate } from '../qa-run-identity.mjs';
+import { assertQaRunScope, qaRunEmail, qaRunLearners, qaRunCpfCandidate, qaProvisionSelection } from '../qa-run-identity.mjs';
 import { generateValidTestCpf } from '../provision-synthetic-qa-learner.mjs';
 
 test('requires numeric GitHub run ID and attempt before allocating any synthetic identity', () => {
@@ -133,4 +133,19 @@ test('inactive QA employee with same registration cannot be silently reused or d
     assert.equal(calls.length, 1);
     assert.equal(calls[0].method, 'GET');
   } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test('re-run only failed certify jobs provisions the new attempt for exactly its browser', () => {
+  const prior = qaProvisionSelection('43012345678', '1', 'chromium', generateValidTestCpf);
+  const rerunChromium = qaProvisionSelection('43012345678', '2', 'chromium', generateValidTestCpf);
+  const rerunWebkit = qaProvisionSelection('43012345678', '2', 'webkit', generateValidTestCpf);
+  assert.deepEqual(Object.keys(rerunChromium), ['chromium']);
+  assert.deepEqual(Object.keys(rerunWebkit), ['webkit']);
+  assert.notEqual(prior.chromium.email, rerunChromium.chromium.email);
+  assert.notEqual(prior.chromium.matricula, rerunChromium.chromium.matricula);
+  assert.notEqual(rerunChromium.chromium.email, rerunWebkit.webkit.email);
+  assert.equal(rerunChromium.chromium.email, qaRunEmail('43012345678', '2', 'chromium'));
+  assert.throws(() => qaProvisionSelection('43012345678', '2', 'safari', generateValidTestCpf),
+    /QA_BROWSER_NOT_ALLOWLISTED/);
 });
