@@ -106,6 +106,8 @@ jobs:
           PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
           EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}
           QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD }}
+          QA_RUN_ID: ${{ github.run_id }}
+          QA_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: node scripts/production/provision-synthetic-qa-learner.mjs --apply
 
   certify:
@@ -125,8 +127,9 @@ jobs:
       HOMOLOGATION_BROWSER: ${{ matrix.browser }}
       HOMOLOGATION_COURSE_IDS: ${{ needs.guard.outputs.course_ids }}
       HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
-      QA_LEARNER_EMAIL: qa.lms.202611@airtrust.online
-      QA_LEARNER_EMAIL_OVERRIDE: qa.lms.202611.${{ matrix.browser }}@airtrust.online
+      QA_RUN_ID: ${{ github.run_id }}
+      QA_RUN_ATTEMPT: ${{ github.run_attempt }}
+      QA_LEARNER_EMAIL_OVERRIDE: qa.lms.${{ github.run_id }}.${{ github.run_attempt }}.${{ matrix.browser }}@airtrust.online
       QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD }}
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}

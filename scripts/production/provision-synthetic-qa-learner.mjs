@@ -17,6 +17,8 @@
  * - Zero PII: dados 100% sintéticos.
  */
 
+import { qaRunLearners, assertQaRunScope } from './qa-run-identity.mjs';
+
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -226,6 +228,7 @@ export async function provisionLearner({
   let employeeCreated = false;
 
   if (employee) {
+    assert(String(employee.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_EMPLOYEE_COLLISION_EMAIL');
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
     console.log(`[QA_PROVISION] Criando funcionário sintético: ${learnerDef.matricula}...`);
@@ -285,6 +288,8 @@ export async function provisionLearner({
   let passwordConfigured = false;
 
   if (user) {
+    assert(String(user.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_USER_IDENTITY_MISMATCH');
+    assert(['ALUNO','student'].includes(String(user.perfil || '').trim()), 'QA_USER_ROLE_INVALID');
     console.log(`[QA_PROVISION] Usuário existente encontrado: id=${user.id}, email=${user.email}, perfil=${user.perfil}`);
     if (mode === 'apply' && learnerPassword) {
       console.log(`[QA_PROVISION] Redefinindo senha para garantir acesso previsível...`);
@@ -382,10 +387,12 @@ export async function provisionLearner({
 }
 
 export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerPassword }) {
+  assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
   await assertPinnedProduction();
   const adminToken = await getAdminToken();
+  const learners = qaRunLearners(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, generateValidTestCpf);
   const results = {};
-  for (const [key, def] of Object.entries(SYNTHETIC_LEARNERS)) {
+  for (const [key, def] of Object.entries(learners)) {
     console.log(`\n============================================================`);
     console.log(`[QA_PROVISION] Provisionando perfil: ${key} (${def.email})`);
     results[key] = await provisionLearner({ mode, learnerPassword, learnerDef: def, adminToken });
