@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse, type HttpClientOptions } from '@/react-app/services/http-client';
+import { useAuth } from '@/react-app/hooks/useAuth';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
 
@@ -188,9 +189,13 @@ async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
 }
 
 export function useFrmsOperationalAccess() {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-operational-access'],
+    // Never request operational permissions before the persisted session has
+    // been verified. The key must not reuse another user/tenant's result.
+    queryKey: ['frms-operational-access', empresaAtualId, user?.id, user?.role],
     queryFn: fetchFrmsOperationalAccess,
+    enabled: !isLoading && isAuthenticated && empresaAtualId !== null,
     retry: false,
     staleTime: 2 * 60 * 1000,
   });
