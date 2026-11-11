@@ -16,7 +16,7 @@ const AUTH_POST = new Set([
 ]);
 const PROFILE = /^Entrar como (Administrador(?: Geral| da Empresa)?|Gestor|Manager)$/i;
 
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: { cookies: [], origins: [] }, screenshot: 'off', video: 'off', trace: 'off' });
 
 test('production FRMS snapshot: permitted tenant 6, no browser abort or operational write', async ({ page }) => {
   test.setTimeout(150_000);
@@ -125,7 +125,7 @@ test('production FRMS snapshot: permitted tenant 6, no browser abort or operatio
 
   // A user-initiated read-only refresh proves a second real GET without
   // replaying any operational mutation or relying on Playwright test retries.
-  await page.getByRole('button', { name: 'Atualizar dados' }).click();
+  await page.getByRole('button', { name: /Atualizar dados|Refresh data/i }).click();
   await expect.poll(() => snapshots.length, { timeout: 40_000 }).toBeGreaterThanOrEqual(2);
   await assertLatestSnapshot(1);
   expect(violations, 'FRMS_PRODUCTION_NETWORK_GUARD').toEqual([]);
