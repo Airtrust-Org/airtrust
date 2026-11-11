@@ -15,6 +15,7 @@ import {
   enrollLearner,
   assignSyntheticQaCourse,
   clickCanonicalLearnerRegistration,
+  waitForCanonicalScormWrapperReady,
   assertQaLearnerIdentity,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
@@ -1730,4 +1731,44 @@ test('canonical learner registration never clicks unrecognized buttons or fabric
   };
   assert.equal(await clickCanonicalLearnerRegistration(page, 0), false);
   assert.deepEqual(names, ['Registrar no AirTrust', 'Confirmar conclusão']);
+});
+
+test('reloaded player does not consent before wrapper and delayed SCO are ready', async () => {
+  let framesReady = false;
+  let listenerReady = false;
+  let attemptedConsent = 0;
+  const sco = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/qa-test/index.html',
+    evaluate: async () => framesReady,
+  };
+  const wrapper = {
+    url: () => 'https://api.airtrust.online/api/lms/scorm/launch/567',
+    evaluate: async () => listenerReady ? { location: '63/63', lessonStatus: 'completed' } : null,
+    $: async (sel) => sel === '#scorm-frame' ? { contentFrame: async () => framesReady ? sco : null } : null,
+  };
+  const page = {
+    evaluate: async () => false,
+    frames: () => framesReady ? [wrapper, sco] : [],
+    $: async () => null,
+    getByRole: () => { attemptedConsent++; throw new Error('CONSENT_PREMATURE'); },
+  };
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+  assert.equal(attemptedConsent, 0);
+  framesReady = true;
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+  assert.equal(attemptedConsent, 0);
+  listenerReady = true;
+  // Wrapper evaluate returns the same truthy state for both readiness reads.
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), true);
+  assert.equal(attemptedConsent, 0);
+});
+
+test('reloaded SCORM wrapper must never be inferred ready from just the player button', async () => {
+  const page = {
+    evaluate: async () => false,
+    frames: () => [],
+    $: async () => null,
+    getByRole: () => ({ count: async () => 1 }),
+  };
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
 });

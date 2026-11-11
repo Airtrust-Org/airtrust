@@ -1242,6 +1242,31 @@ async function readWrapperRuntimeState(wrapper) {
 }
 
 /**
+ * After a React player reload, a visible completion button is NOT proof that
+ * its wrapper postMessage listener exists yet. Wait until the actual SCORM
+ * wrapper and SCO are attached, initialized and readable before consenting.
+ */
+export async function waitForCanonicalScormWrapperReady(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const wrapper = await resolveScormWrapper(page);
+    const sco = await resolveScormContentFrame(page);
+    if (wrapper && sco) {
+      const runtime = await readWrapperRuntimeState(wrapper);
+      const loaded = await wrapper.evaluate(() =>
+        document.readyState === 'complete' &&
+        Boolean(window.API || window.API_1484_11) &&
+        Boolean(document.querySelector('#scorm-frame')?.contentWindow),
+      ).catch(() => false);
+      if (loaded && runtime) return true;
+    }
+    if (Date.now() >= deadline) break;
+    await delay(500);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+/**
  * Click only the canonical, enabled learner registration control. It may be
  * rendered asynchronously after the SCO has saved its terminal evidence.
  * Returning false is an explicit failure to observe learner consent, never
@@ -2136,7 +2161,12 @@ async function driveScormCourseInBrowser({
       // its enabled, explicitly clicked completion control.
       console.log('[LMS_HOMOLOGATION] Reabrindo player para localizar confirmação canônica...');
       await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
-      registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      const wrapperReady = await waitForCanonicalScormWrapperReady(page, 20_000);
+      if (wrapperReady) {
+        registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      } else {
+        console.log('[LMS_HOMOLOGATION] Wrapper SCORM não pronto após reabertura; nenhuma confirmação sintética enviada.');
+      }
     }
     if (registrationAttempted) await page.waitForTimeout(2000);
   }
