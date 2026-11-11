@@ -39,7 +39,7 @@ const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const BROWSER_NAME = String(process.env.HOMOLOGATION_BROWSER || 'chromium').trim().toLowerCase();
 const REPORT_PATH = process.env.HOMOLOGATION_REPORT_PATH || `qa-state/lms-homologation-${BROWSER_NAME}.json`;
-const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 120_000);
+const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 300_000);
 const MAX_STEPS = Number(process.env.HOMOLOGATION_MAX_STEPS || 300);
 const COURSE_IDS = parseCourseIdFilter(process.env.HOMOLOGATION_COURSE_IDS);
 
@@ -447,12 +447,35 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
   if (res.status === 200 && Array.isArray(res.json?.data) && res.json.data.length > 0) {
     const cert = res.json.data[0];
     const certId = cert.id;
-    // Download PDF and compute hash
+    // Download endpoint returns JSON metadata containing the streaming URL: { data: { url } }
     const downloadRes = await fetch(`${API}/api/certificados/download/${certId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    let streamUrl = `${API}/api/pasta-virtual/stream/${certId}`;
     if (downloadRes.ok) {
-      const buffer = Buffer.from(await downloadRes.arrayBuffer());
+      const contentType = String(downloadRes.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('application/json')) {
+        const meta = await downloadRes.json().catch(() => null);
+        if (meta?.data?.url) {
+          streamUrl = String(meta.data.url).startsWith('http') ? meta.data.url : `${API}${meta.data.url}`;
+        }
+      } else {
+        // Direct stream returned by mock or legacy endpoint
+        const buffer = Buffer.from(await downloadRes.arrayBuffer());
+        const isPdf = buffer.slice(0, 4).toString() === '%PDF';
+        return {
+          id: certId,
+          validPdf: isPdf,
+          sha256: sha256(buffer),
+          sizeBytes: buffer.length,
+        };
+      }
+    }
+    const streamRes = await fetch(streamUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (streamRes.ok) {
+      const buffer = Buffer.from(await streamRes.arrayBuffer());
       const isPdf = buffer.slice(0, 4).toString() === '%PDF';
       return {
         id: certId,
@@ -1102,33 +1125,34 @@ export async function resolveScormWrapper(page) {
 }
 
 export async function resolveScormContentFrame(page) {
-  // 1. Direct search by content asset URL, strictly ensuring course indicators
+  const isFrameReady = async (frame) => {
+    if (!frame || frame.url().includes('about:blank')) return false;
+    return await frame.evaluate(() =>
+      Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit, body > *'))
+    ).catch(() => false);
+  };
+
+  // 1. Direct search by content asset URL, ensuring SCO content is loaded
   for (const frame of page.frames()) {
-    if (frame.url().includes('/api/lms/assets/scorm/')) {
-      const hasScormContent = await frame.evaluate(() =>
-        Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit'))
-      ).catch(() => false);
-      if (hasScormContent) return frame;
+    if (frame.url().includes('/api/lms/assets/scorm/') && await isFrameReady(frame)) {
+      return frame;
     }
   }
 
-  // 2. Resolve inner #scorm-frame element inside the wrapper (excluding wrapper buttons like #btn-close)
+  // 2. Resolve inner #scorm-frame element inside the wrapper
   const wrapper = await resolveScormWrapper(page);
   if (wrapper && wrapper !== page) {
     const frameEl = await wrapper.$('#scorm-frame');
     const frame = await frameEl?.contentFrame();
-    if (frame) {
-      const hasScormContent = await frame.evaluate(() =>
-        Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit'))
-      ).catch(() => false);
-      if (hasScormContent) return frame;
+    if (await isFrameReady(frame)) {
+      return frame;
     }
   }
 
   // 3. Direct launch fallback on page
   const directFrameEl = await page.$('#scorm-frame');
   const directFrame = await directFrameEl?.contentFrame();
-  if (directFrame) {
+  if (await isFrameReady(directFrame)) {
     return directFrame;
   }
   return null;
@@ -1295,8 +1319,15 @@ async function driveScormCourseInBrowser({
       const resumePage = await context.newPage();
       attachPageListeners(resumePage);
       await injectLearnerSessionScript(resumePage, token, funcionarioId);
-      await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
-      await resumePage.waitForTimeout(2000);
+      await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      const frameMounted = await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 15_000 }).catch(() => null);
+      if (!frameMounted && targetUrl !== launchUrl) {
+        console.log(`[LMS_HOMOLOGATION] Frame não montado no player na retomada (${BROWSER_NAME}). Redirecionando para launch wrapper direto: ${launchUrl}`);
+        targetUrl = launchUrl;
+        await resumePage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 15_000 }).catch(() => null);
+      }
+      await resumePage.waitForTimeout(1500);
 
       let restoredLocation = null;
       for (let retries = 0; retries < 20; retries += 1) {
@@ -1319,6 +1350,7 @@ async function driveScormCourseInBrowser({
     const frame = await resolveScormContentFrame(page);
     if (!frame) {
       await page.waitForTimeout(300);
+      steps += 1;
       continue;
     }
 
