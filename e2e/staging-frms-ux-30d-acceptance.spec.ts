@@ -158,17 +158,32 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       url.pathname === '/api/me/operational-access' &&
       request.method() === 'GET';
   };
-  const accessOutcome = Promise.race([
-    page.waitForResponse((response) => isAccessGet(response.request()), { timeout: 25_000 })
-      .then((response) => ({ kind: 'response' as const, status: response.status() })),
+  // The landing page may have an older access fetch still in flight.
+  // A full document navigation aborts it; only the new FRMS document's own
+  // request can establish the outcome for this acceptance.
+  const accessOutcome = page.waitForEvent('request', {
+    predicate: (request) => {
+      if (!isAccessGet(request)) return false;
+      try {
+        return new URL(request.frame().url()).pathname === '/frms';
+      } catch {
+        return false;
+      }
+    },
+    timeout: 25_000,
+  }).then((accessRequest) => Promise.race([
+    page.waitForResponse(
+      (response) => response.request() === accessRequest,
+      { timeout: 25_000 },
+    ).then((response) => ({ kind: 'response' as const, status: response.status() })),
     page.waitForEvent('requestfailed', {
-      predicate: (request) => isAccessGet(request),
+      predicate: (request) => request === accessRequest,
       timeout: 25_000,
     }).then((request) => ({
       kind: 'failed' as const,
       reason: request.failure()?.errorText || 'network_unknown',
     })),
-  ]);
+  ]));
   const snapshotRequest = page.waitForResponse(
     (response) => response.url().includes('/api/frms/operational-snapshot') &&
       response.url().includes(DAY),
