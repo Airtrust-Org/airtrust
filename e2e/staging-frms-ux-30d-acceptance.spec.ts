@@ -174,6 +174,9 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       response.url().includes(DAY),
     { timeout: 50_000 },
   );
+  // If the preceding access guard fails, consume this pending listener's
+  // rejection while still preserving its failure for the normal await below.
+  void snapshotRequest.catch(() => {});
   await page.goto(BASE + '/frms?data=' + DAY, { waitUntil: 'domcontentloaded' });
   const access = await accessOutcome;
   if (access.kind === 'failed') {
