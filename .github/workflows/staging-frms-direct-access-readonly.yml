@@ -1,0 +1,93 @@
+name: Staging FRMS Direct Access QA (Read Only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        required: true
+        type: string
+      expected_deployed_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+concurrency:
+  group: airtrust-frms-direct-access-readonly
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      GITHUB_TOKEN: ${{ github.token }}
+      FRMS_QA_EMAIL: qa-frms-ux@staging.airtrust.invalid
+      FRMS_QA_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Strict main and staging provenance gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CONFIRMATION" = AIRTRUST_FRMS_DIRECT_READONLY
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git merge-base --is-ancestor "$EXPECTED_SHA" HEAD
+          [[ -n "$FRMS_QA_EMAIL" && -n "$FRMS_QA_PASSWORD" ]]
+          RELEASE_SHA="$EXPECTED_SHA" node scripts/ci/verify-release-gates.mjs
+          node --input-type=module <<'NODE'
+          const sha=process.env.EXPECTED_SHA;
+          const api=await fetch('https://airtrust-api-staging.airtrust.workers.dev/api/version',{signal:AbortSignal.timeout(10000)});
+          if(!api.ok||(await api.json())?.data?.sourceSha!==sha)throw Error('WORKER_SHA_MISMATCH');
+          const pages=await fetch('https://staging.airtrust.pages.dev/',{signal:AbortSignal.timeout(10000)});
+          if(!pages.ok||!(await pages.text()).includes(sha.slice(0,7)))throw Error('PAGES_SHA_MISMATCH');
+          console.log('FRMS_DIRECT_STAGING_PROVENANCE_PASS');
+          NODE
+      - name: Compare QA authentication and operational scope directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {login,extractAccessToken} from './scripts/smoke-auth-common.mjs';
+          const base='https://airtrust-api-staging.airtrust.workers.dev';
+          if(process.env.FRMS_QA_EMAIL!=='qa-frms-ux@staging.airtrust.invalid')throw Error('QA_IDENTITY_NOT_ALLOWLISTED');
+          const started=performance.now();
+          const logged=await login(base,process.env.FRMS_QA_EMAIL,process.env.FRMS_QA_PASSWORD);
+          let token=extractAccessToken(logged);
+          const tenant=jwt=>Number(JSON.parse(Buffer.from(jwt.split('.')[1],'base64url')).empresa_id);
+          if(tenant(token)!==999013)throw Error('QA_TENANT_MISMATCH');
+          console.log('FRMS_DIRECT_LOGIN_PASS elapsed_ms='+Math.round(performance.now()-started));
+          const chosen=await fetch(base+'/api/me/operational-access/session-profile',{
+            method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+            body:JSON.stringify({role:'GESTOR'}),signal:AbortSignal.timeout(12000)});
+          const profile=await chosen.json().catch(()=>null);
+          if(!chosen.ok||profile?.data?.activeRole!=='GESTOR')throw Error('QA_GESTOR_SELECTION_HTTP_'+chosen.status);
+          token=profile.data.accessToken;
+          if(tenant(token)!==999013)throw Error('QA_SELECTED_TENANT_MISMATCH');
+          console.log('FRMS_DIRECT_PROFILE_PASS');
+          async function measure(path,name){
+            const t=performance.now();let response;
+            try{response=await fetch(base+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+              signal:AbortSignal.timeout(18000)});}
+            catch(e){console.log(name+'_TRANSPORT_'+(e?.name==='TimeoutError'?'TIMEOUT':'FAILED')+' elapsed_ms='+Math.round(performance.now()-t));throw Error(name+'_UNAVAILABLE');}
+            const elapsed=Math.round(performance.now()-t);
+            const body=await response.json().catch(()=>null);
+            console.log(name+' http='+response.status+' elapsed_ms='+elapsed+' envelope='+String(body?.success===true));
+            if(!response.ok||body?.success!==true)throw Error(name+'_HTTP_'+response.status);
+            return body;
+          }
+          await measure('/api/auth/me','AUTH_BASELINE');
+          const a=await measure('/api/me/operational-access','FRMS_SCOPE_FIRST');
+          const b=await measure('/api/me/operational-access','FRMS_SCOPE_REPEAT');
+          for(const v of [a,b])if(!Array.isArray(v?.data?.domains)||!Array.isArray(v?.data?.setor_ids))throw Error('SCOPE_RESPONSE_INVALID');
+          console.log('FRMS_DIRECT_ACCESS_QA_PASS requests=2 tenant=999013 production_writes=0');
+          NODE
