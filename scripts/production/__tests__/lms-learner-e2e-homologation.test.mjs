@@ -13,6 +13,7 @@ import {
   checkLearnerQualifications,
   determineSlideAction,
   enrollLearner,
+  assignSyntheticQaCourse,
   assertQaLearnerIdentity,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
@@ -1587,4 +1588,94 @@ test('live QA driver does not click every generic button before navigation and r
   assert.match(source, /driver_action_counts: driverActionCounts/);
   assert.match(source, /driver_last_action_types: driverLastActionTypes/);
   assert.match(source, /\^\[a-z-\]\{1,40\}\$/, 'action types must be whitelist-shaped, not DOM content');
+});
+
+test('QA admin assignment: assigns only run-scoped ALUNO and verifies learner readback', async () => {
+  const old = globalThis.fetch;
+  const learner = makeQaToken(193);
+  const admin = makeQaToken(777, 'admin@airtrust.online', 6, 'ADMIN');
+  const calls = [];
+  let enrolled = false;
+  globalThis.fetch = async (url, options = {}) => {
+    const method = options.method || 'GET';
+    calls.push({ path: new URL(url).pathname, method, auth: options.headers?.Authorization });
+    const body = (data, status = 200) => new Response(JSON.stringify({ success: true, data }),
+      { status, headers: { 'Content-Type': 'application/json' } });
+    if (String(url).endsWith('/minhas-ead')) {
+      assert.equal(options.headers?.Authorization, 'Bearer ' + learner);
+      return body(enrolled ? [{ id: 9123, curso_id: 32, funcionario_id: 193,
+        empresa_id: 6, status: 'NAO_INICIADO' }] : []);
+    }
+    if (String(url).endsWith('/api/lms/matriculas') && method === 'POST') {
+      assert.equal(options.headers?.Authorization, 'Bearer ' + admin);
+      assert.deepEqual(JSON.parse(options.body), { curso_id: 32, funcionario_id: 193 });
+      enrolled = true;
+      return body({ id: 9123 }, 201);
+    }
+    throw new Error('UNEXPECTED_QA_REQUEST');
+  };
+  try {
+    const id = await assignSyntheticQaCourse(admin, learner, 32, 193);
+    assert.equal(id, 9123);
+    assert.deepEqual(calls.map(c => c.method), ['GET', 'POST', 'GET']);
+    assert.equal(calls.filter(c => c.method === 'POST').length, 1);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: invalid admin role, tenant or learner identity makes zero writes', async () => {
+  const old = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (...args) => { calls.push(args); throw new Error('UNEXPECTED_NETWORK'); };
+  try {
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ALUNO'), makeQaToken(193), 32, 193),
+      /QA_ASSIGN_ADMIN_ROLE_REQUIRED/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 7, 'ADMIN'), makeQaToken(193), 32, 193),
+      /QA_ASSIGN_ADMIN_TENANT_MISMATCH/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ADMIN'), makeQaToken(193, 'real@example.com'), 32, 193),
+      /QA_LEARNER_EMAIL_NOT_ALLOWLISTED/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ADMIN'), makeQaToken(193), 0, 193),
+      /QA_ASSIGN_COURSE_ID_INVALID/);
+    assert.equal(calls.length, 0);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: existing non-fresh enrollment is never reset or reassigned', async () => {
+  const old = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push(options.method || 'GET');
+    return new Response(JSON.stringify({ success: true, data: [
+      { id: 901, curso_id: 32, funcionario_id: 193, status: 'EM_ANDAMENTO', empresa_id: 6 },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(assignSyntheticQaCourse(
+      makeQaToken(7, 'admin@airtrust.online', 6, 'ADMIN'), makeQaToken(193), 32, 193,
+    ), /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.deepEqual(calls, ['GET']);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: mismatched readback fails closed without further mutations', async () => {
+  const old = globalThis.fetch;
+  let requests = 0, posts = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    requests += 1;
+    if ((options.method || 'GET') === 'POST') {
+      posts += 1;
+      return new Response(JSON.stringify({ success: true, data: { id: 9123 } }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }
+    const data = requests === 1 ? [] :
+      [{ id: 9123, curso_id: 32, funcionario_id: 999, status: 'NAO_INICIADO', empresa_id: 6 }];
+    return new Response(JSON.stringify({ success: true, data }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(assignSyntheticQaCourse(
+      makeQaToken(7, 'admin@airtrust.online', 6, 'ADMIN'), makeQaToken(193), 32, 193,
+    ), /QA_ASSIGN_READBACK_MISMATCH/);
+    assert.equal(posts, 1);
+    assert.equal(requests, 3);
+  } finally { globalThis.fetch = old; }
 });
