@@ -66,5 +66,13 @@ export function validateRollbackManifest(
   manifest: unknown,
   options: HashAndCount,
 ): { body: BatchBody; planSha256: string; forwardPlanSha256: string; sourceSha: string | null; total: number };
+export interface CycleOperation {
+  id: number;
+  spec: CyclePointerRow;
+  from: { qh: number | null };
+  to: { qh: number | null };
+  direction: 'forward' | 'rollback';
+}
+export function casUpdateSql(op: CycleOperation): string;
 export function countDanglingTotal(port: ExecutorPort): number;
 export function executeManifest(options: ExecuteOptions): ExecutionReport;

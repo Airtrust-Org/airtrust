@@ -10,6 +10,7 @@ import {
   casUpdateSql,
   executeManifest,
   hashBody,
+  type CycleOperation,
   type ExecutionManifest,
   type ExecutorPort,
   type RollbackManifest,
@@ -261,9 +262,9 @@ describe('LMS cycle dangling pointer batch (local SQLite only)', () => {
   });
 
   it('the forward statement carries the soft-deleted guard and the rollback statement does not need it', () => {
-    const op = { id: 8, spec: manifest.cycle_pointers[0], from: { qh: 1001 }, to: { qh: null }, direction: 'forward' };
+    const op: CycleOperation = { id: 8, spec: manifest.cycle_pointers[0], from: { qh: 1001 }, to: { qh: null }, direction: 'forward' };
     expect(casUpdateSql(op)).toContain('h.deleted_at IS NOT NULL');
-    const inverse = { ...op, direction: 'rollback', from: { qh: null }, to: { qh: 1001 } };
+    const inverse: CycleOperation = { ...op, direction: 'rollback', from: { qh: null }, to: { qh: 1001 } };
     expect(casUpdateSql(inverse)).not.toContain('qualificacoes_historico');
     expect(casUpdateSql(inverse)).toContain('qualificacao_historico_id IS NULL');
   });
