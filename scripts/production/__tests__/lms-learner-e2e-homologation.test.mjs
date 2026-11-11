@@ -949,6 +949,31 @@ test('resolveScormContentFrame excludes launch wrapper with hidden completion ov
   assert.equal(resolved.url().includes('assets/scorm'), true);
 });
 
+test('regression: resolveScormContentFrame ignores about:blank frame until SCO course readiness is detected', async () => {
+  let contentReady = false;
+  const mockBlankFrame = {
+    url: () => 'about:blank',
+    evaluate: async () => false,
+  };
+  const mockSCOFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/pkg-456/index.html',
+    evaluate: async () => contentReady,
+  };
+  const mockPage = {
+    frames: () => [mockBlankFrame, mockSCOFrame],
+    evaluate: async () => false,
+    $: async () => null,
+  };
+
+  // While SCO response is still loading, resolveScormContentFrame returns null rather than about:blank
+  assert.equal(await resolveScormContentFrame(mockPage), null);
+
+  // Once SCO content finishes loading, resolveScormContentFrame resolves the frame
+  contentReady = true;
+  const resolved = await resolveScormContentFrame(mockPage);
+  assert.equal(resolved, mockSCOFrame);
+});
+
 test('regression: determineSlideAction recognizes and clicks "Revisar cenário pendente" on study_end without stalling', () => {
   let pendingClicked = false;
   const mockDoc = {

@@ -1125,19 +1125,26 @@ export async function resolveScormWrapper(page) {
 }
 
 export async function resolveScormContentFrame(page) {
-  // 1. Direct search by content asset URL
+  const isFrameReady = async (frame) => {
+    if (!frame || frame.url().includes('about:blank')) return false;
+    return await frame.evaluate(() =>
+      Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit, body > *'))
+    ).catch(() => false);
+  };
+
+  // 1. Direct search by content asset URL, ensuring SCO content is loaded
   for (const frame of page.frames()) {
-    if (frame.url().includes('/api/lms/assets/scorm/')) {
+    if (frame.url().includes('/api/lms/assets/scorm/') && await isFrameReady(frame)) {
       return frame;
     }
   }
 
-  // 2. Resolve inner #scorm-frame element inside the wrapper (excluding wrapper buttons like #btn-close)
+  // 2. Resolve inner #scorm-frame element inside the wrapper
   const wrapper = await resolveScormWrapper(page);
   if (wrapper && wrapper !== page) {
     const frameEl = await wrapper.$('#scorm-frame');
     const frame = await frameEl?.contentFrame();
-    if (frame) {
+    if (await isFrameReady(frame)) {
       return frame;
     }
   }
@@ -1145,7 +1152,7 @@ export async function resolveScormContentFrame(page) {
   // 3. Direct launch fallback on page
   const directFrameEl = await page.$('#scorm-frame');
   const directFrame = await directFrameEl?.contentFrame();
-  if (directFrame) {
+  if (await isFrameReady(directFrame)) {
     return directFrame;
   }
   return null;
