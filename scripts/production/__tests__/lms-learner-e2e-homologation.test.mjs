@@ -721,3 +721,53 @@ test('regression: determineSlideAction does not oscillate between alternatives o
   const step3 = determineSlideAction(mockDoc);
   assert.equal(step3.type, 'assessment-answer');
 });
+
+test('regression: determineSlideAction does not oscillate between scenario options and advances to next-button', () => {
+  let selectedOption = null;
+  let nextClicked = false;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '#next') {
+        return {
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          click: () => {
+            nextClicked = true;
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector.includes('data-opt') || selector.includes('button.option')) {
+        // Return 4 scenario options A, B, C, D
+        return [0, 1, 2, 3].map((i) => ({
+          disabled: false,
+          getAttribute: (attr) => (attr === 'data-opt' ? String(i) : null),
+          hasAttribute: () => false,
+          style: {},
+          classList: {
+            contains: (cls) => cls === 'selected' && selectedOption === i,
+          },
+          click: () => {
+            selectedOption = i;
+          },
+        }));
+      }
+      return [];
+    },
+  };
+
+  // Step 1: No scenario option selected -> chooses option 0
+  const step1 = determineSlideAction(mockDoc);
+  assert.equal(step1.type, 'scenario-option');
+  assert.equal(selectedOption, 0);
+
+  // Step 2: Option 0 is already selected -> MUST NOT choose another option, must advance with next-button
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'next-button');
+  assert.equal(nextClicked, true);
+});

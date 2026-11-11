@@ -811,7 +811,23 @@ export function determineSlideAction(doc, {
     domTotal = Number(counterMatch[2]);
   }
 
-  // 1. Assessment questions: stop selecting alternatives once the question already has an answer
+  // 1. Scenario options: stop selecting once an option is chosen in the scenario
+  const scenarioOptions = Array.from(doc.querySelectorAll('[data-opt], button.option')).filter(visible);
+  const hasSelectedScenarioOption = scenarioOptions.some((el) => {
+    return el.classList?.contains?.('selected') ||
+      el.classList?.contains?.('active') ||
+      el.getAttribute?.('aria-pressed') === 'true';
+  });
+
+  if (!hasSelectedScenarioOption && scenarioOptions.length > 0) {
+    const unselectedScenarioOpt = scenarioOptions.find((el) => !el.disabled);
+    if (unselectedScenarioOpt) {
+      unselectedScenarioOpt.click?.();
+      return { type: 'scenario-option', domCurrent, domTotal, atLastUnit, decisionResolved: true };
+    }
+  }
+
+  // 2. Assessment questions: stop selecting alternatives once the question already has an answer
   const assessOptions = Array.from(doc.querySelectorAll('[data-answer], button.answer')).filter(visible);
   const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
     return el.classList?.contains?.('selected') ||
@@ -824,7 +840,7 @@ export function determineSlideAction(doc, {
     const unselectedAnswer = assessOptions.find((el) => !el.disabled);
     if (unselectedAnswer) {
       unselectedAnswer.click?.();
-      return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+      return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit, decisionResolved: true };
     }
   }
 
@@ -834,7 +850,7 @@ export function determineSlideAction(doc, {
     return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
   }
 
-  // 2. Interactive choices / radio options
+  // 3. Interactive choices / radio options
   const choices = Array.from(doc.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
   if (choices.length > 0) {
     const hasSelectedChoice = choices.some((c) => c.classList?.contains?.('selected') || c.checked);
@@ -1079,12 +1095,32 @@ async function driveScormCourseInBrowser({
       }
 
       // 3. Scenario options and interactive decision choices
-      const scenarioOpt = Array.from(document.querySelectorAll('[data-opt], button.option')).find((el) => {
-        return visible(el) && !el.disabled && !el.classList.contains('selected');
+      // Stop selecting options once an option is already chosen in the active scenario
+      const scenarioOptions = Array.from(document.querySelectorAll('[data-opt], button.option')).filter(visible);
+      const hasSelectedScenarioOption = scenarioOptions.some((el) => {
+        return el.classList.contains('selected') ||
+          el.classList.contains('active') ||
+          el.getAttribute('aria-pressed') === 'true';
       });
-      if (scenarioOpt) {
-        scenarioOpt.click();
-        return { type: 'scenario-option', domCurrent, domTotal, atLastUnit };
+
+      if (!hasSelectedScenarioOption && scenarioOptions.length > 0) {
+        let targetOpt = null;
+        if (Array.isArray(plan) && plan.length > 0) {
+          const planned = plan.find((p) => p.slideIndex === domCurrent || p.unit === domCurrent);
+          if (planned && planned.optionIndex != null) {
+            targetOpt = scenarioOptions.find((el) => {
+              const optIdx = el.getAttribute('data-opt');
+              return optIdx != null && Number(optIdx) === Number(planned.optionIndex);
+            });
+          }
+        }
+        if (!targetOpt) {
+          targetOpt = scenarioOptions.find((el) => !el.disabled);
+        }
+        if (targetOpt) {
+          targetOpt.click();
+          return { type: 'scenario-option', domCurrent, domTotal, atLastUnit, decisionResolved: true };
+        }
       }
 
       // 4. Assessment questions: options and question navigation
@@ -1224,8 +1260,12 @@ async function driveScormCourseInBrowser({
     if (action?.type === 'submit') {
       submittedInCurrentSlide = true;
     }
-    if (action?.type === 'scenario-option' || action?.type === 'assessment-answer') {
-      if (action.domCurrent > 0) {
+    if (
+      action?.type === 'scenario-option' ||
+      action?.type === 'assessment-answer' ||
+      action?.decisionResolved
+    ) {
+      if (action?.domCurrent > 0) {
         resolvedDecisionIndices.add(action.domCurrent);
       }
     }
