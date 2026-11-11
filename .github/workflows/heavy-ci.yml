@@ -47,10 +47,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends sqlite3
+      - name: Verify real SQLite engine without apt mirror dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            command -v python3 >/dev/null 2>&1 || { echo PYTHON3_SQLITE_ENGINE_REQUIRED >&2; exit 1; }
+            sudo install -m 0755 scripts/ci/sqlite3-python-compat.py /usr/local/bin/sqlite3
+          fi
+          node --test scripts/ci/sqlite3-python-compat.test.mjs
       - run: npm run test:coverage
 
   worker-tests-1:
@@ -77,10 +82,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends sqlite3
+      - name: Verify real SQLite engine without apt mirror dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            command -v python3 >/dev/null 2>&1 || { echo PYTHON3_SQLITE_ENGINE_REQUIRED >&2; exit 1; }
+            sudo install -m 0755 scripts/ci/sqlite3-python-compat.py /usr/local/bin/sqlite3
+          fi
+          node --test scripts/ci/sqlite3-python-compat.test.mjs
       - run: cd worker-airtrust && npx vitest run --shard=1/2
       - name: Verify governed qualification renewal repair with SQLite
         run: python3 scripts/__tests__/qualification-renewal-chain-repair.test.py
@@ -110,10 +120,16 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends sqlite3 git
+      - name: Verify real SQLite and Git dependencies without apt mirrors
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v git >/dev/null 2>&1 || { echo GIT_REQUIRED >&2; exit 1; }
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            command -v python3 >/dev/null 2>&1 || { echo PYTHON3_SQLITE_ENGINE_REQUIRED >&2; exit 1; }
+            sudo install -m 0755 scripts/ci/sqlite3-python-compat.py /usr/local/bin/sqlite3
+          fi
+          node --test scripts/ci/sqlite3-python-compat.test.mjs
       - run: cd worker-airtrust && npx vitest run --shard=2/2
 
   lms-smoke:
@@ -140,10 +156,15 @@ jobs:
             worker-airtrust/package-lock.json
       - run: npm ci
       - run: npm --prefix worker-airtrust ci
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends sqlite3
+      - name: Verify real SQLite engine without apt mirror dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v sqlite3 >/dev/null 2>&1; then
+            command -v python3 >/dev/null 2>&1 || { echo PYTHON3_SQLITE_ENGINE_REQUIRED >&2; exit 1; }
+            sudo install -m 0755 scripts/ci/sqlite3-python-compat.py /usr/local/bin/sqlite3
+          fi
+          node --test scripts/ci/sqlite3-python-compat.test.mjs
       - name: Run LMS smoke against isolated local D1
         shell: bash
         run: |
