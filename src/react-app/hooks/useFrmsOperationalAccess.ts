@@ -192,10 +192,11 @@ export function useFrmsOperationalAccess() {
   const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
     // Never request operational permissions before the persisted session has
-    // been verified. The key must not reuse another user/tenant's result.
+    // been verified. Keep tenant/user/profile in the cache identity. A missing
+    // empresas response does not itself revoke a server-verified JWT.
     queryKey: ['frms-operational-access', empresaAtualId, user?.id, user?.role],
     queryFn: fetchFrmsOperationalAccess,
-    enabled: !isLoading && isAuthenticated && empresaAtualId !== null,
+    enabled: !isLoading && isAuthenticated,
     retry: false,
     staleTime: 2 * 60 * 1000,
   });
