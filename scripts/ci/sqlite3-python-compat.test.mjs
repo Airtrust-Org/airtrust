@@ -1,3 +1,7 @@
+// source_reference: scripts/ci/sqlite3-python-compat.py and scripts/setup-local-lms-smoke-db.sh
+// operational_decision: CI-only disposable SQLite unit fixture; never production D1.
+// dry_run_required: false; no remote system or operational data is accessed.
+// rollback_plan_required: each test deletes its own isolated temporary SQLite file.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
