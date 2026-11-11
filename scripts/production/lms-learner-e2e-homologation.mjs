@@ -290,6 +290,75 @@ export async function enrollLearner(token, cursoId, funcionarioId) {
   throw new Error(`QA_ENROLLMENT_HTTP_${Number(res.status) || 0}`);
 }
 
+/**
+ * QA-only administrative assignment. A published course is not necessarily
+ * self-enrollable: its sector policy may intentionally reject students.
+ * Explicit administrative assignment is the canonical workflow, performed
+ * ONLY for a run-scoped synthetic ALUNO after verifying tenant and identity.
+ *
+ * Never use this function as a fallback after a denied learner write, and
+ * never reset/reverse/delete a previous enrollment.
+ */
+export async function assignSyntheticQaCourse(adminToken, learnerToken, courseId, funcionarioId) {
+  assertQaLearnerIdentity(learnerToken, funcionarioId);
+  const adminClaims = decodeJwtPayload(adminToken || '');
+  assert(Number(adminClaims?.empresa_id) === TARGET_COMPANY_ID, 'QA_ASSIGN_ADMIN_TENANT_MISMATCH');
+  assert(['ADMIN', 'ADMINISTRADOR'].includes(String(adminClaims?.role || '').toUpperCase()),
+    'QA_ASSIGN_ADMIN_ROLE_REQUIRED');
+  assert(Number.isSafeInteger(courseId) && courseId > 0, 'QA_ASSIGN_COURSE_ID_INVALID');
+  assert(Number.isSafeInteger(funcionarioId) && funcionarioId > 0, 'QA_ASSIGN_EMPLOYEE_ID_INVALID');
+
+  // Read student-owned enrollments before every privileged operation.
+  const existing = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${learnerToken}` },
+  });
+  assert(existing.status === 200 && Array.isArray(existing.json?.data),
+    'QA_ASSIGN_OWNERSHIP_UNVERIFIED');
+  const matches = existing.json.data.filter(
+    (row) => Number(row.curso_id) === courseId && !row.deleted_at,
+  );
+  assert(matches.length <= 1, 'QA_ASSIGN_AMBIGUOUS_CYCLE');
+  if (matches.length) {
+    const match = matches[0];
+    assert(Number(match.funcionario_id) === funcionarioId &&
+      (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
+    'QA_ASSIGN_OWNERSHIP_MISMATCH');
+    assert(String(match.status || '').toUpperCase() === 'NAO_INICIADO',
+      'QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
+    const id = Number(match.id);
+    assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
+    return id;
+  }
+
+  // Only an authenticated tenant administrator can designate training to QA.
+  const assigned = await fetchJson(`${API}/api/lms/matriculas`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ curso_id: courseId, funcionario_id: funcionarioId }),
+  });
+  assert(assigned.status === 200 || assigned.status === 201,
+    `QA_ASSIGN_HTTP_${Number(assigned.status) || 0}`);
+  const id = Number(assigned.json?.data?.id);
+  assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
+
+  // Administrative success alone cannot prove the student owns this cycle.
+  const readback = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${learnerToken}` },
+  });
+  assert(readback.status === 200 && Array.isArray(readback.json?.data),
+    'QA_ASSIGN_READBACK_UNAVAILABLE');
+  const match = readback.json.data.find((row) => Number(row.id) === id);
+  assert(match && Number(match.curso_id) === courseId &&
+    Number(match.funcionario_id) === funcionarioId &&
+    (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID) &&
+    String(match.status || '').toUpperCase() === 'NAO_INICIADO',
+  'QA_ASSIGN_READBACK_MISMATCH');
+  return id;
+}
+
 async function getMatriculaDetail(token, matriculaId) {
   const res = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -2236,7 +2305,9 @@ export async function runHomologation() {
         }
 
         // 1. Enroll learner
-        const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId, adminToken);
+        const matriculaId = await assignSyntheticQaCourse(
+          adminToken, learner.token, Number(course.id), learner.funcionarioId,
+        );
         console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
 
         // 2. Drive course by content type in real browser
