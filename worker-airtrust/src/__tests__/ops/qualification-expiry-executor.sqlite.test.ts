@@ -127,13 +127,13 @@ describe('qualification expiry governed executor (local SQLite only)', () => {
     expect(plan.blocked.model_validity_ambiguous).toBe(1);
   });
 
-  it('applies exact-day, end-of-month and leap-year rules per model', () => {
+  it('applies the exact-day rule (legacy end-of-month flag ignored) and clamps leap days', () => {
     const byId = new Map(manifest.rows.map((r) => [r.id, r]));
     expect(byId.get(ids.exact)?.next_expiry).toBe('2026-01-15');
-    // end-of-month model, 12 months from 2024-02-29 -> last day of Feb 2025
+    // model with the legacy end-of-month flag set (ignored), 12 months from 2024-02-29 -> last day of Feb 2025
     expect(byId.get(ids.endOfMonthLeap)?.next_expiry).toBe('2025-02-28');
-    // exact-day 24 months from a leap day: planner rule rolls 2026-02-29 over to 2026-03-01
-    expect(byId.get(ids.leapExact)?.next_expiry).toBe('2026-03-01');
+    // exact-day 24 months from a leap day: clamped to the last valid day (2026-02-28), never rolled to 03-01
+    expect(byId.get(ids.leapExact)?.next_expiry).toBe('2026-02-28');
   });
 
   it('produces a deterministic manifest regardless of input order', () => {
@@ -310,7 +310,7 @@ describe('qualification expiry governed executor (local SQLite only)', () => {
     expect(rows.find((r) => r.id === ids.exact)?.data_vencimento).toBe('2025-01-15');
     expect(audits(db, AUDIT_ACTION_APPLY).map((r) => r.entity_id)).toEqual([ids.endOfMonthLeap]);
     for (const change of [
-      'UPDATE qualificacoes_tipos SET vencimento_fim_mes = 0 WHERE id = 601',
+      'UPDATE qualificacoes_tipos SET validade = 36 WHERE id = 601',
       "UPDATE qualificacoes_tipos SET deleted_at = datetime('now') WHERE id = 601",
       "UPDATE qualificacoes_tipos SET codigo = 'RENAMED' WHERE id = 601",
     ]) {

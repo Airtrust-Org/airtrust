@@ -75,6 +75,7 @@ test_endpoint() {
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}📋 FASE 1 & 2: Schema e Tipos${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# vencimento_fim_mes: campo LEGADO ainda presente na resposta (ignorado no calculo)
 test_endpoint "GET /tipos" "GET" "/api/qualificacoes/tipos" 200 "vencimento_fim_mes"
 test_endpoint "GET /tipos/CMA" "GET" "/api/qualificacoes/tipos/CMA" 200 "vencimento_fim_mes"
 echo ""

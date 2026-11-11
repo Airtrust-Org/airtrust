@@ -1,4 +1,4 @@
-import { sqlAddMonthsClamped } from '../../utils/sql-add-months';
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths, sqlCmaAgeValidityMonths } from '../../utils/sql-add-months';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -164,7 +164,7 @@ describe('qualificacoes historico status sort contract', () => {
     const statsSql = calls.find((call) => call.method === 'first' && call.query.includes('as validas,') && call.query.includes('as vencidas,'))?.query || '';
     expect(statsSql).not.toBe('');
     expect(statsSql).not.toContain("julianday('now')");
-    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', 'COALESCE(qh.validade_meses, qt.validade)')})`;
+    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')))})`;
     const predicates = buildVencimentoStatusPredicates(vencimentoExpr);
     expect(statsSql).toContain(`AND ${predicates.valida} THEN 1 ELSE 0 END) as validas`);
     expect(statsSql).toContain(`AND (${predicates.vencendo}) THEN 1 ELSE 0 END) as vencendo`);
@@ -234,7 +234,7 @@ describe('qualificacoes historico status sort contract', () => {
 
     const dataQuery = dataCall?.query || '';
     expect(dataQuery).toContain("WHEN UPPER(COALESCE(qh.status,'')) IN ('PLANEJADA','PLANEJADO') OR qh.data_conclusao IS NULL THEN 1");
-    expect(dataQuery).toContain("qh.validade_meses IS NOT NULL OR qt.validade IS NOT NULL");
+    expect(dataQuery).toContain(sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')));
     // "hoje" é o dia civil de São Paulo (UTC-3), não date('now') em UTC.
     expect(dataQuery).toContain("< date('now','-3 hours') THEN 2");
     // Confirma que o fallback 12 NÃO está presente

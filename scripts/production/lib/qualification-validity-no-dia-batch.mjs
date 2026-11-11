@@ -1,3 +1,5 @@
+// LEGACY NOTE: this batch only NORMALIZES the legacy flag qualificacoes_tipos.vencimento_fim_mes (1 -> 0) and
+//   recomputes stored dates "no dia"; the flag itself no longer influences any expiry calculation.
 // source_reference: owner decisions of 11/11/2026 (follow-up of issue #2158): every expiry is "no dia"; D2 and
 //   MNT_INTEGRACAO_DOUTRINACAO validity 36 -> 24; ASO/G1-SEM/G2 leave the legacy end-of-month mode. Same pattern as
 //   lib/qualification-model-batch.mjs (#2158) and PR #2141/#2153 (qualification-expiry-executor.mjs); the shared

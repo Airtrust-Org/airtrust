@@ -2,6 +2,9 @@
 /**
  * Auditoria e correção de vencimento_fim_mes em qualificações.
  *
+ * LEGADO: a coluna vencimento_fim_mes e ignorada pelo calculo (todo vencimento vence NO DIA,
+ * decisao do dono). Este script apenas relata/normaliza a coluna legada; nao altera datas.
+ *
  * Problema: certificados/vencimentos de tipos OPERACIONAIS saíram com validade
  * no "fim do mês" (ex.: 31/08) quando o correto é "dia exato" (ex.: 17/08).
  * Causa: `qualificacoes_tipos.vencimento_fim_mes = 1` em tipos que deveriam ser 0

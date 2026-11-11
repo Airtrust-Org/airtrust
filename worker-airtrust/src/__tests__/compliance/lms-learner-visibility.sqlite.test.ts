@@ -54,7 +54,7 @@ beforeEach(() => {
       data_vencimento TEXT, data_conclusao TEXT, validade_meses INTEGER, qualificacao_id INTEGER
     );
     CREATE TABLE qualificacoes_tipos (
-      id INTEGER PRIMARY KEY, empresa_id INTEGER, deleted_at TEXT, validade INTEGER
+      id INTEGER PRIMARY KEY, empresa_id INTEGER, deleted_at TEXT, validade INTEGER, codigo TEXT
     );
 
     INSERT INTO funcionarios (id, empresa_id, nome, status, ativo) VALUES
