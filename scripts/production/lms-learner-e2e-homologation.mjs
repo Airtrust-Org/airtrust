@@ -780,6 +780,94 @@ async function drivePptxCourseInBrowser({
 }
 
 // ---------------------------------------------------------------------------
+// Pure Slide Interaction Action Resolver (tested in unit & adversarial suites)
+// ---------------------------------------------------------------------------
+export function determineSlideAction(doc, {
+  plan = [],
+  requiredIndices = [],
+  submittedInSlide = false,
+  clickedGates = [],
+  clickedTouches = [],
+} = {}) {
+  const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+  const visible = (el) => {
+    if (!el) return false;
+    if (el.getAttribute && (el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('hidden'))) return false;
+    if (el.style) {
+      if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+
+  let domCurrent = 0;
+  let domTotal = 0;
+  let atLastUnit = false;
+
+  const counterEl = doc.querySelector('.counter, #count');
+  const counterText = clean(counterEl?.innerText || counterEl?.textContent);
+  const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (counterMatch) {
+    domCurrent = Number(counterMatch[1]);
+    domTotal = Number(counterMatch[2]);
+  }
+
+  // 1. Assessment questions: stop selecting alternatives once the question already has an answer
+  const assessOptions = Array.from(doc.querySelectorAll('[data-answer], button.answer')).filter(visible);
+  const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+    return el.classList?.contains?.('selected') ||
+      el.classList?.contains?.('active') ||
+      el.getAttribute?.('aria-checked') === 'true' ||
+      el.getAttribute?.('aria-pressed') === 'true';
+  });
+
+  if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+    const unselectedAnswer = assessOptions.find((el) => !el.disabled);
+    if (unselectedAnswer) {
+      unselectedAnswer.click?.();
+      return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+    }
+  }
+
+  const qNext = doc.querySelector('#qNext');
+  if (qNext && visible(qNext) && !qNext.disabled) {
+    qNext.click?.();
+    return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 2. Interactive choices / radio options
+  const choices = Array.from(doc.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
+  if (choices.length > 0) {
+    const hasSelectedChoice = choices.some((c) => c.classList?.contains?.('selected') || c.checked);
+    if (!hasSelectedChoice) {
+      const unselected = choices.find((c) => !c.disabled);
+      if (unselected) {
+        unselected.click?.();
+        return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+      }
+    }
+  }
+
+  // 3. Submit
+  const submitBtn = Array.from(doc.querySelectorAll('button, input[type=button]')).find((el) => {
+    const txt = clean(el.innerText || el.value).toLowerCase();
+    return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
+  });
+  if (submitBtn) {
+    submitBtn.click?.();
+    return { type: 'submit', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 4. Next navigation
+  const nextBtn = doc.querySelector('#next');
+  if (nextBtn && visible(nextBtn) && !nextBtn.disabled) {
+    nextBtn.click?.();
+    return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+  }
+
+  return { type: 'none', domCurrent, domTotal, atLastUnit };
+}
+
+// ---------------------------------------------------------------------------
 // SCORM Frame Driver with Interactive Gates & Accordion Support
 // ---------------------------------------------------------------------------
 async function driveScormCourseInBrowser({
@@ -1000,12 +1088,21 @@ async function driveScormCourseInBrowser({
       }
 
       // 4. Assessment questions: options and question navigation
-      const assessOpt = Array.from(document.querySelectorAll('[data-answer], button.answer')).find((el) => {
-        return visible(el) && !el.disabled && !el.classList.contains('selected');
+      // Stop selecting alternatives once the current question already has an answer selected
+      const assessOptions = Array.from(document.querySelectorAll('[data-answer], button.answer')).filter(visible);
+      const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+        return el.classList.contains('selected') ||
+          el.classList.contains('active') ||
+          el.getAttribute('aria-checked') === 'true' ||
+          el.getAttribute('aria-pressed') === 'true';
       });
-      if (assessOpt) {
-        assessOpt.click();
-        return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+
+      if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+        const unselectedAnswer = assessOptions.find((el) => !el.disabled);
+        if (unselectedAnswer) {
+          unselectedAnswer.click();
+          return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+        }
       }
 
       const qNext = document.querySelector('#qNext');
@@ -1040,12 +1137,16 @@ async function driveScormCourseInBrowser({
       }
 
       // 7. Interactive choices / radio options / checklists
+      // If a choice/radio is already selected in the active group, do not toggle others
       const choices = Array.from(document.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
       if (choices.length > 0) {
-        const unselected = choices.find((c) => !c.classList.contains('selected') && !c.checked);
-        if (unselected) {
-          unselected.click();
-          return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+        const hasSelectedChoice = choices.some((c) => c.classList.contains('selected') || c.checked);
+        if (!hasSelectedChoice) {
+          const unselected = choices.find((c) => !c.disabled);
+          if (unselected) {
+            unselected.click();
+            return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+          }
         }
       }
 

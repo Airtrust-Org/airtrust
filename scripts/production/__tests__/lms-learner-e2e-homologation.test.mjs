@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkCertificate,
   checkLearnerQualifications,
+  determineSlideAction,
   enrollLearner,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
@@ -664,4 +665,59 @@ test('adversarial: missing path or assessment evidence is not defaulted to PASS'
   });
   assert.equal(actual.pass, false);
   assert.equal(actual.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('regression: determineSlideAction does not oscillate between alternatives once question is answered and advances to qNext', () => {
+  let qIndex = 0;
+  let selectedOption = null;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '#qNext') {
+        return {
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          click: () => {
+            qIndex += 1;
+            selectedOption = null; // Next question starts with no answer selected
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector.includes('data-answer') || selector.includes('button.answer')) {
+        // Return 3 options for the current question
+        return [0, 1, 2].map((i) => ({
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          classList: {
+            contains: (cls) => cls === 'selected' && selectedOption === i,
+          },
+          click: () => {
+            selectedOption = i;
+          },
+        }));
+      }
+      return [];
+    },
+  };
+
+  // Step 1: No answer selected -> chooses an answer
+  const step1 = determineSlideAction(mockDoc);
+  assert.equal(step1.type, 'assessment-answer');
+  assert.equal(selectedOption, 0);
+
+  // Step 2: Answer 0 is selected -> MUST NOT choose another alternative, must advance with qNext
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'assessment-next-q');
+  assert.equal(qIndex, 1); // Advanced to question 2!
+
+  // Step 3: Question 2 has no answer -> chooses an answer
+  const step3 = determineSlideAction(mockDoc);
+  assert.equal(step3.type, 'assessment-answer');
 });
