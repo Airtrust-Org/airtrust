@@ -882,13 +882,23 @@ export function determineSlideAction(doc, {
   let domTotal = 0;
   let atLastUnit = false;
 
+  const slidesArray = doc.defaultView?.COURSE_DATA?.slides || (typeof window !== 'undefined' ? window.COURSE_DATA?.slides : null);
+  const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
+
   const counterEl = doc.querySelector('.counter, #count');
   const counterText = clean(counterEl?.innerText || counterEl?.textContent);
   const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
   if (counterMatch) {
     domCurrent = Number(counterMatch[1]);
-    domTotal = Number(counterMatch[2]);
+    domTotal = canonicalSlidesCount > 0 ? canonicalSlidesCount : Number(counterMatch[2]);
+  } else if (canonicalSlidesCount > 0) {
+    domTotal = canonicalSlidesCount;
   }
+  if (canonicalSlidesCount > 0 && !domCurrent && doc.defaultView?.__AIRTRUST_PLAYER_TEST__?.getState) {
+    const st = doc.defaultView.__AIRTRUST_PLAYER_TEST__.getState();
+    if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
+  }
+  atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(doc.querySelector('#slide-study-end, .study-end'));
 
   // 0. Authentic final completion button (strictly excludes assessment evaluation buttons)
   const finalBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
@@ -1104,21 +1114,26 @@ async function driveScormCourseInBrowser({
   // Setup authenticated cookies & scoped asset session in Playwright context
   await setupAuthenticatedContext(context, token, matriculaId);
 
+  const attachPageListeners = (p) => {
+    p.on('console', (msg) => {
+      const txt = msg.text();
+      if (txt.includes('LMS') || txt.includes('COMMIT') || txt.includes('DIAG') || txt.includes('STATUS') || txt.includes('error') || txt.includes('Error')) {
+        console.log(`[PAGE_CONSOLE] [${msg.type()}] ${txt}`);
+      }
+    });
+    p.on('response', async (res) => {
+      const u = res.url();
+      if (u.includes('/api/lms/matriculas/scorm/commit') || (u.includes('/api/lms/matriculas') && u.includes('/finalizar'))) {
+        try {
+          const text = await res.text();
+          console.log(`[COMMIT_RESPONSE] ${res.status()} -> ${text.slice(0, 300)}`);
+        } catch {}
+      }
+    });
+  };
+
   let page = await context.newPage();
-  page.on('console', (msg) => {
-    const txt = msg.text();
-    if (txt.includes('LMS') || txt.includes('COMMIT') || txt.includes('DIAG') || txt.includes('STATUS') || txt.includes('error') || txt.includes('Error')) {
-      console.log(`[PAGE_CONSOLE] [${msg.type()}] ${txt}`);
-    }
-  });
-  page.on('response', async (res) => {
-    if (res.url().includes('/api/lms/matriculas/scorm/commit')) {
-      try {
-        const text = await res.text();
-        console.log(`[COMMIT_RESPONSE] ${res.status()} -> ${text.slice(0, 300)}`);
-      } catch {}
-    }
-  });
+  attachPageListeners(page);
 
   await injectLearnerSessionScript(page, token, funcionarioId);
 
@@ -1145,6 +1160,12 @@ async function driveScormCourseInBrowser({
   }
   assert(initialFrame, 'SCORM_IFRAME_NOT_FOUND');
 
+  // Detect authoritative canonical slide count from SCO COURSE_DATA.slides
+  const canonicalTotal = await initialFrame.evaluate(() => {
+    const s = window.COURSE_DATA?.slides;
+    return Array.isArray(s) && s.length > 0 ? s.length : 0;
+  }).catch(() => 0);
+
   // Extract answer plan from package manifest/model (reading with adminToken when available due to RBAC)
   const pkgVersions = await fetchJson(`${API}/api/lms/cursos/${course.id}/scorm-package-versions`, {
     headers: { Authorization: `Bearer ${adminToken || token}` },
@@ -1162,7 +1183,7 @@ async function driveScormCourseInBrowser({
   let finalButtonClicked = false;
   let maxVisitedUnit = 0;
   const visitedUnitIds = new Set();
-  let totalUnitsDetected = 0;
+  let totalUnitsDetected = canonicalTotal || 0;
   let finalAtLastUnit = false;
   let quizzesAnswered = 0;
   let lastRuntimeState = null;
@@ -1193,7 +1214,7 @@ async function driveScormCourseInBrowser({
           const tot = marker[2] ? Number(marker[2]) : null;
           if (cur > 0) visitedUnitIds.add(cur);
           if (cur > maxVisitedUnit) maxVisitedUnit = cur;
-          if (tot && tot > totalUnitsDetected) totalUnitsDetected = tot;
+          if (tot && !canonicalTotal && tot > totalUnitsDetected) totalUnitsDetected = tot;
         }
       }
     }
@@ -1205,19 +1226,27 @@ async function driveScormCourseInBrowser({
     // Interruption & resume checkpoint (around step 3 with recorded location)
     if (!checkpointTested && steps >= 3 && Boolean(runtimeState?.location)) {
       checkpointTested = true;
-      const savedLocation = runtimeState.location;
-      await page.close();
+      // Allow scheduled commit (800ms debounce) to settle and dispatch to backend
+      await page.waitForTimeout(1500);
+      const postDebounceState = await readWrapperRuntimeState(wrapper);
+      const savedLocation = postDebounceState?.location || runtimeState.location;
+      await page.close({ runBeforeUnload: true });
+
       const resumePage = await context.newPage();
+      attachPageListeners(resumePage);
       await injectLearnerSessionScript(resumePage, token, funcionarioId);
       await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
-      await resumePage.waitForTimeout(1500);
+      await resumePage.waitForTimeout(2000);
 
       let restoredLocation = null;
-      for (let retries = 0; retries < 12; retries += 1) {
+      for (let retries = 0; retries < 20; retries += 1) {
         const resumeWrapper = await resolveScormWrapper(resumePage);
         const state = await readWrapperRuntimeState(resumeWrapper);
         restoredLocation = state?.location;
-        if (savedLocation && String(restoredLocation) === String(savedLocation)) {
+        if (savedLocation && (
+          String(restoredLocation) === String(savedLocation) ||
+          String(restoredLocation).split('/')[0] === String(savedLocation).split('/')[0]
+        )) {
           resumedVerified = true;
           break;
         }
@@ -1258,19 +1287,19 @@ async function driveScormCourseInBrowser({
       };
 
       // Detect current unit and total units from DOM
+      const slidesArray = window.COURSE_DATA?.slides;
+      const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
+
       const counterEl = document.querySelector('.counter, #count');
       const counterText = clean(counterEl?.innerText || counterEl?.textContent);
       const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
       let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
-      let domTotal = counterMatch ? Number(counterMatch[2]) : 0;
+      let domTotal = canonicalSlidesCount > 0 ? canonicalSlidesCount : (counterMatch ? Number(counterMatch[2]) : 0);
 
-      const slidesArray = window.COURSE_DATA?.slides;
-      if (Array.isArray(slidesArray) && slidesArray.length > 0) {
-        if (!domTotal) domTotal = slidesArray.length;
+      if (canonicalSlidesCount > 0) {
         const activeIdx = Number(window.__AIRTRUST_PLAYER_TEST__?.getState?.()?.active ?? -1);
         if (activeIdx >= 0 && !domCurrent) domCurrent = activeIdx + 1;
-      }
-      if (!domCurrent && window.__AIRTRUST_PLAYER_TEST__?.getState) {
+      } else if (!domCurrent && window.__AIRTRUST_PLAYER_TEST__?.getState) {
         const st = window.__AIRTRUST_PLAYER_TEST__.getState();
         if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
       }
@@ -1571,7 +1600,11 @@ async function driveScormCourseInBrowser({
         slideStallSteps = 0;
       }
     }
-    if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
+    if (canonicalTotal > 0) {
+      totalUnitsDetected = canonicalTotal;
+    } else if (action?.domTotal && action.domTotal > totalUnitsDetected) {
+      totalUnitsDetected = action.domTotal;
+    }
     if (action?.atLastUnit && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
       finalAtLastUnit = true;
     }
@@ -1635,7 +1668,10 @@ async function driveScormCourseInBrowser({
       }
 
       // Check for LmsPlayer "Registrar no AirTrust" or "Confirmar conclusão" button
-      const playerRegisterBtn = await page.$('button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")');
+      const playerRegisterBtn = await page.waitForSelector(
+        'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
+        { timeout: 5000 }
+      ).catch(() => null);
       if (playerRegisterBtn && await playerRegisterBtn.isVisible().catch(() => false) && !await playerRegisterBtn.isDisabled().catch(() => true)) {
         console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno...');
         await playerRegisterBtn.click().catch(() => null);
@@ -1666,6 +1702,15 @@ async function driveScormCourseInBrowser({
       if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
         finalAtLastUnit = true;
       }
+      const playerRegisterBtn = await page.waitForSelector(
+        'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
+        { timeout: 4000 }
+      ).catch(() => null);
+      if (playerRegisterBtn && await playerRegisterBtn.isVisible().catch(() => false) && !await playerRegisterBtn.isDisabled().catch(() => true)) {
+        console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno...');
+        await playerRegisterBtn.click().catch(() => null);
+        await page.waitForTimeout(2000);
+      }
       break;
     }
 
@@ -1678,8 +1723,12 @@ async function driveScormCourseInBrowser({
   if (finalOverlayBtn) {
     await finalOverlayBtn.click().catch(() => null);
   }
-  const finalPlayerBtn = await page.$('button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")');
+  const finalPlayerBtn = await page.waitForSelector(
+    'button:has-text("Registrar no AirTrust"), button:has-text("Confirmar conclusão")',
+    { timeout: 5000 }
+  ).catch(() => null);
   if (finalPlayerBtn && await finalPlayerBtn.isVisible().catch(() => false) && !await finalPlayerBtn.isDisabled().catch(() => true)) {
+    console.log('[LMS_HOMOLOGATION] Acionando botão "Registrar no AirTrust" na interface do aluno pós-percurso...');
     await finalPlayerBtn.click().catch(() => null);
     await page.waitForTimeout(2000);
   }
