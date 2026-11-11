@@ -20,6 +20,10 @@ test.use({ storageState: { cookies: [], origins: [] }, screenshot: 'off', video:
 
 test('production FRMS snapshot: permitted tenant 6, no browser abort or operational write', async ({ page }) => {
   test.setTimeout(150_000);
+  // Fail before any navigation, even if this spec is invoked explicitly outside CI.
+  if (process.env.E2E_ALLOW_PRODUCTION !== 'true') {
+    throw new Error('FRMS_PRODUCTION_EXPLICIT_OPT_IN_REQUIRED');
+  }
   const email = process.env.E2E_EMAIL?.trim() || '';
   const password = process.env.E2E_PASSWORD || '';
   if (!email || !password || email.endsWith('staging.airtrust.invalid')) {
