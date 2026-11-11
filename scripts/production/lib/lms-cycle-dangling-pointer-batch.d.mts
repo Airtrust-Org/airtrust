@@ -73,6 +73,7 @@ export interface CycleOperation {
   to: { qh: number | null };
   direction: 'forward' | 'rollback';
 }
-export function casUpdateSql(op: CycleOperation): string;
+export function casUpdateSql(op: CycleOperation, options?: { forwardPlanSha256?: string }): string;
+export function cycleFingerprintSql(alias?: string): string;
 export function countDanglingTotal(port: ExecutorPort): number;
 export function executeManifest(options: ExecuteOptions): ExecutionReport;

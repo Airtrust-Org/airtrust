@@ -119,13 +119,31 @@ function buildOps(body, direction) {
 // ---------- CAS statements ----------
 const matriculaIs = (id) => (id === null ? 'matricula_id IS NULL' : `matricula_id = ${sqlInt(id)}`);
 
-/** One CAS UPDATE. Writes ONLY qualificacao_historico_id and updated_at of one active cycle row of tenant 6. */
-export function casUpdateSql(op) {
+/**
+ * Post-write fingerprint of a cycle row: the forward audit row records it right after the forward UPDATE, and the rollback
+ * requires the cycle to still match it (preflight AND UPDATE guard). Any later change to the cycle (e.g. a completion reversal
+ * that invalidates it, bumps updated_at or alters status/progress/date/current flag) makes rollback fail closed.
+ */
+export const cycleFingerprintSql = (alias = '') => {
+  const c = alias ? `${alias}.` : '';
+  return `json_object('updated_at', ${c}updated_at, 'status', ${c}status, 'ciclo_atual', ${c}ciclo_atual, 'progresso_pct', ${c}progresso_pct, 'data_conclusao', ${c}data_conclusao)`;
+};
+
+/**
+ * One CAS UPDATE. Writes ONLY qualificacao_historico_id and updated_at of one active cycle row of tenant 6.
+ * Rollback statements require { forwardPlanSha256 }: the cycle must still match the fingerprint recorded by the forward audit row.
+ */
+export function casUpdateSql(op, { forwardPlanSha256 } = {}) {
   const { spec, from, to } = op;
   const forward = op.direction === 'forward';
+  if (!forward) check(HASH_RE.test(forwardPlanSha256 ?? ''), 'FORWARD_PLAN_HASH_REQUIRED');
   const guard = forward ? `
    AND EXISTS (SELECT 1 FROM qualificacoes_historico h WHERE h.id = ${sqlInt(spec.historico_id)}
-         AND h.empresa_id = ${TENANT_ID} AND h.deleted_at IS NOT NULL)` : '';
+         AND h.empresa_id = ${TENANT_ID} AND h.deleted_at IS NOT NULL)` : `
+   AND ${cycleFingerprintSql()} = (SELECT json_extract(a.new_values, '$.applied_fingerprint') FROM audit_logs a
+         WHERE a.empresa_id = ${TENANT_ID} AND a.entity_type = '${ENTITY}' AND a.entity_id = ${sqlInt(spec.cycle_id)}
+           AND a.action = '${auditAction('forward')}' AND json_extract(a.new_values, '$.plan_sha256') = '${forwardPlanSha256}'
+         ORDER BY a.id DESC LIMIT 1)`;
   return `UPDATE lms_matricula_ciclos
    SET qualificacao_historico_id = ${sqlNullableInt(to.qh)}, updated_at = datetime('now')
  WHERE id = ${sqlInt(spec.cycle_id)}
@@ -142,11 +160,15 @@ export function auditInsertSql(op, { planSha256, sourceSha, actor }) {
   check(ACTOR_RE.test(actor ?? ''), 'ACTOR_INVALID');
   check(SHA_RE.test(sourceSha ?? ''), 'SOURCE_SHA_INVALID');
   check(HASH_RE.test(planSha256), 'PLAN_HASH_INVALID');
+  // forward only: post-write fingerprint of the cycle, required later by the rollback (fail closed if the cycle changed after apply)
+  const fingerprint = op.direction === 'forward'
+    ? `, '$.applied_fingerprint', (SELECT ${cycleFingerprintSql('c')} FROM lms_matricula_ciclos c WHERE c.id = ${sqlInt(op.id)} AND c.empresa_id = ${TENANT_ID})`
+    : '';
   return `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, empresa_id, created_at)
 SELECT NULL, '${auditAction(op.direction)}', '${ENTITY}', ${sqlInt(op.id)},
   ${auditJson(op.from)},
   json_set(${auditJson(op.to)}, '$.actor', '${actor}', '$.plan_sha256', '${planSha256}', '$.source_sha', '${sourceSha}', '$.direction', '${op.direction}',
-    '$.origin', '${AUDIT_ORIGIN}', '$.matricula_id', ${sqlNullableInt(op.spec.matricula_id)}, '$.historico_id', ${sqlInt(op.spec.historico_id)}),
+    '$.origin', '${AUDIT_ORIGIN}', '$.matricula_id', ${sqlNullableInt(op.spec.matricula_id)}, '$.historico_id', ${sqlInt(op.spec.historico_id)}${fingerprint}),
   ${TENANT_ID}, datetime('now')
 WHERE changes() > 0`;
 }
@@ -156,7 +178,8 @@ const idList = (list) => [...new Set(list)].map((n) => sqlInt(n)).join(',');
 
 function readCycles(port, ops) {
   const map = new Map();
-  for (const row of port.query(`SELECT id, matricula_id, qualificacao_historico_id, CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END AS deleted
+  for (const row of port.query(`SELECT id, matricula_id, qualificacao_historico_id, CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END AS deleted,
+  ${cycleFingerprintSql()} AS fingerprint
  FROM lms_matricula_ciclos WHERE empresa_id = ${TENANT_ID} AND id IN (${idList(ops.map((o) => o.id))})`)) map.set(Number(row.id), row);
   return map;
 }
@@ -170,10 +193,16 @@ function readHistoricos(port, ops) {
 
 function readAudits(port, ops) {
   const set = new Set();
-  const rows = port.query(`SELECT entity_id, action, json_extract(new_values, '$.plan_sha256') AS plan_sha256
+  set.fingerprints = new Map();
+  const rows = port.query(`SELECT entity_id, action, json_extract(new_values, '$.plan_sha256') AS plan_sha256,
+  json_extract(new_values, '$.applied_fingerprint') AS applied_fingerprint
  FROM audit_logs WHERE empresa_id = ${TENANT_ID} AND entity_type = '${ENTITY}'
-   AND action IN ('${auditAction('forward')}','${auditAction('rollback')}') AND entity_id IN (${idList(ops.map((o) => o.id))})`);
-  for (const r of rows) set.add(`${r.entity_id}|${r.action}|${r.plan_sha256}`);
+   AND action IN ('${auditAction('forward')}','${auditAction('rollback')}') AND entity_id IN (${idList(ops.map((o) => o.id))}) ORDER BY id`);
+  for (const r of rows) {
+    const key = `${r.entity_id}|${r.action}|${r.plan_sha256}`;
+    set.add(key);
+    if (r.applied_fingerprint !== null && r.applied_fingerprint !== undefined) set.fingerprints.set(key, String(r.applied_fingerprint));
+  }
   return set;
 }
 
@@ -217,6 +246,10 @@ function classify({ ops, snap, direction, planSha256, forwardPlanSha256 }) {
       if (!h || Number(h.deleted) !== 1) { out.conflicts.push({ id: op.id, reason: 'historico_not_soft_deleted' }); continue; }
     } else if (!snap.audits.has(forwardKey)) {
       out.conflicts.push({ id: op.id, reason: 'not_applied_by_forward_plan' });
+      continue;
+    } else if (snap.audits.fingerprints.get(forwardKey) !== String(row.fingerprint)) {
+      // fail closed: the cycle changed after the forward apply (e.g. completion reversal); never reattach the history
+      out.conflicts.push({ id: op.id, reason: 'cycle_changed_after_apply' });
       continue;
     }
     out.pending.push(op);
@@ -266,7 +299,7 @@ export function executeManifest({
   }
   const meta = { planSha256, sourceSha, actor };
   for (const op of state.pending) {
-    port.exec(`${casUpdateSql(op)};\n${auditInsertSql(op, meta)}`);
+    port.exec(`${casUpdateSql(op, { forwardPlanSha256 })};\n${auditInsertSql(op, meta)}`);
     report.writes_attempted++;
   }
   const after = classify({ ops, snap: snapshot(port, ops), direction, planSha256, forwardPlanSha256 });

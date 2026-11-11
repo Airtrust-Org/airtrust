@@ -265,8 +265,12 @@ describe('LMS cycle dangling pointer batch (local SQLite only)', () => {
     const op: CycleOperation = { id: 8, spec: manifest.cycle_pointers[0], from: { qh: 1001 }, to: { qh: null }, direction: 'forward' };
     expect(casUpdateSql(op)).toContain('h.deleted_at IS NOT NULL');
     const inverse: CycleOperation = { ...op, direction: 'rollback', from: { qh: null }, to: { qh: 1001 } };
-    expect(casUpdateSql(inverse)).not.toContain('qualificacoes_historico');
-    expect(casUpdateSql(inverse)).toContain('qualificacao_historico_id IS NULL');
+    const rollbackSql = casUpdateSql(inverse, { forwardPlanSha256: manifest.plan_sha256 });
+    expect(rollbackSql).not.toContain('h.deleted_at');
+    expect(rollbackSql).toContain('qualificacao_historico_id IS NULL');
+    // rollback is bound to the post-apply fingerprint recorded by the forward audit row
+    expect(rollbackSql).toContain('applied_fingerprint');
+    expect(() => casUpdateSql(inverse)).toThrow('FORWARD_PLAN_HASH_REQUIRED');
   });
 
   describe('rollback', () => {
@@ -294,6 +298,45 @@ describe('LMS cycle dangling pointer batch (local SQLite only)', () => {
       const report = back(p, { apply: true, actor: ACTOR, sourceSha: SHA });
       expect(p.statements).toEqual([]);
       expect(report.skipped_not_applied).toBe(3);
+    });
+
+    it('fails closed (conflict, zero writes) when a completion reversal changed the cycle after apply', () => {
+      forward(port(db), { apply: true, actor: ACTOR, sourceSha: SHA });
+      // simulated lms-completion-reversal: pointer already NULL, completion invalidated, updated_at bumped
+      db.exec("UPDATE lms_matricula_ciclos SET status = 'EM_ANDAMENTO', progresso_pct = 0, data_conclusao = NULL, updated_at = '2030-01-01 00:00:00' WHERE id = 9");
+      const p = port(db);
+      const auditsBefore = audits(db).length;
+      let error: (Error & { report?: { conflicts: Array<{ id: number; reason: string }> } }) | undefined;
+      try { back(p, { apply: true, actor: ACTOR, sourceSha: SHA }); } catch (e) { error = e as Error; }
+      expect(error?.message).toBe('CAS_PREFLIGHT_CONFLICTS_ABORTED_BEFORE_ANY_WRITE');
+      expect(error?.report?.conflicts).toEqual([{ id: 9, reason: 'cycle_changed_after_apply' }]);
+      expect(p.statements).toEqual([]);
+      expect(audits(db)).toHaveLength(auditsBefore);
+      expect(cycle(db, 9).qualificacao_historico_id).toBeNull();
+      // dry-run also reports the conflict
+      expect(back(port(db)).postconditions_verified).toBe(false);
+    });
+
+    it('fails closed even when only state (not updated_at) changed after apply', () => {
+      forward(port(db), { apply: true, actor: ACTOR, sourceSha: SHA });
+      const stamp = cycle(db, 8).updated_at;
+      db.exec(`UPDATE lms_matricula_ciclos SET status = 'EM_ANDAMENTO', updated_at = '${stamp}' WHERE id = 8`);
+      const report = back(port(db));
+      expect(report.conflicts).toEqual([{ id: 8, reason: 'cycle_changed_after_apply' }]);
+    });
+
+    it('statement guard blocks a reversal landing between rollback preflight and write', () => {
+      forward(port(db), { apply: true, actor: ACTOR, sourceSha: SHA });
+      const p = port(db, (sql) => {
+        if (sql.includes('UPDATE lms_matricula_ciclos') && sql.includes('WHERE id = 9\n')) {
+          db.exec("UPDATE lms_matricula_ciclos SET progresso_pct = 10, updated_at = '2030-01-01 00:00:00' WHERE id = 9");
+        }
+      });
+      const report = back(p, { apply: true, actor: ACTOR, sourceSha: SHA });
+      expect(report.cas_conflicts).toEqual([{ id: 9 }]);
+      expect(report.postconditions_verified).toBe(false);
+      expect(cycle(db, 9).qualificacao_historico_id).toBeNull();
+      expect(audits(db).some((a) => a.entity_id === 9 && a.action === auditAction('rollback'))).toBe(false);
     });
 
     it('rejects a rollback manifest with a tampered hash', () => {
