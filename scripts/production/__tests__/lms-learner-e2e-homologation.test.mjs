@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildLearnerAuthPayload,
   checkCertificate,
   checkLearnerQualifications,
   determineSlideAction,
@@ -9,6 +10,7 @@ import {
   evaluateCoursePath,
   evaluateHomologationVerdict,
   resolveAdminToken,
+  resolveScormContentFrame,
   runHomologation,
   setupAuthenticatedContext,
 } from '../lms-learner-e2e-homologation.mjs';
@@ -176,9 +178,11 @@ test('setupAuthenticatedContext adds access cookies and requests scoped asset se
 
   await setupAuthenticatedContext(mockContext, 'mock-jwt-token-123', 42);
 
-  assert.equal(addedCookies.length >= 1, true);
+  assert.equal(addedCookies.length >= 3, true);
   assert.equal(addedCookies[0].name, 'airtrust_access_token');
   assert.equal(addedCookies[0].value, 'mock-jwt-token-123');
+  assert.equal(addedCookies.some((c) => c.name === 'airtrust_token'), true);
+  assert.equal(addedCookies.some((c) => c.name === 'auth_token'), true);
   assert.equal(requestedEndpoint?.endsWith('/api/lms/assets/session'), true);
   assert.equal(requestedOptions?.data?.matricula_id, 42);
 });
@@ -830,5 +834,58 @@ test('regression: determineSlideAction does not treat "Concluir avaliação" as 
   const step2 = determineSlideAction(mockDoc);
   assert.equal(step2.type, 'final-button');
   assert.equal(finalCourseClicked, true);
+});
+
+test('buildLearnerAuthPayload establishes full user session required by AuthContext and ProtectedRoute', () => {
+  // A mock JWT payload with claims
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const claims = Buffer.from(JSON.stringify({
+    id: 194,
+    funcionario_id: 194,
+    email: 'qa.lms.202611.chromium@airtrust.online',
+    nome: 'Aluno QA Chromium',
+    empresa_id: 6,
+  })).toString('base64url');
+  const mockJwt = `${header}.${claims}.signature`;
+
+  const payload = buildLearnerAuthPayload(mockJwt, 194);
+  assert.equal(payload.jwt, mockJwt);
+  assert.equal(payload.user.id, 194);
+  assert.equal(payload.user.funcionario_id, 194);
+  assert.equal(payload.user.email, 'qa.lms.202611.chromium@airtrust.online');
+  assert.equal(payload.user.role, 'ALUNO');
+  assert.equal(payload.user.empresa_id, 6);
+});
+
+test('resolveScormContentFrame excludes launch wrapper with hidden completion overlay and locates nested SCO content', async () => {
+  // Mock wrapper frame that contains #completion-overlay #btn-close
+  const mockWrapperFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/scorm/launch/2404',
+    evaluate: async (fn) => false, // not content
+    $: async (selector) => {
+      if (selector === '#scorm-frame') {
+        return {
+          contentFrame: async () => mockContentFrame,
+        };
+      }
+      return null;
+    },
+  };
+
+  // Mock nested content frame containing actual SCO course data
+  const mockContentFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/pkg-123/index.html',
+    evaluate: async (fn) => true, // has COURSE_DATA / slides
+  };
+
+  const mockPage = {
+    frames: () => [mockWrapperFrame, mockContentFrame],
+    evaluate: async () => false,
+    $: async (selector) => null,
+  };
+
+  const resolved = await resolveScormContentFrame(mockPage);
+  assert.equal(resolved, mockContentFrame);
+  assert.equal(resolved.url().includes('assets/scorm'), true);
 });
 
