@@ -1,0 +1,135 @@
+name: Production ANAC 1167 Seven Planned Training Classes
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+      mode:
+        description: Dry-run or apply
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: Exact scoped confirmation
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required for apply
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-anac1167-seven-turmas-tenant6
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    name: Governed ANAC 1167 Class Reconciliation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      PROD_API_BASE_URL: https://api.airtrust.online
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      ANAC1167_PRIVATE_MANIFEST_B64: ${{ secrets.AIRTRUST_ANAC1167_PLAN_B64 }}
+      ANAC1167_EXPECTED_MANIFEST_SHA: 431779174371b68ba70314c556c11b0937442eeb9220e264bf379660e1af9712
+      ANAC1167_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ANAC1167_CONFIRMATION: ${{ inputs.confirmation }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Confirm exact reviewed main candidate
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
+          [[ "$ANAC1167_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ && "$GITHUB_SHA" == "$ANAC1167_EXPECTED_SHA" ]] || { echo SHA_CHANGED >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$ANAC1167_CONFIRMATION" == ANAC1167_DRYRUN_SEVEN_TURMAS_TENANT6 ]] || { echo INVALID_DRYRUN_CONFIRMATION >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$ANAC1167_CONFIRMATION" == ANAC1167_APPLY_SEVEN_TURMAS_TENANT6_NO_EMAIL ]] || { echo INVALID_APPLY_CONFIRMATION >&2; exit 1; }
+          else echo INVALID_MODE >&2; exit 1; fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+      - name: Verify eight official gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Validate private executor inputs
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo ADMIN_CREDS_MISSING >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo D1_CREDS_MISSING >&2; exit 1; }
+          [[ -n "$ANAC1167_PRIVATE_MANIFEST_B64" ]] || { echo PRIVATE_MANIFEST_MISSING >&2; exit 1; }
+          node --check scripts/production/anac1167-training-plan-import.mjs
+      - name: Verify same-SHA green dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED" =~ ^[1-9][0-9]*$ ]] || { echo DRYRUN_ID_MISSING >&2; exit 1; }
+          meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
+          [[ "$(jq -r .name <<<"$meta")" == 'Production ANAC 1167 Seven Planned Training Classes' ]] || { echo WORKFLOW_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$meta")" == success && "$(jq -r .head_sha <<<"$meta")" == "$GITHUB_SHA" ]] || { echo REVIEWED_RUN_INVALID >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" --name anac1167-seven-proof --dir "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/anac1167-result.json"
+          test -s "$f"
+          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .main_sha "$f")" == "$GITHUB_SHA" ]] || { echo DRYRUN_SHA_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .manifest_sha256 "$f")" == "$ANAC1167_EXPECTED_MANIFEST_SHA" ]] || { echo MANIFEST_CHANGED >&2; exit 1; }
+          [[ "$(jq -r .existing_count "$f")" == 0 && "$(jq -r .planned_collisions "$f")" == 0 ]] || { echo DRYRUN_COLLISION >&2; exit 1; }
+          state_hash="$(jq -r .preflight_state_hash "$f")"
+          [[ "$state_hash" =~ ^[0-9a-f]{64}$ ]] || { echo REVIEWED_STATE_INVALID >&2; exit 1; }
+          echo "ANAC1167_REVIEWED_STATE_HASH=$state_hash" >> "$GITHUB_ENV"
+          echo "REVIEWED_DRY_RUN_ID=$REVIEWED" >> "$GITHUB_STEP_SUMMARY"
+      - name: Capture production D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/anac1167-recovery.txt"
+          test -s "$RUNNER_TEMP/anac1167-recovery.txt"
+          echo "D1_RECOVERY_TIMESTAMP_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/anac1167-recovery.txt"
+      - name: Execute via production API with readback
+        env:
+          ANAC1167_RESULT_PATH: ${{ runner.temp }}/anac1167-result.json
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          node scripts/production/anac1167-training-plan-import.mjs "$MODE"
+          test -s "$ANAC1167_RESULT_PATH"
+      - name: Publish sanitized evidence
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/anac1167-result.json
+        run: |
+          set -euo pipefail
+          test -s "$REPORT" || exit 0
+          jq '{mode,main_sha,manifest_sha256,tenant_id,class_count,participants,existing_count,planned_collisions,escalas_months_count,mutated,email_sent,pii_emitted,ids,planned_qualifications,effective_days,materialized_escala_events,postconditions_verified}' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: anac1167-seven-proof
+          path: ${{ runner.temp }}/anac1167-result.json
+          if-no-files-found: warn
+          retention-days: 30
