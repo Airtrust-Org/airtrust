@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { validateManifest } from '../anac1167-training-plan-import.mjs';
+import { validateManifest, matchingHistoryRows } from '../anac1167-training-plan-import.mjs';
 
 const script = readFileSync(new URL('../anac1167-training-plan-import.mjs', import.meta.url), 'utf8');
 const workflow = readFileSync(new URL('../../../.github/workflows/production-anac1167-seven-planned-training.yml', import.meta.url), 'utf8');
@@ -33,4 +33,20 @@ test('production apply is tied to reviewed same-SHA dry-run and recovery point',
   assert.match(workflow, /verify-release-gates\.mjs/);
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /status.*PLANEJADO|ANAC1167_APPLY_SEVEN_TURMAS_TENANT6_NO_EMAIL/);
+});
+
+test('matching completed history blocks the candidate before create is called', () => {
+  const manifest = { candidates: [{ payload: {
+    participante_ids: [9001], qualificacao_tipo_id: 30, data_inicio: '2027-04-06'
+  } }] };
+  const records = [
+    { funcionario_id: 9001, qualificacao_id: 30, dia: '2027-04-06', qualification_status: 'CONCLUIDA', n: 1 },
+    { funcionario_id: 9002, qualificacao_id: 30, dia: '2027-04-06', qualification_status: 'CONCLUIDA', n: 1 },
+  ];
+  const matches = matchingHistoryRows(manifest, records);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].qualification_status, 'CONCLUIDA');
+  assert.match(script, /const same=matchingHistoryRows\(m,collisions\)/);
+  assert.match(script, /check\(before.existing_count===0&&before.planned_collision_count===0,'BASELINE_CHANGED'\)/);
+  assert.ok(script.indexOf("check(before.existing_count===0") < script.indexOf('for(const c of m.candidates)await create'));
 });

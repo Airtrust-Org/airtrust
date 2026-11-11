@@ -40,6 +40,13 @@ export function validateManifest(raw){
  check(people===16&&days===23,'APPROVED_TOTALS_CHANGED');
  return m;
 }
+// Detect any history the canonical API could reuse on the same qualification/date,
+// including CONCLUIDA and CANCELADA. A completed history must never be re-linked.
+export function matchingHistoryRows(manifest, rows) {
+ const expected = new Set(manifest.candidates.flatMap(c =>
+  c.payload.participante_ids.map(id => id+'|'+c.payload.qualificacao_tipo_id+'|'+c.payload.data_inicio)));
+ return rows.filter(x => expected.has(x.funcionario_id+'|'+x.qualificacao_id+'|'+x.dia));
+}
 function readD1(sql,label){
  check(/^\s*SELECT\b/i.test(sql)&&!/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE)\b/i.test(sql),'D1_READONLY_ONLY');
  const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db','--env','production','--remote','--json','--command',sql],{
@@ -59,9 +66,8 @@ function state(m){
  check(types.length===2&&types.every(t=>Number(t.ativo)===1),'TRAINING_MODEL_INACTIVE');
  const existing=readD1('SELECT id,codigo_turma,status,data_inicio,data_fim,qualificacao_tipo_id FROM treinamentos_planejados WHERE empresa_id=6 AND deleted_at IS NULL AND codigo_turma IN ('+sqlCodes+') ORDER BY codigo_turma,id','EXISTING');
  check(new Set(existing.map(r=>r.codigo_turma)).size===existing.length,'DUPLICATE_CODE_PRODUCTION');
- const collisions=readD1('SELECT funcionario_id,qualificacao_id,date(data_conclusao) dia,COUNT(*) n FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(renovada,0)=0 AND UPPER(COALESCE(status,\'\')) IN (\'PLANEJADA\',\'PLANEJADO\') AND funcionario_id IN ('+ids.join(',')+') AND qualificacao_id IN (30,38) AND date(data_conclusao) BETWEEN \'2027-01-01\' AND \'2027-12-31\' GROUP BY funcionario_id,qualificacao_id,date(data_conclusao)','PLANNED');
- const expected=new Set(m.candidates.flatMap(c=>c.payload.participante_ids.map(id=>id+'|'+c.payload.qualificacao_tipo_id+'|'+c.payload.data_inicio)));
- const same=collisions.filter(x=>expected.has(x.funcionario_id+'|'+x.qualificacao_id+'|'+x.dia));
+ const collisions=readD1("SELECT funcionario_id,qualificacao_id,date(data_conclusao) dia,COALESCE(status,'') qualification_status,COUNT(*) n FROM qualificacoes_historico WHERE empresa_id=6 AND deleted_at IS NULL AND COALESCE(renovada,0)=0 AND funcionario_id IN ("+ids.join(',')+") AND qualificacao_id IN (30,38) AND date(data_conclusao) BETWEEN '2027-01-01' AND '2027-12-31' GROUP BY funcionario_id,qualificacao_id,date(data_conclusao),COALESCE(status,'')",'HISTORIES');
+ const same=matchingHistoryRows(m,collisions);
  const months=readD1('SELECT ano,mes,COUNT(*) n FROM escalas_mensais WHERE empresa_id=6 AND deleted_at IS NULL AND ano=2027 AND mes IN (1,3,4,5,6,8) GROUP BY ano,mes ORDER BY mes','ESCALAS');
  const hash=digest(JSON.stringify({people:people.sort((a,b)=>a.id-b.id),types:types.sort((a,b)=>a.id-b.id),existing,same,months}));
  return {hash,existing_count:existing.length,planned_collision_count:same.length,escalas_months_count:months.length};
