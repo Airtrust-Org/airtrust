@@ -9,7 +9,9 @@ import {
   evaluateAssessmentPolicy,
   evaluateCoursePath,
   evaluateHomologationVerdict,
+  isLocationResumed,
   resolveAdminToken,
+  resolveEffectiveLessonStatus,
   resolveScormContentFrame,
   runHomologation,
   setupAuthenticatedContext,
@@ -1262,5 +1264,62 @@ test('regression: determineSlideAction marks atLastUnit when domCurrent equals c
   assert.equal(action.domCurrent, 45);
   assert.equal(action.atLastUnit, true);
   assert.equal(action.type, 'final-button');
+});
+
+test('resolveEffectiveLessonStatus prioritizes reopen terminal state over stale in-flight snapshot', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'completed' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'completed');
+});
+
+test('resolveEffectiveLessonStatus recognizes backend persisted scorm progression', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: null,
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'passed' },
+    isConcluido: true,
+    policy: 'SCORED',
+  });
+  assert.equal(status, 'passed');
+});
+
+test('adversarial: resolveEffectiveLessonStatus never fabricates completion when all snapshots are incomplete even if isConcluido is true', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'incomplete' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    reopenScormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'incomplete');
+});
+
+test('adversarial: resolveEffectiveLessonStatus preserves explicit failure even if isConcluido is true', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'failed' },
+    lastRuntimeState: { lessonStatus: 'failed' },
+    scormProgresso: { lesson_status: 'failed' },
+    reopenScormProgresso: { lesson_status: 'failed' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'failed');
+});
+
+test('adversarial: isLocationResumed rejects regression/reset to first unit when saved checkpoint was 2/45', () => {
+  assert.equal(isLocationResumed('2/45', '1/45'), false);
+  assert.equal(isLocationResumed('3/45', '1/45'), false);
+});
+
+test('isLocationResumed accepts exact and canonical unit matches', () => {
+  assert.equal(isLocationResumed('2/45', '2/45'), true);
+  assert.equal(isLocationResumed('3/45', '3'), true);
+  assert.equal(isLocationResumed('4', '4/45'), true);
 });
 

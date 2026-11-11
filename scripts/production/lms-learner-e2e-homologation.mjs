@@ -488,6 +488,34 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
   return null;
 }
 
+export function isLocationResumed(savedLocation, restoredLocation) {
+  if (!savedLocation || !restoredLocation) return false;
+  const sStr = String(savedLocation).trim();
+  const rStr = String(restoredLocation).trim();
+  if (sStr === rStr) return true;
+  const sUnit = sStr.split('/')[0];
+  const rUnit = rStr.split('/')[0];
+  return Boolean(sUnit && rUnit && sUnit === rUnit);
+}
+
+export function resolveEffectiveLessonStatus({
+  reopenState = null,
+  lastRuntimeState = null,
+  scormProgresso = null,
+  reopenScormProgresso = null,
+} = {}) {
+  const pick = (s) => (s && TERMINAL_SCORM12.has(String(s).trim().toLowerCase()) ? String(s).trim().toLowerCase() : null);
+  return (
+    pick(reopenState?.lessonStatus) ||
+    pick(lastRuntimeState?.lessonStatus) ||
+    pick(scormProgresso?.lesson_status) ||
+    pick(reopenScormProgresso?.lesson_status) ||
+    (lastRuntimeState?.lessonStatus ? String(lastRuntimeState.lessonStatus).trim().toLowerCase() : null) ||
+    (scormProgresso?.lesson_status ? String(scormProgresso.lesson_status).trim().toLowerCase() : null) ||
+    'incomplete'
+  );
+}
+
 export function evaluateAssessmentPolicy({
   policy = null,
   lessonStatus = '',
@@ -1320,28 +1348,30 @@ async function driveScormCourseInBrowser({
       attachPageListeners(resumePage);
       await injectLearnerSessionScript(resumePage, token, funcionarioId);
       await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      const frameMounted = await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 15_000 }).catch(() => null);
+      const frameMounted = await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
       if (!frameMounted && targetUrl !== launchUrl) {
-        console.log(`[LMS_HOMOLOGATION] Frame não montado no player na retomada (${BROWSER_NAME}). Redirecionando para launch wrapper direto: ${launchUrl}`);
-        targetUrl = launchUrl;
+        console.log(`[LMS_HOMOLOGATION] Frame não montado no player na retomada (${BROWSER_NAME}). Sincronizando com launch wrapper direto: ${launchUrl}`);
         await resumePage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 15_000 }).catch(() => null);
+        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
       }
       await resumePage.waitForTimeout(1500);
 
       let restoredLocation = null;
-      for (let retries = 0; retries < 20; retries += 1) {
+      for (let retries = 0; retries < 30; retries += 1) {
         const resumeWrapper = await resolveScormWrapper(resumePage);
         const state = await readWrapperRuntimeState(resumeWrapper);
         restoredLocation = state?.location;
-        if (savedLocation && (
-          String(restoredLocation) === String(savedLocation) ||
-          String(restoredLocation).split('/')[0] === String(savedLocation).split('/')[0]
-        )) {
+        if (isLocationResumed(savedLocation, restoredLocation)) {
           resumedVerified = true;
           break;
         }
-        await resumePage.waitForTimeout(500);
+        await resumePage.waitForTimeout(1000);
+      }
+
+      // If probe was diverted to launchUrl, restore learner context to playerUrl to ensure completion controls
+      if (targetUrl === playerUrl && resumePage.url().includes('/api/lms/scorm/launch/')) {
+        await resumePage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
       }
       page = resumePage;
     }
@@ -1827,6 +1857,19 @@ async function driveScormCourseInBrowser({
     await page.waitForTimeout(2000);
   }
 
+  // Re-sample final runtime state from wrapper before closing
+  const postWrapper = await resolveScormWrapper(page);
+  for (let r = 0; r < 8; r += 1) {
+    const postState = await readWrapperRuntimeState(postWrapper);
+    if (postState) {
+      if (TERMINAL_SCORM12.has(postState.lessonStatus) || !lastRuntimeState) {
+        lastRuntimeState = postState;
+      }
+      if (TERMINAL_SCORM12.has(postState.lessonStatus)) break;
+    }
+    await page.waitForTimeout(500);
+  }
+
   await page.waitForTimeout(1000);
   await browser.close();
 
@@ -1853,8 +1896,10 @@ async function driveScormCourseInBrowser({
   await setupAuthenticatedContext(reopenContext, token, matriculaId);
   const reopenPage = await reopenContext.newPage();
   await injectLearnerSessionScript(reopenPage, token, funcionarioId);
-  await reopenPage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
-  await reopenPage.waitForTimeout(1500);
+  await reopenPage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+  await reopenPage.waitForTimeout(2000);
+  const reopenWrapper = await resolveScormWrapper(reopenPage);
+  const reopenState = await readWrapperRuntimeState(reopenWrapper);
   await reopenBrowser.close();
 
   const reopenDetail = await getMatriculaDetail(token, matriculaId);
@@ -1873,11 +1918,23 @@ async function driveScormCourseInBrowser({
     totalActivities: requiredDecisionSlideIndices.length,
   });
 
+  const effectiveLessonStatus = resolveEffectiveLessonStatus({
+    reopenState,
+    lastRuntimeState,
+    scormProgresso: detail?.scorm_progresso,
+    reopenScormProgresso: reopenDetail?.scorm_progresso,
+    isConcluido,
+    policy: course.scorm_assessment_policy,
+  });
+
+  const effectiveScoreRaw = lastRuntimeState?.scoreRaw ?? reopenState?.scoreRaw ?? detail?.scorm_progresso?.score_raw ?? null;
+  const effectiveScoreScaled = lastRuntimeState?.scoreScaled ?? reopenState?.scoreScaled ?? detail?.scorm_progresso?.score_scaled ?? null;
+
   const assessmentVerdict = evaluateAssessmentPolicy({
     policy: course.scorm_assessment_policy,
-    lessonStatus: lastRuntimeState?.lessonStatus,
-    scoreRaw: lastRuntimeState?.scoreRaw,
-    scoreScaled: lastRuntimeState?.scoreScaled,
+    lessonStatus: effectiveLessonStatus,
+    scoreRaw: effectiveScoreRaw,
+    scoreScaled: effectiveScoreScaled,
     masteryScore: course.scorm_mastery_score,
   });
 
@@ -1923,9 +1980,9 @@ async function driveScormCourseInBrowser({
       required_decisions_count: requiredDecisionSlideIndices.length,
       assessment: {
         policy: course.scorm_assessment_policy || 'FORMATIVE',
-        status: lastRuntimeState?.lessonStatus || null,
-        score_raw: lastRuntimeState?.scoreRaw ?? null,
-        score_scaled: lastRuntimeState?.scoreScaled ?? null,
+        status: effectiveLessonStatus || null,
+        score_raw: effectiveScoreRaw ?? null,
+        score_scaled: effectiveScoreScaled ?? null,
         mastery_score: course.scorm_mastery_score ?? null,
         passed: assessmentVerdict.ok,
       },
