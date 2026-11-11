@@ -1323,3 +1323,85 @@ test('isLocationResumed accepts exact and canonical unit matches', () => {
   assert.equal(isLocationResumed('4', '4/45'), true);
 });
 
+test('checkCertificate retries on initial empty list and succeeds on subsequent poll', async () => {
+  const originalFetch = globalThis.fetch;
+  let pollCount = 0;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/certificados/historico/40/certificados')) {
+        pollCount += 1;
+        if (pollCount === 1) {
+          // First poll returns empty list while backend worker asynchronously writes certificate
+          return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({ success: true, data: [{ id: 801 }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/801')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { url: '/api/pasta-virtual/stream/801', nome: 'cert_801.pdf' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/pasta-virtual/stream/801')) {
+        const dummyPdf = Buffer.from('%PDF-1.4 async certificate stream content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 40, 5, 0);
+    assert.equal(pollCount, 2);
+    assert.equal(cert?.id, 801);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkLearnerQualifications retries on initial empty list and resolves when qualification appears', async () => {
+  const originalFetch = globalThis.fetch;
+  let qualPollCount = 0;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/qualificacoes/funcionario/194')) {
+        qualPollCount += 1;
+        if (qualPollCount === 1) {
+          return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 7660, lms_curso_id: 67, status: 'CONCLUIDA' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const qual = await checkLearnerQualifications('token', 194, 67, 7660, 5, 0);
+    assert.equal(qualPollCount, 2);
+    assert.equal(qual?.id, 7660);
+    assert.equal(qual?.lms_curso_id, 67);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
