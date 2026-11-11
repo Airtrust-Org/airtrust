@@ -52,6 +52,13 @@ describe('service worker cache guard', () => {
     expect(indexHtmlSource).toContain("!new URL(registration.scope).pathname.startsWith('/pilot/')");
     expect(indexHtmlSource).toContain("currentUrl.searchParams.set(RECOVERY_PARAM, '1');");
     expect(indexHtmlSource).toContain('window.location.replace(currentUrl.toString());');
+    // Delayed asynchronous SW cleanup must not redirect after the live app
+    // mounted, which would abort in-flight authenticated login / FRMS calls.
+    const cleanupGuard = indexHtmlSource.indexOf("if (document.getElementById('root')?.childElementCount)");
+    const redirect = indexHtmlSource.indexOf('window.location.replace(currentUrl.toString());');
+    expect(cleanupGuard).toBeGreaterThan(0);
+    expect(cleanupGuard).toBeLessThan(redirect);
+    expect(indexHtmlSource.slice(cleanupGuard, redirect)).toContain('sessionStorage.removeItem(RECOVERY_KEY);');
   });
 
   it('recupera bootstrap branco em qualquer rota sem apagar a sessao autenticada', () => {
