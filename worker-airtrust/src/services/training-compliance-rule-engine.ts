@@ -328,7 +328,7 @@ export function trainingComplianceEffectiveRequirementPredicateSql(options?: {
   const qualification = options?.qualificationExpr || 'qt.id';
   const empresa = options?.empresaExpr || `${f}.empresa_id`;
   const auto = options?.requireAutoEnrollment
-    ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1 AND ${tr}.modalidade_requerida = 'EAD'`
+    ? ` AND COALESCE(${tr}.auto_matricular_ead, 0) = 1`
     : '';
   const categoryFilter = options?.includeNonTrainingCategories
     ? ''

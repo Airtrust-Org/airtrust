@@ -363,10 +363,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     // Persist the authorized designation but make the gap visible and traceable.
     const contractGap=await inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId);
     if(contractGap) autoEnrollmentWarning=contractGap;
-  } catch(error){
-    console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});
-    autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';
-  }
+  }catch(error){console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';}
   return c.json({success:true,data:{id,auto_enrollment:autoEnrollment,auto_enrollment_warning:autoEnrollmentWarning}},201);
 });
 
