@@ -9,6 +9,7 @@ import {
   checkLearnerQualifications,
   determineSlideAction,
   enrollLearner,
+  assertQaLearnerIdentity,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
   evaluateHomologationVerdict,
@@ -18,8 +19,18 @@ import {
   resolveScormContentFrame,
   runHomologation,
   saveIncrementalReport,
+  safeQaErrorCode,
+  sanitizeQaReportValue,
   setupAuthenticatedContext,
 } from '../lms-learner-e2e-homologation.mjs';
+
+
+function makeQaToken(funcionarioId, email = 'qa.lms.202611.chromium@airtrust.online', empresaId = 6, role = 'ALUNO') {
+  const encode = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+    email, empresa_id: empresaId, funcionario_id: funcionarioId, role,
+  })}.unit_test_signature`;
+}
 
 test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologationVerdict', () => {
   assert.equal(typeof runHomologation, 'function');
@@ -216,7 +227,7 @@ test('enrollLearner reuses existing active enrollment from minhas-ead', async ()
         return new Response(
           JSON.stringify({
             success: true,
-            data: [{ id: 88, curso_id: 67, status: 'NAO_INICIADO', deleted_at: null }],
+            data: [{ id: 88, curso_id: 67, funcionario_id: 193, status: 'NAO_INICIADO', deleted_at: null }],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
@@ -224,82 +235,61 @@ test('enrollLearner reuses existing active enrollment from minhas-ead', async ()
       throw new Error(`Unexpected url: ${url}`);
     };
 
-    const id = await enrollLearner('learner-token', 67, 193);
+    const id = await enrollLearner(makeQaToken(193), 67, 193);
     assert.equal(id, 88);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('enrollLearner falls back to admin token on 403 sector restricted', async () => {
+test('SECURITY: stale employee link or sector-denied learner never uses administrator fallback', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), headers: opts?.headers });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET', auth: opts?.headers?.Authorization });
+      if (String(url).includes('/minhas-ead')) {
         return new Response(JSON.stringify({ success: true, data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          status: 200, headers: { 'Content-Type': 'application/json' },
         });
       }
       if (String(url).endsWith('/api/lms/matriculas')) {
-        const auth = opts?.headers?.Authorization || '';
-        if (auth.includes('learner-token')) {
-          return new Response(
-            JSON.stringify({ success: false, code: 'LMS_SELF_ENROLLMENT_NOT_ALLOWED' }),
-            { status: 403, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-        if (auth.includes('admin-token')) {
-          return new Response(JSON.stringify({ success: true, data: { id: 99 } }), {
-            status: 201,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
+        assert.equal(opts?.headers?.Authorization, 'Bearer ' + makeQaToken(193));
+        return new Response(JSON.stringify({
+          success: false, code: 'LMS_LEARNER_LINK_MISMATCH',
+        }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_URL');
     };
-
-    const id = await enrollLearner('learner-token', 44, 193, 'admin-token');
-    assert.equal(id, 99);
-    assert.equal(calls.length, 3);
+    await assert.rejects(enrollLearner(makeQaToken(193), 44, 193, 'admin-token'),
+      /QA_SELF_ENROLLMENT_FORBIDDEN/);
+    assert.deepEqual(calls.map(x => x.method), ['GET', 'POST']);
+    assert.equal(calls.some(x => x.auth === 'Bearer admin-token'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('enrollLearner reactivates cancelled enrollment on 409 LMS_REMATRICULATION_REQUIRED', async () => {
+test('SECURITY: refuses unsafe reset for enrollLearner reactivates cancelled enrollment on 409 LMS_REMATRICULATION_REQUIRED', async () => {
   const originalFetch = globalThis.fetch;
+  const calls = [];
   try {
-    globalThis.fetch = async (url) => {
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(JSON.stringify({ success: true, data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'CANCELADO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      if (String(url).endsWith('/api/lms/matriculas')) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'LMS_REMATRICULATION_REQUIRED',
-            data: { matricula_id: 77 },
-          }),
-          { status: 409, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      if (String(url).endsWith('/api/lms/matriculas/77/rematricular')) {
-        return new Response(
-          JSON.stringify({ success: true, data: { matricula_id: 77, status: 'NAO_INICIADO' } }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const id = await enrollLearner('learner-token', 67, 193, 'admin-token');
-    assert.equal(id, 77);
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -595,73 +585,51 @@ test('adversarial: evaluateHomologationVerdict fails when avaliacao_ok is false'
   assert.equal(result.reason, 'ASSESSMENT_NOT_PASSED');
 });
 
-test('adversarial: enrollLearner triggers rematricular when course is already CONCLUIDO', async () => {
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner triggers rematricular when course is already CONCLUIDO', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), method: opts?.method });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: [{ id: 670, curso_id: 67, status: 'CONCLUIDO', deleted_at: null }],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'CONCLUIDO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      if (String(url).endsWith('/api/lms/matriculas/670/rematricular')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 671, status: 'NAO_INICIADO', ciclo: 2 },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const id = await enrollLearner('learner-token', 67, 193);
-    assert.equal(id, 671);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[1].method, 'POST');
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('adversarial: enrollLearner triggers rematricular when enrollment is EM_ANDAMENTO (isolamento de navegador)', async () => {
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner triggers rematricular when enrollment is EM_ANDAMENTO (isolamento de navegador)', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), method: opts?.method });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: [{ id: 670, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'EM_ANDAMENTO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      if (String(url).endsWith('/api/lms/matriculas/670/rematricular')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 672, status: 'NAO_INICIADO', ciclo: 3 },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const id = await enrollLearner('learner-token', 67, 193);
-    assert.equal(id, 672);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[1].method, 'POST');
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1048,120 +1016,51 @@ test('regression: determineSlideAction recognizes and clicks "Voltar ao ponto at
   assert.equal(returnClicked, true);
 });
 
-test('adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminToken is provided to ensure full course journey reset', async () => {
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminToken is provided to ensure full course journey reset', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), method: opts?.method, body: opts?.body });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: [{ id: 2405, curso_id: 67, status: 'CONCLUIDO', deleted_at: null }],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 195,
+            empresa_id: 6, status: 'CONCLUIDO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      if (String(url).endsWith('/api/lms/matriculas/2405/reverter')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 2405, status: 'EM_ANDAMENTO', reverted: true },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      if (String(url).endsWith('/api/lms/matriculas/2405/status') && opts?.method === 'PATCH') {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 2405, status: 'NAO_INICIADO' },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const id = await enrollLearner('learner-token', 67, 195, 'admin-token');
-    assert.equal(id, 2405);
-    assert.equal(calls.length, 3);
-    assert.equal(calls[1].method, 'POST');
-    assert.equal(calls[1].url.endsWith('/reverter'), true);
-    assert.equal(calls[1].body.includes('CORRECAO'), true);
-    assert.equal(calls[2].method, 'PATCH');
-    assert.equal(calls[2].url.endsWith('/status'), true);
-    assert.equal(calls[2].body.includes('NAO_INICIADO'), true);
+    await assert.rejects(enrollLearner(makeQaToken(195), 67, 195, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('adversarial: enrollLearner on EM_ANDAMENTO uses governed administrative patch and reversal when /finalizar would reject incomplete runs', async () => {
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner on EM_ANDAMENTO uses governed administrative patch and reversal when /finalizar would reject incomplete runs', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), method: opts?.method, body: opts?.body });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: [{ id: 2404, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 194,
+            empresa_id: 6, status: 'EM_ANDAMENTO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      // Proves Codex finding: /finalizar on an incomplete course returns 409 SCORM_COMPLETION_REJECTED
-      if (String(url).endsWith('/api/lms/matriculas/2404/finalizar')) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'SCORM_COMPLETION_REJECTED',
-            error: 'Conclusão SCORM ainda não elegível',
-          }),
-          { status: 409, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      if (String(url).endsWith('/api/lms/matriculas/2404/status') && opts?.method === 'PATCH') {
-        const parsedBody = JSON.parse(opts.body);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 2404, status: parsedBody.status },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      if (String(url).endsWith('/api/lms/matriculas/2404/reverter')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: { matricula_id: 2404, status: 'EM_ANDAMENTO', reverted: true },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const id = await enrollLearner('learner-token', 67, 194, 'admin-token');
-    assert.equal(id, 2404);
-    assert.equal(calls.length, 4);
-    // 1: minhas-ead
-    // 2: PATCH /status -> CONCLUIDO (governed administrative completion override)
-    assert.equal(calls[1].method, 'PATCH');
-    assert.equal(calls[1].url.endsWith('/status'), true);
-    assert.equal(calls[1].body.includes('CONCLUIDO'), true);
-    // 3: POST /reverter -> resets lms_progresso_scorm and cycles
-    assert.equal(calls[2].method, 'POST');
-    assert.equal(calls[2].url.endsWith('/reverter'), true);
-    assert.equal(calls[2].body.includes('CORRECAO'), true);
-    // 4: PATCH /status -> NAO_INICIADO
-    assert.equal(calls[3].method, 'PATCH');
-    assert.equal(calls[3].url.endsWith('/status'), true);
-    assert.equal(calls[3].body.includes('NAO_INICIADO'), true);
+    await assert.rejects(enrollLearner(makeQaToken(194), 67, 194, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1583,66 +1482,94 @@ test('determineSlideAction recognizes mandatory interaction cards under /intera�
   assert.equal(card2Clicked, true);
 });
 
-test('enrollLearner retries rematricular with reversal when 409 LMS_COMPLETION_REVERSAL_REQUIRED is returned', async () => {
+test('SECURITY: refuses unsafe reset for enrollLearner retries rematricular with reversal when 409 LMS_COMPLETION_REVERSAL_REQUIRED is returned', async () => {
   const originalFetch = globalThis.fetch;
-  let reversalCalled = false;
-  let rematricularCalls = 0;
+  const calls = [];
   try {
-    globalThis.fetch = async (url, options = {}) => {
-      const u = String(url);
-      if (u.includes('/api/lms/matriculas/minhas-ead')) {
-        return new Response(JSON.stringify({ success: true, data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 55, funcionario_id: 194,
+            empresa_id: 6, status: 'CANCELADO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
-      if (u.endsWith('/api/lms/matriculas') && options.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            code: 'LMS_REMATRICULATION_REQUIRED',
-            message: 'Matrícula anterior cancelada',
-            data: { matricula_id: 555 },
-          }),
-          { status: 409, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      if (u.includes('/api/lms/matriculas/555/rematricular')) {
-        rematricularCalls += 1;
-        if (rematricularCalls === 1) {
-          // First attempt returns 409 requiring reversal
-          return new Response(
-            JSON.stringify({ code: 'LMS_COMPLETION_REVERSAL_REQUIRED', message: 'Reverta a conclusão antes' }),
-            { status: 409, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-        // Second attempt after reversal succeeds
-        return new Response(
-          JSON.stringify({ success: true, data: { matricula_id: 555, status: 'NAO_INICIADO' } }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      if (u.includes('/api/lms/matriculas/555/reverter')) {
-        const body = options.body ? JSON.parse(options.body) : {};
-        if (!body.reason || body.reason.length < 10 || body.classification !== 'CORRECAO') {
-          return new Response(
-            JSON.stringify({ code: 'LMS_COMPLETION_REVERSAL_INVALID', message: 'Classificação inválida' }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-        reversalCalled = true;
-        return new Response(
-          JSON.stringify({ success: true, data: { id: 555, status: 'EM_ANDAMENTO' } }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      throw new Error(`Unexpected URL in test: ${u}`);
+      throw new Error('UNEXPECTED_QA_WRITE');
     };
-
-    const matriculaId = await enrollLearner('learner-token', 55, 194, 'admin-token');
-    assert.equal(matriculaId, 555);
-    assert.equal(reversalCalled, true);
-    assert.equal(rematricularCalls, 2);
+    await assert.rejects(enrollLearner(makeQaToken(194), 55, 194, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
+test('SECURITY: Playwright timeout call logs do not expose headers or signed tokens', () => {
+  const marker = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0In0', 'signedtoken123456789'].join('.');
+  const unsafe = new Error('apiRequestContext.post: Timeout 30000ms exceeded.\n' +
+    'Authorization: Bearer ' + marker + '\nCookie: auth_token=' + marker);
+  assert.equal(safeQaErrorCode(unsafe), 'QA_NETWORK_TIMEOUT');
+  const sanitized = sanitizeQaReportValue({
+    error: unsafe.message,
+    nested: { requestHeaders: { Authorization: 'Bearer ' + marker, Cookie: marker } },
+    token: marker,
+  });
+  assert.doesNotMatch(JSON.stringify(sanitized), /eyJhbGciOiJIUzI1NiJ9|signedtoken123456789|auth_token=/);
+  assert.match(JSON.stringify(sanitized), /REDACTED/);
+});
 
+test('SECURITY: incremental QA report sanitizes nested headers in persisted JSON', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'airtrust-lms-qa-redaction-'));
+  const file = path.join(dir, 'report.json');
+  const marker = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0In0', 'signedtoken123456789'].join('.');
+  try {
+    const report = saveIncrementalReport([{
+      status: 'FAIL', reason: 'Timeout\nAuthorization: Bearer ' + marker,
+      audit_evidence: { headers: { Cookie: 'auth_token=' + marker } },
+    }], {}, file);
+    const written = fs.readFileSync(file, 'utf8');
+    assert.equal(report.fail_count, 1);
+    assert.doesNotMatch(written, /signedtoken123456789|eyJhbGciOiJIUzI1NiJ9/);
+    assert.match(written, /REDACTED/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
+test('SECURITY: mismatch tenant/employee/role/email cannot enroll or reset', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('UNEXPECTED_NETWORK_WRITE'); };
+  try {
+    for (const token of [
+      makeQaToken(194), makeQaToken(193, 'real.employee@airtrust.online'),
+      makeQaToken(193, undefined, 7), makeQaToken(193, undefined, 6, 'ADMIN'),
+    ]) {
+      await assert.rejects(enrollLearner(token, 67, 193, 'admin-token'));
+    }
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: missing positive enrollment ownership denies all administrative mutations', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    calls.push({ url: String(url), method: opts.method || 'GET' });
+    return new Response(JSON.stringify({ success: true, data: [
+      { id: 99, curso_id: 67, funcionario_id: 444, empresa_id: 9, status: 'CONCLUIDO' },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_ENROLLMENT_OWNERSHIP_UNVERIFIED/);
+    assert.deepEqual(calls.map(x => x.method), ['GET']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
