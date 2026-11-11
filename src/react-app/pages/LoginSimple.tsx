@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { useLanguage } from '../i18n/useLanguage';
 import { logger } from '../utils/logger';
+import { fetchSessionProfilesBounded } from '../lib/sessionProfilesTransport';
 import {
   API_BASE_URL,
   fetchWithAuth,
@@ -108,9 +109,9 @@ export default function LoginPage() {
     : '/';
 
   const loadSessionProfiles = async (): Promise<SessionRole[]> => {
-    const response = await fetchWithAuth(`${API_BASE_URL}/me/operational-access/session-profiles`, {
-      method: 'GET',
-    });
+    const response = await fetchSessionProfilesBounded(
+      `${API_BASE_URL}/me/operational-access/session-profiles`, fetchWithAuth,
+    );
     const payload = (await response.json().catch(() => ({}))) as SessionProfilesResponse;
 
     if (!response.ok || !payload.success || !payload.data) {
