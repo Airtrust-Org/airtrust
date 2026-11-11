@@ -39,7 +39,7 @@ test('adversarial: an existing QA user linked to another employee cannot be reus
       attempts += 1;
       let data;
       if (String(url).includes('/api/funcionarios?')) {
-        data = [{ id: 301, matricula: learner.matricula, email: learner.email }];
+        data = [{ id: 301, matricula: learner.matricula, email: learner.email, status: 'ATIVO' }];
       } else if (String(url).includes('/api/admin/usuarios')) {
         data = [{ id: 802, email: learner.email, perfil: 'ALUNO',
           funcionario_id: 999, empresa_id: 6 }];
@@ -88,7 +88,7 @@ test('CPF collision between two real run scopes chooses deterministic alternativ
     const resolved = await resolveAvailableQaCpf('synthetic-admin', incoming, '43012349465', '1');
     assert.equal(resolved, second);
     assert.deepEqual(requests.map((q) => q.method), ['GET', 'GET']);
-    assert.ok(requests.every((q) => q.url.includes('/api/funcionarios?')));
+    assert.ok(requests.every((q) => q.url.includes('/api/funcionarios?') && q.url.includes('status=todos')));
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -111,5 +111,26 @@ test('CPF availability denied or truncated fails before any staff creation', asy
     };
     await assert.rejects(resolveAvailableQaCpf('synthetic-admin', learner, '43012349465', '1'), /QA_CPF_AVAILABILITY_TRUNCATED/);
     assert.equal(calls, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test('inactive QA employee with same registration cannot be silently reused or duplicated', async () => {
+  const { provisionLearner } = await import('../provision-synthetic-qa-learner.mjs');
+  const learner = qaRunLearners('43012349465', '1', generateValidTestCpf).chromium;
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), method: options.method || 'GET' });
+      assert.ok(String(url).includes('status=todos'));
+      return new Response(JSON.stringify({ success: true, data: [{
+        id: 75, matricula: learner.matricula, email: learner.email, status: 'INATIVO',
+      }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    await assert.rejects(provisionLearner({mode:'apply', learnerPassword:'synthetic-unit-password', learnerDef:learner, adminToken:'fake-admin'}),
+      /QA_EMPLOYEE_INACTIVE_OR_UNVERIFIED/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
   } finally { globalThis.fetch = originalFetch; }
 });

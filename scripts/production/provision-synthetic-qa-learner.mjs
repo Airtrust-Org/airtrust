@@ -191,7 +191,7 @@ export function selectEligibleSector(
 }
 
 export async function findExistingEmployee(adminToken, matricula) {
-  const res = await request(adminToken, `/api/funcionarios?limit=100&search=${encodeURIComponent(matricula)}`);
+  const res = await request(adminToken, `/api/funcionarios?limit=100&status=todos&search=${encodeURIComponent(matricula)}`);
   if (res.status === 200 && Array.isArray(res.json?.data)) {
     const found = res.json.data.find(
       (f) => String(f.matricula || '').trim().toUpperCase() === matricula.toUpperCase(),
@@ -221,7 +221,7 @@ export async function resolveAvailableQaCpf(adminToken, learnerDef, runId, attem
   assert(browsers.length === 1, 'QA_CPF_LEARNER_SCOPE_INVALID');
   for (let ordinal = 0; ordinal <= 31; ordinal++) {
     const candidate = qaRunCpfCandidate(runId, attempt, browsers[0], generateValidTestCpf, ordinal);
-    const res = await request(adminToken, `/api/funcionarios?limit=100&search=${candidate}`);
+    const res = await request(adminToken, `/api/funcionarios?limit=100&status=todos&search=${candidate}`);
     assert(res.status === 200 && Array.isArray(res.json?.data), 'QA_CPF_AVAILABILITY_UNVERIFIED');
     const rows = res.json.data;
     const total = Number(res.json?.pagination?.total ?? rows.length);
@@ -251,6 +251,7 @@ export async function provisionLearner({
   let employeeCreated = false;
 
   if (employee) {
+    assert(String(employee.status || '').trim().toUpperCase() === 'ATIVO', 'QA_EMPLOYEE_INACTIVE_OR_UNVERIFIED');
     assert(String(employee.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_EMPLOYEE_COLLISION_EMAIL');
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
