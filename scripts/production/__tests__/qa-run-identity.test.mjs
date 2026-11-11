@@ -56,3 +56,10 @@ test('adversarial: an existing QA user linked to another employee cannot be reus
     assert.equal(attempts, 2);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('provisioning error diagnostics cannot print invitation tokens or request headers', async () => {
+  const { safeProvisionErrorCode } = await import('../provision-synthetic-qa-learner.mjs');
+  const sample = new Error('POST failed\nAuthorization: Bearer synthetic-secret-jwt\nCookie: QA_LOGIN=private');
+  assert.equal(safeProvisionErrorCode(sample), 'QA_PROVISION_UNEXPECTED_ERROR');
+  assert.equal(safeProvisionErrorCode(new Error('QA_USER_EMPLOYEE_LINK_MISMATCH')), 'QA_USER_EMPLOYEE_LINK_MISMATCH');
+});

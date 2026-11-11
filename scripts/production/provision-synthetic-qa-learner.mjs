@@ -274,7 +274,7 @@ export async function provisionLearner({
 
     assert(
       createEmpRes.status === 200 || createEmpRes.status === 201,
-      `CREATE_EMPLOYEE_FAILED_HTTP_${createEmpRes.status}: ${JSON.stringify(createEmpRes.json)}`,
+      `CREATE_EMPLOYEE_FAILED_HTTP_${createEmpRes.status}`,
     );
     employee = createEmpRes.json?.data;
     assert(employee && Number(employee.id) > 0, 'CREATE_EMPLOYEE_ID_MISSING');
@@ -323,7 +323,7 @@ export async function provisionLearner({
 
     assert(
       createUserRes.status === 201 || createUserRes.status === 200,
-      `CREATE_USER_FAILED_HTTP_${createUserRes.status}: ${JSON.stringify(createUserRes.json)}`,
+      `CREATE_USER_FAILED_HTTP_${createUserRes.status}`,
     );
     user = createUserRes.json?.data;
     const inviteToken = user?.inviteToken;
@@ -339,7 +339,7 @@ export async function provisionLearner({
     });
     assert(
       acceptRes.status === 200,
-      `ACCEPT_INVITE_FAILED_HTTP_${acceptRes.status}: ${JSON.stringify(acceptRes.json)}`,
+      `ACCEPT_INVITE_FAILED_HTTP_${acceptRes.status}`,
     );
     userCreated = true;
     passwordConfigured = true;
@@ -404,6 +404,15 @@ export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerP
   return results;
 }
 
+// CLI diagnostic output is deliberately code-only: API/Playwright errors may
+// include invitation tokens, passwords or Authorization headers.
+export function safeProvisionErrorCode(err) {
+  const message = String(err?.message || '');
+  const code = message.match(/^([A-Z][A-Z0-9_]{3,90})$/);
+  if (code) return code[1];
+  return 'QA_PROVISION_UNEXPECTED_ERROR';
+}
+
 // CLI execution
 if (import.meta.url === `file://${process.argv[1]}`) {
   const mode = process.argv[2] === '--apply' ? 'apply' : 'inspect';
@@ -418,7 +427,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(0);
     })
     .catch((err) => {
-      console.error('PROVISIONING_ERROR:', err.message || err);
+      console.error('PROVISIONING_ERROR:', safeProvisionErrorCode(err));
       process.exit(1);
     });
 }
