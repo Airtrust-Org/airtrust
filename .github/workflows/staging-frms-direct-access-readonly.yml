@@ -24,8 +24,8 @@ jobs:
       EXPECTED_SHA: ${{ inputs.expected_deployed_sha }}
       CONFIRMATION: ${{ inputs.confirmation }}
       GITHUB_TOKEN: ${{ github.token }}
-      FRMS_QA_EMAIL: ${{ secrets.FRMS_QA_EMAIL }}
-      FRMS_QA_PASSWORD: ${{ secrets.FRMS_QA_PASSWORD }}
+      FRMS_QA_EMAIL: qa-frms-ux@staging.airtrust.invalid
+      FRMS_QA_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
         with:
