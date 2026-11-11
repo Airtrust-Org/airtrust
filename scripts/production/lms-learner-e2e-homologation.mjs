@@ -248,7 +248,7 @@ export function assertQaLearnerIdentity(token, funcionarioId) {
   return true;
 }
 
-export async function enrollLearner(token, cursoId, funcionarioId, adminToken = null) {
+export async function enrollLearner(token, cursoId, funcionarioId) {
   // No administrative reversal, forced completion, DELETE or cycle reset is
   // permitted in a production homologation. Use a newly provisioned synthetic
   // learner or a separately approved, audited reset workflow instead.
@@ -287,11 +287,9 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
     body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
   });
   let res = await create(token);
-  if (res.status === 403 && adminToken) {
-    // The only administrative write permitted by the runner is creation of a
-    // NEW enrollment for the positively attested synthetic learner.
-    res = await create(adminToken);
-  }
+  // No admin fallback on 403: the server may have rejected a stale learner-to-employee link.
+  // The runner may not override that denial using a privileged token.
+  if (res.status === 403) throw new Error('QA_SELF_ENROLLMENT_FORBIDDEN');
   if (res.status === 200 || res.status === 201) {
     const matriculaId = Number(res.json?.data?.id || 0);
     assert(matriculaId > 0, 'QA_ENROLLMENT_ID_INVALID');

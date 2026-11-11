@@ -242,39 +242,29 @@ test('enrollLearner reuses existing active enrollment from minhas-ead', async ()
   }
 });
 
-test('enrollLearner falls back to admin token on 403 sector restricted', async () => {
+test('SECURITY: stale employee link or sector-denied learner never uses administrator fallback', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (url, opts) => {
-      calls.push({ url: String(url), headers: opts?.headers });
-      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET', auth: opts?.headers?.Authorization });
+      if (String(url).includes('/minhas-ead')) {
         return new Response(JSON.stringify({ success: true, data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          status: 200, headers: { 'Content-Type': 'application/json' },
         });
       }
       if (String(url).endsWith('/api/lms/matriculas')) {
-        const auth = opts?.headers?.Authorization || '';
-        if (!auth.includes('admin-token')) {
-          return new Response(
-            JSON.stringify({ success: false, code: 'LMS_SELF_ENROLLMENT_NOT_ALLOWED' }),
-            { status: 403, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-        if (auth.includes('admin-token')) {
-          return new Response(JSON.stringify({ success: true, data: { id: 99 } }), {
-            status: 201,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
+        assert.equal(opts?.headers?.Authorization, 'Bearer ' + makeQaToken(193));
+        return new Response(JSON.stringify({
+          success: false, code: 'LMS_LEARNER_LINK_MISMATCH',
+        }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
-      throw new Error(`Unexpected url: ${url}`);
+      throw new Error('UNEXPECTED_URL');
     };
-
-    const id = await enrollLearner(makeQaToken(193), 44, 193, 'admin-token');
-    assert.equal(id, 99);
-    assert.equal(calls.length, 3);
+    await assert.rejects(enrollLearner(makeQaToken(193), 44, 193, 'admin-token'),
+      /QA_SELF_ENROLLMENT_FORBIDDEN/);
+    assert.deepEqual(calls.map(x => x.method), ['GET', 'POST']);
+    assert.equal(calls.some(x => x.auth === 'Bearer admin-token'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
