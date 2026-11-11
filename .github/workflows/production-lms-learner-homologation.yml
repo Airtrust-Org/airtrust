@@ -88,7 +88,7 @@ jobs:
   provision:
     name: Provision synthetic QA learner
     needs: guard
-    if: needs.guard.outputs.action == 'all' || needs.guard.outputs.action == 'provision'
+    if: needs.guard.outputs.action == 'all' || needs.guard.outputs.action == 'provision' || needs.guard.outputs.action == 'certify'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
@@ -126,6 +126,7 @@ jobs:
       HOMOLOGATION_COURSE_IDS: ${{ needs.guard.outputs.course_ids }}
       HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
       QA_LEARNER_EMAIL: qa.lms.202611@airtrust.online
+      QA_LEARNER_EMAIL_OVERRIDE: qa.lms.202611.${{ matrix.browser }}@airtrust.online
       QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD }}
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
