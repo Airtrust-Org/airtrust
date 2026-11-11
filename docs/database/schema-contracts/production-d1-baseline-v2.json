@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-09",
-    "last_reconciled_against": "0577 D1 legacy QH archival/FK cleanup reviewed; remote apply pending behind independent encrypted off-D1 archive proof",
-    "schema_v2_digest": "585bbe2ff68203dcaec319d60a475191942253708a167b891e58ec12c87bae6c",
+    "last_reconciled_at": "2026-11-11",
+    "last_reconciled_against": "0578 Compliance designation EAD course-link repair reviewed; production Schema V2 and enrollment backfill pending",
+    "schema_v2_digest": "16c27697dbb92f0cd8873396910fbfbed7f40a234bcbcee241233bc08c9735e4",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1794,6 +1794,18 @@
       "reviewed_manifest": "dr-legacy-qh-fk-archive-0577.json",
       "evidence": "worker-airtrust/schema-v2/plans/dr-legacy-qh-fk-archive-0577.md",
       "note": "Zero operational tables modified. Preserves 525 historical rows in non-runtime archive, then removes only _backup_qh_tmp and its known missing-parent FK after independently restored encrypted off-D1 backup, protected production approval, strict preflight and D1 Time Travel. Not applied by merging this PR."
+    },
+    {
+      "change_file": "0578_compliance_designations_ead_contract.sql",
+      "change_id": "compliance-designation-ead-contract-0578",
+      "sha256": "1d0a8adf2acaac0a6b3717edfe898fea7b382fa94c0cee694bb9f9aa824d7a94",
+      "targets": [],
+      "domain": "Training Compliance/LMS: mandatory designation EAD rule opt-in and explicit FDM #201 links, preserve distinct operational #205",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "compliance-designation-ead-contract-0578.json",
+      "evidence": "worker-airtrust/schema-v2/plans/compliance-designation-ead-contract-0578.md",
+      "note": "Tenant 6 data-only update for nine previously disabled, uniquely published EAD designation requirements plus two new FDM_GATE condition rules; enrollment backfill separate authenticated workflow. Not applied merely by merging; schema 0578 may be applied only through governed Schema V2. Data-only UPDATE/INSERT on existing treinamento_requisitos, no DDL target; staleness target classifier expects []."
     }
   ]
 }
