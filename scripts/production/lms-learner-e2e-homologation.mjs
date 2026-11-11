@@ -422,67 +422,82 @@ export async function setupAuthenticatedContext(context, token, matriculaId = nu
   }
 }
 
-export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null) {
-  const res = await fetchJson(`${API}/api/qualificacoes/funcionario/${funcionarioId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (res.status === 200 && Array.isArray(res.json?.data)) {
-    const list = res.json.data;
-    if (qualificacaoHistoricoId) {
-      const exact = list.find((q) => Number(q.id) === Number(qualificacaoHistoricoId));
-      if (exact) return exact;
+export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null, maxRetries = 1, delayMs = 500) {
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    if (attempt > 0 && delayMs > 0) {
+      await delay(delayMs);
     }
-    // Look for qualification related to this course
-    const matching = list.find((q) => Number(q.lms_curso_id || 0) === cursoId);
-    return matching || null;
+    const res = await fetchJson(`${API}/api/qualificacoes/funcionario/${funcionarioId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 200 && Array.isArray(res.json?.data)) {
+      const list = res.json.data;
+      if (qualificacaoHistoricoId) {
+        const exact = list.find((q) => Number(q.id) === Number(qualificacaoHistoricoId));
+        if (exact) return exact;
+      }
+      // Look for qualification related to this course
+      const matching = list.find((q) => Number(q.lms_curso_id || 0) === cursoId);
+      if (matching) return matching;
+      if (!qualificacaoHistoricoId && !cursoId) return null;
+    }
   }
   return null;
 }
 
-export async function checkCertificate(token, qualificacaoHistoricoId) {
+export async function checkCertificate(token, qualificacaoHistoricoId, maxRetries = 10, delayMs = 1500) {
   if (!qualificacaoHistoricoId) return null;
-  const res = await fetchJson(`${API}/api/certificados/historico/${qualificacaoHistoricoId}/certificados`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (res.status === 200 && Array.isArray(res.json?.data) && res.json.data.length > 0) {
-    const cert = res.json.data[0];
-    const certId = cert.id;
-    // Download endpoint returns JSON metadata containing the streaming URL: { data: { url } }
-    const downloadRes = await fetch(`${API}/api/certificados/download/${certId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    let streamUrl = `${API}/api/pasta-virtual/stream/${certId}`;
-    if (downloadRes.ok) {
-      const contentType = String(downloadRes.headers.get('content-type') || '').toLowerCase();
-      if (contentType.includes('application/json')) {
-        const meta = await downloadRes.json().catch(() => null);
-        if (meta?.data?.url) {
-          streamUrl = String(meta.data.url).startsWith('http') ? meta.data.url : `${API}${meta.data.url}`;
-        }
-      } else {
-        // Direct stream returned by mock or legacy endpoint
-        const buffer = Buffer.from(await downloadRes.arrayBuffer());
-        const isPdf = buffer.slice(0, 4).toString() === '%PDF';
-        return {
-          id: certId,
-          validPdf: isPdf,
-          sha256: sha256(buffer),
-          sizeBytes: buffer.length,
-        };
-      }
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    if (attempt > 0 && delayMs > 0) {
+      await delay(delayMs);
     }
-    const streamRes = await fetch(streamUrl, {
+    const res = await fetchJson(`${API}/api/certificados/historico/${qualificacaoHistoricoId}/certificados`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (streamRes.ok) {
-      const buffer = Buffer.from(await streamRes.arrayBuffer());
-      const isPdf = buffer.slice(0, 4).toString() === '%PDF';
-      return {
-        id: certId,
-        validPdf: isPdf,
-        sha256: sha256(buffer),
-        sizeBytes: buffer.length,
-      };
+    if (res.status === 200 && Array.isArray(res.json?.data) && res.json.data.length > 0) {
+      const cert = res.json.data[0];
+      const certId = cert.id;
+      // Download endpoint returns JSON metadata containing the streaming URL: { data: { url } }
+      const downloadRes = await fetch(`${API}/api/certificados/download/${certId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      let streamUrl = `${API}/api/pasta-virtual/stream/${certId}`;
+      if (downloadRes.ok) {
+        const contentType = String(downloadRes.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) {
+          const meta = await downloadRes.json().catch(() => null);
+          if (meta?.data?.url) {
+            streamUrl = String(meta.data.url).startsWith('http') ? meta.data.url : `${API}${meta.data.url}`;
+          }
+        } else {
+          // Direct stream returned by mock or legacy endpoint
+          const buffer = Buffer.from(await downloadRes.arrayBuffer());
+          const isPdf = buffer.slice(0, 4).toString() === '%PDF';
+          if (isPdf) {
+            return {
+              id: certId,
+              validPdf: true,
+              sha256: sha256(buffer),
+              sizeBytes: buffer.length,
+            };
+          }
+        }
+      }
+      const streamRes = await fetch(streamUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (streamRes.ok) {
+        const buffer = Buffer.from(await streamRes.arrayBuffer());
+        const isPdf = buffer.slice(0, 4).toString() === '%PDF';
+        if (isPdf) {
+          return {
+            id: certId,
+            validPdf: true,
+            sha256: sha256(buffer),
+            sizeBytes: buffer.length,
+          };
+        }
+      }
     }
   }
   return null;
@@ -886,7 +901,8 @@ async function drivePptxCourseInBrowser({
   // Qualification and Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
-  const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
+  const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId) : null;
 
   // Reopen in real browser to verify no status or progress downgrade
   const reopenBrowser = await browserEngine.launch({ headless: true });
@@ -1888,7 +1904,8 @@ async function driveScormCourseInBrowser({
   // Qualification & Certificate
   const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
   const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id);
-  const cert = qual?.id ? await checkCertificate(token, qual.id) : null;
+  const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId) : null;
 
   // Real browser reopen check in new isolated session
   const reopenBrowser = await browserEngine.launch({ headless: true });
