@@ -946,7 +946,34 @@ export function determineSlideAction(doc, {
 // ---------------------------------------------------------------------------
 // SCORM Frame Driver with Interactive Gates & Accordion Support
 // ---------------------------------------------------------------------------
-async function resolveScormWrapper(page) {
+export function buildLearnerAuthPayload(token, funcionarioId) {
+  const claims = decodeJwtPayload(token);
+  const user = {
+    id: claims?.id || funcionarioId,
+    funcionario_id: funcionarioId,
+    email: claims?.email || `qa.lms.202611.${BROWSER_NAME}@airtrust.online`,
+    nome: claims?.nome || 'Aluno QA Sintético',
+    role: 'ALUNO',
+    empresa_id: TARGET_COMPANY_ID,
+  };
+  return { jwt: token, user };
+}
+
+export function injectLearnerSessionScript(page, token, funcionarioId) {
+  const payload = buildLearnerAuthPayload(token, funcionarioId);
+  return page.addInitScript(({ jwt, user }) => {
+    try {
+      localStorage.setItem('airtrust_token', jwt);
+      localStorage.setItem('auth_token', jwt);
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+      localStorage.setItem('airtrust_user', JSON.stringify(user));
+      localStorage.setItem('airtrust_empresa_id', '6');
+    } catch {}
+  }, payload);
+}
+
+export async function resolveScormWrapper(page) {
   const hasApiOnPage = await page.evaluate(() => Boolean(window.API || window.API_1484_11)).catch(() => false);
   if (hasApiOnPage) return page;
 
@@ -958,18 +985,36 @@ async function resolveScormWrapper(page) {
   return null;
 }
 
-async function resolveScormContentFrame(page) {
+export async function resolveScormContentFrame(page) {
+  // 1. Direct search by content asset URL, strictly ensuring course indicators
   for (const frame of page.frames()) {
-    if (frame.url().includes('/api/lms/assets/scorm/') || (frame.url().includes('/api/lms/scorm/launch/') && frame !== page.mainFrame())) {
-      const hasContent = await frame.evaluate(() => Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, button, a'))).catch(() => false);
-      if (hasContent) return frame;
+    if (frame.url().includes('/api/lms/assets/scorm/')) {
+      const hasScormContent = await frame.evaluate(() =>
+        Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit'))
+      ).catch(() => false);
+      if (hasScormContent) return frame;
     }
   }
+
+  // 2. Resolve inner #scorm-frame element inside the wrapper (excluding wrapper buttons like #btn-close)
   const wrapper = await resolveScormWrapper(page);
-  const target = wrapper || page;
-  const frameEl = await target.$('#scorm-frame');
-  const frame = await frameEl?.contentFrame();
-  if (frame) return frame;
+  if (wrapper && wrapper !== page) {
+    const frameEl = await wrapper.$('#scorm-frame');
+    const frame = await frameEl?.contentFrame();
+    if (frame) {
+      const hasScormContent = await frame.evaluate(() =>
+        Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit'))
+      ).catch(() => false);
+      if (hasScormContent) return frame;
+    }
+  }
+
+  // 3. Direct launch fallback on page
+  const directFrameEl = await page.$('#scorm-frame');
+  const directFrame = await directFrameEl?.contentFrame();
+  if (directFrame) {
+    return directFrame;
+  }
   return null;
 }
 
@@ -1025,15 +1070,7 @@ async function driveScormCourseInBrowser({
     }
   });
 
-  await page.addInitScript((jwt) => {
-    try {
-      localStorage.setItem('airtrust_token', jwt);
-      localStorage.setItem('auth_token', jwt);
-      localStorage.setItem('airtrust_access_token', jwt);
-      localStorage.setItem('token', jwt);
-      localStorage.setItem('airtrust_empresa_id', '6');
-    } catch {}
-  }, token);
+  await injectLearnerSessionScript(page, token, funcionarioId);
 
   const playerUrl = `${APP}/lms/player/${matriculaId}`;
   const launchUrl = `${API}/api/lms/scorm/launch/${matriculaId}`;
@@ -1121,15 +1158,7 @@ async function driveScormCourseInBrowser({
       const savedLocation = runtimeState.location;
       await page.close();
       const resumePage = await context.newPage();
-      await resumePage.addInitScript((jwt) => {
-        try {
-          localStorage.setItem('airtrust_token', jwt);
-          localStorage.setItem('auth_token', jwt);
-          localStorage.setItem('airtrust_access_token', jwt);
-          localStorage.setItem('token', jwt);
-          localStorage.setItem('airtrust_empresa_id', '6');
-        } catch {}
-      }, token);
+      await injectLearnerSessionScript(resumePage, token, funcionarioId);
       await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
       await resumePage.waitForTimeout(1500);
 
@@ -1608,15 +1637,7 @@ async function driveScormCourseInBrowser({
   const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
   await setupAuthenticatedContext(reopenContext, token, matriculaId);
   const reopenPage = await reopenContext.newPage();
-  await reopenPage.addInitScript((jwt) => {
-    try {
-      localStorage.setItem('airtrust_token', jwt);
-      localStorage.setItem('auth_token', jwt);
-      localStorage.setItem('airtrust_access_token', jwt);
-      localStorage.setItem('token', jwt);
-      localStorage.setItem('airtrust_empresa_id', '6');
-    } catch {}
-  }, token);
+  await injectLearnerSessionScript(reopenPage, token, funcionarioId);
   await reopenPage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
   await reopenPage.waitForTimeout(1500);
   await reopenBrowser.close();
