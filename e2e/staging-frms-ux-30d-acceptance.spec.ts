@@ -166,23 +166,32 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     timeout: 90_000,
   }).then(async (request) => {
     const started = Date.now();
-    const outcome = await Promise.race([
-      page.waitForResponse((response) => response.request() === request, {
-        timeout: 30_000,
-      }).then((response) => ({ kind: 'response' as const, response })),
-      page.waitForEvent('requestfailed', {
-        predicate: (failed) => failed === request,
-        timeout: 30_000,
-      }).then((failed) => ({
-        kind: 'failed' as const,
-        reason: failed.failure()?.errorText || 'network_unknown',
-      })),
-    ]);
-    if (outcome.kind === 'failed') {
-      throw new Error('FRMS_QA_SNAPSHOT_REQUEST_FAILED:' + outcome.reason);
+    const failedAttempts: string[] = [];
+    const onFailed = (failed: import('@playwright/test').Request) => {
+      if (failed.url().includes('/api/frms/operational-snapshot')) {
+        failedAttempts.push(failed.failure()?.errorText || 'network_unknown');
+      }
+    };
+    page.on('requestfailed', onFailed);
+    try {
+      // The bounded frontend transport may retry one aborted GET. Accept the
+      // successful real response from either attempt, never an unrelated API.
+      const response = await page.waitForResponse((candidate) => {
+        const url = new URL(candidate.url());
+        return url.hostname === API_HOST &&
+          url.pathname === '/api/frms/operational-snapshot' &&
+          url.searchParams.get('data_inicio') === DAY &&
+          candidate.request().method() === 'GET';
+      }, { timeout: 30_000 });
+      console.log('FRMS_QA_SNAPSHOT_RESPONSE_MS=' + (Date.now() - started) +
+        ';failed_get_attempts=' + failedAttempts.length);
+      return response;
+    } catch (error) {
+      throw new Error('FRMS_QA_SNAPSHOT_NO_RESPONSE_AFTER_GET:failed=' +
+        failedAttempts.join(',') + ';cause=' + String(error));
+    } finally {
+      page.off('requestfailed', onFailed);
     }
-    console.log('FRMS_QA_SNAPSHOT_RESPONSE_MS=' + (Date.now() - started));
-    return outcome.response;
   });
   // Consume any early rejection if authentication fails before await below.
   void snapshotRequest.catch(() => {});
