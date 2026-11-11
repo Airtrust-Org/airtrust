@@ -192,6 +192,24 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
         // deve ser rematriculada em novo ciclo auditado para garantir teste independente e percurso integral a partir do zero (0%).
         const currentStatus = String(match.status || '').toUpperCase();
         if (currentStatus !== 'NAO_INICIADO' && currentStatus !== 'CANCELADO') {
+          if (currentStatus === 'CONCLUIDO' && adminToken) {
+            console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (CONCLUIDO) já concluída em teste prévio. Revertendo para teste auditado de percurso integral em ${BROWSER_NAME}...`);
+            const rev = await fetchJson(`${API}/api/lms/matriculas/${match.id}/reverter`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                reason: `Homologação LMS Aluno QA - reteste auditado de percurso integral em ${BROWSER_NAME}`,
+                classification: 'CORRECAO',
+              }),
+            });
+            if (rev.status === 200) {
+              console.log(`[LMS_HOMOLOGATION] Conclusão revertida com sucesso: matrícula #${match.id} reiniciada no início.`);
+              return Number(match.id);
+            }
+          }
           console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
           const authToUse = adminToken || token;
           let remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
@@ -871,6 +889,26 @@ export function determineSlideAction(doc, {
     return { type: 'final-button', domCurrent, domTotal, atLastUnit: true };
   }
 
+  // 0b. Pending scenario review button
+  const pendingScenarioBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    return visible(el) && !el.disabled && /revisar cen[áa]rio pendente/i.test(txt);
+  });
+  if (pendingScenarioBtn) {
+    pendingScenarioBtn.click?.();
+    return { type: 'pending-scenario-review', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 0c. Return to journey point button
+  const returnToJourneyBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    return visible(el) && !el.disabled && /voltar ao ponto atual/i.test(txt);
+  });
+  if (returnToJourneyBtn) {
+    returnToJourneyBtn.click?.();
+    return { type: 'return-to-journey', domCurrent, domTotal, atLastUnit };
+  }
+
   // 1. Scenario options: stop selecting once an option is chosen in the scenario
   const scenarioOptions = Array.from(doc.querySelectorAll('[data-opt], button.option')).filter(visible);
   const hasSelectedScenarioOption = scenarioOptions.some((el) => {
@@ -1267,6 +1305,26 @@ async function driveScormCourseInBrowser({
         }
       }
 
+      // 1b. Pending scenario review button
+      const pendingScenarioBtn = Array.from(document.querySelectorAll('#next, #nextBtn, button, a')).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        return /revisar cen[áa]rio pendente/i.test(txt);
+      });
+      if (pendingScenarioBtn) {
+        return result(pendingScenarioBtn, 'pending-scenario-review');
+      }
+
+      // 1c. Return to journey point button
+      const returnToJourneyBtn = Array.from(document.querySelectorAll('#next, #nextBtn, button, a')).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        return /voltar ao ponto atual/i.test(txt);
+      });
+      if (returnToJourneyBtn) {
+        return result(returnToJourneyBtn, 'return-to-journey');
+      }
+
       // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id
       const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab')).find((el) => {
         const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || clean(el.innerText || el.getAttribute('aria-label') || '');
@@ -1531,7 +1589,9 @@ async function driveScormCourseInBrowser({
       action?.type === 'scenario-option' ||
       action?.type === 'assessment-answer' ||
       action?.type === 'gate-item' ||
-      action?.type === 'touch-target'
+      action?.type === 'touch-target' ||
+      action?.type === 'pending-scenario-review' ||
+      action?.type === 'return-to-journey'
     ) {
       quizzesAnswered += 1;
     }

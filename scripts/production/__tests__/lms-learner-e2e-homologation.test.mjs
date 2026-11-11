@@ -889,3 +889,109 @@ test('resolveScormContentFrame excludes launch wrapper with hidden completion ov
   assert.equal(resolved.url().includes('assets/scorm'), true);
 });
 
+test('regression: determineSlideAction recognizes and clicks "Revisar cenário pendente" on study_end without stalling', () => {
+  let pendingClicked = false;
+  const mockDoc = {
+    querySelector: (sel) => {
+      if (sel === '.counter, #count') return { innerText: '45/45' };
+      if (sel === '#qNext') return null;
+      if (sel === '#next') {
+        return {
+          disabled: false,
+          innerText: 'Revisar cenário pendente (tela 24)',
+          click: () => { pendingClicked = true; },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('button, input[type=button], a')) {
+        return [{
+          disabled: false,
+          innerText: 'Revisar cenário pendente (tela 24)',
+          click: () => { pendingClicked = true; },
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.type, 'pending-scenario-review');
+  assert.equal(action.domCurrent, 45);
+  assert.equal(action.domTotal, 45);
+  assert.equal(pendingClicked, true);
+});
+
+test('regression: determineSlideAction recognizes and clicks "Voltar ao ponto atual" in preview mode', () => {
+  let returnClicked = false;
+  const mockDoc = {
+    querySelector: (sel) => {
+      if (sel === '.counter, #count') return { innerText: '5/45' };
+      if (sel === '#qNext') return null;
+      if (sel === '#next') {
+        return {
+          disabled: false,
+          innerText: 'Voltar ao ponto atual',
+          click: () => { returnClicked = true; },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('button, input[type=button], a')) {
+        return [{
+          disabled: false,
+          innerText: 'Voltar ao ponto atual',
+          click: () => { returnClicked = true; },
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.type, 'return-to-journey');
+  assert.equal(action.domCurrent, 5);
+  assert.equal(action.domTotal, 45);
+  assert.equal(returnClicked, true);
+});
+
+test('adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminToken is provided to ensure full course journey reset', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method, body: opts?.body });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 2405, curso_id: 67, status: 'CONCLUIDO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/2405/reverter')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 2405, status: 'EM_ANDAMENTO', reverted: true },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 195, 'admin-token');
+    assert.equal(id, 2405);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, 'POST');
+    assert.equal(calls[1].url.endsWith('/reverter'), true);
+    assert.equal(calls[1].body.includes('CORRECAO'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
