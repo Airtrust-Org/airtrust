@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { safeFrmsOperationalRequestError, withFrmsAccessTimeout } from '../useFrmsOperationalAccess';
+import { canFetchFrmsOperationalAccess, safeFrmsOperationalRequestError, withFrmsAccessTimeout } from '../useFrmsOperationalAccess';
 
 describe('FRMS maintenance operational errors', () => {
   it('returns only operational messages for every visible request kind', () => {
@@ -45,5 +45,17 @@ describe('FRMS operational access must fail closed when a request hangs', () => 
     expect(result).toEqual({ enabled: true });
     await vi.advanceTimersByTimeAsync(150);
     expect(requestSignal?.aborted).toBe(false);
+  });
+});
+
+describe('FRMS access session hydration gate', () => {
+  it('does not query operational permissions during login or restored-session verification', () => {
+    expect(canFetchFrmsOperationalAccess(true, false)).toBe(false);
+    expect(canFetchFrmsOperationalAccess(true, true)).toBe(false);
+    expect(canFetchFrmsOperationalAccess(false, false)).toBe(false);
+  });
+
+  it('queries only after authenticated session hydration, even if company listing is degraded', () => {
+    expect(canFetchFrmsOperationalAccess(false, true)).toBe(true);
   });
 });
