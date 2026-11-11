@@ -17,6 +17,8 @@
  * - Zero PII: dados 100% sintéticos.
  */
 
+import { qaRunLearners, qaProvisionSelection, qaRunEmail, qaRunCpfCandidate, assertQaRunScope } from './qa-run-identity.mjs';
+
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -172,7 +174,9 @@ export function selectEligibleSector(
     return true;
   });
 
-  const candidates = eligible.length > 0 ? eligible : setoresList;
+  // No classified/in-scope sector: fail closed rather than place QA in an arbitrary sector.
+  if (eligible.length === 0) return null;
+  const candidates = eligible;
 
   return (
     candidates.find(
@@ -187,7 +191,7 @@ export function selectEligibleSector(
 }
 
 export async function findExistingEmployee(adminToken, matricula) {
-  const res = await request(adminToken, `/api/funcionarios?limit=100&search=${encodeURIComponent(matricula)}`);
+  const res = await request(adminToken, `/api/funcionarios?limit=100&status=todos&search=${encodeURIComponent(matricula)}`);
   if (res.status === 200 && Array.isArray(res.json?.data)) {
     const found = res.json.data.find(
       (f) => String(f.matricula || '').trim().toUpperCase() === matricula.toUpperCase(),
@@ -208,6 +212,27 @@ export async function findExistingUser(adminToken, email) {
   return null;
 }
 
+// CPF is unique per company, while its hash-derived prefix has a finite
+// namespace. Resolve rare collisions by reading only tenant-scoped employees;
+// never reuse a person by CPF or overwrite a pre-existing registration.
+export async function resolveAvailableQaCpf(adminToken, learnerDef, runId, attempt) {
+  const browsers = ['chromium', 'webkit'].filter((browser) =>
+    qaRunEmail(runId, attempt, browser) === String(learnerDef.email || '').trim().toLowerCase());
+  assert(browsers.length === 1, 'QA_CPF_LEARNER_SCOPE_INVALID');
+  for (let ordinal = 0; ordinal <= 31; ordinal++) {
+    const candidate = qaRunCpfCandidate(runId, attempt, browsers[0], generateValidTestCpf, ordinal);
+    const res = await request(adminToken, `/api/funcionarios?limit=100&status=todos&search=${candidate}`);
+    assert(res.status === 200 && Array.isArray(res.json?.data), 'QA_CPF_AVAILABILITY_UNVERIFIED');
+    const rows = res.json.data;
+    const total = Number(res.json?.pagination?.total ?? rows.length);
+    assert(Number.isSafeInteger(total) && total <= rows.length, 'QA_CPF_AVAILABILITY_TRUNCATED');
+    if (!rows.some((f) => String(f?.cpf || '').replace(/\D/g, '') === candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error('QA_CPF_CANDIDATES_EXHAUSTED');
+}
+
 export async function provisionLearner({
   mode = 'inspect',
   learnerPassword,
@@ -226,6 +251,8 @@ export async function provisionLearner({
   let employeeCreated = false;
 
   if (employee) {
+    assert(String(employee.status || '').trim().toUpperCase() === 'ATIVO', 'QA_EMPLOYEE_INACTIVE_OR_UNVERIFIED');
+    assert(String(employee.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_EMPLOYEE_COLLISION_EMAIL');
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
     console.log(`[QA_PROVISION] Criando funcionário sintético: ${learnerDef.matricula}...`);
@@ -254,13 +281,14 @@ export async function provisionLearner({
     assert(targetSetor?.id, 'NO_ACTIVE_SECTOR_AVAILABLE_FOR_QA_LEARNER');
     console.log(`[QA_PROVISION] Setor elegível selecionado: id=${targetSetor.id}, nome="${targetSetor.nome}"`);
 
+    const freeCpf = await resolveAvailableQaCpf(adminToken, learnerDef, process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
         nome: learnerDef.nome,
         matricula: learnerDef.matricula,
         email: learnerDef.email,
-        cpf: learnerDef.cpf,
+        cpf: freeCpf,
         cargo: learnerDef.cargo,
         setor_id: targetSetor.id,
         setor: targetSetor.nome,
@@ -269,7 +297,7 @@ export async function provisionLearner({
 
     assert(
       createEmpRes.status === 200 || createEmpRes.status === 201,
-      `CREATE_EMPLOYEE_FAILED_HTTP_${createEmpRes.status}: ${JSON.stringify(createEmpRes.json)}`,
+      `CREATE_EMPLOYEE_FAILED_HTTP_${createEmpRes.status}`,
     );
     employee = createEmpRes.json?.data;
     assert(employee && Number(employee.id) > 0, 'CREATE_EMPLOYEE_ID_MISSING');
@@ -285,6 +313,10 @@ export async function provisionLearner({
   let passwordConfigured = false;
 
   if (user) {
+    assert(String(user.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_USER_IDENTITY_MISMATCH');
+    assert(['ALUNO','student'].includes(String(user.perfil || '').trim()), 'QA_USER_ROLE_INVALID');
+    assert(Number(user.funcionario_id) === Number(employee?.id), 'QA_USER_EMPLOYEE_LINK_MISMATCH');
+    assert(Number(user.empresa_id) === TARGET_COMPANY_ID, 'QA_USER_TENANT_MISMATCH');
     console.log(`[QA_PROVISION] Usuário existente encontrado: id=${user.id}, email=${user.email}, perfil=${user.perfil}`);
     if (mode === 'apply' && learnerPassword) {
       console.log(`[QA_PROVISION] Redefinindo senha para garantir acesso previsível...`);
@@ -314,7 +346,7 @@ export async function provisionLearner({
 
     assert(
       createUserRes.status === 201 || createUserRes.status === 200,
-      `CREATE_USER_FAILED_HTTP_${createUserRes.status}: ${JSON.stringify(createUserRes.json)}`,
+      `CREATE_USER_FAILED_HTTP_${createUserRes.status}`,
     );
     user = createUserRes.json?.data;
     const inviteToken = user?.inviteToken;
@@ -330,7 +362,7 @@ export async function provisionLearner({
     });
     assert(
       acceptRes.status === 200,
-      `ACCEPT_INVITE_FAILED_HTTP_${acceptRes.status}: ${JSON.stringify(acceptRes.json)}`,
+      `ACCEPT_INVITE_FAILED_HTTP_${acceptRes.status}`,
     );
     userCreated = true;
     passwordConfigured = true;
@@ -382,15 +414,29 @@ export async function provisionLearner({
 }
 
 export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerPassword }) {
+  assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
   await assertPinnedProduction();
   const adminToken = await getAdminToken();
+  const learners = qaProvisionSelection(
+    process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT,
+    process.env.QA_PROVISION_BROWSER, generateValidTestCpf,
+  );
   const results = {};
-  for (const [key, def] of Object.entries(SYNTHETIC_LEARNERS)) {
+  for (const [key, def] of Object.entries(learners)) {
     console.log(`\n============================================================`);
     console.log(`[QA_PROVISION] Provisionando perfil: ${key} (${def.email})`);
     results[key] = await provisionLearner({ mode, learnerPassword, learnerDef: def, adminToken });
   }
   return results;
+}
+
+// CLI diagnostic output is deliberately code-only: API/Playwright errors may
+// include invitation tokens, passwords or Authorization headers.
+export function safeProvisionErrorCode(err) {
+  const message = String(err?.message || '');
+  const code = message.match(/^([A-Z][A-Z0-9_]{3,90})$/);
+  if (code) return code[1];
+  return 'QA_PROVISION_UNEXPECTED_ERROR';
 }
 
 // CLI execution
@@ -407,7 +453,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(0);
     })
     .catch((err) => {
-      console.error('PROVISIONING_ERROR:', err.message || err);
+      console.error('PROVISIONING_ERROR:', safeProvisionErrorCode(err));
       process.exit(1);
     });
 }

@@ -52,8 +52,8 @@ test('selectEligibleSector filters out unclassified sectors and respects operati
   // Caso onde o setor está classificado mas fora do escopo do admin
   const outOfScope = new Set([99]);
   const chosenOutOfScope = selectEligibleSector(sample, new Set(), outOfScope);
-  // Se nenhum estiver no escopo rigoroso, cai de volta nos candidatos disponíveis
-  assert.equal(chosenOutOfScope?.id, 10);
+  // Sem setor classificado no escopo, não efetuar provisionamento.
+  assert.equal(chosenOutOfScope, null);
 });
 
 test('generateValidTestCpf produces an 11-digit CPF passing modulo 11 algorithm', () => {

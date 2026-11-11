@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { qaRunEmail } from '../qa-run-identity.mjs';
+
+process.env.QA_RUN_ID = '43000000000';
+process.env.QA_RUN_ATTEMPT = '1';
 import {
   buildLearnerAuthPayload,
   checkCertificate,
@@ -25,7 +29,7 @@ import {
 } from '../lms-learner-e2e-homologation.mjs';
 
 
-function makeQaToken(funcionarioId, email = 'qa.lms.202611.chromium@airtrust.online', empresaId = 6, role = 'ALUNO') {
+function makeQaToken(funcionarioId, email = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, 'chromium'), empresaId = 6, role = 'ALUNO') {
   const encode = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
   return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
     email, empresa_id: empresaId, funcionario_id: funcionarioId, role,

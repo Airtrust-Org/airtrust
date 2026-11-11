@@ -18,6 +18,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
 import { chromium, webkit } from '@playwright/test';
+import { qaRunEmail, assertQaRunScope } from './qa-run-identity.mjs';
 import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from '../validation/lms-scorm-video-playback-readonly.mjs';
@@ -133,24 +134,14 @@ async function assertPinnedProduction() {
 }
 
 async function getLearnerSession() {
-  const browserEmail = `qa.lms.202611.${BROWSER_NAME}@airtrust.online`;
-  const preferredEmail = process.env.QA_LEARNER_EMAIL_OVERRIDE || browserEmail;
-  const defaultEmail = String(process.env.QA_LEARNER_EMAIL || 'qa.lms.202611@airtrust.online').trim();
+  const browserEmail = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
+  const preferredEmail = String(process.env.QA_LEARNER_EMAIL_OVERRIDE || '').trim().toLowerCase();
+  assert(preferredEmail === browserEmail, 'QA_EXPECTED_EMAIL_MISMATCH');
   const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
   assert(password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
 
-  let logged = null;
-  let activeEmail = preferredEmail;
-  try {
-    logged = await login(API, preferredEmail, password);
-  } catch (err) {
-    if (preferredEmail !== defaultEmail) {
-      activeEmail = defaultEmail;
-      logged = await login(API, defaultEmail, password);
-    } else {
-      throw err;
-    }
-  }
+  const logged = await login(API, preferredEmail, password);
+  const activeEmail = preferredEmail;
 
   let token = extractAccessToken(logged);
   const empresas = await fetchJson(`${API}/api/auth/empresas`, {
@@ -237,7 +228,7 @@ async function listCourses(learnerToken) {
 export function assertQaLearnerIdentity(token, funcionarioId) {
   const claims = decodeJwtPayload(token);
   const email = String(claims?.email || '').trim().toLowerCase();
-  const expected = `qa.lms.202611.${BROWSER_NAME}@airtrust.online`;
+  const expected = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
   assert(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'QA_BROWSER_NOT_ALLOWLISTED');
   assert(TARGET_COMPANY_ID === 6, 'QA_COMPANY_NOT_ALLOWLISTED');
   assert(email === expected, 'QA_LEARNER_EMAIL_NOT_ALLOWLISTED');
@@ -1090,7 +1081,7 @@ export function buildLearnerAuthPayload(token, funcionarioId) {
   const user = {
     id: claims?.id || funcionarioId,
     funcionario_id: funcionarioId,
-    email: claims?.email || `qa.lms.202611.${BROWSER_NAME}@airtrust.online`,
+    email: claims?.email || qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME),
     nome: claims?.nome || 'Aluno QA Sintético',
     role: 'ALUNO',
     empresa_id: TARGET_COMPANY_ID,
@@ -2189,6 +2180,7 @@ async function driveScormCourseInBrowser({
 // Main Runner
 // ---------------------------------------------------------------------------
 export async function runHomologation() {
+  assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
   await assertPinnedProduction();
   let learner = await getLearnerSession();
   console.log(`[LMS_HOMOLOGATION] Aluno autenticado: ${learner.email} (funcionario_id: ${learner.funcionarioId})`);
