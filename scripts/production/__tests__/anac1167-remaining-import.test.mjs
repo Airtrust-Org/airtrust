@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { manifestValid, matchedHistorical } from '../anac1167-remaining-import.mjs';
+import { manifestValid, matchedHistorical, reportJSON } from '../anac1167-remaining-import.mjs';
 const source=readFileSync(new URL('../anac1167-remaining-import.mjs',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../../../.github/workflows/production-anac1167-remaining-training.yml',import.meta.url),'utf8');
 
@@ -46,4 +46,11 @@ test('independent planned curricula, grouped readback and temporary delays',()=>
  assert.match(source,/HISTORIES_NOT_PLANNED|RB_HISTORY_INVALID/);
  assert.match(source,/Atomics\.wait\(delay,0,0,3000\)/);
  assert.doesNotMatch(source,/\/convocacoes\//);
+});
+
+test('proof is valid parseable JSON with terminal newline',()=>{
+ const s=reportJSON({mode:'dry-run',existing_count:0});
+ assert.deepEqual(JSON.parse(s),{mode:'dry-run',existing_count:0});
+ assert.ok(s.endsWith(String.fromCharCode(10)));
+ assert.equal(s.at(-2),'}');
 });

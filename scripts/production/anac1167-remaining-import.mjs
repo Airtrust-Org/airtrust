@@ -21,8 +21,9 @@ const sha=s=>createHash('sha256').update(s).digest('hex');
 const check=(condition,reason)=>{if(!condition)throw Error(reason)};
 const delay=new Int32Array(new SharedArrayBuffer(4));
 const digest=rows=>sha(JSON.stringify(rows));
+export function reportJSON(obj){return JSON.stringify(obj,null,2)+String.fromCharCode(10);}
 function result(obj){
- const data=JSON.stringify(obj,null,2)+'\\n';
+ const data=reportJSON(obj);
  if(process.env.ANAC1167_RESULT_PATH)writeFileSync(process.env.ANAC1167_RESULT_PATH,data,{mode:0o600});
  else process.stdout.write(data);
 }
