@@ -842,9 +842,10 @@ export function determineSlideAction(doc, {
     domTotal = Number(counterMatch[2]);
   }
 
-  // 0. Authentic final completion button
+  // 0. Authentic final completion button (strictly excludes assessment evaluation buttons)
   const finalBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
     const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
     return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
   });
   if (finalBtn) {
@@ -1129,6 +1130,7 @@ async function driveScormCourseInBrowser({
 
       const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
         const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
         return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
       });
       if (finalBtn) {
@@ -1140,7 +1142,8 @@ async function driveScormCourseInBrowser({
         const termBtn = Array.from(document.querySelectorAll('#next, #nextUnit, #nextBtn, button')).find((el) => {
           if (!visible(el) || el.disabled) return false;
           const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
-          return /(confirmar encerramento|concluir|finalizar|encerrar)/i.test(txt);
+          if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
+          return /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
         });
         if (termBtn) {
           return result(termBtn, 'final-button');

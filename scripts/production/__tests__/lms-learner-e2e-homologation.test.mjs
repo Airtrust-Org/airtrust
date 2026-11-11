@@ -771,3 +771,64 @@ test('regression: determineSlideAction does not oscillate between scenario optio
   assert.equal(step2.type, 'next-button');
   assert.equal(nextClicked, true);
 });
+
+test('regression: determineSlideAction does not treat "Concluir avaliação" as final-button, and advances to "Concluir curso"', () => {
+  let assessmentEvaluated = false;
+  let finalCourseClicked = false;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return { textContent: '45 / 45' };
+      }
+      if (selector === '#next') {
+        return {
+          disabled: false,
+          innerText: assessmentEvaluated ? 'Concluir curso' : 'Concluir avaliação',
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          click: () => {
+            if (!assessmentEvaluated) {
+              assessmentEvaluated = true;
+            } else {
+              finalCourseClicked = true;
+            }
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === 'button, input[type=button], a') {
+        return [
+          {
+            disabled: false,
+            innerText: assessmentEvaluated ? 'Concluir curso' : 'Concluir avaliação',
+            getAttribute: () => null,
+            hasAttribute: () => false,
+            click: () => {
+              if (!assessmentEvaluated) {
+                assessmentEvaluated = true;
+              } else {
+                finalCourseClicked = true;
+              }
+            },
+          },
+        ];
+      }
+      return [];
+    },
+  };
+
+  // Step 1: Assessment questions answered, button says "Concluir avaliação" -> MUST NOT be final-button, must be next-button
+  const step1 = determineSlideAction(mockDoc);
+  assert.notEqual(step1.type, 'final-button');
+  assert.equal(step1.type, 'next-button');
+  assert.equal(assessmentEvaluated, true);
+
+  // Step 2: Now assessment is evaluated and button says "Concluir curso" -> MUST be final-button
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'final-button');
+  assert.equal(finalCourseClicked, true);
+});
+
