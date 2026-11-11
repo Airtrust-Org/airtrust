@@ -50,3 +50,11 @@ test('matching completed history blocks the candidate before create is called', 
   assert.match(script, /check\(before.existing_count===0&&before.planned_collision_count===0,'BASELINE_CHANGED'\)/);
   assert.ok(script.indexOf("check(before.existing_count===0") < script.indexOf('for(const c of m.candidates)await create'));
 });
+
+test('readback uses bounded bulk reads and read-only D1 overload retry', () => {
+  const section = script.split('function verify(m){')[1].split('export async function main(){')[0];
+  assert.equal((section.match(/readD1\(/g) || []).length, 4);
+  assert.match(script, /D1 DB is overloaded/);
+  assert.match(script, /Atomics\.wait\(pause,0,0,attempt\*2500\)/);
+  assert.match(section, /allPeople\.filter/);
+});

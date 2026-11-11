@@ -49,14 +49,24 @@ export function matchingHistoryRows(manifest, rows) {
 }
 function readD1(sql,label){
  check(/^\s*SELECT\b/i.test(sql)&&!/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE)\b/i.test(sql),'D1_READONLY_ONLY');
- const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db','--env','production','--remote','--json','--command',sql],{
-  cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',env:process.env,timeout:60000,maxBuffer:10*1024*1024});
- check(r.status===0,'D1_READ_FAILED_'+label);
- let data;
- try{data=JSON.parse(r.stdout)}catch{throw Error('D1_INVALID_JSON_'+label)}
- const x=Array.isArray(data)?data[0]:data;
- check(x?.success&&Array.isArray(x.results)&&!x.meta?.changed_db&&!x.meta?.rows_written,'D1_QUERY_UNSAFE_'+label);
- return x.results;
+ const pause=new Int32Array(new SharedArrayBuffer(4));
+ for(let attempt=1;attempt<=5;attempt++){
+  const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db','--env','production','--remote','--json','--command',sql],{
+   cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',env:process.env,timeout:60000,maxBuffer:10*1024*1024});
+  let data=null;
+  try{data=JSON.parse(r.stdout)}catch{}
+  const x=Array.isArray(data)?data[0]:data;
+  if(r.status===0&&x?.success&&Array.isArray(x.results)){
+   check(!x.meta?.changed_db&&!x.meta?.rows_written,'D1_QUERY_UNSAFE_'+label);
+   return x.results;
+  }
+  const failure=(r.stderr||'')+' '+(r.stdout||'');
+  if(attempt===5||!/\b7429\b|D1 DB is overloaded|too many resources/i.test(failure))
+   throw Error('D1_READ_FAILED_'+label);
+  // Strictly read-only retry, never replay an authenticated create operation.
+  Atomics.wait(pause,0,0,attempt*2500);
+ }
+ throw Error('D1_READ_RETRY_EXHAUSTED_'+label);
 }
 function state(m){
  const ids=[...new Set(m.candidates.flatMap(c=>c.payload.participante_ids))].sort((a,b)=>a-b);
@@ -99,23 +109,29 @@ async function create(token,payload){
 function verify(m){
  const rows=readD1('SELECT id,codigo_turma,status,data_inicio,data_fim,qualificacao_tipo_id,modalidade FROM treinamentos_planejados WHERE empresa_id=6 AND deleted_at IS NULL AND codigo_turma IN ('+sqlCodes+') ORDER BY codigo_turma','VERIFY_CLASSES');
  check(rows.length===7,'READBACK_CLASS_COUNT');
- let people=0,qual=0,days=0,events=0;
+ const numericIds=rows.map(r=>Number(r.id));
+ check(numericIds.every(x=>Number.isSafeInteger(x)&&x>0),'READBACK_ID_INVALID');
+ const idSql=numericIds.join(',');
+ const allPeople=readD1('SELECT tp.treinamento_id,tp.funcionario_id,tp.confirmado,tp.resultado,tp.data_conclusao_efetiva,tp.qualificacao_historico_id,qh.status q_status FROM treinamentos_participantes tp LEFT JOIN qualificacoes_historico qh ON qh.id=tp.qualificacao_historico_id AND qh.empresa_id=6 AND qh.deleted_at IS NULL WHERE tp.treinamento_id IN ('+idSql+') ORDER BY tp.treinamento_id,tp.funcionario_id','VERIFY_PARTICIPANTS');
+ const allDays=readD1('SELECT treinamento_id,data,hora_inicio,hora_fim,status FROM treinamentos_dias WHERE empresa_id=6 AND deleted_at IS NULL AND treinamento_id IN ('+idSql+') ORDER BY treinamento_id,data','VERIFY_DAYS');
+ const eventLinks=numericIds.map(id=>qstr('treinamento:'+id)).join(',');
+ const allEvents=readD1("SELECT tripulacao_id,COUNT(*) n FROM escala_eventos WHERE origem='treinamento' AND tripulacao_id IN ("+eventLinks+") AND deleted_at IS NULL AND status='pendente' GROUP BY tripulacao_id",'VERIFY_EVENTS');
+ let people=0,qual=0,days=0;
  const ids=[];
  for(const c of m.candidates){
   const t=rows.find(x=>x.codigo_turma===c.code);
   check(t&&t.status==='PLANEJADO'&&t.data_inicio===c.payload.data_inicio&&t.data_fim===c.payload.data_fim&&t.qualificacao_tipo_id===c.payload.qualificacao_tipo_id&&t.modalidade==='SALA','CLASS_DATA_MISMATCH');
   ids.push({code:c.code,id:t.id});
-  const p=readD1('SELECT tp.funcionario_id,tp.confirmado,tp.resultado,tp.data_conclusao_efetiva,tp.qualificacao_historico_id,qh.status q_status FROM treinamentos_participantes tp LEFT JOIN qualificacoes_historico qh ON qh.id=tp.qualificacao_historico_id AND qh.empresa_id=6 AND qh.deleted_at IS NULL WHERE tp.treinamento_id='+Number(t.id)+' ORDER BY tp.funcionario_id','VERIFY_PARTICIPANTS');
+  const p=allPeople.filter(x=>Number(x.treinamento_id)===Number(t.id));
   check(p.length===c.payload.participante_ids.length,'PARTICIPANTS_COUNT_MISMATCH');
   check(p.every(x=>c.payload.participante_ids.includes(Number(x.funcionario_id))&&Number(x.confirmado||0)===0&&x.resultado==null&&x.data_conclusao_efetiva==null&&x.q_status==='PLANEJADA'),'HISTORIES_NOT_PLANNED');
   people+=p.length;qual+=p.filter(x=>x.q_status==='PLANEJADA').length;
-  const dd=readD1('SELECT data,hora_inicio,hora_fim,status FROM treinamentos_dias WHERE empresa_id=6 AND treinamento_id='+Number(t.id)+' AND deleted_at IS NULL ORDER BY data','VERIFY_DAYS');
+  const dd=allDays.filter(x=>Number(x.treinamento_id)===Number(t.id));
   check(dd.length===c.payload.dias.length&&dd.every(x=>c.payload.dias.some(y=>y.data===x.data&&y.hora_inicio===x.hora_inicio&&y.hora_fim===x.hora_fim)&&x.status==='ATIVO'),'DAYS_NOT_MATCHING');
   days+=dd.length;
-  const ev=readD1('SELECT COUNT(*) n FROM escala_eventos WHERE origem=\'treinamento\' AND tripulacao_id='+qstr('treinamento:'+t.id)+' AND deleted_at IS NULL AND status=\'pendente\'','VERIFY_EVENTS');
-  events+=Number(ev[0]?.n||0);
  }
  check(people===16&&qual===16&&days===23,'FINAL_TOTAL_MISMATCH');
+ const events=allEvents.reduce((sum,x)=>sum+Number(x.n||0),0);
  return {ids,participation_count:people,planned_qualifications:qual,effective_days:days,materialized_escala_events:events,postconditions_verified:true};
 }
 export async function main(){
