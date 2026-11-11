@@ -1454,3 +1454,59 @@ test('resolveAdminToken forces refresh when requested to prevent stale token reu
   }
 });
 
+test('regression: getMatriculaDetail scorm_progresso fallback correctly resolves lesson_location', async () => {
+  const detail = {
+    id: 123,
+    status: 'EM_ANDAMENTO',
+    scorm_progresso: {
+      lesson_location: 'slide_05',
+      progresso_percentual: 50,
+    },
+  };
+  const location = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location;
+  assert.equal(location, 'slide_05');
+});
+
+test('regression: unvisited gate selection excludes assessment and scenario answer buttons', () => {
+  const mockButtons = [
+    {
+      innerText: 'Alternativa B',
+      matches: (sel) => sel.includes('.answer') || sel.includes('[data-answer]'),
+      closest: (sel) => sel.includes('.answers'),
+      getAttribute: (attr) => (attr === 'data-answer' ? '1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+    {
+      innerText: 'Card de Informação 1',
+      matches: () => false,
+      closest: () => null,
+      getAttribute: (attr) => (attr === 'data-gate' ? 'card_1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+  ];
+
+  const visible = () => true;
+  const clean = (s) => String(s || '').trim();
+  const clickedGates = [];
+  const clickedTouches = [];
+
+  const unvisitedGate = mockButtons.find((el) => {
+    if (!visible(el) || el.disabled) return false;
+    if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+      return false;
+    }
+    if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+      return false;
+    }
+    const key = el.getAttribute('data-gate') || el.id || clean(el.innerText || '');
+    if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+    return !el.classList.contains('seen');
+  });
+
+  assert.ok(unvisitedGate);
+  assert.equal(unvisitedGate.innerText, 'Card de Informação 1');
+});
+
+

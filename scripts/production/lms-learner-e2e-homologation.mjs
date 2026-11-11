@@ -1393,7 +1393,7 @@ async function driveScormCourseInBrowser({
         }
         if (retries % 3 === 0) {
           const detail = await getMatriculaDetail(token, matriculaId).catch(() => null);
-          const backendLoc = detail?.progresso_scorm?.lesson_location || detail?.progresso_scorm?.location;
+          const backendLoc = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location || detail?.scorm_progresso?.location || detail?.progresso_scorm?.location;
           if (isLocationResumed(savedLocation, backendLoc)) {
             resumedVerified = true;
             break;
@@ -1527,10 +1527,18 @@ async function driveScormCourseInBrowser({
       }
 
       // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id, and unclicked interactive elements
+      // IMPORTANT: Exclude assessment, quiz, question and scenario buttons so answer-selection logic is not preempted.
       const unvisitedGate = Array.from(document.querySelectorAll(
         '[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab, [data-touch], .touchable, [role=tab], .tab-btn, .tab, .card[role=button], .interactive-card, button:not(#next):not(#prev):not(#nextBtn):not(#prevBtn)'
       )).find((el) => {
         if (!visible(el) || el.disabled) return false;
+        // Exclude assessment, quiz, question and scenario choices so they are handled by their specialized logic
+        if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+          return false;
+        }
+        if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+          return false;
+        }
         const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || el.id || clean(el.innerText || el.getAttribute('aria-label') || '');
         if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
         const txt = clean(el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
