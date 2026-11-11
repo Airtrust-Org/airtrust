@@ -1405,3 +1405,52 @@ test('checkLearnerQualifications retries on initial empty list and resolves when
   }
 });
 
+test('resolveAdminToken forces refresh when requested to prevent stale token reuse', async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCalls = 0;
+  const prevEmail = process.env.PROD_SMOKE_EMAIL;
+  const prevPass = process.env.PROD_SMOKE_PASSWORD;
+  try {
+    process.env.PROD_SMOKE_EMAIL = 'admin@airtrust.online';
+    process.env.PROD_SMOKE_PASSWORD = 'password';
+
+    const makeJwt = (payload, callIdx) => {
+      const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.sig${callIdx}`;
+    };
+
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        loginCalls += 1;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            accessToken: makeJwt({ id: 1, role: 'ADMIN', empresa_id: 6 }, loginCalls),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const token1 = await resolveAdminToken(true);
+    assert.ok(token1?.includes('sig1'));
+
+    // Without force refresh, it should return cached token
+    const tokenCached = await resolveAdminToken(false);
+    assert.equal(tokenCached, token1);
+    assert.equal(loginCalls, 1);
+
+    // With force refresh, it should call login again
+    const token2 = await resolveAdminToken(true);
+    assert.ok(token2?.includes('sig2'));
+    assert.equal(loginCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevEmail !== undefined) process.env.PROD_SMOKE_EMAIL = prevEmail;
+    else delete process.env.PROD_SMOKE_EMAIL;
+    if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
+    else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
