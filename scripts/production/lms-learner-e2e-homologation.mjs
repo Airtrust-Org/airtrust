@@ -210,6 +210,28 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
               return Number(match.id);
             }
           }
+          if (currentStatus === 'EM_ANDAMENTO' && adminToken) {
+            console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (EM_ANDAMENTO) possui progresso de teste prévio. Finalizando para reversão governada em ${BROWSER_NAME}...`);
+            await fetchJson(`${API}/api/lms/matriculas/${match.id}/finalizar`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${adminToken}` },
+            });
+            const rev = await fetchJson(`${API}/api/lms/matriculas/${match.id}/reverter`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                reason: `Homologação LMS Aluno QA - reinício auditado de percurso em ${BROWSER_NAME}`,
+                classification: 'CORRECAO',
+              }),
+            });
+            if (rev.status === 200) {
+              console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} revertida com sucesso: reiniciada no início.`);
+              return Number(match.id);
+            }
+          }
           console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
           const authToUse = adminToken || token;
           let remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
@@ -885,7 +907,7 @@ export function determineSlideAction(doc, {
   const slidesArray = doc.defaultView?.COURSE_DATA?.slides || (typeof window !== 'undefined' ? window.COURSE_DATA?.slides : null);
   const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
 
-  const counterEl = doc.querySelector('.counter, #count');
+  const counterEl = doc.querySelector?.('#count') || doc.querySelector?.('.counter') || doc.querySelector?.('.counter, #count');
   const counterText = clean(counterEl?.innerText || counterEl?.textContent);
   const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
   if (counterMatch) {
@@ -1184,6 +1206,7 @@ async function driveScormCourseInBrowser({
   let maxVisitedUnit = 0;
   const visitedUnitIds = new Set();
   let totalUnitsDetected = canonicalTotal || 0;
+  let scormLocationTotal = 0;
   let finalAtLastUnit = false;
   let quizzesAnswered = 0;
   let lastRuntimeState = null;
@@ -1214,7 +1237,10 @@ async function driveScormCourseInBrowser({
           const tot = marker[2] ? Number(marker[2]) : null;
           if (cur > 0) visitedUnitIds.add(cur);
           if (cur > maxVisitedUnit) maxVisitedUnit = cur;
-          if (tot && !canonicalTotal && tot > totalUnitsDetected) totalUnitsDetected = tot;
+          if (tot && tot > 0) {
+            scormLocationTotal = tot;
+            totalUnitsDetected = tot;
+          }
         }
       }
     }
@@ -1290,7 +1316,7 @@ async function driveScormCourseInBrowser({
       const slidesArray = window.COURSE_DATA?.slides;
       const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
 
-      const counterEl = document.querySelector('.counter, #count');
+      const counterEl = document.querySelector('#count, .counter');
       const counterText = clean(counterEl?.innerText || counterEl?.textContent);
       const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
       let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
@@ -1600,7 +1626,9 @@ async function driveScormCourseInBrowser({
         slideStallSteps = 0;
       }
     }
-    if (canonicalTotal > 0) {
+    if (scormLocationTotal > 0) {
+      totalUnitsDetected = scormLocationTotal;
+    } else if (canonicalTotal > 0) {
       totalUnitsDetected = canonicalTotal;
     } else if (action?.domTotal && action.domTotal > totalUnitsDetected) {
       totalUnitsDetected = action.domTotal;

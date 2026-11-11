@@ -995,6 +995,50 @@ test('adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminTok
   }
 });
 
+test('adversarial: enrollLearner on EM_ANDAMENTO with adminToken finalizes and reverts to ensure full course journey reset', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method, body: opts?.body });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 2404, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/2404/finalizar')) {
+        return new Response(
+          JSON.stringify({ success: true, data: { status: 'CONCLUIDO' } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/2404/reverter')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 2404, status: 'NAO_INICIADO', reverted: true },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 194, 'admin-token');
+    assert.equal(id, 2404);
+    assert.equal(calls.length, 3);
+    assert.equal(calls[1].url.endsWith('/finalizar'), true);
+    assert.equal(calls[2].url.endsWith('/reverter'), true);
+    assert.equal(calls[2].body.includes('CORRECAO'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('regression: PPTX traversal resets to Slide 1 if player restored at an advanced slide', async () => {
   let slide1Clicked = false;
   const mockSlide1Btn = {
