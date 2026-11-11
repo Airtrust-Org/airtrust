@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, fetchWithAuth } from '@/react-app/config/api';
+import { fetchFrmsSnapshotBounded } from './frmsSnapshotTransport';
 
 export type FrmsOperationalSnapshotAlertCode =
   | 'CHECKIN_PENDENTE'
@@ -314,12 +315,10 @@ export function useFrmsOperationalSnapshot(
     setUnauthorized(false);
 
     try {
-      const response = await fetchWithAuth(fetchingKey!, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-
-      const payload = (await response.json()) as SnapshotApiResponse;
+      const { response, payload } = await fetchFrmsSnapshotBounded<SnapshotApiResponse>(
+        fetchingKey!,
+        fetchWithAuth,
+      );
       // A slower response for an earlier filter must not overwrite this one.
       if (requestId !== activeRequest.current) return;
 
@@ -349,7 +348,9 @@ export function useFrmsOperationalSnapshot(
       setDataKey(fetchingKey);
     } catch (err) {
       if (requestId !== activeRequest.current) return;
-      const message = err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
+      const message = err instanceof Error && err.message === 'FRMS_SNAPSHOT_TIMEOUT'
+        ? 'O snapshot FRMS não respondeu dentro do prazo. Tente novamente.'
+        : err instanceof Error ? err.message : 'Erro ao carregar snapshot operacional';
       if (
         /session expired|auth|unauthorized|token|sessão expirada/i.test(message) ||
         /Authentication required/i.test(message)
