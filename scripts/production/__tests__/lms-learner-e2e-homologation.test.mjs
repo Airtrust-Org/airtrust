@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkCertificate,
   checkLearnerQualifications,
+  determineSlideAction,
   enrollLearner,
   evaluateAssessmentPolicy,
   evaluateCoursePath,
@@ -190,7 +191,7 @@ test('enrollLearner reuses existing active enrollment from minhas-ead', async ()
         return new Response(
           JSON.stringify({
             success: true,
-            data: [{ id: 88, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+            data: [{ id: 88, curso_id: 67, status: 'NAO_INICIADO', deleted_at: null }],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
@@ -560,23 +561,77 @@ test('adversarial: enrollLearner triggers rematricular when course is already CO
   }
 });
 
+test('adversarial: enrollLearner triggers rematricular when enrollment is EM_ANDAMENTO (isolamento de navegador)', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 670, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/670/rematricular')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 672, status: 'NAO_INICIADO', ciclo: 3 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 193);
+    assert.equal(id, 672);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, 'POST');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when score is below cut even if status is passed (contradictory score)', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'passed',
+    scoreRaw: 20,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
+});
+
 test('adversarial: missing, unknown and external assessment policies do not certify', () => {
   assert.equal(evaluateAssessmentPolicy({ lessonStatus: 'completed' }).ok, false);
   assert.equal(evaluateAssessmentPolicy({ policy: 'UNKNOWN', lessonStatus: 'passed' }).ok, false);
   assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'completed' }).ok, false);
-});
-
-test('adversarial: SCORED passed with a score below mastery is rejected', () => {
-  const actual = evaluateAssessmentPolicy({
-    policy: 'SCORED', lessonStatus: 'passed', scoreRaw: 20, masteryScore: 80,
-  });
-  assert.equal(actual.ok, false);
-  assert.equal(actual.reason, 'SCORE_BELOW_MASTERY');
+  assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'passed', externalProofVerified: false }).reason, 'EXTERNAL_ASSESSMENT_NOT_ATTESTED');
+  assert.equal(evaluateAssessmentPolicy({ policy: 'UNRECOGNIZED_POLICY', lessonStatus: 'completed' }).reason, 'ASSESSMENT_POLICY_UNSUPPORTED');
 });
 
 test('PPTX_SLIDES policy remains explicitly supported when backend completed', () => {
   assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'completed' }).ok, true);
   assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'incomplete' }).ok, false);
+});
+
+test('adversarial: evaluateCoursePath fails when units jump (skipping intermediate units)', () => {
+  // Learner visited only unit 1 and unit 45 (e.g. via direct jump), but totalUnits is 45
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: new Set([1, 45]),
+    atLastUnit: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
 });
 
 test('adversarial: unknown total and skipped slides never prove full course path', () => {
@@ -585,6 +640,22 @@ test('adversarial: unknown total and skipped slides never prove full course path
   assert.equal(unknown.reason, 'COURSE_TOTAL_UNVERIFIED');
   const skipped = evaluateCoursePath({ contentType: 'scorm', totalUnits: 45, visitedUnits: 2, atLastUnit: true });
   assert.equal(skipped.ok, false);
+  assert.equal(skipped.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('evaluateCoursePath passes with distinctUnitsVisited set covering all units', () => {
+  const all45 = new Set(Array.from({ length: 45 }, (_, i) => i + 1));
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: all45,
+    atLastUnit: true,
+    totalActivities: 2,
+    completedActivities: 2,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
 });
 
 test('adversarial: missing path or assessment evidence is not defaulted to PASS', () => {
@@ -594,4 +665,59 @@ test('adversarial: missing path or assessment evidence is not defaulted to PASS'
   });
   assert.equal(actual.pass, false);
   assert.equal(actual.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('regression: determineSlideAction does not oscillate between alternatives once question is answered and advances to qNext', () => {
+  let qIndex = 0;
+  let selectedOption = null;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '#qNext') {
+        return {
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          click: () => {
+            qIndex += 1;
+            selectedOption = null; // Next question starts with no answer selected
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector.includes('data-answer') || selector.includes('button.answer')) {
+        // Return 3 options for the current question
+        return [0, 1, 2].map((i) => ({
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          classList: {
+            contains: (cls) => cls === 'selected' && selectedOption === i,
+          },
+          click: () => {
+            selectedOption = i;
+          },
+        }));
+      }
+      return [];
+    },
+  };
+
+  // Step 1: No answer selected -> chooses an answer
+  const step1 = determineSlideAction(mockDoc);
+  assert.equal(step1.type, 'assessment-answer');
+  assert.equal(selectedOption, 0);
+
+  // Step 2: Answer 0 is selected -> MUST NOT choose another alternative, must advance with qNext
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'assessment-next-q');
+  assert.equal(qIndex, 1); // Advanced to question 2!
+
+  // Step 3: Question 2 has no answer -> chooses an answer
+  const step3 = determineSlideAction(mockDoc);
+  assert.equal(step3.type, 'assessment-answer');
 });

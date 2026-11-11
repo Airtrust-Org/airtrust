@@ -39,7 +39,7 @@ const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
 const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
 const BROWSER_NAME = String(process.env.HOMOLOGATION_BROWSER || 'chromium').trim().toLowerCase();
 const REPORT_PATH = process.env.HOMOLOGATION_REPORT_PATH || `qa-state/lms-homologation-${BROWSER_NAME}.json`;
-const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 60_000);
+const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 120_000);
 const MAX_STEPS = Number(process.env.HOMOLOGATION_MAX_STEPS || 300);
 const COURSE_IDS = parseCourseIdFilter(process.env.HOMOLOGATION_COURSE_IDS);
 
@@ -78,8 +78,8 @@ async function assertPinnedProduction() {
 
 async function getLearnerSession() {
   const email = String(process.env.QA_LEARNER_EMAIL || 'qa.lms.202611@airtrust.online').trim();
-  const password = String(process.env.QA_LEARNER_PASSWORD || 'AirTrust_QA_202611_Lms!');
-  assert(email && password, 'LEARNER_CREDENTIALS_MISSING');
+  const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
+  assert(email && password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
 
   const logged = await login(API, email, password);
   let token = extractAccessToken(logged);
@@ -174,10 +174,11 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
         (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
       );
       if (match && Number(match.id) > 0) {
-        // Se a matrícula já estiver em status CONCLUIDO (ex: ciclo concluído em execução ou navegador anterior),
-        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e evitar concorrência.
-        if (String(match.status || '').toUpperCase() === 'CONCLUIDO') {
-          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} já concluída em ciclo anterior. Rematriculando em novo ciclo auditado para isolamento...`);
+        // Se a matrícula já possuir progresso ou histórico prévio (ex: CONCLUIDO, EM_ANDAMENTO por outro navegador ou ciclo anterior),
+        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e percurso integral a partir do zero (0%).
+        const currentStatus = String(match.status || '').toUpperCase();
+        if (currentStatus !== 'NAO_INICIADO' && currentStatus !== 'CANCELADO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
           const authToUse = adminToken || token;
           const remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
             method: 'POST',
@@ -190,8 +191,8 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
           if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
             return Number(remat.json.data.matricula_id);
           }
-        } else if (match.status !== 'CANCELADO') {
-          console.log(`[LMS_HOMOLOGATION] Matrícula ativa pré-existente reutilizada: id=${match.id}`);
+        } else if (currentStatus === 'NAO_INICIADO') {
+          console.log(`[LMS_HOMOLOGATION] Matrícula virgem (NAO_INICIADO) reutilizada: id=${match.id}`);
           return Number(match.id);
         }
       }
@@ -350,6 +351,7 @@ export function evaluateAssessmentPolicy({
   scoreRaw = null,
   scoreScaled = null,
   masteryScore = null,
+  externalProofVerified = false,
 }) {
   const normStatus = String(lessonStatus || '').trim().toLowerCase();
   const normalizedPolicy = typeof policy === 'string' ? policy.trim().toUpperCase() : '';
@@ -386,9 +388,12 @@ export function evaluateAssessmentPolicy({
       const scaled = scoreScaled != null && Number.isFinite(Number(scoreScaled)) ? Number(scoreScaled) : null;
 
       let scorePassed = false;
+      let scoreEvaluated = false;
       if (raw != null) {
+        scoreEvaluated = true;
         scorePassed = raw >= cut;
       } else if (scaled != null) {
+        scoreEvaluated = true;
         scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
       }
 
@@ -401,6 +406,18 @@ export function evaluateAssessmentPolicy({
           masteryScore: cut,
           status: normStatus,
           reason: 'SCORE_BELOW_MASTERY',
+        };
+      }
+
+      if (!scoreEvaluated && normStatus !== 'passed') {
+        return {
+          ok: false,
+          policy: 'SCORED',
+          scoreRaw,
+          scoreScaled,
+          masteryScore: cut,
+          status: normStatus,
+          reason: 'ASSESSMENT_NOT_PASSED',
         };
       }
     }
@@ -420,8 +437,26 @@ export function evaluateAssessmentPolicy({
   if (normalizedPolicy === 'PPTX_SLIDES') {
     const ok = normStatus === 'completed';
     return {
-      ok, policy: normalizedPolicy, scoreRaw, scoreScaled, masteryScore, status: normStatus,
+      ok,
+      policy: normalizedPolicy,
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
       reason: ok ? null : 'PPTX_NOT_COMPLETED',
+    };
+  }
+
+  if (normalizedPolicy === 'EXTERNAL') {
+    const ok = Boolean(externalProofVerified);
+    return {
+      ok,
+      policy: 'EXTERNAL',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'EXTERNAL_ASSESSMENT_NOT_ATTESTED',
     };
   }
 
@@ -432,9 +467,7 @@ export function evaluateAssessmentPolicy({
     scoreScaled,
     masteryScore,
     status: normStatus,
-    reason: normalizedPolicy === 'EXTERNAL'
-      ? 'EXTERNAL_ASSESSMENT_NOT_ATTESTED'
-      : 'ASSESSMENT_POLICY_UNSUPPORTED',
+    reason: 'ASSESSMENT_POLICY_UNSUPPORTED',
   };
 }
 
@@ -442,6 +475,8 @@ export function evaluateCoursePath({
   contentType = 'scorm',
   totalUnits = 0,
   visitedUnits = 0,
+  visitedUnitIds = null,
+  distinctUnitsVisited = null,
   atLastUnit = false,
   completedActivities = 0,
   totalActivities = 0,
@@ -461,11 +496,23 @@ export function evaluateCoursePath({
     return { ok: false, totalUnits, visitedUnits, atLastUnit, reason: 'COURSE_TOTAL_UNVERIFIED' };
   }
 
-  if (!atLastUnit || visitedUnits < totalUnits) {
+  const unitSet = visitedUnitIds instanceof Set
+    ? visitedUnitIds
+    : distinctUnitsVisited instanceof Set
+      ? distinctUnitsVisited
+      : Array.isArray(visitedUnitIds)
+        ? new Set(visitedUnitIds)
+        : Array.isArray(distinctUnitsVisited)
+          ? new Set(distinctUnitsVisited)
+          : null;
+
+  const uniqueVisitedCount = unitSet ? unitSet.size : visitedUnits;
+
+  if (uniqueVisitedCount < totalUnits || !atLastUnit) {
     return {
       ok: false,
       totalUnits,
-      visitedUnits,
+      visitedUnits: uniqueVisitedCount,
       atLastUnit,
       reason: 'INCOMPLETE_COURSE_PATH',
     };
@@ -474,19 +521,23 @@ export function evaluateCoursePath({
   if (totalActivities > 0 && completedActivities < totalActivities) {
     return {
       ok: false,
+      totalUnits,
+      visitedUnits: uniqueVisitedCount,
+      atLastUnit,
       totalActivities,
       completedActivities,
       reason: 'MANDATORY_ACTIVITIES_INCOMPLETE',
     };
   }
 
-  const ok = visitedUnits > 0 && atLastUnit;
   return {
-    ok,
+    ok: true,
     totalUnits,
-    visitedUnits,
-    atLastUnit,
-    reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
+    visitedUnits: uniqueVisitedCount,
+    atLastUnit: true,
+    completedActivities,
+    totalActivities,
+    reason: null,
   };
 }
 
@@ -671,10 +722,12 @@ async function drivePptxCourseInBrowser({
     String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
     Number(reopenDetail.progresso_pct || 0) === 100;
 
+  const pptxVisitedSet = new Set(Array.from({ length: totalSlides }, (_, i) => i + 1));
   const pathVerdict = evaluateCoursePath({
     contentType: 'pptx',
     totalUnits: totalSlides,
     visitedUnits: totalSlides,
+    distinctUnitsVisited: pptxVisitedSet,
     atLastUnit: true,
   });
   const assessmentVerdict = evaluateAssessmentPolicy({
@@ -727,11 +780,100 @@ async function drivePptxCourseInBrowser({
 }
 
 // ---------------------------------------------------------------------------
+// Pure Slide Interaction Action Resolver (tested in unit & adversarial suites)
+// ---------------------------------------------------------------------------
+export function determineSlideAction(doc, {
+  plan = [],
+  requiredIndices = [],
+  submittedInSlide = false,
+  clickedGates = [],
+  clickedTouches = [],
+} = {}) {
+  const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+  const visible = (el) => {
+    if (!el) return false;
+    if (el.getAttribute && (el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('hidden'))) return false;
+    if (el.style) {
+      if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+
+  let domCurrent = 0;
+  let domTotal = 0;
+  let atLastUnit = false;
+
+  const counterEl = doc.querySelector('.counter, #count');
+  const counterText = clean(counterEl?.innerText || counterEl?.textContent);
+  const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (counterMatch) {
+    domCurrent = Number(counterMatch[1]);
+    domTotal = Number(counterMatch[2]);
+  }
+
+  // 1. Assessment questions: stop selecting alternatives once the question already has an answer
+  const assessOptions = Array.from(doc.querySelectorAll('[data-answer], button.answer')).filter(visible);
+  const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+    return el.classList?.contains?.('selected') ||
+      el.classList?.contains?.('active') ||
+      el.getAttribute?.('aria-checked') === 'true' ||
+      el.getAttribute?.('aria-pressed') === 'true';
+  });
+
+  if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+    const unselectedAnswer = assessOptions.find((el) => !el.disabled);
+    if (unselectedAnswer) {
+      unselectedAnswer.click?.();
+      return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+    }
+  }
+
+  const qNext = doc.querySelector('#qNext');
+  if (qNext && visible(qNext) && !qNext.disabled) {
+    qNext.click?.();
+    return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 2. Interactive choices / radio options
+  const choices = Array.from(doc.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
+  if (choices.length > 0) {
+    const hasSelectedChoice = choices.some((c) => c.classList?.contains?.('selected') || c.checked);
+    if (!hasSelectedChoice) {
+      const unselected = choices.find((c) => !c.disabled);
+      if (unselected) {
+        unselected.click?.();
+        return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+      }
+    }
+  }
+
+  // 3. Submit
+  const submitBtn = Array.from(doc.querySelectorAll('button, input[type=button]')).find((el) => {
+    const txt = clean(el.innerText || el.value).toLowerCase();
+    return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
+  });
+  if (submitBtn) {
+    submitBtn.click?.();
+    return { type: 'submit', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 4. Next navigation
+  const nextBtn = doc.querySelector('#next');
+  if (nextBtn && visible(nextBtn) && !nextBtn.disabled) {
+    nextBtn.click?.();
+    return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+  }
+
+  return { type: 'none', domCurrent, domTotal, atLastUnit };
+}
+
+// ---------------------------------------------------------------------------
 // SCORM Frame Driver with Interactive Gates & Accordion Support
 // ---------------------------------------------------------------------------
 async function driveScormCourseInBrowser({
   browserEngine,
   token,
+  adminToken = null,
   course,
   matriculaId,
   funcionarioId,
@@ -758,9 +900,9 @@ async function driveScormCourseInBrowser({
   const initialFrame = await iframeHandle?.contentFrame();
   assert(initialFrame, 'SCORM_IFRAME_NOT_FOUND');
 
-  // Extract answer plan from package manifest/model
+  // Extract answer plan from package manifest/model (reading with adminToken when available due to RBAC)
   const pkgVersions = await fetchJson(`${API}/api/lms/cursos/${course.id}/scorm-package-versions`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${adminToken || token}` },
   });
   const activeVer = Array.isArray(pkgVersions.json?.data)
     ? pkgVersions.json.data.find((v) => String(v?.status || '').toUpperCase() === 'ACTIVE')
@@ -779,6 +921,17 @@ async function driveScormCourseInBrowser({
   let finalAtLastUnit = false;
   let quizzesAnswered = 0;
   let lastRuntimeState = null;
+
+  // Track verified decision indices
+  const resolvedDecisionIndices = new Set();
+
+  // Scoped in-memory driver state (NO DOM attribute mutations)
+  let currentSlideUnit = 0;
+  let submittedInCurrentSlide = false;
+  const clickedGateKeysInCurrentSlide = new Set();
+  const clickedTouchKeysInCurrentSlide = new Set();
+  let slideStallSteps = 0;
+  let lastStallSignature = '';
 
   const started = Date.now();
 
@@ -807,6 +960,7 @@ async function driveScormCourseInBrowser({
         if (marker) {
           const cur = Number(marker[1]);
           const tot = marker[2] ? Number(marker[2]) : null;
+          if (cur > 0) visitedUnitIds.add(cur);
           if (cur > maxVisitedUnit) maxVisitedUnit = cur;
           if (tot && tot > totalUnitsDetected) totalUnitsDetected = tot;
         }
@@ -863,7 +1017,13 @@ async function driveScormCourseInBrowser({
     } catch { /* ignore media inspection errors */ }
 
     // Evaluate action inside real Frame instance
-    const action = await frame.evaluate(({ plan, requiredIndices }) => {
+    const action = await frame.evaluate(({
+      plan,
+      requiredIndices,
+      submittedInSlide,
+      clickedGates,
+      clickedTouches,
+    }) => {
       const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
       const visible = (el) => {
         if (!el) return false;
@@ -873,7 +1033,7 @@ async function driveScormCourseInBrowser({
       };
 
       // Detect current unit and total units from DOM
-      const counterEl = document.querySelector('.counter');
+      const counterEl = document.querySelector('.counter, #count');
       const counterText = clean(counterEl?.innerText || counterEl?.textContent);
       const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
       let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
@@ -885,8 +1045,12 @@ async function driveScormCourseInBrowser({
         const activeIdx = Number(window.__AIRTRUST_PLAYER_TEST__?.getState?.()?.active ?? -1);
         if (activeIdx >= 0 && !domCurrent) domCurrent = activeIdx + 1;
       }
+      if (!domCurrent && window.__AIRTRUST_PLAYER_TEST__?.getState) {
+        const st = window.__AIRTRUST_PLAYER_TEST__.getState();
+        if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
+      }
 
-      const atLastUnit = (domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
+      const atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
 
       // 1. Check for authentic user completion/finish button in the frame UI
       const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
@@ -899,11 +1063,66 @@ async function driveScormCourseInBrowser({
           type: 'final-button',
           domCurrent,
           domTotal,
-          atLastUnit: true,
+          atLastUnit: atLastUnit || Boolean(domTotal > 0 && domCurrent >= domTotal),
         };
       }
 
-      // 2. Accordion handling: details & summary
+      // 2. Interactive Gate items: hotspots, section map tabs, mandatory criteria (tracked in driver memory)
+      const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], button.spot, .section-map-tab')).find((el) => {
+        const key = el.getAttribute('data-gate') || clean(el.innerText || el.getAttribute('aria-label') || '');
+        return visible(el) && !el.disabled && !clickedGates.includes(key) && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
+      });
+      if (unvisitedGate) {
+        const gateKey = unvisitedGate.getAttribute('data-gate') || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
+        unvisitedGate.click();
+        return { type: 'gate-item', gateKey, domCurrent, domTotal, atLastUnit };
+      }
+
+      // 3. Scenario options and interactive decision choices
+      const scenarioOpt = Array.from(document.querySelectorAll('[data-opt], button.option')).find((el) => {
+        return visible(el) && !el.disabled && !el.classList.contains('selected');
+      });
+      if (scenarioOpt) {
+        scenarioOpt.click();
+        return { type: 'scenario-option', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 4. Assessment questions: options and question navigation
+      // Stop selecting alternatives once the current question already has an answer selected
+      const assessOptions = Array.from(document.querySelectorAll('[data-answer], button.answer')).filter(visible);
+      const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+        return el.classList.contains('selected') ||
+          el.classList.contains('active') ||
+          el.getAttribute('aria-checked') === 'true' ||
+          el.getAttribute('aria-pressed') === 'true';
+      });
+
+      if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+        const unselectedAnswer = assessOptions.find((el) => !el.disabled);
+        if (unselectedAnswer) {
+          unselectedAnswer.click();
+          return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+        }
+      }
+
+      const qNext = document.querySelector('#qNext');
+      if (qNext && visible(qNext) && !qNext.disabled) {
+        qNext.click();
+        return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 5. Explicit touch targets (tracked in driver memory)
+      const touchTarget = Array.from(document.querySelectorAll('[data-touch], .touchable')).find((el) => {
+        const key = el.getAttribute('data-touch') || el.id || clean(el.innerText);
+        return visible(el) && !el.disabled && !clickedTouches.includes(key);
+      });
+      if (touchTarget) {
+        const touchKey = touchTarget.getAttribute('data-touch') || touchTarget.id || clean(touchTarget.innerText);
+        touchTarget.click();
+        return { type: 'touch-target', touchKey, domCurrent, domTotal, atLastUnit };
+      }
+
+      // 6. Accordion handling: details & summary
       const closedSummaries = Array.from(document.querySelectorAll('details:not([open]) > summary')).filter(visible);
       if (closedSummaries.length > 0) {
         closedSummaries[0].click();
@@ -917,27 +1136,45 @@ async function driveScormCourseInBrowser({
         details.forEach((d) => d.dispatchEvent(new Event('scroll', { bubbles: true })));
       }
 
-      // 3. Interactive choices / radio options
+      // 7. Interactive choices / radio options / checklists
+      // If a choice/radio is already selected in the active group, do not toggle others
       const choices = Array.from(document.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
       if (choices.length > 0) {
-        const unselected = choices.find((c) => !c.classList.contains('selected') && !c.checked);
-        if (unselected) {
-          unselected.click();
-          return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+        const hasSelectedChoice = choices.some((c) => c.classList.contains('selected') || c.checked);
+        if (!hasSelectedChoice) {
+          const unselected = choices.find((c) => !c.disabled);
+          if (unselected) {
+            unselected.click();
+            return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+          }
         }
       }
 
-      // 4. Submit / Confirm buttons
+      const unselectedCheckbox = Array.from(document.querySelectorAll('input[type=checkbox]')).find((c) => {
+        return visible(c) && !c.disabled && !c.checked && !c.closest('nav,aside,header,footer,[hidden]');
+      });
+      if (unselectedCheckbox) {
+        unselectedCheckbox.click();
+        return { type: 'checklist-checkbox', domCurrent, domTotal, atLastUnit };
+      }
+
+      // 8. Submit / Confirm buttons (tracked via driver memory without mutating DOM attributes)
       const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
         const txt = clean(el.innerText || el.value).toLowerCase();
-        return visible(el) && !el.disabled && /(confirmar|responder|verificar|submit)/i.test(txt);
+        return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
       });
       if (submitBtn) {
         submitBtn.click();
         return { type: 'submit', domCurrent, domTotal, atLastUnit };
       }
 
-      // 5. Next / Advance navigation
+      // 9. Next / Advance navigation: prioritize #next
+      const nextBtnPrimary = document.querySelector('#next');
+      if (nextBtnPrimary && visible(nextBtnPrimary) && !nextBtnPrimary.disabled) {
+        nextBtnPrimary.click();
+        return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+      }
+
       const nextUnit = document.querySelector('#nextUnit');
       if (nextUnit && visible(nextUnit) && !nextUnit.disabled) {
         nextUnit.click();
@@ -954,18 +1191,73 @@ async function driveScormCourseInBrowser({
       }
 
       return { type: 'none', domCurrent, domTotal, atLastUnit };
-    }, { plan: answerPlan, requiredIndices: requiredDecisionSlideIndices }).catch(() => ({ type: 'error' }));
+    }, {
+      plan: answerPlan,
+      requiredIndices: requiredDecisionSlideIndices,
+      submittedInSlide: submittedInCurrentSlide,
+      clickedGates: Array.from(clickedGateKeysInCurrentSlide),
+      clickedTouches: Array.from(clickedTouchKeysInCurrentSlide),
+    }).catch(() => ({ type: 'error' }));
 
     if (Number.isSafeInteger(action?.domCurrent) && action.domCurrent > 0) {
       visitedUnitIds.add(action.domCurrent);
       if (action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+      if (action.domCurrent !== currentSlideUnit) {
+        currentSlideUnit = action.domCurrent;
+        submittedInCurrentSlide = false;
+        clickedGateKeysInCurrentSlide.clear();
+        clickedTouchKeysInCurrentSlide.clear();
+        slideStallSteps = 0;
+      }
     }
     if (action?.domTotal && action.domTotal > totalUnitsDetected) totalUnitsDetected = action.domTotal;
-    if (action?.atLastUnit) finalAtLastUnit = true;
-    if (action?.type === 'quiz-choice' || action?.type === 'submit') quizzesAnswered += 1;
+    if (action?.atLastUnit && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+      finalAtLastUnit = true;
+    }
+
+    if (action?.type === 'gate-item' && action.gateKey) {
+      clickedGateKeysInCurrentSlide.add(action.gateKey);
+    }
+    if (action?.type === 'touch-target' && action.touchKey) {
+      clickedTouchKeysInCurrentSlide.add(action.touchKey);
+    }
+    if (action?.type === 'submit') {
+      submittedInCurrentSlide = true;
+    }
+    if (action?.type === 'scenario-option' || action?.type === 'assessment-answer') {
+      if (action.domCurrent > 0) {
+        resolvedDecisionIndices.add(action.domCurrent);
+      }
+    }
+
+    if (
+      action?.type === 'quiz-choice' ||
+      action?.type === 'submit' ||
+      action?.type === 'scenario-option' ||
+      action?.type === 'assessment-answer' ||
+      action?.type === 'gate-item' ||
+      action?.type === 'touch-target'
+    ) {
+      quizzesAnswered += 1;
+    }
+
+    // Driver stall detection: fail if 30 iterations produce identical state without progress
+    const stallSig = `${action?.domCurrent}:${action?.type}:${visitedUnitIds.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
+    if (stallSig === lastStallSignature) {
+      slideStallSteps += 1;
+      if (slideStallSteps >= 30) {
+        throw new Error(`DRIVER_STALL_AT_UNIT_${action?.domCurrent || 'UNKNOWN'}`);
+      }
+    } else {
+      lastStallSignature = stallSig;
+      slideStallSteps = 0;
+    }
+
     if (action?.type === 'final-button') {
       finalButtonClicked = true;
-      finalAtLastUnit = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
       await page.waitForTimeout(1000);
       break;
     }
@@ -975,7 +1267,9 @@ async function driveScormCourseInBrowser({
     if (overlayClose) {
       await overlayClose.click().catch(() => null);
       finalButtonClicked = true;
-      finalAtLastUnit = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
       break;
     }
 
@@ -1028,8 +1322,9 @@ async function driveScormCourseInBrowser({
     contentType: 'scorm',
     totalUnits: totalUnitsDetected,
     visitedUnits: visitedUnitIds.size,
-    atLastUnit: finalAtLastUnit || isConcluido,
-    completedActivities: quizzesAnswered,
+    visitedUnitIds,
+    atLastUnit: (finalAtLastUnit || isConcluido) && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected,
+    completedActivities: resolvedDecisionIndices.size,
     totalActivities: requiredDecisionSlideIndices.length,
   });
 
@@ -1075,9 +1370,12 @@ async function driveScormCourseInBrowser({
       units_visited: visitedUnitIds.size,
       visited_unit_ids: [...visitedUnitIds].sort((a, b) => a - b),
       total_units: totalUnitsDetected,
+      distinct_units_visited_count: visitedUnitIds.size,
       actions_count: steps,
       resume_tested: checkpointTested,
       resume_verified: resumedVerified || totalUnitsDetected <= 1,
+      resolved_decisions_count: resolvedDecisionIndices.size,
+      required_decisions_count: requiredDecisionSlideIndices.length,
       assessment: {
         policy: course.scorm_assessment_policy || 'FORMATIVE',
         status: lastRuntimeState?.lessonStatus || null,
@@ -1132,6 +1430,7 @@ export async function runHomologation() {
         outcome = await driveScormCourseInBrowser({
           browserEngine: engine,
           token: learner.token,
+          adminToken,
           course,
           matriculaId,
           funcionarioId: learner.funcionarioId,
