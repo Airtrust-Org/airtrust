@@ -319,7 +319,9 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       body: await treatmentDialog.screenshot({ animations: 'disabled' }),
       contentType: 'image/png',
     });
-    await treatmentDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    // Chromium exposes the shared dialog cancel action as 'Cancel' in
+    // the deployed locale; keep exact alternatives rather than relaxing scope.
+    await treatmentDialog.getByRole('button', { name: /^(Cancelar|Cancel)$/ }).click();
     await expect(treatmentDialog).toHaveCount(0);
     test.info().annotations.push({
       type: 'coverage-gap',
