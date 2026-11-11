@@ -355,7 +355,10 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
 // CLI execution
 if (import.meta.url === `file://${process.argv[1]}`) {
   const mode = process.argv[2] === '--apply' ? 'apply' : 'inspect';
-  const learnerPassword = process.env.QA_LEARNER_PASSWORD || 'AirTrust_QA_202611_Lms!';
+  const learnerPassword = String(process.env.QA_LEARNER_PASSWORD || '').trim();
+  if (mode === 'apply' && !learnerPassword) {
+    throw new Error('QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
+  }
 
   provisionLearner({ mode, learnerPassword })
     .then((result) => {
