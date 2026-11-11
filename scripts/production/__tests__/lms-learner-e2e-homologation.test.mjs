@@ -1026,3 +1026,75 @@ test('regression: PPTX traversal resets to Slide 1 if player restored at an adva
   assert.equal(slide1Clicked, true);
 });
 
+test('regression: determineSlideAction prioritizes canonical COURSE_DATA.slides.length over incidental counter text', () => {
+  const mockDoc = {
+    defaultView: {
+      COURSE_DATA: {
+        slides: new Array(45).fill({ kind: 'content' }),
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return {
+          innerText: '1 / 50',
+          textContent: '1 / 50',
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === '#next, #nextUnit, #nextBtn, button') {
+        return [{
+          id: 'next',
+          innerText: 'Continuar →',
+          disabled: false,
+          click: () => {},
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.domTotal, 45);
+  assert.equal(action.domCurrent, 1);
+  assert.equal(action.atLastUnit, false);
+});
+
+test('regression: determineSlideAction marks atLastUnit when domCurrent equals canonical slide length', () => {
+  const mockDoc = {
+    defaultView: {
+      COURSE_DATA: {
+        slides: new Array(45).fill({ kind: 'content' }),
+      },
+      __AIRTRUST_PLAYER_TEST__: {
+        getState: () => ({ active: 44 }), // 0-based index 44 = slide 45
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return {
+          innerText: '45 / 50',
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === 'button, input[type=button], a') {
+        return [{
+          innerText: 'Confirmar encerramento do estudo',
+          disabled: false,
+          click: () => {},
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.domTotal, 45);
+  assert.equal(action.domCurrent, 45);
+  assert.equal(action.atLastUnit, true);
+  assert.equal(action.type, 'final-button');
+});
+
