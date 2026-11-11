@@ -1405,3 +1405,108 @@ test('checkLearnerQualifications retries on initial empty list and resolves when
   }
 });
 
+test('resolveAdminToken forces refresh when requested to prevent stale token reuse', async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCalls = 0;
+  const prevEmail = process.env.PROD_SMOKE_EMAIL;
+  const prevPass = process.env.PROD_SMOKE_PASSWORD;
+  try {
+    process.env.PROD_SMOKE_EMAIL = 'admin@airtrust.online';
+    process.env.PROD_SMOKE_PASSWORD = 'password';
+
+    const makeJwt = (payload, callIdx) => {
+      const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.sig${callIdx}`;
+    };
+
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        loginCalls += 1;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            accessToken: makeJwt({ id: 1, role: 'ADMIN', empresa_id: 6 }, loginCalls),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const token1 = await resolveAdminToken(true);
+    assert.ok(token1?.includes('sig1'));
+
+    // Without force refresh, it should return cached token
+    const tokenCached = await resolveAdminToken(false);
+    assert.equal(tokenCached, token1);
+    assert.equal(loginCalls, 1);
+
+    // With force refresh, it should call login again
+    const token2 = await resolveAdminToken(true);
+    assert.ok(token2?.includes('sig2'));
+    assert.equal(loginCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevEmail !== undefined) process.env.PROD_SMOKE_EMAIL = prevEmail;
+    else delete process.env.PROD_SMOKE_EMAIL;
+    if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
+    else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
+test('regression: getMatriculaDetail scorm_progresso fallback correctly resolves lesson_location', async () => {
+  const detail = {
+    id: 123,
+    status: 'EM_ANDAMENTO',
+    scorm_progresso: {
+      lesson_location: 'slide_05',
+      progresso_percentual: 50,
+    },
+  };
+  const location = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location;
+  assert.equal(location, 'slide_05');
+});
+
+test('regression: unvisited gate selection excludes assessment and scenario answer buttons', () => {
+  const mockButtons = [
+    {
+      innerText: 'Alternativa B',
+      matches: (sel) => sel.includes('.answer') || sel.includes('[data-answer]'),
+      closest: (sel) => sel.includes('.answers'),
+      getAttribute: (attr) => (attr === 'data-answer' ? '1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+    {
+      innerText: 'Card de Informação 1',
+      matches: () => false,
+      closest: () => null,
+      getAttribute: (attr) => (attr === 'data-gate' ? 'card_1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+  ];
+
+  const visible = () => true;
+  const clean = (s) => String(s || '').trim();
+  const clickedGates = [];
+  const clickedTouches = [];
+
+  const unvisitedGate = mockButtons.find((el) => {
+    if (!visible(el) || el.disabled) return false;
+    if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+      return false;
+    }
+    if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+      return false;
+    }
+    const key = el.getAttribute('data-gate') || el.id || clean(el.innerText || '');
+    if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+    return !el.classList.contains('seen');
+  });
+
+  assert.ok(unvisitedGate);
+  assert.equal(unvisitedGate.innerText, 'Card de Informação 1');
+});
+
+

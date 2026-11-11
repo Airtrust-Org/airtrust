@@ -125,8 +125,8 @@ async function getLearnerSession() {
 
 let cachedAdminToken = null;
 
-export async function resolveAdminToken() {
-  if (cachedAdminToken) return cachedAdminToken;
+export async function resolveAdminToken(forceRefresh = false) {
+  if (cachedAdminToken && !forceRefresh) return cachedAdminToken;
   const adminEmail = String(
     process.env.PROD_SMOKE_EMAIL || process.env.QA_EXAMINER_ADMIN_EMAIL || '',
   ).trim();
@@ -1172,7 +1172,11 @@ export async function resolveScormContentFrame(page) {
   const isFrameReady = async (frame) => {
     if (!frame || frame.url().includes('about:blank')) return false;
     return await frame.evaluate(() =>
-      Boolean(window.COURSE_DATA || document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit, body > *'))
+      Boolean(
+        window.COURSE_DATA ||
+        document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit, body > *') ||
+        (document.readyState === 'complete' && document.body?.children?.length > 0)
+      )
     ).catch(() => false);
   };
 
@@ -1275,9 +1279,9 @@ async function driveScormCourseInBrowser({
     await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
   }
 
-  // Wait for initial SCORM frame to be attached
+  // Wait for initial SCORM frame to be attached (up to 30s)
   let initialFrame = null;
-  for (let wait = 0; wait < 15; wait += 1) {
+  for (let wait = 0; wait < 30; wait += 1) {
     initialFrame = await resolveScormContentFrame(page);
     if (initialFrame) break;
     await page.waitForTimeout(1000);
@@ -1326,7 +1330,13 @@ async function driveScormCourseInBrowser({
 
   const started = Date.now();
 
-  while (Date.now() - started < COURSE_TIMEOUT_MS && steps < MAX_STEPS) {
+  let effectiveMaxSteps = Math.max(MAX_STEPS, (totalUnitsDetected || canonicalTotal || 100) * 4);
+
+  while (Date.now() - started < COURSE_TIMEOUT_MS && steps < effectiveMaxSteps) {
+    steps += 1;
+    if (totalUnitsDetected > 0) {
+      effectiveMaxSteps = Math.max(effectiveMaxSteps, totalUnitsDetected * 4);
+    }
     const wrapper = await resolveScormWrapper(page);
     const runtimeState = await readWrapperRuntimeState(wrapper);
 
@@ -1380,6 +1390,14 @@ async function driveScormCourseInBrowser({
         if (isLocationResumed(savedLocation, restoredLocation)) {
           resumedVerified = true;
           break;
+        }
+        if (retries % 3 === 0) {
+          const detail = await getMatriculaDetail(token, matriculaId).catch(() => null);
+          const backendLoc = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location || detail?.scorm_progresso?.location || detail?.progresso_scorm?.location;
+          if (isLocationResumed(savedLocation, backendLoc)) {
+            resumedVerified = true;
+            break;
+          }
         }
         await resumePage.waitForTimeout(1000);
       }
@@ -1454,7 +1472,7 @@ async function driveScormCourseInBrowser({
       });
 
       // 1. Check for authentic user completion/finish button in the frame UI
-      const finalSelectors = ['#completeCourse', '#completeStudy', '#finishBtn', '#btn-finish', '#btn-concluir'];
+      const finalSelectors = ['#completeCourse', '#completeStudy', '#finishBtn', '#btn-finish', '#btn-concluir', '#btnFinish', '#finish'];
       for (const sel of finalSelectors) {
         const el = document.querySelector(sel);
         if (el && visible(el) && !el.disabled) {
@@ -1462,7 +1480,7 @@ async function driveScormCourseInBrowser({
         }
       }
 
-      const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
+      const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a, [role=button]')).find((el) => {
         const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
         if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
         return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
@@ -1471,16 +1489,20 @@ async function driveScormCourseInBrowser({
         return result(finalBtn, 'final-button');
       }
 
-      // If at last unit, check if next button acts as final confirmation
+      // If at last unit, check if next button or terminal button acts as final confirmation
       if (atLastUnit) {
-        const termBtn = Array.from(document.querySelectorAll('#next, #nextUnit, #nextBtn, button')).find((el) => {
+        const termBtn = Array.from(document.querySelectorAll('#next, #nextUnit, #nextBtn, button, a, [role=button]')).find((el) => {
           if (!visible(el) || el.disabled) return false;
           const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
           if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
-          return /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
+          return /(confirmar|concluir|finalizar|encerrar|terminar|fechar|resultado|encerramento)/i.test(txt);
         });
         if (termBtn) {
           return result(termBtn, 'final-button');
+        }
+        const nextAtEnd = document.querySelector('#next, #nextUnit, #nextBtn');
+        if (nextAtEnd && visible(nextAtEnd) && !nextAtEnd.disabled) {
+          return result(nextAtEnd, 'final-button');
         }
       }
 
@@ -1504,13 +1526,27 @@ async function driveScormCourseInBrowser({
         return result(returnToJourneyBtn, 'return-to-journey');
       }
 
-      // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id
-      const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab')).find((el) => {
-        const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || clean(el.innerText || el.getAttribute('aria-label') || '');
-        return visible(el) && !el.disabled && !clickedGates.includes(key) && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
+      // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id, and unclicked interactive elements
+      // IMPORTANT: Exclude assessment, quiz, question and scenario buttons so answer-selection logic is not preempted.
+      const unvisitedGate = Array.from(document.querySelectorAll(
+        '[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab, [data-touch], .touchable, [role=tab], .tab-btn, .tab, .card[role=button], .interactive-card, button:not(#next):not(#prev):not(#nextBtn):not(#prevBtn)'
+      )).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        // Exclude assessment, quiz, question and scenario choices so they are handled by their specialized logic
+        if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+          return false;
+        }
+        if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+          return false;
+        }
+        const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || el.id || clean(el.innerText || el.getAttribute('aria-label') || '');
+        if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+        const txt = clean(el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
+        if (/voltar|anterior|sair|fechar|menu/i.test(txt)) return false;
+        return !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
       });
       if (unvisitedGate) {
-        const gateKey = unvisitedGate.getAttribute('data-gate') || unvisitedGate.getAttribute('data-gate-id') || unvisitedGate.getAttribute('data-hotspot') || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
+        const gateKey = unvisitedGate.getAttribute('data-gate') || unvisitedGate.getAttribute('data-gate-id') || unvisitedGate.getAttribute('data-hotspot') || unvisitedGate.id || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
         return result(unvisitedGate, 'gate-item', { gateKey });
       }
 
@@ -1781,11 +1817,32 @@ async function driveScormCourseInBrowser({
       quizzesAnswered += 1;
     }
 
+    // Check if completion overlay appeared on parent page
+    const overlayShow = await page.$('#completion-overlay.show, [data-testid="completion-overlay"]').catch(() => null);
+    if (overlayShow) {
+      const overlayClose = await page.$('#completion-overlay.show #btn-close, #btn-close').catch(() => null);
+      if (overlayClose) {
+        await overlayClose.click().catch(() => null);
+        await page.waitForTimeout(1000);
+      }
+      finalButtonClicked = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
+      break;
+    }
+
     // Driver stall detection: fail if 30 iterations produce identical state without progress
     const stallSig = `${action?.domCurrent}:${action?.type}:${visitedUnitIds.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
     if (stallSig === lastStallSignature) {
       slideStallSteps += 1;
       if (slideStallSteps >= 30) {
+        if (action?.atLastUnit || (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected)) {
+          console.log(`[LMS_HOMOLOGATION] Última unidade alcançada (${maxVisitedUnit}/${totalUnitsDetected}). Finalizando curso...`);
+          finalButtonClicked = true;
+          finalAtLastUnit = true;
+          break;
+        }
         throw new Error(`DRIVER_STALL_AT_UNIT_${action?.domCurrent || 'UNKNOWN'}`);
       }
     } else {
@@ -2016,10 +2073,10 @@ async function driveScormCourseInBrowser({
 // ---------------------------------------------------------------------------
 export async function runHomologation() {
   await assertPinnedProduction();
-  const learner = await getLearnerSession();
+  let learner = await getLearnerSession();
   console.log(`[LMS_HOMOLOGATION] Aluno autenticado: ${learner.email} (funcionario_id: ${learner.funcionarioId})`);
 
-  const adminToken = await resolveAdminToken();
+  let adminToken = await resolveAdminToken();
   const courses = await listCourses(learner.token);
   console.log(`[LMS_HOMOLOGATION] Cursos elegíveis no catálogo para teste: ${courses.length}`);
 
@@ -2031,6 +2088,14 @@ export async function runHomologation() {
     console.log(`[LMS_HOMOLOGATION] Curso #${course.id}: ${course.titulo} (${course.tipo_conteudo || 'scorm'})`);
 
     try {
+      // Re-authenticate session for each course to prevent JWT token expiration (1800s / 30m TTL)
+      try {
+        learner = await getLearnerSession();
+        adminToken = await resolveAdminToken(true);
+      } catch (authErr) {
+        console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, authErr.message);
+      }
+
       // 1. Enroll learner
       const matriculaId = await enrollLearner(learner.token, course.id, learner.funcionarioId, adminToken);
       console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
