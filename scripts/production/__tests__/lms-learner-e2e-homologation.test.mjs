@@ -10,6 +10,7 @@ import {
   evaluateCoursePath,
   evaluateHomologationVerdict,
   resolveAdminToken,
+  resolveEffectiveLessonStatus,
   resolveScormContentFrame,
   runHomologation,
   setupAuthenticatedContext,
@@ -1262,5 +1263,38 @@ test('regression: determineSlideAction marks atLastUnit when domCurrent equals c
   assert.equal(action.domCurrent, 45);
   assert.equal(action.atLastUnit, true);
   assert.equal(action.type, 'final-button');
+});
+
+test('resolveEffectiveLessonStatus prioritizes reopen terminal state over stale in-flight snapshot', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'completed' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'completed');
+});
+
+test('resolveEffectiveLessonStatus recognizes backend persisted scorm progression', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: null,
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'passed' },
+    isConcluido: true,
+    policy: 'SCORED',
+  });
+  assert.equal(status, 'passed');
+});
+
+test('resolveEffectiveLessonStatus does not fabricate completion for uncompleted SCORED courses', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'incomplete' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: false,
+    policy: 'SCORED',
+  });
+  assert.equal(status, 'incomplete');
 });
 
