@@ -149,12 +149,57 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     await expect(selector).toHaveValue(QA_TENANT_ID, { timeout: 20_000 });
   }
 
+  // First prove the tenant-scoped access grant actually resolved. A timeout
+  // or aborted access request must NOT be mistaken for a slow empty snapshot.
+  // Both listeners are installed before entering the FRMS route.
+  const isAccessGet = (request: { url(): string; method(): string }) => {
+    const url = new URL(request.url());
+    return url.hostname === API_HOST &&
+      url.pathname === '/api/me/operational-access' &&
+      request.method() === 'GET';
+  };
+  // The landing page may have an older access fetch still in flight.
+  // A full document navigation aborts it; only the new FRMS document's own
+  // request can establish the outcome for this acceptance.
+  const accessOutcome = page.waitForEvent('request', {
+    predicate: (request) => {
+      if (!isAccessGet(request)) return false;
+      try {
+        return new URL(request.frame().url()).pathname === '/frms';
+      } catch {
+        return false;
+      }
+    },
+    timeout: 25_000,
+  }).then((accessRequest) => Promise.race([
+    page.waitForResponse(
+      (response) => response.request() === accessRequest,
+      { timeout: 25_000 },
+    ).then((response) => ({ kind: 'response' as const, status: response.status() })),
+    page.waitForEvent('requestfailed', {
+      predicate: (request) => request === accessRequest,
+      timeout: 25_000,
+    }).then((request) => ({
+      kind: 'failed' as const,
+      reason: request.failure()?.errorText || 'network_unknown',
+    })),
+  ]));
   const snapshotRequest = page.waitForResponse(
     (response) => response.url().includes('/api/frms/operational-snapshot') &&
       response.url().includes(DAY),
     { timeout: 50_000 },
   );
+  // If the preceding access guard fails, consume this pending listener's
+  // rejection while still preserving its failure for the normal await below.
+  void snapshotRequest.catch(() => {});
   await page.goto(BASE + '/frms?data=' + DAY, { waitUntil: 'domcontentloaded' });
+  const access = await accessOutcome;
+  if (access.kind === 'failed') {
+    throw new Error('FRMS_QA_OPERATIONAL_ACCESS_TRANSPORT_FAILURE:' + access.reason);
+  }
+  expect(access.status, 'FRMS_QA_OPERATIONAL_ACCESS_HTTP_NOT_200').toBe(200);
+  await expect(page.getByText(/Não foi possível confirmar seu escopo operacional do FRMS/))
+    .toHaveCount(0);
   const snapshot = await snapshotRequest;
   expect(snapshot.status(), 'FRMS não pode tratar contexto ausente como normal').toBe(200);
   const payload = await snapshot.json() as {
