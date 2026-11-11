@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertQaRunScope, qaRunEmail, qaRunLearners } from '../qa-run-identity.mjs';
+import { assertQaRunScope, qaRunEmail, qaRunLearners, qaRunCpfCandidate } from '../qa-run-identity.mjs';
 import { generateValidTestCpf } from '../provision-synthetic-qa-learner.mjs';
 
 test('requires numeric GitHub run ID and attempt before allocating any synthetic identity', () => {
@@ -62,4 +62,54 @@ test('provisioning error diagnostics cannot print invitation tokens or request h
   const sample = new Error('POST failed\nAuthorization: Bearer synthetic-secret-jwt\nCookie: QA_LOGIN=private');
   assert.equal(safeProvisionErrorCode(sample), 'QA_PROVISION_UNEXPECTED_ERROR');
   assert.equal(safeProvisionErrorCode(new Error('QA_USER_EMPLOYEE_LINK_MISMATCH')), 'QA_USER_EMPLOYEE_LINK_MISMATCH');
+});
+
+
+test('CPF collision between two real run scopes chooses deterministic alternative without employee reuse', async () => {
+  const { resolveAvailableQaCpf } = await import('../provision-synthetic-qa-learner.mjs');
+  const existing = qaRunLearners('43012348474', '1', generateValidTestCpf).webkit;
+  const incoming = qaRunLearners('43012349465', '1', generateValidTestCpf).chromium;
+  assert.equal(existing.cpf, incoming.cpf);
+  const second = qaRunCpfCandidate('43012349465', '1', 'chromium', generateValidTestCpf, 1);
+  assert.notEqual(second, existing.cpf);
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      requests.push({ url: String(url), method: String(options.method || 'GET') });
+      const cpf = new URL(String(url)).searchParams.get('search');
+      const data = cpf === existing.cpf
+        ? [{ id: 111, cpf: existing.cpf, matricula: existing.matricula, email: existing.email }]
+        : [];
+      return new Response(JSON.stringify({ success: true, data, pagination: { total: data.length } }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const resolved = await resolveAvailableQaCpf('synthetic-admin', incoming, '43012349465', '1');
+    assert.equal(resolved, second);
+    assert.deepEqual(requests.map((q) => q.method), ['GET', 'GET']);
+    assert.ok(requests.every((q) => q.url.includes('/api/funcionarios?')));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('CPF availability denied or truncated fails before any staff creation', async () => {
+  const { resolveAvailableQaCpf } = await import('../provision-synthetic-qa-learner.mjs');
+  const learner = qaRunLearners('43012349465', '1', generateValidTestCpf).chromium;
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => { calls++;
+      return new Response(JSON.stringify({ success: false }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    };
+    await assert.rejects(resolveAvailableQaCpf('synthetic-admin', learner, '43012349465', '1'), /QA_CPF_AVAILABILITY_UNVERIFIED/);
+    assert.equal(calls, 1);
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(JSON.stringify({ success: true, data: [], pagination: { total: 101 } }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    await assert.rejects(resolveAvailableQaCpf('synthetic-admin', learner, '43012349465', '1'), /QA_CPF_AVAILABILITY_TRUNCATED/);
+    assert.equal(calls, 2);
+  } finally { globalThis.fetch = originalFetch; }
 });

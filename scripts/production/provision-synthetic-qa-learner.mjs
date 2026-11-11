@@ -17,7 +17,7 @@
  * - Zero PII: dados 100% sintéticos.
  */
 
-import { qaRunLearners, assertQaRunScope } from './qa-run-identity.mjs';
+import { qaRunLearners, qaRunEmail, qaRunCpfCandidate, assertQaRunScope } from './qa-run-identity.mjs';
 
 import {
   assert,
@@ -212,6 +212,27 @@ export async function findExistingUser(adminToken, email) {
   return null;
 }
 
+// CPF is unique per company, while its hash-derived prefix has a finite
+// namespace. Resolve rare collisions by reading only tenant-scoped employees;
+// never reuse a person by CPF or overwrite a pre-existing registration.
+export async function resolveAvailableQaCpf(adminToken, learnerDef, runId, attempt) {
+  const browsers = ['chromium', 'webkit'].filter((browser) =>
+    qaRunEmail(runId, attempt, browser) === String(learnerDef.email || '').trim().toLowerCase());
+  assert(browsers.length === 1, 'QA_CPF_LEARNER_SCOPE_INVALID');
+  for (let ordinal = 0; ordinal <= 31; ordinal++) {
+    const candidate = qaRunCpfCandidate(runId, attempt, browsers[0], generateValidTestCpf, ordinal);
+    const res = await request(adminToken, `/api/funcionarios?limit=100&search=${candidate}`);
+    assert(res.status === 200 && Array.isArray(res.json?.data), 'QA_CPF_AVAILABILITY_UNVERIFIED');
+    const rows = res.json.data;
+    const total = Number(res.json?.pagination?.total ?? rows.length);
+    assert(Number.isSafeInteger(total) && total <= rows.length, 'QA_CPF_AVAILABILITY_TRUNCATED');
+    if (!rows.some((f) => String(f?.cpf || '').replace(/\D/g, '') === candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error('QA_CPF_CANDIDATES_EXHAUSTED');
+}
+
 export async function provisionLearner({
   mode = 'inspect',
   learnerPassword,
@@ -259,13 +280,14 @@ export async function provisionLearner({
     assert(targetSetor?.id, 'NO_ACTIVE_SECTOR_AVAILABLE_FOR_QA_LEARNER');
     console.log(`[QA_PROVISION] Setor elegível selecionado: id=${targetSetor.id}, nome="${targetSetor.nome}"`);
 
+    const freeCpf = await resolveAvailableQaCpf(adminToken, learnerDef, process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
         nome: learnerDef.nome,
         matricula: learnerDef.matricula,
         email: learnerDef.email,
-        cpf: learnerDef.cpf,
+        cpf: freeCpf,
         cargo: learnerDef.cargo,
         setor_id: targetSetor.id,
         setor: targetSetor.nome,
