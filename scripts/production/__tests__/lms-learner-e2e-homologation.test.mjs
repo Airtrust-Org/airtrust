@@ -981,15 +981,96 @@ test('adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminTok
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
+      if (String(url).endsWith('/api/lms/matriculas/2405/status') && opts?.method === 'PATCH') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 2405, status: 'NAO_INICIADO' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       throw new Error(`Unexpected url: ${url}`);
     };
 
     const id = await enrollLearner('learner-token', 67, 195, 'admin-token');
     assert.equal(id, 2405);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[1].method, 'POST');
     assert.equal(calls[1].url.endsWith('/reverter'), true);
     assert.equal(calls[1].body.includes('CORRECAO'), true);
+    assert.equal(calls[2].method, 'PATCH');
+    assert.equal(calls[2].url.endsWith('/status'), true);
+    assert.equal(calls[2].body.includes('NAO_INICIADO'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('adversarial: enrollLearner on EM_ANDAMENTO uses governed administrative patch and reversal when /finalizar would reject incomplete runs', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), method: opts?.method, body: opts?.body });
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 2404, curso_id: 67, status: 'EM_ANDAMENTO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      // Proves Codex finding: /finalizar on an incomplete course returns 409 SCORM_COMPLETION_REJECTED
+      if (String(url).endsWith('/api/lms/matriculas/2404/finalizar')) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'SCORM_COMPLETION_REJECTED',
+            error: 'Conclusão SCORM ainda não elegível',
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/2404/status') && opts?.method === 'PATCH') {
+        const parsedBody = JSON.parse(opts.body);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 2404, status: parsedBody.status },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/lms/matriculas/2404/reverter')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { matricula_id: 2404, status: 'EM_ANDAMENTO', reverted: true },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner('learner-token', 67, 194, 'admin-token');
+    assert.equal(id, 2404);
+    assert.equal(calls.length, 4);
+    // 1: minhas-ead
+    // 2: PATCH /status -> CONCLUIDO (governed administrative completion override)
+    assert.equal(calls[1].method, 'PATCH');
+    assert.equal(calls[1].url.endsWith('/status'), true);
+    assert.equal(calls[1].body.includes('CONCLUIDO'), true);
+    // 3: POST /reverter -> resets lms_progresso_scorm and cycles
+    assert.equal(calls[2].method, 'POST');
+    assert.equal(calls[2].url.endsWith('/reverter'), true);
+    assert.equal(calls[2].body.includes('CORRECAO'), true);
+    // 4: PATCH /status -> NAO_INICIADO
+    assert.equal(calls[3].method, 'PATCH');
+    assert.equal(calls[3].url.endsWith('/status'), true);
+    assert.equal(calls[3].body.includes('NAO_INICIADO'), true);
   } finally {
     globalThis.fetch = originalFetch;
   }
