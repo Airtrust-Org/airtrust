@@ -488,22 +488,31 @@ export async function checkCertificate(token, qualificacaoHistoricoId) {
   return null;
 }
 
+export function isLocationResumed(savedLocation, restoredLocation) {
+  if (!savedLocation || !restoredLocation) return false;
+  const sStr = String(savedLocation).trim();
+  const rStr = String(restoredLocation).trim();
+  if (sStr === rStr) return true;
+  const sUnit = sStr.split('/')[0];
+  const rUnit = rStr.split('/')[0];
+  return Boolean(sUnit && rUnit && sUnit === rUnit);
+}
+
 export function resolveEffectiveLessonStatus({
   reopenState = null,
   lastRuntimeState = null,
   scormProgresso = null,
   reopenScormProgresso = null,
-  isConcluido = false,
-  policy = 'FORMATIVE',
 } = {}) {
-  const normPolicy = String(policy || 'FORMATIVE').trim().toUpperCase();
   const pick = (s) => (s && TERMINAL_SCORM12.has(String(s).trim().toLowerCase()) ? String(s).trim().toLowerCase() : null);
   return (
     pick(reopenState?.lessonStatus) ||
     pick(lastRuntimeState?.lessonStatus) ||
     pick(scormProgresso?.lesson_status) ||
     pick(reopenScormProgresso?.lesson_status) ||
-    (isConcluido && normPolicy === 'FORMATIVE' ? 'completed' : lastRuntimeState?.lessonStatus || null)
+    (lastRuntimeState?.lessonStatus ? String(lastRuntimeState.lessonStatus).trim().toLowerCase() : null) ||
+    (scormProgresso?.lesson_status ? String(scormProgresso.lesson_status).trim().toLowerCase() : null) ||
+    'incomplete'
   );
 }
 
@@ -1347,24 +1356,12 @@ async function driveScormCourseInBrowser({
       }
       await resumePage.waitForTimeout(1500);
 
-      const parseLoc = (loc) => {
-        if (!loc) return null;
-        const m = String(loc).match(/^(\d+)(?:\/(\d+))?$/);
-        return m ? { current: Number(m[1]), total: m[2] ? Number(m[2]) : null } : null;
-      };
-
       let restoredLocation = null;
       for (let retries = 0; retries < 30; retries += 1) {
         const resumeWrapper = await resolveScormWrapper(resumePage);
         const state = await readWrapperRuntimeState(resumeWrapper);
         restoredLocation = state?.location;
-        const sLoc = parseLoc(savedLocation);
-        const rLoc = parseLoc(restoredLocation);
-        if (savedLocation && (
-          String(restoredLocation) === String(savedLocation) ||
-          String(restoredLocation).split('/')[0] === String(savedLocation).split('/')[0] ||
-          (sLoc && rLoc && Math.abs(sLoc.current - rLoc.current) <= 1)
-        )) {
+        if (isLocationResumed(savedLocation, restoredLocation)) {
           resumedVerified = true;
           break;
         }
