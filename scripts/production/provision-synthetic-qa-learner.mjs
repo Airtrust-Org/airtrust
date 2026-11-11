@@ -174,7 +174,9 @@ export function selectEligibleSector(
     return true;
   });
 
-  const candidates = eligible.length > 0 ? eligible : setoresList;
+  // No classified/in-scope sector: fail closed rather than place QA in an arbitrary sector.
+  if (eligible.length === 0) return null;
+  const candidates = eligible;
 
   return (
     candidates.find(
