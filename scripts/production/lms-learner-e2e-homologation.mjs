@@ -699,6 +699,18 @@ async function drivePptxCourseInBrowser({
   });
   assert(totalSlides > 0, 'PPTX_TOTAL_SLIDES_ZERO');
 
+  // Ensure traversal begins at Slide 1 even if player resumed at a later slide
+  const slide1Btn = page.locator('button[aria-label^="Slide 1"]').first();
+  if (await slide1Btn.isVisible().catch(() => false)) {
+    const isSlide1Active = await slide1Btn.evaluate((el) =>
+      el.classList.contains('h-2.5') || el.classList.contains('bg-blue-600') || el.getAttribute('aria-current') === 'true'
+    ).catch(() => true);
+    if (!isSlide1Active) {
+      await slide1Btn.click().catch(() => null);
+      await page.waitForTimeout(600);
+    }
+  }
+
   let resumedVerified = false;
   const checkpointSlide = Math.floor(totalSlides / 2);
 

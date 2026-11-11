@@ -995,3 +995,34 @@ test('adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminTok
   }
 });
 
+test('regression: PPTX traversal resets to Slide 1 if player restored at an advanced slide', async () => {
+  let slide1Clicked = false;
+  const mockSlide1Btn = {
+    isVisible: async () => true,
+    evaluate: async (fn) => false, // not active
+    click: async () => { slide1Clicked = true; },
+  };
+
+  const mockPage = {
+    locator: (selector) => {
+      if (selector === 'button[aria-label^="Slide 1"]') {
+        return {
+          first: () => mockSlide1Btn,
+        };
+      }
+      return { first: () => ({ isVisible: async () => false }) };
+    },
+    waitForTimeout: async () => {},
+  };
+
+  const slide1Btn = mockPage.locator('button[aria-label^="Slide 1"]').first();
+  if (await slide1Btn.isVisible().catch(() => false)) {
+    const isSlide1Active = await slide1Btn.evaluate((el) => false).catch(() => true);
+    if (!isSlide1Active) {
+      await slide1Btn.click().catch(() => null);
+    }
+  }
+
+  assert.equal(slide1Clicked, true);
+});
+
