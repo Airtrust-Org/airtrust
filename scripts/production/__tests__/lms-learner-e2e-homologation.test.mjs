@@ -1619,6 +1619,13 @@ test('enrollLearner retries rematricular with reversal when 409 LMS_COMPLETION_R
         );
       }
       if (u.includes('/api/lms/matriculas/555/reverter')) {
+        const body = options.body ? JSON.parse(options.body) : {};
+        if (!body.reason || body.reason.length < 10 || body.classification !== 'CORRECAO') {
+          return new Response(
+            JSON.stringify({ code: 'LMS_COMPLETION_REVERSAL_INVALID', message: 'Classificação inválida' }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
         reversalCalled = true;
         return new Response(
           JSON.stringify({ success: true, data: { id: 555, status: 'EM_ANDAMENTO' } }),

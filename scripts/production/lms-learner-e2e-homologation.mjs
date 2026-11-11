@@ -379,22 +379,27 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
       });
       if (remat.status === 409 && adminToken) {
         // Se a matrícula possui qualificação vinculada, reverter conclusão antes de rematricular
-        await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/reverter`, {
+        const rev = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/reverter`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${adminToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611 - Reversão prévia' }),
+          body: JSON.stringify({
+            reason: 'Homologação LMS Aluno QA 202611 - Reversão prévia para rematrícula autorizada',
+            classification: 'CORRECAO',
+          }),
         }).catch(() => null);
-        remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${adminToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
-        });
+        if (rev && rev.status === 200) {
+          remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
+          });
+        }
       }
       if (remat.status === 200 && Number(remat.json?.data?.matricula_id || remat.json?.data?.id || 0) > 0) {
         return Number(remat.json.data.matricula_id || remat.json.data.id);
