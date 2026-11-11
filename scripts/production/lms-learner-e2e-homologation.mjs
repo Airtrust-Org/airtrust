@@ -72,16 +72,46 @@ export function saveIncrementalReport(results = [], metadata = {}, targetPath = 
     blocked_count: blockedCount,
     updated_at: new Date().toISOString(),
     ...metadata,
-    results,
+    results: sanitizeQaReportValue(results),
   };
 
   try {
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.writeFileSync(targetPath, JSON.stringify(summary, null, 2), 'utf8');
   } catch (err) {
-    console.warn(`[LMS_HOMOLOGATION] Falha ao salvar relatório incremental: ${err?.message || err}`);
+    console.warn(`[LMS_HOMOLOGATION] Falha ao salvar relatório incremental: ${safeQaErrorCode(err)}`);
   }
   return summary;
+}
+
+// Fail-closed diagnostic output: never serialize raw Playwright network exceptions.
+// Playwright may embed Authorization, Cookie, and signed JWT values in call logs.
+export function safeQaErrorCode(error) {
+  const message = typeof error === 'string' ? error : String(error?.message || '');
+  if (/timed? ?out|timeout|AbortSignal|operation was aborted/i.test(message)) return 'QA_NETWORK_TIMEOUT';
+  if (/\b401\b|INVALID_TOKEN|TOKEN_REVOKED/i.test(message)) return 'QA_AUTHENTICATION_FAILURE';
+  if (/\b403\b|FORBIDDEN/i.test(message)) return 'QA_AUTHORIZATION_FAILURE';
+  if (/\b429\b|rate.limit/i.test(message)) return 'QA_RATE_LIMITED';
+  const known = message.match(/^(INCOMPLETE_COURSE_PATH|SCORM_IFRAME_NOT_FOUND|LMS_[A-Z0-9_]{3,60}|QA_[A-Z0-9_]{3,70}|DRIVER_STALL_AT_UNIT_[0-9]{1,5}|ENROLL_FAILED_HTTP_[0-9]{1,6}_[0-9]{3}:[A-Z0-9_]{3,70})$/);
+  if (known) return known[1];
+  return 'QA_EXECUTION_ERROR';
+}
+
+export function sanitizeQaReportValue(value, key = '', depth = 0) {
+  if (depth > 16) return '[TRUNCATED]';
+  if (/authorization|cookie|token|password|secret|api.?key/i.test(key)) return '[REDACTED]';
+  if (Array.isArray(value)) return value.map((v) => sanitizeQaReportValue(v, '', depth + 1));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, sanitizeQaReportValue(v, k, depth + 1)]),
+    );
+  }
+  if (typeof value !== 'string') return value;
+  // A multiline error may include raw request headers, cookies and JWTs.
+  return value
+    .replace(/\b(?:Authorization|Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]*/gi, '[REDACTED_HEADER]')
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}(?:\.[A-Za-z0-9_-]+)?\b/g, '[REDACTED_JWT]');
 }
 
 function sha256(buffer) {
@@ -145,6 +175,7 @@ async function getLearnerSession() {
   assert(Number(claims?.empresa_id) === TARGET_COMPANY_ID, 'LEARNER_TENANT_MISMATCH');
   const funcionarioId = Number(claims?.funcionario_id || 0);
   assert(funcionarioId > 0, 'LEARNER_FUNCIONARIO_ID_MISSING');
+  assertQaLearnerIdentity(token, funcionarioId);
 
   return { token, funcionarioId, email: activeEmail };
 }
@@ -176,7 +207,7 @@ export async function resolveAdminToken(forceRefresh = false) {
     cachedAdminToken = t;
     return t;
   } catch (err) {
-    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa no tenant alvo:', err.message);
+    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa no tenant alvo:', safeQaErrorCode(err));
     return null;
   }
 }
@@ -203,217 +234,71 @@ async function listCourses(learnerToken) {
     : active;
 }
 
+export function assertQaLearnerIdentity(token, funcionarioId) {
+  const claims = decodeJwtPayload(token);
+  const email = String(claims?.email || '').trim().toLowerCase();
+  const expected = `qa.lms.202611.${BROWSER_NAME}@airtrust.online`;
+  assert(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'QA_BROWSER_NOT_ALLOWLISTED');
+  assert(TARGET_COMPANY_ID === 6, 'QA_COMPANY_NOT_ALLOWLISTED');
+  assert(email === expected, 'QA_LEARNER_EMAIL_NOT_ALLOWLISTED');
+  assert(String(claims?.role || '').toUpperCase() === 'ALUNO', 'QA_LEARNER_ROLE_INVALID');
+  assert(Number(claims?.empresa_id) === TARGET_COMPANY_ID, 'QA_LEARNER_TENANT_MISMATCH');
+  assert(Number(claims?.funcionario_id) === Number(funcionarioId) && Number(funcionarioId) > 0,
+    'QA_LEARNER_EMPLOYEE_MISMATCH');
+  return true;
+}
+
 export async function enrollLearner(token, cursoId, funcionarioId, adminToken = null) {
-  // 1. Verificar se o aluno já possui matrícula ativa pré-existente
-  try {
-    const existingRes = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (existingRes.status === 200 && Array.isArray(existingRes.json?.data)) {
-      const match = existingRes.json.data.find(
-        (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
-      );
-      if (match && Number(match.id) > 0) {
-        // Se a matrícula já possuir progresso ou histórico prévio (ex: CONCLUIDO, EM_ANDAMENTO por outro navegador ou ciclo anterior),
-        // deve ser rematriculada em novo ciclo auditado para garantir teste independente e percurso integral a partir do zero (0%).
-        const currentStatus = String(match.status || '').toUpperCase();
-        if (currentStatus !== 'NAO_INICIADO' && currentStatus !== 'CANCELADO') {
-          if (currentStatus === 'CONCLUIDO' && adminToken) {
-            console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (CONCLUIDO) já concluída em teste prévio. Revertendo para teste auditado de percurso integral em ${BROWSER_NAME}...`);
-            const rev = await fetchJson(`${API}/api/lms/matriculas/${match.id}/reverter`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${adminToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                reason: `Homologação LMS Aluno QA - reteste auditado de percurso integral em ${BROWSER_NAME}`,
-                classification: 'CORRECAO',
-              }),
-            });
-            if (rev.status === 200 && rev.json?.success) {
-              await fetchJson(`${API}/api/lms/matriculas/${match.id}/status`, {
-                method: 'PATCH',
-                headers: {
-                  Authorization: `Bearer ${adminToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  status: 'NAO_INICIADO',
-                  observacoes: `Homologação LMS Aluno QA - percurso reiniciado do marco zero para ${BROWSER_NAME}`,
-                }),
-              });
-              console.log(`[LMS_HOMOLOGATION] Conclusão revertida com sucesso: matrícula #${match.id} reiniciada no início.`);
-              return Number(match.id);
-            }
-          }
-          if (currentStatus === 'EM_ANDAMENTO' && adminToken) {
-            console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (EM_ANDAMENTO) possui progresso de teste prévio. Transicionando via override administrativo para reversão governada em ${BROWSER_NAME}...`);
-            const patchRes = await fetchJson(`${API}/api/lms/matriculas/${match.id}/status`, {
-              method: 'PATCH',
-              headers: {
-                Authorization: `Bearer ${adminToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                status: 'CONCLUIDO',
-                observacoes: `Homologação LMS Aluno QA - conclusão administrativa prévia para reset governado em ${BROWSER_NAME}`,
-              }),
-            });
-            if (patchRes.status === 200 && patchRes.json?.success) {
-              const rev = await fetchJson(`${API}/api/lms/matriculas/${match.id}/reverter`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${adminToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  reason: `Homologação LMS Aluno QA - reinício auditado de percurso em ${BROWSER_NAME}`,
-                  classification: 'CORRECAO',
-                }),
-              });
-              if (rev.status === 200 && rev.json?.success) {
-                await fetchJson(`${API}/api/lms/matriculas/${match.id}/status`, {
-                  method: 'PATCH',
-                  headers: {
-                    Authorization: `Bearer ${adminToken}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    status: 'NAO_INICIADO',
-                    observacoes: `Homologação LMS Aluno QA - percurso reiniciado do marco zero para ${BROWSER_NAME}`,
-                  }),
-                });
-                console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} revertida e reiniciada com sucesso em ${BROWSER_NAME}.`);
-                return Number(match.id);
-              }
-            }
-          }
-          console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
-          const authToUse = adminToken || token;
-          let remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${authToUse}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ reason: `Homologação LMS Aluno QA - ${BROWSER_NAME}` }),
-          });
-          if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
-            return Number(remat.json.data.matricula_id);
-          }
-          if (adminToken && currentStatus === 'EM_ANDAMENTO') {
-            await fetchJson(`${API}/api/lms/matriculas/${match.id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${adminToken}` },
-            });
-            remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${adminToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ reason: `Homologação LMS Aluno QA - ${BROWSER_NAME}` }),
-            });
-            if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
-              return Number(remat.json.data.matricula_id);
-            }
-          }
-        } else if (currentStatus === 'NAO_INICIADO') {
-          console.log(`[LMS_HOMOLOGATION] Matrícula virgem (NAO_INICIADO) reutilizada: id=${match.id}`);
-          return Number(match.id);
-        }
-      }
+  // No administrative reversal, forced completion, DELETE or cycle reset is
+  // permitted in a production homologation. Use a newly provisioned synthetic
+  // learner or a separately approved, audited reset workflow instead.
+  assertQaLearnerIdentity(token, funcionarioId);
+  const existingRes = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert(existingRes.status === 200 && Array.isArray(existingRes.json?.data),
+    'QA_ENROLLMENT_OWNERSHIP_UNVERIFIED');
+
+  const match = existingRes.json.data.find(
+    (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
+  );
+  if (match) {
+    // A list returned to a student does not alone prove that administrative
+    // mutation belongs to this employee, company or test cycle.
+    // /minhas-ead is tenant-scoped by the authenticated Worker (m.empresa_id
+    // predicate); its SELECT returns funcionario_id but omits empresa_id.
+    // Verify the employee unconditionally and verify tenant when included.
+    assert(Number(match.funcionario_id) === Number(funcionarioId) &&
+      (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
+      'QA_ENROLLMENT_OWNERSHIP_UNVERIFIED');
+    if (String(match.status || '').toUpperCase() !== 'NAO_INICIADO') {
+      throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
     }
-  } catch (err) {
-    console.warn(`[LMS_HOMOLOGATION] Aviso ao consultar minhas-ead: ${err.message}`);
+    assert(Number(match.id) > 0, 'QA_ENROLLMENT_ID_INVALID');
+    return Number(match.id);
   }
 
-  // 2. Tentar auto-matrícula normal pelo aluno
-  let res = await fetchJson(`${API}/api/lms/matriculas`, {
+  const create = async (authToken) => fetchJson(`${API}/api/lms/matriculas`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${authToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
   });
-
+  let res = await create(token);
+  if (res.status === 403 && adminToken) {
+    // The only administrative write permitted by the runner is creation of a
+    // NEW enrollment for the positively attested synthetic learner.
+    res = await create(adminToken);
+  }
   if (res.status === 200 || res.status === 201) {
     const matriculaId = Number(res.json?.data?.id || 0);
-    assert(matriculaId > 0, `ENROLL_ID_INVALID:${cursoId}`);
+    assert(matriculaId > 0, 'QA_ENROLLMENT_ID_INVALID');
     return matriculaId;
   }
-
-  // 3. Fallback administrativo caso auto-matrícula seja restrita por setor (403)
-  if (res.status === 403 && adminToken) {
-    console.log(`[LMS_HOMOLOGATION] Auto-matrícula restrita pelo setor. Atribuindo via gestão...`);
-    res = await fetchJson(`${API}/api/lms/matriculas`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
-    });
-    if (res.status === 200 || res.status === 201) {
-      const matriculaId = Number(res.json?.data?.id || 0);
-      assert(matriculaId > 0, `ENROLL_ID_INVALID:${cursoId}`);
-      return matriculaId;
-    }
-  }
-
-  // 4. Tratar matrícula cancelada anterior (LMS_REMATRICULATION_REQUIRED - 409)
-  if (res.status === 409 && res.json?.code === 'LMS_REMATRICULATION_REQUIRED') {
-    const targetMatriculaId = Number(res.json?.data?.matricula_id || res.json?.data?.id || res.json?.matricula_id || 0);
-    const authToUse = adminToken || token;
-    if (targetMatriculaId > 0) {
-      console.log(`[LMS_HOMOLOGATION] Reativando matrícula cancelada id=${targetMatriculaId} via rematrícula autorizada...`);
-      let remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToUse}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
-      });
-      if (remat.status === 409 && adminToken) {
-        // Se a matrícula possui qualificação vinculada, reverter conclusão antes de rematricular
-        const rev = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/reverter`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${adminToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            reason: 'Homologação LMS Aluno QA 202611 - Reversão prévia para rematrícula autorizada',
-            classification: 'CORRECAO',
-          }),
-        }).catch(() => null);
-        if (rev && rev.status === 200) {
-          remat = await fetchJson(`${API}/api/lms/matriculas/${targetMatriculaId}/rematricular`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${adminToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ reason: 'Homologação LMS Aluno QA 202611' }),
-          });
-        }
-      }
-      if (remat.status === 200 && Number(remat.json?.data?.matricula_id || remat.json?.data?.id || 0) > 0) {
-        return Number(remat.json.data.matricula_id || remat.json.data.id);
-      }
-    }
-  }
-
-  // 5. Tratar conflito que retorna id existente
-  if (res.status === 409 && Number(res.json?.data?.id || 0) > 0) {
-    return Number(res.json.data.id);
-  }
-
-  const errDetail = res.json?.code || res.json?.error || JSON.stringify(res.json);
-  throw new Error(`ENROLL_FAILED_HTTP_${cursoId}_${res.status}:${errDetail}`);
+  if (res.status === 409) throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
+  throw new Error(`QA_ENROLLMENT_HTTP_${Number(res.status) || 0}`);
 }
 
 async function getMatriculaDetail(token, matriculaId) {
@@ -1347,7 +1232,7 @@ async function driveScormCourseInBrowser({
     await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.waitForSelector('iframe, #scorm-frame', { timeout: 10_000 }).catch(() => null);
   } catch (err) {
-    console.log(`[LMS_HOMOLOGATION] Navegação via LmsPlayer (${err.message}); usando launchUrl direto...`);
+    console.log(`[LMS_HOMOLOGATION] Navegação via LmsPlayer (${safeQaErrorCode(err)}); usando launchUrl direto...`);
     targetUrl = launchUrl;
     await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
   }
@@ -2346,7 +2231,7 @@ export async function runHomologation() {
           learner = await getLearnerSession();
           adminToken = await resolveAdminToken(true);
         } catch (authErr) {
-          console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, authErr.message);
+          console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, safeQaErrorCode(authErr));
         }
 
         // 1. Enroll learner
@@ -2377,7 +2262,7 @@ export async function runHomologation() {
         console.log(`[LMS_HOMOLOGATION] Resultado: ${outcome.status} ${outcome.reason ? `(${outcome.reason})` : ''}`);
         results.push(outcome);
       } catch (err) {
-        console.error(`[LMS_HOMOLOGATION] Erro ao testar curso #${course.id}:`, err.message);
+        console.error(`[LMS_HOMOLOGATION] Erro ao testar curso #${course.id}:`, safeQaErrorCode(err));
         results.push({
           course_id: course.id,
           titulo: course.titulo,
@@ -2395,7 +2280,7 @@ export async function runHomologation() {
           certificado_emitido: 'N/A',
           reabertura_sem_downgrade: false,
           status: 'FAIL',
-          reason: err.message,
+          reason: safeQaErrorCode(err),
         });
       } finally {
         saveIncrementalReport(results, {
@@ -2426,7 +2311,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(summary.total_courses === 0 || summary.fail_count > 0 || summary.blocked_count > 0 ? 1 : 0);
     })
     .catch((err) => {
-      console.error('FATAL_HOMOLOGATION_ERROR:', err);
+      console.error('FATAL_HOMOLOGATION_ERROR:', safeQaErrorCode(err));
       process.exit(1);
     });
 }
