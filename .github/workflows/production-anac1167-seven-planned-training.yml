@@ -29,7 +29,7 @@ concurrency:
   group: production-anac1167-seven-turmas-tenant6
   cancel-in-progress: false
 jobs:
-  reconcile:
+  d1_reconcile:
     name: Governed ANAC 1167 Class Reconciliation
     runs-on: ubuntu-latest
     environment: production
