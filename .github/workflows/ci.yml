@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RG_BIN="$PWD/node_modules/@vscode/ripgrep/bin/rg"
+          RG_BIN="$PWD/node_modules/@vscode/ripgrep-linux-x64/bin/rg"
           test -x "$RG_BIN" || { echo 'PINNED_RIPGREP_BINARY_MISSING' >&2; exit 1; }
           echo "$(dirname "$RG_BIN")" >> "$GITHUB_PATH"
           "$RG_BIN" --version
