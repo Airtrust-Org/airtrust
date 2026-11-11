@@ -409,6 +409,51 @@ test('checkCertificate validates PDF buffer and computes sha256', async () => {
   }
 });
 
+test('checkCertificate resolves streaming URL from JSON metadata when download returns redirect', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (String(url).endsWith('/api/certificados/historico/30/certificados')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 702 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/702')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { url: '/api/pasta-virtual/stream/702', nome: 'cert.pdf' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/pasta-virtual/stream/702')) {
+        const dummyPdf = Buffer.from('%PDF-1.7 production streamed certificate content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 30);
+    assert.equal(cert?.id, 702);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Adversarial Tests: Course Path, Assessment Policy & Homologation Gate
 // ---------------------------------------------------------------------------
