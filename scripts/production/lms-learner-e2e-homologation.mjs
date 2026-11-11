@@ -1274,6 +1274,9 @@ async function driveScormCourseInBrowser({
   const clickedTouchKeysInCurrentSlide = new Set();
   let slideStallSteps = 0;
   let lastStallSignature = '';
+  // Diagnostics contain only fixed action labels, never DOM text or credentials.
+  const driverActionCounts = Object.create(null);
+  const driverLastActionTypes = [];
 
   const started = Date.now();
 
@@ -1620,7 +1623,7 @@ async function driveScormCourseInBrowser({
       // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id, and unclicked interactive elements
       // IMPORTANT: Exclude assessment, quiz, question and scenario buttons so answer-selection logic is not preempted.
       const unvisitedGate = Array.from(document.querySelectorAll(
-        '[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab, [data-touch], .touchable, [role=tab], .tab-btn, .tab, .card[role=button], .interactive-card, button:not(#next):not(#prev):not(#nextBtn):not(#prevBtn)'
+        '[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab, [data-touch], .touchable, [role=tab], .tab-btn, .tab, .card[role=button], .interactive-card'
       )).find((el) => {
         if (!visible(el) || el.disabled) return false;
         // Exclude assessment, quiz, question and scenario choices so they are handled by their specialized logic
@@ -1837,6 +1840,12 @@ async function driveScormCourseInBrowser({
         await actionHandle.dispose().catch(() => null);
       }
     }
+
+    // Keep bounded, non-sensitive diagnostics for persistent navigation failures.
+    const driverActionType = typeof action?.type === 'string' && /^[a-z-]{1,40}$/.test(action.type) ? action.type : 'none';
+    driverActionCounts[driverActionType] = (driverActionCounts[driverActionType] || 0) + 1;
+    driverLastActionTypes.push(driverActionType);
+    if (driverLastActionTypes.length > 12) driverLastActionTypes.shift();
 
     if (targetEl) {
       try {
@@ -2156,6 +2165,8 @@ async function driveScormCourseInBrowser({
       total_units: totalUnitsDetected,
       distinct_units_visited_count: visitedUnitIds.size,
       actions_count: steps,
+      driver_action_counts: driverActionCounts,
+      driver_last_action_types: driverLastActionTypes,
       resume_tested: checkpointTested,
       resume_verified: resumedVerified || totalUnitsDetected <= 1,
       resolved_decisions_count: resolvedDecisionIndices.size,

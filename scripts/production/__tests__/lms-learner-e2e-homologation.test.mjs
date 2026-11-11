@@ -1577,3 +1577,14 @@ test('SECURITY: missing positive enrollment ownership denies all administrative 
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test('live QA driver does not click every generic button before navigation and reports safe action telemetry', () => {
+  const source = fs.readFileSync(new URL('../lms-learner-e2e-homologation.mjs', import.meta.url), 'utf8');
+  const gateSelector = source.match(/const unvisitedGate = Array\.from\(document\.querySelectorAll\(([\s\S]*?)\)\)\.find/);
+  assert.ok(gateSelector, 'live gate selector must exist');
+  assert.doesNotMatch(gateSelector[1], /button:not\(/, 'generic buttons must not preempt course navigation');
+  assert.match(source, /driver_action_counts: driverActionCounts/);
+  assert.match(source, /driver_last_action_types: driverLastActionTypes/);
+  assert.match(source, /\^\[a-z-\]\{1,40\}\$/, 'action types must be whitelist-shaped, not DOM content');
+});
