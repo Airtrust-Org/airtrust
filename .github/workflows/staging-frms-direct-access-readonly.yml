@@ -74,10 +74,10 @@ jobs:
           token=profile.data.accessToken;
           if(tenant(token)!==999013)throw Error('QA_SELECTED_TENANT_MISMATCH');
           console.log('FRMS_DIRECT_PROFILE_PASS');
-          async function measure(path,name){
+          async function measure(path,name,timeoutMs=18000){
             const t=performance.now();let response;
             try{response=await fetch(base+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},
-              signal:AbortSignal.timeout(18000)});}
+              signal:AbortSignal.timeout(timeoutMs)});}
             catch(e){console.log(name+'_TRANSPORT_'+(e?.name==='TimeoutError'?'TIMEOUT':'FAILED')+' elapsed_ms='+Math.round(performance.now()-t));throw Error(name+'_UNAVAILABLE');}
             const elapsed=Math.round(performance.now()-t);
             const body=await response.json().catch(()=>null);
@@ -90,4 +90,9 @@ jobs:
           const b=await measure('/api/me/operational-access','FRMS_SCOPE_REPEAT');
           for(const v of [a,b])if(!Array.isArray(v?.data?.domains)||!Array.isArray(v?.data?.setor_ids))throw Error('SCOPE_RESPONSE_INVALID');
           console.log('FRMS_DIRECT_ACCESS_QA_PASS requests=2 tenant=999013 production_writes=0');
+          const snapshot=await measure('/api/frms/operational-snapshot?data_inicio=2026-10-13&data_fim=2026-10-13&include_inconsistencies=true',
+            'FRMS_SNAPSHOT_DIRECT_20261013',45000);
+          if(!Array.isArray(snapshot?.data)||!snapshot.data.every(v=>Number(v.empresa_id)===999013))
+            throw Error('FRMS_SNAPSHOT_DIRECT_TENANT_SHAPE_INVALID');
+          console.log('FRMS_SNAPSHOT_DIRECT_READONLY_PASS tenant=999013 production_writes=0');
           NODE

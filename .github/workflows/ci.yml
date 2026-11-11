@@ -47,16 +47,19 @@ jobs:
       VITE_API_URL: http://127.0.0.1:8787
     steps:
       - uses: actions/checkout@v7
-      - name: install ripgrep
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources 2>/dev/null || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ripgrep
       - uses: actions/setup-node@v7
         with:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm ci
+      - name: verify lockfile-pinned ripgrep without Ubuntu apt mirrors
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_BIN="$PWD/node_modules/@vscode/ripgrep-linux-x64/bin/rg"
+          test -x "$RG_BIN" || { echo 'PINNED_RIPGREP_BINARY_MISSING' >&2; exit 1; }
+          echo "$(dirname "$RG_BIN")" >> "$GITHUB_PATH"
+          "$RG_BIN" --version
       - name: verify R2 credential guard with synthetic format and redaction cases
         run: node --test scripts/__tests__/r2-literal-guard.test.mjs
       - name: validate release-gate verifier and deploy wiring

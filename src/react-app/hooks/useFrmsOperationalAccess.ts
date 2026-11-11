@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse, type HttpClientOptions } from '@/react-app/services/http-client';
+import { useAuth } from '@/react-app/hooks/useAuth';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
 
@@ -187,10 +188,19 @@ async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
   }
 }
 
+export function canFetchFrmsOperationalAccess(isLoading: boolean, isAuthenticated: boolean): boolean {
+  return !isLoading && isAuthenticated;
+}
+
 export function useFrmsOperationalAccess() {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-operational-access'],
+    // Never request operational permissions before the persisted session has
+    // been verified. Keep tenant/user/profile in the cache identity. A missing
+    // empresas response does not itself revoke a server-verified JWT.
+    queryKey: ['frms-operational-access', empresaAtualId, user?.id, user?.role],
     queryFn: fetchFrmsOperationalAccess,
+    enabled: canFetchFrmsOperationalAccess(isLoading, isAuthenticated),
     retry: false,
     staleTime: 2 * 60 * 1000,
   });

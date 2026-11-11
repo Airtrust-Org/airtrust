@@ -83,7 +83,10 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     // CSS/legacy cache recovery can navigate the login document as it boots.
     // Wait for a stable public login before the real credential POST; never
     // forge tokens or retry a potentially successful FRMS data submission.
-    await page.goto(BASE + '/login', { waitUntil: 'networkidle' });
+    // Start from the protected deep link. ProtectedRoute preserves the actual
+    // requested route in LoginSimple's redirect state, so the server-approved
+    // Manager selection navigates directly to FRMS (one document navigation).
+    await page.goto(BASE + '/frms?data=' + DAY, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#airtrust-boot-fallback')).toHaveCount(0);
     await expect(page.locator('input[type="email"]')).toBeVisible();
     await page.locator('input[type="email"]').fill(email);
@@ -115,6 +118,48 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     }).then(() => true).catch(() => false);
   };
 
+  // First prove the tenant-scoped access grant actually resolved. A timeout
+  // or aborted access request must NOT be mistaken for a slow empty snapshot.
+  // Listeners start before the authenticated profile redirect into FRMS.
+  const isAccessGet = (request: { url(): string; method(): string }) => {
+    const url = new URL(request.url());
+    return url.hostname === API_HOST &&
+      url.pathname === '/api/me/operational-access' &&
+      request.method() === 'GET';
+  };
+  // Only a request issued by the actual FRMS document can qualify.
+  // The test must not force another hard navigation after profile activation.
+  const accessOutcome = page.waitForEvent('request', {
+    predicate: (request) => {
+      if (!isAccessGet(request)) return false;
+      try {
+        return new URL(request.frame().url()).pathname === '/frms';
+      } catch {
+        return false;
+      }
+    },
+    timeout: 90_000,
+  }).then((accessRequest) => Promise.race([
+    page.waitForResponse(
+      (response) => response.request() === accessRequest,
+      { timeout: 25_000 },
+    ).then((response) => ({ kind: 'response' as const, status: response.status() })),
+    page.waitForEvent('requestfailed', {
+      predicate: (request) => request === accessRequest,
+      timeout: 25_000,
+    }).then((request) => ({
+      kind: 'failed' as const,
+      reason: request.failure()?.errorText || 'network_unknown',
+    })),
+  ]));
+  const snapshotRequest = page.waitForResponse(
+    (response) => response.url().includes('/api/frms/operational-snapshot') &&
+      response.url().includes(DAY),
+    { timeout: 50_000 },
+  );
+  // If the preceding access guard fails, consume this pending listener's
+  // rejection while still preserving its failure for the normal await below.
+  void snapshotRequest.catch(() => {});
   await loginPage();
   let loggedIn = await completeRealLogin(20_000);
   if (!loggedIn && loginAborted.length > 0 && loginResponses.length === 0 &&
@@ -149,50 +194,7 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     await expect(selector).toHaveValue(QA_TENANT_ID, { timeout: 20_000 });
   }
 
-  // First prove the tenant-scoped access grant actually resolved. A timeout
-  // or aborted access request must NOT be mistaken for a slow empty snapshot.
-  // Both listeners are installed before entering the FRMS route.
-  const isAccessGet = (request: { url(): string; method(): string }) => {
-    const url = new URL(request.url());
-    return url.hostname === API_HOST &&
-      url.pathname === '/api/me/operational-access' &&
-      request.method() === 'GET';
-  };
-  // The landing page may have an older access fetch still in flight.
-  // A full document navigation aborts it; only the new FRMS document's own
-  // request can establish the outcome for this acceptance.
-  const accessOutcome = page.waitForEvent('request', {
-    predicate: (request) => {
-      if (!isAccessGet(request)) return false;
-      try {
-        return new URL(request.frame().url()).pathname === '/frms';
-      } catch {
-        return false;
-      }
-    },
-    timeout: 25_000,
-  }).then((accessRequest) => Promise.race([
-    page.waitForResponse(
-      (response) => response.request() === accessRequest,
-      { timeout: 25_000 },
-    ).then((response) => ({ kind: 'response' as const, status: response.status() })),
-    page.waitForEvent('requestfailed', {
-      predicate: (request) => request === accessRequest,
-      timeout: 25_000,
-    }).then((request) => ({
-      kind: 'failed' as const,
-      reason: request.failure()?.errorText || 'network_unknown',
-    })),
-  ]));
-  const snapshotRequest = page.waitForResponse(
-    (response) => response.url().includes('/api/frms/operational-snapshot') &&
-      response.url().includes(DAY),
-    { timeout: 50_000 },
-  );
-  // If the preceding access guard fails, consume this pending listener's
-  // rejection while still preserving its failure for the normal await below.
-  void snapshotRequest.catch(() => {});
-  await page.goto(BASE + '/frms?data=' + DAY, { waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL((url) => url.pathname === '/frms' && url.searchParams.get('data') === DAY);
   const access = await accessOutcome;
   if (access.kind === 'failed') {
     throw new Error('FRMS_QA_OPERATIONAL_ACCESS_TRANSPORT_FAILURE:' + access.reason);
@@ -242,7 +244,9 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       body: await detail.screenshot({ animations: 'disabled' }),
       contentType: 'image/png',
     });
-    await detail.getByRole('button', { name: 'Fechar', exact: true }).click();
+    // The published app's runtime translator may expose this icon as 'Close'.
+    // Match only the two actual accessible labels, not an arbitrary button.
+    await detail.getByRole('button', { name: /^(Fechar|Close)$/ }).click();
     await expect(detail).toHaveCount(0);
   }
   await expect(page.locator('main [aria-label^="Check-in diário: Recebido — normal"]')).toHaveCount(0);
@@ -315,7 +319,9 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       body: await treatmentDialog.screenshot({ animations: 'disabled' }),
       contentType: 'image/png',
     });
-    await treatmentDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    // Chromium exposes the shared dialog cancel action as 'Cancel' in
+    // the deployed locale; keep exact alternatives rather than relaxing scope.
+    await treatmentDialog.getByRole('button', { name: /^(Cancelar|Cancel)$/ }).click();
     await expect(treatmentDialog).toHaveCount(0);
     test.info().annotations.push({
       type: 'coverage-gap',
