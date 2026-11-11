@@ -11,6 +11,9 @@ import { resolveE2EBaseUrl } from './e2e/config/resolve-base-url';
  */
 export default defineConfig({
   testDir: './e2e',
+  // The production FRMS smoke uses its own fail-closed config and opt-in.
+  // A normal npm run test:e2e must never discover or contact production.
+  testIgnore: /production-frms-snapshot-readonly\.spec\.ts$/,
   fullyParallel: false, // Sequencial para evitar race conditions no DB
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
