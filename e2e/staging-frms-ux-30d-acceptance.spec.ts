@@ -244,7 +244,9 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
       body: await detail.screenshot({ animations: 'disabled' }),
       contentType: 'image/png',
     });
-    await detail.getByRole('button', { name: 'Fechar', exact: true }).click();
+    // The published app's runtime translator may expose this icon as 'Close'.
+    // Match only the two actual accessible labels, not an arbitrary button.
+    await detail.getByRole('button', { name: /^(Fechar|Close)$/ }).click();
     await expect(detail).toHaveCount(0);
   }
   await expect(page.locator('main [aria-label^="Check-in diário: Recebido — normal"]')).toHaveCount(0);
