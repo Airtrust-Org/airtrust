@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request, type Response } from '@playwright/test';
+import { expect, test, type Request, type Response } from '@playwright/test';
 
 /**
  * Real, authenticated production FRMS read-only browser smoke.
