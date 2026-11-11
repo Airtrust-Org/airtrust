@@ -188,6 +188,10 @@ async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
   }
 }
 
+export function canFetchFrmsOperationalAccess(isLoading: boolean, isAuthenticated: boolean): boolean {
+  return !isLoading && isAuthenticated;
+}
+
 export function useFrmsOperationalAccess() {
   const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
@@ -196,7 +200,7 @@ export function useFrmsOperationalAccess() {
     // empresas response does not itself revoke a server-verified JWT.
     queryKey: ['frms-operational-access', empresaAtualId, user?.id, user?.role],
     queryFn: fetchFrmsOperationalAccess,
-    enabled: !isLoading && isAuthenticated,
+    enabled: canFetchFrmsOperationalAccess(isLoading, isAuthenticated),
     retry: false,
     staleTime: 2 * 60 * 1000,
   });
