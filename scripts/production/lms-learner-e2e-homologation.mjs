@@ -77,11 +77,25 @@ async function assertPinnedProduction() {
 }
 
 async function getLearnerSession() {
-  const email = String(process.env.QA_LEARNER_EMAIL || 'qa.lms.202611@airtrust.online').trim();
+  const browserEmail = `qa.lms.202611.${BROWSER_NAME}@airtrust.online`;
+  const preferredEmail = process.env.QA_LEARNER_EMAIL_OVERRIDE || browserEmail;
+  const defaultEmail = String(process.env.QA_LEARNER_EMAIL || 'qa.lms.202611@airtrust.online').trim();
   const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
-  assert(email && password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
+  assert(password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
 
-  const logged = await login(API, email, password);
+  let logged = null;
+  let activeEmail = preferredEmail;
+  try {
+    logged = await login(API, preferredEmail, password);
+  } catch (err) {
+    if (preferredEmail !== defaultEmail) {
+      activeEmail = defaultEmail;
+      logged = await login(API, defaultEmail, password);
+    } else {
+      throw err;
+    }
+  }
+
   let token = extractAccessToken(logged);
   const empresas = await fetchJson(`${API}/api/auth/empresas`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -106,7 +120,7 @@ async function getLearnerSession() {
   const funcionarioId = Number(claims?.funcionario_id || 0);
   assert(funcionarioId > 0, 'LEARNER_FUNCIONARIO_ID_MISSING');
 
-  return { token, funcionarioId, email };
+  return { token, funcionarioId, email: activeEmail };
 }
 
 let cachedAdminToken = null;
@@ -180,7 +194,7 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
         if (currentStatus !== 'NAO_INICIADO' && currentStatus !== 'CANCELADO') {
           console.log(`[LMS_HOMOLOGATION] Matrícula #${match.id} (${currentStatus}) já possui progresso/ciclo prévio. Rematriculando em novo ciclo auditado para isolamento de ${BROWSER_NAME}...`);
           const authToUse = adminToken || token;
-          const remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
+          let remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${authToUse}`,
@@ -190,6 +204,23 @@ export async function enrollLearner(token, cursoId, funcionarioId, adminToken = 
           });
           if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
             return Number(remat.json.data.matricula_id);
+          }
+          if (adminToken && currentStatus === 'EM_ANDAMENTO') {
+            await fetchJson(`${API}/api/lms/matriculas/${match.id}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${adminToken}` },
+            });
+            remat = await fetchJson(`${API}/api/lms/matriculas/${match.id}/rematricular`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${adminToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ reason: `Homologação LMS Aluno QA - ${BROWSER_NAME}` }),
+            });
+            if (remat.status === 200 && Number(remat.json?.data?.matricula_id || 0) > 0) {
+              return Number(remat.json.data.matricula_id);
+            }
           }
         } else if (currentStatus === 'NAO_INICIADO') {
           console.log(`[LMS_HOMOLOGATION] Matrícula virgem (NAO_INICIADO) reutilizada: id=${match.id}`);
@@ -811,6 +842,16 @@ export function determineSlideAction(doc, {
     domTotal = Number(counterMatch[2]);
   }
 
+  // 0. Authentic final completion button
+  const finalBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
+  });
+  if (finalBtn) {
+    finalBtn.click?.();
+    return { type: 'final-button', domCurrent, domTotal, atLastUnit: true };
+  }
+
   // 1. Scenario options: stop selecting once an option is chosen in the scenario
   const scenarioOptions = Array.from(doc.querySelectorAll('[data-opt], button.option')).filter(visible);
   const hasSelectedScenarioOption = scenarioOptions.some((el) => {
@@ -1033,7 +1074,7 @@ async function driveScormCourseInBrowser({
     } catch { /* ignore media inspection errors */ }
 
     // Evaluate action inside real Frame instance
-    const action = await frame.evaluate(({
+    const actionHandle = await frame.evaluateHandle(({
       plan,
       requiredIndices,
       submittedInSlide,
@@ -1068,35 +1109,56 @@ async function driveScormCourseInBrowser({
 
       const atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
 
+      const result = (target, type, extra = {}) => ({
+        target,
+        type,
+        domCurrent,
+        domTotal,
+        atLastUnit: atLastUnit || Boolean(domTotal > 0 && domCurrent >= domTotal),
+        ...extra,
+      });
+
       // 1. Check for authentic user completion/finish button in the frame UI
+      const finalSelectors = ['#completeCourse', '#completeStudy', '#finishBtn', '#btn-finish', '#btn-concluir'];
+      for (const sel of finalSelectors) {
+        const el = document.querySelector(sel);
+        if (el && visible(el) && !el.disabled) {
+          return result(el, 'final-button');
+        }
+      }
+
       const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a')).find((el) => {
         const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
         return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
       });
       if (finalBtn) {
-        finalBtn.click();
-        return {
-          type: 'final-button',
-          domCurrent,
-          domTotal,
-          atLastUnit: atLastUnit || Boolean(domTotal > 0 && domCurrent >= domTotal),
-        };
+        return result(finalBtn, 'final-button');
       }
 
-      // 2. Interactive Gate items: hotspots, section map tabs, mandatory criteria (tracked in driver memory)
-      const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], button.spot, .section-map-tab')).find((el) => {
-        const key = el.getAttribute('data-gate') || clean(el.innerText || el.getAttribute('aria-label') || '');
+      // If at last unit, check if next button acts as final confirmation
+      if (atLastUnit) {
+        const termBtn = Array.from(document.querySelectorAll('#next, #nextUnit, #nextBtn, button')).find((el) => {
+          if (!visible(el) || el.disabled) return false;
+          const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+          return /(confirmar encerramento|concluir|finalizar|encerrar)/i.test(txt);
+        });
+        if (termBtn) {
+          return result(termBtn, 'final-button');
+        }
+      }
+
+      // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id
+      const unvisitedGate = Array.from(document.querySelectorAll('[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab')).find((el) => {
+        const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || clean(el.innerText || el.getAttribute('aria-label') || '');
         return visible(el) && !el.disabled && !clickedGates.includes(key) && !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
       });
       if (unvisitedGate) {
-        const gateKey = unvisitedGate.getAttribute('data-gate') || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
-        unvisitedGate.click();
-        return { type: 'gate-item', gateKey, domCurrent, domTotal, atLastUnit };
+        const gateKey = unvisitedGate.getAttribute('data-gate') || unvisitedGate.getAttribute('data-gate-id') || unvisitedGate.getAttribute('data-hotspot') || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
+        return result(unvisitedGate, 'gate-item', { gateKey });
       }
 
       // 3. Scenario options and interactive decision choices
-      // Stop selecting options once an option is already chosen in the active scenario
-      const scenarioOptions = Array.from(document.querySelectorAll('[data-opt], button.option')).filter(visible);
+      const scenarioOptions = Array.from(document.querySelectorAll('.screen.active [data-scenario][data-opt], .screen.active [data-choice], [data-opt], [data-choice], button.option')).filter(visible);
       const hasSelectedScenarioOption = scenarioOptions.some((el) => {
         return el.classList.contains('selected') ||
           el.classList.contains('active') ||
@@ -1105,11 +1167,24 @@ async function driveScormCourseInBrowser({
 
       if (!hasSelectedScenarioOption && scenarioOptions.length > 0) {
         let targetOpt = null;
-        if (Array.isArray(plan) && plan.length > 0) {
+        // Try authored scenario in frame
+        const currentSlideObj = window.COURSE_DATA?.slides?.[domCurrent - 1];
+        if (currentSlideObj && Array.isArray(currentSlideObj.options)) {
+          const correctIdx = currentSlideObj.options.findIndex((o) =>
+            Array.isArray(o) ? o[1] === true : Boolean(o?.correct || o?.isCorrect)
+          );
+          if (correctIdx >= 0) {
+            targetOpt = scenarioOptions.find((el) => {
+              const optIdx = el.getAttribute('data-opt') ?? el.getAttribute('data-choice');
+              return optIdx != null && Number(optIdx) === correctIdx;
+            });
+          }
+        }
+        if (!targetOpt && Array.isArray(plan) && plan.length > 0) {
           const planned = plan.find((p) => p.slideIndex === domCurrent || p.unit === domCurrent);
           if (planned && planned.optionIndex != null) {
             targetOpt = scenarioOptions.find((el) => {
-              const optIdx = el.getAttribute('data-opt');
+              const optIdx = el.getAttribute('data-opt') ?? el.getAttribute('data-choice');
               return optIdx != null && Number(optIdx) === Number(planned.optionIndex);
             });
           }
@@ -1118,14 +1193,12 @@ async function driveScormCourseInBrowser({
           targetOpt = scenarioOptions.find((el) => !el.disabled);
         }
         if (targetOpt) {
-          targetOpt.click();
-          return { type: 'scenario-option', domCurrent, domTotal, atLastUnit, decisionResolved: true };
+          return result(targetOpt, 'scenario-option', { decisionResolved: true });
         }
       }
 
       // 4. Assessment questions: options and question navigation
-      // Stop selecting alternatives once the current question already has an answer selected
-      const assessOptions = Array.from(document.querySelectorAll('[data-answer], button.answer')).filter(visible);
+      const assessOptions = Array.from(document.querySelectorAll('#stage button[data-answer], [data-answer], button.answer')).filter(visible);
       const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
         return el.classList.contains('selected') ||
           el.classList.contains('active') ||
@@ -1134,54 +1207,78 @@ async function driveScormCourseInBrowser({
       });
 
       if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
-        const unselectedAnswer = assessOptions.find((el) => !el.disabled);
-        if (unselectedAnswer) {
-          unselectedAnswer.click();
-          return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit };
+        let qIdx = 0;
+        const qMeta = document.querySelector('.qmeta')?.textContent || '';
+        const qMatch = qMeta.match(/quest[ãa]o\s*(\d+)/i);
+        if (qMatch) qIdx = Number(qMatch[1]) - 1;
+
+        let targetIndex = null;
+        const currentSlideObj = window.COURSE_DATA?.slides?.[domCurrent - 1] ||
+          window.COURSE_DATA?.slides?.find((s) => s.kind === 'assessment');
+        const qAuthored = currentSlideObj?.questions?.[qIdx] || currentSlideObj?.content?.questions?.[qIdx];
+        if (qAuthored) {
+          const ans = qAuthored.answer ?? qAuthored.correctIndex ?? qAuthored.correct;
+          if (Number.isInteger(ans)) targetIndex = Number(ans);
+        }
+
+        if (targetIndex === null && Array.isArray(plan) && plan.length > 0) {
+          const planned = plan.find((p) =>
+            (p.slideIndex === domCurrent || p.unit === domCurrent) &&
+            (p.path?.includes(`questions[${qIdx}]`) || p.questionIndex === qIdx)
+          ) || plan.find((p) => p.slideIndex === domCurrent || p.unit === domCurrent);
+          if (planned?.indices?.[0] != null) targetIndex = Number(planned.indices[0]);
+          else if (planned?.optionIndex != null) targetIndex = Number(planned.optionIndex);
+        }
+
+        let targetAns = null;
+        if (targetIndex !== null) {
+          targetAns = assessOptions.find((el) => {
+            const idx = el.getAttribute('data-answer');
+            return idx != null && Number(idx) === targetIndex;
+          });
+        }
+        if (!targetAns) {
+          targetAns = assessOptions.find((el) => !el.disabled);
+        }
+        if (targetAns) {
+          return result(targetAns, 'assessment-answer', { decisionResolved: true });
         }
       }
 
-      const qNext = document.querySelector('#qNext');
+      const qNext = document.querySelector('#qNext, #quizNext');
       if (qNext && visible(qNext) && !qNext.disabled) {
-        qNext.click();
-        return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+        return result(qNext, 'assessment-next-q');
       }
 
-      // 5. Explicit touch targets (tracked in driver memory)
+      const retryAssessment = document.querySelector('#retryAssessment');
+      if (retryAssessment && visible(retryAssessment) && !retryAssessment.disabled) {
+        return result(retryAssessment, 'assessment-retry');
+      }
+
+      // 5. Explicit touch targets
       const touchTarget = Array.from(document.querySelectorAll('[data-touch], .touchable')).find((el) => {
         const key = el.getAttribute('data-touch') || el.id || clean(el.innerText);
         return visible(el) && !el.disabled && !clickedTouches.includes(key);
       });
       if (touchTarget) {
         const touchKey = touchTarget.getAttribute('data-touch') || touchTarget.id || clean(touchTarget.innerText);
-        touchTarget.click();
-        return { type: 'touch-target', touchKey, domCurrent, domTotal, atLastUnit };
+        return result(touchTarget, 'touch-target', { touchKey });
       }
 
       // 6. Accordion handling: details & summary
       const closedSummaries = Array.from(document.querySelectorAll('details:not([open]) > summary')).filter(visible);
       if (closedSummaries.length > 0) {
-        closedSummaries[0].click();
-        closedSummaries[0].dispatchEvent(new Event('toggle', { bubbles: true }));
-        return { type: 'accordion-expand', domCurrent, domTotal, atLastUnit };
-      }
-
-      // If details are present, ensure scroll and event dispatch
-      const details = Array.from(document.querySelectorAll('details[open]')).filter(visible);
-      if (details.length > 0) {
-        details.forEach((d) => d.dispatchEvent(new Event('scroll', { bubbles: true })));
+        return result(closedSummaries[0], 'accordion-expand');
       }
 
       // 7. Interactive choices / radio options / checklists
-      // If a choice/radio is already selected in the active group, do not toggle others
-      const choices = Array.from(document.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
+      const choices = Array.from(document.querySelectorAll('button.choice, input[type=radio], .quiz-option, [data-module-quiz]')).filter(visible);
       if (choices.length > 0) {
         const hasSelectedChoice = choices.some((c) => c.classList.contains('selected') || c.checked);
         if (!hasSelectedChoice) {
           const unselected = choices.find((c) => !c.disabled);
           if (unselected) {
-            unselected.click();
-            return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+            return result(unselected, 'quiz-choice');
           }
         }
       }
@@ -1190,31 +1287,40 @@ async function driveScormCourseInBrowser({
         return visible(c) && !c.disabled && !c.checked && !c.closest('nav,aside,header,footer,[hidden]');
       });
       if (unselectedCheckbox) {
-        unselectedCheckbox.click();
-        return { type: 'checklist-checkbox', domCurrent, domTotal, atLastUnit };
+        return result(unselectedCheckbox, 'checklist-checkbox');
       }
 
-      // 8. Submit / Confirm buttons (tracked via driver memory without mutating DOM attributes)
+      // 8. Submit / Confirm buttons
+      const submitSelectors = ['#submitAssessment', '#reflectionReveal'];
+      for (const sel of submitSelectors) {
+        const el = document.querySelector(sel);
+        if (el && visible(el) && !el.disabled && !submittedInSlide) {
+          return result(el, 'submit');
+        }
+      }
+
       const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
         const txt = clean(el.innerText || el.value).toLowerCase();
         return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
       });
       if (submitBtn) {
-        submitBtn.click();
-        return { type: 'submit', domCurrent, domTotal, atLastUnit };
+        return result(submitBtn, 'submit');
       }
 
       // 9. Next / Advance navigation: prioritize #next
       const nextBtnPrimary = document.querySelector('#next');
       if (nextBtnPrimary && visible(nextBtnPrimary) && !nextBtnPrimary.disabled) {
-        nextBtnPrimary.click();
-        return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+        return result(nextBtnPrimary, 'next-button');
+      }
+
+      const nextBtnAlt = document.querySelector('#nextBtn');
+      if (nextBtnAlt && visible(nextBtnAlt) && !nextBtnAlt.disabled) {
+        return result(nextBtnAlt, 'next-button');
       }
 
       const nextUnit = document.querySelector('#nextUnit');
       if (nextUnit && visible(nextUnit) && !nextUnit.disabled) {
-        nextUnit.click();
-        return { type: 'next-unit', domCurrent, domTotal, atLastUnit };
+        return result(nextUnit, 'next-unit');
       }
 
       const nextBtn = Array.from(document.querySelectorAll('button, a, [role=button]')).find((el) => {
@@ -1222,18 +1328,47 @@ async function driveScormCourseInBrowser({
         return visible(el) && !el.disabled && /(next|avan[cç]ar|pr[oó]ximo|continuar|prosseguir)/i.test(txt);
       });
       if (nextBtn) {
-        nextBtn.click();
-        return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+        return result(nextBtn, 'next-button');
       }
 
-      return { type: 'none', domCurrent, domTotal, atLastUnit };
+      return result(null, 'none');
     }, {
       plan: answerPlan,
       requiredIndices: requiredDecisionSlideIndices,
       submittedInSlide: submittedInCurrentSlide,
       clickedGates: Array.from(clickedGateKeysInCurrentSlide),
       clickedTouches: Array.from(clickedTouchKeysInCurrentSlide),
-    }).catch(() => ({ type: 'error' }));
+    }).catch(() => null);
+
+    let action = { type: 'none' };
+    let targetEl = null;
+    if (actionHandle) {
+      try {
+        const targetProp = await actionHandle.getProperty('target').catch(() => null);
+        targetEl = targetProp ? targetProp.asElement() : null;
+        action = await actionHandle.jsonValue().catch(() => ({ type: 'none' }));
+      } catch {
+        action = { type: 'none' };
+      } finally {
+        await actionHandle.dispose().catch(() => null);
+      }
+    }
+
+    if (targetEl) {
+      try {
+        await targetEl.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => null);
+        await targetEl.click({ timeout: 3000 });
+      } catch {
+        await targetEl.evaluate((node) => node.click?.()).catch(() => null);
+      }
+
+      if (action.type === 'accordion-expand') {
+        await targetEl.evaluate((summary) => {
+          summary.dispatchEvent(new Event('toggle', { bubbles: true }));
+          summary.closest('details')?.dispatchEvent(new Event('scroll', { bubbles: true }));
+        }).catch(() => null);
+      }
+    }
 
     if (Number.isSafeInteger(action?.domCurrent) && action.domCurrent > 0) {
       visitedUnitIds.add(action.domCurrent);
@@ -1297,6 +1432,11 @@ async function driveScormCourseInBrowser({
       finalButtonClicked = true;
       if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
         finalAtLastUnit = true;
+      }
+      await page.waitForSelector('#completion-overlay.show', { timeout: 6000 }).catch(() => null);
+      const overlayClose = await page.$('#completion-overlay.show #btn-close');
+      if (overlayClose) {
+        await overlayClose.click().catch(() => null);
       }
       await page.waitForTimeout(1000);
       break;

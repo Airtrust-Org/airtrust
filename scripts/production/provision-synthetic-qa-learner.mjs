@@ -55,8 +55,29 @@ export const SYNTHETIC_LEARNER = Object.freeze({
   cargo: 'Aluno de Teste QA',
   setor: 'Treinamento e Capacitação',
   perfil: 'ALUNO',
-  // CPF sintético dinamicamente computado para satisfazer regras de integridade sem literais estáticos
   cpf: generateValidTestCpf('999000001'),
+});
+
+export const SYNTHETIC_LEARNERS = Object.freeze({
+  default: SYNTHETIC_LEARNER,
+  chromium: Object.freeze({
+    nome: 'AIRTRUST_QA_LMS_CHR_202611',
+    matricula: 'QA-LMS-CHR-202611',
+    email: 'qa.lms.202611.chromium@airtrust.online',
+    cargo: 'Aluno de Teste QA Chromium',
+    setor: 'Treinamento e Capacitação',
+    perfil: 'ALUNO',
+    cpf: generateValidTestCpf('999000002'),
+  }),
+  webkit: Object.freeze({
+    nome: 'AIRTRUST_QA_LMS_WBK_202611',
+    matricula: 'QA-LMS-WBK-202611',
+    email: 'qa.lms.202611.webkit@airtrust.online',
+    cargo: 'Aluno de Teste QA WebKit',
+    setor: 'Treinamento e Capacitação',
+    perfil: 'ALUNO',
+    cpf: generateValidTestCpf('999000003'),
+  }),
 });
 
 export function assertLearnerClaims(token, expectedFuncionarioId) {
@@ -187,20 +208,27 @@ export async function findExistingUser(adminToken, email) {
   return null;
 }
 
-export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
-  await assertPinnedProduction();
-  const adminToken = await getAdminToken();
+export async function provisionLearner({
+  mode = 'inspect',
+  learnerPassword,
+  learnerDef = SYNTHETIC_LEARNER,
+  adminToken = null,
+}) {
+  if (!adminToken) {
+    await assertPinnedProduction();
+    adminToken = await getAdminToken();
+  }
 
-  console.log(`[QA_PROVISION] Iniciando em modo: ${mode}`);
+  console.log(`[QA_PROVISION] Iniciando em modo: ${mode} para ${learnerDef.email}`);
 
   // 1. Verificar funcionário
-  let employee = await findExistingEmployee(adminToken, SYNTHETIC_LEARNER.matricula);
+  let employee = await findExistingEmployee(adminToken, learnerDef.matricula);
   let employeeCreated = false;
 
   if (employee) {
     console.log(`[QA_PROVISION] Funcionário existente encontrado: id=${employee.id}, matrícula=${employee.matricula}`);
   } else if (mode === 'apply') {
-    console.log(`[QA_PROVISION] Criando funcionário sintético: ${SYNTHETIC_LEARNER.matricula}...`);
+    console.log(`[QA_PROVISION] Criando funcionário sintético: ${learnerDef.matricula}...`);
     const setoresRes = await request(adminToken, '/api/setores');
     assert(setoresRes.status === 200, `LIST_SETORES_FAILED_HTTP_${setoresRes.status}`);
     const setoresList = Array.isArray(setoresRes.json?.data) ? setoresRes.json.data : [];
@@ -229,11 +257,11 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
-        nome: SYNTHETIC_LEARNER.nome,
-        matricula: SYNTHETIC_LEARNER.matricula,
-        email: SYNTHETIC_LEARNER.email,
-        cpf: SYNTHETIC_LEARNER.cpf,
-        cargo: SYNTHETIC_LEARNER.cargo,
+        nome: learnerDef.nome,
+        matricula: learnerDef.matricula,
+        email: learnerDef.email,
+        cpf: learnerDef.cpf,
+        cargo: learnerDef.cargo,
         setor_id: targetSetor.id,
         setor: targetSetor.nome,
       },
@@ -252,7 +280,7 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
   }
 
   // 2. Verificar usuário
-  let user = await findExistingUser(adminToken, SYNTHETIC_LEARNER.email);
+  let user = await findExistingUser(adminToken, learnerDef.email);
   let userCreated = false;
   let passwordConfigured = false;
 
@@ -276,8 +304,8 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
     const createUserRes = await request(adminToken, '/api/admin/usuarios', {
       method: 'POST',
       body: {
-        email: SYNTHETIC_LEARNER.email,
-        nome: SYNTHETIC_LEARNER.nome,
+        email: learnerDef.email,
+        nome: learnerDef.nome,
         perfil: 'ALUNO',
         funcionario_id: Number(employee.id),
         empresa_id: TARGET_COMPANY_ID,
@@ -314,8 +342,8 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
   // 3. Teste de login do aluno
   let learnerSession = null;
   if (passwordConfigured || (user && learnerPassword)) {
-    console.log(`[QA_PROVISION] Verificando login real do aluno...`);
-    const loginRes = await login(API, SYNTHETIC_LEARNER.email, learnerPassword);
+    console.log(`[QA_PROVISION] Verificando login real do aluno (${learnerDef.email})...`);
+    const loginRes = await login(API, learnerDef.email, learnerPassword);
     const token = extractAccessToken(loginRes);
     assert(token, 'LEARNER_LOGIN_TOKEN_MISSING');
     assertLearnerClaims(token, Number(employee.id));
@@ -338,11 +366,12 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
       catalog_accessible: true,
       ready: true,
     };
-    console.log(`[QA_PROVISION] Login do aluno validado com sucesso! Pronto para testes LMS.`);
+    console.log(`[QA_PROVISION] Login do aluno (${learnerDef.email}) validado com sucesso! Pronto para testes LMS.`);
   }
 
   return {
     mode,
+    email: learnerDef.email,
     employee_id: employee?.id ?? null,
     employee_created: employeeCreated,
     user_id: user?.id ?? null,
@@ -350,6 +379,18 @@ export async function provisionLearner({ mode = 'inspect', learnerPassword }) {
     password_configured: passwordConfigured,
     learner_ready: learnerSession?.ready === true,
   };
+}
+
+export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerPassword }) {
+  await assertPinnedProduction();
+  const adminToken = await getAdminToken();
+  const results = {};
+  for (const [key, def] of Object.entries(SYNTHETIC_LEARNERS)) {
+    console.log(`\n============================================================`);
+    console.log(`[QA_PROVISION] Provisionando perfil: ${key} (${def.email})`);
+    results[key] = await provisionLearner({ mode, learnerPassword, learnerDef: def, adminToken });
+  }
+  return results;
 }
 
 // CLI execution
@@ -360,7 +401,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     throw new Error('QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
   }
 
-  provisionLearner({ mode, learnerPassword })
+  provisionAllSyntheticLearners({ mode, learnerPassword })
     .then((result) => {
       console.log(JSON.stringify(result, null, 2));
       process.exit(0);
