@@ -28,3 +28,31 @@ test('one run has browser-specific employees, CPFs, email and enrollment scopes'
 test('rejects unexpected browser name; never falls back to shared production QA user', () => {
   assert.throws(() => qaRunEmail('43012345678','1','safari'), /QA_BROWSER_NOT_ALLOWLISTED/);
 });
+
+test('adversarial: an existing QA user linked to another employee cannot be reused', async () => {
+  const { provisionLearner } = await import('../provision-synthetic-qa-learner.mjs');
+  const originalFetch = globalThis.fetch;
+  const learner = qaRunLearners('43012345678','1',generateValidTestCpf).chromium;
+  let attempts = 0;
+  try {
+    globalThis.fetch = async (url) => {
+      attempts += 1;
+      let data;
+      if (String(url).includes('/api/funcionarios?')) {
+        data = [{ id: 301, matricula: learner.matricula, email: learner.email }];
+      } else if (String(url).includes('/api/admin/usuarios')) {
+        data = [{ id: 802, email: learner.email, perfil: 'ALUNO',
+          funcionario_id: 999, empresa_id: 6 }];
+      } else {
+        throw new Error('UNEXPECTED_NETWORK_REQUEST');
+      }
+      return new Response(JSON.stringify({ success: true, data }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    await assert.rejects(provisionLearner({
+      mode: 'inspect', learnerDef: learner, adminToken: 'synthetic-admin-token',
+    }), /QA_USER_EMPLOYEE_LINK_MISMATCH/);
+    assert.equal(attempts, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});

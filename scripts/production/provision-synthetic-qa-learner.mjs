@@ -290,6 +290,8 @@ export async function provisionLearner({
   if (user) {
     assert(String(user.email || '').toLowerCase() === learnerDef.email.toLowerCase(), 'QA_USER_IDENTITY_MISMATCH');
     assert(['ALUNO','student'].includes(String(user.perfil || '').trim()), 'QA_USER_ROLE_INVALID');
+    assert(Number(user.funcionario_id) === Number(employee?.id), 'QA_USER_EMPLOYEE_LINK_MISMATCH');
+    assert(Number(user.empresa_id) === TARGET_COMPANY_ID, 'QA_USER_TENANT_MISMATCH');
     console.log(`[QA_PROVISION] Usuário existente encontrado: id=${user.id}, email=${user.email}, perfil=${user.perfil}`);
     if (mode === 'apply' && learnerPassword) {
       console.log(`[QA_PROVISION] Redefinindo senha para garantir acesso previsível...`);
