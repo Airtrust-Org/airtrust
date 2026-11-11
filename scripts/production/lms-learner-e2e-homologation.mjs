@@ -674,7 +674,10 @@ export function evaluateHomologationVerdict({
 }) {
   const percursoValid = percurso_ok === true;
   const avaliacaoValid = avaliacao_ok === true;
-  const qualValid = !qualExpected || Boolean(qual && qual.id && String(qual.status || '').toUpperCase() === 'CONCLUIDA');
+  const qualStatus = String(qual?.status || qual?.qualificacao_status || '').toUpperCase();
+  const qualValid = !qualExpected || Boolean(
+    qual && qual.id && ['CONCLUIDA', 'CONCLUIDO', 'VALIDA', 'VIGENTE', 'VENCENDO_30'].includes(qualStatus),
+  );
   const certValid = !qualExpected || Boolean(cert && cert.validPdf === true && cert.sizeBytes > 0);
   const pass = Boolean(
     percursoValid &&

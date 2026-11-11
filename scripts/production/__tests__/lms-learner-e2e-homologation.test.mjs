@@ -39,6 +39,21 @@ test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass',
   });
   assert.equal(result.pass, true);
   assert.equal(result.reason, null);
+
+  // Proves VALIDA (active qualification with future expiration date) yields PASS
+  const resultValida = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 102, status: 'VALIDA', qualificacao_status: 'CONCLUIDA' },
+    cert: { id: 56, validPdf: true, sha256: 'def', sizeBytes: 2048 },
+  });
+  assert.equal(resultValida.pass, true);
+  assert.equal(resultValida.reason, null);
 });
 
 test('evaluateHomologationVerdict rejects PASS when resume verification fails', () => {
