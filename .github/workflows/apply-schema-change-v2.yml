@@ -18,6 +18,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  statuses: read
 
 concurrency:
   group: apply-schema-change-v2-production
@@ -86,6 +88,14 @@ jobs:
 
       - name: Install worker dependencies
         run: npm --prefix worker-airtrust ci
+
+      - name: Verify eight official gates for sensitive Compliance 0578 data correction
+        if: ${{ inputs.change_id == 'compliance-designation-ead-contract-0578' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
 
       - name: Build and verify reviewed atomic SQL bundle
         id: bundle
@@ -674,6 +684,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0543-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight Compliance designation EAD contract 0578
+        if: ${{ inputs.change_id == 'compliance-designation-ead-contract-0578' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0578-production-preflight.sh --target=airtrust-db
+
       - name: Preflight Training Compliance canonical PDF 0545
         if: ${{ inputs.change_id == 'training-compliance-canonical-pdf-alignment-0545' }}
         shell: bash
@@ -863,6 +881,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0543-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate Compliance designation EAD contract 0578
+        if: ${{ inputs.change_id == 'compliance-designation-ead-contract-0578' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0578-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate Training Compliance canonical PDF 0545
         if: ${{ inputs.change_id == 'training-compliance-canonical-pdf-alignment-0545' }}
