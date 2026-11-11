@@ -149,12 +149,39 @@ test('FRMS UX 30d staging: synthetic tenant admin reads operational flows', asyn
     await expect(selector).toHaveValue(QA_TENANT_ID, { timeout: 20_000 });
   }
 
+  // First prove the tenant-scoped access grant actually resolved. A timeout
+  // or aborted access request must NOT be mistaken for a slow empty snapshot.
+  // Both listeners are installed before entering the FRMS route.
+  const isAccessGet = (request: { url(): string; method(): string }) => {
+    const url = new URL(request.url());
+    return url.hostname === API_HOST &&
+      url.pathname === '/api/me/operational-access' &&
+      request.method() === 'GET';
+  };
+  const accessOutcome = Promise.race([
+    page.waitForResponse((response) => isAccessGet(response.request()), { timeout: 25_000 })
+      .then((response) => ({ kind: 'response' as const, status: response.status() })),
+    page.waitForEvent('requestfailed', {
+      predicate: (request) => isAccessGet(request),
+      timeout: 25_000,
+    }).then((request) => ({
+      kind: 'failed' as const,
+      reason: request.failure()?.errorText || 'network_unknown',
+    })),
+  ]);
   const snapshotRequest = page.waitForResponse(
     (response) => response.url().includes('/api/frms/operational-snapshot') &&
       response.url().includes(DAY),
     { timeout: 50_000 },
   );
   await page.goto(BASE + '/frms?data=' + DAY, { waitUntil: 'domcontentloaded' });
+  const access = await accessOutcome;
+  if (access.kind === 'failed') {
+    throw new Error('FRMS_QA_OPERATIONAL_ACCESS_TRANSPORT_FAILURE:' + access.reason);
+  }
+  expect(access.status, 'FRMS_QA_OPERATIONAL_ACCESS_HTTP_NOT_200').toBe(200);
+  await expect(page.getByText(/Não foi possível confirmar seu escopo operacional do FRMS/))
+    .toHaveCount(0);
   const snapshot = await snapshotRequest;
   expect(snapshot.status(), 'FRMS não pode tratar contexto ausente como normal').toBe(200);
   const payload = await snapshot.json() as {
