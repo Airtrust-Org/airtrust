@@ -143,7 +143,11 @@ export function TrainingComplianceConditionsEditor() {
       if(!incomplete) showToast.success(enrolled>0?
         `Designação atribuída. ${enrolled} treinamento(s) disponibilizado(s) automaticamente.`:
         'Designação atribuída ao funcionário.');
-      if(result.auto_enrollment_warning==='UNMAPPED_MANDATORY_QUALIFICATION')
+      if(result.auto_enrollment_warning==='ENROLLMENT_DIAGNOSTIC_UNAVAILABLE')
+        showToast.warning(enrolled>0
+          ? `Designação salva e ${enrolled} matrícula(s) processada(s), mas a verificação complementar está indisponível. Confira o LMS.`
+          : 'Designação salva; verificação complementar de matrícula indisponível. Confira o LMS.');
+      else if(result.auto_enrollment_warning==='UNMAPPED_MANDATORY_QUALIFICATION')
         showToast.warning('Designação registrada, mas existe qualificação obrigatória sem curso vinculado. Verifique se exige treinamento EAD.');
       else if(result.auto_enrollment_warning==='NO_EAD_POLICY')
         showToast.warning('Designação registrada, mas a regra obrigatória não habilita matrícula EAD automática.');
