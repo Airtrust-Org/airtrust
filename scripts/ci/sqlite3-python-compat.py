@@ -34,10 +34,13 @@ def parse_args(argv):
 
 
 def statements(source):
+    # sqlite3.complete_statement knows SQL strings, comments and trigger bodies.
+    # Check at each semicolon, not only at end of line: migration fixtures
+    # legitimately include CREATE TABLE ...; INSERT INTO ...; on one line.
     statement = ''
-    for line in source.splitlines(keepends=True):
-        statement += line
-        if sqlite3.complete_statement(statement):
+    for char in source:
+        statement += char
+        if char == ';' and sqlite3.complete_statement(statement):
             if statement.strip():
                 yield statement
             statement = ''

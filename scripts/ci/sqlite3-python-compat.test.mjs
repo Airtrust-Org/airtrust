@@ -95,3 +95,21 @@ test('migration RAISE(ABORT) failures propagate exact fail-closed reason and nev
     assert.equal(query(db, 'SELECT COUNT(*) FROM qa;').stdout.trim(), '0');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('multiple statements sharing a line are executed separately with fail-closed SQL semantics', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'airtrust-ci-sqlite-multiline-'));
+  const db = join(dir, 'local.sqlite');
+  try {
+    const setup = query(db, "CREATE TABLE qa(id INTEGER); INSERT INTO qa VALUES(11); INSERT INTO qa VALUES(12);", true);
+    assert.equal(setup.status, 0, setup.stderr);
+    assert.equal(query(db, 'SELECT COUNT(*) FROM qa;').stdout.trim(), '2');
+    const failing = query(db, "INSERT INTO qa VALUES(13); INSERT INTO missing VALUES(14); INSERT INTO qa VALUES(15);", true);
+    assert.notEqual(failing.status, 0);
+    assert.equal(query(db, 'SELECT GROUP_CONCAT(id) FROM qa;').stdout.trim(), '11,12,13');
+    const queryJson = spawnSync('python3', [binary, '-json', db, 'SELECT id FROM qa WHERE id=11; SELECT id FROM qa WHERE id=12;'], {
+      encoding: 'utf8', timeout: 10_000,
+    });
+    assert.equal(queryJson.status, 0, queryJson.stderr);
+    assert.equal(queryJson.stdout.trim(), '[{"id":11}]\n[{"id":12}]');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
