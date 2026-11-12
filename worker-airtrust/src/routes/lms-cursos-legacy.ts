@@ -2065,6 +2065,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(finalQualificacaoTipoId),
+      preferredCourseId: Number(id),
     });
 
     const reconcileTask = reconcileImportedEdappHistory(db, {

@@ -160,9 +160,9 @@ describe('lms matriculas progress integrity', () => {
   it('preserva matrícula existente em vez de resetar o progresso no rematricular manual', async () => {
     const { db, calls } = createMockDb([
       [
-        'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos',
+        'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos',
         {
-          first: () => ({ id: 9, titulo: 'AW139', qualificacao_tipo_id: null }),
+          first: () => ({ id: 9, titulo: 'AW139', qualificacao_tipo_id: null, publicado: 1 }),
         },
       ],
       [
@@ -221,9 +221,9 @@ describe('lms matriculas progress integrity', () => {
   it('ignora matrícula em lote quando já existe matrícula preservável em vez de resetar progresso', async () => {
     const { db, calls } = createMockDb([
       [
-        'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos',
+        'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos',
         {
-          first: () => ({ id: 9, titulo: 'AW139', qualificacao_tipo_id: null }),
+          first: () => ({ id: 9, titulo: 'AW139', qualificacao_tipo_id: null, publicado: 1 }),
         },
       ],
       [
@@ -271,7 +271,7 @@ describe('lms matriculas progress integrity', () => {
 
   it('cria matrícula nova no lote sem email quando o Compliance pede etapa silenciosa', async () => {
     const { db } = createMockDb([
-      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100 }) }],
+      ['SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100, publicado: 1 }) }],
       ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
       ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
       ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],
@@ -298,9 +298,38 @@ describe('lms matriculas progress integrity', () => {
     );
   });
 
+  it('pré-matricula em curso rascunho sem aviso ao aluno nem convite', async () => {
+    const { db, calls } = createMockDb([
+      ['SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos',
+        { first: () => ({ id: 75, titulo: 'NR-12', qualificacao_tipo_id: 189, publicado: 0 }) }],
+      ['SELECT id, nome, setor_id FROM funcionarios',
+        { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
+      ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
+      ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],
+      ['SELECT m.*, f.nome AS funcionario_nome',
+        { first: () => ({ id: 777, curso_id: 75, funcionario_id: 77, status: 'NAO_INICIADO' }) }],
+    ]);
+    const app = new Hono<{ Bindings: Env }>();
+    app.route('/', lmsMatriculasRoutes);
+    const response = await app.fetch(new Request('http://localhost/lote', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ funcionario_ids: [77], curso_id: 75, enviar_convite_email: true }),
+    }), { DB: db } as Env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true, data: { criadas: 1, erros: 0 },
+    });
+    expect(ensureMatriculaCycleMock).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({matriculaId: 777, empresaId: 1}),
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(calls.filter(x => x.query.includes('INSERT OR IGNORE INTO notificacoes_inapp')))
+      .toHaveLength(0);
+  });
+
   it('reativa matrícula cancelada no lote sem enviar email quando solicitado pelo Compliance', async () => {
     const { db, calls } = createMockDb([
-      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100 }) }],
+      ['SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CRM EAD', qualificacao_tipo_id: 100, publicado: 1 }) }],
       ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
       ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => ({ id: 501, status: 'CANCELADO', deleted_at: '2026-09-15 00:00:00' }) }],
       ['INSERT OR IGNORE INTO notificacoes_inapp', { run: () => ({ meta: { changes: 1 } }) }],
@@ -332,7 +361,7 @@ describe('lms matriculas progress integrity', () => {
     'informa %s por funcionário e preserva a matrícula anterior', async (reason) => {
       reactivateCancelledMatriculaMock.mockResolvedValue(reason);
       const { db, calls } = createMockDb([
-        ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+        ['SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null, publicado: 1 }) }],
         ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
         ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => ({ id: 501, status: 'CANCELADO', deleted_at: '2026-09-15' }) }],
       ]);
@@ -356,7 +385,7 @@ describe('lms matriculas progress integrity', () => {
     'não trata falha posterior ao insert como conflito de inserção: %s', async (message) => {
     stampLmsEnrollmentEvidenceProfileMock.mockRejectedValue(new Error(message));
     const { db, calls } = createMockDb([
-      ['SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null }) }],
+      ['SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos', { first: () => ({ id: 9, titulo: 'CFIT', qualificacao_tipo_id: null, publicado: 1 }) }],
       ['SELECT id, nome, setor_id FROM funcionarios', { all: () => ({ results: [{ id: 77, nome: 'Aluno QA', setor_id: 1 }] }) }],
       ['FROM lms_matriculas\n        WHERE curso_id = ?', { first: () => null }],
       ['INSERT INTO lms_matriculas', { run: () => ({ meta: { changes: 1, last_row_id: 777 } }) }],

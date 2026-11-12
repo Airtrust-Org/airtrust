@@ -13,7 +13,7 @@ describe('LMS draft enrollment notification policy', () => {
     expect(mayNotifyEnrollmentForCourse({ publicado: '1' })).toBe(true);
   });
   it('requires both single and batch routes to check publication before all invitations', () => {
-    const source = readFileSync(new URL('../../routes/lms-matriculas.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../routes/lms-matriculas.ts', import.meta.url).pathname, 'utf8');
     const postOne = source.split("app.post('/', async (c) => {")[1].split("app.post('/lote'")[0];
     const postBatch = source.split("app.post('/lote'")[1].split("app.post('/scorm/commit'")[0];
     for (const route of [postOne, postBatch]) {
