@@ -276,7 +276,7 @@ async function inspectAssignedConditionEnrollmentContract(
     .all<{qualificacao_tipo_id:number;auto_matricular_ead:number|null;modalidade_requerida:string|null;course_count:number}>();
   if((results||[]).some(x=>Number(x.course_count)===0)) return 'UNMAPPED_MANDATORY_QUALIFICATION';
   if((results||[]).some(x=>Number(x.course_count)!==1 || Number(x.auto_matricular_ead)!==1
-      || x.modalidade_requerida!=='EAD')) return 'NO_EAD_POLICY';
+      || (x.modalidade_requerida!=='EAD' && !(empresaId===6 && x.modalidade_requerida==null)))) return 'NO_EAD_POLICY';
   return null;
 }
 

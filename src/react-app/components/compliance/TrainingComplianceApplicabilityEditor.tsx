@@ -756,13 +756,13 @@ export function TrainingComplianceApplicabilityEditor({
                   <input
                     type="checkbox"
                     aria-label={`Habilitar matrícula EAD automática da regra ${rule.id}`}
-                    checked={Number(rule.auto_matricular_ead) === 1 && rule.modalidade_requerida === 'EAD'}
+                    checked={Number(rule.auto_matricular_ead) === 1 && (rule.modalidade_requerida === 'EAD' || rule.modalidade_requerida == null)}
                     disabled={editBlocked || updateRule.isPending}
                     onChange={(event) =>
                       updateRule.mutate({
                         id: rule.id,
                         patch: event.target.checked
-                          ? { modalidade_requerida: 'EAD', auto_matricular_ead: true }
+                          ? { ...(rule.modalidade_requerida == null ? {} : { modalidade_requerida: 'EAD' }), auto_matricular_ead: true }
                           : { auto_matricular_ead: false },
                       })
                     }

@@ -1,0 +1,110 @@
+name: Production Compliance LMS Finalize 2215
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha: {required: true, type: string}
+      mode: {required: true, type: choice, options: [dry-run, apply]}
+      confirmation: {required: true, type: string}
+      reviewed_dry_run_run_id: {required: false, type: string}
+permissions: {contents: read, actions: read, checks: read, statuses: read}
+concurrency: {group: production-compliance-lms-finalize-2215, cancel-in-progress: false}
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      MODE: ${{ inputs.mode }}
+      COMPLIANCE_2215_CONFIRMATION: ${{ inputs.confirmation }}
+      COMPLIANCE_2215_TARGET_DB: airtrust-db
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - name: Validate reviewed main ancestor
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git cat-file -e "$EXPECTED_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_SHA" "$GITHUB_SHA"
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$COMPLIANCE_2215_CONFIRMATION" == AIRTRUST_2215_DRYRUN_ONLY ]] || exit 1
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$COMPLIANCE_2215_CONFIRMATION" == AIRTRUST_2215_PRODUCTION_FINALIZE_EXACT_REVIEWED_RULES_NO_CONTENT_NO_EMAIL ]] || exit 1
+          else exit 1; fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Verify official eight gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="$EXPECTED_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+      - name: Pin reviewed script and immutable dependencies
+        run: |
+          set -euo pipefail
+          git checkout "$EXPECTED_SHA" -- scripts/production/finalize-compliance-lms-2215.mjs worker-airtrust/package.json worker-airtrust/package-lock.json
+          npm --prefix worker-airtrust ci
+          node -e "const l=require('./worker-airtrust/package-lock.json');const i=require('./worker-airtrust/node_modules/wrangler/package.json');if(!l.packages?.['node_modules/wrangler']?.version||i.version!==l.packages['node_modules/wrangler'].version)process.exit(1)"
+          node --check scripts/production/finalize-compliance-lms-2215.mjs
+      - name: Validate production D1 access
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+      - name: Validate reviewed dry-run and exact candidate hash
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || exit 1
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run")" == 'Production Compliance LMS Finalize 2215' && "$(jq -r .conclusion <<<"$run")" == success && "$(jq -r .head_branch <<<"$run")" == main ]] || exit 1
+          reviewed_head="$(jq -r .head_sha <<<"$run")"
+          git cat-file -e "$reviewed_head^{commit}"
+          git merge-base --is-ancestor "$reviewed_head" "$GITHUB_SHA"
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" -R "$GITHUB_REPOSITORY" -n "compliance-lms-finalize-dry-run-$EXPECTED_SHA" -D "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/result.json"
+          jq -e --arg sha "$EXPECTED_SHA" '.mode=="dry-run" and .source_sha==$sha and .tenant==6 and .reviewed_rule_updates==124 and .draft_rule_updates==3 and .archived_rule_retirements==8 and .created_enrollments==0 and .emails_sent==0 and .content_published==0 and .certifications_created==0' "$f" >/dev/null
+          h="$(jq -r .before_hash "$f")"
+          [[ "$h" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          echo "COMPLIANCE_2215_EXPECTED_HASH=$h" >> "$GITHUB_ENV"
+      - name: Capture D1 recovery checkpoint
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "D1_TIME_TRAVEL_RECOVERY_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply reviewed rules or execute read-only preflight
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$EXPECTED_SHA" node scripts/production/finalize-compliance-lms-2215.mjs "$MODE" > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          if [[ "$MODE" == apply ]]; then
+            jq -e '.postconditions_verified==true and .reviewed_rule_updates==124 and .archived_rule_retirements==8 and .content_published==0 and .created_enrollments==0 and .emails_sent==0 and .certifications_created==0' "$RUNNER_TEMP/result.json" >/dev/null
+          fi
+      - name: Publish sanitized summary
+        if: always()
+        run: |
+          test -s "$RUNNER_TEMP/result.json" || exit 0
+          jq '{mode,tenant,source_sha,before_hash,reviewed_rule_updates,draft_rule_updates,archived_rule_retirements,audit_records,created_enrollments,emails_sent,content_published,certifications_created,postconditions_verified}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: compliance-lms-finalize-${{ inputs.mode }}-${{ inputs.expected_sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30
