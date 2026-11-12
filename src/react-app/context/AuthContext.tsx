@@ -373,6 +373,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const accessToken = (await ensureValidAccessToken()) || storedToken;
             const controller = new AbortController();
             timeoutId = window.setTimeout(() => controller.abort(), 5000);
+            // Fetch tenant metadata in parallel with identity validation, but do
+            // not apply it until /me confirms the session. This removes a
+            // sequential network round trip from cold startup without making
+            // cached identity or tenant privileges authoritative.
+            const empresasRequest = authFetch(
+              '/empresas',
+              { headers: { Authorization: `Bearer ${accessToken}` } },
+              AUTH_EMPRESAS_TIMEOUT_MS,
+            )
+              .then(async (response) => (response.ok ? (await response.json())?.data : null))
+              .catch(() => null);
             const meRes = await authFetch('/me', {
               headers: { Authorization: `Bearer ${accessToken}` },
               signal: controller.signal,
@@ -384,7 +395,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(resolvedUser);
               setTokens(accessToken, storedRefreshToken || undefined);
               writeAuthStorage(USER_KEY, JSON.stringify(resolvedUser));
-              await loadEmpresas(accessToken);
+              const empresasPayload = await empresasRequest;
+              setEmpresas(Array.isArray(empresasPayload?.empresas) ? empresasPayload.empresas : []);
+              setEmpresaAtualId(
+                typeof empresasPayload?.empresaAtualId === 'number'
+                  ? empresasPayload.empresaAtualId
+                  : null,
+              );
             } else if (meRes.status === 401 || meRes.status === 403) {
               if (storedRefreshToken) {
                 try {
