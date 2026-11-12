@@ -77,6 +77,48 @@ describe('SCORM resume restore helpers', () => {
   });
 });
 
+describe('F5 final slide restoration after previously repaired scenario', () => {
+  const T=59;
+  function checkpoint({ cursor=25, missing=-1, location='59/59', completed=false }={}) {
+    const done=Array.from({length:T-1},(_,i)=>i).filter(i=>i!==missing);
+    const original=JSON.stringify({
+      v:4,p:'CDS-CODIGO-ETICA-CONDUTA-F5-RC1-20261101',
+      a:cursor,d:done,
+      s:{scenario_1:0},g:[],h:{},vs:{},q:{},c:completed,
+    });
+    return JSON.stringify({
+      'cmi.suspend_data':original,'cmi.core.lesson_location':location,
+      'cmi.core.lesson_status':'incomplete','airtrust.total_slides':T,
+    });
+  }
+  it('reopens Karl at last real screen after proving 58/58 preceding units, without finishing', () => {
+    const {initialCmiJson}=buildScormLaunchState(checkpoint(),null,false,false,null,{
+      formativeCourse:true,
+      persisted:{lesson_status:'incomplete'},
+    });
+    const cmi=JSON.parse(initialCmiJson);
+    const saved=JSON.parse(cmi['cmi.suspend_data']);
+    expect(saved.a).toBe(58);
+    expect(saved.d).toHaveLength(58);
+    expect(saved.c).toBe(false);
+    expect(cmi['cmi.core.lesson_location']).toBe('59/59');
+    expect(cmi['cmi.core.lesson_status']).toBe('incomplete');
+  });
+  it('never advances an incomplete path or an unvisited final slide', () => {
+    for(const params of [
+      {missing:20},{location:'26/59'},
+      {location:'26/54'},{completed:true},
+    ]) {
+      const {initialCmiJson}=buildScormLaunchState(
+        checkpoint(params),null,false,false,null,{formativeCourse:true},
+      );
+      const saved=JSON.parse(JSON.parse(initialCmiJson)['cmi.suspend_data']);
+      expect(saved.a).toBeLessThan(58);
+      expect(saved.c).toBe(params.completed === true);
+    }
+  });
+});
+
 describe('S76 RC3 authenticated launch-site integration — Carlos enrollment #681', () => {
   it('routes every verified handoff to a strict native projection, not only legacy #690', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
