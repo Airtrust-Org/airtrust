@@ -89,3 +89,27 @@ Atenção: este é um **gate de paridade curricular**, não certifica conteúdo 
 --pto-v18-contract /tmp/pto-v18-private/review-pack/sessoes_pto_v18.json \
 --pto-v18-manifest /tmp/pto-v18-private/review-pack/manifesto_validacao.json
 ```
+
+## Consulta direta da produção — D1 Costa do Sol, 12/11/2026
+
+Consulta **exclusivamente de leitura** ao D1 `airtrust-db` em `production`, tenant 6, usando Wrangler com `SELECT` e `PRAGMA table_info`. Todas as respostas reportaram `rows_written=0` e `changed_db=false`. Os exports JSON completos foram guardados **fora do Git** em `/tmp/pto-v18-private/`.
+
+| Dado de produção observado | Quantidade |
+| --- | ---: |
+| Registros de modelos ativos | 120 |
+| Desses, classificados AW139 / SK76 / sem aeronave | 61 / 45 / 14 |
+| Vínculos técnicos ativos dos modelos ativos | 2.052 |
+| Guias ativos `html_status_validacao=VALIDO` | 51 |
+| Vínculos ativos modelo→guia / modelos distintos vinculados | 51 / 51 |
+| Sessões do PTO com código canônico igual a algum modelo ativo | 14/82 |
+| Sessões do PTO sem correspondência canônica exata | 68/82 |
+| Sessões com código correspondente e os 18 itens técnicos exatamente compatíveis em ordem, código e nome | 0/14 |
+| Dentre as 14 com código correspondente, com guia ligado ao candidato de maior versão | 12 |
+
+**Interpretação necessária:** os 68 códigos não correspondentes incluem currículos presentes sob nomenclaturas históricas (por exemplo, `SK76-I-*` comparado ao `S76-I-*` aprovado), além de mudanças de arquitetura (`/04` versus `/03`) e de programas. Não se deve criar 68 sessões automaticamente sem resolver equivalências, versões e requisitos. Os 12 modelos AW139 iniciais têm simultaneamente registros legados e versões novas ativos; o auditor seleciona primeiro a versão com maior `versao_numero` para comparação e preserva a evidência de candidatos alternativos. O resultado 0/14 se refere somente à igualdade integral **por código, nome e ordem**, não é julgamento técnico da equivalência operacional das manobras. O status `VALIDO` do HTML não atesta aderência ao V18.
+
+### Auditor de snapshot criado
+
+`scripts/operations/audit-pto-v18-production-snapshot.py` lê exclusivamente exports JSON de Wrangler já coletados (não conecta ao D1), falha caso não exista prova `rows_written=0` e `changed_db=false`, usa o hash aprovado do DOCX e gera o resultado por sessão e por posição, incluindo status dos guias vinculados. Os caminhos dos exports e detalhes de ambiente permanecem privados. A comparação não compreende as rubricas NOTECHS, PF armazenado em `metadados_json`, conteúdo HTML do R2, critérios SOP/RFM/QRH, autorização de treinamento e check ou evidência de histórico.
+
+3 testes novos do auditor de produção PASS (inclusive rejeição de export com mutação e seleção de versão mais recente), totalizando 20 testes focados aprovados desta frente (9 Node + 5 Vitest + 3 Python iniciais + 3 Python do snapshot). O resultado é **NO-GO** para atualização automática de produção até que a matriz técnica e os guias V18 estejam validados e reconciliados.
