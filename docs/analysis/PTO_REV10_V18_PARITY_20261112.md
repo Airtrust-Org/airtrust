@@ -123,3 +123,18 @@ O proprietário autorizou expressamente a modificação de produção para a ade
 Foi identificado que o aplicador local aceitava planos do schema 1 (72 modelos, contrato curricular antigo) como **novos** imports após verificações de integridade. O aplicador passou a rejeitar toda aplicação nova do schema 1. A leitura idempotente de imports antigos já concluídos continua disponível sem alteração de registros. Para um plano V18 schema 2: a operação `--dry-run` exige versão e fonte normativa corretas, enquanto a operação `--apply` exige adicionalmente artefato de aceite técnico independente (`--technical-approval <arquivo.json>`) com hash do PTO, hash do contrato, hash do plano, cobertura explícita de 82 guias/1476 itens/15 NOTECHS, data, revisor e referência à evidência. Esse aceite deve ser produzido após conferência efetiva dos guias, versões SOP/RFM/QRH e critérios de check; não gerar aceite sintético para destravar o gate.
 
 Esta barreira não autoriza nem executa escrita remota. O aplicador continua restrito a banco D1 **local** e a autorização de mudança de produção será exercida apenas por fluxo separado, após testes, aceite técnico e evidências de rollback/readback. A alteração é funcionalmente testada por 7 novos cenários Node além dos testes existentes.
+
+## Reconciliação técnica objetiva dos catálogos — lote 12/11/2026
+
+Comparação por código **e** descrição normalizada (sem supor equivalência por similaridade) entre os 1.476 vínculos extraídos do PTO V18 e os catálogos técnicos privados antigos:
+
+| Critério | Vínculos |
+| --- | ---: |
+| Mesmo código e mesma descrição | 1.435 |
+| Código ausente do catálogo antigo | 37 |
+| Código existente com descrição divergente | 4 |
+| Total de posições técnicas | 1.476 |
+
+Essas 41 posições dependem de **18 códigos distintos** (15 AW139, 3 S76). Relação AW139: `A139-DSP-001`, `A139-PWR-001`, `ABN-HNG-69`, `ABN-MRC-30B`, `ABN-TRC-30E`, `CAU-BOF-55`, `CAU-DUD-46`, `CAU-FDT-62`, `CAU-FPC-73`, `CAU-MCC-104`, `CAU-SAS-41`, `CAU-SRV-80`, `MSG-ATF-89`, `MSG-FDF-98`, `WAR-TMP-30A`; S76: `S76-ENV-NRM`, `S76-ICE-NRM`, `S76-SYS-001`. Falta confirmar procedimento, manual e configuração aplicáveis para cada código antes de sua inserção operacional.
+
+Script reproduzível: `scripts/operations/reconcile-pto-v18-technical-catalog.py`. Emite relatório privado JSON com diferença por sessão, posição, código e descrição; preserva metadados do catálogo antigo **somente** se código e descrição coincidirem, sem presumir que o procedimento esteja homologado operacionalmente. Mesmo os 1.435 itens coincidentes permanecem com `operational_validation=PENDENTE` até revisão da aeronave/variante. O resultado está explicitamente `DRAFT_NOT_APPROVED_NOT_IMPORTABLE`. 3 testes novos PASS, incluindo rejeição de substituição por semelhança, contagem incompleta e código duplicado. Nenhum procedimento técnico foi inventado e nenhum modelo de produção foi atualizado.
