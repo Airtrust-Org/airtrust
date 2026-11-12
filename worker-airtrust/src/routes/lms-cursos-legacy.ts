@@ -1409,6 +1409,21 @@ app.get('/', async (c) => {
     finalSetorIds = access.setorIds;
   }
 
+  // Learners can always list their own active enrollments, even if the
+  // course's sector classification no longer matches the employee sector.
+  // This mirrors the direct-detail exception in hasOwnEnrolledCourseReadAccess.
+  // Still scoped by empresa_id + funcionario_id + active enrollment status.
+  const ownEnrollmentPredicate = access.mode === 'self'
+    ? `EXISTS (
+        SELECT 1 FROM lms_matriculas own_m
+        WHERE own_m.empresa_id = c.empresa_id
+          AND own_m.curso_id = c.id
+          AND own_m.funcionario_id = ?
+          AND own_m.deleted_at IS NULL
+          AND own_m.status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO')
+      )`
+    : null;
+
   let where = 'WHERE c.empresa_id = ? AND c.deleted_at IS NULL AND c.ativo = 1';
   const binds: (string | number)[] = [empresaId];
 
@@ -1424,7 +1439,12 @@ app.get('/', async (c) => {
     binds.push(`%${q}%`);
   }
   if (finalSetorIds !== null && finalSetorIds.length === 0) {
-    where += ' AND 1 = 0';
+    if (ownEnrollmentPredicate && access.mode === 'self') {
+      where += ` AND ${ownEnrollmentPredicate}`;
+      binds.push(access.funcionarioId);
+    } else {
+      where += ' AND 1 = 0';
+    }
   } else if (finalSetorIds !== null) {
     const placeholders = finalSetorIds.map(() => '?').join(', ');
     const directScope = courseSetorSchema.hasCursoSetores
@@ -1456,15 +1476,17 @@ app.get('/', async (c) => {
         )`
       : '';
     const scopeClauses = [directScope, fallbackScope].filter(Boolean);
-    if (scopeClauses.length === 0) {
+    if (scopeClauses.length === 0 && !ownEnrollmentPredicate) {
       where += ' AND 1 = 0';
     } else {
-      where += ` AND (${scopeClauses.join(' OR ')})`;
+      const allowedScopes = [...scopeClauses, ...(ownEnrollmentPredicate ? [ownEnrollmentPredicate] : [])];
+      where += ` AND (${allowedScopes.join(' OR ')})`;
       binds.push(
         ...finalSetorIds,
         ...(courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
           ? finalSetorIds
           : []),
+        ...(ownEnrollmentPredicate && access.mode === 'self' ? [access.funcionarioId] : []),
       );
     }
   }
