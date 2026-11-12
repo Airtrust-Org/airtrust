@@ -1415,6 +1415,12 @@ app.get('/', async (c) => {
 
   if (somentePublicados) {
     where += ' AND c.publicado = 1';
+    // A published SCORM without a package cannot launch (LGPD #69).
+    // Hide only from learner catalog discovery; managers retain visibility to
+    // repair publication. Existing enrollment history is never modified.
+    if (!hasRole(c, 'admin', 'manager')) {
+      where += " AND (c.tipo_conteudo != 'scorm' OR NULLIF(TRIM(c.scorm_package_r2_prefix), '') IS NOT NULL)";
+    }
   }
   if (categoria) {
     where += ' AND c.categoria = ?';
