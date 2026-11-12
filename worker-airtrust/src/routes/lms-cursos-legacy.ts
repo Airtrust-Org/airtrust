@@ -1482,8 +1482,8 @@ app.get('/', async (c) => {
       const allowedScopes = [...scopeClauses, ...(ownEnrollmentPredicate ? [ownEnrollmentPredicate] : [])];
       where += ` AND (${allowedScopes.join(' OR ')})`;
       binds.push(
-        ...finalSetorIds,
-        ...(courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
+        ...(scopeClauses.length > 0 ? finalSetorIds : []),
+        ...(scopeClauses.length > 0 && courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
           ? finalSetorIds
           : []),
         ...(ownEnrollmentPredicate && access.mode === 'self' ? [access.funcionarioId] : []),
