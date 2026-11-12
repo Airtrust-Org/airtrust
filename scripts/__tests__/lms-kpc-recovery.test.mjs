@@ -27,3 +27,14 @@ test('S76 can only execute exact verified 26/49 edition handoff',()=>{
   assert.throws(()=>validateCaseState({...row,active_resume_proposal:{targetPosition:25,activeTotal:49}},CASES[2]));
   assert.throws(()=>validateCaseState({...row,edition_mismatch:{required:false}},CASES[2]));
 });
+test('trusted workflow verifies fully gated deployed ancestor rather than moving main HEAD', async ()=>{
+  const { readFileSync } = await import('node:fs');
+  const workflow=readFileSync('.github/workflows/production-lms-kpc-recovery.yml','utf8');
+  const runner=readFileSync('scripts/production/lms-kpc-recovery.mjs','utf8');
+  assert.match(workflow, /git merge-base --is-ancestor "\$EXPECTED_PRODUCTION_SHA" "\$GITHUB_SHA"/);
+  assert.match(workflow, /RELEASE_SHA: \$\{\{ inputs.expected_production_sha \}\}/);
+  assert.match(workflow, /verify-release-gates\.mjs/);
+  assert.match(workflow, /\[\[ "\$live" == "\$EXPECTED_PRODUCTION_SHA" \]\]/);
+  assert.match(runner, /sha===process\.env\.RELEASE_SHA/);
+  assert.doesNotMatch(runner, /sha===process\.env\.GITHUB_SHA/);
+});

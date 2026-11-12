@@ -65,8 +65,8 @@ async function adminToken() {
 export async function executeRecovery() {
   assert(process.env.GITHUB_ACTIONS==='true' && process.env.GITHUB_REF==='refs/heads/main',
     'KPC_GITHUB_MAIN_REQUIRED');
-  assert(/^[0-9a-f]{40}$/.test(sha) && sha===process.env.GITHUB_SHA,
-    'KPC_SOURCE_SHA_INVALID');
+  assert(/^[0-9a-f]{40}$/.test(sha) && sha===process.env.RELEASE_SHA,
+    'KPC_RELEASE_PIN_INVALID');
   assert(['inspect','apply'].includes(mode),'KPC_MODE_INVALID');
   assert(process.env.LMS_KPC_CONFIRMATION ===
     (mode==='apply' ? 'AIRTRUST_LMS_KPC_APPLY' : 'AIRTRUST_LMS_KPC_INSPECT'),
