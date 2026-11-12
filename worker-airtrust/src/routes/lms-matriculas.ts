@@ -82,7 +82,7 @@ import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaTracked } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
-import { hasLaunchablePublishedScormPackage } from '../services/lms-scorm-enrollment-readiness';
+import { assertPublishedScormEnrollmentReady } from '../services/lms-scorm-enrollment-readiness';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
 import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
@@ -603,15 +603,7 @@ app.post('/', async (c) => {
     .bind(curso_id, empresaId)
     .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number; tipo_conteudo: string; scorm_package_r2_prefix: string | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-  if (!(await hasLaunchablePublishedScormPackage(db, {
-    empresaId, cursoId: curso_id, tipoConteudo: curso.tipo_conteudo,
-    publicado: curso.publicado, packagePrefix: curso.scorm_package_r2_prefix,
-  }))) {
-    throw new ApiError(
-      'Curso SCORM publicado sem pacote ativo validado. Não é possível criar novas matrículas até a regularização da edição.',
-      409,
-    );
-  }
+  await assertPublishedScormEnrollmentReady(db, empresaId, curso_id, curso);
 
   const funcionario = await db
     .prepare(
@@ -865,15 +857,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
     .bind(curso_id, empresaId)
     .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number; tipo_conteudo: string; scorm_package_r2_prefix: string | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
-  if (!(await hasLaunchablePublishedScormPackage(db, {
-    empresaId, cursoId: curso_id, tipoConteudo: curso.tipo_conteudo,
-    publicado: curso.publicado, packagePrefix: curso.scorm_package_r2_prefix,
-  }))) {
-    throw new ApiError(
-      'Curso SCORM publicado sem pacote ativo validado. Não é possível criar novas matrículas até a regularização da edição.',
-      409,
-    );
-  }
+  await assertPublishedScormEnrollmentReady(db, empresaId, curso_id, curso);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
   if (loteAccess.mode === 'restricted') {

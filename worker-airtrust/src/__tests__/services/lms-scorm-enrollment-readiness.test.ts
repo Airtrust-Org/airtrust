@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hasLaunchablePublishedScormPackage } from '../../services/lms-scorm-enrollment-readiness';
+import { hasLaunchablePublishedScormPackage, assertPublishedScormEnrollmentReady } from '../../services/lms-scorm-enrollment-readiness';
 
 const params = {
   empresaId: 6,
@@ -16,6 +16,11 @@ function mockDb(active: boolean) {
   return {db: {prepare} as unknown as D1Database,first,bind,prepare};
 }
 describe('published SCORM enrollment package readiness, tenant-scoped',()=>{
+  it('rejects unavailable published SCORM at the shared single/batch HTTP boundary',async()=>{
+    const t=mockDb(false);
+    await expect(assertPublishedScormEnrollmentReady(t.db,6,23,{tipo_conteudo:'scorm',publicado:1,scorm_package_r2_prefix:params.packagePrefix}))
+      .rejects.toMatchObject({statusCode:409});
+  });
   it('rejects ANAC #23 with only VALIDATED candidates and no ACTIVE',async()=>{
     const t=mockDb(false);
     expect(await hasLaunchablePublishedScormPackage(t.db,params)).toBe(false);

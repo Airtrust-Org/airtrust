@@ -76,7 +76,7 @@ async function main(){
   if(externalBytes)assert(externalBytes.length<=80*1024*1024,'EXTERNAL_ZIP_TOO_LARGE');
   const dbFile=findDb(stateDir);
   const db=new DatabaseSync(dbFile);
-  const prefix='local-browser-qa/scorm/'+companyId+'/'+courseId+'/';
+  const prefix='lms/scorm/'+companyId+'/'+courseId+'/_candidates/local-browser-qa-v1/';
   db.prepare("UPDATE lms_cursos SET titulo='SCORM Browser QA', tipo_conteudo='scorm', scorm_versao='1.2', scorm_mastery_score=?, scorm_package_r2_prefix=?, scorm_launch_file=?, gerar_qualificacao_ao_concluir=1, ativo=1, publicado=1 WHERE id=? AND empresa_id=?").run(masteryScore,prefix,launchFile,courseId,companyId);
   const secondEmployee=Number(db.prepare("INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES ('QA SCORM WEBKIT SINTETICO', ?, 1, 0, '99051')").run(companyId).lastInsertRowid);
   // Disposable foreign tenant: never share the authenticated operator's company.
@@ -107,6 +107,28 @@ async function main(){
       "INSERT INTO funcionarios (nome, empresa_id, ativo, is_examinador, matricula) VALUES (?, ?, 1, 0, ?)"
     ).run('QA SCORM CYCLE ISOLATION '+browser,companyId,'QA-CYCLE-'+browser).lastInsertRowid);
   }
+  fs.mkdirSync(fixtureRoot,{recursive:true});
+  // SHA is calculated on the exact ZIP from which R2 browser assets are extracted.
+  const id='qa-'+courseId, version='local-browser-qa-v1';
+  const content=buildInteractiveM8QaFiles(id,version);
+  const xml='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" identifier="LOCAL-QA"><organizations default="ORG"><organization identifier="ORG"><title>QA</title><item identifier="I" identifierref="R"><title>QA</title></item></organization></organizations><resources><resource identifier="R" type="webcontent" adlcp:scormtype="sco" href="index.html"><file href="index.html"/></resource></resources></manifest>';
+  const completion={schemaVersion:1,diagnosticsVersion:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',scormVersion:'1.2',courseId:id,packageVersion:version,content:{requiredSlides:['qa-slide-1']},assessment:{requiredInteractions:['qa-interaction-1'],masteryScore:70,successStatus:'passed',failureStatus:'failed'},completion:{strategy:'AIRTRUST_COMPLETION_CONTRACT_V1'},diagnostics:{currentSlide:true,slides:true,assessment:true,packageStatus:true,updatedAt:true}};
+  const zipBytes=externalBytes??zipSync({...content,'imsmanifest.xml':strToU8(xml),'airtrust-completion-manifest.json':strToU8(JSON.stringify(completion))},{level:6});
+  const zipPath=path.join(fixtureRoot,'candidate.zip');
+  fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
+  const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
+
+  // The public enrollment endpoint now requires the actual synthetic ACTIVE
+  // edition. Seed ONLY disposable LOCAL D1 with this exact package hash and
+  // canonical tenant-scoped prefix before browser QA provisions learners.
+  // No production credentials or remote tables are touched.
+  const uploadedAt=new Date().toISOString();
+  db.prepare(`INSERT INTO lms_scorm_package_versions (
+    id,empresa_id,curso_id,package_version,package_sha256,zip_size_bytes,
+    r2_prefix,launch_file,scorm_versao,uploaded_at,status,activated_at
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE',?)`)
+    .run('qa-local-'+companyId+'-'+courseId,companyId,courseId,version,
+      packageSha256,zipBytes.length,prefix,launchFile,'1.2',uploadedAt,uploadedAt);
   db.close();
 
   const login=await fetch(api+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -144,16 +166,6 @@ async function main(){
     cycleIsolationEnrollments[browser]=cycleEnrollmentId;
   }
 
-  fs.mkdirSync(fixtureRoot,{recursive:true});
-  // SHA is calculated on the exact ZIP from which R2 browser assets are extracted.
-  const id='qa-'+courseId, version='local-browser-qa-v1';
-  const content=buildInteractiveM8QaFiles(id,version);
-  const xml='<manifest xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2" identifier="LOCAL-QA"><organizations default="ORG"><organization identifier="ORG"><title>QA</title><item identifier="I" identifierref="R"><title>QA</title></item></organization></organizations><resources><resource identifier="R" type="webcontent" adlcp:scormtype="sco" href="index.html"><file href="index.html"/></resource></resources></manifest>';
-  const completion={schemaVersion:1,diagnosticsVersion:'AIRTRUST_COMPLETION_DIAGNOSTICS_V1',scormVersion:'1.2',courseId:id,packageVersion:version,content:{requiredSlides:['qa-slide-1']},assessment:{requiredInteractions:['qa-interaction-1'],masteryScore:70,successStatus:'passed',failureStatus:'failed'},completion:{strategy:'AIRTRUST_COMPLETION_CONTRACT_V1'},diagnostics:{currentSlide:true,slides:true,assessment:true,packageStatus:true,updatedAt:true}};
-  const zipBytes=externalBytes??zipSync({...content,'imsmanifest.xml':strToU8(xml),'airtrust-completion-manifest.json':strToU8(JSON.stringify(completion))},{level:6});
-  const zipPath=path.join(fixtureRoot,'candidate.zip');
-  fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
-  const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
   const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
   const manifestBytes=files['imsmanifest.xml'];
   assert(manifestBytes instanceof Uint8Array,'QA_MANIFEST_MISSING');

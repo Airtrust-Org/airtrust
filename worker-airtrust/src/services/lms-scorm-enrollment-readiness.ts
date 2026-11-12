@@ -1,3 +1,4 @@
+import { ApiError } from '../middleware/error-handler';
 /**
  * Prevents new enrollment into a PUBLISHED SCORM course without a valid,
  * currently ACTIVE package. Existing history/progress/legacy enrollment
@@ -35,4 +36,27 @@ export async function hasLaunchablePublishedScormPackage(
     LIMIT 1
   `).bind(empresaId, cursoId, packagePrefix).first<{ready:number}>();
   return active?.ready === 1;
+}
+
+
+export async function assertPublishedScormEnrollmentReady(
+  db: Pick<D1Database, 'prepare'>,
+  empresaId: number,
+  cursoId: number,
+  course: {
+    tipo_conteudo: unknown;
+    publicado: unknown;
+    scorm_package_r2_prefix: unknown;
+  },
+): Promise<void> {
+  const ready = await hasLaunchablePublishedScormPackage(db, {
+    empresaId, cursoId, tipoConteudo: course.tipo_conteudo,
+    publicado: course.publicado, packagePrefix: course.scorm_package_r2_prefix,
+  });
+  if (!ready) {
+    throw new ApiError(
+      'Curso SCORM publicado sem pacote ativo validado. Novas matrículas bloqueadas até a regularização.',
+      409,
+    );
+  }
 }
