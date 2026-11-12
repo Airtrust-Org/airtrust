@@ -117,6 +117,17 @@ async function main(){
   const zipPath=path.join(fixtureRoot,'candidate.zip');
   fs.writeFileSync(zipPath,zipBytes,{mode:0o600});
   const packageSha256=createHash('sha256').update(zipBytes).digest('hex');
+  // Distinct, local-only active ZIP: an added inert marker makes its exact SHA
+  // differ from the unmodified candidate.zip under inactive-candidate QA.
+  // This preserves the security regression: uploading candidate.zip must
+  // result in VALIDATED, never accidentally resolve to an existing ACTIVE.
+  const activeMarker=strToU8('LOCAL_QA_ACTIVE_PACKAGE_V1');
+  const activeZipBytes=zipSync({
+    ...unzipSync(new Uint8Array(zipBytes)),
+    'qa-local-active-marker.txt':activeMarker,
+  },{level:6});
+  const activePackageSha256=createHash('sha256').update(activeZipBytes).digest('hex');
+  assert(activePackageSha256!==packageSha256,'LOCAL_QA_CANDIDATE_SHA_COLLISION');
 
   // The public enrollment endpoint now requires the actual synthetic ACTIVE
   // edition. Seed ONLY disposable LOCAL D1 with this exact package hash and
@@ -128,7 +139,7 @@ async function main(){
     r2_prefix,launch_file,scorm_versao,uploaded_at,status,activated_at
   ) VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE',?)`)
     .run('qa-local-'+companyId+'-'+courseId,companyId,courseId,version,
-      packageSha256,zipBytes.length,prefix,launchFile,'1.2',uploadedAt,uploadedAt);
+      activePackageSha256,activeZipBytes.length,prefix,launchFile,'1.2',uploadedAt,uploadedAt);
   db.close();
 
   const login=await fetch(api+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -166,7 +177,10 @@ async function main(){
     cycleIsolationEnrollments[browser]=cycleEnrollmentId;
   }
 
-  const files=externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)));
+  const files={
+    ...(externalFiles??unzipSync(new Uint8Array(fs.readFileSync(zipPath)))),
+    'qa-local-active-marker.txt':activeMarker,
+  };
   const manifestBytes=files['imsmanifest.xml'];
   assert(manifestBytes instanceof Uint8Array,'QA_MANIFEST_MISSING');
   const manifestSha256=createHash('sha256').update(manifestBytes).digest('hex');
