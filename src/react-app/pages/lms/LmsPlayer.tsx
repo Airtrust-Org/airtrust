@@ -1377,7 +1377,7 @@ export default function LmsPlayer() {
     );
   }
 
-  if (matriculaIsError) {
+  if (matriculaIsError && !matricula) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-5 text-center text-white"
         role="alert">
@@ -1484,6 +1484,16 @@ export default function LmsPlayer() {
           </button>
         </div>
       </header>
+
+      {matriculaIsError && matricula ? (
+        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-400/40 bg-amber-950/70 px-4 py-2 text-xs text-amber-100">
+          <span>A atualização do progresso não respondeu. O conteúdo aberto foi preservado; verifique o registro antes de encerrar o curso.</span>
+          <button type="button" onClick={() => void refetchMatricula()}
+            className="rounded-lg border border-amber-300/40 px-3 py-1.5 font-semibold hover:bg-amber-900/60">
+            Atualizar situação
+          </button>
+        </div>
+      ) : null}
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
         <div className="flex w-full shrink-0 flex-col items-stretch gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100 sm:flex-row sm:items-start">

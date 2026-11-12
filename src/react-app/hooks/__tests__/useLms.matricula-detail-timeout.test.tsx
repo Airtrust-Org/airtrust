@@ -47,6 +47,22 @@ describe('LMS enrollment detail player load', () => {
     unmount();client.clear();
   });
 
+  it('keeps a previously loaded enrollment in cache when a background refresh fails', async () => {
+    const row = {id:2058,curso_id:68,empresa_id:6,
+      status:'EM_ANDAMENTO',progresso_pct:100,ultimo_slide:59};
+    authFetch.mockResolvedValueOnce({ok:true,json:async()=>({success:true,data:row})});
+    authFetch.mockResolvedValue({ok:false,status:503,json:async()=>({
+      success:false,error:'A consulta temporariamente falhou',
+    })});
+    const {client,wrapper}=setup();
+    const {result,unmount}=renderHook(()=>useMatriculaDetalhe(2058),{wrapper});
+    await waitFor(()=>expect(result.current.isSuccess).toBe(true));
+    await act(async()=>{await result.current.refetch();});
+    expect(result.current.data).toMatchObject(row);
+    await waitFor(()=>expect(result.current.error?.message).toMatch(/temporariamente falhou/), {timeout:3500});
+    unmount();client.clear();
+  });
+
   it('surfaces server 409/403 rather than labelling a real enrollment absent', async () => {
     authFetch.mockResolvedValue({ok:false,status:409,
       json:async()=>({success:false,error:'Sessão SCORM temporariamente indisponível'})});
