@@ -194,7 +194,12 @@ describe('ProtectedRoute auth hydration', () => {
 
     renderProtectedRoute();
 
-    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/me'))).toBe(true),
+    );
+    await waitFor(() =>
+      expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/empresas'))).toBe(true),
+    );
     expect(screen.getByText('protected.loading')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/rota-protegida');
     expect(screen.queryByText('login')).not.toBeInTheDocument();
@@ -203,6 +208,46 @@ describe('ProtectedRoute auth hydration', () => {
 
     await waitFor(() => expect(screen.getByText('conteúdo protegido')).toBeInTheDocument());
     expect(screen.getByTestId('location')).toHaveTextContent('/rota-protegida');
+  });
+
+  it('inicia empresas sem aguardar /me e mantém rota bloqueada até confirmar ambos', async () => {
+    const me = deferred<Response>();
+    const empresas = deferred<Response>();
+    apiFetchMock.mockImplementation((input: RequestInfo | URL) => {
+      if (String(input).includes('/api/auth/me')) return me.promise;
+      if (String(input).includes('/api/auth/empresas')) return empresas.promise;
+      throw new Error('unexpected URL');
+    });
+
+    renderProtectedRoute();
+
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('protected.loading')).toBeInTheDocument();
+    expect(screen.queryByText('conteúdo protegido')).not.toBeInTheDocument();
+
+    await act(async () => me.resolve(meResponse()));
+    expect(screen.getByText('protected.loading')).toBeInTheDocument();
+
+    await act(async () => empresas.resolve(empresasResponse()));
+    await waitFor(() => expect(screen.getByText('conteúdo protegido')).toBeInTheDocument());
+  });
+
+  it('não aplica empresas obtidas com token cuja identidade foi negada', async () => {
+    const empresas = deferred<Response>();
+    apiFetchMock.mockImplementation((input: RequestInfo | URL) => {
+      if (String(input).includes('/api/auth/me')) {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      if (String(input).includes('/api/auth/empresas')) return empresas.promise;
+      throw new Error('unexpected URL');
+    });
+    refreshAccessTokenMock.mockRejectedValue({ terminal: true });
+
+    renderProtectedRoute();
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
+    await act(async () => empresas.resolve(empresasResponse()));
+    await waitFor(() => expect(screen.getByText('login')).toBeInTheDocument());
+    expect(screen.queryByText('conteúdo protegido')).not.toBeInTheDocument();
   });
 
   it('mantém a rota enquanto refresh é necessário e libera normalmente após a rotação', async () => {
