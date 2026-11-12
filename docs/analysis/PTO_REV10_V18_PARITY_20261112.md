@@ -59,3 +59,15 @@ O auditor é **fail-closed**: código de saída não zero enquanto houver diverg
 ## Status
 
 **NO-GO para afirmar conformidade de 100% ou fazer importação curricular em produção.** Auditoria documental e testes focados concluídos; corrigir os dados dos pacotes e confrontar produção ainda é trabalho aberto. Nenhuma alteração de D1, curso, ficha, guia publicado ou deploy nesta frente.
+
+## Pacote de revisão canônica gerado nesta frente
+
+O script `scripts/operations/build-pto-rev10-v18-review-pack.py` extrai diretamente do DOCX V18 aprovado, sem bibliotecas externas, os 82 currículos, as 1.476 relações técnicas, os 15 elementos NOTECHS e 82 **rascunhos** HTML de guias. Executado em 12/11/2026: contagens 82/1476/15/82 confirmadas. O manifesto gerado marca explicitamente `NAO_APROVADO_NAO_IMPORTAVEL_NAO_PUBLICAVEL`: não contém critérios SOP/QRH inventados e exige revisão técnica antes do uso operacional.
+
+Exemplo (somente arquivos privados locais, não commitar artefatos do PTO):
+
+```bash
+python3 scripts/operations/build-pto-rev10-v18-review-pack.py \
+  --pto /caminho/PRG-OPS-001_PTO_Rev10_V18.docx \
+  --out /tmp/pto-rev10-v18-review
+```
