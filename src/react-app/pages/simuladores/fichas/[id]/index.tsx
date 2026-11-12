@@ -1284,7 +1284,7 @@ export default function FichaDetalhe() {
     setHistoricoNotechsCarregando(true);
     try {
       const token = getAccessToken();
-      const response = await fetch(
+      const response = await appFetch(
         `${API_BASE_URL}/simuladores/fichas/notechs/historico/${colaboradorId}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
