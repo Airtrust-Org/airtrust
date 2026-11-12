@@ -1386,7 +1386,10 @@ describe('training compliance engine', () => {
     sqlite.database.exec("UPDATE treinamento_requisitos SET auto_matricular_ead=0 WHERE empresa_id=6");
     expect((await (await app.request('/reconciliacao/matricular-pendentes', {method:'POST',body:JSON.stringify({aplicar:false})})).json() as any).data.pendentes).toBe(0);
     sqlite.database.exec("UPDATE treinamento_requisitos SET auto_matricular_ead=1,modalidade_requerida=NULL WHERE empresa_id=6");
-    expect((await (await app.request('/reconciliacao/matricular-pendentes', {method:'POST',body:JSON.stringify({aplicar:false})})).json() as any).data.pendentes).toBe(0);
+    // Costa do Sol: NULL evidence modality cannot suppress an explicitly opted-in EAD course.
+    // A preview remains read-only; the published unique course is still mandatory.
+    expect((await (await app.request('/reconciliacao/matricular-pendentes', {method:'POST',body:JSON.stringify({aplicar:false})})).json() as any).data.pendentes).toBe(1);
+    expect((sqlite.database.prepare('SELECT COUNT(*) n FROM lms_matriculas').get() as any).n).toBe(0);
   });
 
   it('gera a matrícula Regras de Ouro uma vez, sem reabrir ciclo já ativo', async () => {
