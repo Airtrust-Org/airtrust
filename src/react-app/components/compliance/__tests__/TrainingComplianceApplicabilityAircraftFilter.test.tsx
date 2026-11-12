@@ -144,6 +144,45 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     expect(screen.getByText(/Sem regra aplicável, o treinamento já não é obrigatório/)).toBeInTheDocument();
   });
 
+  it('requires explicit EAD opt-in, then sends auto enrollment only when selected', async () => {
+    renderEditor();
+    await screen.findByRole('option', { name: 'Tripulação' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: '10' } });
+    const auto = screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/);
+    expect(auto).not.toBeChecked();
+    fireEvent.click(auto);
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar requisito' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/regras', expect.objectContaining({ method: 'POST' }),
+    ));
+    const call = fetchWithAuthMock.mock.calls.find(([url, init]) =>
+      url === '/api/compliance-treinamentos/regras' && init?.method === 'POST');
+    const body = JSON.parse(String((call?.[1] as RequestInit)?.body));
+    expect(body.modalidade_requerida).toBe('EAD');
+    expect(body.auto_matricular_ead).toBe(true);
+  });
+
+  it('defaults to no EAD automation and disables opt-in for a different modality', async () => {
+    renderEditor();
+    await screen.findByRole('option', { name: 'Tripulação' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: '10' } });
+    fireEvent.click(screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar referência e criticidade' }));
+    fireEvent.change(screen.getByLabelText('Modalidade requerida'), { target: { value: 'PRESENCIAL' } });
+    expect(screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/)).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar requisito' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/regras', expect.objectContaining({ method: 'POST' }),
+    ));
+    const call = fetchWithAuthMock.mock.calls.find(([url, init]) =>
+      url === '/api/compliance-treinamentos/regras' && init?.method === 'POST');
+    expect(JSON.parse(String((call?.[1] as RequestInit)?.body))).toMatchObject({
+      modalidade_requerida: 'PRESENCIAL', auto_matricular_ead: false,
+    });
+  });
+
   it('keeps aircraft hidden for non-crew sectors', async () => {
     renderEditor();
 
