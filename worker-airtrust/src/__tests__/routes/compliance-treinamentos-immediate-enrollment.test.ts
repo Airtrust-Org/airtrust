@@ -82,3 +82,18 @@ describe('Compliance requirement save enrollment synchronization', () => {
     expect(put).toContain('data: enrollment');
   });
 });
+
+
+describe('Tenant-scoped designation enrollment synchronization',()=>{
+  it('mutating assignment query includes the same tenant-6 null modality gate as diagnostics',()=>{
+    const code=readFileSync(resolve(process.cwd(),'src/routes/compliance-treinamentos-conditions.ts'),'utf8');
+    const writer=code.slice(code.indexOf('async function autoEnrollAssignedConditionRequirements'),
+      code.indexOf('async function inspectAssignedConditionEnrollmentContract'));
+    expect(writer).toContain("tr_assigned.modalidade_requerida='EAD' OR (tr_assigned.modalidade_requerida IS NULL AND tr_assigned.empresa_id=6)");
+    expect(writer).toContain("COALESCE(tr_assigned.auto_matricular_ead,0)=1");
+    expect(writer).toContain("Number(row.course_count)!==1");
+    expect(writer).toContain("summary.created+=1");
+    expect(writer).toContain("summary.skipped_valid_evidence+=1");
+    expect(writer).toContain("ensureMatriculaCycle(");
+  });
+});

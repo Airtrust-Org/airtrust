@@ -34,7 +34,9 @@ function d1(sql, mutating=false) {
   return {rows:payload.flatMap(x=>x.results||[]),changes:payload.reduce((n,x)=>n+Number(x.meta?.changes||0),0)};
 }
 function readState() {
-  const rules=d1(`SELECT tr.id,tr.qualificacao_tipo_id,tr.escopo,tr.condicao_id,tr.fundamento_tipo,
+  const rules=d1(`SELECT tr.id,tr.qualificacao_tipo_id,tr.escopo,tr.setor_id,tr.funcao_id,
+       tr.funcionario_id,tr.aeronave_modelo,tr.condicao_id,tr.fundamento_tipo,
+       tr.vigencia_inicio,tr.vigencia_fim,tr.obrigatoriedade,tr.perfil_competencia,
        tr.modalidade_requerida,tr.auto_matricular_ead,tr.ativo,tr.deleted_at,
        qt.codigo,qt.categoria,qt.deleted_at qualification_deleted,
        (SELECT COUNT(*) FROM lms_cursos c WHERE c.empresa_id=tr.empresa_id
@@ -62,6 +64,7 @@ function verify(state,post=false){
   for(const id of REVIEWED){
     const r=map.get(id);
     if(!r||Number(r.ativo)!==1||r.deleted_at!=null||r.qualification_deleted!=null
+      ||r.obrigatoriedade!=='OBRIGATORIA'
       ||String(r.categoria).toUpperCase()!=='EAD'||Number(r.published_courses)!==1
       ||r.condicao_id!=null||!['EMPRESA','SETOR','FUNCAO','SETOR_FUNCAO'].includes(r.escopo)
       ||String(r.fundamento_tipo||'').toUpperCase()==='DESIGNACAO')
