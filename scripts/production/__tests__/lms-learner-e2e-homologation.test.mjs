@@ -15,6 +15,7 @@ import {
   enrollLearner,
   assignSyntheticQaCourse,
   clickCanonicalLearnerRegistration,
+  shouldRetryCanonicalRegistration,
   waitForCanonicalScormWrapperReady,
   assertQaLearnerIdentity,
   evaluateAssessmentPolicy,
@@ -1771,4 +1772,18 @@ test('reloaded SCORM wrapper must never be inferred ready from just the player b
     getByRole: () => ({ count: async () => 1 }),
   };
   assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+});
+
+test('finalization retry requires authentic 100% backend and complete authored coverage', () => {
+  const allowed = { isPlayerRoute: true, atLastUnit: true, visitedUnits: 63, totalUnits: 63,
+    backendStatus: 'EM_ANDAMENTO', backendProgress: 100, assessmentFailed: false };
+  assert.equal(shouldRetryCanonicalRegistration(allowed), true);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, visitedUnits: 62 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, atLastUnit: false }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, totalUnits: 0 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendProgress: 99 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendStatus: 'CONCLUIDO' }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendStatus: 'REPROVADO' }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, assessmentFailed: true }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, isPlayerRoute: false }), false);
 });

@@ -1295,6 +1295,25 @@ export async function clickCanonicalLearnerRegistration(page, timeoutMs = 15_000
   return false;
 }
 
+/**
+ * A second REAL learner click is permitted only after the package's last
+ * authored unit was actually visited and the authenticated server confirms
+ * raw 100% progress without an accepted completion. A 99% display alone,
+ * a failed assessment or a partial journey never authorizes this retry.
+ */
+export function shouldRetryCanonicalRegistration({
+  isPlayerRoute, atLastUnit, visitedUnits, totalUnits, backendStatus, backendProgress,
+  assessmentFailed = false,
+}) {
+  return isPlayerRoute === true &&
+    atLastUnit === true &&
+    Number.isSafeInteger(totalUnits) && totalUnits > 0 &&
+    Number.isSafeInteger(visitedUnits) && visitedUnits === totalUnits &&
+    String(backendStatus || '').toUpperCase() === 'EM_ANDAMENTO' &&
+    Number(backendProgress) === 100 &&
+    assessmentFailed !== true;
+}
+
 async function driveScormCourseInBrowser({
   browserEngine,
   token,
@@ -2185,10 +2204,47 @@ async function driveScormCourseInBrowser({
   }
 
   await page.waitForTimeout(1000);
+
+  // On some browsers, the first legitimate click commits a last-slide save
+  // but loses the explicit finalization during a React re-render. We verify
+  // the authoritative enrollment FIRST and retry the real UI once, never by
+  // sending a direct API completion or fabricating SCORM terminal evidence.
+  let detail = await getMatriculaDetail(token, matriculaId);
+  if (shouldRetryCanonicalRegistration({
+    isPlayerRoute: targetUrl === playerUrl,
+    atLastUnit: finalAtLastUnit,
+    visitedUnits: visitedUnitIds.size,
+    totalUnits: totalUnitsDetected,
+    backendStatus: detail.status,
+    backendProgress: detail.progresso_pct,
+    assessmentFailed: String(lastRuntimeState?.lessonStatus || '').toLowerCase() === 'failed',
+  })) {
+    await delay(1500);
+    detail = await getMatriculaDetail(token, matriculaId);
+    if (shouldRetryCanonicalRegistration({
+      isPlayerRoute: targetUrl === playerUrl,
+      atLastUnit: finalAtLastUnit,
+      visitedUnits: visitedUnitIds.size,
+      totalUnits: totalUnitsDetected,
+      backendStatus: detail.status,
+      backendProgress: detail.progresso_pct,
+      assessmentFailed: String(lastRuntimeState?.lessonStatus || '').toLowerCase() === 'failed',
+    })) {
+      console.log('[LMS_HOMOLOGATION] Matrícula 100% sem conclusão aceita; retentando UMA confirmação legítima no player...');
+      await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+      if (await waitForCanonicalScormWrapperReady(page, 20_000)) {
+        const retried = await clickCanonicalLearnerRegistration(page, 15_000);
+        if (retried) {
+          console.log('[LMS_HOMOLOGATION] Segunda confirmação legítima acionada; aguardando aceitação canônica...');
+          await delay(3000);
+        }
+      }
+    }
+  }
+
   await browser.close();
 
   // Poll for completion persistence in backend (up to 15s)
-  let detail = await getMatriculaDetail(token, matriculaId);
   for (let poll = 0; poll < 15; poll += 1) {
     if (String(detail.status).toUpperCase() === 'CONCLUIDO' && Number(detail.progresso_pct || 0) === 100) {
       break;
