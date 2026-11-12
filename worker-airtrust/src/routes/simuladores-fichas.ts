@@ -961,6 +961,18 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
       return c.json({ success: false, error: 'Acesso negado', code: 'FORBIDDEN' }, 403);
     }
 
+    // A criação não pode marcar uma ficha como APROVADA/ASSINADA_TOTAL nem
+    // gravar aprovado=1 antes de notas NOTECHS, assinaturas e validações.
+    const novoStatus = String(b.status || 'AVALIACAO_PENDENTE').trim().toUpperCase();
+    const statusCriacaoPermitidos = new Set([
+      'AVALIACAO_PENDENTE', 'AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR',
+    ]);
+    if (!statusCriacaoPermitidos.has(novoStatus) ||
+      (b.aprovado !== undefined && b.aprovado !== false && b.aprovado !== 0)) {
+      return c.json({ success: false, code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE',
+        error: 'Nova ficha não pode nascer aprovada; avaliação e assinatura do instrutor são obrigatórias.' }, 409);
+    }
+
     const uuid = crypto.randomUUID();
     const r = await c.env.DB.prepare(
       'INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,tipo_sessao,tipo_aeronave,status,data_sessao,aprovado,empresa_id)VALUES(?,?,?,?,?,?,?,?,?,?)',
@@ -972,9 +984,9 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
         instrutorId,
         b.tipo_sessao,
         b.tipo_aeronave || null,
-        b.status || 'AVALIACAO_PENDENTE',
+        novoStatus,
         b.data_sessao || new Date().toISOString(),
-        b.aprovado !== undefined ? b.aprovado : 0,
+        0,
         empresaId,
       )
       .run();
@@ -1958,7 +1970,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // instrutor. Impede que PUT /fichas/:id burle a validação NOTECHS
     // alterando diretamente o campo status.
     if (
-      ['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(String(newStatus).toUpperCase()) &&
+      ['APROVADO', 'NAO_APROVADO', 'CONCLUIDA', 'APROVADA', 'ASSINADA_TOTAL'].includes(String(newStatus).toUpperCase()) &&
       !a.assinatura_instrutor_timestamp
     ) {
       return c.json(

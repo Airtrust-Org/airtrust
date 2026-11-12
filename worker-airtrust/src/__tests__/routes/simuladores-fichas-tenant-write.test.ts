@@ -228,6 +228,26 @@ describe('simuladores fichas tenant-aware writes', () => {
     expect(insert?.args.at(-1)).toBe(6);
   });
 
+  it.each([
+    { status: 'APROVADO' },
+    { status: 'ASSINADA_TOTAL' },
+    { status: 'APROVADA' },
+    { aprovado: true },
+    { aprovado: 1 },
+  ])('POST /fichas não permite criar ficha aprovada sem avaliação e assinatura: %j', async (overrides) => {
+    const { db, runs } = createDbMock();
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colaborador_id_aluno: 10, instrutor_id: 11,
+          tipo_sessao: 'PER', ...overrides }),
+      }), { DB: db, __mockEmpresaId: 6 } as unknown as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE' });
+    expect(runs.some((row) => row.query.includes('INSERT INTO fichas_sessao'))).toBe(false);
+  });
+
   it('POST /fichas bloqueia aluno/instrutor fora do tenant', async () => {
     const { db, runs } = createDbMock({ invalidTenantLink: true });
 
@@ -279,7 +299,7 @@ describe('simuladores fichas tenant-aware writes', () => {
     );
   });
 
-  it.each(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'])(
+  it.each(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA', 'APROVADA', 'ASSINADA_TOTAL'])(
     'PUT /fichas/:id não permite forçar status final %s sem assinatura', async (status) => {
       const { db, runs } = createDbMock({ manobrasCount: 18 });
       const response = await simuladoresFichasRoutes.fetch(
