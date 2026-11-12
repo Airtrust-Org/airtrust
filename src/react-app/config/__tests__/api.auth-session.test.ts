@@ -56,6 +56,35 @@ describe('auth session storage', () => {
     });
   });
 
+  it('aceita JWT base64url com - e _ e mantém acesso após login', async () => {
+    const module = await import('../api');
+
+    for (const marker of ['~~~~', '????']) {
+      const payload = {
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        sub: '1',
+        marker,
+      };
+      const base64url = btoa(JSON.stringify(payload))
+        .replace(/\\+/g, '-')
+        .replace(/\\//g, '_')
+        .replace(/=+$/, '');
+      expect(base64url).toMatch(marker === '~~~~' ? /-/ : /_/);
+
+      const token = `header.${base64url}.signature`;
+      module.setTokens(token);
+      expect(module.getAccessToken()).toBe(token);
+      expect(module.getTokenExpiryTimeMs(token)).toBe(payload.exp * 1000);
+    }
+  });
+
+  it('recusa JWT com payload malformado sem lançar exceção', async () => {
+    const module = await import('../api');
+    module.setTokens('header.invalid!.signature');
+    expect(module.getAccessToken()).toBeNull();
+    expect(module.getTokenExpiryTimeMs('header.invalid!.signature')).toBeNull();
+  });
+
   it('mantém a sessão persistente por padrão na política atual', async () => {
     const module = await import('../api');
 
