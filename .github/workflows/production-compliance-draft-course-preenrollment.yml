@@ -64,7 +64,6 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: worker-airtrust/package-lock.json
-      - run: npm --prefix worker-airtrust ci
       - name: Verify all eight official main gates
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -82,6 +81,11 @@ jobs:
           git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- scripts/production/prepare-compliance-draft-courses-20261112.mjs
           git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- worker-airtrust/package-lock.json
           git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- worker-airtrust/package.json
+      - name: Install exact approved production Worker dependencies
+        run: |
+          set -euo pipefail
+          npm --prefix worker-airtrust ci
+          node -e "const lock=require('./worker-airtrust/package-lock.json');const installed=require('./worker-airtrust/node_modules/wrangler/package.json');const expected=lock.packages?.['node_modules/wrangler']?.version;if(!expected||installed.version!==expected)process.exit(1)"
       - name: Validate production credentials and managed D1 access
         run: |
           set -euo pipefail
