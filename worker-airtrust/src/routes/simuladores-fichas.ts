@@ -647,7 +647,7 @@ app.get('/fichas/notechs/historico/:funcionarioId', async (c) => {
           AND fs.colaborador_id_aluno = ?
           AND fs.deleted_at IS NULL
         ORDER BY fs.data_sessao DESC, fs.id DESC, m.ordem
-        LIMIT 3001`,
+        LIMIT 1000`,
     ).bind(empresaId, funcionarioId).all<{
       ficha_id: number;
       data_sessao: string | null;
@@ -661,7 +661,7 @@ app.get('/fichas/notechs/historico/:funcionarioId', async (c) => {
       observacoes: string | null;
     }>();
     const rows = data.results || [];
-    if (rows.length > 3000) {
+    if (rows.length >= 1000) {
       return c.json({ success: false, code: 'NOTECHS_HISTORY_LIMIT_EXCEEDED',
         error: 'Histórico excede o limite da consulta; use extração paginada controlada.' }, 409);
     }
