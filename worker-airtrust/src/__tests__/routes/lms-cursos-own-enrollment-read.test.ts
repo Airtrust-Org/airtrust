@@ -63,3 +63,21 @@ describe('LMS catalog operational enrollment count', () => {
     expect(source).toContain("m.status = 'CONCLUIDO' AND m.deleted_at IS NULL");
   });
 });
+
+describe('LMS catalog — own enrollment visibility contract', () => {
+  it('uses the same tenant/employee/active-enrollment boundary as detail without broadening management access', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-cursos-legacy.ts'), 'utf8');
+    const start = source.indexOf("const ownEnrollmentPredicate = access.mode === 'self'");
+    const end = source.indexOf("let where = 'WHERE c.empresa_id", start);
+    expect(start).toBeGreaterThan(0);
+    const predicate = source.slice(start, end);
+    expect(predicate).toContain('own_m.empresa_id = c.empresa_id');
+    expect(predicate).toContain('own_m.curso_id = c.id');
+    expect(predicate).toContain('own_m.funcionario_id = ?');
+    expect(predicate).toContain('own_m.deleted_at IS NULL');
+    expect(predicate).toContain("own_m.status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO')");
+    expect(source).toContain("...(ownEnrollmentPredicate && access.mode === 'self' ? [access.funcionarioId] : [])");
+    expect(source).toContain("where += ` AND ${ownEnrollmentPredicate}`");
+    expect(source).toContain("const allowedScopes = [...scopeClauses, ...(ownEnrollmentPredicate ? [ownEnrollmentPredicate] : [])]");
+  });
+});
