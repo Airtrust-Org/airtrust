@@ -149,3 +149,14 @@ test('production repair never creates a placeholder or silently enrolls when no 
 test('pending independent validation is always reviewed manually without enrollment', () => {
   assert.match(script, /status === 'EM_ANDAMENTO' \|\| status === 'PENDENTE_VALIDACAO'/);
 });
+
+
+test('one-shot enrollment mode includes mandatory policy-disabled targets without cancellations', () => {
+  assert.match(script, /enrollmentOnly = \['enroll-dry-run', 'enroll-apply'\]/);
+  assert.match(script, /oneShotPolicyOverrideCount \+= 1/);
+  assert.match(script, /if \(!enrollmentOnly\) \{\s+summary\.cancelled_wrong_enrollments/);
+  assert.match(script, /if \(!enrollmentOnly && after\.wrong_count !== 0\)/);
+  assert.match(script, /cancellation_scope: enrollmentOnly \? 'none'/);
+  assert.match(workflow, /REVIEWED_ENROLLMENT_MODE_MISMATCH/);
+  assert.match(workflow, /REVIEWED_CANCELLATION_SCOPE_INVALID/);
+});
