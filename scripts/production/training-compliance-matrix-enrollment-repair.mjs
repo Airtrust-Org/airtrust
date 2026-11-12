@@ -504,8 +504,8 @@ function chunk(items, size = 200) {
   return out;
 }
 
-async function enrollMissingPairs(token) {
-  const state = await readState(token);
+async function enrollMissingPairs(token, state) {
+  // Use precisely the candidate set whose count/hash was approved immediately before apply.
   if (state.ambiguous_course_types.length > 0) fail('AMBIGUOUS_ACTIVE_COURSE_MAPPING');
   if (state.no_course_count > 0) fail('REQUIRED_EAD_COURSE_STILL_MISSING_AFTER_CREATE');
 
@@ -721,7 +721,7 @@ async function main() {
   if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW');
   verifyReviewedState(before);
 
-  const enrollmentResult = await enrollMissingPairs(token);
+  const enrollmentResult = await enrollMissingPairs(token, before);
   summary.created_enrollments = enrollmentResult.created;
   summary.ignored_existing = enrollmentResult.ignored;
 
@@ -734,7 +734,6 @@ async function main() {
     summary.cancelled_redundant_valid_evidence_enrollments = cancelReviewedRedundantEnrollments(
       before.redundant_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
     );
-  
   }
 
   const after = await readState(token);
