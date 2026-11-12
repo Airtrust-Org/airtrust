@@ -311,6 +311,14 @@ function unwrapUploadResult<T>(result: LmsUploadResponse<T>): T {
   return result.data as T;
 }
 
+// Preserve HTTP status without exposing backend exception details to the learner.
+export class LmsRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'LmsRequestError';
+  }
+}
+
 // ── API helper ────────────────────────────────────────────────────────────────
 
 async function lmsRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -324,7 +332,7 @@ async function lmsRequest<T>(path: string, init?: RequestInit): Promise<T> {
     error?: string;
     pagination?: unknown;
   };
-  if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+  if (!res.ok || !json.success) throw new LmsRequestError(json.error ?? `HTTP ${res.status}`, res.status);
   return json.data as T;
 }
 

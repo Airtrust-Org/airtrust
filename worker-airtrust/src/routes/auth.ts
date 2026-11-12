@@ -720,6 +720,17 @@ authRoutes.post(
       return c.json({ success: true });
     }
 
+    // This is a global delivery prerequisite, checked before looking up the
+    // address. Returning the same unavailable status to every address avoids
+    // account enumeration while preventing false 'email sent' confirmations.
+    if (!c.env.BREVO_API_KEY?.trim()) {
+      logger.warn('[AUTH] forgot-password: PASSWORD_RESET_DELIVERY_UNAVAILABLE');
+      return c.json(
+        { success: false, code: 'PASSWORD_RESET_DELIVERY_UNAVAILABLE' },
+        503,
+      );
+    }
+
     try {
       const db = c.env.DB;
       const { activeWhere } = await getUsuariosSchema(db);
@@ -736,7 +747,7 @@ authRoutes.post(
         .bind(email)
         .first<{ id: number; email: string }>();
 
-      if (user && c.env.BREVO_API_KEY) {
+      if (user) {
         const token = await issuePasswordResetToken(db, user.id, user.email);
         const resetUrl = buildResetPasswordUrl(c.env.FRONTEND_URL, token);
         const assunto = '[AirTrust] Recuperação de senha';
