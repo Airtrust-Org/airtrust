@@ -40,7 +40,7 @@ function row() {
     suspend_data:suspend,lesson_status:'incomplete',
   };
 }
-function fakeDb(enrollment: ReturnType<typeof row> | null) {
+function fakeDb(enrollment: ReturnType<typeof row> | null, auditReceipt = true) {
   const statements: Array<{sql:string; args:unknown[]}> = [];
   const db = {
     prepare(sql:string) {
@@ -48,17 +48,18 @@ function fakeDb(enrollment: ReturnType<typeof row> | null) {
       statements.push(stmt);
       const api = {
         bind(...values:unknown[]) {stmt.args=values;return api;},
-        async first(){return enrollment;},
+        async first(){return sql.includes('SELECT 1 AS acknowledged')
+          ? (auditReceipt ? {acknowledged:1} : null) : enrollment;},
       };
       return api;
     },
     batch:vi.fn(async () => statements.slice(-3).map(() => ({
-      success:true,meta:{changes:1},
+      success:true,meta:{changes:0},
     }))),
   };
   return {db:db as unknown as D1Database,batch:db.batch,statements};
 }
-function fixture(opts:{role?:string;enrollment?:ReturnType<typeof row>|null}={}) {
+function fixture(opts:{role?:string;enrollment?:ReturnType<typeof row>|null;auditReceipt?:boolean}={}) {
   const app = new Hono<{Bindings:Env}>();
   app.onError(errorHandler);
   app.use('*',async (c,next) => {
@@ -68,7 +69,8 @@ function fixture(opts:{role?:string;enrollment?:ReturnType<typeof row>|null}={})
     await next();
   });
   registerLmsIncompleteInteractionRecoveryRoute(app);
-  const {db,batch,statements}=fakeDb(opts.enrollment===undefined?row():opts.enrollment);
+  const {db,batch,statements}=fakeDb(
+    opts.enrollment===undefined?row():opts.enrollment,opts.auditReceipt);
   const bucket={
     get:vi.fn(async () => ({
       size:300,text:async()=>`window.COURSE_DATA=${JSON.stringify(model)};`,
@@ -99,7 +101,7 @@ describe('authenticated recovery of missing authored interactions', () => {
       success:true,data:{resume_position:2,missing_scenarios:1,qualification_granted:false},
     });
     expect(t.batch).toHaveBeenCalledTimes(1);
-    const updates=t.statements.slice(-3);
+    const updates=t.statements.slice(-4,-1);
     expect(updates[0].sql).toContain('UPDATE lms_progresso_scorm');
     expect(updates[1].sql).toContain('UPDATE lms_matriculas');
     expect(updates[2].sql).toContain('SCORM_MISSING_DECISION_RECOVERY');
@@ -107,6 +109,20 @@ describe('authenticated recovery of missing authored interactions', () => {
     expect(cmi['cmi.core.lesson_status']).toBe('incomplete');
     expect(JSON.parse(cmi['cmi.suspend_data']).d).toEqual([0,2]);
     expect(JSON.parse(cmi['cmi.suspend_data']).s).toEqual({});
+  });
+  it('fails closed if batch reports success but exact committed CMI and audit are absent',async()=>{
+    const t=fixture({auditReceipt:false});
+    const response=await t.post();
+    expect(response.status).toBe(409);
+    expect(t.batch).toHaveBeenCalledTimes(1);
+    expect(t.statements.at(-1)?.sql).toContain('SELECT 1 AS acknowledged');
+  });
+  it('accepts committed readback even when D1 metadata changes reports zero',async()=>{
+    const t=fixture();
+    const response=await t.post();
+    expect(response.status).toBe(200);
+    expect(t.statements.at(-1)?.sql).toContain('SCORM_MISSING_DECISION_RECOVERY');
+    expect(t.statements.at(-1)?.sql).toContain("a.new_values=?");
   });
   it('rejects foreign learner and performs no writes',async()=>{
     mocks.resolveFuncionario.mockResolvedValue(99);

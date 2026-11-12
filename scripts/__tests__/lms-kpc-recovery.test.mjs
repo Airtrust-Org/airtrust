@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CASES, validateCaseState } from '../production/lms-kpc-recovery.mjs';
+import { CASES, validateCaseState, parsePinnedCaseSelection } from '../production/lms-kpc-recovery.mjs';
 test('KPC production repair has exactly three pinned identities', ()=>{
   assert.deepEqual(CASES.map(x=>x.id),[2058,1223,681]);
   assert.deepEqual(CASES.map(x=>x.course),[68,8,39]);
@@ -38,4 +38,18 @@ test('trusted workflow verifies fully gated deployed ancestor rather than moving
   assert.match(workflow, /\[\[ "\$live" == "\$EXPECTED_PRODUCTION_SHA" \]\]/);
   assert.match(runner, /sha===process\.env\.RELEASE_SHA/);
   assert.doesNotMatch(runner, /sha===process\.env\.GITHUB_SHA/);
+});
+
+test('recover only previously unmodified pinned enrollments; never touch Karl on retry',()=>{
+  assert.deepEqual(parsePinnedCaseSelection('1223,681').map(c=>c.id),[1223,681]);
+  assert.deepEqual(parsePinnedCaseSelection('2058').map(c=>c.id),[2058]);
+  for(const invalid of ['','  ','2058,2058','1223,999','2058,1223,681,999','1','2058;1223']) {
+    assert.throws(()=>parsePinnedCaseSelection(invalid));
+  }
+});
+test('production workflow only accepts an explicit strict subset of the pinned IDs', async()=>{
+  const {readFileSync}=await import('node:fs');
+  const s=readFileSync('.github/workflows/production-lms-kpc-recovery.yml','utf8');
+  assert.match(s,/LMS_KPC_CASE_IDS: \$\{\{ inputs.case_ids \}\}/);
+  assert.match(s,/\^\(2058\|1223\|681\)\(,\(2058\|1223\|681\)\)\*\$/);
 });

@@ -12,6 +12,13 @@ export const CASES = Object.freeze([
   { id:1223, employee:22, course:8, progress:100, recover:'scorm-missing-interactions-recover', expectedPosition:15 },
   { id:681, employee:67, course:39, progress:51, recover:'scorm-edition-handoff', expectedPosition:26 },
 ]);
+export function parsePinnedCaseSelection(raw) {
+  const ids = String(raw || '').split(',').map(x => x.trim());
+  assert(ids.length > 0 && ids.length <= CASES.length, 'KPC_CASE_SELECTION_INVALID');
+  assert(ids.every(x => /^(2058|1223|681)$/.test(x)), 'KPC_CASE_NOT_AUTHORIZED');
+  assert(new Set(ids).size === ids.length, 'KPC_DUPLICATE_CASE');
+  return ids.map(id => CASES.find(entry => entry.id === Number(id)));
+}
 const TENANT=6;
 const mode=process.env.LMS_KPC_MODE || 'inspect';
 const sha=String(process.env.EXPECTED_PRODUCTION_SHA||'').toLowerCase();
@@ -76,9 +83,10 @@ export async function executeRecovery() {
     String(version.json?.data?.sourceSha||'').toLowerCase()===sha,
     'KPC_PRODUCTION_SHA_MISMATCH');
 
+  const selected = parsePinnedCaseSelection(process.env.LMS_KPC_CASE_IDS || '2058,1223,681');
   const token=await adminToken();
   const preflight=[];
-  for(const entry of CASES) {
+  for(const entry of selected) {
     const response=await request(`/api/lms/matriculas/${entry.id}`,token);
     assert(response.status===200, `KPC_DETAIL_HTTP_${entry.id}_${response.status}`);
     validateCaseState(response.json?.data,entry);
@@ -87,7 +95,7 @@ export async function executeRecovery() {
   if(mode==='inspect') return {version:1,mode,sha,tenant:TENANT,preflight,writes:0};
 
   const applied=[];
-  for(const entry of CASES) {
+  for(const entry of selected) {
     const response=await request(
       `/api/lms/matriculas/${entry.id}/${entry.recover}`,token,
       {method:'POST',body:{}},
