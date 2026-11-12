@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 import { showToast } from '@/react-app/utils/toast';
 import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 import { invalidateComplianceDependents } from './complianceCacheInvalidation';
@@ -146,6 +147,7 @@ export function TrainingComplianceApplicabilityEditor({
   const tipoId = Number(qualificacaoTipoId || 0);
   const enabled = Number.isInteger(tipoId) && tipoId > 0;
   const { isAdmin, isGestor } = usePermissions();
+  const { empresaId } = useTenantQueryKey();
   const canEdit = isAdmin || isGestor;
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<Scope>('SETOR_FUNCAO');
@@ -756,13 +758,13 @@ export function TrainingComplianceApplicabilityEditor({
                   <input
                     type="checkbox"
                     aria-label={`Habilitar matrícula EAD automática da regra ${rule.id}`}
-                    checked={Number(rule.auto_matricular_ead) === 1 && rule.modalidade_requerida === 'EAD'}
+                    checked={Number(rule.auto_matricular_ead) === 1 && (rule.modalidade_requerida === 'EAD' || (empresaId === 6 && rule.modalidade_requerida == null))}
                     disabled={editBlocked || updateRule.isPending}
                     onChange={(event) =>
                       updateRule.mutate({
                         id: rule.id,
                         patch: event.target.checked
-                          ? { modalidade_requerida: 'EAD', auto_matricular_ead: true }
+                          ? { ...(empresaId === 6 && rule.modalidade_requerida == null ? {} : { modalidade_requerida: 'EAD' }), auto_matricular_ead: true }
                           : { auto_matricular_ead: false },
                       })
                     }

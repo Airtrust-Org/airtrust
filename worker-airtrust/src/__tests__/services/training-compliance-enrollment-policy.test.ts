@@ -22,3 +22,12 @@ describe('matrícula ao salvar requisitos de Compliance', () => {
     expect(trainingComplianceNeedsImmediateEnrollmentOnRuleSave('VENCENDO')).toBe(false);
   });
 });
+
+import { complianceAllowsEadEnrollment } from '../../services/training-compliance-enrollment-policy';
+test('only explicit tenant 6 EAD opt-in may have null historical modality',()=>{
+  expect(complianceAllowsEadEnrollment(1,null,6)).toBe(true);
+  expect(complianceAllowsEadEnrollment(0,null,6)).toBe(false);
+  expect(complianceAllowsEadEnrollment(1,'PRESENCIAL',6)).toBe(false);
+  expect(complianceAllowsEadEnrollment(1,null,7)).toBe(false);
+  expect(complianceAllowsEadEnrollment(1,'EAD',7)).toBe(true);
+});

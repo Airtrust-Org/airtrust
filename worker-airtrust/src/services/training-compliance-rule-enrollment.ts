@@ -1,6 +1,6 @@
 import { canReuseMatriculaCycle, hasActiveMatriculaCycle, resetMatriculaForNewCycle } from './lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from './training-compliance-evidence-profile';
-import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave } from './training-compliance-enrollment-policy';
+import { trainingComplianceNeedsImmediateEnrollmentOnRuleSave, complianceAllowsEadEnrollment } from './training-compliance-enrollment-policy';
 import { registrarAuditoria, extrairUsuarioAuditoria } from '../utils/auditoria';
 import { createComplianceEnrollmentAtomic } from './training-compliance-create-enrollment';
 
@@ -76,19 +76,19 @@ async function performComplianceRuleEnrollment<TAccess>(
   }>();
   if (!persistedRule || persistedRule.obrigatoriedade !== 'OBRIGATORIA'
     || persistedRule.auto_matricular_ead !== 1
-    || persistedRule.modalidade_requerida !== 'EAD') return summary;
+    || !complianceAllowsEadEnrollment(persistedRule.auto_matricular_ead,persistedRule.modalidade_requerida,empresaId)) return summary;
 
   const snapshot = await buildSnapshot(db, empresaId, access);
   const rule = snapshot.rules.find((candidate) => candidate.id === ruleId);
   if (!rule || rule.obrigatoriedade !== 'OBRIGATORIA' || rule.auto_matricular_ead !== 1) return summary;
 
   // Never fulfill presencial/hybrid/practical regulatory requirements with an LMS launch.
-  if (rule.modalidade_requerida !== 'EAD') return summary;
+  if (rule.modalidade_requerida !== 'EAD' && !complianceAllowsEadEnrollment(rule.auto_matricular_ead,rule.modalidade_requerida,empresaId)) return summary;
 
   const applicable = snapshot.people.flatMap((person) =>
     person.requisitos
       .filter((req) => req.regra_id === ruleId && req.obrigatoriedade === 'OBRIGATORIA'
-        && req.auto_matricular_ead === 1 && req.modalidade_requerida === 'EAD'
+        && req.auto_matricular_ead === 1 && (req.modalidade_requerida === 'EAD' || (empresaId === 6 && req.modalidade_requerida == null))
         && !req.evidencia_pendente_validacao)
       .map((req) => ({ person, status: req.status_compliance })),
   );
