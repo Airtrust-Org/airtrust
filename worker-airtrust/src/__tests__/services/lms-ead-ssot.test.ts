@@ -69,6 +69,10 @@ function createMockDb(courseCandidates: Array<Record<string, unknown>>) {
         first: async () => {
           calls.push({ query, args, method: 'first' });
 
+          if (query.includes('FROM lms_cursos') && query.includes('WHERE lms_cursos.id = ?')) {
+            return courseCandidates.find(x => Number(x.id) === Number(args[0])
+              && Number(x.empresa_id) === Number(args[1]) && x.deleted_at === null) || null;
+          }
           if (query.includes('FROM qualificacoes_tipos') && query.includes('formato_codigo')) {
             return makeTipoRow();
           }
@@ -165,6 +169,31 @@ describe('lms-ead-ssot', () => {
       (call) => call.query.includes('UPDATE lms_cursos') && call.method === 'run',
     );
     expect(updateCall?.args.at(-2)).toBe(5);
+  });
+
+  it('prioriza curso draft explicitamente criado em vez de ressuscitar edição arquivada', async () => {
+    const { db, calls } = createMockDb([
+      makeCourseRow({ id: 35, ativo: 1, publicado: 0, deleted_at: null,
+        scorm_package_r2_prefix: null, scorm_launch_file: null }),
+      makeCourseRow({ id: 5, ativo: 0, publicado: 1,
+        deleted_at: '2026-07-02 15:56:44', scorm_package_r2_prefix: 'lms/scorm/7/5/',
+        scorm_launch_file: 'index.html', matriculas_total: 13, progressos_scorm_total: 6 }),
+    ]);
+    const cursoId = await syncLmsCourseFromQualificacaoTipo(db, {
+      empresaId: 7, qualificacaoTipoId: 10, preferredCourseId: 35,
+    });
+    expect(cursoId).toBe(35);
+    const update = calls.find(x => x.query.includes('UPDATE lms_cursos') && x.method === 'run');
+    expect(update?.args.at(-2)).toBe(35);
+    expect(update?.query).not.toContain('publicado = 1');
+  });
+  it('rejeita curso preferido arquivado ou de qualificação diferente', async () => {
+    const { db } = createMockDb([
+      makeCourseRow({ id: 35, ativo: 0, deleted_at: '2026-10-01' }),
+    ]);
+    await expect(syncLmsCourseFromQualificacaoTipo(db, {
+      empresaId: 7, qualificacaoTipoId: 10, preferredCourseId: 35,
+    })).rejects.toThrow('SSOT_PREFERRED_COURSE_NOT_ACTIVE_OR_MISMATCHED');
   });
 
   it('falha fechado quando encontra mais de um curso recuperável com evidência equivalente', async () => {

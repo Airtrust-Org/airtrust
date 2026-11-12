@@ -1,0 +1,140 @@
+name: Production Compliance Draft Course Pre-Enrollment
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed and deployed main SHA
+        required: true
+        type: string
+      mode:
+        description: Dry-run first, apply only after reviewed evidence
+        required: true
+        type: choice
+        options: [dry-run, apply]
+      confirmation:
+        description: Exact confirmation phrase for selected mode
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Successful same-SHA dry-run run ID for apply
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-compliance-draft-preenrollment-tenant6
+  cancel-in-progress: false
+jobs:
+  d1_governed_preparation:
+    name: D1 preflight and governed 3 LMS draft courses + 26 NR-12 pre-enrollments
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      COMPLIANCE_DRAFT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      COMPLIANCE_DRAFT_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Validate reviewed main SHA and exact scoped confirmation
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
+          [[ "$COMPLIANCE_DRAFT_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ &&
+             "$GITHUB_SHA" == "$COMPLIANCE_DRAFT_EXPECTED_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$COMPLIANCE_DRAFT_CONFIRMATION" == COMPLIANCE_DRAFT_DRYRUN_ONLY ]] || exit 1
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$COMPLIANCE_DRAFT_CONFIRMATION" == COMPLIANCE_DRAFT_3_COURSES_26_ENROLLMENTS_NO_INVITE ]] || exit 1
+          else exit 1; fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+      - name: Verify all eight official main gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Validate production credentials and managed D1 access
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo D1_CREDENTIALS_UNAVAILABLE >&2; exit 1; }
+          if [[ "${{ inputs.mode }}" == apply ]]; then
+            [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo AUTH_UNAVAILABLE >&2; exit 1; }
+          fi
+      - name: Validate signed same-SHA dry-run evidence
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED" =~ ^[1-9][0-9]*$ ]] || exit 1
+          meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
+          [[ "$(jq -r .name <<<"$meta")" == 'Production Compliance Draft Course Pre-Enrollment' ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$meta")" == success &&
+             "$(jq -r .head_sha <<<"$meta")" == "$GITHUB_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" \
+            --name "compliance-draft-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/result.json"
+          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .sha "$f")" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(jq -r .nr12_expected_staff "$f")" == 26 ]] || exit 1
+          jq -e '(.proposed_course_qualifications | all(. == 45 or . == 120 or . == 203))' "$f" >/dev/null
+          reviewed_hash="$(jq -r .original_state_hash "$f")"
+          [[ "$reviewed_hash" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          echo "COMPLIANCE_DRAFT_REVIEWED_HASH=$reviewed_hash" >> "$GITHUB_ENV"
+      - name: Capture D1 recovery checkpoint
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "D1_TIME_TRAVEL_RECOVERY_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare draft courses and pre-enroll only eligible NR-12 employees
+        env:
+          MODE: ${{ inputs.mode }}
+          COMPLIANCE_DRAFT_RESULT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          node --check scripts/production/prepare-compliance-draft-courses-20261112.mjs
+          node scripts/production/prepare-compliance-draft-courses-20261112.mjs "$MODE"
+          test -s "$COMPLIANCE_DRAFT_RESULT"
+          if [[ "$MODE" == apply ]]; then
+            jq -e '.postconditions_verified==true and .nr12_enrollments_verified==26 and
+              .nr12_cycles_verified==26 and .email_sent==false and .published_courses_created==0' \
+              "$COMPLIANCE_DRAFT_RESULT" >/dev/null
+          fi
+      - name: Publish restricted evidence summary
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/result.json
+        run: |
+          test -s "$REPORT" || exit 0
+          jq '{mode,sha,tenant,original_state_hash,existing_draft_course_id,
+            proposed_course_qualifications,nr12_expected_staff,created_draft_courses,configured_rules,
+            nr12_enrollments_verified,nr12_cycles_verified,postconditions_verified,
+            email_sent,mutated}' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized audit record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compliance-draft-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30

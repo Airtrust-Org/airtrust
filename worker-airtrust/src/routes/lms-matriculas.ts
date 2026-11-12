@@ -9,6 +9,7 @@
 import { completedCancelBlock, completedCancelBlockById } from '../services/lms-matricula-cancel-guard';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
+import { mayNotifyEnrollmentForCourse } from '../services/lms-draft-enrollment-policy';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { auth } from '../middleware/auth';
@@ -601,12 +602,12 @@ app.post('/', async (c) => {
 
   // Verificar se curso existe e está publicado/ativo
   const cursoQuery = canManage
-    ? 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
-    : 'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
+    ? 'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
+    : 'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
   const curso = await db
     .prepare(cursoQuery)
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const funcionario = await db
@@ -656,7 +657,7 @@ app.post('/', async (c) => {
         funcionarioId: funcionario_id,
         qualificacaoTipoId: curso.qualificacao_tipo_id,
       });
-      await createLmsInAppNotification(db, {
+      if (mayNotifyEnrollmentForCourse(curso)) await createLmsInAppNotification(db, {
         funcionarioId: funcionario_id,
         empresaId,
         tipo: 'lms_nova_matricula',
@@ -673,7 +674,7 @@ app.post('/', async (c) => {
           preserved_progress: true, preserved_scorm_state: resume.scormPreserved,
           resumed_status: resume.status, resumed_progress_pct: resume.progressoPct },
       });
-      if (enviar_convite_email)
+      if (mayNotifyEnrollmentForCourse(curso) && enviar_convite_email)
         await sendMatriculaTracked(c, c.env, db, existente.id, {
           funcionarioId: funcionario_id,
           empresaId,
@@ -758,7 +759,7 @@ app.post('/', async (c) => {
       origin: 'MANUAL',
       empresaId,
     });
-    await createLmsInAppNotification(db, {
+    if (mayNotifyEnrollmentForCourse(curso)) await createLmsInAppNotification(db, {
       funcionarioId: funcionario_id,
       empresaId,
       tipo: 'lms_nova_matricula',
@@ -778,7 +779,7 @@ app.post('/', async (c) => {
         data_expiracao: data_expiracao ?? null,
       },
     });
-    if (enviar_convite_email)
+    if (mayNotifyEnrollmentForCourse(curso) && enviar_convite_email)
       await sendMatriculaTracked(c, c.env, db, matriculaId, {
         funcionarioId: funcionario_id,
         empresaId,
@@ -856,10 +857,10 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const curso = await db
     .prepare(
-      'SELECT id, titulo, qualificacao_tipo_id FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
+      'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
     )
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
@@ -976,7 +977,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           qualificacaoTipoId: curso.qualificacao_tipo_id,
         });
         etapa = 'notificacao';
-        await createLmsInAppNotification(db, {
+        if (mayNotifyEnrollmentForCourse(curso)) await createLmsInAppNotification(db, {
           funcionarioId,
           empresaId,
           tipo: 'lms_nova_matricula',
@@ -998,7 +999,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
           },
         });
         etapa = 'convite';
-        if (enviar_convite_email)
+        if (mayNotifyEnrollmentForCourse(curso) && enviar_convite_email)
           await sendMatriculaTracked(c, c.env, db, existente.id, {
             funcionarioId,
             empresaId,
@@ -1045,7 +1046,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         empresaId,
       });
       etapa = 'notificacao';
-      await createLmsInAppNotification(db, {
+      if (mayNotifyEnrollmentForCourse(curso)) await createLmsInAppNotification(db, {
         funcionarioId,
         empresaId,
         tipo: 'lms_nova_matricula',
@@ -1067,7 +1068,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
         },
       });
       etapa = 'convite';
-      if (enviar_convite_email)
+      if (mayNotifyEnrollmentForCourse(curso) && enviar_convite_email)
         await sendMatriculaTracked(c, c.env, db, matriculaId, {
           funcionarioId,
           empresaId,
