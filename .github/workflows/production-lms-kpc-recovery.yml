@@ -42,7 +42,7 @@ jobs:
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
-      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_SHA: ${{ inputs.expected_production_sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,14 +57,23 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REF" == 'refs/heads/main' ]]
           [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$EXPECTED_PRODUCTION_SHA" == "$GITHUB_SHA" ]]
+          # The fully verified, actually DEPLOYED release may be an ancestor
+          # of main while independent PRs continue to merge. Trust only that
+          # exact deployed SHA, require it in protected main history, and verify
+          # the eight original gates on that SHA, never on newer unshipped code.
+          git cat-file -e "$EXPECTED_PRODUCTION_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_PRODUCTION_SHA" "$GITHUB_SHA"
           if [[ "$LMS_KPC_MODE" == inspect ]]; then
             [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_INSPECT ]]
           else
             [[ "$LMS_KPC_MODE" == apply ]]
             [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_APPLY ]]
           fi
-          node scripts/ci/verify-release-gates.mjs
+          # BOTH immutable release code and current trusted executor code
+          # must independently have eight successful official checks.
+          # A green old Worker can never authorize unreviewed new mutation code.
+          RELEASE_SHA="$EXPECTED_PRODUCTION_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
           live="$(curl -fsS -A 'Mozilla/5.0' https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).data.sourceSha))")"
           [[ "$live" == "$EXPECTED_PRODUCTION_SHA" ]]
       - run: npm ci
