@@ -23,15 +23,18 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email: email.trim() }),
       });
 
-      if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+      } | null;
+      if (!response.ok || payload?.success !== true) {
         throw new Error('PASSWORD_RECOVERY_REQUEST_FAILED');
       }
 
-      // The backend deliberately returns the same success response whether or
-      // not the account exists, preventing user enumeration.
+      // Accepted means only that the request was processed. The response never
+      // confirms account existence or successful inbox delivery.
       setSubmitted(true);
     } catch {
-      setError('Não foi possível solicitar a recuperação agora. Tente novamente em instantes.');
+      setError('A recuperação de senha está indisponível no momento. Tente novamente mais tarde ou contate o responsável pelo AirTrust.');
     } finally {
       setSubmitting(false);
     }
@@ -51,10 +54,11 @@ export default function ForgotPasswordPage() {
         {submitted ? (
           <div role="status" aria-live="polite">
             <CheckCircle2 className="mb-4 h-9 w-9 text-[var(--at-success)]" aria-hidden="true" />
-            <h1 className="text-xl font-semibold">Confira seu e-mail</h1>
+            <h1 className="text-xl font-semibold">Solicitação recebida</h1>
             <p className="mt-2 text-sm leading-6 text-[var(--at-text-secondary)]">
-              Se houver uma conta ativa para o endereço informado, enviaremos as instruções para
-              redefinir a senha. Por segurança, não confirmamos se o e-mail está cadastrado.
+              Se houver uma conta ativa para o endereço informado e o serviço de e-mail estiver
+              disponível, você receberá um link para redefinir a senha. Verifique também a pasta
+              de spam. Por segurança, não confirmamos se o e-mail está cadastrado nem a entrega.
             </p>
             <a
               href="/login"
