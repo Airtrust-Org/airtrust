@@ -1,6 +1,6 @@
 const ASSET_REVALIDATE = 'public, max-age=0, must-revalidate';
 const HASHED_FONT_CACHE = 'public, max-age=31536000, immutable';
-const HASHED_FONT_PATH = /^\\/assets\\/[^/]+-[A-Za-z0-9_-]{8,}\\.woff2$/i;
+const HASHED_FONT_PATH = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.woff2$/i;
 const ASSET_MISS_CACHE = 'no-store, no-cache, must-revalidate, max-age=0';
 
 type PagesAssetContext = {
