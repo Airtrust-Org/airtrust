@@ -121,7 +121,7 @@ test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
   assert.match(workflow, /d1 time-travel info airtrust-db --env production/);
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
   assert.match(workflow, /PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL/);
-  assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-dry-run-/);
+  assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-\$expected_mode-\$EXPECTED_SHA/);
   assert.match(workflow, /for key in missing wrong no_course redundant/);
   assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL/);
   assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
