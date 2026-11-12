@@ -631,7 +631,32 @@ export interface LmsMatriculaEAD extends LmsMatricula {
 export function useMinhasEAD() {
   return useQuery({
     queryKey: lmsKeys.minhasEAD(),
-    queryFn: () => lmsRequest<LmsMatriculaEAD[]>('/matriculas/minhas-ead'),
+    // A stalled auth refresh or EAD endpoint must not leave the learner
+    // dashboard permanently showing skeleton rows and a misleading "0".
+    // Abort the request and surface a retryable error after a bounded wait.
+    queryFn: async ({ signal }) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', abort, { once: true });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Tempo limite ao consultar seus treinamentos. Tente novamente.'));
+        }, 20_000);
+      });
+      try {
+        return await Promise.race([
+          lmsRequest<LmsMatriculaEAD[]>('/matriculas/minhas-ead', { signal: controller.signal }),
+          deadline,
+        ]);
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        signal.removeEventListener('abort', abort);
+      }
+    },
+    retry: 1,
     staleTime: 30_000,
   });
 }
