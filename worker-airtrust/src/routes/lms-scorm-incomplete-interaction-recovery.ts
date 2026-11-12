@@ -137,8 +137,36 @@ export function registerLmsIncompleteInteractionRecoveryRoute(app: Hono<{Binding
         .bind(actorId,matriculaId,oldAudit,newAudit,empresaId,
           empresaId,matriculaId,plan.cmiJson,empresaId,matriculaId,plan.resumePosition),
     ]);
-    if (responses.length !== 3 ||
-        responses.some(r => !r.success || r.meta.changes !== 1)) {
+    if (responses.length !== 3 || responses.some(r => !r.success)) {
+      throw new ApiError('Não foi possível verificar a gravação SCORM', 409);
+    }
+    // D1 batch metadata may report cumulative or driver-dependent changes.
+    // A previous deployment returned 409 AFTER committing all three writes
+    // to the actual database. Instead, verify the exact resulting enrollment,
+    // SCORM CMI and durable audit receipt. This also fails closed if an
+    // optimistic CAS lost the race, with no false positive completion.
+    const verified = await db.prepare(`
+      SELECT 1 AS acknowledged
+      FROM lms_matriculas m
+      JOIN lms_progresso_scorm ps
+        ON ps.empresa_id=m.empresa_id AND ps.matricula_id=m.id
+      JOIN audit_logs a ON a.empresa_id=m.empresa_id
+        AND a.entity_type='lms_matriculas'
+        AND a.entity_id=CAST(m.id AS TEXT)
+        AND a.action='SCORM_MISSING_DECISION_RECOVERY'
+        AND a.user_id=?
+        AND a.old_values=?
+        AND a.new_values=?
+      WHERE m.empresa_id=? AND m.id=? AND m.status='EM_ANDAMENTO'
+        AND m.qualificacao_historico_id IS NULL
+        AND m.ultimo_slide=? AND m.ultima_pagina=?
+        AND ps.lesson_status='incomplete'
+        AND ps.cmi_json=? AND ps.suspend_data=?
+      LIMIT 1`)
+      .bind(actorId,oldAudit,newAudit,empresaId,matriculaId,
+        plan.resumePosition,plan.resumePosition,plan.cmiJson,plan.suspendData)
+      .first<{acknowledged:number}>();
+    if (verified?.acknowledged !== 1) {
       throw new ApiError('Estado SCORM mudou durante a recuperação; reabra a matrícula', 409);
     }
     return c.json({success:true,data:{

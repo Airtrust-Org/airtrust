@@ -17,6 +17,11 @@ on:
         description: 'AIRTRUST_LMS_KPC_INSPECT or AIRTRUST_LMS_KPC_APPLY'
         required: true
         type: string
+      case_ids:
+        description: 'Strict subset of 2058,1223,681 (CSV). Use 1223,681 after Karl recovery'
+        required: false
+        type: string
+        default: '2058,1223,681'
 
 permissions:
   contents: read
@@ -36,6 +41,7 @@ jobs:
     env:
       EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
       LMS_KPC_MODE: ${{ inputs.mode }}
+      LMS_KPC_CASE_IDS: ${{ inputs.case_ids }}
       LMS_KPC_CONFIRMATION: ${{ inputs.confirmation }}
       PROD_API_BASE_URL: https://api.airtrust.online
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
@@ -63,6 +69,7 @@ jobs:
           # the eight original gates on that SHA, never on newer unshipped code.
           git cat-file -e "$EXPECTED_PRODUCTION_SHA^{commit}"
           git merge-base --is-ancestor "$EXPECTED_PRODUCTION_SHA" "$GITHUB_SHA"
+          [[ "$LMS_KPC_CASE_IDS" =~ ^(2058|1223|681)(,(2058|1223|681))*$ ]]
           if [[ "$LMS_KPC_MODE" == inspect ]]; then
             [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_INSPECT ]]
           else
