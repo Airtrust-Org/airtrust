@@ -260,6 +260,7 @@ export default function FichaDetalhe() {
   const [historicoNotechsAberto, setHistoricoNotechsAberto] = useState(false);
   const [historicoNotechsCarregando, setHistoricoNotechsCarregando] = useState(false);
   const [historicoNotechsErro, setHistoricoNotechsErro] = useState<string | null>(null);
+  const historicoFichaIdRef = useRef(id);
   const [historicoNotechs, setHistoricoNotechs] = useState<{
     total_fichas: number;
     fichas_com_suficiencia_individual: number;
@@ -274,6 +275,14 @@ export default function FichaDetalhe() {
       notas: Array<{ codigo: string; resultado: string | null }>;
     }>;
   } | null>(null);
+  // O componente pode ser reutilizado entre fichas: nunca exibir histórico
+  // do funcionário anterior, mesmo se a requisição antiga terminar depois.
+  useEffect(() => {
+    historicoFichaIdRef.current = id;
+    setHistoricoNotechs(null);
+    setHistoricoNotechsAberto(false);
+    setHistoricoNotechsErro(null);
+  }, [id]);
   const [motivoEdicao, setMotivoEdicao] = useState('');
   const [observacoesGeraisEdicao, setObservacoesGeraisEdicao] = useState('');
   const [observacoesManobrasEdicao, setObservacoesManobrasEdicao] = useState<
@@ -1289,6 +1298,7 @@ export default function FichaDetalhe() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
       const result = await response.json();
+      if (historicoFichaIdRef.current !== id) return;
       if (!response.ok || !result.success) {
         setHistoricoNotechsErro(result.error || 'Não foi possível consultar o histórico.');
         return;
