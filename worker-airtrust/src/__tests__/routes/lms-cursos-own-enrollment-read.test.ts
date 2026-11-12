@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
+import type { DatabaseSync } from 'node:sqlite';
 import { buildCatalogCourseReadScope } from '../../routes/lms-cursos-setor-scope';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { hasOwnEnrolledCourseReadAccess } from '../../routes/lms-cursos-legacy';
 import type { EmployeeSectorAccess } from '../../middleware/employee-sector-access';
+
+const NodeDatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
+  new (location: string): DatabaseSync;
+};
 
 const student: EmployeeSectorAccess = {
   mode: 'self', funcionarioId: 17, setorIds: [4],
@@ -68,7 +73,7 @@ describe('LMS catalog operational enrollment count', () => {
 
 describe('LMS catalog — real SQL own-enrollment authorization matrix', () => {
   function setupDb() {
-    const db = new DatabaseSync(':memory:');
+    const db = new NodeDatabaseSync(':memory:');
     db.exec(`
       CREATE TABLE lms_cursos (id INTEGER, empresa_id INTEGER, ativo INTEGER, publicado INTEGER, deleted_at TEXT, qualificacao_tipo_id INTEGER);
       CREATE TABLE lms_cursos_setores (curso_id INTEGER, empresa_id INTEGER, setor_id INTEGER, deleted_at TEXT);
