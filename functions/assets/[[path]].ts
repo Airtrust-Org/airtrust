@@ -1,4 +1,6 @@
 const ASSET_REVALIDATE = 'public, max-age=0, must-revalidate';
+const HASHED_FONT_CACHE = 'public, max-age=31536000, immutable';
+const HASHED_FONT_PATH = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.woff2$/i;
 const ASSET_MISS_CACHE = 'no-store, no-cache, must-revalidate, max-age=0';
 
 type PagesAssetContext = {
@@ -35,7 +37,10 @@ export async function onRequest(context: PagesAssetContext): Promise<Response> {
   }
 
   const headers = new Headers(response.headers);
-  headers.set('Cache-Control', ASSET_REVALIDATE);
+  // Source files for fonts are content-addressed by Vite and safe to retain
+  // across deployments; JS/CSS keep revalidation to recover stale edge assets.
+  const pathname = new URL(context.request.url).pathname;
+  headers.set('Cache-Control', HASHED_FONT_PATH.test(pathname) ? HASHED_FONT_CACHE : ASSET_REVALIDATE);
   headers.set('X-Content-Type-Options', 'nosniff');
 
   return new Response(response.body, {
