@@ -30,7 +30,7 @@ describe('password recovery public UI', () => {
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar instruções' }));
 
-    await waitFor(() => expect(screen.getByText('Confira seu e-mail')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Solicitação recebida')).toBeInTheDocument());
     expect(screen.getByText(/não confirmamos se o e-mail está cadastrado/i)).toBeInTheDocument();
     expect(controlledFetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/forgot-password'),
@@ -39,6 +39,20 @@ describe('password recovery public UI', () => {
         body: JSON.stringify({ email: 'usuario@example.com' }),
       }),
     );
+  });
+
+  it('does not confirm recovery when HTTP 200 reports success false', async () => {
+    controlledFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ success: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    render(<ForgotPasswordPage />);
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'usuario@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar instruções' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('indisponível'));
+    expect(screen.queryByText('Solicitação recebida')).not.toBeInTheDocument();
   });
 
   it('shows a safe retry message when forgot-password is unavailable', async () => {
@@ -50,7 +64,7 @@ describe('password recovery public UI', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível solicitar a recuperação agora',
+        'A recuperação de senha está indisponível no momento',
       ),
     );
   });
@@ -64,7 +78,7 @@ describe('password recovery public UI', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Não foi possível solicitar a recuperação agora',
+        'A recuperação de senha está indisponível no momento',
       ),
     );
     expect(screen.queryByText(/network down/i)).not.toBeInTheDocument();

@@ -68,6 +68,75 @@ export function buildCourseSetorScope(
   };
 }
 
+
+/**
+ * Catalog visibility: a learner may list their own enrolled course even when
+ * its mapped setor no longer equals the employee's current setor. This is the
+ * same exception as the course-detail handler. The exception is never offered
+ * to managers or other employees and is always tenant- and employee-scoped.
+ */
+export function buildCatalogCourseReadScope(
+  access: EmployeeSectorAccess,
+  setorIds: number[] | null,
+  schema: { hasCursoSetores: boolean; hasQualificacaoTipoSetores: boolean },
+): { clause: string; bindings: number[] } {
+  if (setorIds === null) return { clause: '', bindings: [] };
+
+  const ownEnrollment = access.mode === 'self'
+    ? `EXISTS (
+        SELECT 1 FROM lms_matriculas own_m
+        WHERE own_m.empresa_id = c.empresa_id
+          AND own_m.curso_id = c.id
+          AND own_m.funcionario_id = ?
+          AND own_m.deleted_at IS NULL
+          AND own_m.status IN ('NAO_INICIADO', 'EM_ANDAMENTO', 'CONCLUIDO', 'REPROVADO')
+      )`
+    : '';
+
+  const clauses: string[] = [];
+  const bindings: number[] = [];
+  if (setorIds.length > 0) {
+    const placeholders = setorIds.map(() => '?').join(', ');
+    if (schema.hasCursoSetores) {
+      clauses.push(`EXISTS (
+        SELECT 1 FROM lms_cursos_setores lcs_f
+        WHERE lcs_f.curso_id = c.id
+          AND lcs_f.empresa_id = c.empresa_id
+          AND lcs_f.setor_id IN (${placeholders})
+          AND lcs_f.deleted_at IS NULL
+      )`);
+      bindings.push(...setorIds);
+    }
+    if (schema.hasQualificacaoTipoSetores) {
+      clauses.push(`(
+        ${schema.hasCursoSetores
+          ? `NOT EXISTS (
+              SELECT 1 FROM lms_cursos_setores lcs_chk
+              WHERE lcs_chk.curso_id = c.id
+                AND lcs_chk.empresa_id = c.empresa_id
+                AND lcs_chk.deleted_at IS NULL
+            ) AND `
+          : ''}EXISTS (
+          SELECT 1 FROM qualificacoes_tipos_setores qts_f
+          WHERE qts_f.tipo_id = c.qualificacao_tipo_id
+            AND qts_f.empresa_id = c.empresa_id
+            AND qts_f.setor_id IN (${placeholders})
+            AND qts_f.deleted_at IS NULL
+        )
+      )`);
+      bindings.push(...setorIds);
+    }
+  }
+  if (ownEnrollment && access.mode === 'self') {
+    clauses.push(ownEnrollment);
+    bindings.push(access.funcionarioId);
+  }
+
+  return clauses.length === 0
+    ? { clause: ' AND 1 = 0', bindings: [] }
+    : { clause: ` AND (${clauses.join(' OR ')})`, bindings };
+}
+
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
   try {
     const row = await db

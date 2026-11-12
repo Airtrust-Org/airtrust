@@ -49,6 +49,25 @@ const input = (): S76Rc3ResumeBridgeInput => ({
 });
 
 describe('S-76 RC3 V4 administrative credit projection (launch-only)', () => {
+  it('projects a partially credited 26/49 governed handoff without granting completion', () => {
+    const credited=25;
+    const c = { ...credit(), a: credited, d: Array.from({length:credited},(_,i)=>i) };
+    const cmi = initialCmi(c);
+    (cmi['airtrust.administrative_credit'] as {credited_units:number;previous_progress_pct:number}).credited_units = credited;
+    (cmi['airtrust.administrative_credit'] as {credited_units:number;previous_progress_pct:number}).previous_progress_pct = 51;
+    const projected = projectS76Rc3AdministrativeResume({
+      ...input(), matriculaId:681, cicloId:902, handoffId:79,
+      handoffPreviousProgressPct:51, handoffBookmark:{position:26,total:49},
+      initialCmiJson:JSON.stringify(cmi),
+    });
+    expect(projected).not.toBeNull();
+    const saved=JSON.parse(projected!);
+    const resume=JSON.parse(saved['cmi.suspend_data']);
+    expect(resume).toEqual({v:2,p:version,a:25,c:c.d,d:c.d,g:{}});
+    expect(saved['cmi.core.lesson_location']).toBe('26/49');
+    expect(saved['cmi.core.lesson_status']).toBe('incomplete');
+    expect(saved['airtrust.administrative_credit'].credited_units).toBe(25);
+  });
   it('keeps exactly 48 credited indexes, never emits completion, quiz answers or score', () => {
     const original = input();
     const projected = projectS76Rc3AdministrativeResume(original);
@@ -138,10 +157,10 @@ describe('S-76 RC3 V4 administrative credit projection (launch-only)', () => {
   it('rejects scope, handoff, identity, policy and completed-course mismatches', () => {
     const original = input();
     for (const delta of [
-      { empresaId: 7 }, { cursoId: 40 }, { matriculaId: 691 },
-      { cicloId: 890 }, { handoffId: 31 },
-      { handoffPreviousProgressPct: 99 },
-      { handoffBookmark: { position: 48, total: 49 } },
+      { empresaId: 7 }, { cursoId: 40 }, { matriculaId: 0 },
+      { cicloId: 0 }, { handoffId: null },
+      { handoffPreviousProgressPct: 0 },
+      { handoffBookmark: { position: 1, total: 49 } },
       { activePackageSha256: 'a'.repeat(64) }, { assessmentPolicy: 'SCORED' },
       { enrollmentStatus: 'CONCLUIDO' }, { qualificationHistoryId: 123 },
       { manifest: { ...manifest, assessmentMode: 'SCORM' as const } },
