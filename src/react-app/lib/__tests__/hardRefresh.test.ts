@@ -43,6 +43,7 @@ describe('hardRefreshApp', () => {
       'airtrust-v8-assets',
       'other-cache',
       'AirTrust-runtime',
+      'airtrust-pilot-offline-v1',
     ]);
     const replaceMock = vi.fn();
 
@@ -57,6 +58,7 @@ describe('hardRefreshApp', () => {
     expect(deleteMock).toHaveBeenCalledTimes(2);
     expect(deleteMock).toHaveBeenNthCalledWith(1, 'airtrust-v8-assets');
     expect(deleteMock).toHaveBeenNthCalledWith(2, 'AirTrust-runtime');
+    expect(deleteMock).not.toHaveBeenCalledWith('airtrust-pilot-offline-v1');
     expect(replaceMock).toHaveBeenCalledTimes(1);
   });
 

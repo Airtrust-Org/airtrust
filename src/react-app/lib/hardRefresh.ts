@@ -86,7 +86,10 @@ export async function hardRefreshAppWithDeps(deps: HardRefreshDeps = {}): Promis
       const cacheNames = await cachesApi.keys();
       await Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName.toLowerCase().startsWith('airtrust'))
+          .filter((cacheName) => {
+            const name = cacheName.toLowerCase();
+            return name.startsWith('airtrust') && !name.startsWith('airtrust-pilot-');
+          })
           .map((cacheName) => cachesApi.delete(cacheName)),
       );
     }
