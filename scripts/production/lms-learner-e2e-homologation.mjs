@@ -19,6 +19,7 @@ import process from 'node:process';
 import { createHash } from 'node:crypto';
 import { chromium, webkit } from '@playwright/test';
 import { SYNTHETIC_LEARNER } from './provision-synthetic-qa-learner.mjs';
+import { assertQaRunScope } from './qa-run-identity.mjs';
 import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from '../validation/lms-scorm-video-playback-readonly.mjs';
@@ -1150,7 +1151,7 @@ export function buildLearnerAuthPayload(token, funcionarioId) {
   const user = {
     id: claims?.id || funcionarioId,
     funcionario_id: funcionarioId,
-    email: claims?.email || qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME),
+    email: claims?.email || SYNTHETIC_LEARNER.email,
     nome: claims?.nome || 'Aluno QA Sintético',
     role: 'ALUNO',
     empresa_id: TARGET_COMPANY_ID,
