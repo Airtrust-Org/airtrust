@@ -69,7 +69,11 @@ jobs:
             [[ "$LMS_KPC_MODE" == apply ]]
             [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_APPLY ]]
           fi
-          node scripts/ci/verify-release-gates.mjs
+          # BOTH immutable release code and current trusted executor code
+          # must independently have eight successful official checks.
+          # A green old Worker can never authorize unreviewed new mutation code.
+          RELEASE_SHA="$EXPECTED_PRODUCTION_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
           live="$(curl -fsS -A 'Mozilla/5.0' https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).data.sourceSha))")"
           [[ "$live" == "$EXPECTED_PRODUCTION_SHA" ]]
       - run: npm ci
