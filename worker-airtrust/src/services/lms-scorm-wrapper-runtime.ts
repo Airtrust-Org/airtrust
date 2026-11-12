@@ -515,6 +515,31 @@ export function buildScormNativeResumeOwnershipScript(): string {
  * Finish/finalization payload when unload autosaves race with an in-flight commit.
  * This is runtime JavaScript, not TypeScript executed on the Worker.
  */
+export function buildScormCommitDeadlineScript(): string {
+  return `
+  function fetchBoundedScormCommit(url, options) {
+    var controller = new AbortController(), timeoutId;
+    var deadline = new Promise(function(_resolve, reject) {
+      timeoutId = window.setTimeout(function() {
+        controller.abort();
+        reject(new Error('SCORM_COMMIT_TIMEOUT'));
+      }, 10000);
+    });
+    // Invoke fetch synchronously: SCORM Commit/Finish events must enqueue a
+    // request before a same-tick pagehide/beforeunload can replace it.
+    var request;
+    try {
+      request = fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+    return Promise.race([request, deadline]).finally(function() {
+      window.clearTimeout(timeoutId);
+    });
+  }
+  `;
+}
+
 export function buildScormQueuedCommitScript(): string {
   return `
   function queuedCommitPriority(eventType) {

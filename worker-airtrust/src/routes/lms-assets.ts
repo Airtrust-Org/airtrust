@@ -12,7 +12,7 @@ import { serveAuthorizedRenderedPptx } from './lms-pptx-rendered';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
 import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from '../lib/lms/lms-scorm-asset-paths';
 export { guessMime } from '../lib/lms/lms-scorm-asset-paths';
-import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
+import { assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
@@ -23,6 +23,7 @@ import {
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
   buildScormQueuedCommitScript,
+  buildScormCommitDeadlineScript,
   buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
@@ -1949,7 +1950,7 @@ ${buildScormNativeResumeOwnershipScript()}
   }
 
 ${buildScormQueuedCommitScript()}
-
+${buildScormCommitDeadlineScript()}
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
@@ -1983,7 +1984,7 @@ ${buildScormQueuedCommitScript()}
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
     var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
-    var requestPromise = fetch(COMMIT_URL, {
+    var requestPromise = fetchBoundedScormCommit(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -2100,7 +2101,13 @@ ${buildScormQueuedCommitScript()}
         attempt: currentAttempt,
       });
       if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
-        notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
+        notifyCompletionError(
+          'SCORM_FINAL_COMMIT_MISSING',
+          e && e.message === 'SCORM_COMMIT_TIMEOUT' ? 'commit-timeout' : 'network-error',
+          e && e.message === 'SCORM_COMMIT_TIMEOUT'
+            ? 'O servidor não confirmou o encerramento no prazo. Seu progresso não foi descartado; verifique a situação e tente novamente.'
+            : undefined,
+        );
       }
       return null;
     });
