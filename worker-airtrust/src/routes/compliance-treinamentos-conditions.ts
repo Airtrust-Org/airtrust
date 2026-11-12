@@ -17,6 +17,7 @@ import {
 } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { classifyComplianceEnrollmentFailure } from '../services/training-compliance-rule-enrollment';
+import { runDesignationEnrollmentWithDiagnostics } from '../services/training-compliance-assignment-diagnostics';
 import {
   trainingComplianceEffectiveRequirementPredicateSql,
   trainingComplianceRuleApplicabilitySql,
@@ -356,14 +357,13 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     },
     ...extrairUsuarioAuditoria(c),
   });
-  let autoEnrollment:AutoEnrollmentSummary|null=null; let autoEnrollmentWarning:string|null=null;
-  try{
-    autoEnrollment=await autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId);
-    // Missing or disabled contract is not a completed LMS synchronization.
-    // Persist the authorized designation but make the gap visible and traceable.
-    const contractGap=await inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId);
-    if(contractGap) autoEnrollmentWarning=contractGap;
-  }catch(error){console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';}
+  const {autoEnrollment,autoEnrollmentWarning}=await runDesignationEnrollmentWithDiagnostics(
+    () => autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId),
+    () => inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId),
+    (phase,error) => console.error('[TRAINING_COMPLIANCE] Falha em designação:',{
+      phase,code:classifyComplianceEnrollmentFailure(error),
+    }),
+  );
   return c.json({success:true,data:{id,auto_enrollment:autoEnrollment,auto_enrollment_warning:autoEnrollmentWarning}},201);
 });
 
