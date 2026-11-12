@@ -2,6 +2,7 @@ import { ApiError } from '../middleware/error-handler';
 
 export type TrainingLmsContractState =
   | 'NON_EAD'
+  | 'QUALIFICATION_UNAVAILABLE'
   | 'INVALID_AUTO_CONFIGURATION'
   | 'NO_PUBLISHED_COURSE'
   | 'MULTIPLE_PUBLISHED_COURSES'
@@ -14,6 +15,8 @@ type ContractRow = {
   condicao_id: number | null;
   escopo: string;
   categoria: string | null;
+  qualification_active: number;
+  qualification_deleted_at: string | null;
   auto_matricular_ead: number | null;
   modalidade_requerida: string | null;
   published_courses: number;
@@ -21,7 +24,9 @@ type ContractRow = {
 };
 
 export function classifyTrainingLmsContract(row: Pick<ContractRow,
-  'categoria' | 'auto_matricular_ead' | 'modalidade_requerida' | 'published_courses'>): TrainingLmsContractState {
+  'categoria' | 'qualification_active' | 'qualification_deleted_at' | 'auto_matricular_ead' | 'modalidade_requerida' | 'published_courses'>): TrainingLmsContractState {
+  if (Number(row.qualification_active) !== 1 || row.qualification_deleted_at !== null)
+    return 'QUALIFICATION_UNAVAILABLE';
   if (!['EAD', 'TREINAMENTO EAD'].includes(String(row.categoria || '').trim().toUpperCase()))
     return Number(row.auto_matricular_ead) === 1 ? 'INVALID_AUTO_CONFIGURATION' : 'NON_EAD';
   if (Number(row.published_courses) === 0) return 'NO_PUBLISHED_COURSE';
@@ -73,7 +78,8 @@ export async function inspectTrainingComplianceLmsContracts(
   db: D1Database, empresaId: number,
 ) {
   const { results } = await db.prepare(
-    `SELECT tr.id,tr.qualificacao_tipo_id,tr.condicao_id,tr.escopo,qt.categoria,
+    `SELECT tr.id,tr.qualificacao_tipo_id,tr.condicao_id,tr.escopo,qt.categoria,COALESCE(qt.ativo,0) qualification_active,
+        qt.deleted_at qualification_deleted_at,
         tr.auto_matricular_ead,tr.modalidade_requerida,
         (SELECT COUNT(*) FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
           AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
@@ -82,14 +88,14 @@ export async function inspectTrainingComplianceLmsContracts(
           AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id
           AND lc.ativo=1 AND lc.publicado=0 AND lc.deleted_at IS NULL) unpublished_courses
        FROM treinamento_requisitos tr
-       JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id
-         AND qt.empresa_id=tr.empresa_id AND qt.ativo=1 AND qt.deleted_at IS NULL
+       LEFT JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id
+         AND qt.empresa_id=tr.empresa_id
        WHERE tr.empresa_id=? AND tr.ativo=1 AND tr.deleted_at IS NULL
          AND tr.obrigatoriedade='OBRIGATORIA'
        ORDER BY tr.id`,
   ).bind(empresaId).all<ContractRow>();
   const summary: Record<TrainingLmsContractState, number> = {
-    NON_EAD: 0, INVALID_AUTO_CONFIGURATION: 0, NO_PUBLISHED_COURSE: 0, MULTIPLE_PUBLISHED_COURSES: 0,
+    NON_EAD: 0, QUALIFICATION_UNAVAILABLE: 0, INVALID_AUTO_CONFIGURATION: 0, NO_PUBLISHED_COURSE: 0, MULTIPLE_PUBLISHED_COURSES: 0,
     EAD_OPT_OUT: 0, EAD_READY: 0,
   };
   const checks = (results || []).map((row) => {
@@ -108,6 +114,7 @@ export async function inspectTrainingComplianceLmsContracts(
     // Opt-outs are configured behavior, not proof of defects.
     alerts: checks.filter((row) => row.state === 'NO_PUBLISHED_COURSE'
       || row.state === 'MULTIPLE_PUBLISHED_COURSES'
+      || row.state === 'QUALIFICATION_UNAVAILABLE'
       || row.state === 'INVALID_AUTO_CONFIGURATION'),
     checks,
   };

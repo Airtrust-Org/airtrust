@@ -6,7 +6,8 @@ import {
 } from '../../services/training-compliance-lms-contract';
 
 const row = (extra: Record<string, unknown> = {}) => ({
-  categoria: 'EAD', auto_matricular_ead: 1, modalidade_requerida: 'EAD',
+  categoria: 'EAD', qualification_active: 1, qualification_deleted_at: null,
+  auto_matricular_ead: 1, modalidade_requerida: 'EAD',
   published_courses: 1, ...extra,
 });
 
@@ -18,6 +19,8 @@ describe('Compliance ↔ LMS rule contract', () => {
     expect(classifyTrainingLmsContract(row({ modalidade_requerida: null }))).toBe('INVALID_AUTO_CONFIGURATION');
     expect(classifyTrainingLmsContract(row({ categoria: 'Treinamentos Operacionais', auto_matricular_ead: 0 }))).toBe('NON_EAD');
     expect(classifyTrainingLmsContract(row({ categoria: 'Treinamentos Operacionais' }))).toBe('INVALID_AUTO_CONFIGURATION');
+    expect(classifyTrainingLmsContract(row({ qualification_active: 0 }))).toBe('QUALIFICATION_UNAVAILABLE');
+    expect(classifyTrainingLmsContract(row({ qualification_deleted_at: '2026-11-11' }))).toBe('QUALIFICATION_UNAVAILABLE');
     expect(classifyTrainingLmsContract(row())).toBe('EAD_READY');
   });
   const fakeDb = (category: string | null, count: number) => {
@@ -73,12 +76,15 @@ describe('Compliance ↔ LMS rule contract', () => {
         bind: (empresaId: number) => {
           expect(empresaId).toBe(6);
           expect(sql).toMatch(/tr\.empresa_id=\?/);
+          expect(sql).toMatch(/LEFT JOIN qualificacoes_tipos qt/);
+          expect(sql).not.toMatch(/qt\.ativo=1 AND qt\.deleted_at IS NULL/);
           return {
             all: async () => ({
               results: [
                 { id: 104, qualificacao_tipo_id: 45, condicao_id: null, escopo: 'FUNCIONARIO', unpublished_courses: 0, ...row({ published_courses: 0 }) },
                 { id: 677, qualificacao_tipo_id: 189, condicao_id: null, escopo: 'FUNCAO', unpublished_courses: 1, ...row({ published_courses: 0 }) },
                 { id: 1, qualificacao_tipo_id: 19, condicao_id: null, escopo: 'FUNCAO', unpublished_courses: 0, ...row({ auto_matricular_ead: 0 }) },
+                { id: 44, qualificacao_tipo_id: 222, condicao_id: null, escopo: 'FUNCAO', unpublished_courses: 0, ...row({ qualification_active: 0 }) },
               ],
             }),
           };
@@ -86,10 +92,11 @@ describe('Compliance ↔ LMS rule contract', () => {
       }),
     } as unknown as D1Database;
     const report = await inspectTrainingComplianceLmsContracts(db, 6);
-    expect(report.total_rules).toBe(3);
+    expect(report.total_rules).toBe(4);
     expect(report.summary.NO_PUBLISHED_COURSE).toBe(2);
     expect(report.summary.EAD_OPT_OUT).toBe(1);
-    expect(report.alerts).toHaveLength(2);
+    expect(report.summary.QUALIFICATION_UNAVAILABLE).toBe(1);
+    expect(report.alerts).toHaveLength(3);
     expect(JSON.stringify(report)).not.toMatch(/funcionario_id|nome|email/);
   });
 });
