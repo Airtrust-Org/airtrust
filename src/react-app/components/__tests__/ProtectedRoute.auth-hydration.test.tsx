@@ -275,7 +275,12 @@ describe('ProtectedRoute auth hydration', () => {
   });
 
   it('token inválido termina em login, sem permanecer em loading', async () => {
-    apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    apiFetchMock.mockImplementation((input: RequestInfo | URL) => {
+      if (String(input).includes('/api/auth/me')) {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      return Promise.resolve(empresasResponse());
+    });
     refreshAccessTokenMock.mockRejectedValue({ terminal: true });
 
     renderProtectedRoute();
