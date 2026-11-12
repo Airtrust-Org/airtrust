@@ -168,8 +168,8 @@ export async function runScormBrowserConformance(params: {
         : asset;
       return request.respond({
         status: 200, body,
-        headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' :
-          path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ?
+        headers: { 'Content-Type': /\.js$/i.test(path) ? 'application/javascript' :
+          /\.css$/i.test(path) ? 'text/css' : /\.html?$/i.test(path) ?
             'text/html; charset=utf-8' : 'application/octet-stream' },
       });
     });

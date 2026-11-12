@@ -147,6 +147,24 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
     expect(denied).toHaveBeenCalledWith('blockedbyclient');
   });
 
+  it.each(['INDEX.HTM','MAIN.HTML'])('serves case-insensitive authored HTML launch %s as executable document', async launchFile => {
+    const {page,browser}=fakeBrowser();
+    await runScormBrowserConformance({
+      browserBinding:{},candidateSha256:'d'.repeat(64),launchFile,
+      assets:[{path:launchFile,data:new TextEncoder().encode('<html><body>QA</body></html>')}],
+      launchBrowser:async()=>browser as never,
+    });
+    const handler=page.on.mock.calls.find(([kind])=>kind==='request')?.[1];
+    const served=vi.fn(async (response:unknown)=>response);
+    await handler({
+      url:()=> 'https://scorm-candidate.invalid/'+launchFile,
+      respond:served,abort:vi.fn(async()=>undefined),
+    });
+    expect(served.mock.calls[0][0]).toMatchObject({
+      status:200,headers:{'Content-Type':'text/html; charset=utf-8'},
+    });
+  });
+
   it('fails closed with a safe diagnostic when SCO never initializes', async () => {
     const { page, browser } = fakeBrowser(true);
     const runtime = await runScormBrowserConformance({
