@@ -115,7 +115,7 @@ test('non-EAD mandatory and historic/progress LMS records never become automated
 });
 
 test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
-  assert.match(workflow, /options: \[dry-run, apply\]/);
+  assert.match(workflow, /options: \[dry-run, apply, enroll-dry-run, enroll-apply\]/);
   assert.match(workflow, /reviewed_dry_run_run_id/);
   assert.match(workflow, /Verify official release gates on exact SHA/);
   assert.match(workflow, /d1 time-travel info airtrust-db --env production/);
