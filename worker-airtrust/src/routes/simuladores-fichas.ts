@@ -33,6 +33,7 @@ import {
   getNotechsStatus,
   isFichaStatusFinalizado,
 } from '../constants/notechs';
+import { evaluateNotechsApproval } from '../constants/notechs-approval';
 import { getSpecialEventSessionDefinition } from '../../../src/shared/simuladores/special-event-sessions';
 import {
   buildSimulatorDisplayName,
@@ -589,6 +590,124 @@ async function hasSimuladoresEvaluateCapability(
  *      — filtro de dados. Ter a capability não basta; ter uma linha
  *      "acidental" de instrutor_id não basta sem a capability.
  */
+/**
+ * Histórico longitudinal NOTECHS por funcionário — somente leitura.
+ * O vínculo ficha → colaborador é obtido do banco; jamais aceita empresa_id
+ * ou identidade de funcionário a partir do corpo do cliente.
+ *
+ * Gestores/administradores mantêm o mesmo isolamento de setores das fichas;
+ * demais perfis podem consultar somente o próprio histórico.
+ * Sem notas fabricadas, sem alterar assinaturas históricas.
+ */
+app.get('/fichas/notechs/historico/:funcionarioId', async (c) => {
+  try {
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
+    const empresaId = getEmpresaId(c);
+    const funcionarioId = Number(c.req.param('funcionarioId'));
+    if (!Number.isSafeInteger(funcionarioId) || funcionarioId <= 0) {
+      return c.json({ success: false, error: 'Funcionário inválido' }, 400);
+    }
+    const target = await c.env.DB.prepare(
+      'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    ).bind(funcionarioId, empresaId).first<{ id: number }>();
+    if (!target) return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+
+    if (isFullAccess(role)) {
+      const access = await getEmployeeSectorAccess(c, empresaId);
+      if (access.mode === 'restricted') {
+        const setores = await effectiveFichaSetorIds({
+          db: c.env.DB, empresaId, userId: Number(userId),
+          role, legacySetorIds: access.setorIds,
+        });
+        const allowed = await getAllowedFuncionariosBySetorScope(
+          c.env.DB, empresaId, [funcionarioId], setores,
+        );
+        if (!allowed.has(funcionarioId)) {
+          return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+        }
+      }
+    } else {
+      const ownId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      if (!ownId || Number(ownId) !== funcionarioId) {
+        return c.json({ success: false, error: 'Acesso negado' }, 403);
+      }
+    }
+
+    const data = await c.env.DB.prepare(
+      `SELECT fs.id AS ficha_id, fs.data_sessao, fs.tipo_sessao,
+              fs.status, fs.resultado_final, fs.assinatura_instrutor_timestamp,
+              m.codigo, m.categoria, m.resultado, m.observacoes
+         FROM fichas_sessao fs
+         LEFT JOIN fichas_sessao_manobras m
+           ON m.ficha_id = fs.id
+          AND m.deleted_at IS NULL
+          AND UPPER(TRIM(m.categoria)) = 'NOTECHS'
+        WHERE fs.empresa_id = ?
+          AND fs.colaborador_id_aluno = ?
+          AND fs.deleted_at IS NULL
+        ORDER BY fs.data_sessao DESC, fs.id DESC, m.ordem
+        LIMIT 3001`,
+    ).bind(empresaId, funcionarioId).all<{
+      ficha_id: number;
+      data_sessao: string | null;
+      tipo_sessao: string | null;
+      status: string | null;
+      resultado_final: string | null;
+      assinatura_instrutor_timestamp: string | null;
+      codigo: string | null;
+      categoria: string | null;
+      resultado: string | null;
+      observacoes: string | null;
+    }>();
+    const rows = data.results || [];
+    if (rows.length > 3000) {
+      return c.json({ success: false, code: 'NOTECHS_HISTORY_LIMIT_EXCEEDED',
+        error: 'Histórico excede o limite da consulta; use extração paginada controlada.' }, 409);
+    }
+    const sessions = new Map<number, {
+      ficha_id: number; data_sessao: string | null; tipo_sessao: string | null;
+      status: string | null; resultado_final: string | null;
+      assinada: boolean; notas: Array<{ codigo: string; resultado: string | null; observacoes: string | null }>;
+    }>();
+    for (const row of rows) {
+      if (!sessions.has(row.ficha_id)) {
+        sessions.set(row.ficha_id, {
+          ficha_id: row.ficha_id, data_sessao: row.data_sessao,
+          tipo_sessao: row.tipo_sessao, status: row.status,
+          resultado_final: row.resultado_final,
+          assinada: Boolean(row.assinatura_instrutor_timestamp), notas: [],
+        });
+      }
+      if (row.codigo) {
+        sessions.get(row.ficha_id)!.notas.push({
+          codigo: row.codigo, resultado: row.resultado, observacoes: row.observacoes,
+        });
+      }
+    }
+    const historico = [...sessions.values()].map((session) => ({
+      ...session,
+      avaliacao: evaluateNotechsApproval(
+        session.notas.map((nota) => ({ ...nota, categoria: 'NOTECHS' })),
+      ),
+    }));
+    return c.json({
+      success: true, data: {
+        funcionario_id: funcionarioId, total_fichas: historico.length,
+        fichas_com_15_notechs: historico.filter((entry) =>
+          entry.avaliacao.missing.length === 0 && entry.avaliacao.duplicate.length === 0).length,
+        fichas_com_suficiencia_individual: historico.filter((entry) => entry.avaliacao.eligible).length,
+        fichas_aprovadas_com_nota_incompleta: historico.filter((entry) =>
+          entry.resultado_final === 'APROVADO' && !entry.avaliacao.eligible).length,
+        historico,
+      },
+    });
+  } catch (error) {
+    console.error('Falha ao consultar histórico NOTECHS:', error);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
+  }
+});
+
 app.get('/fichas/para-avaliar', async (c) => {
   try {
     const userId = getContextUserId(c);
@@ -1252,6 +1371,7 @@ app.get('/fichas/:id', async (c) => {
       edicao_pendente: Number(f.edicoes_pendentes_count || 0) > 0,
       notechs_status: notechsStatus,
       missing_notechs_count: notechsMissingCount,
+      notechs_avaliacao: evaluateNotechsApproval(m.results || []),
       created_at: f.ficha_created_at || null,
       updated_at: f.updated_at || null,
     };
@@ -1832,6 +1952,23 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
           `✅ [FICHA ${id}] Avaliação ${avaliacaoSalva ? 'salva' : 'não salva'} → ${newStatus}`,
         );
       }
+    }
+
+    // Os estados finais só podem ser criados pela assinatura formal do
+    // instrutor. Impede que PUT /fichas/:id burle a validação NOTECHS
+    // alterando diretamente o campo status.
+    if (
+      ['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'].includes(String(newStatus).toUpperCase()) &&
+      !a.assinatura_instrutor_timestamp
+    ) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE',
+          error: 'Status final exige assinatura formal do instrutor e validação dos NOTECHS.',
+        },
+        409,
+      );
     }
 
     if (

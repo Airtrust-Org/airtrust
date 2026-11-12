@@ -117,6 +117,7 @@ interface FichaDetalhada {
   created_at?: string | null;
   updated_at?: string | null;
   nota_geral?: number;
+  colaborador_id_aluno?: number | null;
   aprovado?: boolean | number | null;
   status: string;
   observacoes_gerais?: string;
@@ -138,6 +139,18 @@ interface FichaDetalhada {
   edicoes_pendentes_count?: number;
   notechs_status?: 'missing' | 'partial' | 'complete';
   missing_notechs_count?: number;
+  notechs_avaliacao?: {
+    eligible: boolean;
+    required: number;
+    complete: number;
+    passed: number;
+    missing: string[];
+    unscored: string[];
+    belowMinimum: Array<{ codigo: string; nota: number }>;
+    invalid: Array<{ codigo: string; valor: string }>;
+    duplicate: string[];
+    unexpected: string[];
+  };
 }
 
 interface AlteracaoEdicaoFicha {
@@ -244,6 +257,23 @@ export default function FichaDetalhe() {
   const [edicoes, setEdicoes] = useState<EdicaoFicha[]>([]);
   const [modalSolicitarEdicao, setModalSolicitarEdicao] = useState(false);
   const [modalNotechsAberto, setModalNotechsAberto] = useState(false);
+  const [historicoNotechsAberto, setHistoricoNotechsAberto] = useState(false);
+  const [historicoNotechsCarregando, setHistoricoNotechsCarregando] = useState(false);
+  const [historicoNotechsErro, setHistoricoNotechsErro] = useState<string | null>(null);
+  const [historicoNotechs, setHistoricoNotechs] = useState<{
+    total_fichas: number;
+    fichas_com_suficiencia_individual: number;
+    fichas_aprovadas_com_nota_incompleta: number;
+    historico: Array<{
+      ficha_id: number;
+      data_sessao: string | null;
+      tipo_sessao: string | null;
+      status: string | null;
+      resultado_final: string | null;
+      avaliacao: { eligible: boolean; passed: number; required: number };
+      notas: Array<{ codigo: string; resultado: string | null }>;
+    }>;
+  } | null>(null);
   const [motivoEdicao, setMotivoEdicao] = useState('');
   const [observacoesGeraisEdicao, setObservacoesGeraisEdicao] = useState('');
   const [observacoesManobrasEdicao, setObservacoesManobrasEdicao] = useState<
@@ -1244,11 +1274,43 @@ export default function FichaDetalhe() {
     }
   };
 
+  const carregarHistoricoNotechs = async () => {
+    const colaboradorId = Number(ficha?.colaborador_id_aluno);
+    if (!Number.isSafeInteger(colaboradorId) || colaboradorId <= 0) {
+      setHistoricoNotechsErro('Funcionário da ficha não identificado.');
+      return;
+    }
+    setHistoricoNotechsErro(null);
+    setHistoricoNotechsCarregando(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(
+        `${API_BASE_URL}/simuladores/fichas/notechs/historico/${colaboradorId}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        setHistoricoNotechsErro(result.error || 'Não foi possível consultar o histórico.');
+        return;
+      }
+      setHistoricoNotechs(result.data);
+    } catch {
+      setHistoricoNotechsErro('Não foi possível consultar o histórico NOTECHS.');
+    } finally {
+      setHistoricoNotechsCarregando(false);
+    }
+  };
+
   // Separar manobras técnicas variáveis do bloco NOTECHS (namespace de
   // ordem reservado >= 1001) — sempre separado, independentemente do modelo.
   const { tecnicas: manobrasTecnicas, notechs: manobrasNotechs } = splitManobrasNotechs(
     ficha?.manobras || [],
   );
+  // Contagem instantânea durante a edição; o backend valida todos os códigos,
+  // a ausência de duplicações e as 15 notas no momento da assinatura final.
+  const notechsSuficientesEmTela = manobrasNotechs.filter(
+    (item) => item.nota !== null && Number.isInteger(item.nota) && item.nota >= 6 && item.nota <= 10,
+  ).length;
   const specialDefinition = getSpecialEventSessionDefinition(ficha?.sessao_codigo);
   const specialTechnicalBlocks = splitSpecialTechnicalBlocks(
     ficha?.sessao_codigo,
@@ -1887,6 +1949,17 @@ export default function FichaDetalhe() {
                     </span>
                     <h3 className="text-lg font-bold text-slate-900">Habilidades Não Técnicas</h3>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!historicoNotechsAberto && !historicoNotechs) void carregarHistoricoNotechs();
+                        setHistoricoNotechsAberto((aberto) => !aberto);
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {historicoNotechsAberto ? 'Ocultar histórico' : 'Histórico do funcionário'}
+                    </button>
                   <button
                     type="button"
                     onClick={() => setModalNotechsAberto(true)}
@@ -1895,6 +1968,59 @@ export default function FichaDetalhe() {
                     <Info className="h-3.5 w-3.5" />
                     Ver descritores completos
                   </button>
+                  </div>
+                </div>
+                {historicoNotechsAberto && (
+                  <section className="mb-3 rounded-md border border-slate-200 p-3" aria-label="Histórico NOTECHS do funcionário">
+                    {historicoNotechsCarregando && <p className="text-sm">Consultando avaliações...</p>}
+                    {historicoNotechsErro && <p className="text-sm text-red-700">{historicoNotechsErro}</p>}
+                    {historicoNotechs && (
+                      <>
+                        <p className="mb-2 text-sm font-medium">
+                          {historicoNotechs.total_fichas} fichas no histórico; {historicoNotechs.fichas_com_suficiencia_individual} com os 15 NOTECHS suficientes.
+                          {historicoNotechs.fichas_aprovadas_com_nota_incompleta > 0 &&
+                            ` ${historicoNotechs.fichas_aprovadas_com_nota_incompleta} aprovação(ões) histórica(s) requer(em) revisão.`}
+                        </p>
+                        <div className="max-h-64 space-y-2 overflow-auto">
+                          {historicoNotechs.historico.map((registro) => (
+                            <details key={registro.ficha_id} className="rounded border border-slate-200 px-2 py-1 text-xs">
+                              <summary className="cursor-pointer">
+                                {registro.data_sessao || 'Sem data'} — {registro.tipo_sessao || 'Sessão'} — {registro.avaliacao.passed}/{registro.avaliacao.required} suficientes — {registro.resultado_final || registro.status || 'Pendente'}
+                              </summary>
+                              <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                                {registro.notas.map((nota) => (
+                                  <li key={nota.codigo}>{nota.codigo}: {nota.resultado || 'Sem nota'}</li>
+                                ))}
+                              </ul>
+                            </details>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </section>
+                )}
+                <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  Nota mínima individual para aprovação: <strong>6 em cada um dos 15 NOTECHS</strong>.
+                  {ficha.notechs_avaliacao && (
+                    <span className="ml-2 font-medium">
+                      {isEditMode ? notechsSuficientesEmTela : ficha.notechs_avaliacao.passed}/{ficha.notechs_avaliacao.required} competências com nota suficiente.
+                      {!ficha.notechs_avaliacao.eligible &&
+                        ficha.status !== 'APROVADO' && ficha.status !== 'NAO_APROVADO' &&
+                        ' A aprovação final permanecerá bloqueada até a regularização.'}
+                    </span>
+                  )}
+                  {ficha.notechs_avaliacao && !ficha.notechs_avaliacao.eligible && (
+                    <div className="mt-1 text-xs text-amber-900">
+                      {ficha.notechs_avaliacao.missing.length > 0 &&
+                        `Ausentes: ${ficha.notechs_avaliacao.missing.join(', ')}. `}
+                      {ficha.notechs_avaliacao.unscored.length > 0 &&
+                        `Sem avaliação: ${ficha.notechs_avaliacao.unscored.join(', ')}. `}
+                      {ficha.notechs_avaliacao.belowMinimum.length > 0 &&
+                        `Abaixo de 6: ${ficha.notechs_avaliacao.belowMinimum.map((x) => `${x.codigo} (${x.nota})`).join(', ')}. `}
+                      {ficha.notechs_avaliacao.invalid.length > 0 && 'Existem notas inválidas. '}
+                      {ficha.notechs_avaliacao.duplicate.length > 0 && 'Existem competências duplicadas. '}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                   {manobrasNotechs.map((manobra) => (

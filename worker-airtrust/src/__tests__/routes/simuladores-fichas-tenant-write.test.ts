@@ -279,6 +279,25 @@ describe('simuladores fichas tenant-aware writes', () => {
     );
   });
 
+  it.each(['APROVADO', 'NAO_APROVADO', 'CONCLUIDA'])(
+    'PUT /fichas/:id não permite forçar status final %s sem assinatura', async (status) => {
+      const { db, runs } = createDbMock({ manobrasCount: 18 });
+      const response = await simuladoresFichasRoutes.fetch(
+        new Request('http://localhost/fichas/901', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, observacoes: 'Tentativa de contornar a assinatura' }),
+        }),
+        { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE',
+      });
+      expect(runs.some((row) => row.query.includes('UPDATE fichas_sessao SET status'))).toBe(false);
+    },
+  );
+
   it('PUT /fichas/:id aceita rascunho parcial sem avançar o status', async () => {
     const { db } = createDbMock({ manobrasCount: 2 });
 
