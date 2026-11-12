@@ -724,9 +724,7 @@ authRoutes.post(
     // address. Returning the same unavailable status to every address avoids
     // account enumeration while preventing false 'email sent' confirmations.
     if (!c.env.BREVO_API_KEY?.trim()) {
-      logger.error('[AUTH] forgot-password: delivery unavailable (configuration)', {
-        reason: 'PASSWORD_RESET_DELIVERY_UNAVAILABLE',
-      });
+      logger.warn('[AUTH] forgot-password: PASSWORD_RESET_DELIVERY_UNAVAILABLE');
       return c.json(
         { success: false, code: 'PASSWORD_RESET_DELIVERY_UNAVAILABLE' },
         503,
