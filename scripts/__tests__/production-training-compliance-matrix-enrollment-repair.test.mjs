@@ -141,7 +141,7 @@ test('production repair never creates a placeholder or silently enrolls when no 
   assert.doesNotMatch(script, /Placeholder EAD criado/);
   assert.match(script, /if \(before\.no_course_count !== 0\) fail\('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW'\)/);
   const noContentGuardIndex = script.indexOf("if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW')");
-  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token)');
+  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token, before)');
   assert.ok(noContentGuardIndex > 0 && noContentGuardIndex < mutationIndex);
 });
 
@@ -159,4 +159,12 @@ test('one-shot enrollment mode includes mandatory policy-disabled targets withou
   assert.match(script, /cancellation_scope: enrollmentOnly \? 'none'/);
   assert.match(workflow, /REVIEWED_ENROLLMENT_MODE_MISMATCH/);
   assert.match(workflow, /REVIEWED_CANCELLATION_SCOPE_INVALID/);
+});
+
+
+test('enroll apply writes exact candidate set validated by reviewed hash, no second topology scan', () => {
+  assert.match(script, /async function enrollMissingPairs\(token, state\)/);
+  assert.match(script, /verifyReviewedState\(before\);[\s\S]*?enrollMissingPairs\(token, before\)/);
+  const body = script.split('async function enrollMissingPairs(token, state) {')[1].split('function cancelReviewedWrongEnrollments')[0];
+  assert.doesNotMatch(body, /readState\(token\)/);
 });
