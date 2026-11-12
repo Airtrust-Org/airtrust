@@ -9,6 +9,10 @@ import {
   sanitizeComplianceEnrollmentResponse,
 } from '../services/training-compliance-rule-enrollment';
 import { reconcileFdmMaintenance72 } from '../services/training-compliance-fdm72-reconciliation';
+import {
+  assertTrainingComplianceAutoEnrollmentContract,
+  inspectTrainingComplianceLmsContracts,
+} from '../services/training-compliance-lms-contract';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -515,6 +519,13 @@ app.post('/reconciliacao/fdm-mnt72/sincronizar', requireRole('admin'), async (c)
   return c.json({ success: true, data });
 });
 
+// Admin-only contract health endpoint: no enrollment writes, no employee PII.
+app.get('/regras/integridade-lms', requireRole('admin'), async (c) => {
+  const empresaId = getEmpresaId(c);
+  const report = await inspectTrainingComplianceLmsContracts(c.env.DB, empresaId);
+  return c.json({ success: true, data: report });
+});
+
 app.post('/regras', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -529,6 +540,8 @@ app.post('/regras', requireRole('admin', 'manager'), async (c) => {
   }
   const access = await getEmployeeSectorAccess(c, empresaId);
   await assertIndividualRuleWithinAccess(db, empresaId, access, data);
+  await assertTrainingComplianceAutoEnrollmentContract(db, empresaId,
+    data.qualificacao_tipo_id, data.auto_matricular_ead, data.modalidade_requerida);
   const result = await insertTrainingComplianceRequirement(db, empresaId, data);
   const id = Number(result.meta.last_row_id);
   await registrarAuditoria({
@@ -569,6 +582,8 @@ app.put('/regras/:id', requireRole('admin', 'manager'), async (c) => {
   if (data.aeronave_modelo && !aircraftScopeReady) {
     throw new ApiError('Schema de compliance por aeronave ainda não aplicado', 409);
   }
+  await assertTrainingComplianceAutoEnrollmentContract(db, empresaId,
+    data.qualificacao_tipo_id, data.auto_matricular_ead, data.modalidade_requerida);
   await updateTrainingComplianceRequirement(db, empresaId, id, data);
   await registrarAuditoria({
     db,
