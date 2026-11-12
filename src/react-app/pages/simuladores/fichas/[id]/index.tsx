@@ -60,6 +60,7 @@ import { openPreviewWindow } from '@/react-app/utils/pdfPreview';
 import AssinaturaModal from '@/react-app/components/AssinaturaModal';
 import ModalNotechsReferencia from '../components/ModalNotechsReferencia';
 import { NOTECHS_ORDEM_BASE, splitManobrasNotechs } from '../../../../lib/simuladores/notechs';
+import { NOTECHS_SCORE_OPTIONS, notechsHistoryIdentity } from '@/shared/simuladores/notechs-scoring';
 
 interface ManobraAvaliacao {
   id: number;
@@ -260,8 +261,9 @@ export default function FichaDetalhe() {
   const [historicoNotechsAberto, setHistoricoNotechsAberto] = useState(false);
   const [historicoNotechsCarregando, setHistoricoNotechsCarregando] = useState(false);
   const [historicoNotechsErro, setHistoricoNotechsErro] = useState<string | null>(null);
-  const historicoFichaIdRef = useRef(id);
+  const historicoIdentidadeRef = useRef(notechsHistoryIdentity(id, ficha?.colaborador_id_aluno));
   const [historicoNotechs, setHistoricoNotechs] = useState<{
+    funcionario_id: number;
     total_fichas: number;
     fichas_com_suficiencia_individual: number;
     fichas_aprovadas_com_nota_incompleta: number;
@@ -275,14 +277,17 @@ export default function FichaDetalhe() {
       notas: Array<{ codigo: string; resultado: string | null }>;
     }>;
   } | null>(null);
-  // O componente pode ser reutilizado entre fichas: nunca exibir histórico
-  // do funcionário anterior, mesmo se a requisição antiga terminar depois.
+  // A identidade do histórico inclui ficha e colaborador: trocar o avaliado
+  // na mesma rota também invalida o cache e resultados assíncronos anteriores.
   useEffect(() => {
-    historicoFichaIdRef.current = id;
+    const identidade = notechsHistoryIdentity(id, ficha?.colaborador_id_aluno);
+    if (historicoIdentidadeRef.current === identidade) return;
+    historicoIdentidadeRef.current = identidade;
     setHistoricoNotechs(null);
     setHistoricoNotechsAberto(false);
     setHistoricoNotechsErro(null);
-  }, [id]);
+    setHistoricoNotechsCarregando(false);
+  }, [id, ficha?.colaborador_id_aluno]);
   const [motivoEdicao, setMotivoEdicao] = useState('');
   const [observacoesGeraisEdicao, setObservacoesGeraisEdicao] = useState('');
   const [observacoesManobrasEdicao, setObservacoesManobrasEdicao] = useState<
@@ -1289,6 +1294,7 @@ export default function FichaDetalhe() {
       setHistoricoNotechsErro('Funcionário da ficha não identificado.');
       return;
     }
+    const identidadeRequisicao = notechsHistoryIdentity(id, colaboradorId);
     setHistoricoNotechsErro(null);
     setHistoricoNotechsCarregando(true);
     try {
@@ -1298,16 +1304,20 @@ export default function FichaDetalhe() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
       const result = await response.json();
-      if (historicoFichaIdRef.current !== id) return;
+      if (historicoIdentidadeRef.current !== identidadeRequisicao) return;
       if (!response.ok || !result.success) {
         setHistoricoNotechsErro(result.error || 'Não foi possível consultar o histórico.');
         return;
       }
       setHistoricoNotechs(result.data);
     } catch {
-      setHistoricoNotechsErro('Não foi possível consultar o histórico NOTECHS.');
+      if (historicoIdentidadeRef.current === identidadeRequisicao) {
+        setHistoricoNotechsErro('Não foi possível consultar o histórico NOTECHS.');
+      }
     } finally {
-      setHistoricoNotechsCarregando(false);
+      if (historicoIdentidadeRef.current === identidadeRequisicao) {
+        setHistoricoNotechsCarregando(false);
+      }
     }
   };
 
@@ -1963,7 +1973,10 @@ export default function FichaDetalhe() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (!historicoNotechsAberto && !historicoNotechs) void carregarHistoricoNotechs();
+                        if (!historicoNotechsAberto &&
+                          Number(historicoNotechs?.funcionario_id) !== Number(ficha.colaborador_id_aluno)) {
+                          void carregarHistoricoNotechs();
+                        }
                         setHistoricoNotechsAberto((aberto) => !aberto);
                       }}
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
@@ -1984,7 +1997,8 @@ export default function FichaDetalhe() {
                   <section className="mb-3 rounded-md border border-slate-200 p-3" aria-label="Histórico NOTECHS do funcionário">
                     {historicoNotechsCarregando && <p className="text-sm">Consultando avaliações...</p>}
                     {historicoNotechsErro && <p className="text-sm text-red-700">{historicoNotechsErro}</p>}
-                    {historicoNotechs && (
+                    {historicoNotechs &&
+                      Number(historicoNotechs.funcionario_id) === Number(ficha.colaborador_id_aluno) && (
                       <>
                         <p className="mb-2 text-sm font-medium">
                           {historicoNotechs.total_fichas} fichas no histórico; {historicoNotechs.fichas_com_suficiencia_individual} com os 15 NOTECHS suficientes.
@@ -2057,7 +2071,7 @@ export default function FichaDetalhe() {
                           }`}
                         >
                           <option value="">Selecione</option>
-                          {opcoesNota.map((opcao) => (
+                          {NOTECHS_SCORE_OPTIONS.map((opcao) => (
                             <option key={opcao} value={opcao}>
                               {opcao}
                             </option>

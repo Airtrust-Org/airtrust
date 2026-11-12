@@ -34,6 +34,7 @@ import {
   isFichaStatusFinalizado,
 } from '../constants/notechs';
 import { evaluateNotechsApproval } from '../constants/notechs-approval';
+import { isNotechsDraftScoreAllowed } from '../../../src/shared/simuladores/notechs-scoring';
 import { getSpecialEventSessionDefinition } from '../../../src/shared/simuladores/special-event-sessions';
 import {
   buildSimulatorDisplayName,
@@ -1850,12 +1851,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     >();
     if (Array.isArray(b.manobras) && b.manobras.length > 0) {
       const atuais = await c.env.DB.prepare(
-        'SELECT ordem, resultado FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
+        'SELECT ordem, resultado, categoria FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
       )
         .bind(id)
-        .all<{ ordem: number; resultado: unknown }>();
+        .all<{ ordem: number; resultado: unknown; categoria: string | null }>();
       const atuaisPorOrdem = new Map(
         (atuais.results || []).map((row) => [Number(row.ordem), row.resultado]),
+      );
+      const categoriasPorOrdem = new Map(
+        (atuais.results || []).map((row) => [Number(row.ordem), String(row.categoria || '').trim().toUpperCase()]),
       );
 
       for (const m of b.manobras as FichaUpdateManobraPayload[]) {
@@ -1872,6 +1876,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             },
             409,
           );
+        }
+        if (categoriasPorOrdem.get(ordem) === 'NOTECHS' &&
+            !isNotechsDraftScoreAllowed(m?.resultado)) {
+          return c.json({
+            success: false,
+            code: 'NOTECHS_SCORE_INVALID',
+            error: 'NOTECHS aceita somente notas inteiras de 1 a 10, NR ou sem nota durante o rascunho.',
+            details: { ordem },
+          }, 400);
         }
         const update = {
           ordem,

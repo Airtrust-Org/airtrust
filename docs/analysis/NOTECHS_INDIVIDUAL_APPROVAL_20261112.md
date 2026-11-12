@@ -20,3 +20,9 @@ Tenant Costa do Sol empresa 6: 110 fichas, 21 funcionários; 35 fichas com 15 NO
 ## Não feito / aceitação pendente
 
 Nenhuma nota histórica foi alterada, nenhuma aprovação foi fabricada, nenhuma ficha assinada foi reaberta. O achado histórico deve passar por revisão do responsável técnico, incluindo a regra de admissibilidade de `NR` naquela sessão e a documentação de retificação se necessária. Os guias PTO e os demais currículos da issue #2232 são frente distinta e **não estão homologados** por este PR. Conferir os 8 gates oficiais, fazer merge isolado de NOTECHS, publicar Worker+Pages no mesmo SHA e comprovar fluxo de aprovar/reprovar no readback. Este documento não constitui homologação de 100% do PTO.
+
+### Revisão de consistência da escala (revisor automático PR #2236)
+
+A seção de avaliação NOTECHS do PTO aprovado define escala qualitativa por **notas inteiras de 1 a 10** (faixas 1–2, 3–5, 6–7, 8–9, 10) e suficiência de 6 por elemento. O frontend anterior oferecia frações de 0,5 inclusive para NOTECHS. O seletor NOTECHS agora oferece `NR` no rascunho e exatamente `1.0` a `10.0` por inteiros; o PUT recusa notas fracionárias, 0 e maiores que 10 antes de gravar; o POST assinatura segue exigindo as 15 notas suficientes. As notas técnicas mantêm seu seletor anterior, sem alterar esta outra política. Testes verificam as opções, gravação e assinatura.
+
+O histórico NOTECHS mantém identidade de cache de **ficha + colaborador**, invalida em mudanças de rota ou funcionário e descarta respostas assíncronas tardias; evita exibir avaliações de outro colaborador após navegação. A resposta histórica só renderiza quando o `funcionario_id` da API coincide com o avaliado da ficha atual.

@@ -55,6 +55,7 @@ function createDbMock(options?: {
   invalidTenantLink?: boolean;
   manobrasCount?: number;
   manobrasRowsCount?: number;
+  notechsOrdens?: number[];
   sessionDate?: string;
   sessionTime?: string;
 }) {
@@ -169,11 +170,12 @@ function createDbMock(options?: {
           return null;
         },
         all: async () => {
-          if (query.includes('SELECT ordem, resultado FROM fichas_sessao_manobras')) {
+          if (query.includes('SELECT ordem, resultado, categoria FROM fichas_sessao_manobras')) {
             const rowsCount = options?.manobrasRowsCount ?? 2;
             return {
               results: Array.from({ length: rowsCount }, (_, index) => ({
                 ordem: index + 1,
+                categoria: options?.notechsOrdens?.includes(index + 1) ? 'NOTECHS' : 'GERAL',
                 resultado: null,
               })),
             };
@@ -340,6 +342,27 @@ describe('simuladores fichas tenant-aware writes', () => {
       success: true,
       data: { status: 'AGUARDANDO_ASSINATURA_ALUNO' },
     });
+  });
+
+  it.each([
+    { note: 6.5, expected: 400 },
+    { note: 10.5, expected: 400 },
+    { note: 0, expected: 400 },
+    { note: 8, expected: 200 },
+    { note: 'NR', expected: 200 },
+  ])('PUT não grava NOTECHS fora da escala da revisão PTO: nota $note', async ({ note, expected }) => {
+    const { db, runs } = createDbMock({ manobrasRowsCount: 2, notechsOrdens: [1] });
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manobras: [{ ordem: 1, resultado: note, observacoes: '' }] }),
+      }), { DB: db, __mockEmpresaId: 6 } as unknown as Env, {} as ExecutionContext,
+    );
+    expect(response.status).toBe(expected);
+    if (expected === 400) {
+      await expect(response.json()).resolves.toMatchObject({ code: 'NOTECHS_SCORE_INVALID' });
+      expect(runs.some((row) => row.query.includes('UPDATE fichas_sessao_manobras'))).toBe(false);
+    }
   });
 
   it('PUT /fichas/:id consolida rascunho com 33 manobras sem uma query D1 por linha', async () => {
