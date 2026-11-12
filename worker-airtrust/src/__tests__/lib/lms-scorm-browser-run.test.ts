@@ -81,7 +81,7 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
     const page = {
       setRequestInterception: vi.fn(async () => undefined),
       on: vi.fn(),
-      setContent: vi.fn(async () => undefined),
+      goto: vi.fn(async () => undefined),
       waitForFunction: vi.fn(async () => {
         if (waitFailure) throw new Error('TimeoutError: browser readiness timed out');
         return undefined;
@@ -106,11 +106,63 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
       assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
       launchBrowser: async () => browser as never,
     });
-    expect(page.setContent).toHaveBeenCalledWith(expect.any(String), {
+    expect(page.goto).toHaveBeenCalledWith('https://scorm-candidate.invalid/index.html', {
       waitUntil: 'domcontentloaded', timeout: 30000,
     });
     expect(page.waitForFunction).toHaveBeenCalledOnce();
     expect(runtime).toMatchObject({ status: 'PASS', initializeObserved: true, commitObserved: true, finishObserved: true });
+  });
+
+  it('serves instrumented SCO on a real same-origin navigation, preserving localStorage availability', async () => {
+    const {page,browser}=fakeBrowser();
+    const html='<html><head></head><body><script src="app.js"></script></body></html>';
+    await runScormBrowserConformance({
+      browserBinding:{},candidateSha256:'c'.repeat(64),launchFile:'index.html',
+      assets:[
+        {path:'index.html',data:new TextEncoder().encode(html)},
+        {path:'app.js',data:new TextEncoder().encode('localStorage.setItem("proof","1");')},
+      ],
+      launchBrowser:async()=>browser as never,
+    });
+    const handler=page.on.mock.calls.find(([kind])=>kind==='request')?.[1];
+    expect(handler).toBeTypeOf('function');
+    const served=vi.fn(async (response:unknown)=>response);
+    await handler({
+      url:()=> 'https://scorm-candidate.invalid/index.html',
+      respond:served,
+      abort:vi.fn(async()=>undefined),
+    });
+    expect(served).toHaveBeenCalledOnce();
+    const response=served.mock.calls[0][0] as {body:string;headers:Record<string,string>};
+    expect(response.headers['Content-Type']).toMatch(/text\/html/);
+    expect(response.body).toContain('__AIRTRUST_SCORM_TRACE');
+    expect(response.body).toContain('<script src="app.js"></script>');
+    expect(page.goto).toHaveBeenCalledWith(
+      'https://scorm-candidate.invalid/index.html',expect.any(Object));
+    const denied=vi.fn(async (reason?:string)=>reason);
+    await handler({
+      url:()=> 'https://evil.example.invalid/app.js',
+      respond:vi.fn(async()=>undefined),abort:denied,
+    });
+    expect(denied).toHaveBeenCalledWith('blockedbyclient');
+  });
+
+  it.each(['INDEX.HTM','MAIN.HTML'])('serves case-insensitive authored HTML launch %s as executable document', async launchFile => {
+    const {page,browser}=fakeBrowser();
+    await runScormBrowserConformance({
+      browserBinding:{},candidateSha256:'d'.repeat(64),launchFile,
+      assets:[{path:launchFile,data:new TextEncoder().encode('<html><body>QA</body></html>')}],
+      launchBrowser:async()=>browser as never,
+    });
+    const handler=page.on.mock.calls.find(([kind])=>kind==='request')?.[1];
+    const served=vi.fn(async (response:unknown)=>response);
+    await handler({
+      url:()=> 'https://scorm-candidate.invalid/'+launchFile,
+      respond:served,abort:vi.fn(async()=>undefined),
+    });
+    expect(served.mock.calls[0][0]).toMatchObject({
+      status:200,headers:{'Content-Type':'text/html; charset=utf-8'},
+    });
   });
 
   it('fails closed with a safe diagnostic when SCO never initializes', async () => {
@@ -120,7 +172,7 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
       assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
       launchBrowser: async () => browser as never,
     });
-    expect(page.setContent).toHaveBeenCalledOnce();
+    expect(page.goto).toHaveBeenCalledOnce();
     expect(runtime).toMatchObject({
       status: 'TIMEOUT', failureStage: 'VERIFY_SCORM_INITIALIZATION',
       failureCategory: 'BROWSER_TIMEOUT',
