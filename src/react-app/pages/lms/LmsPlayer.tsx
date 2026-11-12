@@ -288,6 +288,8 @@ export default function LmsPlayer() {
   const {
     data: matricula,
     isLoading: matriculaLoading,
+    isError: matriculaIsError,
+    error: matriculaError,
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
   // Keep the asset-session effect scoped to session identity. Query hook
@@ -1367,8 +1369,36 @@ export default function LmsPlayer() {
 
   if (matriculaLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-5 text-white"
+        role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+        <p className="text-sm text-white/70">Consultando a matrícula e o progresso já salvo...</p>
+      </div>
+    );
+  }
+
+  if (matriculaIsError && !matricula) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-5 text-center text-white"
+        role="alert">
+        <AlertTriangle className="h-9 w-9 text-amber-400" />
+        <h1 className="text-lg font-semibold">Não foi possível carregar o treinamento</h1>
+        <p className="max-w-lg text-sm text-white/75">
+          {matriculaError instanceof Error ? matriculaError.message : 'Não foi possível consultar a matrícula.'}
+        </p>
+        <p className="max-w-lg text-xs text-white/55">
+          Seu progresso permanece salvo. Não é necessário reiniciar o curso.
+        </p>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={() => void refetchMatricula()}
+            className="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300">
+            Tentar novamente
+          </button>
+          <button type="button" onClick={() => navigate('/lms')}
+            className="rounded-lg border border-white/25 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
+            Voltar aos treinamentos
+          </button>
+        </div>
       </div>
     );
   }
@@ -1454,6 +1484,16 @@ export default function LmsPlayer() {
           </button>
         </div>
       </header>
+
+      {matriculaIsError && matricula ? (
+        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-400/40 bg-amber-950/70 px-4 py-2 text-xs text-amber-100">
+          <span>A atualização do progresso não respondeu. O conteúdo aberto foi preservado; verifique o registro antes de encerrar o curso.</span>
+          <button type="button" onClick={() => void refetchMatricula()}
+            className="rounded-lg border border-amber-300/40 px-3 py-1.5 font-semibold hover:bg-amber-900/60">
+            Atualizar situação
+          </button>
+        </div>
+      ) : null}
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
         <div className="flex w-full shrink-0 flex-col items-stretch gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100 sm:flex-row sm:items-start">

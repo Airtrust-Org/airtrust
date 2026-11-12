@@ -666,8 +666,34 @@ export function useMinhasEAD() {
 export function useMatriculaDetalhe(id: number) {
   return useQuery({
     queryKey: lmsKeys.matriculaDetalhe(id),
-    queryFn: () => lmsRequest<LmsCursoDetalhe>(`/matriculas/${id}`),
-    enabled: id > 0,
+    queryFn: async ({ signal }) => {
+      // The detail route resolves manifest and edition information before
+      // returning. Bound the entire auth-aware request including refresh and
+      // response parsing, so a single stalled dependency never traps the
+      // learner on a black player spinner indefinitely.
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', abort, { once: true });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Tempo limite ao abrir a matrícula. O progresso salvo não foi alterado.'));
+        }, 20_000);
+      });
+      try {
+        return await Promise.race([
+          lmsRequest<LmsCursoDetalhe>(`/matriculas/${id}`, { signal: controller.signal }),
+          deadline,
+        ]);
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        signal.removeEventListener('abort', abort);
+      }
+    },
+    enabled: Number.isSafeInteger(id) && id > 0,
+    retry: 1,
     staleTime: 10_000,
   });
 }
