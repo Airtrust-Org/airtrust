@@ -27,6 +27,7 @@ import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/use
 import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
+import { authorizeScormAssetSession } from './scormAssetSessionDeadline';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -641,6 +642,17 @@ export default function LmsPlayer() {
     // established asset session. The short-lived HttpOnly asset cookie
     // remains valid, while a real logout is handled by the auth guard below.
     if (!playerToken) {
+      // A refresh may be pending, but absence of a token must never leave
+      // the initial asset authorization spinner indefinitely. Preserve an
+      // already mounted SCO; only report a recoverable first-launch failure.
+      if (assetSessionKeyRef.current !== sessionKey) {
+        const waitForRefresh = window.setTimeout(() => {
+          if (assetSessionKeyRef.current !== sessionKey) {
+            setAssetSessionError('A autorização do conteúdo não foi concluída. Verifique sua sessão e tente novamente.');
+          }
+        }, 20_000);
+        return () => window.clearTimeout(waitForRefresh);
+      }
       return;
     }
 
@@ -648,9 +660,9 @@ export default function LmsPlayer() {
 
     async function syncAssetSession() {
       try {
-        const response = await fetchWithAuth('/api/lms/assets/session', {
-          method: 'POST',
-          body: JSON.stringify({ matricula_id: id, expected_handoff_id: activeHandoffId }),
+        const response = await authorizeScormAssetSession({
+          matriculaId: id,
+          expectedHandoffId: activeHandoffId,
         });
         if (cancelled) return;
 
@@ -682,10 +694,12 @@ export default function LmsPlayer() {
           setAssetSessionReady(false);
           setAssetSessionError(`Não foi possível autorizar a abertura do conteúdo (HTTP ${response.status}).`);
         }
-      } catch {
+      } catch (error) {
         if (!cancelled && assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
-          setAssetSessionError('Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
+          setAssetSessionError(error instanceof Error && error.message === 'ASSET_SESSION_TIMEOUT'
+            ? 'Tempo limite ao autorizar o conteúdo. Seu progresso foi preservado. Tente novamente.'
+            : 'Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
         }
       }
     }
