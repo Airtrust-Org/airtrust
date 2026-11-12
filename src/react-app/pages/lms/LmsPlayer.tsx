@@ -272,6 +272,7 @@ export default function LmsPlayer() {
   // Snapshot granular AIRTRUST_COMPLETION_DIAGNOSTICS_V1 (informativo).
   const [granularDiagnostic, setGranularDiagnostic] = useState<LmsGranularDiagnostic | null>(null);
   const [startingNewEdition, setStartingNewEdition] = useState(false);
+  const [recoveringInteractions, setRecoveringInteractions] = useState(false);
 
   const qc = useQueryClient();
   const id = Number(matriculaId);
@@ -1076,11 +1077,14 @@ export default function LmsPlayer() {
     );
     if (!confirmed) return;
     setStartingNewEdition(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
       const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/scorm-edition-handoff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
+        signal: controller.signal,
       });
       const result = await res.json() as { success?: boolean; code?: string; error?: string };
       if (!res.ok || result.success !== true) {
@@ -1089,8 +1093,46 @@ export default function LmsPlayer() {
       await queryClient.invalidateQueries({ queryKey: ['lms'] });
       window.location.reload();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível preservar e retomar a edição ativa.');
+      toast.error(error instanceof Error && error.name === 'AbortError'
+        ? 'A retomada não respondeu. Atualize a matrícula para verificar se foi aplicada antes de tentar novamente.'
+        : error instanceof Error ? error.message : 'Não foi possível preservar e retomar a edição ativa.');
       setStartingNewEdition(false);
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  async function recoverMissingScormInteractions() {
+    if (!id || recoveringInteractions || newEditionRequired || effectiveReviewMode) return;
+    if (!window.confirm(
+      'O AirTrust verificará o pacote ativo e reabrirá somente os cenários obrigatórios sem resposta registrada. As demais respostas e o histórico serão preservados. Continuar?',
+    )) return;
+    setRecoveringInteractions(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/lms/matriculas/${id}/scorm-missing-interactions-recover`, {
+        method: 'POST', signal: controller.signal,
+      });
+      const result = await res.json() as {
+        success?: boolean; error?: string; code?: string;
+        data?: { resume_position?: number; missing_scenarios?: number };
+      };
+      if (!res.ok || result.success !== true) {
+        throw new Error(result.error || result.code || `HTTP ${res.status}`);
+      }
+      toast.success(
+        `Interações pendentes reabertas a partir do slide ${result.data?.resume_position ?? '?'}. As respostas anteriores foram preservadas.`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ['lms'] });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error && error.name === 'AbortError'
+        ? 'A recuperação não respondeu. Atualize a matrícula antes de tentar novamente.'
+        : error instanceof Error ? error.message : 'Falha ao recuperar as interações.');
+    } finally {
+      window.clearTimeout(timeout);
+      setRecoveringInteractions(false);
     }
   }
 
@@ -1632,6 +1674,22 @@ export default function LmsPlayer() {
                         solicite a verificação do registro SCORM pela administração.
                       </p>
                     ) : null}
+                    {!isCompletedState && !effectiveReviewMode && !newEditionRequired &&
+                      closureReadiness?.code === 'PROGRESS_EVIDENCE_MISSING' &&
+                      closureReadiness.missing?.includes('manifest_required_units') &&
+                      displayProgress >= 95 ? (
+                        <button
+                          type="button"
+                          data-testid="lms-recover-missing-scenarios"
+                          onClick={() => void recoverMissingScormInteractions()}
+                          disabled={recoveringInteractions}
+                          className="mt-2 w-full rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/20 disabled:opacity-50"
+                        >
+                          {recoveringInteractions
+                            ? 'Verificando as respostas preservadas...'
+                            : 'Recuperar cenários obrigatórios sem resposta'}
+                        </button>
+                      ) : null}
                     {!isCompletedState && closureReadiness?.missing?.includes('distinct_slide_coverage') &&
                       closureReadiness.slide_coverage?.missing_numbers?.length ? (
                       <p className="text-xs text-amber-200/90" data-testid="lms-missing-slide-numbers">
