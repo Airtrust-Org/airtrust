@@ -11,7 +11,7 @@ on:
         description: dry-run is read-only; apply repairs exact reviewed candidates
         required: true
         type: choice
-        options: [dry-run, apply]
+        options: [dry-run, apply, enroll-dry-run, enroll-apply]
         default: dry-run
       confirmation:
         description: Exact confirmation required by the selected mode
@@ -56,10 +56,12 @@ jobs:
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
           [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
-          if [[ "$MODE" == dry-run ]]; then
+          if [[ "$MODE" == dry-run || "$MODE" == enroll-dry-run ]]; then
             [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_DRYRUN_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR ]] || { echo DRYRUN_CONFIRMATION_REQUIRED >&2; exit 1; }
           elif [[ "$MODE" == apply ]]; then
             [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_REQUIRED >&2; exit 1; }
+          elif [[ "$MODE" == enroll-apply ]]; then
+            [[ "$CONFIRMATION" == AIRTRUST_PRODUCTION_ENROLL_ONLY_MANDATORY_EAD_NO_CANCEL_NO_EMAIL ]] || { echo ENROLL_ONLY_CONFIRMATION_REQUIRED >&2; exit 1; }
           else
             echo INVALID_MODE >&2; exit 1
           fi
@@ -93,7 +95,7 @@ jobs:
           [[ "$E2E_EMAIL" != *'staging.airtrust.invalid'* ]] || { echo STAGING_QA_IDENTITY_REJECTED >&2; exit 1; }
 
       - name: Verify reviewed dry-run predecessor and load exact candidate sets
-        if: ${{ inputs.mode == 'apply' }}
+        if: ${{ inputs.mode == 'apply' || inputs.mode == 'enroll-apply' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -107,9 +109,15 @@ jobs:
           [[ "$(jq -r .conclusion <<<"$run_json")" == success ]] || { echo REVIEWED_DRY_RUN_NOT_SUCCESSFUL >&2; exit 1; }
           [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED_SHA" ]] || { echo REVIEWED_DRY_RUN_SHA_MISMATCH >&2; exit 1; }
           mkdir -p "$RUNNER_TEMP/reviewed"
-          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "production-training-compliance-matrix-enrollment-repair-dry-run-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
+          expected_mode=dry-run
+          if [[ "${{ inputs.mode }}" == enroll-apply ]]; then expected_mode=enroll-dry-run; fi
+          gh run download "$REVIEWED_RUN" --repo "$GITHUB_REPOSITORY" --name "production-training-compliance-matrix-enrollment-repair-$expected_mode-$EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
           evidence="$RUNNER_TEMP/reviewed/result.json"
           test -s "$evidence"
+          [[ "$(jq -r .mode "$evidence")" == "$expected_mode" ]] || { echo REVIEWED_ENROLLMENT_MODE_MISMATCH >&2; exit 1; }
+          if [[ "${{ inputs.mode }}" == enroll-apply ]]; then
+            [[ "$(jq -r .cancellation_scope "$evidence")" == none ]] || { echo REVIEWED_CANCELLATION_SCOPE_INVALID >&2; exit 1; }
+          fi
           for key in missing wrong no_course redundant; do
             count="$(jq -r ".${key}_count" "$evidence")"
             hash="$(jq -r ".${key}_hash" "$evidence")"
@@ -130,7 +138,7 @@ jobs:
           echo "REVIEWED_DRY_RUN_VERIFIED=$REVIEWED_RUN" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture D1 Time Travel recovery point
-        if: ${{ inputs.mode == 'apply' }}
+        if: ${{ inputs.mode == 'apply' || inputs.mode == 'enroll-apply' }}
         working-directory: worker-airtrust
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
@@ -160,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s "$RUNNER_TEMP/result.json" || exit 0
-          jq '{mode,source_sha,empresa_id,expected_pairs,renewal_window_days,renewal_window_count,suppressed_by_valid_evidence_count,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,redundant_count,redundant_hash,redundant_manual_review_count,modality_manual_review_count,policy_manual_review_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,cancelled_redundant_valid_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_redundant_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode,cancellation_scope,one_shot_policy_override_count,source_sha,empresa_id,expected_pairs,renewal_window_days,renewal_window_count,suppressed_by_valid_evidence_count,missing_count,missing_hash,wrong_count,wrong_hash,unsafe_wrong_count,wrong_with_evidence_count,redundant_count,redundant_hash,redundant_manual_review_count,modality_manual_review_count,policy_manual_review_count,historical_evidence_preserved,no_course_count,no_course_hash,no_course_codes,ambiguous_course_count,email_disabled,invitation_endpoint_called,mutation_executed,created_courses,created_enrollments,ignored_existing,cancelled_wrong_enrollments,cancelled_wrong_with_evidence_enrollments,cancelled_redundant_valid_evidence_enrollments,post_expected_pairs,post_missing_count,post_wrong_count,post_redundant_count,post_no_course_count,postconditions_verified,pii_emitted}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload sanitized evidence
         uses: actions/upload-artifact@v7
