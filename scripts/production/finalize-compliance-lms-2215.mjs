@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// source_reference: tenant-6 production D1 read-only inventory 2026-11-12, issue #2215, SHA-specific 124 reviewed EAD organizational rules and archived qualification references.
+// operational_decision: explicit one-time approval prepares durable EAD enrollment opt-in while preserving legacy NULL evidence modalities, four unpublished curriculum drafts and existing training evidence.
+// dry_run_required: official production dry-run and exact pre-state SHA256/hash plus eight release gates are mandatory before any production apply.
+// rollback_plan_required: official governed workflow captures D1 Time Travel recovery point immediately before mutation; existing qualification history, LMS progress and certificates are not altered.
 // #2215: reviewed tenant-6 canonical organizational EAD rules only.
 // Never publish a course, manufacture qualification evidence, or invite students.
 import { createHash } from 'node:crypto';
