@@ -9,7 +9,8 @@ on:
 permissions: {contents: read, actions: read, checks: read, statuses: read}
 concurrency: {group: production-compliance-lms-finalize-2215, cancel-in-progress: false}
 jobs:
-  finalize:
+  d1_finalize:
+    name: Governed D1 tenant 6 Compliance-LMS rule alignment
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
