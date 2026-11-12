@@ -11,10 +11,6 @@ type CandidateAsset = { path: string; data: Uint8Array };
 type TraceItem = { method: string; key?: string; value?: string };
 type ObservedTrace = { trace: TraceItem[]; values: Record<string, string>; initialized: boolean; finished: boolean; lastError: string };
 
-function escapeScript(value: string) {
-  return value.replace(/<\/script/gi, '<\\/script');
-}
-
 function instrumentation() {
   return `<script>(function(){
 var trace=[], values={}, finished=false, initialized=false, lastError='0';
@@ -147,20 +143,41 @@ export async function runScormBrowserConformance(params: {
     const page = await browser.newPage();
     failureStage = 'SET_REQUEST_INTERCEPTION';
     await page.setRequestInterception(true);
+    // page.setContent() on a brand-new about:blank tab leaves the document on
+    // an opaque origin. Many legitimate SCORM 1.2 SCOs use localStorage for
+    // resume and crash with SecurityError before registering LMSFinish. This
+    // produced false conformance failures for ANAC #23 candidates even though
+    // their scripts implement real beforeunload/pagehide session termination.
+    // Navigate to the isolated intercepted candidate origin instead. No
+    // external origin is ever allowed and the harness still never calls
+    // LMSFinish: only the authored package can do that.
+    const candidateUrl = new URL(params.launchFile, CANDIDATE_ORIGIN);
+    const scopedPath = decodeURIComponent(candidateUrl.pathname.replace(/^\//, ''));
+    if (candidateUrl.origin !== new URL(CANDIDATE_ORIGIN).origin ||
+        scopedPath !== params.launchFile) {
+      throw new Error('Invalid candidate launch path');
+    }
     page.on('request', async (request: HTTPRequest) => {
       const url = new URL(request.url());
-      if (url.origin !== new URL(CANDIDATE_ORIGIN).origin) return request.abort('blockedbyclient');
+      if (url.origin !== candidateUrl.origin) return request.abort('blockedbyclient');
       const path = decodeURIComponent(url.pathname.replace(/^\//, ''));
       const asset = assets.get(path);
       if (!asset) return request.respond({ status: 404, body: 'not found' });
-      return request.respond({ status: 200, body: asset, headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ? 'text/html' : 'application/octet-stream' } });
+      const body = path === params.launchFile
+        ? injectBeforePackageScripts(new TextDecoder().decode(asset))
+        : asset;
+      return request.respond({
+        status: 200, body,
+        headers: { 'Content-Type': path.endsWith('.js') ? 'application/javascript' :
+          path.endsWith('.css') ? 'text/css' : path.endsWith('.html') ?
+            'text/html; charset=utf-8' : 'application/octet-stream' },
+      });
     });
     failureStage = 'LOAD_SCO_ASSETS';
-    // networkidle0 waits for all incidental resources, not for SCO readiness.
-    // It can timeout on an otherwise healthy course (fonts/images/telemetry).
-    // DOMContentLoaded awaits parser-blocking course scripts; the next bounded
-    // check independently proves that the SCORM adapter initialized.
-    await page.setContent(`<base href="${CANDIDATE_ORIGIN}">${injectBeforePackageScripts(new TextDecoder().decode(launch))}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS });
+    // DOMContentLoaded waits for the authored parser-blocking scripts, not
+    // incidental image/font network-idle. The real candidate origin makes
+    // localStorage and same-origin runtime calls available as in production.
+    await page.goto(candidateUrl.href, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS });
     failureStage = 'VERIFY_SCORM_INITIALIZATION';
     await page.waitForFunction(() => {
       const probe: unknown = Reflect.get(globalThis, '__AIRTRUST_SCORM_TRACE');
