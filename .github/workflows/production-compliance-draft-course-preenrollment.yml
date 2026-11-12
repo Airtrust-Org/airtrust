@@ -42,32 +42,50 @@ jobs:
       COMPLIANCE_DRAFT_EXPECTED_SHA: ${{ inputs.expected_sha }}
       COMPLIANCE_DRAFT_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
-      - name: Validate reviewed main SHA and exact scoped confirmation
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate exact deployed main ancestor and scoped confirmation
         env:
           MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
-          [[ "$COMPLIANCE_DRAFT_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ &&
-             "$GITHUB_SHA" == "$COMPLIANCE_DRAFT_EXPECTED_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          [[ "$COMPLIANCE_DRAFT_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo INVALID_RELEASE_SHA >&2; exit 1; }
+          git cat-file -e "$COMPLIANCE_DRAFT_EXPECTED_SHA^{commit}"
+          git merge-base --is-ancestor "$COMPLIANCE_DRAFT_EXPECTED_SHA" "$GITHUB_SHA" || { echo RELEASE_NOT_IN_MAIN_HISTORY >&2; exit 1; }
           if [[ "$MODE" == dry-run ]]; then
             [[ "$COMPLIANCE_DRAFT_CONFIRMATION" == COMPLIANCE_DRAFT_DRYRUN_ONLY ]] || exit 1
           elif [[ "$MODE" == apply ]]; then
             [[ "$COMPLIANCE_DRAFT_CONFIRMATION" == COMPLIANCE_DRAFT_3_COURSES_26_ENROLLMENTS_NO_INVITE ]] || exit 1
           else exit 1; fi
-      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: worker-airtrust/package-lock.json
-      - run: npm --prefix worker-airtrust ci
       - name: Verify all eight official main gates
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="$COMPLIANCE_DRAFT_EXPECTED_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          live="$(curl -fsS --max-time 20 https://api.airtrust.online/api/version | jq -r .data.sourceSha)"
+          [[ "$live" == "$COMPLIANCE_DRAFT_EXPECTED_SHA" ]] || { echo PRODUCTION_SOURCE_DRIFT >&2; exit 1; }
+      - name: Pin immutable authorized production script and dependencies
+        run: |
+          set -euo pipefail
+          git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- scripts/production/prepare-compliance-draft-courses-20261112.mjs
+          git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- worker-airtrust/package-lock.json
+          git checkout "$COMPLIANCE_DRAFT_EXPECTED_SHA" -- worker-airtrust/package.json
+      - name: Install exact approved production Worker dependencies
+        run: |
+          set -euo pipefail
+          npm --prefix worker-airtrust ci
+          node -e "const lock=require('./worker-airtrust/package-lock.json');const installed=require('./worker-airtrust/node_modules/wrangler/package.json');const expected=lock.packages?.['node_modules/wrangler']?.version;if(!expected||installed.version!==expected)process.exit(1)"
       - name: Validate production credentials and managed D1 access
         run: |
           set -euo pipefail
@@ -86,12 +104,15 @@ jobs:
           meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
           [[ "$(jq -r .name <<<"$meta")" == 'Production Compliance Draft Course Pre-Enrollment' ]] || exit 1
           [[ "$(jq -r .conclusion <<<"$meta")" == success &&
-             "$(jq -r .head_sha <<<"$meta")" == "$GITHUB_SHA" ]] || exit 1
+             "$(jq -r .head_sha <<<"$meta")" != '' ]] || exit 1
+          reviewed_head="$(jq -r .head_sha <<<"$meta")"
+          git cat-file -e "$reviewed_head^{commit}"
+          git merge-base --is-ancestor "$reviewed_head" "$GITHUB_SHA" || exit 1
           mkdir -p "$RUNNER_TEMP/reviewed"
           gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" \
-            --name "compliance-draft-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+            --name "compliance-draft-dry-run-$COMPLIANCE_DRAFT_EXPECTED_SHA" --dir "$RUNNER_TEMP/reviewed"
           f="$RUNNER_TEMP/reviewed/result.json"
-          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .sha "$f")" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .sha "$f")" == "$COMPLIANCE_DRAFT_EXPECTED_SHA" ]] || exit 1
           [[ "$(jq -r .nr12_expected_staff "$f")" == 26 ]] || exit 1
           jq -e '(.proposed_course_qualifications | all(. == 45 or . == 120 or . == 203))' "$f" >/dev/null
           reviewed_hash="$(jq -r .original_state_hash "$f")"
@@ -113,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check scripts/production/prepare-compliance-draft-courses-20261112.mjs
-          node scripts/production/prepare-compliance-draft-courses-20261112.mjs "$MODE"
+          GITHUB_SHA="$COMPLIANCE_DRAFT_EXPECTED_SHA" node scripts/production/prepare-compliance-draft-courses-20261112.mjs "$MODE"
           test -s "$COMPLIANCE_DRAFT_RESULT"
           if [[ "$MODE" == apply ]]; then
             jq -e '.postconditions_verified==true and .nr12_enrollments_verified==26 and
@@ -134,7 +155,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: compliance-draft-${{ inputs.mode }}-${{ github.sha }}
+          name: compliance-draft-${{ inputs.mode }}-${{ inputs.expected_sha }}
           path: ${{ runner.temp }}/result.json
           if-no-files-found: warn
           retention-days: 30
