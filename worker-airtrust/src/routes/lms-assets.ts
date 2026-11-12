@@ -23,6 +23,7 @@ import {
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
   buildScormQueuedCommitScript,
+  buildScormCommitDeadlineScript,
   buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
@@ -1949,7 +1950,7 @@ ${buildScormNativeResumeOwnershipScript()}
   }
 
 ${buildScormQueuedCommitScript()}
-
+${buildScormCommitDeadlineScript()}
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
@@ -1983,33 +1984,13 @@ ${buildScormQueuedCommitScript()}
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
     var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
-    // A hung autosave must not indefinitely monopolize commitInFlight:
-    // otherwise its queued learner-owned SCORM_USER_FINALIZE never reaches
-    // D1 and the player remains at "Salvando progresso..." forever.
-    // Abort plus a real Promise deadline covers stalled auth/network shims
-    // that ignore AbortController. The existing bounded retry/error path
-    // reports failure rather than inventing terminal status or qualification.
-    var requestController = new AbortController();
-    var requestTimeoutId = null;
-    var requestDeadline = new Promise(function(_resolve, reject) {
-      requestTimeoutId = window.setTimeout(function() {
-        requestController.abort();
-        reject(new Error('SCORM_COMMIT_TIMEOUT'));
-      }, 10000);
-    });
-    var requestPromise = Promise.race([
-      Promise.resolve().then(function() {
-        return fetch(COMMIT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          keepalive: needsKeepalive,
-          credentials: 'include',
-          signal: requestController.signal,
-        });
-      }),
-      requestDeadline,
-    ]).then(function(response) {
+    var requestPromise = fetchBoundedScormCommit(COMMIT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      keepalive: needsKeepalive,
+      credentials: 'include',
+    }).then(function(response) {
       if (response && response.ok) {
         diag(' COMMIT_FETCH_STATUS=' + String(response.status) + ' OK');
         // Routine saves are silent; errors and final results stay visible.
@@ -2129,8 +2110,6 @@ ${buildScormQueuedCommitScript()}
         );
       }
       return null;
-    }).finally(function() {
-      if (requestTimeoutId !== null) window.clearTimeout(requestTimeoutId);
     });
 
     if (currentAttempt !== 0) return requestPromise;
