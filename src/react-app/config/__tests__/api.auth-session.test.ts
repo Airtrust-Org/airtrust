@@ -66,8 +66,8 @@ describe('auth session storage', () => {
         marker,
       };
       const base64url = btoa(JSON.stringify(payload))
-        .replace(/\\+/g, '-')
-        .replace(/\\//g, '_')
+        .split('+').join('-')
+        .split('/').join('_')
         .replace(/=+$/, '');
       expect(base64url).toMatch(marker === '~~~~' ? /-/ : /_/);
 
