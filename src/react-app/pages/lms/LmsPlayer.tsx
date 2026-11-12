@@ -1108,6 +1108,13 @@ export default function LmsPlayer() {
       'O AirTrust verificará o pacote ativo e reabrirá somente os cenários obrigatórios sem resposta registrada. As demais respostas e o histórico serão preservados. Continuar?',
     )) return;
     setRecoveringInteractions(true);
+    // Unload the prior SCO before changing its persisted cursor. Otherwise
+    // its pagehide/beforeunload commit can race and overwrite the just-repaired
+    // state using a stale in-memory copy of suspend_data.
+    if (iframeRef.current) {
+      iframeRef.current.src = 'about:blank';
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
+    }
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
     try {
