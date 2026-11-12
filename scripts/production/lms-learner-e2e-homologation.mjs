@@ -18,7 +18,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
 import { chromium, webkit } from '@playwright/test';
-import { qaRunEmail, assertQaRunScope } from './qa-run-identity.mjs';
+import { SYNTHETIC_LEARNER } from './provision-synthetic-qa-learner.mjs';
 import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from '../validation/lms-scorm-video-playback-readonly.mjs';
@@ -134,7 +134,7 @@ async function assertPinnedProduction() {
 }
 
 async function getLearnerSession() {
-  const browserEmail = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
+  const browserEmail = SYNTHETIC_LEARNER.email;
   const preferredEmail = String(process.env.QA_LEARNER_EMAIL_OVERRIDE || '').trim().toLowerCase();
   assert(preferredEmail === browserEmail, 'QA_EXPECTED_EMAIL_MISMATCH');
   const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
@@ -228,7 +228,7 @@ async function listCourses(learnerToken) {
 export function assertQaLearnerIdentity(token, funcionarioId) {
   const claims = decodeJwtPayload(token);
   const email = String(claims?.email || '').trim().toLowerCase();
-  const expected = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
+  const expected = SYNTHETIC_LEARNER.email;
   assert(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'QA_BROWSER_NOT_ALLOWLISTED');
   assert(TARGET_COMPANY_ID === 6, 'QA_COMPANY_NOT_ALLOWLISTED');
   assert(email === expected, 'QA_LEARNER_EMAIL_NOT_ALLOWLISTED');
