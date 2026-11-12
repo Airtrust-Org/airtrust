@@ -80,6 +80,14 @@ describe('F5-08 SCORM bearer isolation', () => {
     );
     expect(source).not.toContain('lms:auth-token');
     expect(source).not.toContain('syncFrameToken');
-    expect(source).toContain("fetchWithAuth('/api/lms/assets/session'");
+    expect(source).toContain('authorizeScormAssetSession({');
+    const helper = readFileSync(
+      join(process.cwd(), '..', 'src', 'react-app', 'pages', 'lms', 'scormAssetSessionDeadline.ts'),
+      'utf8',
+    );
+    expect(helper).toContain("fetchWithAuth('/api/lms/assets/session'");
+    expect(helper).toContain('signal: controller.signal');
+    expect(helper).not.toContain('Authorization:');
+    expect(helper).not.toContain('postMessage(');
   });
 });
