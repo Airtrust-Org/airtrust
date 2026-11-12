@@ -138,3 +138,17 @@ Comparação por código **e** descrição normalizada (sem supor equivalência 
 Essas 41 posições dependem de **18 códigos distintos** (15 AW139, 3 S76). Relação AW139: `A139-DSP-001`, `A139-PWR-001`, `ABN-HNG-69`, `ABN-MRC-30B`, `ABN-TRC-30E`, `CAU-BOF-55`, `CAU-DUD-46`, `CAU-FDT-62`, `CAU-FPC-73`, `CAU-MCC-104`, `CAU-SAS-41`, `CAU-SRV-80`, `MSG-ATF-89`, `MSG-FDF-98`, `WAR-TMP-30A`; S76: `S76-ENV-NRM`, `S76-ICE-NRM`, `S76-SYS-001`. Falta confirmar procedimento, manual e configuração aplicáveis para cada código antes de sua inserção operacional.
 
 Script reproduzível: `scripts/operations/reconcile-pto-v18-technical-catalog.py`. Emite relatório privado JSON com diferença por sessão, posição, código e descrição; preserva metadados do catálogo antigo **somente** se código e descrição coincidirem, sem presumir que o procedimento esteja homologado operacionalmente. Mesmo os 1.435 itens coincidentes permanecem com `operational_validation=PENDENTE` até revisão da aeronave/variante. O resultado está explicitamente `DRAFT_NOT_APPROVED_NOT_IMPORTABLE`. 3 testes novos PASS, incluindo rejeição de substituição por semelhança, contagem incompleta e código duplicado. Nenhum procedimento técnico foi inventado e nenhum modelo de produção foi atualizado.
+
+## Pacote curricular candidato completo e vínculo com modelos ativos — continuação 12/11/2026
+
+O `scripts/operations/build-pto-v18-curriculum-candidate.py` agora gera, em diretório privado, **82 sessões de aeronave + 6 funcionais = 88 modelos**, com **1.476 + 108 = 1.584 vínculos técnicos** e **1.230 NOTECHS de aeronave** (o futuro plano completo contém ainda 90 NOTECHS das seis sessões funcionais = 1.320). Inclui três sessões complementares condicionais do S76: `S76-P-AD-01/01-C1`, `-C2`, `-C3`; marca os possíveis checks para revisão e não transforma a carga de prática FFS em duração total de evento. Utiliza apenas código e descrição canônicos do PTO; metadados históricos só são reaproveitados com código e nome idênticos e todos permanecem com `operational_validation=PENDENTE`. As 41 posições / 18 códigos técnicos divergentes são preservadas para validação, não preenchidas por heurística. O status do artefato é **`DRAFT_NOT_IMPORTABLE_NOT_PUBLISHED`**. Testes: cinco PASS.
+
+O `scripts/operations/propose-pto-v18-model-lineage.py` compara os 82 códigos aprovados com as versões de modelos realmente ativos do D1, a partir dos snapshots read-only já coletados, e aponta:
+
+| Classe documental de correspondência | Sessões |
+| --- | ---: |
+| Código canônico igual no D1 ativo | 14 |
+| Possível alias exclusivamente sintático `SK76-I-*` → `S76-I-*`, ainda pendente de aprovação | 12 |
+| Sem vínculo documental seguro pelas regras conservadoras aplicadas | 56 |
+
+O mapeamento de 12 sessões S76 iniciais **não foi aplicado**: depende de avaliação de equivalência operacional. Nenhuma aposentadoria ou fusão de modelo histórico é inferida. Todos os itens são marcados `manual_approval_required=true` e `safe_to_auto_retire_or_merge=false`. Quatro testes PASS. `NO-GO` mantém-se para importação automática.
