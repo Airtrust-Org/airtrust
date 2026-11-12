@@ -238,8 +238,9 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
     throw new Error('Invalid JWT format');
   }
 
-  const encoded = parts[1];
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded) || encoded.length % 4 === 1) {
+  // Also accept padded base64 payloads produced by legacy test fixtures.
+  const encoded = parts[1].replace(/=+$/, '');
+  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(parts[1]) || encoded.length % 4 === 1) {
     throw new Error('Invalid JWT payload encoding');
   }
 
