@@ -22,14 +22,11 @@ import { describeLmsQualificationFailure } from '../services/lms-qualification-f
 import { resolveLmsCompletionScorePct } from '../services/lms-completion-evidence';
 import {
   ensureMatriculaCycle,
-  hasActiveMatriculaCycle,
-  resetMatriculaForNewCycle,
   reactivateCancelledMatriculaPreservingProgress,
   syncMatriculaCycleFromMatricula,
 } from '../services/lms-matricula-cycle';
 import {
   buildMatriculaCompletionDiagnostic,
-  buildScormCompletionDiagnostic,
   extractScormLocationFromCmiJson,
   mergeScormRuntimeState,
   mergeMonotonicMatriculaStatus,
@@ -53,14 +50,11 @@ import {
   buildAppliedScormState,
   buildProgressRecoveryReference,
   buildProgressRecoverySnapshot,
-  buildRecoveryDryRunDifferences,
   evaluateProgressRecovery,
   extractLessonLocationValue,
-  normalizeStatusToken,
   safeJsonParseObject,
   summarizeProgressRecoverySnapshot,
   type ProgressRecoveryEnrollment,
-  type ProgressRecoveryEvaluation,
   type ProgressRecoveryStateSnapshot,
 } from '../services/lms-progress-recovery-domain';
 import {
@@ -73,7 +67,6 @@ import {
   isScormFailed,
   parsePositiveInt,
   requiresServerValidatedNonScormEvidence,
-  resolveScormScorePct,
   summarizeScormTextPayload,
 } from '../services/lms-matricula-runtime-domain';
 import {
@@ -89,6 +82,7 @@ import { hasPptxEvidenceForCompletion } from '../services/lms-pptx-evidence';
 import { withAlunoVinculado, withAlunoVinculadoBestEffort } from '../services/lms-learner-link-state';
 import lmsMatriculasConvitesRoutes, { sendMatriculaTracked } from './lms-matriculas-convites';
 import { readLmsScormEditionState } from '../services/lms-scorm-edition-read';
+import { assertPublishedScormEnrollmentReady } from '../services/lms-scorm-enrollment-readiness';
 import lmsMatriculasEmAndamentoRoutes from './lms-matriculas-em-andamento';
 import { assertScormCommitCycle, assertScormCycleWriteApplied as assertCycleWrite, SCORM_ACTIVE_CYCLE_WRITE_GUARD_SQL as CYCLE_WRITE_GUARD, scormActiveCycleWriteGuardBinds as cycleGuardBinds } from '../services/lms-scorm-cycle-guard'; import { loadManifestEvidenceForEnrollment } from '../services/lms-scorm-completion-context';
 import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
@@ -602,13 +596,14 @@ app.post('/', async (c) => {
 
   // Verificar se curso existe e está publicado/ativo
   const cursoQuery = canManage
-    ? 'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
-    : 'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
+    ? 'SELECT id, titulo, qualificacao_tipo_id, publicado, tipo_conteudo, scorm_package_r2_prefix FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL'
+    : 'SELECT id, titulo, qualificacao_tipo_id, publicado, tipo_conteudo, scorm_package_r2_prefix FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND publicado = 1 AND deleted_at IS NULL';
   const curso = await db
     .prepare(cursoQuery)
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number; tipo_conteudo: string; scorm_package_r2_prefix: string | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
+  await assertPublishedScormEnrollmentReady(db, empresaId, curso_id, curso);
 
   const funcionario = await db
     .prepare(
@@ -857,11 +852,12 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
 
   const curso = await db
     .prepare(
-      'SELECT id, titulo, qualificacao_tipo_id, publicado FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
+      'SELECT id, titulo, qualificacao_tipo_id, publicado, tipo_conteudo, scorm_package_r2_prefix FROM lms_cursos WHERE id = ? AND empresa_id = ? AND ativo = 1 AND deleted_at IS NULL',
     )
     .bind(curso_id, empresaId)
-    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number }>();
+    .first<{ id: number; titulo: string; qualificacao_tipo_id: number | null; publicado: number; tipo_conteudo: string; scorm_package_r2_prefix: string | null }>();
   if (!curso) throw new ApiError('Curso não encontrado ou inativo', 404);
+  await assertPublishedScormEnrollmentReady(db, empresaId, curso_id, curso);
 
   const loteAccess = await getEmployeeSectorAccess(c, empresaId);
   if (loteAccess.mode === 'restricted') {
