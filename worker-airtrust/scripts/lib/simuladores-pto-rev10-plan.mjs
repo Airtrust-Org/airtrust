@@ -1,11 +1,18 @@
 import crypto from 'node:crypto';
 
-export const PTO_REV10_PLAN_SCHEMA_VERSION = 1;
+export const PTO_REV10_PLAN_SCHEMA_VERSION = 1; // legado, somente compatibilidade histórica
+export const PTO_REV10_V18_PLAN_SCHEMA_VERSION = 2;
 export const PTO_REV10_PLAN_KIND = 'PTO_REV10_SIMULATORS';
 export const PTO_REV10_EXPECTED_PLAN_TOTALS = Object.freeze({
   models: 72,
   links: 1296,
   notechs_links: 1080,
+  functional_codes: 94,
+});
+export const PTO_REV10_V18_EXPECTED_PLAN_TOTALS = Object.freeze({
+  models: 88,
+  links: 1584,
+  notechs_links: 1320,
   functional_codes: 94,
 });
 
@@ -35,13 +42,24 @@ export function sealPtoRev10Plan(payload) {
 }
 
 export function assertPtoRev10Plan(plan) {
-  if (plan?.schema_version !== PTO_REV10_PLAN_SCHEMA_VERSION) {
+  if (![PTO_REV10_PLAN_SCHEMA_VERSION, PTO_REV10_V18_PLAN_SCHEMA_VERSION].includes(plan?.schema_version)) {
     throw new Error('schema de plano PTO Rev10 incompatível');
   }
   if (plan?.kind !== PTO_REV10_PLAN_KIND) throw new Error('kind de plano PTO Rev10 inválido');
   const { plan_sha256: received, ...payload } = plan || {};
   if (!received || sha256(payload) !== received) throw new Error('plan_sha256 adulterado');
-  for (const [key, expected] of Object.entries(PTO_REV10_EXPECTED_PLAN_TOTALS)) {
+  const expectedTotals = plan.schema_version === PTO_REV10_V18_PLAN_SCHEMA_VERSION
+    ? PTO_REV10_V18_EXPECTED_PLAN_TOTALS
+    : PTO_REV10_EXPECTED_PLAN_TOTALS;
+  if (plan.schema_version === PTO_REV10_V18_PLAN_SCHEMA_VERSION &&
+      plan.approved_source_sha256 !== '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912') {
+    throw new Error('PTO V18: documento aprovado não comprovado no plano');
+  }
+  if (plan.schema_version === PTO_REV10_V18_PLAN_SCHEMA_VERSION &&
+      !/^[a-f0-9]{64}$/.test(String(plan.canonical_contract_sha256 || ''))) {
+    throw new Error('PTO V18: checksum do contrato curricular ausente no plano');
+  }
+  for (const [key, expected] of Object.entries(expectedTotals)) {
     if (Number(plan.totals?.[key]) !== expected) {
       throw new Error(`total ${key} do plano PTO Rev10 inválido`);
     }
@@ -191,6 +209,8 @@ export function projectionToPlanPayload({
   catalogFingerprint,
   supersededModels,
   manobraResolution,
+  approvedSourceSha256 = null,
+  canonicalContractSha256 = null,
 }) {
   if (!projection?.aeronaves?.AW139 || !projection?.aeronaves?.S76) {
     throw new Error('projeção PTO Rev10 inválida');
@@ -250,8 +270,19 @@ export function projectionToPlanPayload({
     }
   }
 
+  const isV18 = projection.aeronaves.AW139.sessoes.length === 37 &&
+    projection.aeronaves.S76.sessoes.length === 45;
+  if (isV18 && approvedSourceSha256 !== '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912') {
+    throw new Error('PTO V18: identidade da fonte normativa exigida');
+  }
+  if (isV18 && !/^[a-f0-9]{64}$/.test(String(canonicalContractSha256 || ''))) {
+    throw new Error('PTO V18: checksum do contrato curricular exigido');
+  }
+  const schemaVersion = isV18 ? PTO_REV10_V18_PLAN_SCHEMA_VERSION : PTO_REV10_PLAN_SCHEMA_VERSION;
+  const expectedTotals = isV18 ? PTO_REV10_V18_EXPECTED_PLAN_TOTALS : PTO_REV10_EXPECTED_PLAN_TOTALS;
   return {
-    schema_version: PTO_REV10_PLAN_SCHEMA_VERSION,
+    schema_version: schemaVersion,
+    ...(isV18 ? { approved_source_sha256: approvedSourceSha256, canonical_contract_sha256: canonicalContractSha256 } : {}),
     kind: PTO_REV10_PLAN_KIND,
     versao_matriz: projection.versao_matriz,
     empresa_id: Number(empresaId),
@@ -259,7 +290,7 @@ export function projectionToPlanPayload({
     base_fingerprint: baseFingerprint,
     catalog_fingerprint: catalogFingerprint,
     superseded_models: supersededModels,
-    totals: { ...PTO_REV10_EXPECTED_PLAN_TOTALS },
+    totals: { ...expectedTotals },
     models,
     items,
     notechs: projection.notechs,
@@ -277,7 +308,7 @@ export function projectionToPlanPayload({
       'fichas e sessões realizadas não são atualizadas nem excluídas',
       'modelos atuais são versionados, nunca sobrescritos',
       'modelos personalizados não mapeados permanecem intocados',
-      '72 sessões, cada uma com 18 itens técnicos e 15 NOTECHS',
+      `${expectedTotals.models} sessões, cada uma com 18 itens técnicos e 15 NOTECHS`,
       '6 sessões INST/EXA e 108 vínculos importados da matriz canônica',
       'carga_sessao é a única fonte de duração',
     ],

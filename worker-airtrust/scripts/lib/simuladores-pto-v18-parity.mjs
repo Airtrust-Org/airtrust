@@ -1,0 +1,99 @@
+/**
+ * PTO Rev.10 V18 curricular parity preflight.
+ *
+ * Independent of D1; rejects obsolete 'PTO Rev10' packages before plan creation.
+ * The private contract is generated from the DOCX with its pinned SHA256.
+ * This check does NOT approve SOP/QRH, instructor guides or production release.
+ */
+export const PTO_V18_SHA256 =
+  '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912';
+
+const EXPECTED = Object.freeze({ AW139: 37, S76: 45, technical: 1476, notechs: 15 });
+
+function fail(message) {
+  throw new Error(`PTO V18 preflight: ${message}`);
+}
+
+function normalized(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+}
+
+export function assertPtoV18CurricularParity({ projection, contract, sourceManifest, contractSha256 }) {
+  if (sourceManifest?.sha256_fonte !== PTO_V18_SHA256) {
+    fail('hash da fonte V18 não corresponde ao PTO aprovado');
+  }
+  if (!Array.isArray(contract)) fail('contrato curricular V18 ausente');
+  if (!/^[a-f0-9]{64}$/.test(String(contractSha256 || '')) ||
+      sourceManifest.sha256_contrato !== contractSha256) {
+    fail('checksum do contrato V18 diferente do manifesto');
+  }
+  if (contract.length !== EXPECTED.AW139 + EXPECTED.S76) {
+    fail(`contrato V18 exige 82 sessões (recebidas ${contract.length})`);
+  }
+
+  const expected = new Map();
+  for (const session of contract) {
+    const code = String(session?.codigo ?? '');
+    if (!code || expected.has(code)) fail(`código de sessão V18 duplicado ou vazio: ${code}`);
+    if (!['AW139', 'S76'].includes(session.aeronave)) fail(`${code}: aeronave do contrato inválida`);
+    if (!Array.isArray(session.itens) || session.itens.length !== 18) {
+      fail(`${code}: contrato exige exatamente 18 manobras`);
+    }
+    for (let i = 0; i < 18; i += 1) {
+      if (Number(session.itens[i].ordem) !== i + 1 || !String(session.itens[i].codigo || '').trim()) {
+        fail(`${code}: ordem/código inválido no contrato na posição ${i + 1}`);
+      }
+    }
+    expected.set(code, session);
+  }
+
+  const actual = new Map();
+  for (const [aircraft, count] of Object.entries({ AW139: EXPECTED.AW139, S76: EXPECTED.S76 })) {
+    const models = projection?.aeronaves?.[aircraft]?.sessoes;
+    if (!Array.isArray(models) || models.length !== count) {
+      fail(`${aircraft}: esperadas ${count} sessões, recebidas ${models?.length ?? 'nenhuma'}`);
+    }
+    const contractCount = contract.filter((session) => session.aeronave === aircraft).length;
+    if (contractCount !== count) fail(`${aircraft}: quantidade de sessões no contrato incorreta`);
+    for (const model of models) {
+      if (!model.codigo || actual.has(model.codigo)) fail(`modelo duplicado: ${model.codigo}`);
+      actual.set(model.codigo, { ...model, aeronave: aircraft });
+    }
+  }
+
+  if (actual.size !== expected.size) fail('quantidade total de modelos divergente');
+  let technicalCount = 0;
+  for (const [code, wanted] of expected) {
+    const got = actual.get(code);
+    if (!got) fail(`${code}: sessão ausente no pacote`);
+    if (got.aeronave !== wanted.aeronave) fail(`${code}: aeronave incorreta`);
+    if (normalized(got.titulo) !== normalized(wanted.titulo)) fail(`${code}: título divergente`);
+    const items = got.itens_tecnicos;
+    if (!Array.isArray(items) || items.length !== 18) fail(`${code}: deve conter 18 itens técnicos`);
+    for (let i = 0; i < 18; i += 1) {
+      const a = items[i];
+      const b = wanted.itens[i];
+      if (Number(a.ordem) !== b.ordem) fail(`${code}: ordem divergente na posição ${i + 1}`);
+      if (String(a.codigo) !== String(b.codigo)) fail(`${code}: código divergente na posição ${i + 1}`);
+      if (normalized(a.nome) !== normalized(b.nome)) fail(`${code}: descrição divergente na posição ${i + 1}`);
+      if (normalized(a.perna_pf ?? a.perna) !== normalized(b.perna)) {
+        fail(`${code}: perna PF divergente na posição ${i + 1}`);
+      }
+      technicalCount += 1;
+    }
+  }
+  if (technicalCount !== EXPECTED.technical) fail('vínculos técnicos incompletos');
+  if (projection?.notechs?.length !== EXPECTED.notechs) fail('catálogo NOTECHS incompleto');
+  return Object.freeze({
+    sessions: actual.size,
+    technical_links: technicalCount,
+    notechs: EXPECTED.notechs,
+    source_sha256: PTO_V18_SHA256,
+    contract_sha256: contractSha256,
+    level: 'CURRICULAR_PARITY_ONLY',
+  });
+}

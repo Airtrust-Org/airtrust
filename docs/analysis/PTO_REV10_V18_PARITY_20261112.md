@@ -71,3 +71,21 @@ python3 scripts/operations/build-pto-rev10-v18-review-pack.py \
   --pto /caminho/PRG-OPS-001_PTO_Rev10_V18.docx \
   --out /tmp/pto-rev10-v18-review
 ```
+
+## Preflight fail-closed de importação V18 (lote seguinte)
+
+- `worker-airtrust/scripts/lib/simuladores-pto-v18-parity.mjs`: valida o contrato curricular derivado do DOCX aprovado (SHA-256 pinado), checksum do JSON canônico, contagens **37 AW139 + 45 S76**, exatamente **18 procedimentos por sessão**, títulos, códigos, descrições, ordem e PF. Exige 15 NOTECHS na projeção; o carregador existente já exige 15 por sessão.
+- `worker-airtrust/scripts/prepare-simuladores-pto-rev10-import.mjs`: agora exige `--pto-v18-contract` e `--pto-v18-manifest` e bloqueia geração de plano divergente. Nenhum dado D1 é modificado pelo preflight.
+- `worker-airtrust/scripts/lib/simuladores-pto-rev10-plan.mjs`: suporta schema 2 para **88 modelos / 1.584 vínculos técnicos / 1.320 vínculos NOTECHS** (82 sessões de aeronave + 6 instrutor/examinador), com proveniência V18 e checksum do contrato. Schema 1 (72/1296/1080) permanece reconhecido para compatibilidade documental/histórica, **não equivale ao PTO V18**.
+- Teste negativo com os pacotes privados antigos reais: carregador detecta 66 sessões/1.188 itens; novo preflight rejeita: `AW139: esperadas 37 sessões, recebidas 31`.
+- Teste positivo do contrato recém-extraído do DOCX: **82/1476/15 PASS** com checksum do contrato `0d3fa1f4ee9bcd812b99627bd6251b6729ad5ae3d34cd53fae953dc21d560fec`.
+- 9 testes Node do novo preflight + 5 testes Vitest do plano + 3 testes Python do auditor: PASS em execução local focada. Oito gates oficiais, aplicação em D1 e homologação operacional permanecem pendentes.
+
+Atenção: este é um **gate de paridade curricular**, não certifica conteúdo operacional dos guias, variantes/SOP/RFM/QRH, versões do D1, histórico ou conformidade de produção. Antes de tentar plano de escrita, substituir os pacotes antigos por fontes revisadas e validar tecnicamente todos os guias.
+
+### Argumentos obrigatórios adicionais do preparador
+
+```bash
+--pto-v18-contract /tmp/pto-v18-private/review-pack/sessoes_pto_v18.json \
+--pto-v18-manifest /tmp/pto-v18-private/review-pack/manifesto_validacao.json
+```

@@ -85,10 +85,11 @@ def main():
         technical.extend({'sessao':code,'aeronave':aircraft,**item} for item in s['itens'])
         (out/'guias-rascunho'/(code.replace('/','_')+'.html')).write_text(html_page(r,notechs))
     assert len(canonical)==82 and len(technical)==1476
-    (out/'sessoes_pto_v18.json').write_text(json.dumps(canonical,ensure_ascii=False,indent=2)+'\n')
+    serialized=json.dumps(canonical,ensure_ascii=False,indent=2)+'\n'
+    (out/'sessoes_pto_v18.json').write_text(serialized)
     (out/'matriz_tecnica_pto_v18.json').write_text(json.dumps(technical,ensure_ascii=False,indent=2)+'\n')
     (out/'notechs_pto_v18.json').write_text(json.dumps(notechs,ensure_ascii=False,indent=2)+'\n')
-    manifest={'fonte':'PRG-OPS-001 PTO Rev10 V18','sha256_fonte':digest,
+    manifest={'fonte':'PRG-OPS-001 PTO Rev10 V18','sha256_fonte':digest,'sha256_contrato':hashlib.sha256(serialized.encode('utf8')).hexdigest(),
         'sessoes':len(canonical),'vinculos_tecnicos':len(technical),
         'guias_em_revisao':len(canonical),'notechs':len(notechs),
         'status':'NAO_APROVADO_NAO_IMPORTAVEL_NAO_PUBLICAVEL'}
