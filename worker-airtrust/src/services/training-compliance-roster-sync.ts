@@ -49,7 +49,7 @@ export async function readTrainingRosterPlan(
     keep = new Set((list.results || []).map(row=>Number(row.matricula_id)));
   }
   const plan = buildTrainingComplianceRosterPlan(
-    snapshot, courses.results || [], enrollments.results || [], keep,
+    snapshot, courses.results || [], enrollments.results || [], keep, empresaId,
   );
   const material = [
     ...plan.enroll.map(r=>`E:${r.funcionarioId}:${r.cursoId}:${r.existingId ?? 0}`),

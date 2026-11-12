@@ -4,7 +4,7 @@
  * mere applicability is not. Historical/terminal cycles are never deleted.
  */
 import type { TrainingComplianceSnapshot } from './training-compliance-snapshot-builder';
-import { trainingComplianceNeedsEnrollment } from './training-compliance-enrollment-policy';
+import { trainingComplianceNeedsEnrollment, complianceAllowsEadEnrollment } from './training-compliance-enrollment-policy';
 
 export type RosterCourse = {
   id: number;
@@ -62,6 +62,7 @@ export function buildTrainingComplianceRosterPlan(
   courses: RosterCourse[],
   enrollments: RosterEnrollment[],
   keepStandaloneEnrollmentIds: Set<number> = new Set(),
+  empresaId = 0,
 ): RosterPlan {
   const byType = new Map<number, number[]>();
   for (const course of courses) {
@@ -106,12 +107,12 @@ export function buildTrainingComplianceRosterPlan(
         plan.skippedPendingEvidence++;
         continue;
       }
-      if (req.modalidade_requerida !== 'EAD') {
-        plan.skippedManualModality++;
-        continue;
-      }
       if (req.auto_matricular_ead !== 1) {
         plan.skippedPolicyOptOut++;
+        continue;
+      }
+      if (req.modalidade_requerida !== 'EAD' && !complianceAllowsEadEnrollment(req.auto_matricular_ead,req.modalidade_requerida,empresaId)) {
+        plan.skippedManualModality++;
         continue;
       }
       if (!trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer)) continue;

@@ -42,3 +42,19 @@ export function trainingComplianceEvidenceIsRealizedBy(
   const cutoffDay = trainingComplianceIsoDay(today);
   return realizedDay !== null && cutoffDay !== null && realizedDay <= cutoffDay;
 }
+
+/**
+ * Tenant 6: an explicit LMS EAD opt-in may coexist with an unspecified
+ * *evidence* modality. Do not force modalidade_requerida='EAD': that would
+ * invalidate valid historical training records with legacy null formats.
+ * Every caller must still prove exactly one published linked EAD course.
+ * Other tenants retain the strict explicit EAD modality requirement.
+ */
+export function complianceAllowsEadEnrollment(
+  autoOptIn: number | null | undefined,
+  requiredModality: string | null | undefined,
+  empresaId: number,
+): boolean {
+  if (Number(autoOptIn) !== 1) return false;
+  return requiredModality === 'EAD' || (empresaId === 6 && requiredModality == null);
+}
