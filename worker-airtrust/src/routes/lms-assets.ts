@@ -1106,10 +1106,12 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     s76Rc3Active = active?.sha === S76_RC3_IMMUTABLE_SHA256;
   }
 
-  // Project the same 48/49 administrative indexes only for verified handoff
-  // #30. This changes launch CMI in memory, never the underlying D1 row.
-  if (s76Rc3Active && matricula.id === 690 &&
-      ciclo.id === 889 && verifiedHandoff?.id === 30 &&
+  // Project any governed same-cycle S76 RC3 administrative checkpoint into
+  // the immutable package's native V2 runtime, not merely the first historical
+  // handoff. The projector validates tenant, ACTIVE package SHA, immutable
+  // manifest, exact audited credits, cycle and zero terminal status. No D1/R2
+  // edits, fictitious responses or completion occur.
+  if (s76Rc3Active && verifiedHandoff?.id &&
       matricula.status === 'EM_ANDAMENTO' &&
       matricula.qualificacao_historico_id === null &&
       matricula.scorm_assessment_policy === 'FORMATIVE' &&
