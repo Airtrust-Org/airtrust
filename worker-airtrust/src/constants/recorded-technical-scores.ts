@@ -19,8 +19,10 @@ export function assessRecordedTechnicalScores(rows: readonly RecordedTechnicalRo
   const invalid: string[] = [];
   let scored = 0;
   let nonPerformed = 0;
+  let technicalRows = 0;
   for (const row of rows) {
     if (String(row.categoria || '').trim().toUpperCase() === 'NOTECHS') continue;
+    technicalRows++;
     const codigo = String(row.codigo || '').trim();
     const raw = String(row.resultado ?? '').trim();
     if (raw.toUpperCase() === 'NR' || raw.toUpperCase() === 'NAO_REALIZADA') {
@@ -35,7 +37,9 @@ export function assessRecordedTechnicalScores(rows: readonly RecordedTechnicalRo
     scored++;
     if (nota < 6) belowMinimum.push({ codigo, nota });
   }
-  // No rows / all NR does not prove practical coverage. Caller must not infer otherwise.
-  return { eligible: invalid.length === 0 && belowMinimum.length === 0,
+  // When technical rows exist, an ALL-NR sheet is not evidence of a performed
+  // maneuver. No technical rows is handled separately by curricular validation;
+  // do not infer a complete PTO session from this negative safety assessment.
+  return { eligible: invalid.length === 0 && belowMinimum.length === 0 && (technicalRows === 0 || scored > 0),
     scored, nonPerformed, belowMinimum, invalid };
 }
