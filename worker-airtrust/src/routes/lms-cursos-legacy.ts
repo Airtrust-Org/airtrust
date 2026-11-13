@@ -749,7 +749,7 @@ async function uploadCursoThumbnail(params: {
   return { thumbnail_r2_key: key, version_tag: versionTag };
 }
 
-async function parseCursoCreateRequest(c: Context) {
+export async function parseCursoCreateRequest(c: Context) {
   const contentType = c.req.header('content-type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
