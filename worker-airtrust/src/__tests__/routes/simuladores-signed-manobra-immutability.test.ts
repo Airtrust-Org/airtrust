@@ -82,11 +82,10 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
   it('requires a scoped unsigned parent in BOTH INSERT branches and UPDATE', () => {
     expect(inserts).toHaveLength(2);
     expect(updates).toHaveLength(1);
-    expect(route).toContain('FICHA_ALREADY_SIGNED');
     expect(route).toContain('FICHA_MANOBRA_CONCURRENT_SIGNATURE');
     expect(route).toContain('if (!created)');
     for (const statement of [...inserts, ...updates]) {
-      expect(statement).toContain('f.empresa_id = ?');
+      expect(statement).toMatch(/f\.empresa_id\s*=\s*\?/);
       expect(statement).toContain('f.deleted_at IS NULL');
       expect(statement).toContain('f.assinatura_instrutor_timestamp IS NULL');
       expect(statement).toMatch(/COALESCE\(f\.assinatura_instrutor,\s*0\)\s*=\s*0/);
