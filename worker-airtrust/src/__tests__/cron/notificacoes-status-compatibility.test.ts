@@ -4,7 +4,7 @@ import { buildQualificacoesParaNotificarQuery } from '../../cron/notificacoes';
 describe('notificacoes cron status compatibility', () => {
   it('filtra alertas automaticos para a categoria/formato EAD', () => {
     const sql = buildQualificacoesParaNotificarQuery();
-    expect(sql).toContain("UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'");
+    expect(sql).toContain("UPPER(TRIM(COALESCE(qt.categoria, qh.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')");
     expect(sql).toContain("IN ('EAD', 'TREINAMENTO EAD')");
   });
 
