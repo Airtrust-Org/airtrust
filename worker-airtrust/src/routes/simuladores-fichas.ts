@@ -1763,6 +1763,12 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
     const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId, instructorMetaSchema);
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    // Never change any technical score, session header or instructor metadata
+    // after instructor final signature, including legacy rows with stale status.
+    if (a.assinatura_instrutor_timestamp || Number(a.assinatura_instrutor) === 1) {
+      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+        error: 'Ficha assinada: somente retificação formal pode alterá-la.' }, 409);
+    }
 
     const expectedUpdatedAt =
       typeof b?.expected_updated_at === 'string' && b.expected_updated_at.trim()
@@ -2030,9 +2036,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // version and the compare-and-set header update runs last in the transaction.
     const writeTimestamp = new Date().toISOString();
     const statements: D1PreparedStatement[] = [];
-    const versionGuard = expectedUpdatedAt
-      ? ' AND EXISTS (SELECT 1 FROM fichas_sessao fs WHERE fs.id = ? AND fs.empresa_id = ? AND fs.updated_at = ?)'
-      : '';
+    // Always guard child DML by tenant + UNSIGNED parent. The version check is
+    // additional, never a substitute for preserving signed evidence.
+    const versionGuard = ` AND EXISTS (
+      SELECT 1 FROM fichas_sessao fs
+       WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
+         AND fs.assinatura_instrutor_timestamp IS NULL
+         AND COALESCE(fs.assinatura_instrutor,0)=0
+         ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
+    )`;
 
     // D1 counts every statement in a batch against the Worker invocation query budget.
     // A full ficha can contain dozens of maneuvers, so persisting one UPDATE per row can
@@ -2061,13 +2073,24 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
         writeTimestamp,
         id,
       ];
-      if (expectedUpdatedAt) {
-        bindValues.push(id, tenantEmpresaId, expectedUpdatedAt);
-      }
+      bindValues.push(id, tenantEmpresaId);
+      if (expectedUpdatedAt) bindValues.push(expectedUpdatedAt);
       statements.push(statement.bind(...bindValues));
     }
 
-    if (instructorMetaSchema.hasMetaTable && expectedUpdatedAt) {
+    if (instructorMetaSchema.hasMetaTable) {
+      // Guard both INSERT and UPSERT conflict-UPDATE: a signature can be
+      // added after the preflight SELECT but before db.batch starts.
+      const metaGuard = `EXISTS (
+        SELECT 1 FROM fichas_sessao fs
+         WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
+           AND fs.assinatura_instrutor_timestamp IS NULL
+           AND COALESCE(fs.assinatura_instrutor,0)=0
+           ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
+      )`;
+      const metaGuardArgs = expectedUpdatedAt
+        ? [id, tenantEmpresaId, expectedUpdatedAt]
+        : [id, tenantEmpresaId];
       statements.push(
         c.env.DB.prepare(
           `INSERT INTO fichas_sessao_instrutor_meta (
@@ -2075,48 +2098,18 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
              assento_instrucao_utilizado, created_at, updated_at
            )
            SELECT ?, ?, ?, ?, ?, datetime('now'), ?
-            WHERE EXISTS (
-              SELECT 1 FROM fichas_sessao
-               WHERE id = ? AND empresa_id = ? AND updated_at = ?
-            )
+            WHERE ${metaGuard}
            ON CONFLICT(ficha_id) DO UPDATE SET
              empresa_id = excluded.empresa_id,
              equipamento_utilizado = excluded.equipamento_utilizado,
              dispositivo_identificacao = excluded.dispositivo_identificacao,
              assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
-             updated_at = excluded.updated_at`,
+             updated_at = excluded.updated_at
+           WHERE ${metaGuard}`,
         ).bind(
-          id,
-          tenantEmpresaId,
-          equipamentoUtilizado,
-          dispositivoIdentificacao,
-          assentoInstrucaoCanonico,
-          writeTimestamp,
-          id,
-          tenantEmpresaId,
-          expectedUpdatedAt,
-        ),
-      );
-    } else if (instructorMetaSchema.hasMetaTable) {
-      statements.push(
-        c.env.DB.prepare(
-          `INSERT INTO fichas_sessao_instrutor_meta (
-             ficha_id, empresa_id, equipamento_utilizado, dispositivo_identificacao,
-             assento_instrucao_utilizado, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
-           ON CONFLICT(ficha_id) DO UPDATE SET
-             empresa_id = excluded.empresa_id,
-             equipamento_utilizado = excluded.equipamento_utilizado,
-             dispositivo_identificacao = excluded.dispositivo_identificacao,
-             assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
-             updated_at = excluded.updated_at`,
-        ).bind(
-          id,
-          tenantEmpresaId,
-          equipamentoUtilizado,
-          dispositivoIdentificacao,
-          assentoInstrucaoCanonico,
-          writeTimestamp,
+          id, tenantEmpresaId, equipamentoUtilizado, dispositivoIdentificacao,
+          assentoInstrucaoCanonico, writeTimestamp,
+          ...metaGuardArgs, ...metaGuardArgs,
         ),
       );
     } else if (instructorMetaSchema.legacyColumns.size > 0) {
@@ -2148,6 +2141,8 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
               ...legacyColumns.map((column) => legacyValues[column]),
               id,
               tenantEmpresaId,
+              id,
+              tenantEmpresaId,
             ),
       );
     }
@@ -2156,7 +2151,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     statements.push(
       expectedUpdatedAt
         ? c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND updated_at = ?',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND updated_at = ?',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
@@ -2166,7 +2161,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             expectedUpdatedAt,
           )
         : c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ?',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
@@ -2177,7 +2172,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     );
 
     const batchResults = await c.env.DB.batch(statements);
-    if (expectedUpdatedAt && Number(batchResults[headerStatementIndex]?.meta?.changes || 0) === 0) {
+    if (Number(batchResults[headerStatementIndex]?.meta?.changes || 0) !== 1) {
       return c.json(
         {
           success: false,

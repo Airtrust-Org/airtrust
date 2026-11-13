@@ -352,7 +352,7 @@ export default function AlertasNotificacoes() {
 
       <Card
         title="Qualificações"
-        description="Régua única de treinamento. Funcionário recebe e-mail + WhatsApp em 30/15/7 dias e e-mail após o vencimento. Gestores recebem somente CHECK do próprio setor por e-mail em 45/30/15/7 dias. Alterar 30/15/7 sincroniza e-mail e WhatsApp no mesmo estágio."
+        description="Alertas de pendência e vencimento por e-mail/WhatsApp são exclusivos de treinamentos da categoria EAD. Treinamentos externos, presenciais, AVCB, DGR e CMA permanecem sob controle da Gerência de Treinamento, sem cobrança automática ao aluno. Convites de matrícula ou agendamento são comunicações separadas."
       >
         <div className="space-y-4">
           {qualifications.map((row, index) => (

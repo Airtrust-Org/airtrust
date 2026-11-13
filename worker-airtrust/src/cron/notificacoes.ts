@@ -267,6 +267,7 @@ export function buildQualificacoesParaNotificarQuery(): string {
         )
       )
     WHERE qh.deleted_at IS NULL
+      AND UPPER(TRIM(COALESCE(qt.categoria, qh.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
       AND f.deleted_at IS NULL
       AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
       AND qh.data_vencimento IS NOT NULL

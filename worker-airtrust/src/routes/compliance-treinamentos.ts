@@ -743,7 +743,17 @@ app.get('/treinamentos', requireRole('admin', 'manager'), async (c) => {
       (!aeronaveModelo || p.aeronaves_modelos.includes(aeronaveModelo)) &&
       (!q || normalizeSearchText(p.nome).includes(q)),
   );
-  const data = summarizeTrainingComplianceCourses(people, activeEnrollments);
+  const trainingRows = summarizeTrainingComplianceCourses(people, activeEnrollments);
+  const { results: eadTypes } = await c.env.DB.prepare(`
+    SELECT id FROM qualificacoes_tipos
+    WHERE empresa_id = ? AND deleted_at IS NULL
+      AND UPPER(TRIM(COALESCE(categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+  `).bind(empresaId).all<{ id: number }>();
+  const eadIds = new Set((eadTypes || []).map((row) => Number(row.id)));
+  const data = trainingRows.map((row) => ({
+    ...row,
+    alerta_ead_permitido: eadIds.has(Number(row.qualificacao_tipo_id)),
+  }));
   return c.json({ success: true, data });
 });
 
