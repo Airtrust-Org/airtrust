@@ -141,6 +141,16 @@ export async function runScormBrowserConformance(params: {
     }
     failureStage = 'CREATE_PAGE';
     const page = await browser.newPage();
+    // Real authored SCOs can show an informational alert after LMSFinish.
+    // An unresolved native modal blocks CDP evaluation and masquerades as a
+    // Browser Rendering infrastructure error. Dismissing a message-only
+    // alert is not a course interaction, scoring action or LMS write.
+    // Never accept confirm/prompt; deny them and fail functional QA closed.
+    let interactiveDialogSeen = false;
+    page.on('dialog', (dialog) => {
+      if (dialog.type() !== 'alert') interactiveDialogSeen = true;
+      void dialog.dismiss().catch(() => undefined);
+    });
     failureStage = 'SET_REQUEST_INTERCEPTION';
     await page.setRequestInterception(true);
     // page.setContent() on a brand-new about:blank tab leaves the document on
@@ -238,8 +248,9 @@ export async function runScormBrowserConformance(params: {
     return {
       ...runtime,
       masteryScore: masteryScore === null ? runtime.masteryScore : String(masteryScore),
-      functionalCompletionVerified: functional.supported && functional.completed && functional.steps > 0,
-      functionalCompletionReason: functional.reason,
+      functionalCompletionVerified: !interactiveDialogSeen && functional.supported && functional.completed && functional.steps > 0,
+      functionalCompletionReason: interactiveDialogSeen
+        ? 'SCORM_QA_INTERACTIVE_DIALOG_NOT_SUPPORTED' : functional.reason,
       expectedSuccessStatus,
       requiresAssessmentEvidence,
     };
