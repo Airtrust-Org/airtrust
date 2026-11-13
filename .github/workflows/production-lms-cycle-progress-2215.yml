@@ -1,0 +1,137 @@
+name: Production LMS Cycle Progress Reconcile 2215
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current reviewed main SHA
+        required: true
+        type: string
+      mode:
+        description: Review only or apply the two immutable scoped updates
+        required: true
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirmation:
+        description: AIRTRUST_LMS_CYCLE_2215_DRY_RUN or AIRTRUST_LMS_CYCLE_2215_APPLY_EXACT_2
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        description: Required successful matching dry-run run ID for apply
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-lms-cycle-progress-reconcile-2215
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    name: Scoped tenant6 D1 cycle reconciliation (no SCORM or qualification writes)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Validate governed dispatch
+        env:
+          EXPECTED: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED" == "$GITHUB_SHA" ]]
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$CONFIRM" == AIRTRUST_LMS_CYCLE_2215_DRY_RUN ]]
+          else
+            [[ "$MODE" == apply ]]
+            [[ "$CONFIRM" == AIRTRUST_LMS_CYCLE_2215_APPLY_EXACT_2 ]]
+          fi
+      - name: Require exact eight green release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify scoped code contract
+        run: node --test scripts/__tests__/lms-cycle-progress-2215.test.mjs
+      - name: Install D1 CLI
+        run: npm --prefix worker-airtrust ci
+      - name: Require production D1 identity
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          D1_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$D1_TOKEN" && -n "$D1_ACCOUNT" ]]
+      - name: Verify reviewed dry-run and immutable prestate hash
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED: ${{ inputs.reviewed_dry_run_run_id }}
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED" =~ ^[1-9][0-9]*$ ]]
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
+          [[ "$(jq -r .name <<<"$run_json")" == 'Production LMS Cycle Progress Reconcile 2215' ]]
+          [[ "$(jq -r .conclusion <<<"$run_json")" == success ]]
+          [[ "$(jq -r .head_sha <<<"$run_json")" == "$EXPECTED" ]]
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" --name "lms-cycle-2215-dry-run-$EXPECTED" --dir "$RUNNER_TEMP/reviewed"
+          doc="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$doc"
+          [[ "$(jq -r .scope "$doc")" == AIRTRUST_LMS_2215_TENANT6_TARGETED_CYCLE_PROGRESS ]]
+          [[ "$(jq -r .sourceSha "$doc")" == "$EXPECTED" ]]
+          [[ "$(jq -r .mode "$doc")" == dry-run ]]
+          [[ "$(jq -r .tenant "$doc")" == 6 ]]
+          [[ "$(jq -r .plannedChanges "$doc")" == 2 ]]
+          [[ "$(jq -r .writes "$doc")" == 0 ]]
+          hash="$(jq -r .beforeHash "$doc")"
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]]
+          echo "CYCLE2215_REVIEWED_HASH=$hash" >> "$GITHUB_ENV"
+      - name: Capture D1 Time Travel recovery checkpoint
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx --no-install wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/tt.txt"
+          test -s "$RUNNER_TEMP/tt.txt"
+          echo "D1_TIME_TRAVEL_CHECKPOINT_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/tt.txt"
+      - name: Execute exact guarded D1 dry-run or repair
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CYCLE2215_MODE: ${{ inputs.mode }}
+          CYCLE2215_CONFIRMATION: ${{ inputs.confirmation }}
+          CYCLE2215_SOURCE_SHA: ${{ github.sha }}
+          CYCLE2215_REPORT_PATH: ${{ runner.temp }}/result.json
+        run: node scripts/production/lms-cycle-progress-2215.mjs
+      - name: Add non-PII evidence to job summary
+        if: always()
+        run: |
+          if [[ -s "$RUNNER_TEMP/result.json" ]]; then
+            jq '{scope,sourceSha,mode,tenant,matriculaIds,cycleIds,beforeHash,plannedChanges,writes,postconditionsVerified}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload immutable sanitized evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: lms-cycle-2215-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 30
