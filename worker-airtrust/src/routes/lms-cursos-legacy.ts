@@ -31,6 +31,7 @@ import {
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { assertCoursePolicyChangeAllowed } from '../lib/lms/lms-course-policy-guard';
+import { withNewCourseAssessmentDefault } from '../lib/lms/lms-course-create-policy';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
@@ -770,7 +771,7 @@ async function parseCursoCreateRequest(c: Context) {
       tipo_conteudo: String(formData.get('tipo_conteudo') ?? 'scorm').trim() || 'scorm',
       scorm_versao: parseOptionalScormVersion(formText(formData.get('scorm_versao'))),
       scorm_mastery_score: parseOptionalInt(formText(formData.get('scorm_mastery_score'))),
-      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? 'SCORED',
+      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? undefined,
       qualificacao_tipo_id: parseOptionalInt(formText(formData.get('qualificacao_tipo_id'))),
       gerar_qualificacao_ao_concluir: parseOptionalBinary(
         formText(formData.get('gerar_qualificacao_ao_concluir')),
@@ -779,7 +780,7 @@ async function parseCursoCreateRequest(c: Context) {
       setor_ids: parsedSetorIds.length > 0 ? parsedSetorIds : undefined,
     };
 
-    const parsed = CursoCreateSchema.safeParse(payload);
+    const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(payload));
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
     }
@@ -788,7 +789,7 @@ async function parseCursoCreateRequest(c: Context) {
   }
 
   const body = await c.req.json<unknown>();
-  const parsed = CursoCreateSchema.safeParse(body);
+  const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(body));
   if (!parsed.success) {
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
   }
