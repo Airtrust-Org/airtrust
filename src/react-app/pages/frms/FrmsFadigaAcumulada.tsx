@@ -248,7 +248,7 @@ export default function FrmsFadigaAcumulada() {
 
   const { data: individualRaw, loading: individualLoading, error: individualError, refetch: refetchIndividual } = useApi<IndividualResponse>(
     expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : null,
-    { preserveEnvelope: true, bypassGetCache: true },
+    { preserveEnvelope: true, bypassGetCache: true, enabled: expandedTrip !== null },
   );
   const validIndividual = individualRaw?.success === true && Array.isArray(individualRaw.data?.evolucao);
   const useIndividualData = !individualLoading && !individualError && validIndividual;
