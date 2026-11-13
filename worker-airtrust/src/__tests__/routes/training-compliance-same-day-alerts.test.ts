@@ -80,7 +80,7 @@ async function post(path: string, data: Record<string, unknown>) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(data),
     }),
-    { DB: {} } as Env,
+    { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: [{ id: 55 }] }) }) }) } } as unknown as Env,
     {} as ExecutionContext,
   );
 }

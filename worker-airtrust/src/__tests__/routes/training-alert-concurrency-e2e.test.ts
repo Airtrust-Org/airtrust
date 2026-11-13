@@ -90,6 +90,21 @@ beforeEach(() => {
       empresa_id INTEGER NOT NULL,
       titulo TEXT,
       qualificacao_tipo_id INTEGER,
+      categoria TEXT,
+      formato_id INTEGER,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS qualificacoes_tipos (
+      id INTEGER PRIMARY KEY,
+      empresa_id INTEGER NOT NULL,
+      categoria TEXT,
+      formato_id INTEGER,
+      deleted_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS qualificacoes_formatos (
+      id INTEGER PRIMARY KEY,
+      codigo TEXT,
       deleted_at TEXT
     );
 
@@ -135,8 +150,10 @@ beforeEach(() => {
     INSERT INTO funcionarios (id, empresa_id, nome, email, telefone, status, ativo)
       VALUES (101, 1, 'Piloto Concorrente', 'piloto@example.com', '+5521999991111', 'ATIVO', 1);
 
-    INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id)
-      VALUES (32, 1, 'Segurança de Voo', 55);
+    INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, categoria)
+      VALUES (55, 1, 'EAD-SEG', 'EAD');
+    INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id, categoria)
+      VALUES (32, 1, 'Segurança de Voo', 55, 'EAD');
 
     INSERT INTO lms_matriculas (id, empresa_id, funcionario_id, curso_id, status, data_expiracao)
       VALUES (11, 1, 101, 32, 'NAO_INICIADO', '2026-12-31');
