@@ -24,6 +24,21 @@ const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: 'cancelado', label: 'Cancelado' },
 ];
 
+const COORDENACAO_NEXT_ACTION: Record<CvRdvWorkflowStatus, string> = {
+  rascunho: 'Aguardando preenchimento e envio pelo piloto',
+  enviado: 'Pendente: iniciar revisão pela Coordenação',
+  em_revisao: 'Pendente: aprovar ou devolver ao piloto',
+  devolvido: 'Aguardando correção e reenvio pelo piloto',
+  reaberto: 'Pendente: reiniciar revisão pela Coordenação',
+  aprovado_coordenacao: 'Pendente: finalizar relatório pela Coordenação',
+  finalizado: 'Concluído — elegível ao XML após validação dos dados',
+  cancelado: 'Cancelado — fora da exportação',
+};
+
+const COORDENACAO_ACTIONABLE = new Set<CvRdvWorkflowStatus>([
+  'enviado', 'em_revisao', 'reaberto', 'aprovado_coordenacao',
+]);
+
 export default function ControleVoosCoordenacaoFila() {
   const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('');
   const [dataInicio, setDataInicio] = useState('');
@@ -45,6 +60,8 @@ export default function ControleVoosCoordenacaoFila() {
     data_fim: dataFim || undefined,
   });
 
+  const pendentesCoordenacao = fila.filter((item) => COORDENACAO_ACTIONABLE.has(item.workflow_status)).length;
+
   return (
     <AppLayout>
       <div className="w-full">
@@ -63,6 +80,12 @@ export default function ControleVoosCoordenacaoFila() {
             <Link to="/controle-voos/voos" className="shrink-0 font-semibold underline underline-offset-2">
               Ver todos os voos e status operacionais
             </Link>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+            <p className="font-semibold">Pendências da Coordenação: {pendentesCoordenacao} RDV(s) nos filtros atuais</p>
+            <p className="mt-1">O envio pelo piloto não encerra o RDV. A Coordenação deve abrir cada relatório, iniciar revisão, conferir os dados, aprovar ou devolver e, após a aprovação, clicar em Finalizar relatório. Apenas o status Finalizado permite a exportação XML Petrobras.</p>
+            <p className="mt-1 text-xs">O contador considera somente os registros carregados nesta fila e nos filtros atuais; não é o total geral de pendências.</p>
           </div>
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
@@ -188,6 +211,9 @@ export default function ControleVoosCoordenacaoFila() {
                         Status RDV
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                        Próxima ação / responsável
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Status do voo
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
@@ -224,6 +250,11 @@ export default function ControleVoosCoordenacaoFila() {
                         <td className="px-4 py-3">
                           <ControleVoosRdvWorkflowBadge status={item.workflow_status} />
                         </td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          <span className={COORDENACAO_ACTIONABLE.has(item.workflow_status) ? 'text-amber-700 dark:text-amber-300' : ''}>
+                            {COORDENACAO_NEXT_ACTION[item.workflow_status]}
+                          </span>
+                        </td>
                         <td className="px-4 py-3">
                           <ControleVoosStatusBadge
                             status={flightPresentationStatus({
@@ -248,7 +279,7 @@ export default function ControleVoosCoordenacaoFila() {
                             to={`/controle-voos/rdv/${item.voo_id}`}
                             className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
                           >
-                            <FileSearch className="h-3.5 w-3.5" /> {item.workflow_status === 'rascunho' ? 'Visualizar' : 'Revisar'}
+                            <FileSearch className="h-3.5 w-3.5" /> {item.workflow_status === 'rascunho' || item.workflow_status === 'finalizado' || item.workflow_status === 'cancelado' ? 'Visualizar' : 'Resolver pendência'}
                           </Link>
                         </td>
                       </tr>
