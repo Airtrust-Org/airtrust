@@ -62,12 +62,19 @@ app.put(
     // Record-level tenant boundary must be proven before availability/model
     // lookups or any read/write by ficha_id.
     const fichaTenant = await c.env.DB.prepare(
-      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT id, assinatura_instrutor_timestamp, assinatura_instrutor FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
     )
       .bind(fichaId, empresaId)
-      .first<{ id: number }>();
+      .first<{ id: number; assinatura_instrutor_timestamp: string | null; assinatura_instrutor: number | null }>();
     if (!fichaTenant) {
       return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+    }
+
+    // Existing final signatures are immutable. The D1 write statements
+    // below re-check this predicate atomically to reject concurrent signing.
+    if (fichaTenant.assinatura_instrutor_timestamp || Number(fichaTenant.assinatura_instrutor) === 1) {
+      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+        error: 'Ficha já assinada. Utilize o procedimento formal de retificação.' }, 409);
     }
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
@@ -94,7 +101,8 @@ app.put(
       .bind(fichaId, ordem)
       .first<any>();
 
-    // 2) If not found, try to create from model
+    // 2) If not found, create in a single guarded statement.
+    let created = false;
     if (!manobra) {
       const ficha = await c.env.DB.prepare(
         `SELECT
@@ -149,10 +157,17 @@ app.put(
         const descricao = descricaoOverride || m?.descricao || `Manobra ordem ${ordem}`;
         const categoria = m?.categoria || 'GERAL';
 
-        await c.env.DB.prepare(
+        const inserted = await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
              ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0) = 0
+            )`,
         )
           .bind(
             fichaId,
@@ -162,8 +177,15 @@ app.put(
             Number(ordem),
             b.resultado ?? null,
             b.observacoes ?? '',
+            fichaId,
+            empresaId,
           )
           .run();
+        if (Number(inserted.meta?.changes || 0) !== 1) {
+          return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+            error: 'Ficha assinada durante inclusão da manobra.' }, 409);
+        }
+        created = true;
 
         manobra = await c.env.DB.prepare(
           'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=?',
@@ -171,10 +193,17 @@ app.put(
           .bind(fichaId, ordem)
           .first<any>();
       } else {
-        await c.env.DB.prepare(
+        const inserted = await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
              ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0) = 0
+            )`,
         )
           .bind(
             fichaId,
@@ -184,8 +213,15 @@ app.put(
             Number(ordem),
             b.resultado ?? null,
             b.observacoes ?? '',
+            fichaId,
+            empresaId,
           )
           .run();
+        if (Number(inserted.meta?.changes || 0) !== 1) {
+          return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+            error: 'Ficha assinada durante inclusão da manobra.' }, 409);
+        }
+        created = true;
 
         manobra = await c.env.DB.prepare(
           'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=?',
@@ -195,17 +231,35 @@ app.put(
       }
     }
 
-    // 3) Update (idempotent)
-    await c.env.DB.prepare(
-      'UPDATE fichas_sessao_manobras SET resultado=?, observacoes=?, updated_at=datetime("now") WHERE ficha_id=? AND ordem=?',
-    )
-      .bind(
-        b.resultado !== undefined ? b.resultado : manobra.resultado,
-        b.observacoes !== undefined ? b.observacoes : manobra.observacoes,
-        fichaId,
-        ordem,
+    // 3) For existing maneuvers, this is the ONLY write. Prevent a
+    // concurrent final signature or cross-tenant mutation inside SQL.
+    // Newly inserted rows already include their final result in the INSERT.
+    if (!created) {
+      const updated = await c.env.DB.prepare(
+        `UPDATE fichas_sessao_manobras
+            SET resultado=?, observacoes=?, updated_at=datetime("now")
+          WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0)=0
+            )`,
       )
-      .run();
+        .bind(
+          b.resultado !== undefined ? b.resultado : manobra.resultado,
+          b.observacoes !== undefined ? b.observacoes : manobra.observacoes,
+          fichaId,
+          ordem,
+          fichaId,
+          empresaId,
+        )
+        .run();
+      if (Number(updated.meta?.changes || 0) !== 1) {
+        return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+          error: 'Ficha assinada ou manobra alterada. Recarregue a ficha.' }, 409);
+      }
+    }
 
     const atual = await c.env.DB.prepare(
       'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL',
