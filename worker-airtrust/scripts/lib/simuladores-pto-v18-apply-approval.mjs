@@ -4,6 +4,7 @@
  * produção com homologação operacional da matriz de sessões e procedimentos.
  */
 import { PTO_REV10_V18_PLAN_SCHEMA_VERSION } from './simuladores-pto-rev10-plan.mjs';
+import { assertPtoV18CanonicalPlan } from './simuladores-pto-v18-canonical-match.mjs';
 
 const PTO_V18_SHA256 = '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912';
 
@@ -21,9 +22,9 @@ export function assertNewPtoV18ApplyReady({
   if (plan.approved_source_sha256 !== PTO_V18_SHA256) {
     throw new Error('PTO V18: fonte normativa do plano não corresponde ao documento aprovado');
   }
-  if (!/^[a-f0-9]{64}$/.test(String(plan.canonical_contract_sha256 || ''))) {
-    throw new Error('PTO V18: contrato canônico sem checksum');
-  }
+  // A syntactically valid hash is not proof that the 82 sessions and 1476
+  // positions actually match the approved PTO. Run this before even dry-run.
+  assertPtoV18CanonicalPlan(plan);
 
   if (dryRun) return { mode: 'CURRICULAR_DRY_RUN_ONLY' };
 

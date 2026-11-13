@@ -121,6 +121,9 @@ jobs:
           python3 scripts/operations/check-pto-v18-canonical-contract.py
           python3 -m unittest discover -s scripts/operations -p 'test_pto_v18_canonical_contract.py' -v
 
+      - name: validate PTO V18 exact-content import guard (not only counts and hashes)
+        run: node --test worker-airtrust/scripts/__tests__/simuladores-pto-v18-apply-approval.test.mjs
+
       - name: validate staging simulator planning read-only preflight
         run: |
           node --test scripts/__tests__/staging-simulator-matrix-baseline-audit.test.mjs
