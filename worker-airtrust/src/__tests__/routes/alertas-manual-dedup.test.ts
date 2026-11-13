@@ -122,7 +122,7 @@ describe('manual qualification alerts share durable daily dedup with Compliance/
       channel: 'WHATSAPP',
       reenviarHoje: false,
       manual: true,
-      qualificacaoNome: 'CMA',
+      qualificacaoNome: 'EAD Demo',
     }));
     expect(delivery).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
