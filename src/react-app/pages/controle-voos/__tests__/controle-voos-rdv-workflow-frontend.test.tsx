@@ -8,6 +8,7 @@ import ControleVoosMeusVoos from '../ControleVoosMeusVoos';
 import ControleVoosCoordenacaoFila from '../ControleVoosCoordenacaoFila';
 import ControleVoosRdvWorkflowPanel from '../components/ControleVoosRdvWorkflowPanel';
 import { apiClient } from '@/react-app/services/apiClient';
+import { fetchWithAuth } from '@/react-app/config/api';
 import type { CvRdv } from '@/react-app/hooks/useControleVoos';
 
 vi.mock('@/react-app/components/AppLayout', () => ({
@@ -26,6 +27,11 @@ vi.mock('../components/ControleVoosPageHeader', () => ({
 }));
 vi.mock('../components/ControleVoosNovoVooDialog', () => ({
   default: () => null,
+}));
+
+vi.mock('@/react-app/config/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/react-app/config/api')>()),
+  fetchWithAuth: vi.fn(),
 }));
 
 vi.mock('@/react-app/services/apiClient', () => ({
@@ -213,13 +219,27 @@ describe('ControleVoosCoordenacaoFila', () => {
     expect(screen.getByRole('link', { name: 'Visualizar' })).toHaveAttribute('href', '/controle-voos/rdv/602');
   });
 
-  it('não permite trocar a data operacional durante exportação XML', async () => {
+  it('impede mudar a data de exportação enquanto a requisição está pendente', async () => {
     getMock.mockImplementation(async () => apiOk([]));
+    let failExport: ((response: Response) => void) | undefined;
+    vi.mocked(fetchWithAuth).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => { failExport = resolve; }),
+    );
     renderWithClient(<ControleVoosCoordenacaoFila />);
+
     const dateInput = screen.getByLabelText('Data operacional para exportação XML');
-    expect(dateInput).not.toBeDisabled();
-    // A data precisa ficar bloqueada enquanto a requisição está pendente,
-    // impedindo que uma falha da data A seja apresentada como erro da data B.
+    fireEvent.change(dateInput, { target: { value: '2026-10-24' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar XML do dia' }));
+
+    await waitFor(() => expect(dateInput).toBeDisabled());
+    expect(dateInput).toHaveValue('2026-10-24');
+
+    failExport?.({
+      ok: false,
+      json: async () => ({ error: 'Nenhum RDV finalizado encontrado para a data selecionada' }),
+    } as Response);
+    await waitFor(() => expect(dateInput).not.toBeDisabled());
+    expect(screen.getByText('Não foi possível gerar o XML de 24/10/2026.')).toBeInTheDocument();
   });
 
   it('coordenação identifica RDV aprovado ainda pendente de finalização', async () => {
