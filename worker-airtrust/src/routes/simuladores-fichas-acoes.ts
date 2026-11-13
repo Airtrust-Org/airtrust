@@ -468,6 +468,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       }
 
       let notechsFingerprint: string | null = null;
+      let fullManeuverFingerprint: string | null = null;
       // NOTECHS: a ficha pertence a um funcionário e deve ter 15 notas
       // individuais válidas (mínimo 6 para aprovação). Nunca inferir aprovação
       // pela média nem tratar NR/NAO_REALIZADA como nota suficiente.
@@ -475,12 +476,20 @@ app.post('/fichas/:id/assinar', async (c) => {
       // ficha histórica já assinada é modificada por esta verificação.
       if (aprovadoInstrutor) {
         const notechsRows = await c.env.DB.prepare(
-          `SELECT codigo, categoria, resultado FROM fichas_sessao_manobras
+          `SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes FROM fichas_sessao_manobras
            WHERE ficha_id = ? AND deleted_at IS NULL`,
         )
           .bind(id)
-          .all<{ codigo: string | null; categoria: string | null; resultado: string | null }>();
+          .all<{ id: number; codigo: string | null; categoria: string | null; resultado: string | null; ordem: number | null; descricao: string | null; observacoes: string | null }>();
         const notechs = evaluateNotechsApproval(notechsRows.results || []);
+        // The final signature must attest the *same* complete maneuver evidence
+        // that was observed during validation. This is deliberately independent
+        // of execution/NR semantics; it does not claim curricular eligibility.
+        // SQLite JSON arrays preserve NULL and avoid delimiter collisions.
+        fullManeuverFingerprint = JSON.stringify((notechsRows.results || [])
+          .slice()
+          .sort((a, b) => Number(a.id) - Number(b.id))
+          .map((row) => [row.id, row.codigo, row.categoria, row.resultado, row.ordem, row.descricao, row.observacoes]));
         // Snapshot ordenado dos códigos e notas: o UPDATE da assinatura
         // comparará atomicamente este fingerprint com os itens no mesmo D1.
         // Assim outra edição simultânea não pode rebaixar uma nota após
@@ -534,16 +543,25 @@ app.post('/fichas/:id/assinar', async (c) => {
                      AND UPPER(TRIM(categoria))='NOTECHS'
                    ORDER BY codigo
                 ) snapshot
-            ) = ?` : ''}`,
+            ) = ?
+            AND (SELECT json_group_array(json_array(snapshot.id, snapshot.codigo,
+                   snapshot.categoria, snapshot.resultado, snapshot.ordem,
+                   snapshot.descricao, snapshot.observacoes))
+                   FROM (
+                     SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes
+                       FROM fichas_sessao_manobras
+                      WHERE ficha_id=? AND deleted_at IS NULL
+                      ORDER BY id
+                   ) snapshot) = ?` : ''}`,
       );
       const escrita = await (aprovadoInstrutor
         ? updateAssinatura.bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal,
-          aprovado, id, empresaId, id, notechsFingerprint)
+          aprovado, id, empresaId, id, notechsFingerprint, id, fullManeuverFingerprint)
         : updateAssinatura.bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal,
           aprovado, id, empresaId)).run();
       if (Number(escrita.meta?.changes || 0) !== 1) {
         return c.json({ success: false, code: 'FICHA_CONCURRENT_UPDATE',
-          error: 'Ficha ou notas NOTECHS alteradas durante a assinatura. Recarregue e confira.' }, 409);
+          error: 'Ficha ou evidências das manobras alteradas durante a assinatura. Recarregue e confira.' }, 409);
       }
 
       console.log(`✍️ [FICHA ${id}] Instrutor assinou → ${ns} (${resultadoFinal})`);

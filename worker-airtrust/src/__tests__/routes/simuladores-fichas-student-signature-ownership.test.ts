@@ -98,9 +98,9 @@ function createDb(options: { alunoJaAssinou?: boolean; notechsScore?: string; no
           return null;
         },
         all: async () => {
-          if (query.includes('SELECT codigo, categoria, resultado FROM fichas_sessao_manobras')) {
+          if (query.includes('SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes FROM fichas_sessao_manobras')) {
             return { results: (options.notechsMissing ? NOTECHS_CANONICAL_ITEMS.slice(0, 14) : NOTECHS_CANONICAL_ITEMS)
-              .map((item) => ({ codigo: item.codigo, categoria: 'NOTECHS', resultado: options.notechsScore ?? '8.0' })) };
+              .map((item, index) => ({ id: index + 1, codigo: item.codigo, categoria: 'NOTECHS', resultado: options.notechsScore ?? '8.0', ordem: index + 1, descricao: null, observacoes: null })) };
           }
           return { results: [] };
         },
