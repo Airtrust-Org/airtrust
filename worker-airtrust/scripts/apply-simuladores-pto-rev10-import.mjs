@@ -9,6 +9,7 @@ import { REUSE_RESOLUTION_TYPES, buildResolutionStatements } from './lib/matriz-
 import { assertPtoRev10Plan, sha256 } from './lib/simuladores-pto-rev10-plan.mjs';
 import { assertNewPtoV18ApplyReady } from './lib/simuladores-pto-v18-apply-approval.mjs';
 import { buildPtoRev10ModelAndLinkStatements } from './lib/simuladores-pto-rev10-apply-core.mjs';
+import { buildPtoRev10AtomicPostconditions } from './lib/simuladores-pto-rev10-atomic-postconditions.mjs';
 
 const APPLY_CONFIRMATION = 'APLICAR_PTO_REV10_LOCAL';
 
@@ -355,6 +356,9 @@ export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmati
     ...resolutionStatements,
     ...supersededStatements,
     ...modelStatements,
+    // Fail atomically before marking APPLIED: the sqlite3 -bail process
+    // closes and rolls back the transaction if this temp CHECK fails.
+    buildPtoRev10AtomicPostconditions({ plan, empresaId }),
     `UPDATE simuladores_matriz_imports
         SET status='APPLIED',
             applied_at=CURRENT_TIMESTAMP,
