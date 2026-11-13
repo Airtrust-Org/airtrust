@@ -149,3 +149,16 @@ test('re-run only failed certify jobs provisions the new attempt for exactly its
   assert.throws(() => qaProvisionSelection('43012345678', '2', 'safari', generateValidTestCpf),
     /QA_BROWSER_NOT_ALLOWLISTED/);
 });
+
+test('production provisioning reuses one canonical employee for all browsers and reruns', async () => {
+  const { selectCanonicalQaLearners, SYNTHETIC_LEARNER } = await import('../provision-synthetic-qa-learner.mjs');
+  const defaultLearner = selectCanonicalQaLearners().default;
+  const chromium = selectCanonicalQaLearners('chromium').chromium;
+  const webkit = selectCanonicalQaLearners('webkit').webkit;
+  for (const learner of [defaultLearner, chromium, webkit]) {
+    assert.equal(learner, SYNTHETIC_LEARNER);
+    assert.equal(learner.matricula, 'QA-LMS-202611');
+    assert.equal(learner.email, 'qa.lms.202611@airtrust.online');
+  }
+  assert.throws(() => selectCanonicalQaLearners('safari'), /QA_BROWSER_NOT_ALLOWLISTED/);
+});

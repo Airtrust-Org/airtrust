@@ -281,7 +281,9 @@ export async function provisionLearner({
     assert(targetSetor?.id, 'NO_ACTIVE_SECTOR_AVAILABLE_FOR_QA_LEARNER');
     console.log(`[QA_PROVISION] Setor elegível selecionado: id=${targetSetor.id}, nome="${targetSetor.nome}"`);
 
-    const freeCpf = await resolveAvailableQaCpf(adminToken, learnerDef, process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
+    const freeCpf = learnerDef.matricula === SYNTHETIC_LEARNER.matricula
+      ? SYNTHETIC_LEARNER.cpf
+      : await resolveAvailableQaCpf(adminToken, learnerDef, process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
     const createEmpRes = await request(adminToken, '/api/funcionarios', {
       method: 'POST',
       body: {
@@ -413,18 +415,19 @@ export async function provisionLearner({
   };
 }
 
+// All production runs and browser replays reuse one real, tenant-scoped QA employee.
+// Browser/run identifiers belong to evidence metadata, NEVER employee identities.
+export function selectCanonicalQaLearners(browser = '') {
+  assert(['', 'chromium', 'webkit'].includes(browser), 'QA_BROWSER_NOT_ALLOWLISTED');
+  return { [browser || 'default']: SYNTHETIC_LEARNER };
+}
+
 export async function provisionAllSyntheticLearners({ mode = 'inspect', learnerPassword }) {
-  assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
   await assertPinnedProduction();
   const adminToken = await getAdminToken();
-  const learners = qaProvisionSelection(
-    process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT,
-    process.env.QA_PROVISION_BROWSER, generateValidTestCpf,
-  );
+  const learners = selectCanonicalQaLearners(String(process.env.QA_PROVISION_BROWSER || '').trim().toLowerCase());
   const results = {};
   for (const [key, def] of Object.entries(learners)) {
-    console.log(`\n============================================================`);
-    console.log(`[QA_PROVISION] Provisionando perfil: ${key} (${def.email})`);
     results[key] = await provisionLearner({ mode, learnerPassword, learnerDef: def, adminToken });
   }
   return results;
