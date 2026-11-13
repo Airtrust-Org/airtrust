@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   resume:
-    name: Resume verified synthetic QA R2 object cleanup
+    name: Resume verified QA D1 postflight and R2 object cleanup
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
