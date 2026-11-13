@@ -19,7 +19,8 @@ describe('LMS draft enrollment notification policy', () => {
     for (const route of [postOne, postBatch]) {
       expect(route.match(/if \(mayNotifyEnrollmentForCourse\(curso\)\) await createLmsInAppNotification/g)?.length).toBe(2);
       expect(route.match(/if \(mayNotifyEnrollmentForCourse\(curso\) && enviar_convite_email\)/g)?.length).toBe(2);
-      expect(route).toMatch(/publicado FROM lms_cursos/);
+      expect(route).toMatch(/publicado, tipo_conteudo, scorm_package_r2_prefix FROM lms_cursos/);
+      expect(route).toMatch(/await assertPublishedScormEnrollmentReady\(db, empresaId, curso_id, curso\)/);
     }
   });
 });
