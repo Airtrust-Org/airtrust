@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { qaRunEmail } from '../qa-run-identity.mjs';
 
 process.env.QA_RUN_ID = '43000000000';
 process.env.QA_RUN_ATTEMPT = '1';
@@ -33,7 +32,7 @@ import {
 } from '../lms-learner-e2e-homologation.mjs';
 
 
-function makeQaToken(funcionarioId, email = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, 'chromium'), empresaId = 6, role = 'ALUNO') {
+function makeQaToken(funcionarioId, email = 'qa.lms.202611@airtrust.online', empresaId = 6, role = 'ALUNO') {
   const encode = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
   return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
     email, empresa_id: empresaId, funcionario_id: funcionarioId, role,
@@ -1642,7 +1641,7 @@ test('QA admin assignment: invalid admin role, tenant or learner identity makes 
   } finally { globalThis.fetch = old; }
 });
 
-test('QA admin assignment: existing non-fresh enrollment is never reset or reassigned', async () => {
+test('QA admin assignment: existing EM_ANDAMENTO is resumed without reset or reassignment', async () => {
   const old = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
@@ -1652,9 +1651,10 @@ test('QA admin assignment: existing non-fresh enrollment is never reset or reass
     ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   try {
-    await assert.rejects(assignSyntheticQaCourse(
+    const id = await assignSyntheticQaCourse(
       makeQaToken(7, 'admin@airtrust.online', 6, 'ADMIN'), makeQaToken(193), 32, 193,
-    ), /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    );
+    assert.equal(id, 901);
     assert.deepEqual(calls, ['GET']);
   } finally { globalThis.fetch = old; }
 });
@@ -1786,4 +1786,64 @@ test('finalization retry requires authentic 100% backend and complete authored c
   assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendStatus: 'REPROVADO' }), false);
   assert.equal(shouldRetryCanonicalRegistration({ ...allowed, assessmentFailed: true }), false);
   assert.equal(shouldRetryCanonicalRegistration({ ...allowed, isPlayerRoute: false }), false);
+});
+
+
+test('QA canonical Chromium -> WebKit reuses employee and creates only a governed new cycle', async () => {
+  const original = globalThis.fetch;
+  const learner = makeQaToken(193);
+  const admin = makeQaToken(777,'admin@airtrust.online',6,'ADMIN');
+  let status = 'NAO_INICIADO';
+  const writes = [];
+  const respond = (data,statusCode=200) => new Response(JSON.stringify({success:true,data}),
+    {status:statusCode,headers:{'Content-Type':'application/json'}});
+  try {
+    globalThis.fetch = async (url,options={}) => {
+      const path=new URL(url).pathname;
+      const method=options.method || 'GET';
+      if(path==='/api/lms/matriculas/minhas-ead') {
+        assert.equal(options.headers?.Authorization,'Bearer '+learner);
+        return respond([{id:9301,curso_id:32,funcionario_id:193,empresa_id:6,status}]);
+      }
+      if(path==='/api/lms/matriculas/9301/qa-novo-ciclo') {
+        assert.equal(method,'POST');
+        assert.equal(options.headers?.Authorization,'Bearer '+admin);
+        const body=JSON.parse(options.body);
+        assert.equal(body.confirmation,'AIRTRUST_QA_LMS_NEW_CYCLE');
+        assert.equal(body.expected_course_id,32);
+        assert.match(body.reason,/arquivar evidências/);
+        writes.push(path);
+        status='NAO_INICIADO';
+        return respond({matricula_id:9301,curso_id:32,funcionario_id:193,
+          status:'NAO_INICIADO',new_cycle_id:9302,previous_cycle_archived:true});
+      }
+      throw Error('UNEXPECTED_QA_NETWORK_OPERATION');
+    };
+    const chromium=await assignSyntheticQaCourse(admin,learner,32,193);
+    assert.equal(chromium,9301);
+    status='CONCLUIDO';
+    const webkit=await assignSyntheticQaCourse(admin,learner,32,193);
+    assert.equal(webkit,chromium);
+    assert.deepEqual(writes,['/api/lms/matriculas/9301/qa-novo-ciclo']);
+  } finally {globalThis.fetch=original;}
+});
+
+test('QA canonical repeated completion fails closed if protected cycle renewal is denied', async () => {
+  const original=globalThis.fetch;
+  const learner=makeQaToken(193);
+  const admin=makeQaToken(777,'admin@airtrust.online',6,'ADMIN');
+  try {
+    globalThis.fetch=async (url,options={}) => {
+      const path=new URL(url).pathname;
+      if(path.endsWith('/minhas-ead')) return new Response(JSON.stringify({
+        success:true,data:[{id:9301,curso_id:32,funcionario_id:193,empresa_id:6,status:'CONCLUIDO'}],
+      }),{status:200,headers:{'Content-Type':'application/json'}});
+      if(path.endsWith('/qa-novo-ciclo')) return new Response(JSON.stringify({
+        success:false,code:'QA_CYCLE_SCOPE_OR_STATUS_DENIED'
+      }),{status:409,headers:{'Content-Type':'application/json'}});
+      throw Error('UNEXPECTED_QA_NETWORK_OPERATION');
+    };
+    await assert.rejects(assignSyntheticQaCourse(admin,learner,32,193),
+      /QA_GOVERNED_CYCLE_RENEWAL_UNVERIFIED/);
+  } finally {globalThis.fetch=original;}
 });

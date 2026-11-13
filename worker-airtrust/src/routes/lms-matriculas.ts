@@ -90,13 +90,13 @@ import { ScormCommitSchema } from '../services/lms-scorm-commit-schema';
 import { activeXapiFirst } from '../services/lms-active-xapi-read';
 import { registerLmsScormEditionHandoffRoute } from './lms-scorm-edition-handoff';
 import { registerLmsIncompleteInteractionRecoveryRoute } from './lms-scorm-incomplete-interaction-recovery';
-
+import { registerLmsQaCycleRoute } from './lms-qa-cycle';
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', auth());
 registerPptxEvidenceRoutes(app);
 app.route('/convites', lmsMatriculasConvitesRoutes);
 registerLmsScormEditionHandoffRoute(app);
-registerLmsIncompleteInteractionRecoveryRoute(app);
+registerLmsIncompleteInteractionRecoveryRoute(app); registerLmsQaCycleRoute(app);
 app.route('/', lmsMatriculasEmAndamentoRoutes);
 async function resolveCallerFuncionarioId(c: Context, db: D1Database): Promise<number | null> {
   return resolveLmsFuncionarioId(db, c.get('userId' as never), getEmpresaIdSafe(c));

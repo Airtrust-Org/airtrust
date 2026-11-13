@@ -129,7 +129,7 @@ jobs:
       HOMOLOGATION_REPORT_PATH: qa-state/lms-homologation-${{ matrix.browser }}.json
       QA_RUN_ID: ${{ github.run_id }}
       QA_RUN_ATTEMPT: ${{ github.run_attempt }}
-      QA_LEARNER_EMAIL_OVERRIDE: qa.lms.${{ github.run_id }}.${{ github.run_attempt }}.${{ matrix.browser }}@airtrust.online
+      QA_LEARNER_EMAIL_OVERRIDE: qa.lms.202611@airtrust.online
       QA_LEARNER_PASSWORD: ${{ secrets.QA_LEARNER_PASSWORD }}
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
@@ -141,10 +141,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      # A re-run of failed certify jobs increments github.run_attempt but does
-      # not re-run a previously successful provision job. Always provision the
-      # exact current attempt/browser before accessing any course.
-      - name: Provision isolated learner for current browser and attempt
+      # Re-runs reuse the canonical synthetic employee; never allocate another
+      # employee by run, attempt or browser. Course cycles require governed resets.
+      - name: Reuse canonical QA learner for browser run
         env:
           QA_PROVISION_BROWSER: ${{ matrix.browser }}
           EXPECTED_PRODUCTION_SHA: ${{ needs.guard.outputs.expected_sha }}

@@ -18,7 +18,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
 import { chromium, webkit } from '@playwright/test';
-import { qaRunEmail, assertQaRunScope } from './qa-run-identity.mjs';
+import { SYNTHETIC_LEARNER } from './provision-synthetic-qa-learner.mjs';
+import { assertQaRunScope } from './qa-run-identity.mjs';
 import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
 import { readVisibleVideo, startRealVisibleVideo } from '../validation/lms-scorm-video-playback-readonly.mjs';
@@ -134,7 +135,7 @@ async function assertPinnedProduction() {
 }
 
 async function getLearnerSession() {
-  const browserEmail = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
+  const browserEmail = SYNTHETIC_LEARNER.email;
   const preferredEmail = String(process.env.QA_LEARNER_EMAIL_OVERRIDE || '').trim().toLowerCase();
   assert(preferredEmail === browserEmail, 'QA_EXPECTED_EMAIL_MISMATCH');
   const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
@@ -228,7 +229,7 @@ async function listCourses(learnerToken) {
 export function assertQaLearnerIdentity(token, funcionarioId) {
   const claims = decodeJwtPayload(token);
   const email = String(claims?.email || '').trim().toLowerCase();
-  const expected = qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME);
+  const expected = SYNTHETIC_LEARNER.email;
   assert(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'QA_BROWSER_NOT_ALLOWLISTED');
   assert(TARGET_COMPANY_ID === 6, 'QA_COMPANY_NOT_ALLOWLISTED');
   assert(email === expected, 'QA_LEARNER_EMAIL_NOT_ALLOWLISTED');
@@ -323,11 +324,45 @@ export async function assignSyntheticQaCourse(adminToken, learnerToken, courseId
     assert(Number(match.funcionario_id) === funcionarioId &&
       (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
     'QA_ASSIGN_OWNERSHIP_MISMATCH');
-    assert(String(match.status || '').toUpperCase() === 'NAO_INICIADO',
-      'QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
     const id = Number(match.id);
     assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
-    return id;
+    const status = String(match.status || '').toUpperCase();
+    if (status === 'NAO_INICIADO' || status === 'EM_ANDAMENTO') return id;
+    if (status === 'CONCLUIDO' || status === 'REPROVADO') {
+      // Existing official LMS service archives CMI, xAPI and prior cycle
+      // transactionally. This route is scoped to the canonical synthetic
+      // employee, an administrator and the exact course/enrollment.
+      const renewed = await fetchJson(`${API}/api/lms/matriculas/${id}/qa-novo-ciclo`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          expected_course_id: courseId,
+          confirmation: 'AIRTRUST_QA_LMS_NEW_CYCLE',
+          reason: `Reexecução QA LMS ${process.env.QA_RUN_ID}/${process.env.QA_RUN_ATTEMPT}, navegador ${BROWSER_NAME}; arquivar evidências e testar novo ciclo`,
+        }),
+      });
+      assert(renewed.status === 200 && renewed.json?.success === true &&
+        Number(renewed.json?.data?.matricula_id) === id &&
+        Number(renewed.json?.data?.curso_id) === courseId &&
+        Number(renewed.json?.data?.funcionario_id) === funcionarioId &&
+        renewed.json?.data?.status === 'NAO_INICIADO' &&
+        renewed.json?.data?.previous_cycle_archived === true,
+      'QA_GOVERNED_CYCLE_RENEWAL_UNVERIFIED');
+      const readback = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+        headers: {Authorization: `Bearer ${learnerToken}`},
+      });
+      assert(readback.status === 200 && Array.isArray(readback.json?.data) &&
+        readback.json.data.some(r => Number(r.id) === id &&
+          Number(r.curso_id) === courseId &&
+          Number(r.funcionario_id) === funcionarioId &&
+          String(r.status).toUpperCase() === 'NAO_INICIADO'),
+      'QA_NEW_CYCLE_LEARNER_READBACK_UNVERIFIED');
+      return id;
+    }
+    throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
   }
 
   // Only an authenticated tenant administrator can designate training to QA.
@@ -1150,7 +1185,7 @@ export function buildLearnerAuthPayload(token, funcionarioId) {
   const user = {
     id: claims?.id || funcionarioId,
     funcionario_id: funcionarioId,
-    email: claims?.email || qaRunEmail(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT, BROWSER_NAME),
+    email: claims?.email || SYNTHETIC_LEARNER.email,
     nome: claims?.nome || 'Aluno QA Sintético',
     role: 'ALUNO',
     empresa_id: TARGET_COMPANY_ID,
