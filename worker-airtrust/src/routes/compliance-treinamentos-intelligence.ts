@@ -104,10 +104,8 @@ export function createTrainingComplianceIntelligenceRoutes({
   async function eligibleEadQualificationIds(db: D1Database, empresaId: number): Promise<Set<number>> {
     const { results } = await db.prepare(`
       SELECT qt.id FROM qualificacoes_tipos qt
-      LEFT JOIN qualificacoes_formatos qf ON qf.id = qt.formato_id AND qf.deleted_at IS NULL
       WHERE qt.empresa_id = ? AND qt.deleted_at IS NULL
-        AND (UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
-          OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD'))
+        AND UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
     `).bind(empresaId).all<{ id: number }>();
     return new Set((results || []).map((row) => Number(row.id)));
   }
