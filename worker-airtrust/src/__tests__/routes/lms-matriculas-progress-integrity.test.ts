@@ -69,6 +69,7 @@ vi.mock('../../services/lms-matricula-cycle', () => ({
   resetMatriculaForNewCycle: resetMatriculaForNewCycleMock,
   reactivateCancelledMatriculaPreservingProgress: reactivateCancelledMatriculaMock,
   syncMatriculaCycleFromMatricula: syncMatriculaCycleFromMatriculaMock,
+  syncMatriculaCycleProgressMonotonic: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../middleware/employee-sector-access', () => ({

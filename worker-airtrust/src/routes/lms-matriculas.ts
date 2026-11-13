@@ -25,6 +25,7 @@ import {
   ensureMatriculaCycle,
   reactivateCancelledMatriculaPreservingProgress,
   syncMatriculaCycleFromMatricula,
+  syncMatriculaCycleProgressMonotonic,
 } from '../services/lms-matricula-cycle';
 import {
   buildMatriculaCompletionDiagnostic,
@@ -2847,12 +2848,10 @@ app.patch('/:id/progresso', async (c) => {
   const empresaId = getEmpresaIdSafe(c);
   const matriculaId = Number(c.req.param('id'));
   if (!matriculaId || isNaN(matriculaId)) throw new ApiError('ID inválido', 400);
-
   const body = await c.req.json<unknown>();
   const parsed = PatchProgressoSchema.safeParse(body);
   if (!parsed.success)
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
-
   const { progresso_pct, ultimo_slide, ultima_pagina } = parsed.data;
 
   // Verificar que a matrícula pertence à empresa e ao funcionário autenticado
@@ -2920,6 +2919,7 @@ app.patch('/:id/progresso', async (c) => {
     .bind(...binds)
     .run();
 
+  await syncMatriculaCycleProgressMonotonic(db, { matriculaId, empresaId });
   const updated = await db
     .prepare(
       `SELECT id, status, progresso_pct, ultimo_slide, ultima_pagina FROM lms_matriculas WHERE id = ?`,
