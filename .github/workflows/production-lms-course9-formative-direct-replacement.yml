@@ -45,7 +45,7 @@ jobs:
       ZIP_SHA: ${{ inputs.incoming_zip_sha }}
       CONFIRMATION: ${{ inputs.confirmation }}
       REPLACEMENT_MODE: ${{ inputs.mode }}
-      PRIVATE_ZIP_FILE: ${{ runner.temp }}/course9-private.zip
+      PRIVATE_ZIP_FILE: /tmp/airtrust-course9-private-r32.zip
       PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
       PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
     steps:
