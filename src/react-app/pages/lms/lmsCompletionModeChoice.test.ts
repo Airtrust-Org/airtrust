@@ -22,9 +22,10 @@ describe('proteção contra falsa prova externa no curso', () => {
     expect(canUseLegacyEvaluatedPolicy('SCORED', undefined)).toBe(false);
     expect(canUseLegacyEvaluatedPolicy('SCORED', 'FORMATIVE')).toBe(false);
   });
-  it('mantém edição histórica SCORED editável sem reinterpretar a política', () => {
+  it('impede downgrade da edição SCORED pela edição simples de metadados', () => {
     expect(canUseLegacyEvaluatedPolicy('SCORED', 'SCORED')).toBe(true);
-    expect(canUseLegacyEvaluatedPolicy('FORMATIVE', 'SCORED')).toBe(true);
+    expect(canUseLegacyEvaluatedPolicy('FORMATIVE', 'SCORED')).toBe(false);
     expect(canUseLegacyEvaluatedPolicy('FORMATIVE', undefined)).toBe(true);
+    expect(canUseLegacyEvaluatedPolicy('FORMATIVE', 'FORMATIVE')).toBe(true);
   });
 });
