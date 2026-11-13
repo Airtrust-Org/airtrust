@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Source contract: test the exact SQL that the live PUT route uses, not a
 // parallel reimplementation that might drift from production.
 const source = readFileSync(
-  fileURLToPath(new URL('../../routes/simuladores-fichas-simulador.ts', import.meta.url)),
+  join(dirname(fileURLToPath(import.meta.url)), '../../routes/simuladores-fichas-simulador.ts'),
   'utf8',
 );
 const route = source.slice(
