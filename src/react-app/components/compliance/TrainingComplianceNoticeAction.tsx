@@ -10,6 +10,7 @@ type PendingNoticeRow = {
   funcionario_id: number;
   funcionario_nome: string;
   qualificacao_tipo_id: number;
+  alerta_ead_permitido?: boolean;
   qualificacao_tipo_nome?: string | null;
   status_compliance: NoticeStatus | 'EM_ANDAMENTO' | 'CONFORME';
   tem_email: boolean;
@@ -134,7 +135,8 @@ export function TrainingComplianceNoticeAction({
       ),
   });
 
-  const rows = pending.data || [];
+  // Exibir pendências de compliance não implica permitir cobrança ao aluno.
+  const rows = (pending.data || []).filter((row) => row.alerta_ead_permitido === true);
   const statusCounts = useMemo(
     () =>
       STATUS_OPTIONS.reduce(
