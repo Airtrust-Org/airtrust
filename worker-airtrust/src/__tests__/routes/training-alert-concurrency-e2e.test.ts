@@ -150,8 +150,8 @@ beforeEach(() => {
     INSERT INTO funcionarios (id, empresa_id, nome, email, telefone, status, ativo)
       VALUES (101, 1, 'Piloto Concorrente', 'piloto@example.com', '+5521999991111', 'ATIVO', 1);
 
-    INSERT INTO qualificacoes_tipos (id, empresa_id, categoria)
-      VALUES (55, 1, 'EAD');
+    INSERT INTO qualificacoes_tipos (id, empresa_id, codigo, categoria)
+      VALUES (55, 1, 'EAD-SEG', 'EAD');
     INSERT INTO lms_cursos (id, empresa_id, titulo, qualificacao_tipo_id, categoria)
       VALUES (32, 1, 'Segurança de Voo', 55, 'EAD');
 
