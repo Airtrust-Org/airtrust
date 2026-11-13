@@ -12,5 +12,11 @@
   "pf_b_positions_per_session": 9,
   "notechs_competencies": 15,
   "status": "CANONICAL_NORMATIVE_REFERENCE_NOT_OPERATIONAL_GUIDE",
-  "approval_scope": "PTO documents approved; technical guide SOP/RFM/QRH/ECL acceptance remains separate"
+  "approval_scope": "PTO documents approved; technical guide SOP/RFM/QRH/ECL acceptance remains separate",
+  "functional_sha256": "42aa89a4aa582bdcbe25ea47afb02503c154a6e5c2ec1e7c6371c05c0ca7d54c",
+  "functional_session_count": 6,
+  "functional_technical_positions": 108,
+  "distinct_functional_codes": 94,
+  "all_models_including_functional": 88,
+  "all_technical_positions_including_functional": 1584
 }

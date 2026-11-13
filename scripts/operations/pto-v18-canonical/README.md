@@ -7,6 +7,8 @@ O AirTrust deve se conformar ao PTO aprovado, e não o contrário.
 Este diretório contém as tabelas extraídas literalmente do PTO:
 - sessoes_pto_v18.json: 82 sessões (37 AW139 + 45 S76), cada uma com 18
   posições técnicas em ordem (9 PF A + 9 PF B).
+- funcionais_pto_v18.json: seis sessões práticas INST/EXA com 108 posições
+  e 94 códigos funcionais distintos, incluindo os títulos aprovados.
 - notechs_pto_v18.json: 15 competências NOTECHS oficiais, seus nomes,
   categorias e evidências observáveis.
 - manifest.json: hashes, contagens e status de fonte normativa, sem status
