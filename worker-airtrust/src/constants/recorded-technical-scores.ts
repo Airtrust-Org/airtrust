@@ -35,7 +35,10 @@ export function assessRecordedTechnicalScores(rows: readonly RecordedTechnicalRo
     scored++;
     if (nota < 6) belowMinimum.push({ codigo, nota });
   }
-  // No rows / all NR does not prove practical coverage. Caller must not infer otherwise.
-  return { eligible: invalid.length === 0 && belowMinimum.length === 0,
+  // A PTO simulator session without any scored technical maneuver has no
+  // affirmative execution evidence. This also covers NOTECHS-only / empty
+  // datasets; the session-specific 18-item curriculum still requires separate
+  // versioned validation and is not inferred by this negative safety gate.
+  return { eligible: scored > 0 && invalid.length === 0 && belowMinimum.length === 0,
     scored, nonPerformed, belowMinimum, invalid };
 }
