@@ -115,7 +115,7 @@ export default function ControleVoosCoordenacaoFila() {
             </div>
             <label className="space-y-1 text-xs">
               <span className="block font-medium text-slate-500 dark:text-slate-400">Data operacional</span>
-              <input type="date" value={xmlDate} onChange={(event) => { setXmlDate(event.target.value); setXmlErrorMessage(''); }} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+              <input type="date" aria-label="Data operacional para exportação XML" disabled={xmlLoading} value={xmlDate} onChange={(event) => { setXmlDate(event.target.value); setXmlErrorMessage(''); }} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
             </label>
             <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); setXmlErrorMessage(''); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { const message = xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'; setXmlErrorMessage(message); if (!message.includes('Nenhum RDV finalizado')) toast.error(message); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
               <FileDown className="h-4 w-4" /> {xmlLoading ? 'Gerando…' : 'Gerar XML do dia'}
