@@ -492,7 +492,7 @@ function driveFactoryCourse() {
             return fail('LEGACY_ANAC23_QUIZ_POSITION_INVALID',step);
           }
           if (!quizComplete) {
-            const index = Number(quizIndex);
+            const index: number = Number(quizIndex);
             const question = questions[index];
             if (!Number.isInteger(index) || index < 0 || index >= questions.length ||
                 !question || quizAnswers[index] != null) {
@@ -503,7 +503,7 @@ function driveFactoryCourse() {
                 !clickControl('#quizNext')) {
               return fail('LEGACY_ANAC23_QUESTION_CONTROL_MISSING',step);
             }
-            if (!quizComplete && quizIndex !== index + 1) {
+            if (!quizComplete && Number(quizIndex) !== index + 1) {
               return fail('LEGACY_ANAC23_QUESTION_NOT_ADVANCED',step);
             }
             continue;
@@ -548,7 +548,7 @@ function driveFactoryCourse() {
             }
           }
         }
-        const before = current;
+        const before: number = current;
         if (!clickControl('#nextBtn') || current !== before + 1 ||
             !completed.has(slide.id)) {
           return fail('LEGACY_ANAC23_NAVIGATION_UNVERIFIED',step);
