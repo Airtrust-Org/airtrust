@@ -308,7 +308,7 @@ app.post('/fichas/:id/assinar', async (c) => {
 
     // Uma ficha já assinada pelo instrutor não pode ser regravada por uma
     // segunda chamada de assinatura; usar fluxo auditável de retificação.
-    if (f.assinatura_instrutor_timestamp) {
+    if (f.assinatura_instrutor_timestamp || Number(f.assinatura_instrutor) === 1) {
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
         error: 'Ficha já assinada pelo instrutor. Utilize o fluxo formal de retificação.' }, 409);
     }
@@ -388,11 +388,27 @@ app.post('/fichas/:id/assinar', async (c) => {
     let ns = f.status;
 
     if (b.tipo === 'ALUNO') {
-      await c.env.DB.prepare(
-        "UPDATE fichas_sessao SET assinatura_aluno_ip=?,assinatura_aluno_timestamp=?,assinatura_aluno_imagem=?,assinatura_tripulante=1,status='AGUARDANDO_ASSINATURA_INSTRUTOR' WHERE id=? AND empresa_id = ?",
+      // A previously recorded student signature is immutable, even when a
+      // legacy row has only its boolean flag and no timestamp. The UPDATE
+      // repeats the guard to prevent a second signature racing this read.
+      if (f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1) {
+        return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+          error: 'Aluno já assinou esta ficha. Utilize retificação formal.' }, 409);
+      }
+      const escritaAluno = await c.env.DB.prepare(
+        `UPDATE fichas_sessao SET assinatura_aluno_ip=?, assinatura_aluno_timestamp=?,
+            assinatura_aluno_imagem=?, assinatura_tripulante=1,
+            status='AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHERE id=? AND empresa_id=? AND deleted_at IS NULL
+            AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0
+            AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0`,
       )
         .bind(ip, ts, b.assinatura_imagem || null, id, empresaId)
         .run();
+      if (Number(escritaAluno.meta?.changes || 0) !== 1) {
+        return c.json({ success: false, code: 'FICHA_CONCURRENT_UPDATE',
+          error: 'Ficha já assinada ou alterada durante a assinatura do aluno. Recarregue.' }, 409);
+      }
       ns = 'AGUARDANDO_ASSINATURA_INSTRUTOR';
       console.log(`✍️ [FICHA ${id}] Aluno assinou → AGUARDANDO_ASSINATURA_INSTRUTOR`);
 
@@ -508,7 +524,7 @@ app.post('/fichas/:id/assinar', async (c) => {
                 assinatura_instrutor_imagem=?, assinatura_instrutor=1,
                 status=?, resultado_final=?, aprovado=?, updated_at=datetime('now')
           WHERE id=? AND empresa_id=? AND assinatura_instrutor_timestamp IS NULL
-            AND deleted_at IS NULL
+            AND COALESCE(assinatura_instrutor,0)=0 AND deleted_at IS NULL
             ${aprovadoInstrutor ? `AND (
               SELECT GROUP_CONCAT(snapshot.codigo || ':' || COALESCE(snapshot.resultado,''), '|')
                 FROM (
