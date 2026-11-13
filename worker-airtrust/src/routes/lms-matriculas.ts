@@ -2004,7 +2004,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
 
   const existing = await db
     .prepare(
-      `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
+      `SELECT m.id, m.status, m.progresso_pct, m.data_inicio, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
               c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
@@ -2019,6 +2019,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       id: number;
       status: string;
       progresso_pct: number | null;
+      data_inicio: string | null;
       funcionario_id: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
@@ -2044,6 +2045,29 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
 
   const { status, observacoes } = parsed.data;
   const now = getTodayIsoSaoPaulo();
+
+  // #1325 / #2215: uma simples alteração administrativa de status não pode
+  // reiniciar um percurso com progresso, nem deixar CMI/SCORM existente
+  // associado a NAO_INICIADO. Reset verdadeiro exige procedimento governado
+  // próprio, com revisão de evidências e ciclo de matrícula.
+  if (status === 'NAO_INICIADO') {
+    const started = Number(existing.progresso_pct ?? 0) > 0
+      || Boolean(existing.data_inicio);
+    const hasScormRuntime = String(existing.tipo_conteudo ?? '').toLowerCase() === 'scorm'
+      ? Boolean(await db.prepare(
+          `SELECT 1 AS has_runtime FROM lms_progresso_scorm
+             WHERE matricula_id=? AND empresa_id=? LIMIT 1`,
+        ).bind(matriculaId, empresaId).first())
+      : false;
+    if (started || hasScormRuntime) {
+      return c.json({
+        success: false,
+        code: 'LMS_RESET_REQUIRES_GOVERNED_RECOVERY',
+        error: 'Matrícula com início, progresso ou evidência SCORM não pode ser redefinida como NÃO INICIADA apenas pelo status administrativo.',
+        data: { matricula_id: matriculaId, status_atual: existing.status },
+      }, 409);
+    }
+  }
 
   // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
   if (status === 'CONCLUIDO') {
