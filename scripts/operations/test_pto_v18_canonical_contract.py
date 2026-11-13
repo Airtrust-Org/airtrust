@@ -17,14 +17,15 @@ class CanonicalPtoV18Test(unittest.TestCase):
     def test_approved_document_transcription_and_two_pf_legs(self):
         result = guard.validate()
         self.assertEqual(
-            (result["sessions"], result["technical_positions"], result["distinct_technical_codes"], result["notechs"]),
-            (82, 1476, 531, 15),
+            (result["sessions"], result["technical_positions"], result["distinct_technical_codes"], result["notechs"], result["functional_sessions"],
+             result["functional_technical_positions"], result["distinct_functional_codes"]),
+            (82, 1476, 531, 15, 6, 108, 94),
         )
 
     def test_tampered_technical_item_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = guard.DEFAULT_DIR
-            for name in ("manifest.json", "sessoes_pto_v18.json", "notechs_pto_v18.json"):
+            for name in ("manifest.json", "sessoes_pto_v18.json", "notechs_pto_v18.json", "funcionais_pto_v18.json"):
                 shutil.copyfile(source / name, Path(tmp) / name)
             path = Path(tmp) / "sessoes_pto_v18.json"
             sessions = json.loads(path.read_text())
@@ -33,10 +34,23 @@ class CanonicalPtoV18Test(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "HASH_MISMATCH"):
                 guard.validate(tmp)
 
+    def test_changed_functional_item_cannot_be_silently_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = guard.DEFAULT_DIR
+            for name in ("manifest.json", "sessoes_pto_v18.json",
+                         "notechs_pto_v18.json", "funcionais_pto_v18.json"):
+                shutil.copyfile(source / name, Path(tmp) / name)
+            path = Path(tmp) / "funcionais_pto_v18.json"
+            source_data = json.loads(path.read_text())
+            source_data[0]["itens"][0]["codigo"] = "CODIGO_NAO_PTO"
+            path.write_text(json.dumps(source_data))
+            with self.assertRaisesRegex(ValueError, "HASH_MISMATCH"):
+                guard.validate(tmp)
+
     def test_manifest_cannot_grant_operational_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = guard.DEFAULT_DIR
-            for name in ("manifest.json", "sessoes_pto_v18.json", "notechs_pto_v18.json"):
+            for name in ("manifest.json", "sessoes_pto_v18.json", "notechs_pto_v18.json", "funcionais_pto_v18.json"):
                 shutil.copyfile(source / name, Path(tmp) / name)
             path = Path(tmp) / "manifest.json"
             manifest = json.loads(path.read_text())
