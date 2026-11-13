@@ -165,6 +165,54 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
     });
   });
 
+
+  it.each(['alert', 'confirm', 'prompt'] as const)(
+    'denies %s modal safely while preserving only proof from authored SCO',
+    async kind => {
+      const on = vi.fn();
+      const dismissed = vi.fn(async () => undefined);
+      const accepted = vi.fn(async () => undefined);
+      const page = {
+        setRequestInterception: vi.fn(async () => undefined),
+        on,
+        goto: vi.fn(async () => undefined),
+        waitForFunction: vi.fn(async () => undefined),
+        evaluate: vi.fn()
+          .mockImplementationOnce(async () => {
+            const handler = on.mock.calls.find(([event]) => event === 'dialog')?.[1] as
+              ((dialog: {type:()=>string;dismiss:()=>Promise<void>;accept:()=>Promise<void>}) => void) | undefined;
+            expect(handler).toBeTypeOf('function');
+            handler?.({ type: () => kind, dismiss: dismissed, accept: accepted });
+            await Promise.resolve();
+            return { supported: true, completed: true, steps: 45, reason: null };
+          })
+          .mockResolvedValueOnce(undefined)
+          .mockResolvedValueOnce({
+            trace: [
+              { method: 'LMSInitialize' },
+              { method: 'LMSSetValue', key: 'cmi.core.lesson_status', value: 'passed' },
+              { method: 'LMSCommit' },
+              { method: 'LMSFinish' },
+            ],
+            values: { 'cmi.core.lesson_status': 'passed', 'cmi.core.score.raw': '100' },
+            initialized: true, finished: true, lastError: '0',
+          }),
+      };
+      const browser = {newPage:async()=>page,close:vi.fn(async()=>undefined)};
+      const runtime = await runScormBrowserConformance({
+        browserBinding:{},candidateSha256:'e'.repeat(64),launchFile:'index.html',
+        assets:[{path:'index.html',data:new TextEncoder().encode('<html><body>SCORM QA</body></html>')}],
+        launchBrowser:async()=>browser as never,
+      });
+      expect(dismissed).toHaveBeenCalledOnce();
+      expect(accepted).not.toHaveBeenCalled();
+      expect(runtime.status).toBe('PASS');
+      expect(runtime.functionalCompletionVerified).toBe(kind==='alert');
+      expect(runtime.functionalCompletionReason).toBe(kind==='alert'
+        ? null:'SCORM_QA_INTERACTIVE_DIALOG_NOT_SUPPORTED');
+    },
+  );
+
   it('fails closed with a safe diagnostic when SCO never initializes', async () => {
     const { page, browser } = fakeBrowser(true);
     const runtime = await runScormBrowserConformance({
