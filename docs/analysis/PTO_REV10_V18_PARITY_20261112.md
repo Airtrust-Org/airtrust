@@ -152,3 +152,22 @@ O `scripts/operations/propose-pto-v18-model-lineage.py` compara os 82 códigos a
 | Sem vínculo documental seguro pelas regras conservadoras aplicadas | 56 |
 
 O mapeamento de 12 sessões S76 iniciais **não foi aplicado**: depende de avaliação de equivalência operacional. Nenhuma aposentadoria ou fusão de modelo histórico é inferida. Todos os itens são marcados `manual_approval_required=true` e `safe_to_auto_retire_or_merge=false`. Quatro testes PASS. `NO-GO` mantém-se para importação automática.
+
+## Guias de instrutor: contextualização histórica e registro integral de aceite (12/11/2026)
+
+Código novo: `scripts/operations/enrich-pto-v18-guide-drafts.py` — gera **82 guias HTML em área privada de revisão**, com os 15 elementos NOTECHS, ordem e distribuição PF do PTO V18, textos herdados somente se código + descrição coincidirem. Rejeita reutilização diante de múltiplos cenários distintos, escapa HTML de fontes antigas e escreve marcador visual **RASCUNHO NÃO HOMOLOGADO — NÃO UTILIZAR EM INSTRUÇÃO OU CHECK**. A comparação documental dos 1.476 vínculos produziu:
+
+| Proveniência do contexto técnico herdado | Vínculos |
+| --- | ---: |
+| Mesma sessão histórica, código e descrição | 565 |
+| Outra sessão histórica, código e descrição, contexto único no catálogo | 701 |
+| Fonte histórica ausente ou cenário ambíguo | 210 |
+| Total | 1.476 |
+
+São **210 posições sem contexto histórico inequívoco**, distribuídas por **58 sessões**. Mesmo as **1.266 posições com contexto histórico** permanecem `PENDENTE` para validação operacional por variante, configuração, revisão SOP/RFM/QRH e condições do FFS. A regra de equivalência histórica jamais substitui a homologação técnica. Arquivos privados produzidos em `/tmp/pto-v18-private/guias-enriquecidos`; não versionar o conteúdo operacional.
+
+Foram gerados **quatro registros CSV de aceite pendente** em área privada `/tmp/pto-v18-private/registro-aceite/`: 1.476 posições técnicas das 82 sessões de aeronaves; 82 guias correspondentes; 108 posições técnicas de seis sessões funcionais (instrutor/examinador); e seis fichas de aceite de guias funcionais. Os 90 vínculos NOTECHS das seis sessões funcionais também permanecem sem aceite. A procedência dessas seis sessões continua marcada **LEGADO FUNCIONAL**, não como tabela de sessão certificada no PTO V18; a revisão deverá demonstrar sua aplicabilidade com referência direta ao documento aprovado.
+
+Gerador `build-pto-v18-technical-review-ledger.py`; auditor independente `audit-pto-v18-technical-review-ledger.py` recusa código, nome, ordem ou perna manipulados e exige preenchimento dos campos de manual controlado/revisão/seção, revisor/data/evidência para as posições e revisão de guia/variante/PF/PM/NOTECHS para cada guia. Executado no pacote real, corretamente retornou **`NO_GO_REVISAO_PENDENTE`**; nenhuma célula foi falsamente marcada como aprovada. Os CSVs, por si só, não autenticam revisores e **não geram arquivo de homologação `VALIDADO_PARA_PRODUCAO`**; aprovação independente e conferência das evidências são obrigatórias.
+
+A barreira `assertNewPtoV18ApplyReady` também passou a exigir, adicionalmente aos **82 guias/1.476 posições/15 NOTECHS** de aeronaves, aceite técnico separado para **6 guias funcionais, 108 posições e 90 vínculos NOTECHS funcionais**, impedindo que o plano schema2 de 88 modelos publique as seis sessões legadas sem a correspondente conferência. Ainda é apenas barreira no aplicador D1 **local**, não um release de produção. Testes focados acrescentados. **NO-GO permanece** até homologação controlada, processo de versão/migração e gates completos.

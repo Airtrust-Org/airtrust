@@ -17,6 +17,9 @@ const approval = Object.freeze({
   guide_count: 82,
   technical_items_verified: 1476,
   notechs_verified: 15,
+  functional_guides_verified: 6,
+  functional_technical_items_verified: 108,
+  functional_notechs_links_verified: 90,
   reviewer: 'responsavel-tecnico',
   reviewed_at: '2026-11-12T21:00:00Z',
   evidence_ref: 'auditoria/versao-controlada',
@@ -58,6 +61,20 @@ test('incomplete guide approval blocks application', () => {
   assert.throws(() => assertNewPtoV18ApplyReady({
     plan, existingState: 'NEW', dryRun: false,
     technicalApproval: { ...approval, guide_count: 51 },
+  }), /não abrange integralmente/);
+});
+
+test('six functional instructor/examiner guides are also mandatory', () => {
+  assert.throws(() => assertNewPtoV18ApplyReady({
+    plan, existingState: 'NEW', dryRun: false,
+    technicalApproval: { ...approval, functional_guides_verified: 0 },
+  }), /não abrange integralmente/);
+});
+
+test('missing 90 functional NOTECHS links blocks production', () => {
+  assert.throws(() => assertNewPtoV18ApplyReady({
+    plan, existingState: 'NEW', dryRun: false,
+    technicalApproval: { ...approval, functional_notechs_links_verified: 0 },
   }), /não abrange integralmente/);
 });
 

@@ -37,7 +37,10 @@ export function assertNewPtoV18ApplyReady({
   }
   if (technicalApproval.guide_count !== 82 ||
       technicalApproval.technical_items_verified !== 1476 ||
-      technicalApproval.notechs_verified !== 15) {
+      technicalApproval.notechs_verified !== 15 ||
+      technicalApproval.functional_guides_verified !== 6 ||
+      technicalApproval.functional_technical_items_verified !== 108 ||
+      technicalApproval.functional_notechs_links_verified !== 90) {
     throw new Error('PTO V18: aprovação técnica não abrange integralmente a matriz');
   }
   if (!String(technicalApproval.reviewer || '').trim() ||

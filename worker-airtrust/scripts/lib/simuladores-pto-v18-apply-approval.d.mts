@@ -15,6 +15,9 @@ export function assertNewPtoV18ApplyReady(args: {
     guide_count?: number;
     technical_items_verified?: number;
     notechs_verified?: number;
+    functional_guides_verified?: number;
+    functional_technical_items_verified?: number;
+    functional_notechs_links_verified?: number;
     reviewer?: string;
     evidence_ref?: string;
     reviewed_at?: string;
