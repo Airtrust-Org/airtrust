@@ -1,8 +1,9 @@
 /**
  * Catálogo NOTECHS canônico do PTO Revisão 10.
  *
- * Os códigos NTS-* e as evidências observáveis vêm dos pacotes canônicos
- * AW139/S-76 auditados em 30/07/2026. Os aliases NOTECHS-* existem apenas
+ * Os 15 códigos, nomes, categorias e evidências observáveis correspondem ao
+ * PTO aprovado PRG-OPS-001 Rev.10 V18 §4.2 (SHA-256 040a0287...06912).
+ * Os aliases NOTECHS-* existem apenas
  * para reconhecer fichas históricas sem duplicar itens durante o self-heal.
  */
 export interface CanonicalNotechsItem {
@@ -16,8 +17,8 @@ export interface CanonicalNotechsItem {
 export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-TEM-01',
-    nome: 'Formação e manutenção da equipe',
-    categoria: 'Trabalho em equipe',
+    nome: 'Construção e manutenção de equipe',
+    categoria: 'Cooperação',
     evidenciaObservavel:
       'Contribui para constituir e manter uma equipe coordenada, com objetivos e papéis compreendidos.',
     ordem: 1001,
@@ -25,15 +26,15 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-TEM-02',
     nome: 'Consideração pelos outros',
-    categoria: 'Trabalho em equipe',
+    categoria: 'Cooperação',
     evidenciaObservavel:
       'Demonstra respeito, atenção às necessidades dos demais e comportamento cooperativo.',
     ordem: 1002,
   },
   {
     codigo: 'NTS-TEM-03',
-    nome: 'Apoio aos outros',
-    categoria: 'Trabalho em equipe',
+    nome: 'Dar suporte aos outros',
+    categoria: 'Cooperação',
     evidenciaObservavel:
       'Oferece e solicita apoio de modo oportuno, especialmente sob carga de trabalho elevada.',
     ordem: 1003,
@@ -41,23 +42,23 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-TEM-04',
     nome: 'Resolução de conflitos',
-    categoria: 'Trabalho em equipe',
+    categoria: 'Cooperação',
     evidenciaObservavel:
       'Identifica e trata divergências de modo construtivo, preservando segurança e coordenação.',
     ordem: 1004,
   },
   {
     codigo: 'NTS-LDR-05',
-    nome: 'Uso da autoridade e assertividade',
-    categoria: 'Liderança e gestão',
+    nome: 'Uso de autoridade e assertividade',
+    categoria: 'Liderança e Habilidades Gerenciais',
     evidenciaObservavel:
       'Exerce autoridade adequada e intervém assertivamente quando a segurança ou o padrão exige.',
     ordem: 1005,
   },
   {
     codigo: 'NTS-LDR-06',
-    nome: 'Manutenção de padrões',
-    categoria: 'Liderança e gestão',
+    nome: 'Oferecer e manter padrões',
+    categoria: 'Liderança e Habilidades Gerenciais',
     evidenciaObservavel:
       'Mantém SOP, disciplina operacional e padrões mesmo sob pressão ou mudança de cenário.',
     ordem: 1006,
@@ -65,7 +66,7 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-LDR-07',
     nome: 'Planejamento e coordenação',
-    categoria: 'Liderança e gestão',
+    categoria: 'Liderança e Habilidades Gerenciais',
     evidenciaObservavel:
       'Planeja, distribui tarefas, coordena recursos e atualiza o plano conforme a situação.',
     ordem: 1007,
@@ -73,7 +74,7 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-WLM-08',
     nome: 'Gerenciamento da carga de trabalho',
-    categoria: 'Liderança e gestão',
+    categoria: 'Liderança e Habilidades Gerenciais',
     evidenciaObservavel:
       'Prioriza, distribui e acompanha tarefas sem perder capacidade de monitoramento.',
     ordem: 1008,
@@ -81,7 +82,7 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-SA-09',
     nome: 'Consciência dos sistemas da aeronave',
-    categoria: 'Consciência situacional',
+    categoria: 'Consciência Situacional',
     evidenciaObservavel:
       'Mantém modelo mental atualizado do estado, configuração e tendências dos sistemas.',
     ordem: 1009,
@@ -89,15 +90,15 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-SA-10',
     nome: 'Consciência do ambiente externo',
-    categoria: 'Consciência situacional',
+    categoria: 'Consciência Situacional',
     evidenciaObservavel:
       'Monitora tráfego, terreno, meteorologia, helideck, ATC e demais ameaças externas.',
     ordem: 1010,
   },
   {
     codigo: 'NTS-SA-11',
-    nome: 'Consciência do tempo',
-    categoria: 'Consciência situacional',
+    nome: 'Consciência do tempo (time)',
+    categoria: 'Consciência Situacional',
     evidenciaObservavel:
       'Reconhece pressões temporais, antecipa marcos e evita decisões tardias.',
     ordem: 1011,
@@ -105,31 +106,31 @@ export const NOTECHS_CANONICAL_ITEMS: readonly CanonicalNotechsItem[] = [
   {
     codigo: 'NTS-DEC-12',
     nome: 'Definição e diagnóstico do problema',
-    categoria: 'Tomada de decisão',
+    categoria: 'Tomada de Decisão',
     evidenciaObservavel:
       'Identifica corretamente o problema, distingue sintomas de causas e confirma informações críticas.',
     ordem: 1012,
   },
   {
     codigo: 'NTS-DEC-13',
-    nome: 'Geração de opções',
-    categoria: 'Tomada de decisão',
+    nome: 'Produção de opções',
+    categoria: 'Tomada de Decisão',
     evidenciaObservavel:
       'Produz alternativas viáveis e considera recursos, restrições e consequências.',
     ordem: 1013,
   },
   {
     codigo: 'NTS-DEC-14',
-    nome: 'Avaliação de risco e seleção de opção',
-    categoria: 'Tomada de decisão',
+    nome: 'Avaliação do risco e seleção de opções',
+    categoria: 'Tomada de Decisão',
     evidenciaObservavel:
       'Compara riscos e benefícios e seleciona opção compatível com a margem de segurança.',
     ordem: 1014,
   },
   {
     codigo: 'NTS-DEC-15',
-    nome: 'Revisão do resultado',
-    categoria: 'Tomada de decisão',
+    nome: 'Revisão dos resultados',
+    categoria: 'Tomada de Decisão',
     evidenciaObservavel:
       'Monitora o efeito da decisão, revisa o plano e corrige a ação quando necessário.',
     ordem: 1015,
