@@ -272,3 +272,14 @@ test('production certification workflow is governed, online-triggerable, SHA-pin
   assert.doesNotMatch(workflow, /CLOUDFLARE_(?:WORKER|PAGES|D1|API)_/);
   assert.doesNotMatch(workflow, /wrangler\s+(?:deploy|d1|r2)/i);
 });
+
+test('basePhasePass permits read-only completed reopen without redundant commit and certifier recognizes RC21 and DOM slide counters', () => {
+  const source = read(SCRIPT);
+  assert.match(source, /const commitRequired = phase\.phase !== 'reopen-completed'/);
+  assert.match(source, /!commitRequired \|\| phase\.commit_observed/);
+  assert.match(source, /domCounterMatch/);
+  assert.match(source, /\.bottomnav #count/);
+  assert.match(source, /rt-choice/);
+  assert.match(source, /rt-case-choices/);
+  assert.match(source, /data-opt/);
+});
