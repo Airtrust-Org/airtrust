@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -161,4 +162,85 @@ test('inventory uses generic fallback only when no tenant-specific revision exis
   assert.equal(chooseFrmsInventoryRevision([generic, otherTenant], 6).revision.id, 'generic');
   assert.equal(chooseFrmsInventoryRevision([otherTenant], 6).revision, null);
   assert.equal(chooseFrmsInventoryRevision([], 6).ambiguous, false);
+});
+
+test('inventory and production release preflight use the identical active-company tenant predicate', () => {
+  const inventory = read(SCRIPT);
+  const releasePreflight = read('scripts/production/release-readonly-preflight.mjs');
+  const tenantJoin = 'JOIN empresas e ON e.id = f.empresa_id AND e.ativo = 1 AND e.deleted_at IS NULL';
+  assert.ok(inventory.includes(tenantJoin));
+  assert.ok(releasePreflight.includes(tenantJoin));
+  assert.match(inventory, /assignmentCoverageReady/);
+  assert.match(inventory, /inventoryConclusive/);
+  assert.match(inventory, /FRMS_PROFILE_ASSIGNMENTS_AMBIGUOUS/);
+});
+
+const INVENTORY_OFFLINE_SIMULATOR = `
+  import assert from 'node:assert/strict';
+  const active8 = process.env.TEST_INCLUDE_ACTIVE8 === 'yes';
+  globalThis.fetch = async (_url, options) => {
+    const sql = JSON.parse(options.body).sql;
+    let rows;
+    if (sql.includes('SELECT DISTINCT f.empresa_id')) {
+      assert.ok(sql.includes('JOIN empresas e ON e.id = f.empresa_id AND e.ativo = 1 AND e.deleted_at IS NULL'));
+      rows = active8 ? [{ empresa_id: 6 }, { empresa_id: 8 }] : [{ empresa_id: 6 }];
+    } else if (sql.includes('FROM frms_profile_assignments')) {
+      rows = sql.includes('empresa_id = 8') ? [] : [{ regulatory_profile_id: 'prof-6', profile_code: 'HELICOPTER_OFFSHORE' }];
+    } else if (sql.includes('FROM frms_regulatory_profiles')) {
+      rows = sql.includes('empresa_id = 8') ? [] : [{ id: 'prof-6', profile_code: 'HELICOPTER_OFFSHORE', service_category: 'OFFSHORE' }];
+    } else if (sql.includes('FROM frms_config_revisions')) {
+      rows = [{ id: 'rev-6', empresa_id: 6, policy_version: 'V2', revision_number: 1, effective_from: '2026-01-01' }];
+    } else if (sql.includes('FROM frms_config_parameters')) {
+      rows = [{ c: 169 }];
+    } else {
+      throw new Error('Unexpected SQL in offline inventory test');
+    }
+    return { ok: true, status: 200, json: async () => ({ success: true, result: [{ success: true, results: rows }] }) };
+  };
+  await import('./scripts/production/frms-assignment-readonly-inventory.mjs');
+`;
+
+function runOfflineInventory({ active8 }) {
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', INVENTORY_OFFLINE_SIMULATOR], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      CLOUDFLARE_API_TOKEN: 'offline-test-only',
+      CLOUDFLARE_ACCOUNT_ID: 'offline-test-only',
+      EXPECTED_SHA: 'a'.repeat(40),
+      PRODUCTION_D1_ID: PRODUCTION_DB_ID,
+      TEST_INCLUDE_ACTIVE8: active8 ? 'yes' : 'no',
+    },
+  });
+  // GitHub Actions writes stdout directly to a .json artifact and JSON.parse's
+  // the whole file. Any trailing PASS banner would break this contract.
+  return { status: result.status, report: JSON.parse(result.stdout), stderr: result.stderr };
+}
+
+test('inactive historical tenant 8 is excluded; complete governance inventory succeeds without guessing its profile', () => {
+  const run = runOfflineInventory({ active8: false });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.report.activeTenantCount, 1);
+  assert.deepEqual(run.report.tenants.map((t) => t.empresaId), [6]);
+  assert.equal(run.report.tenants[0].assignmentState, 'ASSIGNMENT_PRESENT');
+  assert.equal(run.report.missingAssignmentTenantId, null);
+  assert.equal(run.report.profileDecision.proven, false);
+  assert.equal(run.report.profileDecision.reason, 'NO_TENANT_WITH_MISSING_ASSIGNMENT');
+  assert.equal(run.report.verdict.assignmentCoverageReady, true);
+  assert.equal(run.report.verdict.inventoryConclusive, true);
+  assert.equal(run.report.verdict.blocker, null);
+  assert.equal(run.report.writes, 0);
+});
+
+test('if company 8 becomes active without a profile, its missing assignment continues to fail closed', () => {
+  const run = runOfflineInventory({ active8: true });
+  assert.equal(run.status, 1, run.stderr);
+  assert.equal(run.report.activeTenantCount, 2);
+  assert.equal(run.report.missingAssignmentTenantId, 8);
+  assert.equal(run.report.verdict.assignmentCoverageReady, false);
+  assert.equal(run.report.verdict.inventoryConclusive, false);
+  assert.equal(run.report.verdict.blocker, 'FRMS_PROFILE_DECISION_REQUIRES_EXPLICIT_BUSINESS_AUTHORIZATION');
+  assert.equal(run.report.profileDecision.reason, 'NO_APPLICABLE_REGULATORY_PROFILE_FOR_TENANT');
+  assert.equal(run.report.writes, 0);
 });
