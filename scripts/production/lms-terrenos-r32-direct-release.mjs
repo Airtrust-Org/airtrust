@@ -72,6 +72,8 @@ async function main() {
   const active = rows.find(v => String(v.status).toUpperCase() === 'ACTIVE');
   required(Boolean(active), 'ACTIVE_EDITION_NOT_FOUND');
   const activeSha = String(active.package_sha256 || active.packageSha256 || '').toLowerCase();
+  const activeId = String(active.packageId || active.id || '');
+  required(/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(activeId), 'ACTIVE_PACKAGE_ID_UNAVAILABLE');
   if (activeSha === expectedZip) {
     noSecretLog('ALREADY_APPLIED', { courseId: TARGET.cursoId, sha: expectedZip, status: 'ACTIVE' });
     return;
@@ -89,6 +91,7 @@ async function main() {
   form.set('arquivo', new Blob([bytes], { type: 'application/zip' }), 'Operacoes_Terrenos_Desabitados_R32.zip');
   const result = await call(token, '/api/lms/cursos/9/scorm-replace?confirm=REPLACE_AFTER_VALIDATION', {
     method: 'POST', body: form,
+    headers: { 'X-Airtrust-Expected-Active-Package-Id': activeId },
   });
   if (result.status !== 200 || result.body?.success !== true) {
     const code = String(result.body?.code || result.body?.error_code || 'UNKNOWN').replace(/[^A-Z_0-9-]/gi,'').slice(0,80);
