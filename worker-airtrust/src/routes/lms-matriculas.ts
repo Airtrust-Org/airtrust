@@ -25,6 +25,7 @@ import {
   ensureMatriculaCycle,
   reactivateCancelledMatriculaPreservingProgress,
   syncMatriculaCycleFromMatricula,
+  syncMatriculaCycleProgressMonotonic,
 } from '../services/lms-matricula-cycle';
 import {
   buildMatriculaCompletionDiagnostic,
@@ -2919,6 +2920,9 @@ app.patch('/:id/progresso', async (c) => {
     .prepare(`UPDATE lms_matriculas SET ${setClauses.join(', ')} WHERE id = ? AND empresa_id = ?`)
     .bind(...binds)
     .run();
+
+  // Preserve higher SCORM cycle progress and assessment evidence; never full-snapshot sync here.
+  await syncMatriculaCycleProgressMonotonic(db, { matriculaId, empresaId });
 
   const updated = await db
     .prepare(
