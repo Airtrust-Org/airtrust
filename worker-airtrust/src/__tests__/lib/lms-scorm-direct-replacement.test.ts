@@ -73,6 +73,28 @@ describe('admin direct SCORM replacement — fail closed', () => {
     }));
   });
 
+  it('rejects a concurrent predecessor change BEFORE the server activation CAS', async () => {
+    const current = plan();
+    mocks.evaluate.mockResolvedValue({
+      ...current, active: { packageId: 'new-admin-edition', packageSha256: 'c'.repeat(64), policy: 'FORMATIVE' },
+    });
+    await expect(replaceValidatedFormativeScorm(makeParams({
+      confirm: { cursoId: 26, packageSha256: SHA, acknowledgeInProgress: 3,
+        expectedActivePackageId: 'old' },
+    }))).rejects.toMatchObject({ code: 'SCORM_REPLACE_PREDECESSOR_CHANGED' });
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('pins the approved previous edition ID to the activation CAS observation', async () => {
+    await replaceValidatedFormativeScorm(makeParams({
+      confirm: { cursoId: 26, packageSha256: SHA, acknowledgeInProgress: 3,
+        expectedActivePackageId: 'old' },
+    }));
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      observed: { activePackageId: 'old', coursePolicy: 'SCORED' },
+    }));
+  });
+
   it('resolves the real in-progress enrollment count before one-click legacy upload acknowledgement', async () => {
     const modern = plan();
     const legacy = {

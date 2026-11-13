@@ -321,6 +321,11 @@ app.post('/:id/scorm-replace',
     }
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const empresaId = getEmpresaIdSafe(c), cursoId = courseIdParam(c);
+    const expectedActivePackageId = c.req.header('X-Airtrust-Expected-Active-Package-Id');
+    if (expectedActivePackageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expectedActivePackageId)) {
+      throw new ApiError('Identificador da edição anterior inválido', 400,
+        'SCORM_REPLACE_PREDECESSOR_ID_INVALID');
+    }
     const { bytes, arquivoNome } = await readPackageRequest(c, 'scorm');
     const candidate = await createScormPackageCandidate({
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
@@ -369,6 +374,7 @@ app.post('/:id/scorm-replace',
       confirm: {
         cursoId, packageSha256: candidate.packageSha256,
         acknowledgeInProgress: preflight.impact.inProgress,
+        ...(expectedActivePackageId ? { expectedActivePackageId } : {}),
       },
     };
     const data = resolvedFormative
@@ -661,6 +667,7 @@ const ActivateSchema = z.object({
     cursoId: z.number().int().positive(),
     packageSha256: z.string().regex(/^[a-f0-9]{64}$/),
     acknowledgeInProgress: z.number().int().min(0).optional(),
+    expectedActivePackageId: z.string().uuid().optional(),
   }).strict().optional(),
 }).strict();
 

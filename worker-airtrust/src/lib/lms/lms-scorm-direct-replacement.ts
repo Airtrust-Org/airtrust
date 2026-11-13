@@ -20,6 +20,7 @@ export type DirectReplacementConfirmation = {
   cursoId?: unknown;
   packageSha256?: unknown;
   acknowledgeInProgress?: unknown;
+  expectedActivePackageId?: unknown;
 };
 
 /** Resolve a legacy candidate's profile BEFORE the upload route counts active
@@ -153,6 +154,14 @@ export async function replaceValidatedExternalScorm(params: {
     cursoId: params.cursoId, packageId: params.packageId,
   });
   const row = preflight.row;
+  // The client's approved predecessor is an immutable package ID. Verify it
+  // against the fresh preflight; commitCertifiedScormActivation reuses that
+  // preflight ID inside the same D1 CAS, closing the listing-to-POST race.
+  if (params.confirm?.expectedActivePackageId !== undefined &&
+      params.confirm.expectedActivePackageId !== (preflight.active?.packageId ?? null)) {
+    throw new ApiError('A edição anterior mudou desde a confirmação', 409,
+      'SCORM_REPLACE_PREDECESSOR_CHANGED');
+  }
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' || row.certification_profile !== null ||
       quality?.authoringReview?.externalExam !== (mode === 'EXTERNAL') ||
@@ -232,6 +241,14 @@ export async function replaceValidatedFormativeScorm(params: {
   // external approval checks are intentionally replaced by the static gates.
   const preflight = await preflightDirectFormativeReplacement(params);
   const row = preflight.row;
+  // The client's approved predecessor is an immutable package ID. Verify it
+  // against the fresh preflight; commitCertifiedScormActivation reuses that
+  // preflight ID inside the same D1 CAS, closing the listing-to-POST race.
+  if (params.confirm?.expectedActivePackageId !== undefined &&
+      params.confirm.expectedActivePackageId !== (preflight.active?.packageId ?? null)) {
+    throw new ApiError('A edição anterior mudou desde a confirmação', 409,
+      'SCORM_REPLACE_PREDECESSOR_CHANGED');
+  }
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (row.status !== 'VALIDATED' ||
       row.certification_profile !== FORMATIVE_PROFILE ||
