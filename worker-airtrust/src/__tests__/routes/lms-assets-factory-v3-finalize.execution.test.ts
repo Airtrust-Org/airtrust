@@ -20,6 +20,7 @@ function launch(params: {
   lastKind?: string;
   label?: string;
   hasFactoryMetadata?: boolean;
+  fetchImpl?: () => Promise<unknown>;
 }) {
   g.document.body.innerHTML = [
     '<div id="status-bar"><span id="status-dot"></span><span id="status-text"></span></div>',
@@ -42,10 +43,10 @@ function launch(params: {
   }
 
   const addListener = vi.spyOn(doc, 'addEventListener');
-  const fetchMock = vi.fn().mockResolvedValue({
+  const fetchMock = vi.fn().mockImplementation(params.fetchImpl ?? (async () => ({
     ok: true, status: 200,
     clone: () => ({ json: async () => ({ success: true, data: { progresso_pct: 99 } }) }),
-  });
+  })));
   vi.stubGlobal('fetch', fetchMock);
   const html = buildLaunchPage({
     matriculaId: 990013,
@@ -75,7 +76,7 @@ function launch(params: {
     const calls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
     return JSON.parse(calls[calls.length - 1][1].body) as Record<string, unknown>;
   };
-  return { api, onClick, click, button, lastPayload };
+  return { api, onClick, click, button, lastPayload, fetchMock };
 }
 
 describe('Factory V3 user-owned finish bridge (server evidence remains mandatory)', () => {
@@ -96,6 +97,54 @@ describe('Factory V3 user-owned finish bridge (server evidence remains mandatory
       completion_candidate: true,
       completion_observed_at: expect.any(String),
     });
+  });
+
+  it('fails closed in bounded time when all explicit terminal commit HTTP requests stall', async () => {
+    // A real click starts finalization, but no HTTP response ever arrives.
+    // This must end in a visible failure, never an endless saving toast or
+    // an invented server acknowledgement.
+    const test = launch({terminal:true,fetchImpl:()=>new Promise(()=>{})});
+    vi.useFakeTimers();
+    test.click(true);
+    test.api.LMSFinish('');
+    await vi.advanceTimersByTimeAsync(34_000);
+    expect(test.fetchMock).toHaveBeenCalledTimes(3);
+    for (const [, options] of test.fetchMock.mock.calls as unknown as Array<[string,{signal:AbortSignal;body:string}]>) {
+      expect(options.signal.aborted).toBe(true);
+      expect(JSON.parse(options.body)).toMatchObject({
+        commit_event:'SCORM_USER_FINALIZE',completion_candidate:true,
+      });
+    }
+    expect(g.document.getElementById('status-bar')?.textContent)
+      .toMatch(/servidor não confirmou o encerramento no prazo/);
+    expect(g.document.getElementById('completion-overlay')?.classList.contains('show'))
+      .toBe(false);
+  });
+
+  it('drains a queued user-finalization after a hung autosave, without promoting the autosave', async () => {
+    let count = 0;
+    const test = launch({
+      terminal: true,
+      fetchImpl: () => {
+        count++;
+        return count <= 3 ? new Promise(() => {}) : Promise.resolve({
+          ok: true, status: 200,
+          clone: () => ({json: async () => ({success:true,data:{progresso_pct:99}})}),
+        });
+      },
+    });
+    vi.useFakeTimers();
+    test.api.LMSCommit('');
+    await vi.advanceTimersByTimeAsync(1);
+    test.click(true);
+    test.api.LMSFinish('');
+    await vi.advanceTimersByTimeAsync(35_000);
+    const sends = (test.fetchMock.mock.calls as unknown as Array<[string, {body:string}]>)
+      .map(([, req]) => JSON.parse(req.body) as {commit_event:string});
+    expect(sends.length).toBe(4);
+    expect(sends.slice(0, 3).every(s => s.commit_event === 'SCORM_COMMIT')).toBe(true);
+    expect(sends[3].commit_event).toBe('SCORM_USER_FINALIZE');
+    expect(g.document.getElementById('completion-overlay')?.classList.contains('show')).toBe(false);
   });
 
   it('keeps terminal LMSFinish passive without the real user gesture', async () => {
