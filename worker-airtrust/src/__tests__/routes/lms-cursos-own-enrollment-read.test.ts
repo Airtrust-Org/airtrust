@@ -75,21 +75,22 @@ describe('LMS learner catalog excludes published SCORM with no package', () => {
   it('hides LGPD-like unlaunchable SCORM but preserves valid and non-SCORM courses', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-cursos-legacy.ts'), 'utf8');
     expect(source).toContain("NULLIF(TRIM(c.scorm_package_r2_prefix), '') IS NOT NULL");
+    expect(source).toContain("NULLIF(TRIM(c.scorm_launch_file), '') IS NOT NULL");
     expect(source).toContain("if (!hasRole(c, 'admin', 'manager'))");
     const db = new NodeDatabaseSync(':memory:');
     db.exec(`CREATE TABLE c (id INTEGER, empresa_id INTEGER, publicado INTEGER, ativo INTEGER,
-      tipo_conteudo TEXT, scorm_package_r2_prefix TEXT);
+      tipo_conteudo TEXT, scorm_package_r2_prefix TEXT, scorm_launch_file TEXT);
       INSERT INTO c VALUES
-       (69,6,1,1,'scorm',NULL), (23,6,1,1,'scorm','lms/scorm/6/23/'),
-       (68,6,1,1,'scorm','lms/scorm/6/68/_candidates/live/'),
-       (80,6,0,1,'scorm',NULL), (99,6,1,1,'pdf',NULL),
-       (100,7,1,1,'scorm',NULL);`);
+       (69,6,1,1,'scorm',NULL,NULL), (23,6,1,1,'scorm','lms/scorm/6/23/','index.html'),
+       (68,6,1,1,'scorm','lms/scorm/6/68/_candidates/live/','index.html'),
+       (80,6,0,1,'scorm',NULL,NULL), (99,6,1,1,'pdf',NULL,NULL),
+       (100,7,1,1,'scorm',NULL,NULL), (101,6,1,1,'scorm',NULL,'index.html');`);
     const rows = db.prepare(`SELECT id FROM c WHERE empresa_id=6 AND ativo=1 AND publicado=1
-      AND (tipo_conteudo != 'scorm' OR NULLIF(TRIM(scorm_package_r2_prefix),'') IS NOT NULL)
+      AND (tipo_conteudo != 'scorm' OR NULLIF(TRIM(scorm_package_r2_prefix),'') IS NOT NULL OR NULLIF(TRIM(scorm_launch_file),'') IS NOT NULL)
       ORDER BY id`).all() as Array<{id:number}>;
-    expect(rows.map(row => row.id)).toEqual([23,68,99]);
+    expect(rows.map(row => row.id)).toEqual([23,68,99,101]);
     const adminRows = db.prepare('SELECT id FROM c WHERE empresa_id=6 AND ativo=1 AND publicado=1 ORDER BY id').all() as Array<{id:number}>;
-    expect(adminRows.map(row=>row.id)).toEqual([23,68,69,99]);
+    expect(adminRows.map(row=>row.id)).toEqual([23,68,69,99,101]);
   });
 });
 
