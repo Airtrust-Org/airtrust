@@ -1031,26 +1031,34 @@ function CourseDrawer({
                       </div>
                       <div className="space-y-2">
                         <FieldLabel label="Modalidade de conclusão" />
-                        <select
-                          aria-label="Modalidade de conclusão SCORM"
-                          disabled={form.tipo_conteudo !== 'scorm'}
-                          value={form.scorm_assessment_policy ?? defaultNewScormModeForRole(isAdmin)}
-                          onChange={(e) =>
-                            setForm((c) => ({
-                              ...c,
-                              scorm_assessment_policy: e.target.value as 'SCORED' | 'FORMATIVE',
-                            }))
-                          }
-                          className={fieldCls}
-                        >
-                          {SCORM_COMPLETION_MODE_CHOICES.map((choice) => (
-                            <option key={choice.value} value={choice.value}
-                              disabled={choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'}>
-                              {choice.label}{choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'
-                                ? ' — disponível após habilitação das provas' : ''}
-                            </option>
-                          ))}
-                        </select>
+                        {form.tipo_conteudo === 'scorm' ? (
+  <select
+    aria-label="Modalidade de conclusão SCORM"
+    disabled={form.tipo_conteudo !== 'scorm'}
+    value={form.scorm_assessment_policy ?? defaultNewScormModeForRole(isAdmin)}
+    onChange={(e) =>
+      setForm((c) => ({
+        ...c,
+        scorm_assessment_policy: e.target.value as 'SCORED' | 'FORMATIVE',
+      }))
+    }
+    className={fieldCls}
+  >
+    {SCORM_COMPLETION_MODE_CHOICES.map((choice) => (
+      <option key={choice.value} value={choice.value}
+        disabled={choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'}>
+        {choice.label}{choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'
+          ? ' — disponível após habilitação das provas' : ''}
+      </option>
+    ))}
+  </select>
+                        ) : (
+                          <p role="status" className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                            {form.tipo_conteudo === 'pptx'
+                              ? 'Formativo — sem prova final SCORM. O encerramento exige cobertura verificada das páginas e confirmação.'
+                              : 'A modalidade de avaliação SCORM não se aplica a este formato. A conclusão segue a validação própria do conteúdo.'}
+                          </p>
+                        )}
                         <FieldError message={errors.scorm_assessment_policy} />
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
