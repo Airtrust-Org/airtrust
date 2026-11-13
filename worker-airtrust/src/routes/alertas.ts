@@ -671,12 +671,14 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
         qh.codigo as tipo_codigo,
         COALESCE(qh.categoria, qt.categoria) as categoria,
         qt.nome as tipo_nome,
+        qf.codigo as formato_codigo,
         f.nome as funcionario_nome,
         f.email as funcionario_email,
         f.telefone as funcionario_telefone
       FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
-      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+      LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id
+      LEFT JOIN qualificacoes_formatos qf ON qf.id = COALESCE(qh.formato_id, qt.formato_id) AND qf.deleted_at IS NULL
       WHERE qh.id = ?
         AND qh.deleted_at IS NULL
         AND f.empresa_id = ?
@@ -744,18 +746,17 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       );
     }
 
-    // Verificar se é EAD ou CMA
-    const categoria = (r.categoria as string)?.toUpperCase();
-    const formatoCodigo = String((r as any).formato_codigo || '').toUpperCase();
+    // Cobranças por vencimento são exclusivas de EAD; convocações são separadas.
+    const categoria = String(r.categoria || '').trim().toUpperCase();
+    const formatoCodigo = String(r.formato_codigo || '').trim().toUpperCase();
     const isEAD =
       formatoCodigo === 'EAD' || categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
-    const isCMA = categoria === 'CMA' || categoria === 'EXAME';
 
-    if (!isEAD && !isCMA) {
+    if (!isEAD) {
       return alertasErrorResponse(
         c,
         400,
-        'Esta qualificação não é um treinamento EAD ou CMA',
+        'Alertas por e-mail e WhatsApp são permitidos somente para treinamentos EAD',
         'ALERTA_INVALID_CATEGORY',
         {
           detalhes: [`Categoria atual: ${categoria}`],
@@ -817,7 +818,7 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
       : null;
 
     // Usar mensagem customizada ou padrão
-    const tipoAlerta = isCMA ? 'CMA' : 'EAD';
+    const tipoAlerta = 'EAD';
     const mensagem =
       mensagemCustom ||
       `
@@ -1005,7 +1006,7 @@ Por favor, providencie a renovação o quanto antes.
       try {
         const statusCallbackUrl = new URL(TWILIO_STATUS_CALLBACK_PATH, c.req.url).toString();
         const templateKey = resolveQualificacaoAlertTemplateKey({
-          isCma: isCMA,
+          isCma: false,
           expired: diasDiferenca !== null && diasDiferenca < 0,
         });
         const localTemplate = await getLocalWhatsAppTemplateRecord(db, templateKey);
