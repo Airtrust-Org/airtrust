@@ -207,14 +207,17 @@ export function useFrmsOperationalAccess() {
 }
 
 export function useFrmsMaintenanceTeam(referenceDate: string, enabled = true) {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-maintenance-team', referenceDate],
+    // Include tenant and authenticated identity: a previously cached team
+    // must never be displayed under a different company/user session.
+    queryKey: ['frms-maintenance-team', referenceDate, empresaAtualId, user?.id, user?.role],
     queryFn: () =>
       getEndpoint<FrmsMaintenanceTeam>(
         `/me/operational-access/frms-maintenance-team?date=${encodeURIComponent(referenceDate)}`,
         'maintenance-team',
       ),
-    enabled: enabled && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
+    enabled: enabled && !isLoading && isAuthenticated && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
     staleTime: 60 * 1000,
   });
 }

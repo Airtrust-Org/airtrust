@@ -41,7 +41,7 @@ const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className
   },
 };
 
-function MetricCard({ label, value, helper }: { label: string; value: number; helper: string }) {
+function MetricCard({ label, value, helper }: { label: string; value: number | string; helper: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
@@ -90,15 +90,22 @@ export default function FrmsMaintenanceDashboard() {
   const canManage = access.data?.can_manage_maintenance === true;
   const canOpenOwnMaintenanceCheckin = access.data?.frms_profile === 'maintenance';
   const team = useFrmsMaintenanceTeam(date, canManage);
+  const validTeam = Array.isArray(team.data?.items) &&
+    team.data?.meta?.scope === 'maintenance' &&
+    Array.isArray(team.data?.meta?.setor_ids);
+  // In-flight refetch, failed GET or invalid shape cannot prove zero risks.
+  // React Query may retain successful results after a failed refresh.
+  const verifiedTeam = !team.isLoading && !team.isFetching && !team.isError && validTeam;
+  const teamUnavailable = !team.isLoading && !team.isFetching && !verifiedTeam;
   const items = useMemo(
-    () => (team.data?.items || []).filter((item) =>
+    () => (verifiedTeam ? (team.data?.items ?? []) : []).filter((item) =>
       shouldExposeFrmsPerson({
         nome: item.funcionario_nome,
         cargo: item.cargo,
         funcao: item.funcao,
       }),
     ),
-    [team.data?.items],
+    [team.data?.items, verifiedTeam],
   );
 
   const counts = useMemo(
@@ -202,19 +209,21 @@ export default function FrmsMaintenanceDashboard() {
         </header>
 
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-900/60">
-          {maintenanceScopeLabel(team.data?.meta.access_source)} · Profissionais: cargo Mecânico/Inspetor · Fonte: check-in FRMS + PVT/Readiness
+          {verifiedTeam ? maintenanceScopeLabel(team.data?.meta.access_source) : 'Escopo e evidências ainda não confirmados'} · Profissionais: cargo Mecânico/Inspetor · Fonte: check-in FRMS + PVT/Readiness
         </div>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo de manutenção">
-          <MetricCard label="Revisão imediata" value={counts.CRITICAL} helper="sinal crítico de fadiga ou prontidão" />
-          <MetricCard label="Atenção" value={counts.ATTENTION} helper="requer avaliação e mitigação" />
-          <MetricCard label="Evidência insuficiente" value={counts.PENDING} helper="check-in, PVT ou baseline individual não confirmado; não significa condição normal" />
-          <MetricCard label="Sem pendência" value={counts.NORMAL} helper="monitoramento normal" />
+          <MetricCard label="Revisão imediata" value={verifiedTeam ? counts.CRITICAL : '—'} helper="sinal crítico de fadiga ou prontidão" />
+          <MetricCard label="Atenção" value={verifiedTeam ? counts.ATTENTION : '—'} helper="requer avaliação e mitigação" />
+          <MetricCard label="Evidência insuficiente" value={verifiedTeam ? counts.PENDING : '—'} helper="check-in, PVT ou baseline individual não confirmado; não significa condição normal" />
+          <MetricCard label="Sem pendência" value={verifiedTeam ? counts.NORMAL : '—'} helper="monitoramento normal" />
         </section>
 
-        {team.isError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-            {team.error instanceof Error ? team.error.message : 'Não foi possível carregar a equipe de manutenção.'}
+        {teamUnavailable ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+            <p className="font-semibold">Não foi possível confirmar a equipe de manutenção.</p>
+            <p className="mt-1">Erro de consulta ou resposta inválida não comprovam ausência de profissionais, risco ou pendências.</p>
+            <button type="button" onClick={() => void team.refetch()} className="mt-2 rounded-lg border border-red-400 px-3 py-2 font-semibold">Tentar novamente</button>
           </div>
         ) : null}
 
@@ -224,10 +233,10 @@ export default function FrmsMaintenanceDashboard() {
               <h2 className="font-bold text-slate-950 dark:text-white">Equipe de manutenção</h2>
               <p className="text-xs text-slate-500">A prioridade considera fadiga diária e prontidão objetiva. Não há turno ou próxima tarefa individual nesta fonte: confirme com a programação da manutenção.</p>
             </div>
-            <span className="text-xs font-semibold text-slate-500">{items.length} profissional(is)</span>
+            <span className="text-xs font-semibold text-slate-500">{verifiedTeam ? items.length : '—'} profissional(is)</span>
           </div>
 
-          <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800" aria-label="Filtrar equipe por necessidade">
+          {verifiedTeam ? <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800" aria-label="Filtrar equipe por necessidade">
             {([
               { key: 'TODOS', label: 'Toda a equipe', value: items.length },
               { key: 'CRITICAL', label: 'Revisão imediata', value: counts.CRITICAL },
@@ -243,14 +252,16 @@ export default function FrmsMaintenanceDashboard() {
                 {option.label}: {option.value}
               </button>
             ))}
-          </div>
+          </div> : null}
 
-          {team.isLoading ? (
+          {team.isLoading || team.isFetching ? (
             <div className="space-y-3 p-4">
               {[0, 1, 2].map((index) => (
                 <div key={index} className="h-16 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-900" />
               ))}
             </div>
+          ) : teamUnavailable ? (
+            <p className="p-6 text-sm text-amber-800 dark:text-amber-200">A equipe e as pendências não puderam ser verificadas nesta data. Reconsulte antes de tomar decisões.</p>
           ) : items.length === 0 ? (
             <div className="p-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-slate-400" />
