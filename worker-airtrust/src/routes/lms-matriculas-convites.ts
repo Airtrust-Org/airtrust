@@ -375,12 +375,11 @@ async function loadAlertableEnrollments(
        JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
        JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
        LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL
-       LEFT JOIN qualificacoes_formatos qf ON qf.id=COALESCE(c.formato_id,qt.formato_id) AND qf.deleted_at IS NULL
       WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
         AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
         AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
         AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
-        AND ${eadOnly ? "(UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD' OR UPPER(TRIM(COALESCE(c.categoria, qt.categoria, ''))) IN ('EAD','TREINAMENTO EAD'))" : '1=1'}
+        AND ${eadOnly ? "UPPER(TRIM(COALESCE(c.categoria, qt.categoria, ''))) IN ('EAD','TREINAMENTO EAD')" : '1=1'}
         AND ${scope.clause}`,
   ).bind(empresaId, ...ids, ...scope.bindings).all<AlertableEnrollment>();
 }
