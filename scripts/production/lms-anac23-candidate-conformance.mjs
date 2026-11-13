@@ -13,6 +13,7 @@ export const ANAC23_CANDIDATES = Object.freeze([
   { id: '2a494f17-e787-4243-95de-db420bcfd6ee', shaPrefix:'ce76ee1a85353d27' },
   { id: '5afeba00-3408-499a-acf6-7e0f7f89e6b5', shaPrefix:'a7e36d7a586c6d55' },
 ]);
+export const ANAC23_CONFORMANCE_TIMEOUT_MS = 180_000;
 export const ANAC23_TENANT = 6;
 export const ANAC23_COURSE = 23;
 
@@ -60,10 +61,11 @@ export function summarizeConformance(data, selected) {
   };
 }
 
-async function authJson(base,token,route,method='GET',body) {
+export async function authJson(base,token,route,method='GET',body,timeoutMs) {
   return fetchJson(`${base}${route}`, {
     method, headers:{Authorization:`Bearer ${token}`, 'Content-Type':'application/json'},
     body: body === undefined ? undefined : JSON.stringify(body),
+    timeoutMs,
   });
 }
 
@@ -115,7 +117,8 @@ export async function main(env=process.env) {
     }
     try {
       const outcome=await authJson(api,token,
-        `/api/lms/cursos/23/scorm-package-versions/${item.id}/conformance`,'POST');
+        `/api/lms/cursos/23/scorm-package-versions/${item.id}/conformance`,
+        'POST',undefined,ANAC23_CONFORMANCE_TIMEOUT_MS);
       assert(outcome.status===200&&outcome.json?.success===true,
         'CANDIDATE_CONFORMANCE_HTTP_FAILURE');
       report.candidates.push(summarizeConformance(outcome.json.data,item));

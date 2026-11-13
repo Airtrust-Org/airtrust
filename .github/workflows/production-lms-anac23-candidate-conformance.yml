@@ -45,7 +45,11 @@ jobs:
           git cat-file -e "$EXPECTED^{commit}"
           git merge-base --is-ancestor "$EXPECTED" HEAD
           [[ "$CONFIRM" == "AIRTRUST_ANAC23_CONFORMANCE_${MODE^^}" ]]
+          # The deployed Worker may lag a newer workflow checkout. Both the
+          # immutable live release AND the actual executing main checkout
+          # must each pass all eight official gates before prod candidate QA.
           node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
           live="$(curl -fsS --max-time 12 https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).data.sourceSha))")"
           [[ "$live" == "$EXPECTED" ]]
       - name: Install dependencies and run scoped checks

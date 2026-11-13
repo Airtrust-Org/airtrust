@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ANAC23_CANDIDATES,validatePinnedCandidateList,summarizeConformance}
+import {ANAC23_CANDIDATES,ANAC23_CONFORMANCE_TIMEOUT_MS,authJson,validatePinnedCandidateList,summarizeConformance}
   from '../production/lms-anac23-candidate-conformance.mjs';
 
 function rows() {return ANAC23_CANDIDATES.map(v=>({
@@ -36,4 +36,36 @@ test('runtime conformance cannot claim PASS with wrong candidate SHA',()=>{
  assert.equal(summary.status,'PASS');
  assert.equal(summary.publishable,false);
  assert.equal(summary.finished,true);
+});
+
+test('guard both fully gated live release and actual executing checkout',async()=>{
+ const fs=await import('node:fs');
+ const workflow=fs.readFileSync('.github/workflows/production-lms-anac23-candidate-conformance.yml','utf8');
+ assert.match(workflow,/RELEASE_SHA: \$\{\{ inputs.expected_production_sha \}\}/);
+ assert.match(workflow,/RELEASE_SHA="\$GITHUB_SHA" node scripts\/ci\/verify-release-gates\.mjs/);
+ assert.match(workflow,/git merge-base --is-ancestor "\$EXPECTED" HEAD/);
+});
+test('candidate-only POST explicitly exceeds shared 25-second auth timeout',async()=>{
+ assert.ok(ANAC23_CONFORMANCE_TIMEOUT_MS > 30_000);
+ const originalFetch=globalThis.fetch;
+ const originalTimeout=AbortSignal.timeout;
+ const captured=[];
+ AbortSignal.timeout=(ms)=>{
+   captured.push(ms);
+   return new AbortController().signal;
+ };
+ globalThis.fetch=async()=>({
+   status:200,text:async()=>JSON.stringify({success:true,data:{}})
+   ,headers:{forEach(){}},
+ });
+ try{
+   const response=await authJson('https://api.airtrust.online','test',
+     '/api/lms/cursos/23/scorm-package-versions/863d66ce-d06a-411e-bca9-a6be5b98a08c/conformance',
+     'POST',undefined,ANAC23_CONFORMANCE_TIMEOUT_MS);
+   assert.equal(response.status,200);
+   assert.deepEqual(captured,[ANAC23_CONFORMANCE_TIMEOUT_MS]);
+ }finally{
+   globalThis.fetch=originalFetch;
+   AbortSignal.timeout=originalTimeout;
+ }
 });
