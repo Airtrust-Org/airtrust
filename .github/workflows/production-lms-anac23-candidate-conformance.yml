@@ -1,0 +1,75 @@
+name: Production LMS ANAC23 Candidate Conformance
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: 'Exact live production Worker SHA'
+        required: true
+        type: string
+      mode:
+        description: 'Inspect without writes, or rerun candidate-only browser QA'
+        required: true
+        type: choice
+        options: [inspect, apply]
+        default: inspect
+      confirmation:
+        description: 'AIRTRUST_ANAC23_CONFORMANCE_INSPECT or AIRTRUST_ANAC23_CONFORMANCE_APPLY'
+        required: true
+        type: string
+permissions: {contents: read, checks: read, statuses: read}
+concurrency: {group: production-lms-anac23-candidate-conformance, cancel-in-progress: false}
+jobs:
+  anac23:
+    name: Guarded production inactive candidate QA
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Guard exact release and immutable course scope
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.expected_production_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirmation }}
+          RELEASE_SHA: ${{ inputs.expected_production_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ ]]
+          git cat-file -e "$EXPECTED^{commit}"
+          git merge-base --is-ancestor "$EXPECTED" HEAD
+          [[ "$CONFIRM" == "AIRTRUST_ANAC23_CONFORMANCE_${MODE^^}" ]]
+          # The deployed Worker may lag a newer workflow checkout. Both the
+          # immutable live release AND the actual executing main checkout
+          # must each pass all eight official gates before prod candidate QA.
+          node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          live="$(curl -fsS --max-time 12 https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).data.sourceSha))")"
+          [[ "$live" == "$EXPECTED" ]]
+      - name: Install dependencies and run scoped checks
+        run: |
+          npm ci
+          node --test scripts/__tests__/lms-anac23-candidate-conformance.test.mjs
+      - name: Inspect or revalidate only 3 pinned inactive candidates
+        env:
+          PROD_API_BASE_URL: https://api.airtrust.online
+          PROD_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+          PROD_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+          ANAC23_MODE: ${{ inputs.mode }}
+          ANAC23_CONFIRMATION: ${{ inputs.confirmation }}
+          ANAC23_REPORT_PATH: qa-state/anac23-conformance.json
+        run: node scripts/production/lms-anac23-candidate-conformance.mjs
+      - name: Upload sanitized candidate-only QA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: anac23-conformance-${{ inputs.mode }}-${{ inputs.expected_production_sha }}
+          path: qa-state/anac23-conformance.json
+          if-no-files-found: ignore
+          retention-days: 14
