@@ -62,6 +62,7 @@ import {
 } from '@/react-app/hooks/useQualificacoesExt';
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
+import { getLmsExamAction } from './lmsExamAction';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -1614,6 +1615,29 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
+  const [examAction, setExamAction] = useState<'READY' | 'PASSED' | null>(null);
+  // Show an exam action only after the authenticated Worker confirms the
+  // active learner/edition/cycle is eligible. Never infer it from 99% alone.
+  useEffect(() => {
+    setExamAction(null);
+    if (canManage || curso.tipo_conteudo !== 'scorm' ||
+        matricula?.status !== 'EM_ANDAMENTO' || enrollmentProgress < 99) return;
+    const controller = new AbortController();
+    void fetchWithAuth(`/api/lms/exams/matriculas/${matricula.id}/prova`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    }).then(async response => {
+      if (!response.ok) return; // runtime disabled/unbound: no false CTA
+      const result = await response.json() as {
+        success?: boolean; data?: { state?: string };
+      };
+      const state = result.data?.state;
+      if (!controller.signal.aborted && result.success === true && getLmsExamAction(state)) {
+        setExamAction(state as 'READY' | 'PASSED');
+      }
+    }).catch(() => { /* unavailable exam service must not become a false CTA */ });
+    return () => controller.abort();
+  }, [canManage, curso.tipo_conteudo, matricula?.id, matricula?.status, enrollmentProgress]);
   const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
     ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
     : null;
@@ -1789,6 +1813,16 @@ function CourseCard({
                 <Eye className="h-4 w-4" />
               </Button>
             </div>
+            {!canManage && examAction && matricula ? (
+              <button
+                type="button"
+                data-testid="lms-course-exam-action"
+                onClick={() => navigate(`/lms/provas/${matricula.id}`)}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                {getLmsExamAction(examAction)}
+              </button>
+            ) : null}
             {canManage ? (
               <div className="flex flex-wrap gap-1.5">
                 {canUpdateCourse ? (
