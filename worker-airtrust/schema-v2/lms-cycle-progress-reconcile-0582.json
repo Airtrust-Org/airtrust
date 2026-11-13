@@ -1,0 +1,8 @@
+{
+  "changeId": "lms-cycle-progress-reconcile-0582",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0582_lms_cycle_progress_reconcile.sql",
+  "fileHash": "f4be3a1c1c8ccc3b086e0b8a3155b1037a52adba38ef7dec8fb1ff3e8d815d92",
+  "planPath": "worker-airtrust/schema-v2/plans/lms-cycle-progress-reconcile-0582.md",
+  "planHash": "db64f12618ea6efb29546ce0f46b2298c5dee866eaed0de56b0c0b7dee09da6f"
+}
