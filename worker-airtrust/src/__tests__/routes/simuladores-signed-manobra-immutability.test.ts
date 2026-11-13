@@ -3,11 +3,12 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Source contract: test the exact SQL that the live PUT route uses, not a
 // parallel reimplementation that might drift from production.
 const source = readFileSync(
-  new URL('../../routes/simuladores-fichas-simulador.ts', import.meta.url),
+  fileURLToPath(new URL('../../routes/simuladores-fichas-simulador.ts', import.meta.url)),
   'utf8',
 );
 const route = source.slice(
