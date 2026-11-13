@@ -6,7 +6,7 @@ on:
       mode: {required: true, type: choice, options: [dry-run, apply]}
       confirmation: {required: true, type: string}
       reviewed_dry_run_run_id: {required: false, type: string}
-permissions: {contents: read, actions: read, checks: read, statuses: read}
+permissions: {contents: read, actions: read, checks: read, statuses: read, pull-requests: read}
 concurrency: {group: production-pto-aw139-aircraft-metadata, cancel-in-progress: false}
 jobs:
   d1_update_aircraft:
