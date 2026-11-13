@@ -47,90 +47,50 @@ export interface CronHealthSnapshot {
 }
 
 export function buildCronHealthQuery(): string {
-  return `WITH ranked_runs AS (
-            SELECT
-              r.job_name,
-              r.scope_key,
-              r.outcome,
-              r.started_at,
-              r.cursor_after,
-              r.processed_count,
-              ROW_NUMBER() OVER (
-                PARTITION BY r.job_name, r.scope_key
-                ORDER BY datetime(r.started_at) DESC, r.id DESC
-              ) AS rn
-            FROM cron_job_runs r
-            WHERE r.job_name IN (
-              'ead-renewal',
-              'sigvoos-dispatch',
-              'sigvoos-ingest',
-              'frms-reprocess',
-              'domain-events-dispatch'
-            )
-          ), run_progress AS (
-            SELECT
-              job_name,
-              scope_key,
-              MAX(CASE WHEN rn = 1 THEN outcome END) AS latest_outcome,
-              MAX(CASE WHEN rn = 1 THEN started_at END) AS latest_started_at,
-              MAX(CASE WHEN rn = 1 THEN cursor_after END) AS latest_cursor,
-              MAX(CASE WHEN rn = 2 THEN cursor_after END) AS previous_cursor,
-              MAX(CASE WHEN rn = 1 THEN processed_count ELSE 0 END) AS latest_processed,
-              MAX(CASE WHEN rn = 2 THEN processed_count ELSE 0 END) AS previous_processed
-            FROM ranked_runs
-            WHERE rn <= 2
-            GROUP BY job_name, scope_key
+  // Scope FIRST: the previous window over all cron_job_runs ranked the entire
+  // history, while LIMIT applied only after joining all items and runs. That
+  // unbounded work ran on every 10-minute tick and competed with auth/JTI D1.
+  // The production 0451 schema already indexes (job_name, scope_key, started_at).
+  return `WITH limited_state AS MATERIALIZED (
+            SELECT job_name, scope_key, last_started_at, last_success_at,
+                   updated_at, consecutive_failures, last_error_code,
+                   lease_owner, lease_expires_at
+              FROM cron_job_state
+             WHERE job_name IN (
+               'ead-renewal', 'sigvoos-dispatch', 'sigvoos-ingest',
+               'frms-reprocess', 'domain-events-dispatch'
+             )
+             ORDER BY job_name ASC, scope_key ASC
+             LIMIT ?
           )
           SELECT
-            s.job_name,
-            s.scope_key,
-            s.last_started_at,
-            s.last_success_at,
-            s.updated_at,
-            s.consecutive_failures,
-            s.last_error_code,
-            s.lease_owner,
-            s.lease_expires_at,
-            COALESCE(SUM(CASE WHEN i.status != 'SUCCEEDED' THEN 1 ELSE 0 END), 0) AS pending_items,
-            COALESCE(SUM(CASE WHEN i.status = 'FAILED' AND i.attempts >= ? THEN 1 ELSE 0 END), 0) AS exhausted_items,
-            p.latest_outcome,
-            p.latest_started_at,
-            p.latest_cursor,
-            p.previous_cursor,
-            COALESCE(p.latest_processed, 0) AS latest_processed,
-            COALESCE(p.previous_processed, 0) AS previous_processed
-          FROM cron_job_state s
-          LEFT JOIN cron_job_items i
-            ON i.job_name = s.job_name
-           AND i.scope_key = s.scope_key
-          LEFT JOIN run_progress p
-            ON p.job_name = s.job_name
-           AND p.scope_key = s.scope_key
-         WHERE s.job_name IN (
-           'ead-renewal',
-           'sigvoos-dispatch',
-           'sigvoos-ingest',
-           'frms-reprocess',
-           'domain-events-dispatch'
-         )
-         GROUP BY
-           s.job_name,
-           s.scope_key,
-           s.last_started_at,
-           s.last_success_at,
-           s.updated_at,
-           s.consecutive_failures,
-           s.last_error_code,
-           s.lease_owner,
-           s.lease_expires_at,
-           p.latest_outcome,
-           p.latest_started_at,
-           p.latest_cursor,
-           p.previous_cursor,
-           p.latest_processed,
-           p.previous_processed
-         ORDER BY s.job_name ASC, s.scope_key ASC
-         LIMIT ?`;
+            s.job_name, s.scope_key, s.last_started_at, s.last_success_at,
+            s.updated_at, s.consecutive_failures, s.last_error_code,
+            s.lease_owner, s.lease_expires_at,
+            (SELECT COUNT(*) FROM cron_job_items i
+              WHERE i.job_name = s.job_name AND i.scope_key = s.scope_key
+                AND i.status != 'SUCCEEDED') AS pending_items,
+            (SELECT COUNT(*) FROM cron_job_items i
+              WHERE i.job_name = s.job_name AND i.scope_key = s.scope_key
+                AND i.status = 'FAILED' AND i.attempts >= ?) AS exhausted_items,
+            latest.outcome AS latest_outcome,
+            latest.started_at AS latest_started_at,
+            latest.cursor_after AS latest_cursor,
+            previous.cursor_after AS previous_cursor,
+            COALESCE(latest.processed_count, 0) AS latest_processed,
+            COALESCE(previous.processed_count, 0) AS previous_processed
+          FROM limited_state s
+          LEFT JOIN cron_job_runs latest ON latest.id = (
+            SELECT r.id FROM cron_job_runs r
+             WHERE r.job_name = s.job_name AND r.scope_key = s.scope_key
+             ORDER BY r.started_at DESC, r.id DESC LIMIT 1
+          )
+          LEFT JOIN cron_job_runs previous ON previous.id = (
+            SELECT r.id FROM cron_job_runs r
+             WHERE r.job_name = s.job_name AND r.scope_key = s.scope_key
+             ORDER BY r.started_at DESC, r.id DESC LIMIT 1 OFFSET 1
+          )
+          ORDER BY s.job_name ASC, s.scope_key ASC`;
 }
 
 function ageMinutes(value: string | null, now: Date): number | null {
@@ -152,7 +112,7 @@ export async function collectCronHealthSnapshot(
 ): Promise<CronHealthSnapshot> {
   const result = await db
     .prepare(buildCronHealthQuery())
-    .bind(CRON_HEALTH_RETRY_THRESHOLD, CRON_HEALTH_STATE_LIMIT)
+    .bind(CRON_HEALTH_STATE_LIMIT, CRON_HEALTH_RETRY_THRESHOLD)
     .all<CronHealthRow>();
   const rows = result.results || [];
   const nowIso = now.toISOString();

@@ -115,13 +115,13 @@ test('non-EAD mandatory and historic/progress LMS records never become automated
 });
 
 test('workflow is exact-SHA, dry-run-first and recovery guarded', () => {
-  assert.match(workflow, /options: \[dry-run, apply\]/);
+  assert.match(workflow, /options: \[dry-run, apply, enroll-dry-run, enroll-apply\]/);
   assert.match(workflow, /reviewed_dry_run_run_id/);
   assert.match(workflow, /Verify official release gates on exact SHA/);
   assert.match(workflow, /d1 time-travel info airtrust-db --env production/);
   assert.match(workflow, /CLOUDFLARE_D1_MIGRATION_API_TOKEN/);
   assert.match(workflow, /PROD_SMOKE_EMAIL \|\| secrets\.QA_EXAMINER_ADMIN_EMAIL/);
-  assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-dry-run-/);
+  assert.match(workflow, /production-training-compliance-matrix-enrollment-repair-\$expected_mode-\$EXPECTED_SHA/);
   assert.match(workflow, /for key in missing wrong no_course redundant/);
   assert.match(workflow, /APPLY_COMPLIANCE_MATRIX_ENROLLMENT_REPAIR_CANCEL_NONREQUIRED_AND_REDUNDANT_VALID_EVIDENCE_NO_EMAIL/);
   assert.doesNotMatch(workflow, /REVIEWED_UNSAFE_WRONG_NOT_ZERO/);
@@ -141,11 +141,30 @@ test('production repair never creates a placeholder or silently enrolls when no 
   assert.doesNotMatch(script, /Placeholder EAD criado/);
   assert.match(script, /if \(before\.no_course_count !== 0\) fail\('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW'\)/);
   const noContentGuardIndex = script.indexOf("if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW')");
-  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token)');
+  const mutationIndex = script.indexOf('const enrollmentResult = await enrollMissingPairs(token, before)');
   assert.ok(noContentGuardIndex > 0 && noContentGuardIndex < mutationIndex);
 });
 
 
 test('pending independent validation is always reviewed manually without enrollment', () => {
   assert.match(script, /status === 'EM_ANDAMENTO' \|\| status === 'PENDENTE_VALIDACAO'/);
+});
+
+
+test('one-shot enrollment mode includes mandatory policy-disabled targets without cancellations', () => {
+  assert.match(script, /enrollmentOnly = \['enroll-dry-run', 'enroll-apply'\]/);
+  assert.match(script, /oneShotPolicyOverrideCount \+= 1/);
+  assert.match(script, /if \(!enrollmentOnly\) \{\s+summary\.cancelled_wrong_enrollments/);
+  assert.match(script, /if \(!enrollmentOnly && after\.wrong_count !== 0\)/);
+  assert.match(script, /cancellation_scope: enrollmentOnly \? 'none'/);
+  assert.match(workflow, /REVIEWED_ENROLLMENT_MODE_MISMATCH/);
+  assert.match(workflow, /REVIEWED_CANCELLATION_SCOPE_INVALID/);
+});
+
+
+test('enroll apply writes exact candidate set validated by reviewed hash, no second topology scan', () => {
+  assert.match(script, /async function enrollMissingPairs\(token, state\)/);
+  assert.match(script, /verifyReviewedState\(before\);[\s\S]*?enrollMissingPairs\(token, before\)/);
+  const body = script.split('async function enrollMissingPairs(token, state) {')[1].split('function cancelReviewedWrongEnrollments')[0];
+  assert.doesNotMatch(body, /readState\(token\)/);
 });

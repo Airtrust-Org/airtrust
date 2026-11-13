@@ -1,4 +1,5 @@
 import { resolveHistoricoReadExpiry } from './historico-helpers';
+import { isCmaCode, resolveCmaValidity } from '../../utils/cma-validity';
 
 export type QualificationExportExpiryInput = {
   validadeMeses: string | number | null;
@@ -6,7 +7,6 @@ export type QualificationExportExpiryInput = {
   dataRealizacao: string | null;
   codigoQualificacao: string | null;
   nascimentoFuncionario: string | null;
-  vencimentoFimMes: string | number | null;
 };
 
 /**
@@ -25,14 +25,12 @@ export function resolveQualificationExportExpiry(input: QualificationExportExpir
       : null;
 
   const codigo = String(input.codigoQualificacao || '').trim().toUpperCase();
-  if (codigo === 'CMA' && input.nascimentoFuncionario && input.dataRealizacao) {
-    const nascimento = new Date(`${input.nascimentoFuncionario}T00:00:00Z`);
-    const realizacao = new Date(`${input.dataRealizacao}T00:00:00Z`);
-    if (!Number.isNaN(nascimento.getTime()) && !Number.isNaN(realizacao.getTime())) {
-      const aniversario60 = new Date(nascimento);
-      aniversario60.setUTCFullYear(aniversario60.getUTCFullYear() + 60);
-      if (aniversario60 <= realizacao) validadeMeses = 6;
-    }
+  if (isCmaCode(codigo) && input.dataRealizacao) {
+    // CMA: validade por idade na data de realizacao (12 meses; 6 a partir dos 60 anos).
+    validadeMeses = resolveCmaValidity({
+      dataRealizacao: input.dataRealizacao,
+      dataNascimento: input.nascimentoFuncionario,
+    }).months;
   }
 
   return {
@@ -41,7 +39,6 @@ export function resolveQualificationExportExpiry(input: QualificationExportExpir
       dataVencimento: input.dataVencimentoPersistida,
       dataConclusao: input.dataRealizacao,
       validadeMeses,
-      vencimentoFimMes: Number(input.vencimentoFimMes || 0) === 1 ? 1 : 0,
       codigoQualificacao: codigo,
     }),
   };

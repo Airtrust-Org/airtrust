@@ -97,8 +97,12 @@ CREATE TABLE qualificacoes_historico (
   status TEXT,
   created_at TEXT,
   updated_at TEXT,
-  deleted_at TEXT
+  deleted_at TEXT,
+  lms_matricula_id INTEGER,
+  lms_matricula_ciclo_id INTEGER
 );
+CREATE TABLE lms_matriculas (id INTEGER PRIMARY KEY, empresa_id INTEGER, qualificacao_historico_id INTEGER, updated_at TEXT);
+CREATE TABLE lms_matricula_ciclos (id INTEGER PRIMARY KEY, empresa_id INTEGER, qualificacao_historico_id INTEGER, updated_at TEXT);
 `;
 
 let sqlite: DatabaseSync;

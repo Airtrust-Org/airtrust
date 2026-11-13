@@ -20,6 +20,7 @@ import { z } from 'zod';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { resolveCmaValidityForEmployee } from '../utils/cma-validity';
 import { requirePermission } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
 import {
@@ -334,8 +335,7 @@ solicitacoesRoutes.post(
       .prepare(
         `SELECT s.id, s.status, s.solicitante_id, s.qualificacao_id, s.tipo_treinamento,
                 qt.codigo AS qualificacao_codigo, qt.nome AS qualificacao_nome,
-                qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade,
-                qt.vencimento_fim_mes AS qualificacao_vencimento_fim_mes
+                qt.categoria AS qualificacao_categoria, qt.validade AS qualificacao_validade
          FROM solicitacoes_treinamento s
          LEFT JOIN qualificacoes_tipos qt ON qt.id = s.qualificacao_id AND qt.empresa_id = s.empresa_id AND qt.deleted_at IS NULL
          WHERE s.id = ? AND s.empresa_id = ? AND s.deleted_at IS NULL`,
@@ -351,7 +351,6 @@ solicitacoesRoutes.post(
         qualificacao_nome: string | null;
         qualificacao_categoria: string | null;
         qualificacao_validade: number | null;
-        qualificacao_vencimento_fim_mes: number | null;
       }>();
 
     if (!item) return c.json({ success: false, error: 'Não encontrada' }, 404);
@@ -388,17 +387,21 @@ solicitacoesRoutes.post(
     // TRAINING_INTEGRATION_PENDING (treinamentos-planejados.ts).
     let qualificacaoHistoricoId = trainingSync.qualificacaoHistoricoId ?? null;
     if (item.qualificacao_id && item.qualificacao_codigo && !qualificacaoHistoricoId) {
-      const validadeMeses =
+      const validadeModelo =
         typeof item.qualificacao_validade === 'number' && item.qualificacao_validade > 0
           ? item.qualificacao_validade
           : null;
+      // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+      const cmaValidity = await resolveCmaValidityForEmployee(db, {
+        codigo: item.qualificacao_codigo,
+        empresaId,
+        funcionarioId: item.solicitante_id,
+        dataRealizacao: dataRealizada,
+      });
+      const validadeMeses = cmaValidity?.months ?? validadeModelo;
       const dataVencimentoStr = validadeMeses === null
         ? null
-        : calcularDataVencimento(
-            dataRealizada,
-            validadeMeses,
-            Number(item.qualificacao_vencimento_fim_mes || 0) === 1 ? 1 : 0,
-          );
+        : calcularDataVencimento(dataRealizada, validadeMeses);
 
       try {
         const result = await createQualificationHistoryAtomic(db, {

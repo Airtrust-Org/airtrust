@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { frmsBrazilOperationalTodayIso, isAtOrAfterFrmsPresentationBrasilia, localTodayIso, resolveCalendarFortnightRange, resolveFrmsOperationalDate } from '../frmsOperationalDate';
 
@@ -21,6 +23,15 @@ describe('FRMS operational date', () => {
     const timestamp = new Date('2026-10-13T01:30:00Z');
     Object.defineProperty(timestamp, 'getTimezoneOffset', { value: () => -540 });
     expect(frmsBrazilOperationalTodayIso(timestamp)).toBe('2026-10-12');
+  });
+
+  it('mantém o painel de manutenção na data operacional de Brasília, não na data local do navegador', () => {
+    const maintenance = readFileSync(
+      resolve(process.cwd(), 'src/react-app/pages/frms/FrmsMaintenanceDashboard.tsx'),
+      'utf8',
+    );
+    expect(maintenance).toContain('useState(frmsBrazilOperationalTodayIso())');
+    expect(maintenance).not.toContain('useState(localTodayIso())');
   });
 
   it('preserva a data operacional explícita da URL', () => {

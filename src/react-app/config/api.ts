@@ -227,6 +227,35 @@ export function getRefreshToken(): string | null {
 }
 
 /**
+ * JWT payloads use base64url (RFC 7515), not browser base64. In particular
+ * '-' and '_' must be normalized before atob or valid login tokens are
+ * incorrectly rejected depending on their claims.
+ * This parses untrusted claims only; signature verification remains server-side.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts.every(Boolean)) {
+    throw new Error('Invalid JWT format');
+  }
+
+  // Also accept padded base64 payloads produced by legacy test fixtures.
+  const encoded = parts[1].replace(/=+$/, '');
+  if (!/^[A-Za-z0-9_-]+={0,2}$/.test(parts[1]) || encoded.length % 4 === 1) {
+    throw new Error('Invalid JWT payload encoding');
+  }
+
+  const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Invalid JWT payload');
+  }
+  return payload as Record<string, unknown>;
+}
+
+/**
  * Validate JWT token format (basic check)
  */
 function isValidToken(token: string | null): boolean {
@@ -234,21 +263,12 @@ function isValidToken(token: string | null): boolean {
     return false;
   }
 
-  // JWT format: header.payload.signature
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    return false;
-  }
-
   try {
-    // Decode payload (no signature verification here - that's done by backend)
-    const payload = JSON.parse(atob(parts[1]));
-
-    // Check expiry
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
-      return false; // Token expired
+    const payload = decodeJwtPayload(token);
+    // This is a client-side expiry hint, never authorization.
+    if (typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) {
+      return false;
     }
-
     return true;
   } catch {
     return false;
@@ -261,7 +281,7 @@ export function getTokenExpiryTimeMs(token: string | null): number | null {
   }
 
   try {
-    const payload = JSON.parse(atob(token.split('.')[1] || ''));
+    const payload = decodeJwtPayload(token);
     return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
   } catch {
     return null;

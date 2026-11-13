@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../utils/sql-add-months';
 import { Hono } from 'hono';
 import { requireRole } from '../middleware/rbac';
 import { ApiError } from '../middleware/error-handler';
@@ -16,8 +17,11 @@ import {
 } from '../services/lms-matricula-cycle';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { classifyComplianceEnrollmentFailure } from '../services/training-compliance-rule-enrollment';
+import { runDesignationEnrollmentWithDiagnostics } from '../services/training-compliance-assignment-diagnostics';
 import {
   trainingComplianceEffectiveRequirementPredicateSql,
+  trainingComplianceRuleApplicabilitySql,
+  trainingComplianceRulePrioritySql,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL,
 } from '../services/training-compliance-rule-engine';
@@ -85,13 +89,13 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
     LEFT JOIN lms_cursos lc ON lc.empresa_id=f.empresa_id AND lc.qualificacao_tipo_id=qt.id AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL
     WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
       AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
+      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND (tr_assigned.modalidade_requerida='EAD' OR (tr_assigned.modalidade_requerida IS NULL AND tr_assigned.empresa_id=6)) AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
       AND ${predicate}
     GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
   for(const row of results||[]){
     if(Number(row.course_count)!==1||!row.course_id){summary.unavailable_course+=1;continue;}
     const valid=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
-      SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND qt.validade IS NOT NULL AND qh.data_conclusao IS NOT NULL AND date(qh.data_conclusao,'+'||qt.validade||' months')>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
+      SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND (${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade')}) IS NOT NULL AND qh.data_conclusao IS NOT NULL AND ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade'))}>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
     if(valid?.ok){summary.skipped_valid_evidence+=1;continue;}
     const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,row.course_id,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
     if(existing){
@@ -229,6 +233,53 @@ app.post('/condicoes', requireRole('admin'), async (c) => {
   return c.json({ success: true, data: { id } }, 201);
 });
 
+/**
+ * A designation may create a mandatory Compliance obligation even when no
+ * course-enrollment policy exists. Report this explicit mismatch instead of
+ * treating a zero-enrollment result as an implicit success. Read-only, scoped
+ * to the selected tenant and condition. Never infer equivalence by course name.
+ */
+async function inspectAssignedConditionEnrollmentContract(
+  db:D1Database, empresaId:number, funcionarioId:number, condicaoId:number,
+):Promise<'NO_EAD_POLICY'|'UNMAPPED_MANDATORY_QUALIFICATION'|null>{
+  const today=getTodayIsoSaoPaulo();
+  const applies=trainingComplianceRuleApplicabilitySql('tr','f');
+  const higherApplies=trainingComplianceRuleApplicabilitySql('higher','f');
+  const priority=trainingComplianceRulePrioritySql('tr');
+  const higherPriority=trainingComplianceRulePrioritySql('higher');
+  // Inspect only the current effective winner for this employee and qualification.
+  // A future/expired/superseded rule must never generate a false enrollment warning.
+  const {results}=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
+    SELECT tr.qualificacao_tipo_id,tr.auto_matricular_ead,tr.modalidade_requerida,
+      (SELECT COUNT(*) FROM lms_cursos lc WHERE lc.empresa_id=tr.empresa_id
+        AND lc.qualificacao_tipo_id=tr.qualificacao_tipo_id AND lc.ativo=1
+        AND lc.publicado=1 AND lc.deleted_at IS NULL) course_count
+    FROM funcionarios f
+    JOIN treinamento_requisitos tr ON tr.empresa_id=f.empresa_id
+    JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id AND qt.empresa_id=tr.empresa_id
+      AND qt.ativo=1 AND qt.deleted_at IS NULL
+    WHERE f.id=? AND f.empresa_id=? AND f.ativo=1 AND f.deleted_at IS NULL
+      AND tr.condicao_id=? AND tr.ativo=1 AND tr.deleted_at IS NULL
+      AND tr.obrigatoriedade='OBRIGATORIA'
+      AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
+      AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND ${applies}
+      AND NOT EXISTS(SELECT 1 FROM treinamento_requisitos higher
+        WHERE higher.empresa_id=tr.empresa_id AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
+          AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
+          AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND ${higherApplies}
+          AND (${higherPriority}>${priority} OR (${higherPriority}=${priority} AND higher.id>tr.id)))`)
+    .bind(today,funcionarioId,empresaId,condicaoId)
+    .all<{qualificacao_tipo_id:number;auto_matricular_ead:number|null;modalidade_requerida:string|null;course_count:number}>();
+  if((results||[]).some(x=>Number(x.course_count)===0)) return 'UNMAPPED_MANDATORY_QUALIFICATION';
+  if((results||[]).some(x=>Number(x.course_count)!==1 || Number(x.auto_matricular_ead)!==1
+      || (x.modalidade_requerida!=='EAD' && !(empresaId===6 && x.modalidade_requerida==null)))) return 'NO_EAD_POLICY';
+  return null;
+}
+
 app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
@@ -263,6 +314,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     .bind(empresaId, funcionarioId, condicaoId)
     .first<{ id: number }>();
   let id = Number(current?.id || 0);
+  const wasExisting = Boolean(id);
   if (id) {
     await db
       .prepare(
@@ -291,7 +343,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
   await registrarAuditoria({
     db,
     tabela: 'funcionarios_compliance_condicoes',
-    acao: 'INSERT',
+    acao: wasExisting ? 'UPDATE' : 'INSERT',
     registro_id: id,
     dados_novos: {
       empresa_id: empresaId,
@@ -305,9 +357,13 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     },
     ...extrairUsuarioAuditoria(c),
   });
-  let autoEnrollment:AutoEnrollmentSummary|null=null; let autoEnrollmentWarning:string|null=null;
-  try{autoEnrollment=await autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId);}
-  catch(error){console.error('[TRAINING_COMPLIANCE] Falha ao auto-matricular por designação:',{code:classifyComplianceEnrollmentFailure(error)});autoEnrollmentWarning='AUTO_ENROLLMENT_DEFERRED';}
+  const {autoEnrollment,autoEnrollmentWarning}=await runDesignationEnrollmentWithDiagnostics(
+    () => autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId),
+    () => inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId),
+    (phase,error) => console.error('[TRAINING_COMPLIANCE] Falha em designação:',{
+      phase,code:classifyComplianceEnrollmentFailure(error),
+    }),
+  );
   return c.json({success:true,data:{id,auto_enrollment:autoEnrollment,auto_enrollment_warning:autoEnrollmentWarning}},201);
 });
 

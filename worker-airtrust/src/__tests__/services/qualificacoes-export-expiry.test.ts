@@ -10,7 +10,6 @@ const base: QualificationExportExpiryInput = {
   dataRealizacao: '2025-09-03',
   codigoQualificacao: 'EAD_COORDENADOR_VOO',
   nascimentoFuncionario: null,
-  vencimentoFimMes: 0,
 };
 
 describe('qualificacoes export expiry parity', () => {
@@ -29,13 +28,6 @@ describe('qualificacoes export expiry parity', () => {
     expect(resolveQualificationExportExpiry(base)).toEqual({
       validadeMeses: 24,
       dataVencimento: '2027-09-03',
-    });
-  });
-
-  it('respeita modelos com vencimento no último dia do mês', () => {
-    expect(resolveQualificationExportExpiry({ ...base, vencimentoFimMes: 1 })).toEqual({
-      validadeMeses: 24,
-      dataVencimento: '2027-09-30',
     });
   });
 

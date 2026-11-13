@@ -8,6 +8,11 @@ const { fetchWithAuthMock, toastMock } = vi.hoisted(() => ({
   toastMock: { success: vi.fn(), error: vi.fn() },
 }));
 
+const { tenantMock } = vi.hoisted(() => ({ tenantMock: { empresaId: 6 } }));
+vi.mock('@/react-app/hooks/useTenantQueryKey', () => ({
+  useTenantQueryKey: () => ({ empresaId: tenantMock.empresaId, tenantKey: (...parts:unknown[]) => parts }),
+}));
+
 vi.mock('@/react-app/config/api', () => ({
   fetchWithAuth: (...args: unknown[]) => fetchWithAuthMock(...args),
 }));
@@ -34,6 +39,7 @@ function renderEditor() {
 describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tenantMock.empresaId = 6;
     fetchWithAuthMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/capabilities')) {
         return ok({ schema_ready: true, aircraft_scope_ready: true });
@@ -142,6 +148,74 @@ describe('TrainingComplianceApplicabilityEditor aircraft scope', () => {
     expect(within(effect).getByRole('option', { name: 'Excluir / não se aplica (exceção)' })).toBeInTheDocument();
     fireEvent.change(effect, { target: { value: 'NAO_APLICA' } });
     expect(screen.getByText(/Sem regra aplicável, o treinamento já não é obrigatório/)).toBeInTheDocument();
+  });
+
+  it('requires explicit EAD opt-in, then sends auto enrollment only when selected', async () => {
+    renderEditor();
+    await screen.findByRole('option', { name: 'Tripulação' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: '10' } });
+    const auto = screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/);
+    expect(auto).not.toBeChecked();
+    fireEvent.click(auto);
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar requisito' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/regras', expect.objectContaining({ method: 'POST' }),
+    ));
+    const call = fetchWithAuthMock.mock.calls.find(([url, init]) =>
+      url === '/api/compliance-treinamentos/regras' && init?.method === 'POST');
+    const body = JSON.parse(String((call?.[1] as RequestInit)?.body));
+    expect(body.modalidade_requerida).toBe('EAD');
+    expect(body.auto_matricular_ead).toBe(true);
+  });
+
+  it('defaults to no EAD automation and disables opt-in for a different modality', async () => {
+    renderEditor();
+    await screen.findByRole('option', { name: 'Tripulação' });
+    fireEvent.change(screen.getByLabelText('Setor'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: '10' } });
+    fireEvent.click(screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar referência e criticidade' }));
+    fireEvent.change(screen.getByLabelText('Modalidade requerida'), { target: { value: 'PRESENCIAL' } });
+    expect(screen.getByLabelText(/Matrícula automática no LMS ao salvar o requisito/)).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar requisito' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/regras', expect.objectContaining({ method: 'POST' }),
+    ));
+    const call = fetchWithAuthMock.mock.calls.find(([url, init]) =>
+      url === '/api/compliance-treinamentos/regras' && init?.method === 'POST');
+    expect(JSON.parse(String((call?.[1] as RequestInit)?.body))).toMatchObject({
+      modalidade_requerida: 'PRESENCIAL', auto_matricular_ead: false,
+    });
+  });
+
+  it.each([
+    { tenant:6, needsExplicitModality:false },
+    { tenant:7, needsExplicitModality:true },
+  ])('enables null-modality EAD only with tenant-scoped behavior $tenant', async ({tenant,needsExplicitModality})=>{
+    tenantMock.empresaId=tenant;
+    const oldImplementation=fetchWithAuthMock.getMockImplementation();
+    fetchWithAuthMock.mockImplementation(async (url:string, init?:RequestInit)=>{
+      if(url.includes('/regras?qualificacao_tipo_id=300')) return ok([{
+        id:991,qualificacao_tipo_id:300,escopo:'FUNCAO',setor_id:null,funcao_id:10,
+        funcionario_id:null,obrigatoriedade:'OBRIGATORIA',critico_operacional:0,
+        auto_matricular_ead:0,modalidade_requerida:null,origem:'EMPRESA',
+      }]);
+      if(url.includes('/regras/991') && init?.method==='PUT') return ok({id:991});
+      return oldImplementation?.(url,init);
+    });
+    renderEditor();
+    const checkbox=await screen.findByRole('checkbox',{name:'Habilitar matrícula EAD automática da regra 991'});
+    fireEvent.click(checkbox);
+    await waitFor(()=>expect(fetchWithAuthMock.mock.calls.some(
+      ([url,init])=>url==='/api/compliance-treinamentos/regras/991' && init?.method==='PUT'
+    )).toBe(true));
+    const call=fetchWithAuthMock.mock.calls.find(([url,init])=>
+      url==='/api/compliance-treinamentos/regras/991' && init?.method==='PUT');
+    const payload=JSON.parse(String((call?.[1] as RequestInit)?.body));
+    expect(payload.auto_matricular_ead).toBe(true);
+    if(needsExplicitModality)expect(payload.modalidade_requerida).toBe('EAD');
+    else expect(payload).not.toHaveProperty('modalidade_requerida');
   });
 
   it('keeps aircraft hidden for non-crew sectors', async () => {

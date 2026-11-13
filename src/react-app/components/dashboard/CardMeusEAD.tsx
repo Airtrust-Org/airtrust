@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   ChevronRight,
@@ -295,7 +295,8 @@ type AbaEad = 'andamento' | 'naoIniciados' | 'finalizados';
 
 export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: boolean }) {
   const navigate = useNavigate();
-  const { data: matriculas, isLoading, error } = useMinhasEAD();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { data: matriculas, isLoading, isFetching, error, refetch } = useMinhasEAD();
   const [abaSelecionada, setAbaSelecionada] = useState<AbaEad | null>(null);
 
   // Matrículas canceladas não representam treinamento ativo ou concluído.
@@ -310,8 +311,19 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
   const total = grupos.andamento.length + grupos.naoIniciados.length + grupos.finalizados.length;
   // Ao carregar, abrir a primeira categoria que requer atenção, sem alterar
   // a escolha manual do usuário (inclusive quando uma categoria está vazia).
-  const abaAtiva: AbaEad = abaSelecionada ??
+  const requestedTab = searchParams.get('situacao');
+  const abaViaUrl: AbaEad | null = requestedTab === 'finalizados' ||
+    requestedTab === 'andamento' || requestedTab === 'naoIniciados' ? requestedTab : null;
+  const abaAtiva: AbaEad = abaViaUrl ?? abaSelecionada ??
     (grupos.andamento.length ? 'andamento' : grupos.naoIniciados.length ? 'naoIniciados' : 'finalizados');
+  const selecionarAba = (aba: AbaEad) => {
+    setAbaSelecionada(aba);
+    if (searchParams.has('situacao')) {
+      const next = new URLSearchParams(searchParams);
+      next.set('situacao', aba);
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   const abas = [
     { id: 'andamento', label: 'Em andamento', count: grupos.andamento.length, Icon: Play },
@@ -330,9 +342,22 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
             <h2 className="text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-100">Meus treinamentos EAD</h2>
           </div>
           <p className="mt-1 text-xs text-slate-500 sm:text-sm dark:text-slate-400">
-            {total} treinamento{total !== 1 ? 's' : ''} · Acompanhe o andamento e acesse seus certificados.
+            {isLoading
+              ? 'Consultando suas matrículas e cursos concluídos…'
+              : `${total} treinamento${total !== 1 ? 's' : ''} · ${grupos.finalizados.length} concluído${grupos.finalizados.length !== 1 ? 's' : ''} · Acesse seus certificados.`}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => showOpenPageLink
+              ? navigate('/lms?situacao=finalizados')
+              : selecionarAba('finalizados')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-slate-800"
+          >
+            <Award className="h-4 w-4" />
+            {isLoading ? 'Ver cursos realizados' : `Cursos realizados (${grupos.finalizados.length})`}
+          </button>
         {showOpenPageLink && (
           <button
             type="button"
@@ -343,6 +368,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
             <ChevronRight className="h-4 w-4" />
           </button>
         )}
+        </div>
       </div>
 
       <div className="p-4 sm:p-5">
@@ -353,8 +379,13 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
             ))}
           </div>
         ) : error ? (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error instanceof Error ? error.message : 'Erro ao carregar treinamentos.'}
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p>{error instanceof Error ? error.message : 'Erro ao carregar treinamentos.'}</p>
+            <p className="mt-2 text-xs">Os cursos não foram consultados. Isso não significa que seu histórico está vazio.</p>
+            <button type="button" onClick={() => void refetch()}
+              className="mt-3 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold hover:bg-red-100">
+              Tentar novamente
+            </button>
           </div>
         ) : total === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center dark:border-slate-700 dark:bg-slate-800">
@@ -372,7 +403,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
                   key={id}
                   type="button"
                   aria-pressed={abaAtiva === id}
-                  onClick={() => setAbaSelecionada(id)}
+                  onClick={() => selecionarAba(id)}
                   className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2.5 text-center text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
                     abaAtiva === id
                       ? 'bg-white text-sky-800 shadow-sm ring-1 ring-sky-200 dark:bg-slate-700 dark:text-sky-200 dark:ring-sky-500/40'
@@ -389,6 +420,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
             </div>
             <p className="my-3 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
               {grupos[abaAtiva].length} treinamento{grupos[abaAtiva].length !== 1 ? 's' : ''} nesta categoria
+              {isFetching ? ' · Atualizando…' : ''}
             </p>
             {grupos[abaAtiva].length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">

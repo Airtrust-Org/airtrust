@@ -1,0 +1,130 @@
+name: Production Compliance Designation 0578 Enrollment Backfill
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Reviewed main SHA
+        required: true
+        type: string
+      mode:
+        required: true
+        type: choice
+        options: [dry-run, apply]
+      confirmation:
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-compliance-designation-0578-tenant6
+  cancel-in-progress: false
+jobs:
+  d1_reconcile:
+    name: Governed tenant-6 designation enrollment reconciliation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      COMPLIANCE_0578_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      COMPLIANCE_0578_CONFIRMATION: ${{ inputs.confirmation }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+    steps:
+      - name: Validate exact reviewed candidate
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_REQUIRED >&2; exit 1; }
+          [[ "$COMPLIANCE_0578_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ && "$GITHUB_SHA" == "$COMPLIANCE_0578_EXPECTED_SHA" ]] || { echo SHA_MISMATCH >&2; exit 1; }
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$COMPLIANCE_0578_CONFIRMATION" == COMPLIANCE_0578_DRYRUN_ONLY ]] || { echo DRYRUN_CONFIRMATION_INVALID >&2; exit 1; }
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$COMPLIANCE_0578_CONFIRMATION" == COMPLIANCE_0578_RECONCILE_7_ASSIGNMENTS_NO_EMAIL ]] || { echo APPLY_CONFIRMATION_INVALID >&2; exit 1; }
+          else echo INVALID_MODE >&2; exit 1; fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+      - name: Verify eight official gates on candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify production Schema V2 migration 0578 already applied
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo REQUIRED_SECRETS_MISSING >&2; exit 1; }
+          sql="SELECT COUNT(*) n FROM airtrust_schema_changes_v2 WHERE change_id='compliance-designation-ead-contract-0578' AND baseline_id='production-d1-baseline-v2-20260714'"
+          npx wrangler d1 execute airtrust-db --env production --remote --json --command "$sql" |
+            node -e "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const x=JSON.parse(s)?.[0];if(!x?.success||x?.results?.[0]?.n!==1||x?.meta?.rows_written)process.exit(1)})"
+      - name: Validate same-SHA reviewed dry-run evidence
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED" =~ ^[1-9][0-9]*$ ]] || { echo REVIEWED_RUN_REQUIRED >&2; exit 1; }
+          meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
+          [[ "$(jq -r .name <<<"$meta")" == 'Production Compliance Designation 0578 Enrollment Backfill' ]] || { echo WORKFLOW_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conclusion <<<"$meta")" == success && "$(jq -r .head_sha <<<"$meta")" == "$GITHUB_SHA" ]] || { echo REVIEWED_RUN_INVALID >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" --name "compliance-0578-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$f"
+          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .main_sha "$f")" == "$GITHUB_SHA" ]] || { echo PREDECESSOR_SHA_INVALID >&2; exit 1; }
+          [[ "$(jq -r .configured_auto_rules "$f")" == 11 && "$(jq -r .expected_assignment_count "$f")" == 7 ]] || { echo SCOPE_CHANGED >&2; exit 1; }
+          hash="$(jq -r .original_state_hash "$f")"
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo STATE_HASH_INVALID >&2; exit 1; }
+          echo "COMPLIANCE_0578_REVIEWED_STATE_HASH=$hash" >> "$GITHUB_ENV"
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "D1_TIME_TRAVEL_RECOVERY_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+      - name: Reconcile seven designated employees without invitations
+        env:
+          MODE: ${{ inputs.mode }}
+          COMPLIANCE_0578_RESULT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          node --check scripts/production/reconcile-condition-designations-0578.mjs
+          node scripts/production/reconcile-condition-designations-0578.mjs "$MODE"
+          test -s "$COMPLIANCE_0578_RESULT"
+          if [[ "$MODE" == apply ]]; then
+            jq -e '.postconditions_verified==true and .fdm_active_cycle==true and .replayed_assignments==7 and .email_sent==false' "$COMPLIANCE_0578_RESULT" >/dev/null
+          fi
+      - name: Publish sanitized result
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/result.json
+        run: |
+          test -s "$REPORT" || exit 0
+          jq '{mode,main_sha,tenant_id,expected_assignment_count,original_state_hash,configured_auto_rules,existing_fdm_enrollments,mutated,replayed_assignments,fdm_course_id,fdm_matricula_id,fdm_active_cycle,postconditions_verified,email_sent}' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compliance-0578-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30

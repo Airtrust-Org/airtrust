@@ -155,7 +155,7 @@ router.post('/matricular-pendentes', requireRole('admin'), async (c) => {
           req.evidencia_pendente_validacao ||
           !trainingComplianceNeedsEnrollment(req.status_compliance, req.dias_para_vencer) ||
           req.auto_matricular_ead !== 1 ||
-          req.modalidade_requerida !== 'EAD' ||
+          (req.modalidade_requerida !== 'EAD' && !(empresaId === 6 && req.modalidade_requerida == null)) ||
           activeKeys.has(`${person.id}:${req.qualificacao_tipo_id}`)) continue;
       const mapped = byType.get(Number(req.qualificacao_tipo_id)) || [];
       if (mapped.length !== 1) { semCursoUnico++; continue; }

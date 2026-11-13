@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { fetchWithAuth } from '@/react-app/config/api';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
+import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 import { showToast } from '@/react-app/utils/toast';
 import { notifyComplianceSaveWithEnrollment } from './complianceEnrollmentFeedback';
 import { invalidateComplianceDependents } from './complianceCacheInvalidation';
@@ -34,6 +35,7 @@ type Rule = {
   validade_fonte?: 'MODELO' | 'EVIDENCIA';
   obrigatoriedade: Obrigatoriedade;
   critico_operacional: number;
+  auto_matricular_ead?: number | null;
   origem: string;
   referencia_normativa?: string | null;
   impacto?: { abrangidas: number; prevalece_para: number };
@@ -145,6 +147,7 @@ export function TrainingComplianceApplicabilityEditor({
   const tipoId = Number(qualificacaoTipoId || 0);
   const enabled = Number.isInteger(tipoId) && tipoId > 0;
   const { isAdmin, isGestor } = usePermissions();
+  const { empresaId } = useTenantQueryKey();
   const canEdit = isAdmin || isGestor;
   const queryClient = useQueryClient();
   const [scope, setScope] = useState<Scope>('SETOR_FUNCAO');
@@ -156,6 +159,7 @@ export function TrainingComplianceApplicabilityEditor({
   const [justificativa, setJustificativa] = useState('');
   const [perfilCompetencia, setPerfilCompetencia] = useState('');
   const [modalidadeRequerida, setModalidadeRequerida] = useState('');
+  const [autoMatricularEad, setAutoMatricularEad] = useState(false);
   const [fundamentoTipo, setFundamentoTipo] = useState('');
   const [fundamentoDocumento, setFundamentoDocumento] = useState('');
   const [fundamentoItem, setFundamentoItem] = useState('');
@@ -255,6 +259,7 @@ export function TrainingComplianceApplicabilityEditor({
           justificativa: justificativa.trim() || null,
           perfil_competencia: perfilCompetencia.trim() || null,
           modalidade_requerida: modalidadeRequerida || null,
+          auto_matricular_ead: modalidadeRequerida === 'EAD' && obrigatoriedade === 'OBRIGATORIA' && autoMatricularEad,
           fundamento_tipo: fundamentoTipo.trim() || null,
           fundamento_documento: fundamentoDocumento.trim() || null,
           fundamento_item: fundamentoItem.trim() || null,
@@ -273,6 +278,7 @@ export function TrainingComplianceApplicabilityEditor({
       setJustificativa('');
       setPerfilCompetencia('');
       setModalidadeRequerida('');
+      setAutoMatricularEad(false);
       setFundamentoTipo('');
       setFundamentoDocumento('');
       setFundamentoItem('');
@@ -477,7 +483,10 @@ export function TrainingComplianceApplicabilityEditor({
           Efeito da regra
           <select
             value={obrigatoriedade}
-            onChange={(event) => setObrigatoriedade(event.target.value as Obrigatoriedade)}
+            onChange={(event) => {
+              setObrigatoriedade(event.target.value as Obrigatoriedade);
+              if (event.target.value !== 'OBRIGATORIA') setAutoMatricularEad(false);
+            }}
             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
           >
             <option value="OBRIGATORIA">Incluir como obrigatório</option>
@@ -491,6 +500,23 @@ export function TrainingComplianceApplicabilityEditor({
             </span>
           ) : null}
         </label>
+        {obrigatoriedade === 'OBRIGATORIA' ? (
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+            <input
+              type="checkbox"
+              checked={autoMatricularEad}
+              onChange={(event) => {
+                setAutoMatricularEad(event.target.checked);
+                if (event.target.checked) setModalidadeRequerida('EAD');
+              }}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Matrícula automática no LMS ao salvar o requisito
+            <span className="text-xs text-slate-500">
+              (exige um curso EAD único e publicado; preserva evidências válidas)
+            </span>
+          </label>
+        ) : null}
         <label className="text-xs font-medium text-slate-600">
           Origem
           <select
@@ -552,7 +578,10 @@ export function TrainingComplianceApplicabilityEditor({
               Modalidade requerida
               <select
                 value={modalidadeRequerida}
-                onChange={(event) => setModalidadeRequerida(event.target.value)}
+                onChange={(event) => {
+                  setModalidadeRequerida(event.target.value);
+                  if (event.target.value !== 'EAD') setAutoMatricularEad(false);
+                }}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
               >
                 <option value="">Conforme modelo/evidência</option>
@@ -724,6 +753,26 @@ export function TrainingComplianceApplicabilityEditor({
                 <option value="RECOMENDADA">Incluir · recomendado</option>
                 <option value="NAO_APLICA">Excluir · não se aplica (exceção)</option>
               </select>
+              {rule.obrigatoriedade === 'OBRIGATORIA' ? (
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    aria-label={`Habilitar matrícula EAD automática da regra ${rule.id}`}
+                    checked={Number(rule.auto_matricular_ead) === 1 && (rule.modalidade_requerida === 'EAD' || (empresaId === 6 && rule.modalidade_requerida == null))}
+                    disabled={editBlocked || updateRule.isPending}
+                    onChange={(event) =>
+                      updateRule.mutate({
+                        id: rule.id,
+                        patch: event.target.checked
+                          ? { ...(empresaId === 6 && rule.modalidade_requerida == null ? {} : { modalidade_requerida: 'EAD' }), auto_matricular_ead: true }
+                          : { auto_matricular_ead: false },
+                      })
+                    }
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Matrícula EAD
+                </label>
+              ) : null}
               <button
                 type="button"
                 disabled={editBlocked || deleteRule.isPending}

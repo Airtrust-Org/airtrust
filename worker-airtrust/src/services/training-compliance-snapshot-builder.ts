@@ -18,6 +18,7 @@ import {
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { trainingComplianceEvidenceIsRealizedBy, trainingComplianceIsoDay } from './training-compliance-enrollment-policy';
 
 export const SCOPES = TRAINING_COMPLIANCE_SCOPES;
@@ -57,6 +58,8 @@ export type Rule = {
   qualificacao_tipo_nome: string | null;
   qualificacao_tipo_codigo: string | null;
   validade_meses: number | null;
+  /** Coluna legada qualificacoes_tipos.vencimento_fim_mes: IGNORADA no calculo. */
+  vencimento_fim_mes?: number | null;
   escopo: Scope;
   setor_id: number | null;
   setor_nome: string | null;
@@ -254,6 +257,7 @@ export async function loadRules(
     : tipoCols.has('validade_meses')
       ? 'qt.validade_meses'
       : 'NULL';
+  const fimMesExpr = tipoCols.has('vencimento_fim_mes') ? 'COALESCE(qt.vencimento_fim_mes, 0)' : '0';
   if (!hasV2) {
     if (!(await tableExists(db, 'matriz_treinamento_funcao'))) return [];
     const { results } = await withD1Retry(() =>
@@ -262,6 +266,7 @@ export async function loadRules(
           `SELECT m.id, m.empresa_id, m.qualificacao_tipo_id,
                 qt.nome AS qualificacao_tipo_nome, qt.codigo AS qualificacao_tipo_codigo,
                 ${validadeExpr} AS validade_meses,
+                ${fimMesExpr} AS vencimento_fim_mes,
                 'FUNCAO' AS escopo, NULL AS setor_id, NULL AS setor_nome,
                 m.funcao_id, fn.nome AS funcao_nome,
                 NULL AS funcionario_id, NULL AS funcionario_nome,
@@ -311,6 +316,7 @@ export async function loadRules(
               qt.nome AS qualificacao_tipo_nome,
               qt.codigo AS qualificacao_tipo_codigo,
               ${validadeExpr} AS validade_meses,
+                ${fimMesExpr} AS vencimento_fim_mes,
               tr.escopo, tr.setor_id, s.nome AS setor_nome,
               tr.funcao_id, fn.nome AS funcao_nome,
               tr.funcionario_id, fu.nome AS funcionario_nome,
@@ -650,9 +656,10 @@ export function computeRequirement(
     if (needsEvidenceExpiry) {
       data_validade = trainingComplianceIsoDay(evidence.data_vencimento);
     } else if (months) {
-      const base = new Date(`${trainingComplianceIsoDay(evidence.data_realizacao)}T12:00:00Z`);
-      base.setUTCMonth(base.getUTCMonth() + months);
-      data_validade = base.toISOString().slice(0, 10);
+      const realizationDay = trainingComplianceIsoDay(evidence.data_realizacao);
+      // Vence no dia: soma canonica com limite no ultimo dia do mes-alvo
+      // (vencimento_fim_mes e legado e ignorado).
+      data_validade = realizationDay ? calcularDataVencimento(realizationDay, months) : null;
     }
     if (!data_validade) {
       status_compliance = 'CONFORME';

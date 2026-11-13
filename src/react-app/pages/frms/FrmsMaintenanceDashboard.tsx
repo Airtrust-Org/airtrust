@@ -9,6 +9,7 @@ import {
 } from '@/react-app/hooks/useFrmsOperationalAccess';
 import FrmsWorkspaceNav from './components/FrmsWorkspaceNav';
 import { shouldExposeFrmsPerson } from './frmsProductionVisibility';
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 import {
   classifyMaintenanceItem,
   maintenanceActionText,
@@ -39,12 +40,6 @@ const BUCKET_STYLE: Record<MaintenanceDecisionBucket, { label: string; className
     dot: 'bg-emerald-500',
   },
 };
-
-function localTodayIso(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
-}
 
 function MetricCard({ label, value, helper }: { label: string; value: number; helper: string }) {
   return (
@@ -89,7 +84,7 @@ function maintenanceScopeLabel(source: string | undefined): string {
 }
 
 export default function FrmsMaintenanceDashboard() {
-  const [date, setDate] = useState(localTodayIso());
+  const [date, setDate] = useState(frmsBrazilOperationalTodayIso());
   const [bucketFilter, setBucketFilter] = useState<MaintenanceDecisionBucket | 'TODOS'>('TODOS');
   const access = useFrmsOperationalAccess();
   const canManage = access.data?.can_manage_maintenance === true;

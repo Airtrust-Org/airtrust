@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../utils/sql-add-months';
 // ============================================================
 // AIRTRUST - FASE 4: ALERTAS DE VENCIMENTO
 // ============================================================
@@ -138,7 +139,7 @@ export function buildAlertasVencimentosQualificacoesQuery(vencimentoExpr: string
                qh_new.data_vencimento,
                CASE
                  WHEN qh_new.data_conclusao IS NOT NULL
-                   THEN date(qh_new.data_conclusao, '+' || COALESCE(qh_new.validade_meses, qt_new.validade) || ' months')
+                   THEN ${sqlAddMonthsClamped('qh_new.data_conclusao', sqlEffectiveValidityMonths('qh_new.validade_meses', 'qt_new.codigo', 'qt_new.validade'))}
                  ELSE NULL
                END
              )) > date(${vencimentoExpr})

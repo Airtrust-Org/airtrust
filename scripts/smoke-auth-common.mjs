@@ -165,6 +165,8 @@ function assertAllowedProductionBaseUrl(value) {
 }
 
 async function fetchJson(url, options = {}) {
+  const defaultTimeoutMs = Number(options.timeoutMs || 25_000);
+  const signal = options.signal ?? (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(defaultTimeoutMs) : undefined);
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers: {
@@ -172,6 +174,7 @@ async function fetchJson(url, options = {}) {
       ...(options.headers || {}),
     },
     body: options.body,
+    signal,
   });
 
   const rawText = await response.text();

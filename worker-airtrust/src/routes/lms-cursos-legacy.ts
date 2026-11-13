@@ -19,6 +19,7 @@ import {
 import {
   assertCursoWriteScope,
   buildCourseSetorScope,
+  buildCatalogCourseReadScope,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
@@ -1414,6 +1415,12 @@ app.get('/', async (c) => {
 
   if (somentePublicados) {
     where += ' AND c.publicado = 1';
+    // Hide only SCORM without version prefix AND without a legacy launch file.
+    // Legacy flat-path packages can launch with a NULL version prefix.
+    // repair publication. Existing enrollment history is never modified.
+    if (!hasRole(c, 'admin', 'manager')) {
+      where += " AND (c.tipo_conteudo != 'scorm' OR NULLIF(TRIM(c.scorm_package_r2_prefix), '') IS NOT NULL OR NULLIF(TRIM(c.scorm_launch_file), '') IS NOT NULL)";
+    }
   }
   if (categoria) {
     where += ' AND c.categoria = ?';
@@ -1423,51 +1430,9 @@ app.get('/', async (c) => {
     where += ' AND c.titulo LIKE ?';
     binds.push(`%${q}%`);
   }
-  if (finalSetorIds !== null && finalSetorIds.length === 0) {
-    where += ' AND 1 = 0';
-  } else if (finalSetorIds !== null) {
-    const placeholders = finalSetorIds.map(() => '?').join(', ');
-    const directScope = courseSetorSchema.hasCursoSetores
-      ? `EXISTS (
-          SELECT 1 FROM lms_cursos_setores lcs_f
-          WHERE lcs_f.curso_id = c.id
-            AND lcs_f.empresa_id = c.empresa_id
-            AND lcs_f.setor_id IN (${placeholders})
-            AND lcs_f.deleted_at IS NULL
-        )`
-      : '';
-    const fallbackScope = courseSetorSchema.hasQualificacaoTipoSetores
-      ? `(
-          ${
-            courseSetorSchema.hasCursoSetores
-              ? `NOT EXISTS (
-            SELECT 1 FROM lms_cursos_setores lcs_chk
-            WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
-          )
-          AND `
-              : ''
-          }EXISTS (
-            SELECT 1 FROM qualificacoes_tipos_setores qts_f
-            WHERE qts_f.tipo_id = c.qualificacao_tipo_id
-              AND qts_f.empresa_id = c.empresa_id
-              AND qts_f.setor_id IN (${placeholders})
-              AND qts_f.deleted_at IS NULL
-          )
-        )`
-      : '';
-    const scopeClauses = [directScope, fallbackScope].filter(Boolean);
-    if (scopeClauses.length === 0) {
-      where += ' AND 1 = 0';
-    } else {
-      where += ` AND (${scopeClauses.join(' OR ')})`;
-      binds.push(
-        ...finalSetorIds,
-        ...(courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
-          ? finalSetorIds
-          : []),
-      );
-    }
-  }
+  const catalogScope = buildCatalogCourseReadScope(access, finalSetorIds, courseSetorSchema);
+  where += catalogScope.clause;
+  binds.push(...catalogScope.bindings);
 
   const domainFilter = await applyLmsCursosDomainReadFilter({
     db,
@@ -2065,6 +2030,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(finalQualificacaoTipoId),
+      preferredCourseId: Number(id),
     });
 
     const reconcileTask = reconcileImportedEdappHistory(db, {

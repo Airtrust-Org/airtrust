@@ -1,3 +1,5 @@
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths, sqlCmaAgeValidityMonths } from '../../utils/sql-add-months';
+import { isCmaCode, resolveCmaValidity } from '../../utils/cma-validity';
 /**
  * QUALIFICACOES - MÓDULO HISTÓRICO
  * Gestão de histórico de qualificações com filtros, stats e paginação
@@ -471,8 +473,7 @@ export const getHistoricoListHandler = safe(async (c) => {
 
     // Sem o fallback de 12: quando validade_meses e qt.validade são NULL, a expressão
     // retorna NULL (sem vencimento). Registros com NULL validade não aparecem como VENCIDA.
-    const vencimentoExpr =
-      "COALESCE(qh.data_vencimento, date(qh.data_conclusao, '+' || COALESCE(qh.validade_meses, qt.validade) || ' months'))";
+    const vencimentoExpr = `COALESCE(qh.data_vencimento, ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento')))})`;
 
     // Compartilhado por filtros e totais: usar uma só regra de vencimento em data civil BRT.
     const vencimentoPredicates = buildVencimentoStatusPredicates(vencimentoExpr);
@@ -622,9 +623,8 @@ export const getHistoricoListHandler = safe(async (c) => {
       COALESCE(qh.categoria, qt.categoria) AS tipo_categoria,
       qh.validade_meses AS historico_validade_meses,
       qt.validade AS tipo_validade_atual,
-      COALESCE(qh.validade_meses, qt.validade) AS qualificacao_validade,
-      COALESCE(qh.validade_meses, qt.validade) AS validade_meses,
-      qt.vencimento_fim_mes AS vencimento_fim_mes,
+      ${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento'))} AS qualificacao_validade,
+      ${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade', sqlCmaAgeValidityMonths('qh.data_conclusao', 'f.nascimento'))} AS validade_meses,
       qh.data_conclusao AS data_realizacao,
       qh.data_vencimento AS data_vencimento,
       qh.instrutor AS instrutor,
@@ -714,24 +714,20 @@ export const getHistoricoListHandler = safe(async (c) => {
         ? (tipoValidadeAtual ?? historicoValidadeMeses ?? null)
         : (historicoValidadeMeses ?? tipoValidadeAtual ?? null);
       const codigoQualificacao = String(r.tipo_codigo || r.qualificacao_codigo || '').toUpperCase();
-      if (codigoQualificacao === 'CMA' && r.funcionario_data_nascimento && r.data_realizacao) {
-        const birthDate = new Date(String(r.funcionario_data_nascimento) + 'T00:00:00Z');
-        const refDate = new Date(String(r.data_realizacao) + 'T00:00:00Z');
-        const sixtiethBirthday = new Date(birthDate);
-        sixtiethBirthday.setFullYear(sixtiethBirthday.getFullYear() + 60);
-        if (sixtiethBirthday <= refDate) {
-          validadeMesesEfetiva = 6;
-        }
+      if (isCmaCode(codigoQualificacao) && r.data_realizacao) {
+        // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+        validadeMesesEfetiva = resolveCmaValidity({
+          dataRealizacao: r.data_realizacao,
+          dataNascimento: r.funcionario_data_nascimento,
+        }).months;
       }
 
-      const vencimentoFimMes = Number(r.vencimento_fim_mes || 0) === 1 ? 1 : 0;
       // Histórico é evidência: vencimento explicitamente persistido prevalece.
       // O cálculo é apenas fallback para registros legados sem data_vencimento.
       const dataVencimentoCalculada = resolveHistoricoReadExpiry({
         dataVencimento: r.data_vencimento,
         dataConclusao: r.data_realizacao,
         validadeMeses: validadeMesesEfetiva,
-        vencimentoFimMes,
         codigoQualificacao,
       });
 

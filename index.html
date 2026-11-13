@@ -114,6 +114,15 @@
             return;
           }
 
+          // Cache inspection/cleanup is asynchronous. If React has already
+          // mounted, redirecting now can abort a real login or a scoped FRMS
+          // request. Recovery was successful enough to boot: defer any further
+          // reload to an explicit boot failure instead of interrupting the user.
+          if (document.getElementById('root')?.childElementCount) {
+            sessionStorage.removeItem(RECOVERY_KEY);
+            return;
+          }
+
           if (sessionStorage.getItem(RECOVERY_KEY) === '1') return;
 
           sessionStorage.setItem(RECOVERY_KEY, '1');

@@ -1,0 +1,185 @@
+# PTO Rev. 10 V18 — auditoria de paridade curricular (12/11/2026)
+
+## Fonte de autoridade
+
+- Documento recebido do proprietário: `PRG-OPS-001_PTO_Rev10_V18.docx`, SHA-256 `040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912`.
+- Comparação realizada **somente** com os pacotes privados de importação `Pacote_AW139_PTO_Rev10_AirTrust_Alinhado.zip` e `Pacote_S76_PTO_Rev10_AirTrust_Alinhado.zip`, extraídos fora do repositório.
+- **Não** é atestado do estado atual do D1 de produção: precisa de snapshot read-only e de validação dos guias vigentes no tenant.
+- Evidência detalhada JSON mantida fora de Git em `/tmp/pto-v18-private/audit.json`.
+
+## Resultado reproduzível
+
+| Dimensão | PTO Rev10 V18 | Pacotes antigos |
+| --- | ---: | ---: |
+| Sessões de voo/simulador | 82 (37 AW139 e 45 S76) | 66 (31 AW139 e 35 S76) |
+| Vínculos técnicos | 1.476 (18 por sessão) | 1.188 (18 por sessão) |
+| Códigos de sessão do PTO sem correspondência exata nos pacotes | — | 49 |
+| Códigos dos pacotes sem correspondência exata no PTO | — | 33 |
+| Posições técnicas divergentes pelo código | — | 28 |
+| Descrições técnicas divergentes | — | 27 |
+| Títulos divergentes | — | 3 |
+| Guias sem correspondência exata por sessão aprovada | — | 49 |
+| Eventos do PTO não localizados nos guias de sessões com código correspondente | — | 28 |
+
+**Total: 217 ocorrências documentais.** Não representam 217 defeitos independentes: ausência de sessão e ausência de guia referem-se às mesmas 49 sessões; divergência de código e divergência de guia referem-se frequentemente aos mesmos 28 eventos.
+
+Comparações de duração distinguem horas práticas em FFS da duração global do evento de check (exame oral, briefing e debriefing). Não foram identificadas divergências inequívocas restantes na carga dos códigos de sessão coincidentes.
+
+## Exemplos de incompatibilidades técnicas reais
+
+- `A139-I-06/12`, posição 12: PTO `WAR-MGB-30 — Baixa pressão de óleo da MGB`; pacote `A139-EMG-008 — Falha de transmissão`.
+- `A139-I-07/12`, posição 17: PTO `A139-DSP-001 — Interpretação integrada de PFD, MFD, CAS e FMA`; pacote `A139-CRM-001 — Comunicações e coordenação ATC`.
+- `A139-I-10/12`, posição 13: PTO `CAU-FDT-62 — Falha do sistema de detecção de fogo`; pacote `WAR-CAB-24-FLT — Fogo ou fumaça na cabine em voo`.
+
+A substituição por equivalência aproximada é proibida: **não tratar códigos diferentes como o mesmo exercício sem parecer técnico**.
+
+## Ação corretiva obrigatória
+
+1. Fazer snapshot somente-leitura das versões correntes, modelos, vínculos de manobras, rubricas NOTECHS, guias e agendamentos da empresa-alvo.
+2. Reconciliar cada um dos 82 códigos com modelos correntes, históricos, transição, periódico, semestral condicional, requalificação, recência, diferenças, instrutor e examinador. Sessões de elevação de nível ou referências reutilizadas requerem análise de aplicabilidade; não excluí-las apenas porque não possuem tabela própria na seção 4.
+3. Produzir pacote de matriz com as 1.476 relações na ordem, código, descrição e perna PF do PTO. Não inventar procedimentos, QRH, parâmetros de desempenho ou cenários ausentes do documento.
+4. Revisar individualmente os 82 guias técnicos, com conteúdo operacional válido para cada aeronave e variante e 15 NOTECHS quando aplicáveis, e distinguir instrução de check.
+5. Produzir versão nova dos modelos e guias, jamais alterar fichas históricas já assinadas; concluir dry-run, integridade referencial, RBAC/tenant, idempotência, rollback append-only, testes e gates oficiais.
+6. Só liberar planejamento/uso dos modelos novos após aceite técnico do Gerente de Treinamento, homologação e validação do estado real pós-publicação.
+
+## Reprodução
+
+```bash
+python3 scripts/operations/audit-pto-rev10-v18.py \
+  --pto /caminho/PRG-OPS-001_PTO_Rev10_V18.docx \
+  --aw139 /caminho/Pacote_AW139_PTO_Rev10 \
+  --s76 /caminho/Pacote_S76_PTO_Rev10 \
+  --out /tmp/pto-v18-audit.json
+
+python3 scripts/operations/test-pto-rev10-v18.py
+```
+
+O auditor é **fail-closed**: código de saída não zero enquanto houver divergências. A presença de um contrato legado 51/918 ou de um pacote 66/1188 não comprova aderência ao PTO apresentado. Não publicar a matriz antiga em nome do PTO V18.
+
+## Status
+
+**NO-GO para afirmar conformidade de 100% ou fazer importação curricular em produção.** Auditoria documental e testes focados concluídos; corrigir os dados dos pacotes e confrontar produção ainda é trabalho aberto. Nenhuma alteração de D1, curso, ficha, guia publicado ou deploy nesta frente.
+
+## Pacote de revisão canônica gerado nesta frente
+
+O script `scripts/operations/build-pto-rev10-v18-review-pack.py` extrai diretamente do DOCX V18 aprovado, sem bibliotecas externas, os 82 currículos, as 1.476 relações técnicas, os 15 elementos NOTECHS e 82 **rascunhos** HTML de guias. Executado em 12/11/2026: contagens 82/1476/15/82 confirmadas. O manifesto gerado marca explicitamente `NAO_APROVADO_NAO_IMPORTAVEL_NAO_PUBLICAVEL`: não contém critérios SOP/QRH inventados e exige revisão técnica antes do uso operacional.
+
+Exemplo (somente arquivos privados locais, não commitar artefatos do PTO):
+
+```bash
+python3 scripts/operations/build-pto-rev10-v18-review-pack.py \
+  --pto /caminho/PRG-OPS-001_PTO_Rev10_V18.docx \
+  --out /tmp/pto-rev10-v18-review
+```
+
+## Preflight fail-closed de importação V18 (lote seguinte)
+
+- `worker-airtrust/scripts/lib/simuladores-pto-v18-parity.mjs`: valida o contrato curricular derivado do DOCX aprovado (SHA-256 pinado), checksum do JSON canônico, contagens **37 AW139 + 45 S76**, exatamente **18 procedimentos por sessão**, títulos, códigos, descrições, ordem e PF. Exige 15 NOTECHS na projeção; o carregador existente já exige 15 por sessão.
+- `worker-airtrust/scripts/prepare-simuladores-pto-rev10-import.mjs`: agora exige `--pto-v18-contract` e `--pto-v18-manifest` e bloqueia geração de plano divergente. Nenhum dado D1 é modificado pelo preflight.
+- `worker-airtrust/scripts/lib/simuladores-pto-rev10-plan.mjs`: suporta schema 2 para **88 modelos / 1.584 vínculos técnicos / 1.320 vínculos NOTECHS** (82 sessões de aeronave + 6 instrutor/examinador), com proveniência V18 e checksum do contrato. Schema 1 (72/1296/1080) permanece reconhecido para compatibilidade documental/histórica, **não equivale ao PTO V18**.
+- Teste negativo com os pacotes privados antigos reais: carregador detecta 66 sessões/1.188 itens; novo preflight rejeita: `AW139: esperadas 37 sessões, recebidas 31`.
+- Teste positivo do contrato recém-extraído do DOCX: **82/1476/15 PASS** com checksum do contrato `0d3fa1f4ee9bcd812b99627bd6251b6729ad5ae3d34cd53fae953dc21d560fec`.
+- 9 testes Node do novo preflight + 5 testes Vitest do plano + 3 testes Python do auditor: PASS em execução local focada. Oito gates oficiais, aplicação em D1 e homologação operacional permanecem pendentes.
+
+Atenção: este é um **gate de paridade curricular**, não certifica conteúdo operacional dos guias, variantes/SOP/RFM/QRH, versões do D1, histórico ou conformidade de produção. Antes de tentar plano de escrita, substituir os pacotes antigos por fontes revisadas e validar tecnicamente todos os guias.
+
+### Argumentos obrigatórios adicionais do preparador
+
+```bash
+--pto-v18-contract /tmp/pto-v18-private/review-pack/sessoes_pto_v18.json \
+--pto-v18-manifest /tmp/pto-v18-private/review-pack/manifesto_validacao.json
+```
+
+## Consulta direta da produção — D1 Costa do Sol, 12/11/2026
+
+Consulta **exclusivamente de leitura** ao D1 `airtrust-db` em `production`, tenant 6, usando Wrangler com `SELECT` e `PRAGMA table_info`. Todas as respostas reportaram `rows_written=0` e `changed_db=false`. Os exports JSON completos foram guardados **fora do Git** em `/tmp/pto-v18-private/`.
+
+| Dado de produção observado | Quantidade |
+| --- | ---: |
+| Registros de modelos ativos | 120 |
+| Desses, classificados AW139 / SK76 / sem aeronave | 61 / 45 / 14 |
+| Vínculos técnicos ativos dos modelos ativos | 2.052 |
+| Guias ativos `html_status_validacao=VALIDO` | 51 |
+| Vínculos ativos modelo→guia / modelos distintos vinculados | 51 / 51 |
+| Sessões do PTO com código canônico igual a algum modelo ativo | 14/82 |
+| Sessões do PTO sem correspondência canônica exata | 68/82 |
+| Sessões com código correspondente e os 18 itens técnicos exatamente compatíveis em ordem, código e nome | 0/14 |
+| Dentre as 14 com código correspondente, com guia ligado ao candidato de maior versão | 12 |
+
+**Interpretação necessária:** os 68 códigos não correspondentes incluem currículos presentes sob nomenclaturas históricas (por exemplo, `SK76-I-*` comparado ao `S76-I-*` aprovado), além de mudanças de arquitetura (`/04` versus `/03`) e de programas. Não se deve criar 68 sessões automaticamente sem resolver equivalências, versões e requisitos. Os 12 modelos AW139 iniciais têm simultaneamente registros legados e versões novas ativos; o auditor seleciona primeiro a versão com maior `versao_numero` para comparação e preserva a evidência de candidatos alternativos. O resultado 0/14 se refere somente à igualdade integral **por código, nome e ordem**, não é julgamento técnico da equivalência operacional das manobras. O status `VALIDO` do HTML não atesta aderência ao V18.
+
+### Auditor de snapshot criado
+
+`scripts/operations/audit-pto-v18-production-snapshot.py` lê exclusivamente exports JSON de Wrangler já coletados (não conecta ao D1), falha caso não exista prova `rows_written=0` e `changed_db=false`, usa o hash aprovado do DOCX e gera o resultado por sessão e por posição, incluindo status dos guias vinculados. Os caminhos dos exports e detalhes de ambiente permanecem privados. A comparação não compreende as rubricas NOTECHS, PF armazenado em `metadados_json`, conteúdo HTML do R2, critérios SOP/RFM/QRH, autorização de treinamento e check ou evidência de histórico.
+
+3 testes novos do auditor de produção PASS (inclusive rejeição de export com mutação e seleção de versão mais recente), totalizando 20 testes focados aprovados desta frente (9 Node + 5 Vitest + 3 Python iniciais + 3 Python do snapshot). O resultado é **NO-GO** para atualização automática de produção até que a matriz técnica e os guias V18 estejam validados e reconciliados.
+
+## Autorização do proprietário para produção — 12/11/2026
+
+O proprietário autorizou expressamente a modificação de produção para a adequação ao PTO Rev.10 V18. A autorização permite prosseguir com os procedimentos de publicação **quando o artefato estiver validado**, mas não transforma guias automáticos de revisão em material de instrução aprovado nem dispensa os critérios técnicos/operacionais do PTO. Neste momento, o pacote contém 82 guias classificados como `NAO_APROVADO_NAO_IMPORTAVEL_NAO_PUBLICAVEL`; portanto, **nenhuma aplicação curricular em produção foi realizada**.
+
+### Correção de governança de importação (continuidade)
+
+Foi identificado que o aplicador local aceitava planos do schema 1 (72 modelos, contrato curricular antigo) como **novos** imports após verificações de integridade. O aplicador passou a rejeitar toda aplicação nova do schema 1. A leitura idempotente de imports antigos já concluídos continua disponível sem alteração de registros. Para um plano V18 schema 2: a operação `--dry-run` exige versão e fonte normativa corretas, enquanto a operação `--apply` exige adicionalmente artefato de aceite técnico independente (`--technical-approval <arquivo.json>`) com hash do PTO, hash do contrato, hash do plano, cobertura explícita de 82 guias/1476 itens/15 NOTECHS, data, revisor e referência à evidência. Esse aceite deve ser produzido após conferência efetiva dos guias, versões SOP/RFM/QRH e critérios de check; não gerar aceite sintético para destravar o gate.
+
+Esta barreira não autoriza nem executa escrita remota. O aplicador continua restrito a banco D1 **local** e a autorização de mudança de produção será exercida apenas por fluxo separado, após testes, aceite técnico e evidências de rollback/readback. A alteração é funcionalmente testada por 7 novos cenários Node além dos testes existentes.
+
+## Reconciliação técnica objetiva dos catálogos — lote 12/11/2026
+
+Comparação por código **e** descrição normalizada (sem supor equivalência por similaridade) entre os 1.476 vínculos extraídos do PTO V18 e os catálogos técnicos privados antigos:
+
+| Critério | Vínculos |
+| --- | ---: |
+| Mesmo código e mesma descrição | 1.435 |
+| Código ausente do catálogo antigo | 37 |
+| Código existente com descrição divergente | 4 |
+| Total de posições técnicas | 1.476 |
+
+Essas 41 posições dependem de **18 códigos distintos** (15 AW139, 3 S76). Relação AW139: `A139-DSP-001`, `A139-PWR-001`, `ABN-HNG-69`, `ABN-MRC-30B`, `ABN-TRC-30E`, `CAU-BOF-55`, `CAU-DUD-46`, `CAU-FDT-62`, `CAU-FPC-73`, `CAU-MCC-104`, `CAU-SAS-41`, `CAU-SRV-80`, `MSG-ATF-89`, `MSG-FDF-98`, `WAR-TMP-30A`; S76: `S76-ENV-NRM`, `S76-ICE-NRM`, `S76-SYS-001`. Falta confirmar procedimento, manual e configuração aplicáveis para cada código antes de sua inserção operacional.
+
+Script reproduzível: `scripts/operations/reconcile-pto-v18-technical-catalog.py`. Emite relatório privado JSON com diferença por sessão, posição, código e descrição; preserva metadados do catálogo antigo **somente** se código e descrição coincidirem, sem presumir que o procedimento esteja homologado operacionalmente. Mesmo os 1.435 itens coincidentes permanecem com `operational_validation=PENDENTE` até revisão da aeronave/variante. O resultado está explicitamente `DRAFT_NOT_APPROVED_NOT_IMPORTABLE`. 3 testes novos PASS, incluindo rejeição de substituição por semelhança, contagem incompleta e código duplicado. Nenhum procedimento técnico foi inventado e nenhum modelo de produção foi atualizado.
+
+## Pacote curricular candidato completo e vínculo com modelos ativos — continuação 12/11/2026
+
+O `scripts/operations/build-pto-v18-curriculum-candidate.py` agora gera, em diretório privado, **82 sessões de aeronave + 6 funcionais = 88 modelos**, com **1.476 + 108 = 1.584 vínculos técnicos** e **1.230 NOTECHS de aeronave** (o futuro plano completo contém ainda 90 NOTECHS das seis sessões funcionais = 1.320). Inclui três sessões complementares condicionais do S76: `S76-P-AD-01/01-C1`, `-C2`, `-C3`; marca os possíveis checks para revisão e não transforma a carga de prática FFS em duração total de evento. Utiliza apenas código e descrição canônicos do PTO; metadados históricos só são reaproveitados com código e nome idênticos e todos permanecem com `operational_validation=PENDENTE`. As 41 posições / 18 códigos técnicos divergentes são preservadas para validação, não preenchidas por heurística. O status do artefato é **`DRAFT_NOT_IMPORTABLE_NOT_PUBLISHED`**. Testes: cinco PASS.
+
+O `scripts/operations/propose-pto-v18-model-lineage.py` compara os 82 códigos aprovados com as versões de modelos realmente ativos do D1, a partir dos snapshots read-only já coletados, e aponta:
+
+| Classe documental de correspondência | Sessões |
+| --- | ---: |
+| Código canônico igual no D1 ativo | 14 |
+| Possível alias exclusivamente sintático `SK76-I-*` → `S76-I-*`, ainda pendente de aprovação | 12 |
+| Sem vínculo documental seguro pelas regras conservadoras aplicadas | 56 |
+
+O mapeamento de 12 sessões S76 iniciais **não foi aplicado**: depende de avaliação de equivalência operacional. Nenhuma aposentadoria ou fusão de modelo histórico é inferida. Todos os itens são marcados `manual_approval_required=true` e `safe_to_auto_retire_or_merge=false`. Quatro testes PASS. `NO-GO` mantém-se para importação automática.
+
+## Guias de instrutor: contextualização histórica e registro integral de aceite (12/11/2026)
+
+Código novo: `scripts/operations/enrich-pto-v18-guide-drafts.py` — gera **82 guias HTML em área privada de revisão**, com os 15 elementos NOTECHS, ordem e distribuição PF do PTO V18, textos herdados somente se código + descrição coincidirem. Rejeita reutilização diante de múltiplos cenários distintos, escapa HTML de fontes antigas e escreve marcador visual **RASCUNHO NÃO HOMOLOGADO — NÃO UTILIZAR EM INSTRUÇÃO OU CHECK**. A comparação documental dos 1.476 vínculos produziu:
+
+| Proveniência do contexto técnico herdado | Vínculos |
+| --- | ---: |
+| Mesma sessão histórica, código e descrição | 565 |
+| Outra sessão histórica, código e descrição, contexto único no catálogo | 701 |
+| Fonte histórica ausente ou cenário ambíguo | 210 |
+| Total | 1.476 |
+
+São **210 posições sem contexto histórico inequívoco**, distribuídas por **58 sessões**. Mesmo as **1.266 posições com contexto histórico** permanecem `PENDENTE` para validação operacional por variante, configuração, revisão SOP/RFM/QRH e condições do FFS. A regra de equivalência histórica jamais substitui a homologação técnica. Arquivos privados produzidos em `/tmp/pto-v18-private/guias-enriquecidos`; não versionar o conteúdo operacional.
+
+Foram gerados **quatro registros CSV de aceite pendente** em área privada `/tmp/pto-v18-private/registro-aceite/`: 1.476 posições técnicas das 82 sessões de aeronaves; 82 guias correspondentes; 108 posições técnicas de seis sessões funcionais (instrutor/examinador); e seis fichas de aceite de guias funcionais. Os 90 vínculos NOTECHS das seis sessões funcionais também permanecem sem aceite. A procedência dessas seis sessões continua marcada **LEGADO FUNCIONAL**, não como tabela de sessão certificada no PTO V18; a revisão deverá demonstrar sua aplicabilidade com referência direta ao documento aprovado.
+
+Gerador `build-pto-v18-technical-review-ledger.py`; auditor independente `audit-pto-v18-technical-review-ledger.py` recusa código, nome, ordem ou perna manipulados e exige preenchimento dos campos de manual controlado/revisão/seção, revisor/data/evidência para as posições e revisão de guia/variante/PF/PM/NOTECHS para cada guia. Executado no pacote real, corretamente retornou **`NO_GO_REVISAO_PENDENTE`**; nenhuma célula foi falsamente marcada como aprovada. Os CSVs, por si só, não autenticam revisores e **não geram arquivo de homologação `VALIDADO_PARA_PRODUCAO`**; aprovação independente e conferência das evidências são obrigatórias.
+
+A barreira `assertNewPtoV18ApplyReady` também passou a exigir, adicionalmente aos **82 guias/1.476 posições/15 NOTECHS** de aeronaves, aceite técnico separado para **6 guias funcionais, 108 posições e 90 vínculos NOTECHS funcionais**, impedindo que o plano schema2 de 88 modelos publique as seis sessões legadas sem a correspondente conferência. Ainda é apenas barreira no aplicador D1 **local**, não um release de produção. Testes focados acrescentados. **NO-GO permanece** até homologação controlada, processo de versão/migração e gates completos.
+
+## Isolamento estrutural de aeronaves e competências no plano V18 (12/11/2026)
+
+Novo validador independente `worker-airtrust/scripts/lib/simuladores-pto-v18-plan-isolation.mjs`, invocado por `assertPtoRev10Plan()` para cada novo plano schema 2 antes de qualquer importação. Ele confere **37 modelos AW139 (`A139-*`), 45 SK76 (`S76-*`) e 6 funcionais (`INST-*`/`EXA-*` sem aeronave)**, total de 1.584 vínculos técnicos, aeronave de cada vínculo igual à do modelo correspondente, proibição de usar código funcional em modelo de helicóptero e vice-versa, 94 códigos funcionais distintos, 15 NOTECHS distintos e 18 vínculos por modelo. A validação preserva a leitura de planos históricos schema 1 para a compatibilidade de registros anteriores; nenhum plano legado pode ser aplicado novamente por `apply-simuladores-pto-rev10-import.mjs`.
+
+Foram adicionados **7 testes Node adversariais**, incluindo troca de aeronave, vínculo AW139 em sessão S76, código funcional indevido, duplicação NOTECHS, sessão INST/EXA com aeronave e contagem falsa de modelos. A execução local com paridade e aprovação retornou **25 testes PASS**. Trata-se de uma verificação estrutural adicional, sem presumir conteúdo operacional homologado. Alterações de produção da matriz continuam **NO-GO** até conclusão do aceite técnico do PTO e guias.
+
+## Pós-condições transacionais locais e rollback comprovado
+
+O aplicador local de PTO (apply-simuladores-pto-rev10-import.mjs) antes consolidava a transação e só depois executava assertPostconditions, capaz de descobrir incompatibilidades após a persistência. O novo simuladores-pto-rev10-atomic-postconditions.mjs insere guarda SQL temporária CHECK(ok=1) após as inserções e antes da marcação APPLIED e do COMMIT. Verifica quantidade e códigos distintos de modelos correntes, exatamente 18 vínculos por modelo, resolução completa de manobras no tenant, ausência de resoluções cruzadas entre empresas e desativação de modelos explicitamente substituídos. A violação faz o sqlite3 -bail encerrar a conexão e reverter a transação; a assertPostconditions posterior permanece como verificação independente.
+
+Testes com SQLite real comprovaram: commit íntegro, 17 vínculos provocando rollback total e resolução de manobra de outra empresa provocando rollback total. Testes estáticos também verificam IDs e tenant do plano. Essa prova diz respeito ao aplicador D1 LOCAL, sem execução remota. Nenhuma alteração na matriz de produção é autorizada até o aceite operacional dos guias.

@@ -71,6 +71,7 @@ jobs:
           fi
 
       - name: Export production D1 and restore into disposable SQLite
+        id: export_restore
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -78,27 +79,45 @@ jobs:
           set -euo pipefail
           out_dir="$RUNNER_TEMP/airtrust-d1-production-drill"
           report="$RUNNER_TEMP/d1-production-backup-restore-report.json"
-          mkdir -p "$out_dir"
-          trap 'rm -rf "$out_dir"' EXIT
           raw_report="$RUNNER_TEMP/d1-production-backup-restore-report.raw.json"
+          mkdir -p "$out_dir"
+          # Remove sensitive SQL and raw report whether the proof passes or fails.
+          trap 'rm -rf "$out_dir"; rm -f "$raw_report"' EXIT
+          export_exit=0
           node scripts/production/backup-production-d1-readonly.mjs \
             --config worker-airtrust/wrangler.toml \
             --env production \
-            --out-dir "$out_dir" > "$raw_report"
-          jq -e '.ok == true' "$raw_report" >/dev/null
-          jq -e '.restored_sqlite.integrity_check == "ok"' "$raw_report" >/dev/null
-          jq -e '.policy.outside_git == true and .policy.uploaded_to_git == false and .policy.uploaded_to_r2 == false' "$raw_report" >/dev/null
-          jq '{
-            ok, generated_at, git_head,
-            backup: {bytes: .backup.bytes, sha256: .backup.sha256},
-            restored_sqlite, policy
-          }' "$raw_report" > "$report"
-          rm -f "$raw_report"
+            --out-dir "$out_dir" > "$raw_report" || export_exit=$?
+          # Only these allowlisted fields may enter the artifact. No row IDs,
+          # tenant IDs, DB names, raw dump paths, or source rows.
+          if jq -e 'type == "object" and (.restored_sqlite | type == "object")' "$raw_report" >/dev/null; then
+            jq '{
+              ok, generated_at, git_head,
+              backup: {bytes: .backup.bytes, sha256: .backup.sha256},
+              restored_sqlite: {
+                integrity_check: .restored_sqlite.integrity_check,
+                foreign_key_check_count: .restored_sqlite.foreign_key_check_count,
+                foreign_key_violation_groups: .restored_sqlite.foreign_key_violation_groups
+              },
+              policy
+            }' "$raw_report" > "$report"
+          fi
+          # Never convert a failed export/restore into PASS just because the
+          # sanitized evidence artifact could be produced.
+          if [ "$export_exit" -ne 0 ]; then
+            exit "$export_exit"
+          fi
+          jq -e '.ok == true and .restored_sqlite.integrity_check == "ok" and
+            .restored_sqlite.foreign_key_check_count == 0 and
+            (.restored_sqlite.foreign_key_violation_groups | length == 0) and
+            .policy.outside_git == true and .policy.uploaded_to_git == false and
+            .policy.uploaded_to_r2 == false' "$report" >/dev/null
 
       - name: Upload sanitized drill report only
+        if: ${{ always() && steps.export_restore.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
           name: d1-production-backup-restore-report-${{ github.sha }}
           path: ${{ runner.temp }}/d1-production-backup-restore-report.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30

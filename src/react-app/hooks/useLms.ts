@@ -311,6 +311,14 @@ function unwrapUploadResult<T>(result: LmsUploadResponse<T>): T {
   return result.data as T;
 }
 
+// Preserve HTTP status without exposing backend exception details to the learner.
+export class LmsRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'LmsRequestError';
+  }
+}
+
 // ── API helper ────────────────────────────────────────────────────────────────
 
 async function lmsRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -324,7 +332,7 @@ async function lmsRequest<T>(path: string, init?: RequestInit): Promise<T> {
     error?: string;
     pagination?: unknown;
   };
-  if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+  if (!res.ok || !json.success) throw new LmsRequestError(json.error ?? `HTTP ${res.status}`, res.status);
   return json.data as T;
 }
 
@@ -623,7 +631,32 @@ export interface LmsMatriculaEAD extends LmsMatricula {
 export function useMinhasEAD() {
   return useQuery({
     queryKey: lmsKeys.minhasEAD(),
-    queryFn: () => lmsRequest<LmsMatriculaEAD[]>('/matriculas/minhas-ead'),
+    // A stalled auth refresh or EAD endpoint must not leave the learner
+    // dashboard permanently showing skeleton rows and a misleading "0".
+    // Abort the request and surface a retryable error after a bounded wait.
+    queryFn: async ({ signal }) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', abort, { once: true });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Tempo limite ao consultar seus treinamentos. Tente novamente.'));
+        }, 20_000);
+      });
+      try {
+        return await Promise.race([
+          lmsRequest<LmsMatriculaEAD[]>('/matriculas/minhas-ead', { signal: controller.signal }),
+          deadline,
+        ]);
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        signal.removeEventListener('abort', abort);
+      }
+    },
+    retry: 1,
     staleTime: 30_000,
   });
 }
@@ -633,8 +666,34 @@ export function useMinhasEAD() {
 export function useMatriculaDetalhe(id: number) {
   return useQuery({
     queryKey: lmsKeys.matriculaDetalhe(id),
-    queryFn: () => lmsRequest<LmsCursoDetalhe>(`/matriculas/${id}`),
-    enabled: id > 0,
+    queryFn: async ({ signal }) => {
+      // The detail route resolves manifest and edition information before
+      // returning. Bound the entire auth-aware request including refresh and
+      // response parsing, so a single stalled dependency never traps the
+      // learner on a black player spinner indefinitely.
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', abort, { once: true });
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error('Tempo limite ao abrir a matrícula. O progresso salvo não foi alterado.'));
+        }, 20_000);
+      });
+      try {
+        return await Promise.race([
+          lmsRequest<LmsCursoDetalhe>(`/matriculas/${id}`, { signal: controller.signal }),
+          deadline,
+        ]);
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        signal.removeEventListener('abort', abort);
+      }
+    },
+    enabled: Number.isSafeInteger(id) && id > 0,
+    retry: 1,
     staleTime: 10_000,
   });
 }

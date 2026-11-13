@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FICHA_AVALIACAO_FAIXAS } from '../../../../lib/simuladores/avaliacaoScale';
+import { NOTECHS_SCORE_OPTIONS, isNotechsDraftScoreAllowed, notechsHistoryIdentity } from '../../../../../shared/simuladores/notechs-scoring';
 import {
   NOTECHS_CATEGORIA,
   NOTECHS_DESCRITORES,
@@ -123,5 +124,37 @@ describe('splitManobrasNotechs — separação usada na ficha e no PDF', () => {
     const { tecnicas, notechs } = splitManobrasNotechs(manobras);
     expect(tecnicas).toHaveLength(22);
     expect(notechs).toHaveLength(0);
+  });
+});
+
+
+describe('NOTECHS — opções de nota compatíveis com a validação de assinatura', () => {
+  it('oferece apenas inteiros de 1 a 10 e NR no seletor da ficha', () => {
+    expect(NOTECHS_SCORE_OPTIONS).toEqual(['NR', ...Array.from({ length: 10 }, (_, i) => `${i+1}.0`)]);
+    expect(NOTECHS_SCORE_OPTIONS).not.toContain('6.5');
+    expect(NOTECHS_SCORE_OPTIONS).not.toContain('0.0');
+    expect(NOTECHS_SCORE_OPTIONS.every((score) => isNotechsDraftScoreAllowed(score))).toBe(true);
+  });
+
+  it('não aceita salvar frações ou nota fora da escala, preservando NR no rascunho', () => {
+    expect(isNotechsDraftScoreAllowed('6.5')).toBe(false);
+    expect(isNotechsDraftScoreAllowed('0.0')).toBe(false);
+    expect(isNotechsDraftScoreAllowed('10.5')).toBe(false);
+    expect(isNotechsDraftScoreAllowed(6)).toBe(true);
+    expect(isNotechsDraftScoreAllowed('9.0')).toBe(true);
+    expect(isNotechsDraftScoreAllowed('NR')).toBe(true);
+  });
+});
+
+
+describe('NOTECHS — isolamento do histórico por identidade da ficha', () => {
+  it('não reutiliza o histórico de A ao navegar para ficha/funcionário B', () => {
+    const chaveA = notechsHistoryIdentity('100', 10);
+    const chaveB = notechsHistoryIdentity('101', 20);
+    expect(chaveB).not.toBe(chaveA);
+  });
+
+  it('trocar o funcionário dentro da mesma ficha invalida o cache antigo', () => {
+    expect(notechsHistoryIdentity('100', 10)).not.toBe(notechsHistoryIdentity('100', 11));
   });
 });

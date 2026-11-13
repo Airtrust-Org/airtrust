@@ -20,7 +20,7 @@ import {
   markCronJobItemSucceeded,
   recoverStaleCronJobItems,
 } from '../job-state';
-import { runCronJobWithLease, type CronJobLogger } from './job-runner';
+import { isCronD1Overloaded, runCronJobWithLease, type CronJobLogger } from './job-runner';
 
 const DISPATCH_JOB = 'sigvoos-dispatch';
 const INGEST_JOB = 'sigvoos-ingest';
@@ -28,7 +28,8 @@ const FRMS_JOB = 'frms-reprocess';
 const GLOBAL_SCOPE = 'global';
 export const SIGVOOS_TENANT_BATCH = 25;
 export const SIGVOOS_TRIPULANTE_ENQUEUE_BATCH = 100;
-export const FRMS_REPROCESS_BATCH = 25;
+export const FRMS_REPROCESS_BATCH = 5;
+export const FRMS_QUEUE_SCOPE_BATCH = 2;
 
 interface SigvoosConfigCursorRow {
   empresa_id: number | null;
@@ -539,6 +540,10 @@ export async function runTenantIngestion(
   });
 
   if (result.outcome === 'FAILED') {
+    // Database saturation is infrastructure degradation, not a tenant sync
+    // failure. Avoid an alert write to the already overloaded D1, and stop
+    // dispatch rather than attempting another tenant in the same tick.
+    if (isCronD1Overloaded(result.errorCode)) throw new Error('D1_DB_IS_OVERLOADED');
     await notifyFailureOnce(
       db,
       empresaId,
@@ -645,7 +650,7 @@ async function runFrmsQueueScope(
     return;
   }
 
-  await runCronJobWithLease({
+  const queueResult = await runCronJobWithLease({
     db,
     jobName: FRMS_JOB,
     scopeKey,
@@ -711,6 +716,21 @@ async function runFrmsQueueScope(
           processed++;
         } catch (error) {
           failed++;
+          if (isCronD1Overloaded(error)) {
+            // Once D1 has saturated, stop this queue immediately. A failed
+            // retry-state write still leaves PROCESSING recoverable by the
+            // existing stale-item recovery; never mark the work SUCCEEDED.
+            await markCronJobItemFailed(db, {
+              jobName: FRMS_JOB,
+              scopeKey,
+              itemKey: item.item_key,
+              stage: 'FRMS_REPROCESS_DEFERRED_D1',
+              errorCode: 'FRMS_D1_OVERLOADED',
+              errorMessage: 'D1 overloaded; operation deferred',
+              retryDelaySeconds: 300,
+            });
+            throw new Error('D1_DB_IS_OVERLOADED');
+          }
           const exhausted = item.attempts >= 7;
           await markCronJobItemFailed(db, {
             jobName: FRMS_JOB,
@@ -748,23 +768,71 @@ async function runFrmsQueueScope(
       };
     },
   });
+  if (queueResult.outcome === 'FAILED' && isCronD1Overloaded(queueResult.errorCode)) {
+    throw new Error('D1_DB_IS_OVERLOADED');
+  }
+}
+
+/**
+ * 0451's partial index contains pending/failed work, but excludes completed
+ * history. The previous global NOT-SUCCEEDED scan and a UNION with PROCESSING
+ * each revisit every completed item as the table grows. Bound each indexed
+ * source before returning a scope. Delayed retries are not runnable yet.
+ */
+export function buildReadyFrmsQueueScopesQuery(): string {
+  return `SELECT DISTINCT scope_key
+            FROM cron_job_items INDEXED BY idx_cron_job_items_pending
+           WHERE job_name = ?
+             AND status IN ('PENDING', 'FAILED')
+             AND available_at <= datetime('now')
+           ORDER BY scope_key ASC
+           LIMIT ?`;
+}
+
+/**
+ * A crashed Worker can leave PROCESSING items behind. Their durable lease
+ * state is indexed by (job_name, scope_key), so stale scopes can be revisited
+ * without scanning every completed item to search for PROCESSING rows.
+ * An indexed EXISTS check prevents a former failed state without any stale
+ * PROCESSING items from monopolizing the small per-tick scope budget.
+ * runFrmsQueueScope still enforces its normal 30-minute stale-item guard.
+ */
+export function buildStaleFrmsQueueScopesQuery(): string {
+  return `SELECT scope_key
+            FROM cron_job_state
+           WHERE job_name = ?
+             AND last_started_at < datetime('now', '-30 minutes')
+             AND (last_success_at IS NULL OR last_started_at > last_success_at)
+             AND EXISTS (
+               SELECT 1 FROM cron_job_items AS pending_recovery
+                WHERE pending_recovery.job_name = cron_job_state.job_name
+                  AND pending_recovery.scope_key = cron_job_state.scope_key
+                  AND pending_recovery.status = 'PROCESSING'
+                  AND pending_recovery.updated_at <= datetime('now', '-30 minutes')
+             )
+           ORDER BY scope_key ASC
+           LIMIT ?`;
 }
 
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
-  const scopes = await db
-    .prepare(
-      `SELECT DISTINCT scope_key
-         FROM cron_job_items
-        WHERE job_name = ?
-          AND status != 'SUCCEEDED'
-        ORDER BY scope_key ASC
-        LIMIT 50`,
-    )
-    .bind(FRMS_JOB)
+  // Sequential reads avoid concurrent D1 bursts in a saturated 10-minute tick.
+  const ready = await db
+    .prepare(buildReadyFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
+    .all<{ scope_key: string }>();
+  const stale = await db
+    .prepare(buildStaleFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
     .all<{ scope_key: string }>();
 
-  for (const row of scopes.results || []) {
-    await runFrmsQueueScope(db, env, row.scope_key, logger);
+  // Prefer stale recovery, then ready work. Deduplicate scopes and keep the
+  // hard cap independent of the number of pending historical items.
+  const scopes = [...new Set([
+    ...(stale.results || []).map((row) => row.scope_key),
+    ...(ready.results || []).map((row) => row.scope_key),
+  ])].slice(0, FRMS_QUEUE_SCOPE_BATCH);
+  for (const scopeKey of scopes) {
+    await runFrmsQueueScope(db, env, scopeKey, logger);
   }
 }
 
@@ -774,7 +842,10 @@ export async function runSigvoosFrmsJobs(
   logger: CronJobLogger,
   now = new Date(),
 ): Promise<void> {
-  await dispatchSigvoosTenants(db, env, logger, now);
+  const dispatch = await dispatchSigvoosTenants(db, env, logger, now);
+  if (dispatch.outcome === 'FAILED' && isCronD1Overloaded(dispatch.errorCode)) {
+    throw new Error('D1_DB_IS_OVERLOADED');
+  }
   await dispatchFrmsQueues(db, env, logger);
 }
 

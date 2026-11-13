@@ -1,0 +1,90 @@
+name: Production LMS QA R2 0581 Resume
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Original completed Apply Schema Change V2 run that preserved the exact-key QA manifest
+        required: true
+        type: string
+      expected_source_sha:
+        description: Immutable main SHA that executed Schema V2 0581
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_QA_R2_0581_RESUME
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-lms-qa-r2-0581
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    name: Resume verified QA D1 postflight and R2 object cleanup
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Verify original protected workflow and download immutable R2 manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$CONFIRMATION" == 'AIRTRUST_QA_R2_0581_RESUME' ]] || { echo CONFIRMATION_REQUIRED >&2; exit 1; }
+          [[ "$SOURCE_RUN" =~ ^[1-9][0-9]{5,17}$ ]] || { echo SOURCE_RUN_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          source_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN")"
+          jq -e --arg sha "$EXPECTED_SHA" '
+            .name == "Apply Schema Change V2" and
+            .event == "workflow_dispatch" and
+            .head_branch == "main" and .head_sha == $sha and
+            .status == "completed" and (.conclusion == "success" or .conclusion == "failure")
+          ' <<< "$source_json" > /dev/null || { echo SOURCE_RUN_NOT_TRUSTED >&2; exit 1; }
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY"             --name "qa-lms-r2-0581-$EXPECTED_SHA-$SOURCE_RUN" --dir "$RUNNER_TEMP"
+          test -s "$RUNNER_TEMP/airtrust-qa-lms-0581-r2-keys.json"
+      - name: Verify original D1 migration committed and synthetic QA was removed
+        working-directory: worker-airtrust
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql="SELECT
+             (SELECT COUNT(*) FROM airtrust_schema_changes_v2 WHERE change_id='lms-qa-synthetic-purge-0581'
+                AND github_sha='$EXPECTED_SHA') AS ledger,
+             (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=6 AND matricula LIKE 'QA-LMS-%'
+                AND deleted_at IS NULL) AS canonical_count,
+             (SELECT COUNT(*) FROM funcionarios WHERE empresa_id=6
+                AND id BETWEEN 194 AND 221 AND nome LIKE 'AIRTRUST_QA_LMS_%') AS old_employee_count;"
+          results="$(npx wrangler d1 execute airtrust-db --env production --remote --json --command "$sql")"
+          jq -e '.[0].success == true and .[0].results[0].ledger == 1 and
+                 .[0].results[0].canonical_count == 1 and
+                 .[0].results[0].old_employee_count == 0' <<< "$results" > /dev/null ||
+            { echo QA_D1_MIGRATION_NOT_VERIFIED >&2; exit 1; }
+      - name: Resume only exact verified synthetic PDF keys
+        env:
+          CLOUDFLARE_WORKER_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          QA_R2_PURGE_CONFIRMATION: AIRTRUST_QA_R2_0581_POST_D1
+        run: node scripts/schema-v2/validate-lms-qa-0581.mjs r2-cleanup

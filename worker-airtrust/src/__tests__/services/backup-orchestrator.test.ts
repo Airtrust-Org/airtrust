@@ -176,10 +176,11 @@ function createMockR2(initialObjects: Record<string, string>) {
   };
 }
 
-function createOrchestrator(options: MockDbOptions = {}) {
+function createOrchestrator(options: MockDbOptions = {}, additionalR2: Record<string, string> = {}) {
   const { db, state } = createMockDb(options);
   const r2 = createMockR2({
     'tenant-assets/logo.txt': 'demo asset',
+    ...additionalR2,
   });
   const orchestrator = new BackupOrchestrator({
     DB: db,
@@ -242,6 +243,32 @@ describe('BackupOrchestrator integrity', () => {
     expect(state.controlUuids[0]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
+  });
+
+  it('nao inclui backups antigos no inventario R2 de uma nova rodada modular', async () => {
+    const { orchestrator, state, r2 } = createOrchestrator({}, {
+      'backups/2026/11/08/legacy/PESSOAS.json': 'old backup with personal records',
+      'backups/old-checkpoint/checksum-manifest.json': 'old manifest',
+      'scorm/training/index.html': 'course asset',
+    });
+    await orchestrator.executarBackupManual({
+      tipo: 'MODULAR',
+      modulos: ['CONFIGURACOES'],
+      triggered_by: 'UNIT_TEST',
+    });
+    const key = r2.keys().find((k) => k.endsWith('/r2-metadata-manifest.json'));
+    expect(key).toBeTruthy();
+    const manifest = JSON.parse(r2.text(key as string)) as {
+      total_arquivos: number;
+      objetos: Array<{ key: string }>;
+    };
+    expect(manifest.objetos.map((obj) => obj.key).sort()).toEqual([
+      'scorm/training/index.html', 'tenant-assets/logo.txt',
+    ]);
+    expect(manifest.total_arquivos).toBe(2);
+    expect(r2.text(key as string)).not.toContain('backups/2026/11/08/legacy');
+    expect(r2.text(key as string)).not.toContain('old-checkpoint');
+    expect(state.statusUpdates).toContain('CONCLUIDO');
   });
 
   it('grava SHA-256 real do manifesto de artefatos no campo r2_checksum_sha256', async () => {

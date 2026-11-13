@@ -191,7 +191,12 @@ export default defineConfig(({ mode }) => {
           // browser/CDN URL from a previous custom-domain edge transition.
           entryFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash].js`,
           chunkFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash].js`,
-          assetFileNames: `assets/[name]-${BUILD_ASSET_TAG}-[hash][extname]`,
+          // The content hash is sufficient for fonts. Do not force a new 3.8 MB
+          // Material Symbols download on every unrelated frontend release.
+          assetFileNames: (assetInfo) =>
+            assetInfo.name?.toLowerCase().endsWith('.woff2')
+              ? 'assets/[name]-[hash][extname]'
+              : `assets/[name]-${BUILD_ASSET_TAG}-[hash][extname]`,
           // Function form catches React 19 CommonJS proxy/virtual modules that the
           // package-name object form can leave outside the intended vendor chunk.
           manualChunks: manualChunkForModule,

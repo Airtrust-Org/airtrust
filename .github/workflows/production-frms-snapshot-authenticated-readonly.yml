@@ -1,0 +1,138 @@
+name: Production FRMS Snapshot Authenticated Readonly Browser
+
+# Production-only smoke for an existing authorized tenant-6 account.
+# No staging, deploy, D1 write, mutation API, trace, screenshot or PII output.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_worker_sha:
+        description: Deployed production Worker SHA (40 hex)
+        required: true
+        type: string
+      expected_pages_sha:
+        description: Deployed production Pages SHA (40 hex)
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_FRMS_PRODUCTION_BROWSER_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: frms-production-authenticated-snapshot-readonly
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Verify immutable production deployment and release gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test fail-closed production SHA drift policy
+        run: node --test e2e/lib/__tests__/frms-production-provenance.test.mjs
+      - name: Require matching Worker and Pages with protected main
+        shell: bash
+        env:
+          EXPECTED_WORKER: ${{ inputs.expected_worker_sha }}
+          EXPECTED_PAGES: ${{ inputs.expected_pages_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$CONFIRMATION" == AIRTRUST_FRMS_PRODUCTION_BROWSER_READONLY ]] || exit 1
+          [[ "$EXPECTED_WORKER" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$EXPECTED_PAGES" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$EXPECTED_WORKER" HEAD
+          git merge-base --is-ancestor "$EXPECTED_PAGES" HEAD
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$EXPECTED_WORKER" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$EXPECTED_PAGES" node scripts/ci/verify-release-gates.mjs
+          node --input-type=module <<'NODE'
+          import { assertLiveProductionProvenance } from './e2e/lib/frms-production-provenance.mjs';
+          await assertLiveProductionProvenance(process.env.EXPECTED_WORKER, process.env.EXPECTED_PAGES);
+          NODE
+
+  browser:
+    name: Real tenant-6 FRMS browser snapshot, no writes
+    needs: provenance
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      E2E_ALLOW_PRODUCTION: 'true'
+      EXPECTED_WORKER_SHA: ${{ inputs.expected_worker_sha }}
+      EXPECTED_PAGES_SHA: ${{ inputs.expected_pages_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require existing production-only QA credentials
+        run: |
+          set -euo pipefail
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo FRMS_PRODUCTION_QA_CREDENTIALS_MISSING; exit 1; }
+          [[ "$E2E_EMAIL" != *staging.airtrust.invalid* ]] || { echo STAGING_IDENTITY_BLOCKED; exit 1; }
+      - run: npm ci
+      - name: Prove ordinary E2E discovery excludes the production-only test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx playwright test --config=playwright.config.ts --project=chromium --list > "$RUNNER_TEMP/ordinary-e2e-list.txt"
+          if grep -Fq 'production-frms-snapshot-readonly.spec.ts' "$RUNNER_TEMP/ordinary-e2e-list.txt"; then
+            echo 'FRMS_PRODUCTION_SPEC_LEAKED_IN_DEFAULT_E2E' >&2
+            exit 1
+          fi
+          echo 'FRMS_PRODUCTION_DEFAULT_DISCOVERY_ISOLATED'
+      - name: Compile the exact readonly browser test before execution
+        run: >-
+          npx --no-install tsc --noEmit --skipLibCheck
+          --target es2022 --module nodenext --moduleResolution nodenext
+          --esModuleInterop --types node
+          e2e/production-frms-snapshot-readonly.spec.ts
+      - name: Install Chromium only
+        run: npx playwright install --with-deps chromium
+      - name: Verify existing production QA token tenant is 6
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { login, extractAccessToken, decodeJwtPayload } from './scripts/smoke-auth-common.mjs';
+          const payload = await login('https://api.airtrust.online', process.env.E2E_EMAIL, process.env.E2E_PASSWORD);
+          const claims = decodeJwtPayload(extractAccessToken(payload));
+          if (Number(claims?.empresa_id) !== 6) throw new Error('FRMS_PRODUCTION_QA_TENANT_6_NOT_PROVED');
+          console.log('FRMS_PRODUCTION_QA_TENANT_6_PASS');
+          NODE
+      - name: Recheck production deployment immediately before and after real browser QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Approval and npm/Chromium setup can span another production release.
+          # An unchanged, approved deployed SHA pair is required at BOTH edges.
+          node --input-type=module <<'NODE'
+          import { assertLiveProductionProvenance } from './e2e/lib/frms-production-provenance.mjs';
+          await assertLiveProductionProvenance(process.env.EXPECTED_WORKER_SHA, process.env.EXPECTED_PAGES_SHA);
+          NODE
+          npx playwright test --config=e2e/production-frms-snapshot.config.ts \
+            --project=chromium --no-deps --retries=0 --fail-on-flaky-tests \
+            --trace=off --reporter=list
+          node --input-type=module <<'NODE'
+          import { assertLiveProductionProvenance } from './e2e/lib/frms-production-provenance.mjs';
+          await assertLiveProductionProvenance(process.env.EXPECTED_WORKER_SHA, process.env.EXPECTED_PAGES_SHA);
+          NODE

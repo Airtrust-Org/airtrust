@@ -1,0 +1,103 @@
+name: Production LMS KPC Governed Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_sha:
+        description: 'Exact main and deployed Worker SHA (40 lowercase hex)'
+        required: true
+        type: string
+      mode:
+        description: 'inspect = no changes; apply = authorized, audited recovery of only 2058/1223/681'
+        required: true
+        type: choice
+        options: [inspect, apply]
+        default: inspect
+      confirmation:
+        description: 'AIRTRUST_LMS_KPC_INSPECT or AIRTRUST_LMS_KPC_APPLY'
+        required: true
+        type: string
+      case_ids:
+        description: 'Strict subset of 2058,1223,681 (CSV). Use 1223,681 after Karl recovery'
+        required: false
+        type: string
+        default: '2058,1223,681'
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: production-lms-kpc-governed-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Recover three pinned LMS enrollments through canonical API
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      EXPECTED_PRODUCTION_SHA: ${{ inputs.expected_production_sha }}
+      LMS_KPC_MODE: ${{ inputs.mode }}
+      LMS_KPC_CASE_IDS: ${{ inputs.case_ids }}
+      LMS_KPC_CONFIRMATION: ${{ inputs.confirmation }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      PROD_SMOKE_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      PROD_SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      RELEASE_SHA: ${{ inputs.expected_production_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin exact production source and official gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$EXPECTED_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]
+          # The fully verified, actually DEPLOYED release may be an ancestor
+          # of main while independent PRs continue to merge. Trust only that
+          # exact deployed SHA, require it in protected main history, and verify
+          # the eight original gates on that SHA, never on newer unshipped code.
+          git cat-file -e "$EXPECTED_PRODUCTION_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_PRODUCTION_SHA" "$GITHUB_SHA"
+          [[ "$LMS_KPC_CASE_IDS" =~ ^(2058|1223|681)(,(2058|1223|681))*$ ]]
+          if [[ "$LMS_KPC_MODE" == inspect ]]; then
+            [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_INSPECT ]]
+          else
+            [[ "$LMS_KPC_MODE" == apply ]]
+            [[ "$LMS_KPC_CONFIRMATION" == AIRTRUST_LMS_KPC_APPLY ]]
+          fi
+          # BOTH immutable release code and current trusted executor code
+          # must independently have eight successful official checks.
+          # A green old Worker can never authorize unreviewed new mutation code.
+          RELEASE_SHA="$EXPECTED_PRODUCTION_SHA" node scripts/ci/verify-release-gates.mjs
+          RELEASE_SHA="$GITHUB_SHA" node scripts/ci/verify-release-gates.mjs
+          live="$(curl -fsS -A 'Mozilla/5.0' https://api.airtrust.online/api/version | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).data.sourceSha))")"
+          [[ "$live" == "$EXPECTED_PRODUCTION_SHA" ]]
+      - run: npm ci
+      - name: Verify fail-closed three-case contract
+        run: node --test scripts/__tests__/lms-kpc-recovery.test.mjs
+      - name: Execute pinned SCORM recovery or inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/production/lms-kpc-recovery.mjs
+      - name: Record non-sensitive scope
+        if: always()
+        run: |
+          {
+            echo '## LMS three-case recovery (tenant 6)'
+            echo "- Mode: \`$LMS_KPC_MODE\`"
+            echo '- Scope: enrollments 2058 / 1223 / 681 only'
+            echo '- No direct D1 writes, certificate issuance, grade override, or status fabrication'
+            echo '- See above for preflight, canonical API actions, and readback'
+          } >> "$GITHUB_STEP_SUMMARY"

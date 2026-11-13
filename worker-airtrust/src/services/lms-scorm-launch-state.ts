@@ -97,7 +97,26 @@ function repairStrandedCursor(cmi:Record<string,unknown>):void{
   const completed=new Set(done.filter(n=>Number.isInteger(n)&&n>=0&&n<total));
   let firstHole=0;
   while(firstHole<total&&completed.has(firstHole))firstHole++;
-  const target=Math.min(Number(cursor),firstHole>=total?total-1:firstHole);
+  // An inconsistent F5 checkpoint may contain evidence for EVERY authored
+  // unit before the final study_end while its "active" index points backward.
+  // This happened after recovering a missing scenario: Karl #2058 had all
+  // 58 preceding units marked done and all 10 decisions persisted, but a=25
+  // and location=59/59, so the real end-screen button stayed unavailable.
+  //
+  // Advancing the launch-only cursor is safe ONLY when the immutable SCORM
+  // snapshot already proves a complete contiguous prefix, the course has
+  // not been completed and a recorded location explicitly reached the last
+  // screen. This never marks the final screen done, inserts answers or
+  // sends a finalize request: the learner must click the actual final button
+  // and the server must accept the evidence.
+  const finalScreenReached = pairs.some(pair => pair?.total === total && pair.current === total);
+  const fullPrefixVerified = firstHole === total - 1 &&
+    completed.size === total - 1 && done.length === total - 1 &&
+    Number(cursor) >= 0 && Number(cursor) < total - 1 &&
+    cmi['cmi.core.lesson_status'] === 'incomplete';
+  const target = fullPrefixVerified && finalScreenReached
+    ? total - 1
+    : Math.min(Number(cursor),firstHole>=total?total-1:firstHole);
   if(target!==cursor){
     state.a=target;
     cmi['cmi.suspend_data']=JSON.stringify(state);

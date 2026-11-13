@@ -16,13 +16,13 @@ function createImportDb(existingCpfs: string[] = []) {
         const normalizedQuery = query.replace(/\s+/g, ' ').trim();
 
         if (
-          normalizedQuery.includes('SELECT cpf FROM funcionarios WHERE cpf IN') &&
+          normalizedQuery.includes('SELECT cpf, nascimento FROM funcionarios WHERE cpf IN') &&
           normalizedQuery.includes('empresa_id = ?')
         ) {
           const cpfs = bindArgs.slice(0, -1).map((v) => String(v));
           return {
             all: async () => ({
-              results: cpfs.filter((cpf) => createdCpfs.has(cpf)).map((cpf) => ({ cpf })),
+              results: cpfs.filter((cpf) => createdCpfs.has(cpf)).map((cpf) => ({ cpf, nascimento: null })),
             }),
           };
         }
@@ -141,7 +141,7 @@ describe('QualificacaoHistoricoImportacaoService tenant scope', () => {
 
     const hasFuncionarioLookupTenant = calls.some(
       (call) =>
-        call.query.includes('SELECT cpf FROM funcionarios') &&
+        call.query.includes('SELECT cpf, nascimento FROM funcionarios') &&
         call.query.includes('empresa_id = ?') &&
         call.bindArgs.includes(7),
     );

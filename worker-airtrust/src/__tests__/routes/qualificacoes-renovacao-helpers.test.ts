@@ -17,7 +17,7 @@ describe('resolveParametrosRenovacaoQualificacao', () => {
     });
   });
 
-  it('mantem regra padrao de fim de mes para renovacoes nao semestrais', () => {
+  it('renovacoes nao semestrais vencem no dia', () => {
     expect(
       resolveParametrosRenovacaoQualificacao({
         codigoQualificacao: 'FAP05.2',
@@ -26,7 +26,7 @@ describe('resolveParametrosRenovacaoQualificacao', () => {
       }),
     ).toEqual({
       validadeMeses: 12,
-      dataVencimento: '2027-03-31',
+      dataVencimento: '2027-03-14',
       tipoTreinamento: 'RECORRENTE',
       status: 'CONCLUIDA',
     });

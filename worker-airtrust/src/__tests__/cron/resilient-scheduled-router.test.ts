@@ -23,6 +23,9 @@ import {
   resolveNextSigvoosDay,
   shouldRunSigvoosAtCurrentHour,
   FRMS_REPROCESS_BATCH,
+  FRMS_QUEUE_SCOPE_BATCH,
+  buildReadyFrmsQueueScopesQuery,
+  buildStaleFrmsQueueScopesQuery,
   SIGVOOS_TENANT_BATCH,
   SIGVOOS_TRIPULANTE_ENQUEUE_BATCH,
 } from '../../cron/resilient/sigvoos-frms';
@@ -46,7 +49,7 @@ describe('resilient scheduled router', () => {
       runComplianceRoster: true,
       runDailyFrms: false,
       runSigvoosFrms: true,
-      runDomainEvents: true,
+      runDomainEvents: false,
       runCronHealth: true,
       delegateLegacy: false,
     });
@@ -62,6 +65,19 @@ describe('resilient scheduled router', () => {
     expect(daily.runDomainEvents).toBe(false);
     expect(daily.runCronHealth).toBe(true);
     expect(daily.delegateLegacy).toBe(true);
+  });
+
+
+  it('separa os jobs D1 em slots determinísticos; cada job mantém cadência de no máximo 30 min', () => {
+    const slots = [0, 10, 20, 30, 40, 50].map((minute) =>
+      getResilientCronPlan('*/10 * * * *', new Date(`2026-08-02T08:${String(minute).padStart(2, '0')}:00Z`)),
+    );
+    expect(slots.map((s) => [s.runSigvoosFrms, s.runDomainEvents, s.runCronHealth])).toEqual([
+      [true, false, false], [false, true, false], [true, false, true],
+      [false, true, false], [true, false, false], [false, true, true],
+    ]);
+    expect(slots.every((s) => !(s.runSigvoosFrms && s.runDomainEvents))).toBe(true);
+    expect(slots.every((s) => s.runComplianceRoster && s.runComplianceReports)).toBe(true);
   });
 
   it('delega triggers não relacionados sem ativar jobs resilientes', () => {
@@ -89,9 +105,9 @@ describe('resilient scheduled router', () => {
   });
 
   it('não executa o handler monolítico em cada tick de dez minutos', () => {
-    const tenMinute = getResilientCronPlan('*/10 * * * *');
+    const tenMinute = getResilientCronPlan('*/10 * * * *', new Date('2026-08-02T08:20:00Z'));
     expect(tenMinute.delegateLegacy).toBe(false);
-    expect(tenMinute.runDomainEvents).toBe(true);
+    expect(tenMinute.runDomainEvents).toBe(false);
   });
 
   it('ativa o roteador no entrypoint sem alterar os triggers oficiais', () => {
@@ -180,7 +196,25 @@ describe('bounded cron discovery', () => {
   it('mantém caps pequenos para SIGVOOS e FRMS', () => {
     expect(SIGVOOS_TENANT_BATCH).toBeLessThanOrEqual(25);
     expect(SIGVOOS_TRIPULANTE_ENQUEUE_BATCH).toBeLessThanOrEqual(100);
-    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(25);
+    expect(FRMS_REPROCESS_BATCH).toBeLessThanOrEqual(5);
+    expect(FRMS_QUEUE_SCOPE_BATCH).toBeLessThanOrEqual(2);
+  });
+
+  it('descobre filas prontas pelo índice parcial e retoma escopos com lease obsoleto', () => {
+    const ready = compactSql(buildReadyFrmsQueueScopesQuery());
+    const stale = compactSql(buildStaleFrmsQueueScopesQuery());
+    expect(ready).toContain('INDEXED BY idx_cron_job_items_pending');
+    expect(ready).toContain("status IN ('PENDING', 'FAILED')");
+    expect(ready).toContain("available_at <= datetime('now')");
+    expect(ready).toContain('ORDER BY scope_key ASC LIMIT ?');
+    expect(stale).toContain('FROM cron_job_state');
+    expect(stale).toContain("last_started_at < datetime('now', '-30 minutes')");
+    expect(stale).toContain('last_started_at > last_success_at');
+    expect(stale).toContain('EXISTS ( SELECT 1 FROM cron_job_items AS pending_recovery');
+    expect(stale).toContain("pending_recovery.status = 'PROCESSING'");
+    expect(stale).toContain('ORDER BY scope_key ASC LIMIT ?');
+    expect(ready + stale).not.toContain('UNION');
+    expect(ready + stale).not.toContain("status != 'SUCCEEDED'");
   });
 });
 

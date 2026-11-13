@@ -23,6 +23,7 @@ import { CategoriaImportacaoService } from '../services/importacao/CategoriaImpo
 import { chainQualificationLineageForGroups } from '../services/importacao/lineageChaining';
 import { createLogger } from '../utils/logger';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { isCmaCode, resolveCmaValidity, resolveCmaValidityForEmployee } from '../utils/cma-validity';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 
@@ -96,7 +97,7 @@ type HistoricoErroLinha = {
   erros: string[];
 };
 
-type FuncionarioRow = { cpf: string; nome: string };
+type FuncionarioRow = { cpf: string; nome: string; nascimento?: string | null };
 type TipoQualificacaoRow = {
   codigo: string;
   nome: string;
@@ -762,7 +763,10 @@ app.post('/validar-json/:entidade', async (c: Context) => {
 
       // 2. Buscar TODOS os funcionários de uma vez (QUERY 1/2)
       console.log('[VALIDACAO HISTORICO] Buscando funcionários no banco...');
-      const funcionariosMap = new Map<string, { cpf: string; nome: string }>();
+      const funcionariosMap = new Map<
+        string,
+        { cpf: string; nome: string; nascimento: string | null }
+      >();
       if (cpfsUnicos.length > 0) {
         // Buscar tanto CPFs normalizados quanto formatados
         const cpfsFormatados = cpfsUnicos.map((cpf) => {
@@ -775,7 +779,7 @@ app.post('/validar-json/:entidade', async (c: Context) => {
 
         const funcionariosResult = await db
           .prepare(
-            `SELECT cpf, nome FROM funcionarios WHERE cpf IN (${allPlaceholders}) AND empresa_id = ? AND deleted_at IS NULL`,
+            `SELECT cpf, nome, nascimento FROM funcionarios WHERE cpf IN (${allPlaceholders}) AND empresa_id = ? AND deleted_at IS NULL`,
           )
           .bind(...todosCPFs, empresaId)
           .all();
@@ -785,7 +789,11 @@ app.post('/validar-json/:entidade', async (c: Context) => {
         // Mapear por CPF normalizado (sem formatação)
         funcionarios.forEach((f) => {
           const cpfNormalizado = normalizarCPF(f.cpf);
-          funcionariosMap.set(cpfNormalizado, { cpf: f.cpf, nome: f.nome });
+          funcionariosMap.set(cpfNormalizado, {
+            cpf: f.cpf,
+            nome: f.nome,
+            nascimento: f.nascimento ?? null,
+          });
         });
         console.log(
           `[VALIDACAO HISTORICO] Funcionários encontrados: ${funcionariosMap.size}/${cpfsUnicos.length}`,
@@ -887,10 +895,22 @@ app.post('/validar-json/:entidade', async (c: Context) => {
             const tipo = tiposMap.get(row.qualificacao_codigo);
 
             if (tipo && tipo.validade) {
+              // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+              let validadeMeses = tipo.validade;
+              if (isCmaCode(row.qualificacao_codigo)) {
+                const nascimento = row.funcionario_cpf
+                  ? (funcionariosMap.get(normalizarCPF(row.funcionario_cpf))?.nascimento ?? null)
+                  : null;
+                const cmaValidity = resolveCmaValidity({
+                  dataRealizacao: row.data_conclusao_convertida,
+                  dataNascimento: nascimento,
+                });
+                validadeMeses = cmaValidity.months;
+                if (cmaValidity.warning) row.aviso_validade_cma = cmaValidity.warning;
+              }
               row.data_vencimento_calculada = calcularDataVencimento(
                 row.data_conclusao_convertida as string,
-                tipo.validade,
-                1,
+                validadeMeses,
               );
             }
           }
@@ -1396,19 +1416,29 @@ app.post('/enriquecer-historico', async (c: Context) => {
         // Buscar qualificacao_id e validade
         const { results: qualResults } = await db
           .prepare(
-            'SELECT id, validade, vencimento_fim_mes FROM qualificacoes_tipos WHERE UPPER(TRIM(codigo)) = UPPER(TRIM(?)) AND empresa_id = ? AND deleted_at IS NULL',
+            'SELECT id, validade FROM qualificacoes_tipos WHERE UPPER(TRIM(codigo)) = UPPER(TRIM(?)) AND empresa_id = ? AND deleted_at IS NULL',
           )
           .bind(reg.qualificacao_codigo, empresaId)
           .all();
 
         const qualificacaoId = qualResults?.[0]?.id || null;
         const validadeMeses = (qualResults?.[0]?.validade as number) || null;
-        const vencimentoFimMes = Number((qualResults?.[0] as any)?.vencimento_fim_mes || 0) === 1 ? 1 : 0;
 
         // Calcular data_vencimento se temos data_conclusao e validade
         let dataVencimento = null;
         if (reg.data_conclusao && validadeMeses) {
-          dataVencimento = calcularDataVencimento(reg.data_conclusao, validadeMeses, vencimentoFimMes);
+          const cmaValidity = funcionarioId
+            ? await resolveCmaValidityForEmployee(db, {
+                codigo: reg.qualificacao_codigo,
+                empresaId,
+                funcionarioId: funcionarioId as number,
+                dataRealizacao: reg.data_conclusao,
+              })
+            : null;
+          dataVencimento = calcularDataVencimento(
+            reg.data_conclusao,
+            cmaValidity?.months ?? validadeMeses,
+          );
         }
 
         // Atualizar registro

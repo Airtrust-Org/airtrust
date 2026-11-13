@@ -7,6 +7,7 @@ import {
   resolveScormResumeTargetSlide,
 } from '../../routes/lms-assets';
 import { buildScormLaunchState, readScormNavigationBookmark } from '../../services/lms-scorm-launch-state';
+import { projectS76Rc3AdministrativeResume, S76_RC3_IMMUTABLE_SHA256 } from '../../services/lms-scorm-s76-rc3-resume-bridge';
 
 describe('SCORM resume restore helpers', () => {
   it('parseia marcadores numericos simples usados por alguns pacotes AW', () => {
@@ -73,6 +74,90 @@ describe('SCORM resume restore helpers', () => {
     expect(source).toContain('SCORM_BEFORE_UNLOAD_COMMIT');
     expect(source).toContain('SCORM_VISIBILITY_COMMIT');
     expect(source).toContain("console.info('[SCORM_TELEMETRY]'");
+  });
+});
+
+describe('F5 final slide restoration after previously repaired scenario', () => {
+  const T=59;
+  function checkpoint({ cursor=25, missing=-1, location='59/59', completed=false }={}) {
+    const done=Array.from({length:T-1},(_,i)=>i).filter(i=>i!==missing);
+    const original=JSON.stringify({
+      v:4,p:'CDS-CODIGO-ETICA-CONDUTA-F5-RC1-20261101',
+      a:cursor,d:done,
+      s:{scenario_1:0},g:[],h:{},vs:{},q:{},c:completed,
+    });
+    return JSON.stringify({
+      'cmi.suspend_data':original,'cmi.core.lesson_location':location,
+      'cmi.core.lesson_status':'incomplete','airtrust.total_slides':T,
+    });
+  }
+  it('reopens Karl at last real screen after proving 58/58 preceding units, without finishing', () => {
+    const {initialCmiJson}=buildScormLaunchState(checkpoint(),null,false,false,null,{
+      formativeCourse:true,
+      persisted:{lesson_status:'incomplete'},
+    });
+    const cmi=JSON.parse(initialCmiJson);
+    const saved=JSON.parse(cmi['cmi.suspend_data']);
+    expect(saved.a).toBe(58);
+    expect(saved.d).toHaveLength(58);
+    expect(saved.c).toBe(false);
+    expect(cmi['cmi.core.lesson_location']).toBe('59/59');
+    expect(cmi['cmi.core.lesson_status']).toBe('incomplete');
+  });
+  it('never advances an incomplete path or an unvisited final slide', () => {
+    for(const params of [
+      {missing:20},{location:'26/59'},
+      {location:'26/54'},{completed:true},
+    ]) {
+      const {initialCmiJson}=buildScormLaunchState(
+        checkpoint(params),null,false,false,null,{formativeCourse:true},
+      );
+      const saved=JSON.parse(JSON.parse(initialCmiJson)['cmi.suspend_data']);
+      expect(saved.a).toBeLessThan(58);
+      expect(saved.c).toBe(params.completed === true);
+    }
+  });
+});
+
+describe('S76 RC3 authenticated launch-site integration — Carlos enrollment #681', () => {
+  it('routes every verified handoff to a strict native projection, not only legacy #690', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/lms-assets.ts'), 'utf8');
+    expect(source).toContain('if (s76Rc3Active && verifiedHandoff?.id &&');
+    expect(source).toContain('const projection = projectS76Rc3AdministrativeResume({');
+    expect(source).toContain('initialCmiJson = projection;');
+    expect(source).not.toMatch(/s76Rc3Active\s*&&\s*matricula\.id\s*===\s*690/);
+
+    const version = 'v3.4-no-module-exams-rc2-2026-11-02';
+    const state = { v: 4, p: version, a: 25,
+      d: Array.from({length:25},(_,i)=>i), s: {}, g: [], h: {}, vs: {}, c: false };
+    const json = JSON.stringify({
+      'cmi.core.lesson_status': 'incomplete',
+      'cmi.core.lesson_mode': 'normal',
+      'cmi.core.lesson_location': '26/49',
+      'cmi.suspend_data': JSON.stringify(state),
+      'airtrust.total_slides': 49,
+      'airtrust.administrative_credit': {
+        kind:'PREVIOUS_EDITION_UNITS_RECOGNIZED',
+        credited_units:25,previous_progress_pct:51,
+        package_sha256:S76_RC3_IMMUTABLE_SHA256,handoff_id:null,
+      },
+    });
+    const projection = projectS76Rc3AdministrativeResume({
+      empresaId:6,cursoId:39,matriculaId:681,cicloId:902,handoffId:79,
+      handoffPreviousProgressPct:51,handoffBookmark:{position:26,total:49},
+      activePackageSha256:S76_RC3_IMMUTABLE_SHA256,
+      assessmentPolicy:'FORMATIVE',enrollmentStatus:'EM_ANDAMENTO',
+      qualificationHistoryId:null,
+      manifest:{packageVersion:version,
+        requiredSlideIds:Array.from({length:49},(_,i)=>i===0?'C00':i===48?'M6-07':'M'+i),
+        assessmentMode:'NONE',workerApprovalRequired:true},
+      initialCmiJson:json,
+    });
+    expect(projection).not.toBeNull();
+    const launch=JSON.parse(projection!);
+    expect(JSON.parse(launch['cmi.suspend_data']).c).toHaveLength(25);
+    expect(launch['cmi.core.lesson_location']).toBe('26/49');
+    expect(launch['cmi.core.lesson_status']).toBe('incomplete');
   });
 });
 

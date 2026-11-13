@@ -1,0 +1,333 @@
+name: Production Qualification CMA Age Executor
+
+# Owner decision "CMA por idade" (follow-up of #2165 / #2158) - governed tenant-6 batch: qualificacoes_historico of the CMA type
+# get validade_meses 12 (or 6 from 60 completed years on the realization date) and data_vencimento "no dia". Rows without a valid
+# birth date are never touched; explicit/documentary expiries are preserved. Sibling of production-qualification-validity-no-dia-executor.yml.
+# Issued certificates are never reissued.
+# dry-run is read-only. apply/rollback write to production D1 only through
+# scripts/production/qualification-cma-age-governed-executor.mjs (CAS + audit rows),
+# on the exact reviewed SHA, plan hash and row count, with a recorded D1 Time Travel bookmark.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run is read-only; apply writes the reviewed plan; rollback applies a prior rollback manifest
+        required: true
+        type: choice
+        options: [dry-run, apply, rollback]
+        default: dry-run
+      expected_sha:
+        description: Exact current main SHA (must equal the dispatched ref SHA; 8 release gates green)
+        required: true
+        type: string
+      plan_sha256:
+        description: Reviewed forward plan sha256 (64 hex)
+        required: true
+        type: string
+      expected_count:
+        description: Reviewed candidate row count
+        required: true
+        type: string
+      recovery_bookmark:
+        description: D1 Time Travel bookmark captured before the change (required for apply and rollback)
+        required: false
+        type: string
+      confirm_production:
+        description: Must be exactly AIRTRUST_PRODUCTION
+        required: true
+        type: string
+      rollback_artifact_id:
+        description: Rollback only - numeric artifact id of the apply-run evidence artifact produced at source_sha
+        required: false
+        type: string
+      rollback_plan_sha256:
+        description: Rollback only - rollback_plan_sha256 of that manifest (64 hex)
+        required: false
+        type: string
+      source_sha:
+        description: Rollback only - ORIGINAL apply SHA (ancestor of main, may be older than expected_sha); executor runs from this exact commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+  issues: read
+
+concurrency:
+  group: production-qualification-cma-age-executor
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Validate immutable dispatch and release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          EXPECTED_COUNT: ${{ inputs.expected_count }}
+          RECOVERY_BOOKMARK: ${{ inputs.recovery_bookmark }}
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          ROLLBACK_ARTIFACT_ID: ${{ inputs.rollback_artifact_id }}
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+          ROLLBACK_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo MAIN_REF_REQUIRED >&2; exit 1; }
+          [[ "$CONFIRM_PRODUCTION" == AIRTRUST_PRODUCTION ]] || { echo PRODUCTION_CONFIRMATION_REQUIRED >&2; exit 1; }
+          [[ "$MODE" =~ ^(dry-run|apply|rollback)$ ]] || { echo INVALID_MODE >&2; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo EXPECTED_SHA_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]] || { echo EXPECTED_SHA_MISMATCH >&2; exit 1; }
+          [[ "$PLAN_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo PLAN_SHA256_INVALID >&2; exit 1; }
+          [[ "$EXPECTED_COUNT" =~ ^[1-9][0-9]{0,3}$ ]] || { echo EXPECTED_COUNT_INVALID >&2; exit 1; }
+          if [[ "$MODE" == apply || "$MODE" == rollback ]]; then
+            [[ "$RECOVERY_BOOKMARK" =~ ^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$ ]] || { echo RECOVERY_BOOKMARK_REQUIRED >&2; exit 1; }
+          fi
+          if [[ "$MODE" == rollback ]]; then
+            [[ "$ROLLBACK_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo ROLLBACK_ARTIFACT_ID_REQUIRED >&2; exit 1; }
+            [[ "$ROLLBACK_PLAN_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo ROLLBACK_PLAN_SHA256_REQUIRED >&2; exit 1; }
+            [[ "$ROLLBACK_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo ROLLBACK_SOURCE_SHA_REQUIRED >&2; exit 1; }
+          fi
+
+      - name: Resolve source SHA (current main, or original apply SHA for rollback)
+        id: source
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          ROLLBACK_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == rollback ]]; then src="$ROLLBACK_SOURCE_SHA"; else src="$GITHUB_SHA"; fi
+          [[ "$src" =~ ^[0-9a-f]{40}$ ]] || { echo SOURCE_SHA_INVALID >&2; exit 1; }
+          echo "source_sha=$src" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require source SHA to be reachable from protected main
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main || { echo SHA_NOT_ON_PROTECTED_MAIN >&2; exit 1; }
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Verify official release gates on the source SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+
+      # Owner-authored approval bound to mode + source sha + plan hash + count.
+      # Runs in the guard job, which holds no Cloudflare credentials; the execute
+      # job (credentials, any write) cannot start unless this step succeeds.
+      - name: Verify exact owner approval for production apply or rollback
+        if: ${{ inputs.mode != 'dry-run' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+          EXPECTED_COUNT: ${{ inputs.expected_count }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == rollback ]]; then bound_hash="$ROLLBACK_PLAN_SHA256"; else bound_hash="$PLAN_SHA256"; fi
+          approval="/qualification-cma-age $MODE sha=$SOURCE_SHA plan=$bound_hash count=$EXPECTED_COUNT"
+          gh api "repos/$GITHUB_REPOSITORY/issues/2158/comments" --paginate --jq '.[] | {author: .user.login, body: .body}' |
+            jq -s -e --arg expected "$approval" 'any(.[]; .author=="isaeldaumas" and .body==$expected)' >/dev/null ||
+              { echo OWNER_APPROVAL_MISSING >&2; exit 1; }
+
+  execute:
+    name: Governed production D1 qualification CMA age batch apply with backup recovery point
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXECUTOR: scripts/production/qualification-cma-age-governed-executor.mjs
+      EXPECTED_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+      EXPECTED_COUNT: ${{ inputs.expected_count }}
+      MODE: ${{ inputs.mode }}
+      SOURCE_SHA: ${{ needs.guard.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.source_sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+
+      - name: Require production credentials
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { echo PRODUCTION_D1_TOKEN_MISSING >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { echo CLOUDFLARE_ACCOUNT_ID_MISSING >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/cmaagebatch/out"
+          chmod 700 "$RUNNER_TEMP/cmaagebatch" "$RUNNER_TEMP/cmaagebatch/out"
+
+      # ---------- forward (dry-run / apply) ----------
+      - name: Generate read-only plan and assert reviewed hash and count
+        if: ${{ inputs.mode != 'rollback' }}
+        env:
+          AIRTRUST_CMA_AGE_READONLY_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_READONLY
+        run: |
+          set -euo pipefail
+          node scripts/production/qualification-cma-age-readonly-plan.mjs \
+            --manifest="$RUNNER_TEMP/cmaagebatch/plan.json" > "$RUNNER_TEMP/cmaagebatch/out/plan-summary.json"
+          plan_hash="$(jq -r .plan_sha256 "$RUNNER_TEMP/cmaagebatch/plan.json")"
+          plan_count="$(jq -r '.row_count' "$RUNNER_TEMP/cmaagebatch/plan.json")"
+          [[ "$plan_hash" == "$EXPECTED_PLAN_SHA256" ]] || { echo PLAN_HASH_MISMATCH >&2; exit 1; }
+          [[ "$plan_count" == "$EXPECTED_COUNT" ]] || { echo PLAN_COUNT_MISMATCH >&2; exit 1; }
+
+      - name: Dry-run forward plan (read-only) and emit rollback manifest
+        if: ${{ inputs.mode != 'rollback' }}
+        env:
+          AIRTRUST_CMA_AGE_EXECUTOR_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_EXECUTOR_DRY_RUN
+        run: |
+          set -euo pipefail
+          node "$EXECUTOR" \
+            --manifest="$RUNNER_TEMP/cmaagebatch/plan.json" \
+            --expected-plan-hash="$EXPECTED_PLAN_SHA256" \
+            --expected-count="$EXPECTED_COUNT" \
+            --emit-rollback="$RUNNER_TEMP/cmaagebatch/out/rollback-manifest.json" \
+            > "$RUNNER_TEMP/cmaagebatch/out/dry-run-report.json"
+          test -s "$RUNNER_TEMP/cmaagebatch/out/rollback-manifest.json"
+          [[ "$(jq -r .conflict_count "$RUNNER_TEMP/cmaagebatch/out/dry-run-report.json")" == 0 ]] || { echo DRY_RUN_CONFLICTS_ABORT >&2; exit 1; }
+
+      - name: Apply forward plan to production D1
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          AIRTRUST_CMA_AGE_EXECUTOR_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_EXECUTOR_APPLY
+          AIRTRUST_CMA_AGE_RECOVERY_READY: 'yes'
+          AIRTRUST_CMA_AGE_ACTOR: ${{ github.actor }}
+          EXPECTED_SOURCE_SHA: ${{ needs.guard.outputs.source_sha }}
+          RECOVERY_BOOKMARK: ${{ inputs.recovery_bookmark }}
+        run: |
+          set -euo pipefail
+          echo "RECOVERY_BOOKMARK_RECORDED=$RECOVERY_BOOKMARK" >> "$GITHUB_STEP_SUMMARY"
+          node "$EXECUTOR" --apply \
+            --manifest="$RUNNER_TEMP/cmaagebatch/plan.json" \
+            --expected-plan-hash="$EXPECTED_PLAN_SHA256" \
+            --expected-count="$EXPECTED_COUNT" \
+            > "$RUNNER_TEMP/cmaagebatch/out/apply-report.json"
+
+      # ---------- rollback ----------
+      - name: Download rollback manifest from prior apply run artifact
+        if: ${{ inputs.mode == 'rollback' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK_ARTIFACT_ID: ${{ inputs.rollback_artifact_id }}
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+          RECOVERY_BOOKMARK: ${{ inputs.recovery_bookmark }}
+        run: |
+          set -euo pipefail
+          meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ROLLBACK_ARTIFACT_ID")"
+          [[ "$(jq -r .expired <<<"$meta")" == false ]] || { echo ROLLBACK_ARTIFACT_EXPIRED >&2; exit 1; }
+          [[ "$(jq -r .name <<<"$meta")" == "qualification-cma-age-executor-apply-$SOURCE_SHA" ]] || { echo ROLLBACK_ARTIFACT_NAME_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .workflow_run.head_sha <<<"$meta")" == "$SOURCE_SHA" ]] || { echo ROLLBACK_ARTIFACT_SHA_MISMATCH >&2; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ROLLBACK_ARTIFACT_ID/zip" > "$RUNNER_TEMP/cmaagebatch/rollback.zip"
+          unzip -o -j "$RUNNER_TEMP/cmaagebatch/rollback.zip" rollback-manifest.json -d "$RUNNER_TEMP/cmaagebatch"
+          rm -f "$RUNNER_TEMP/cmaagebatch/rollback.zip"
+          manifest="$RUNNER_TEMP/cmaagebatch/rollback-manifest.json"
+          [[ "$(jq -r .rollback_plan_sha256 "$manifest")" == "$ROLLBACK_PLAN_SHA256" ]] || { echo ROLLBACK_HASH_INPUT_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .forward_plan_sha256 "$manifest")" == "$EXPECTED_PLAN_SHA256" ]] || { echo ROLLBACK_FORWARD_HASH_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .row_count "$manifest")" == "$EXPECTED_COUNT" ]] || { echo ROLLBACK_COUNT_MISMATCH >&2; exit 1; }
+          echo "RECOVERY_BOOKMARK_RECORDED=$RECOVERY_BOOKMARK" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dry-run rollback (read-only)
+        if: ${{ inputs.mode == 'rollback' }}
+        env:
+          AIRTRUST_CMA_AGE_EXECUTOR_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_EXECUTOR_DRY_RUN
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+        run: |
+          set -euo pipefail
+          node "$EXECUTOR" --direction=rollback \
+            --manifest="$RUNNER_TEMP/cmaagebatch/rollback-manifest.json" \
+            --expected-plan-hash="$ROLLBACK_PLAN_SHA256" \
+            --expected-count="$EXPECTED_COUNT" \
+            > "$RUNNER_TEMP/cmaagebatch/out/rollback-dry-run-report.json"
+          [[ "$(jq -r .conflict_count "$RUNNER_TEMP/cmaagebatch/out/rollback-dry-run-report.json")" == 0 ]] || { echo ROLLBACK_DRY_RUN_CONFLICTS_ABORT >&2; exit 1; }
+
+      - name: Apply rollback to production D1
+        if: ${{ inputs.mode == 'rollback' }}
+        env:
+          AIRTRUST_CMA_AGE_EXECUTOR_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_EXECUTOR_APPLY
+          AIRTRUST_CMA_AGE_RECOVERY_READY: 'yes'
+          AIRTRUST_CMA_AGE_ACTOR: ${{ github.actor }}
+          EXPECTED_SOURCE_SHA: ${{ needs.guard.outputs.source_sha }}
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+        run: |
+          set -euo pipefail
+          node "$EXECUTOR" --apply --direction=rollback \
+            --manifest="$RUNNER_TEMP/cmaagebatch/rollback-manifest.json" \
+            --expected-plan-hash="$ROLLBACK_PLAN_SHA256" \
+            --expected-count="$EXPECTED_COUNT" \
+            > "$RUNNER_TEMP/cmaagebatch/out/rollback-apply-report.json"
+
+      # ---------- read-only readback ----------
+      - name: Read-back verification (read-only dry-run)
+        if: ${{ inputs.mode != 'dry-run' }}
+        env:
+          AIRTRUST_CMA_AGE_EXECUTOR_CONFIRMATION: AIRTRUST_PRODUCTION_QUALIFICATION_CMA_AGE_EXECUTOR_DRY_RUN
+          ROLLBACK_PLAN_SHA256: ${{ inputs.rollback_plan_sha256 }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == rollback ]]; then
+            args=(--direction=rollback --manifest="$RUNNER_TEMP/cmaagebatch/rollback-manifest.json" --expected-plan-hash="$ROLLBACK_PLAN_SHA256")
+          else
+            args=(--manifest="$RUNNER_TEMP/cmaagebatch/plan.json" --expected-plan-hash="$EXPECTED_PLAN_SHA256")
+          fi
+          node "$EXECUTOR" "${args[@]}" --expected-count="$EXPECTED_COUNT" > "$RUNNER_TEMP/cmaagebatch/out/readback-report.json"
+          r="$RUNNER_TEMP/cmaagebatch/out/readback-report.json"
+          [[ "$(jq -r .pending "$r")" == 0 ]] || { echo READBACK_PENDING_NOT_ZERO >&2; exit 1; }
+          [[ "$(jq -r '.already_applied + .skipped_not_applied' "$r")" == "$EXPECTED_COUNT" ]] || { echo READBACK_ALREADY_APPLIED_MISMATCH >&2; exit 1; }
+          [[ "$(jq -r .conflict_count "$r")" == 0 ]] || { echo READBACK_CONFLICTS >&2; exit 1; }
+
+      - name: Publish counts-only summary
+        if: always()
+        run: |
+          set -euo pipefail
+          for f in plan-summary dry-run-report apply-report rollback-dry-run-report rollback-apply-report readback-report; do
+            p="$RUNNER_TEMP/cmaagebatch/out/$f.json"
+            [[ -s "$p" ]] || continue
+            echo "### $f" >> "$GITHUB_STEP_SUMMARY"
+            jq '{mode,direction,tenant,plan_sha256,row_count,classes,corrigible_operations,corrigible_breakdown,birth_date_missing,pending,already_applied,skipped_not_applied,conflict_count,conflict_reasons,cas_conflict_count,changed,writes_attempted,postconditions_verified,aborted,pii_emitted}' "$p" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Remove plan containing row identifiers from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cmaagebatch/plan.json"
+
+      - name: Upload private evidence (ids and dates only, no PII)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qualification-cma-age-executor-${{ inputs.mode }}-${{ needs.guard.outputs.source_sha }}
+          path: ${{ runner.temp }}/cmaagebatch/out/*.json
+          if-no-files-found: warn
+          retention-days: 30

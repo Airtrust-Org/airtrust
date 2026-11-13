@@ -1,3 +1,5 @@
+import { tryAddCalendarMonthsClamped } from '../../../src/shared/utils/validade-meses';
+import { isCmaCode, resolveCmaValidity } from '../utils/cma-validity';
 type TipoTreinamento = 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
 export type QualificacaoTipoSnapshot = {
@@ -5,7 +7,6 @@ export type QualificacaoTipoSnapshot = {
   nome: string | null;
   categoria: string | null;
   validade: number | null;
-  vencimentoFimMes: number | null;
   cargaHoraria: number | null;
   cargaHorariaInicial: number | null;
   cargaHorariaRecorrente: number | null;
@@ -53,65 +54,20 @@ function toPositiveNumber(value: unknown): number | null {
   return parsed !== null && parsed > 0 ? parsed : null;
 }
 
-function isFuncionarioComMaisDe60AnosNaConclusao(
-  dataConclusao?: string | null,
-  nascimentoFuncionario?: string | null,
-): boolean {
-  const dataConclusaoNormalizada = String(dataConclusao || '').trim();
-  const nascimentoNormalizado = String(nascimentoFuncionario || '').trim();
-
-  if (!dataConclusaoNormalizada || !nascimentoNormalizado) return false;
-
-  const dataConclusaoRef = new Date(`${dataConclusaoNormalizada}T00:00:00Z`);
-  const nascimentoRef = new Date(`${nascimentoNormalizado}T00:00:00Z`);
-
-  if (Number.isNaN(dataConclusaoRef.getTime()) || Number.isNaN(nascimentoRef.getTime())) {
-    return false;
-  }
-
-  const aniversario60 = new Date(nascimentoRef);
-  aniversario60.setUTCFullYear(aniversario60.getUTCFullYear() + 60);
-  return aniversario60 <= dataConclusaoRef;
-}
-
-function calcularDataVencimentoSnapshot(
-  dataConclusao: string,
-  validadeMeses: number,
-  vencimentoFimMes: number | null,
-): string | null {
-  const dataBase = new Date(`${dataConclusao}T00:00:00Z`);
-
-  if (Number.isNaN(dataBase.getTime()) || validadeMeses <= 0) {
-    return null;
-  }
-
-  if (Number(vencimentoFimMes || 0) === 1) {
-    const year = dataBase.getUTCFullYear();
-    const month = dataBase.getUTCMonth();
-    const endOfMonth = new Date(Date.UTC(year, month + validadeMeses + 1, 0));
-    return endOfMonth.toISOString().slice(0, 10);
-  }
-
-  dataBase.setUTCMonth(dataBase.getUTCMonth() + validadeMeses);
-  return dataBase.toISOString().slice(0, 10);
+function calcularDataVencimentoSnapshot(dataConclusao: string, validadeMeses: number): string | null {
+  return tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 export function resolveHistoricoValidadeMeses(
   tipo: QualificacaoTipoSnapshot,
   historico: QualificacaoHistoricoSyncInput,
 ): number | null {
-  const codigo = String(tipo.codigo || '')
-    .trim()
-    .toUpperCase();
-
-  if (
-    codigo === 'CMA' &&
-    isFuncionarioComMaisDe60AnosNaConclusao(
-      historico.dataConclusao,
-      historico.nascimentoFuncionario,
-    )
-  ) {
-    return 6;
+  // CMA: validade por idade (12 meses; 6 a partir dos 60 anos) — fonte única.
+  if (isCmaCode(tipo.codigo)) {
+    return resolveCmaValidity({
+      dataRealizacao: historico.dataConclusao,
+      dataNascimento: historico.nascimentoFuncionario,
+    }).months;
   }
 
   return toPositiveNumber(tipo.validade);
@@ -153,7 +109,7 @@ export function resolveHistoricoDataVencimento(
   }
 
   try {
-    return calcularDataVencimentoSnapshot(dataConclusao, validadeMeses, tipo.vencimentoFimMes);
+    return calcularDataVencimentoSnapshot(dataConclusao, validadeMeses);
   } catch {
     return historico.dataVencimentoAtual || null;
   }
@@ -181,7 +137,6 @@ export function shouldSyncHistoricoSnapshotsOnTipoUpdate(data: Record<string, un
     'codigo',
     'categoria',
     'validade',
-    'vencimento_fim_mes',
     'carga_horaria_inicial',
     'carga_horaria_recorrente',
   ].some((field) => Object.prototype.hasOwnProperty.call(data, field));

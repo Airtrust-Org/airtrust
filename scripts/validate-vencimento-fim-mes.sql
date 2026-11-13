@@ -1,4 +1,6 @@
 -- PHASE 1 VALIDATION: vencimento_fim_mes schema and data
+-- LEGADO / SOMENTE RELATO: a coluna qualificacoes_tipos.vencimento_fim_mes e ignorada no calculo;
+-- todo vencimento vence NO DIA (decisao do dono). Nenhum resultado abaixo e criterio de correcao.
 -- Run via: npx wrangler d1 execute airtrust-db --remote --file=scripts/validate-vencimento-fim-mes.sql
 
 -- 1. Check column exists and has correct constraints
@@ -43,15 +45,15 @@ WHERE deleted_at IS NULL
 GROUP BY vencimento_fim_mes
 ORDER BY vencimento_fim_mes;
 
--- 5. Sample medical types (should be vencimento_fim_mes=1)
+-- 5. Sample medical types (LEGADO: valor informativo; o calculo ignora a coluna)
 SELECT 
   '✅ Medical Types Sample' as test,
   codigo,
   nome,
   vencimento_fim_mes,
   CASE 
-    WHEN vencimento_fim_mes = 1 THEN '✓ Correct'
-    ELSE '✗ Should be 1'
+    WHEN vencimento_fim_mes = 1 THEN 'legacy flag=1 (ignorada)'
+    ELSE 'legacy flag=0'
   END as validation
 FROM qualificacoes_tipos
 WHERE deleted_at IS NULL

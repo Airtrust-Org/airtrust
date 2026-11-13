@@ -386,6 +386,12 @@ describe('Ensaio sintético backup -> restore', () => {
     expect(primeira.checksum).toBeNull();
     expect(r2.keys('backups/cron-mensal-2026-11-09/checksum-manifest.json')).toEqual([]);
 
+    // SQLite CURRENT_TIMESTAMP uses the real UTC clock, not vi.useFakeTimers().
+    // Match the persisted fixture date to the simulated 2026-11-09 cron day;
+    // otherwise this test fails after midnight UTC, despite valid retry logic.
+    d1.database.exec(
+      "UPDATE backups_controle SET created_at = '2026-11-09 05:00:00' WHERE uuid = 'cron-mensal-2026-11-09'",
+    );
     await orchestrator.executarBackupAutomatico('MENSAL'); // retry do mesmo dia
     const retry = d1.database
       .prepare("SELECT uuid, status, r2_checksum_sha256 AS checksum FROM backups_controle WHERE uuid LIKE 'cron-mensal-2026-11-09-retry-%'")
@@ -427,6 +433,16 @@ describe('Ensaio sintético backup -> restore', () => {
     const ctl = controle(d1, uuid);
     const base = { reader: r2Reader(r2), backupUuid: uuid, expectedManifestSha256: ctl.checksum, expectedModules: [...TODOS_MODULOS] };
     expect((await verifyBackupSet(base)).ok).toBe(true);
+
+    // The dated scope in a real generated manifest has NO trailing slash.
+    // Sibling backup UUID prefixes must not be mistaken as this backup's data.
+    const datedScope = (JSON.parse(r2.text(`backups/${uuid}/checksum-manifest.json`)) as {
+      scope_prefixes: string[];
+    }).scope_prefixes.find((prefix) => !prefix.endsWith('/'))!;
+    const siblingKey = `${datedScope}-retry/QUALIFICACOES.json`;
+    r2.store.set(siblingKey, { bytes: new TextEncoder().encode('{}'), uploaded: new Date() });
+    expect((await verifyBackupSet(base)).ok).toBe(true);
+    r2.store.delete(siblingKey);
 
     const moduloKey = r2.keys(`backups/`).find((k) => k.endsWith('/QUALIFICACOES.json'))!;
     const original = new Uint8Array(r2.bytes(moduloKey));

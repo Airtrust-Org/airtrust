@@ -1,6 +1,6 @@
 import type { Env } from '../types';
-import type { VencimentoMode } from '../utils/qualificacoes-expiration';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
+import { resolveCmaValidityForEmployee } from '../utils/cma-validity';
 import { requireActiveQualificationCategoryById } from './qualification-category-contract';
 import { ensureCertificateForQualification } from './ensure-certificate';
 import { hasApprovedScormCategoryLink } from './lms-scorm-category-compatibility';
@@ -49,7 +49,6 @@ export interface CompleteLmsMatriculaParams {
   qualificacaoCategoriaId?: number | null;
   qualificacaoCategoriaCodigo?: string | null;
   validade: number | null;
-  vencimentoFimMes?: VencimentoMode | null;
   dataConclusao: string;
   existingHistoricoId?: number | null;
   progressoPct?: number;
@@ -404,10 +403,9 @@ export function buildCompletionBatchStatements(
   if (needsInsert) {
     const validadeMeses =
       typeof params.validade === 'number' && params.validade > 0 ? params.validade : null;
-    const vencimentoFimMes = (params.vencimentoFimMes ?? 0) === 1 ? 1 : 0;
     const dataVencimento =
       validadeMeses != null
-        ? calcularDataVencimento(params.dataConclusao, validadeMeses, vencimentoFimMes)
+        ? calcularDataVencimento(params.dataConclusao, validadeMeses)
         : null;
     const observacoes = `Origem: LMS | Gerado automaticamente ao concluir: ${params.cursoTitulo}`;
 
@@ -776,8 +774,17 @@ export async function completeLmsMatricula(
     throw rejected;
   }
 
+  // CMA: validade por idade na data de realização (12 meses; 6 a partir dos 60 anos).
+  const cmaValidity = await resolveCmaValidityForEmployee(db, {
+    codigo: qualificacaoCodigo,
+    empresaId: params.empresaId,
+    funcionarioId: params.funcionarioId,
+    dataRealizacao: params.dataConclusao,
+  });
+
   const canonicalParams: CompleteLmsMatriculaParams = {
     ...params,
+    validade: cmaValidity?.months ?? params.validade,
     qualificacaoCategoriaId: category.id,
     qualificacaoCategoria: category.nome,
     qualificacaoCategoriaCodigo: category.codigo,
