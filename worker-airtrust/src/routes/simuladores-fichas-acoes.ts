@@ -308,7 +308,7 @@ app.post('/fichas/:id/assinar', async (c) => {
 
     // Uma ficha já assinada pelo instrutor não pode ser regravada por uma
     // segunda chamada de assinatura; usar fluxo auditável de retificação.
-    if (f.assinatura_instrutor_timestamp) {
+    if (f.assinatura_instrutor_timestamp || Number(f.assinatura_instrutor) === 1) {
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
         error: 'Ficha já assinada pelo instrutor. Utilize o fluxo formal de retificação.' }, 409);
     }
@@ -508,7 +508,7 @@ app.post('/fichas/:id/assinar', async (c) => {
                 assinatura_instrutor_imagem=?, assinatura_instrutor=1,
                 status=?, resultado_final=?, aprovado=?, updated_at=datetime('now')
           WHERE id=? AND empresa_id=? AND assinatura_instrutor_timestamp IS NULL
-            AND deleted_at IS NULL
+            AND COALESCE(assinatura_instrutor,0)=0 AND deleted_at IS NULL
             ${aprovadoInstrutor ? `AND (
               SELECT GROUP_CONCAT(snapshot.codigo || ':' || COALESCE(snapshot.resultado,''), '|')
                 FROM (
