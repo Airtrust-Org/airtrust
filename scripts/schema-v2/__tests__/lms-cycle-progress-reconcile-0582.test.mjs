@@ -1,3 +1,7 @@
+// source_reference: GitHub #2215 production tenant-6 snapshot and PR #2253.
+// operational_decision: test-only SQL fixture; production writes via Schema V2 guarded runner.
+// dry_run_required: exact live D1 preflight before any apply.
+// rollback_plan_required: D1 Time Travel recovery point and reviewed plan 0582.
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
@@ -71,5 +75,17 @@ describe('Schema V2 #2215 — exact, one-shot cycle repair', () => {
     assert.throws(()=>db.exec(sql),/malformed JSON/);
     assert.equal(auditCount(db),0);
     db.close();
+  });
+});
+
+
+describe('Schema V2 0582 production guard wiring', () => {
+  it('requires official eight-gate verification before D1 mutation', () => {
+    const flow=readFileSync(new URL('../../../.github/workflows/apply-schema-change-v2.yml',import.meta.url),'utf8');
+    const gate=flow.indexOf('Verify eight official gates for sensitive production data corrections');
+    const apply=flow.indexOf('Apply schema and ledger atomically');
+    assert.ok(gate>=0 && apply>gate);
+    assert.match(flow.slice(gate,gate+650),/inputs\.change_id == 'lms-cycle-progress-reconcile-0582'/);
+    assert.match(flow.slice(gate,apply),/node scripts\/ci\/verify-release-gates\.mjs/);
   });
 });
