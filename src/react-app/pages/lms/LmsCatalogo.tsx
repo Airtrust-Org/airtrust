@@ -63,7 +63,7 @@ import {
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
-import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES } from './lmsCompletionModeChoice';
+import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy } from './lmsCompletionModeChoice';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -852,6 +852,10 @@ function CourseDrawer({
       return;
     }
     const errs = validateForm(form);
+    if (form.tipo_conteudo === 'scorm' &&
+        !canUseLegacyEvaluatedPolicy(form.scorm_assessment_policy, initial?.scorm_assessment_policy)) {
+      errs.scorm_assessment_policy = 'A prova final AirTrust ainda não está habilitada para novas edições. Mantenha o modo formativo e ative a avaliação somente depois da prova publicada e homologada.';
+    }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     // A candidate ZIP and course metadata are deliberately separate operations.
@@ -1040,9 +1044,14 @@ function CourseDrawer({
                           className={fieldCls}
                         >
                           {SCORM_COMPLETION_MODE_CHOICES.map((choice) => (
-                            <option key={choice.value} value={choice.value}>{choice.label}</option>
+                            <option key={choice.value} value={choice.value}
+                              disabled={choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'}>
+                              {choice.label}{choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'
+                                ? ' — disponível após habilitação das provas' : ''}
+                            </option>
                           ))}
                         </select>
+                        <FieldError message={errors.scorm_assessment_policy} />
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
                           <select
