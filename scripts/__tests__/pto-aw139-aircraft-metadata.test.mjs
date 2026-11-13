@@ -1,3 +1,7 @@
+// source_reference: tenant-6 D1 SELECT proof of nine A139-* active models lacking aircraft metadata; PTO Rev.10 V18, issue #2232.
+// operational_decision: adversarial SQLite-only tests of nine-row AW139 metadata update; no production activity.
+// dry_run_required: all nine IDs/codes, eighteen links each, tenant and S76 isolation before any change.
+// rollback_plan_required: no persistent fixtures; production requires D1 recovery checkpoint and reviewed exact-state hash.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
