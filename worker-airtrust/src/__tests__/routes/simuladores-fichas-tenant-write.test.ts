@@ -58,6 +58,8 @@ function createDbMock(options?: {
   notechsOrdens?: number[];
   sessionDate?: string;
   sessionTime?: string;
+  signedInstructor?: boolean;
+  hasInstructorMeta?: boolean;
 }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
   const batchSizes: number[] = [];
@@ -72,6 +74,11 @@ function createDbMock(options?: {
             query.includes('deleted_at IS NULL')
           ) {
             return { id: Number(args[0]) };
+          }
+
+          if (query.includes("SELECT 1 as found FROM sqlite_master") &&
+              String(args[0]) === 'fichas_sessao_instrutor_meta') {
+            return { found: options?.hasInstructorMeta ? 1 : 0 };
           }
 
           // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
@@ -133,7 +140,9 @@ function createDbMock(options?: {
               dispositivo_identificacao: null,
               assento_instrucao_utilizado: null,
               assinatura_aluno_timestamp: null,
-              assinatura_instrutor_timestamp: null,
+              assinatura_instrutor_timestamp: options?.signedInstructor
+                ? '2026-11-13T11:00:00Z' : null,
+              assinatura_instrutor: options?.signedInstructor ? 1 : 0,
               resultado_final: null,
             };
           }
@@ -273,6 +282,66 @@ describe('simuladores fichas tenant-aware writes', () => {
       error: 'Aluno ou instrutor fora do tenant',
     });
     expect(runs.some((item) => item.query.includes('INSERT INTO fichas_sessao'))).toBe(false);
+  });
+
+  it('PUT /fichas/:id does not edit a signed ficha even with a stale draft status', async () => {
+    const { db, runs, batchSizes } = createDbMock({ signedInstructor: true });
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'AVALIACAO_PENDENTE', observacoes: 'Post-sign edit',
+          manobras: [{ ordem: 1, resultado: 5, observacoes: 'lowered' }] }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'FICHA_ALREADY_SIGNED' });
+    expect(batchSizes).toHaveLength(0);
+    expect(runs.some((row) => row.query.includes('UPDATE fichas_sessao_manobras'))).toBe(false);
+  });
+
+  it('unsigned bulk edit guards technical child and header in SQL even without version token', async () => {
+    const { db, batchSizes } = createDbMock({ manobrasRowsCount: 2 });
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manobras: [{ ordem: 1, resultado: 8, observacoes: '' }] }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    expect(batchSizes).toHaveLength(1);
+    const queries = (db.prepare as unknown as { mock: { calls: Array<[string]> } })
+      .mock.calls.map(([sql]) => sql);
+    const child = queries.find((sql) => sql.includes('UPDATE fichas_sessao_manobras'));
+    const header = queries.find((sql) => sql.includes('UPDATE fichas_sessao SET status'));
+    expect(child).toContain('fs.assinatura_instrutor_timestamp IS NULL');
+    expect(child).toContain('fs.empresa_id = ?');
+    expect(header).toContain('assinatura_instrutor_timestamp IS NULL');
+    expect(header).toContain('COALESCE(assinatura_instrutor,0)=0');
+  });
+
+  it('instructor-meta UPSERT checks unsigned tenant parent on INSERT and conflict UPDATE', async () => {
+    const { db } = createDbMock({ hasInstructorMeta: true });
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacoes: 'Draft with metadata' }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const queries = (db.prepare as unknown as { mock: { calls: Array<[string]> } })
+      .mock.calls.map(([sql]) => sql);
+    const metadataSql = queries.find((sql) => sql.includes('INSERT INTO fichas_sessao_instrutor_meta'));
+    expect(metadataSql).toContain('ON CONFLICT(ficha_id) DO UPDATE SET');
+    expect(metadataSql).toContain('WHERE EXISTS');
+    expect((metadataSql?.match(/assinatura_instrutor_timestamp IS NULL/g) || []).length).toBe(2);
+    expect((metadataSql?.match(/COALESCE\(fs.assinatura_instrutor,0\)=0/g) || []).length).toBe(2);
+    expect((metadataSql?.match(/fs.empresa_id = \?/g) || []).length).toBe(2);
   });
 
   it('PUT /fichas/:id bloqueia recálculo quando ficha não tem manobras', async () => {
