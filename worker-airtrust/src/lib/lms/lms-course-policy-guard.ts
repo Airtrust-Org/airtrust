@@ -2,7 +2,8 @@ import { ApiError } from '../errors/api-error';
 
 /**
  * The assessment policy belongs to an EDITION, not to the course row: once
- * learners are enrolled it only moves through the audited edition activation,
+ * there is an active package OR learners are enrolled it only moves through
+ * audited edition activation,
  * which freezes every ended cycle with the policy it ended under.
  */
 export async function assertCoursePolicyChangeAllowed(
@@ -10,6 +11,15 @@ export async function assertCoursePolicyChangeAllowed(
   current: string, requested: string | undefined,
 ): Promise<void> {
   if (requested === undefined || requested === current) return;
+  const activeEdition = await db
+    .prepare("SELECT COUNT(*) AS n FROM lms_scorm_package_versions WHERE curso_id = ? AND empresa_id = ? AND status = 'ACTIVE'")
+    .bind(cursoId, empresaId)
+    .first<{ n: number }>();
+  if ((Number(activeEdition?.n) || 0) > 0) {
+    throw new ApiError(
+      'A modalidade de um pacote SCORM ativo só muda com a ativação governada de uma nova edição.',
+      409, 'POLICY_CHANGE_REQUIRES_EDITION_ACTIVATION');
+  }
   const enrolled = await db
     .prepare('SELECT COUNT(*) AS n FROM lms_matriculas WHERE curso_id = ? AND empresa_id = ? AND deleted_at IS NULL')
     .bind(cursoId, empresaId)
