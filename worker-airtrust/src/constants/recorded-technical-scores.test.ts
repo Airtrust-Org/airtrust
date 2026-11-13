@@ -28,8 +28,8 @@ describe('PTO §4.2 recorded technical score safety gate', () => {
       eligible: true, scored: 1, nonPerformed: 1,
     });
   });
-  it('does not classify NOTECHS-only or missing technical rows as performed', () => {
-    expect(assessRecordedTechnicalScores([])).toEqual({ eligible:true, scored:0, nonPerformed:0, belowMinimum:[], invalid:[] });
-    expect(assessRecordedTechnicalScores([row('NTS-1','7','NOTECHS')])).toMatchObject({ eligible:true, scored:0 });
+  it('fails closed for NOTECHS-only or missing technical rows', () => {
+    expect(assessRecordedTechnicalScores([])).toEqual({ eligible:false, scored:0, nonPerformed:0, belowMinimum:[], invalid:[] });
+    expect(assessRecordedTechnicalScores([row('NTS-1','7','NOTECHS')])).toMatchObject({ eligible:false, scored:0 });
   });
 });
