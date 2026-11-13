@@ -50,7 +50,7 @@ const reserve = vi.mocked(reserveTrainingAlert);
 const commit = vi.mocked(commitTrainingAlertReservation);
 const delivery = vi.mocked(sendWhatsAppMessage);
 
-function createApp() {
+function createApp(categoria = 'EAD') {
   const app = new Hono<any>();
   app.onError(errorHandler);
   app.route('/api', alertasRoutes);
@@ -63,8 +63,8 @@ function createApp() {
           qualificacao_id: 7,
           data_vencimento: '2026-01-01',
           tipo_codigo: 'EAD_DEMO',
-          categoria: 'EAD',
-          formato_codigo: 'EAD',
+          categoria,
+          formato_codigo: categoria === 'EAD' ? 'EAD' : 'PRESENCIAL',
           tipo_nome: 'EAD Demo',
           funcionario_nome: 'Pessoa Sintetica',
           funcionario_email: 'synthetic@example.invalid',
@@ -95,6 +95,15 @@ beforeEach(() => {
 });
 
 describe('manual qualification alerts share durable daily dedup with Compliance/LMS', () => {
+  it('never reserves or sends a notification for CMA or non-EAD training', async () => {
+    const { app, db } = createApp('CMA');
+    const response = await request(app, db);
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as any).code).toBe('ALERTA_INVALID_CATEGORY');
+    expect(reserve).not.toHaveBeenCalled();
+    expect(delivery).not.toHaveBeenCalled();
+  });
+
   it('returns 409 with explicit resend option, never calling provider when already sent today', async () => {
     const { app, db } = createApp();
     reserve.mockResolvedValueOnce({
