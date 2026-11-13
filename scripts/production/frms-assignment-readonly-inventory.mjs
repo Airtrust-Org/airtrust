@@ -3,6 +3,9 @@
 // source_reference: production-release-readonly-preflight (runs 34169522648 /
 //   34170340062) reported FRMS_GOVERNANCE_NOT_READY — 1 of 2 active FRMS
 //   tenants has ASSIGNMENT_MISSING (no governed frms_profile_assignments row).
+//   The inventory uses precisely the release preflight's active-company filter;
+//   a company with historical jornadas but empresas.ativo=0 is not an active
+//   tenant and must never trigger a default regulatory profile assignment.
 //   That preflight's sanitized report omits empresa_id. This inventory
 //   identifies, READ-ONLY, exactly which active tenant lacks a governed
 //   assignment and enumerates that tenant's own applicable regulatory profiles
@@ -96,6 +99,7 @@ async function main() {
     await query(
       `SELECT DISTINCT f.empresa_id AS empresa_id FROM frms_jornada j ` +
         `JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.deleted_at IS NULL ` +
+        `JOIN empresas e ON e.id = f.empresa_id AND e.ativo = 1 AND e.deleted_at IS NULL ` +
         `WHERE j.deleted_at IS NULL AND f.empresa_id IS NOT NULL ORDER BY f.empresa_id`,
       'active_tenants',
     )
@@ -171,6 +175,7 @@ async function main() {
   }
 
   const missing = tenants.filter((t) => t.assignmentState === 'ASSIGNMENT_MISSING');
+  const ambiguousAssignments = tenants.filter((t) => t.assignmentState === 'ASSIGNMENT_AMBIGUOUS');
 
   // Profile decision — proven ONLY from the tenant's own data: exactly one
   // applicable active regulatory profile and an unambiguous active governed
@@ -210,6 +215,13 @@ async function main() {
     }
   }
 
+  // A fully assigned active-tenant inventory is a valid outcome. It does
+  // not prove a new regulatory-profile decision, because none is needed.
+  // Ambiguous assignments are never treated as successfully inventoried.
+  const assignmentCoverageReady = missing.length === 0 && ambiguousAssignments.length === 0;
+  const inventoryConclusive = ambiguousAssignments.length === 0 &&
+    (assignmentCoverageReady || profileDecision.proven);
+
   const report = {
     generatedAtUtc: new Date().toISOString(),
     expectedSha,
@@ -222,14 +234,21 @@ async function main() {
     profileDecision,
     verdict: {
       profileDecisionProven: profileDecision.proven,
-      blocker: profileDecision.proven ? null : 'FRMS_PROFILE_DECISION_REQUIRES_EXPLICIT_BUSINESS_AUTHORIZATION',
+      assignmentCoverageReady,
+      inventoryConclusive,
+      blocker: ambiguousAssignments.length > 0
+        ? 'FRMS_PROFILE_ASSIGNMENTS_AMBIGUOUS'
+        : inventoryConclusive ? null : 'FRMS_PROFILE_DECISION_REQUIRES_EXPLICIT_BUSINESS_AUTHORIZATION',
     },
   };
 
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 
-  if (profileDecision.proven) {
-    console.log('FRMS_ASSIGNMENT_INVENTORY_PASS: single missing-assignment tenant with an unambiguous, tenant-scoped profile decision (read-only; no write performed).');
+  if (inventoryConclusive) {
+    // The workflow saves stdout verbatim as JSON; all diagnostics go to stderr.
+    console.error(assignmentCoverageReady
+      ? 'FRMS_ASSIGNMENT_INVENTORY_PASS: all active-company FRMS tenants have a single governed assignment (read-only; no write performed).'
+      : 'FRMS_ASSIGNMENT_INVENTORY_PASS: a single missing-assignment tenant has an unambiguous, tenant-scoped profile decision (read-only; no write performed).');
     process.exitCode = 0;
   } else {
     console.error(`FRMS_ASSIGNMENT_INVENTORY_INCONCLUSIVE: ${profileDecision.reason}. No assignment performed. No write performed.`);
