@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../lib/errors/api-error';
 import { assertCoursePolicyChangeAllowed } from '../../lib/lms/lms-course-policy-guard';
 
