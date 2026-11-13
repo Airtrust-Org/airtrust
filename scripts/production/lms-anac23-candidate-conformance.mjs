@@ -49,8 +49,29 @@ export function summarizeConformance(data, selected) {
   const reasons = Array.isArray(runtime.errors)
     ? runtime.errors.filter(v => typeof v === 'string').map(v => v.slice(0,120)).slice(0,5)
     : [];
+  const safeStage = new Set([
+    'BROWSER_LAUNCH','CREATE_PAGE','SET_REQUEST_INTERCEPTION','LOAD_SCO_ASSETS',
+    'VERIFY_SCORM_INITIALIZATION','DRIVE_SCO_INTERACTIONS','CLOSE_SCO_SESSION',
+    'READ_SCORM_TRACE','BINDING_MISSING',
+  ]);
+  const safeCategory = new Set([
+    'BROWSER_QUOTA','BROWSER_ACCESS','BROWSER_SERVICE','BROWSER_TIMEOUT',
+    'BROWSER_CONNECTION','BROWSER_OTHER',
+  ]);
+  const safeCode = new Set([
+    'ECONNRESET','ETIMEDOUT','ECONNREFUSED','ENOTFOUND','EAI_AGAIN',
+    'ERR_CONNECTION_CLOSED','ERR_HTTP2_STREAM_ERROR','TYPE_ERROR',
+    'TIMEOUT_ERROR','ABORT_ERROR','PROTOCOL_ERROR','GENERIC_ERROR',
+    'UNKNOWN_ERROR',
+  ]);
+  // Preserve only fixed-vocabulary diagnostics from the Worker. Raw browser
+  // exception messages can expose internal addresses, tokens or user data.
+  const failureStage = safeStage.has(runtime.failureStage) ? runtime.failureStage : null;
+  const failureCategory = safeCategory.has(runtime.failureCategory) ? runtime.failureCategory : null;
+  const failureCode = safeCode.has(runtime.failureCode) ? runtime.failureCode : null;
   return {
     id:selected.id, shaPrefix:selected.shaPrefix, status,
+    ...(status === 'ERROR' ? {failureStage, failureCategory, failureCode} : {}),
     initialized:runtime.initializeObserved === true,
     committed:runtime.commitObserved === true,
     finished:runtime.finishObserved === true,

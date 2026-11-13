@@ -69,3 +69,24 @@ test('candidate-only POST explicitly exceeds shared 25-second auth timeout',asyn
    AbortSignal.timeout=originalTimeout;
  }
 });
+
+test('safe Browser Rendering diagnostics survive production QA without leaking exception text',()=>{
+ const candidate=validatePinnedCandidateList(rows())[0];
+ const summary=summarizeConformance({publishable:false,runtime:{
+   status:'ERROR',candidateSha256:candidate.sha,initializeObserved:false,
+   commitObserved:false,finishObserved:false,errors:['SCORM_BROWSER_INFRASTRUCTURE_ERROR'],
+   failureStage:'BROWSER_LAUNCH',failureCategory:'BROWSER_SERVICE',
+   failureCode:'PROTOCOL_ERROR',exception:'Authorization Bearer secret'
+ }},candidate);
+ assert.deepEqual([summary.failureStage,summary.failureCategory,summary.failureCode],
+   ['BROWSER_LAUNCH','BROWSER_SERVICE','PROTOCOL_ERROR']);
+ assert.equal(JSON.stringify(summary).includes('secret'),false);
+ const unexpected=summarizeConformance({runtime:{
+   status:'ERROR',candidateSha256:candidate.sha,errors:[],
+   failureStage:'https://internal.example/path?token=secret',
+   failureCategory:'Authorization secret',failureCode:'PRIVATE_ERROR'
+ }},candidate);
+ assert.deepEqual([unexpected.failureStage,unexpected.failureCategory,unexpected.failureCode],
+   [null,null,null]);
+ assert.equal(JSON.stringify(unexpected).includes('secret'),false);
+});
