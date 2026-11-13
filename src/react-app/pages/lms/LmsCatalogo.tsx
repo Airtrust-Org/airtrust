@@ -63,7 +63,7 @@ import {
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
-import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
+import { SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
