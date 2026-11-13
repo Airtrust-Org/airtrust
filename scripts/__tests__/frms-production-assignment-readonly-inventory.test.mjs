@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { chooseFrmsInventoryRevision } from '../production/frms-assignment-inventory-revision.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -134,4 +135,30 @@ test('production revision inventory selects model version from actual governed p
   assert.match(script, /SELECT id, revision_number, policy_version AS model_version, policy_version/);
   const canonical = read('worker-airtrust/src/lib/frms/parameter-governance.ts');
   assert.match(canonical, /modelVersion: revision\.policy_version/);
+});
+
+
+test('inventory uses runtime priority: tenant revision overrides newer global baseline', () => {
+  const generic = { id: 'generic', empresa_id: null, revision_number: 9, effective_from: '2026-09-17' };
+  const tenant = { id: 'tenant-6', empresa_id: 6, revision_number: 1, effective_from: '2026-01-01' };
+  const result = chooseFrmsInventoryRevision([generic, tenant], 6);
+  assert.equal(result.revision.id, 'tenant-6');
+  assert.equal(result.ambiguous, false);
+});
+
+test('inventory prefers newest revision within tenant scope and rejects an exact priority tie', () => {
+  const a = { id: 'tenant-old', empresa_id: 6, revision_number: 1, effective_from: '2026-01-01' };
+  const b = { id: 'tenant-new', empresa_id: 6, revision_number: 2, effective_from: '2026-01-01' };
+  assert.equal(chooseFrmsInventoryRevision([a, b], 6).revision.id, b.id);
+  assert.equal(chooseFrmsInventoryRevision([a, b], 6).ambiguous, false);
+  const tie = { ...b, id: 'duplicate-new' };
+  assert.equal(chooseFrmsInventoryRevision([a, b, tie], 6).ambiguous, true);
+});
+
+test('inventory uses generic fallback only when no tenant-specific revision exists', () => {
+  const generic = { id: 'generic', empresa_id: null, revision_number: 2, effective_from: '2026-09-17' };
+  const otherTenant = { id: 'other', empresa_id: 8, revision_number: 3, effective_from: '2026-10-01' };
+  assert.equal(chooseFrmsInventoryRevision([generic, otherTenant], 6).revision.id, 'generic');
+  assert.equal(chooseFrmsInventoryRevision([otherTenant], 6).revision, null);
+  assert.equal(chooseFrmsInventoryRevision([], 6).ambiguous, false);
 });

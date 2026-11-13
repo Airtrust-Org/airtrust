@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-12",
     "last_reconciled_against": "0581 tenant-6 synthetic LMS QA fixture purge reviewed; protected production apply pending",
-    "schema_v2_digest": "fd227a04a413cde9d8abef56a8724777b291b1a6d25ef49f568d1de841cbdeda",
+    "schema_v2_digest": "23b2490d092ffd8cc274dce7f006a3133d4dca780dd51989ef23e9f3d4181bb3",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1818,6 +1818,18 @@
       "reviewed_manifest": "lms-qa-synthetic-purge-0581.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-qa-fixtures-purge-0581.md",
       "note": "Data-only removal of exact 28 QA synthetic accounts, 409 LMS enrollments, cycles and related records after independent course-status snapshot, strict read-only preflight, immutable main SHA and D1 Time Travel. R2 PDF objects verified and removed separately after postflight; merging does not authorize ad-hoc SQL."
+    },
+    {
+      "change_file": "0582_lms_cycle_progress_reconcile.sql",
+      "change_id": "lms-cycle-progress-reconcile-0582",
+      "sha256": "f4be3a1c1c8ccc3b086e0b8a3155b1037a52adba38ef7dec8fb1ff3e8d815d92",
+      "targets": [],
+      "domain": "LMS tenant-6 data-only cycle progress normalization #1390/#2057; preserve SCORM #385 100%",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "lms-cycle-progress-reconcile-0582.json",
+      "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-progress-reconcile-0582.md",
+      "note": "Data-only CAS update of exactly two stale LMS cycles with hard pre/post snapshot checks, two audit rows, protected eight gates, D1 Time Travel and readback; no DDL and no automatic D1 writes on merge."
     }
   ]
 }

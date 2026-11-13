@@ -89,8 +89,8 @@ jobs:
       - name: Install worker dependencies
         run: npm --prefix worker-airtrust ci
 
-      - name: Verify eight official gates for sensitive Compliance 0578 data correction
-        if: ${{ inputs.change_id == 'compliance-designation-ead-contract-0578' || inputs.change_id == 'lms-qa-synthetic-purge-0581' }}
+      - name: Verify eight official gates for sensitive production data corrections
+        if: ${{ inputs.change_id == 'compliance-designation-ead-contract-0578' || inputs.change_id == 'lms-qa-synthetic-purge-0581' || inputs.change_id == 'lms-cycle-progress-reconcile-0582' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

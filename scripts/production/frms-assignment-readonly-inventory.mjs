@@ -19,6 +19,7 @@
 // rollback_plan_required: not applicable — read-only.
 
 import { classifyFrmsD1Error, validatedPhase } from './frms-d1-error-classification.mjs';
+import { chooseFrmsInventoryRevision } from './frms-assignment-inventory-revision.mjs';
 
 const PRODUCTION_DB_ID = '7c8a788e-a4c4-4d5d-8208-ff7ff55e84ae';
 const BLOCKED_STAGING_DB_ID = 'bf9963f4-eb12-439b-a830-20bbf577ac22';
@@ -129,14 +130,15 @@ async function main() {
           `ORDER BY CASE WHEN empresa_id = ${empresaId} THEN 0 ELSE 1 END, revision_number DESC, effective_from DESC`,
         'config_revisions',
       );
-      if (revisions.length >= 1) {
-        const rev = revisions[0];
+      const choice = chooseFrmsInventoryRevision(revisions, empresaId);
+      if (choice.revision) {
+        const rev = choice.revision;
         resolvedRevision = {
           id: rev.id,
           revisionNumber: rev.revision_number,
           modelVersion: rev.model_version,
           tenantScoped: rev.empresa_id != null && Number(rev.empresa_id) === empresaId,
-          ambiguous: revisions.length > 1,
+          ambiguous: choice.ambiguous,
         };
         resolvedParameterCount = scalar(
           await query(`SELECT COUNT(*) AS c FROM frms_config_parameters WHERE revision_id = '${rev.id}'`, 'config_parameter_count'),
