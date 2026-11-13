@@ -171,6 +171,49 @@ describe('PATCH /:id/status — qualification gate', () => {
     hasRoleMock.mockReturnValue(true); // default: admin
   });
 
+  it.each([
+    { progresso_pct: 99, data_inicio: '2026-11-11 08:28:06', hasScorm: true },
+    { progresso_pct: 0, data_inicio: null, hasScorm: true },
+    { progresso_pct: 0, data_inicio: '2026-11-11 08:28:06', hasScorm: false },
+  ])('bloqueia reset NAO_INICIADO com evidência ou início prévio: %j', async (scenario) => {
+    const { db, writes } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', {
+        first: () => ({ ...scormMatriculaWithQual, ...scenario }),
+      }],
+      ['SELECT 1 AS has_runtime FROM lms_progresso_scorm', {
+        first: () => scenario.hasScorm ? ({ has_runtime: 1 }) : null,
+      }],
+    ]);
+    const res = await patchStatus(makeApp(), db, 200, {
+      status: 'NAO_INICIADO',
+      observacoes: 'Reinício de percurso de homologação',
+    });
+    expect(res.status).toBe(409);
+    const payload = await res.json() as { code?: string };
+    expect(payload.code).toBe('LMS_RESET_REQUIRES_GOVERNED_RECOVERY');
+    expect(writes).toHaveLength(0);
+    expect(syncMatriculaCycleFromMatriculaMock).not.toHaveBeenCalled();
+    expect(completeLmsMatriculaMock).not.toHaveBeenCalled();
+  });
+
+  it('mantém reset de status permitido para matrícula genuinamente não iniciada e sem CMI', async () => {
+    const updated = { ...scormMatriculaWithQual, status: 'NAO_INICIADO', progresso_pct: 0 };
+    const { db } = createMockDb([
+      ['c.tipo_conteudo, c.scorm_mastery_score', {
+        first: () => ({
+          ...scormMatriculaWithQual,
+          status: 'NAO_INICIADO', progresso_pct: 0, data_inicio: null,
+        }),
+      }],
+      ['SELECT 1 AS has_runtime FROM lms_progresso_scorm', { first: () => null }],
+      ['UPDATE lms_matriculas', {}],
+      ['SELECT * FROM lms_matriculas WHERE id = ? AND empresa_id = ?', { first: () => updated }],
+    ]);
+    const res = await patchStatus(makeApp(), db, 200, { status: 'NAO_INICIADO' });
+    expect(res.status).toBe(200);
+    expect(syncMatriculaCycleFromMatriculaMock).toHaveBeenCalledTimes(1);
+  });
+
   // ── 1. Manager blocked from generating qualification ───────────────────────
 
   it('rejeita 403 quando manager tenta CONCLUIDO em matricula com qualificacao vinculada', async () => {

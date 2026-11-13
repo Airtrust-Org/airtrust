@@ -7,6 +7,7 @@
  * - Geração automática de qualificação ao concluir
  */
 import { completedCancelBlock, completedCancelBlockById } from '../services/lms-matricula-cancel-guard';
+import { canSetEnrollmentNotStarted } from '../services/lms-administrative-reset-guard';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import { mayNotifyEnrollmentForCourse } from '../services/lms-draft-enrollment-policy';
@@ -2004,7 +2005,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
 
   const existing = await db
     .prepare(
-      `SELECT m.id, m.status, m.progresso_pct, m.funcionario_id, m.qualificacao_historico_id,
+      `SELECT m.id, m.status, m.progresso_pct, m.data_inicio, m.funcionario_id, m.qualificacao_historico_id,
               c.id AS curso_id, c.titulo AS curso_titulo, c.qualificacao_tipo_id,
               c.scorm_package_r2_prefix, c.tipo_conteudo, c.scorm_mastery_score, ${EFFECTIVE_ASSESSMENT_POLICY_SQL}, c.gerar_qualificacao_ao_concluir,
               qt.nome AS qualificacao_nome, qt.codigo AS qualificacao_codigo,
@@ -2019,6 +2020,7 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
       id: number;
       status: string;
       progresso_pct: number | null;
+      data_inicio: string | null;
       funcionario_id: number;
       qualificacao_historico_id: number | null;
       curso_id: number;
@@ -2044,6 +2046,15 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
 
   const { status, observacoes } = parsed.data;
   const now = getTodayIsoSaoPaulo();
+
+  // A troca administrativa de status não pode apagar a semântica do SCORM.
+  if (status === 'NAO_INICIADO' && !(await canSetEnrollmentNotStarted(db, empresaId, matriculaId, existing))) {
+    return c.json({
+      success: false, code: 'LMS_RESET_REQUIRES_GOVERNED_RECOVERY',
+      error: 'Matrícula com início, progresso ou evidência SCORM exige recuperação governada.',
+      data: { matricula_id: matriculaId, status_atual: existing.status },
+    }, 409);
+  }
 
   // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
   if (status === 'CONCLUIDO') {
