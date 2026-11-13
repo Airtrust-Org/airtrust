@@ -7,6 +7,11 @@
  * exists in legacy internal-quiz editions and must not be silently converted.
  */
 export const DEFAULT_NEW_SCORM_COMPLETION_POLICY = 'FORMATIVE' as const;
+
+/** Formative course creation is restricted to admins; do not force manager requests to fail with 403. */
+export function defaultNewScormModeForRole(isAdmin: boolean): 'SCORED' | 'FORMATIVE' {
+  return isAdmin ? DEFAULT_NEW_SCORM_COMPLETION_POLICY : 'SCORED';
+}
 export const SCORM_COMPLETION_MODE_CHOICES = [
   { value: 'FORMATIVE', label: 'Formativo — sem avaliação final' },
   { value: 'SCORED', label: 'Com avaliação' },
