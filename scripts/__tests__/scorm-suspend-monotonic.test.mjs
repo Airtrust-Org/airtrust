@@ -90,6 +90,32 @@ test('keeps synthetic navigation fixture cursor strict without broadening F5/CFI
  assert.equal(observeMonotonicSuspend(state(),qa(2)).ok,false);
 });
 
+test('offshore RC21 v1 real on-wire checkpoint preserves course/edition/cursor',()=>{
+ const v1=(changes={})=>JSON.stringify({v:1,c:'cds-offshore-aa-formacao',
+  p:'agente-atendimento-rampa-RC21',a:1,d:'0',r:{},g:{},f:false,...changes});
+ assert.deepEqual(observeMonotonicSuspend(v1(),v1()),{
+  ok:true,reason:'BYTE_IDENTICAL'});
+ assert.deepEqual(observeMonotonicSuspend(v1(),v1({d:'0,1',r:{case005:1},
+  g:{workflow003:[0,1]}})),{ok:true,reason:'MONOTONIC_CHECKPOINT'});
+ const prior=v1({d:'0,1',r:{case005:1},g:{workflow003:[0,1]},f:true});
+ const same=v1({d:'1,0,2',r:{case005:1,case009:0},
+  g:{workflow003:[1,0,2]},f:true});
+ assert.equal(observeMonotonicSuspend(prior,same).ok,true);
+ for(const changed of [
+  {a:0},{a:2},{a:'1'},{c:'another-course'},{p:'another-edition'},
+  {d:'1'},{d:'0,1,1'},{d:['0','1']},{r:{}},{r:{case005:2}},
+  {g:{}},{g:{workflow003:[0]}},{f:false},{v:2},{f:'true'},
+  {r:{case005:1},g:{workflow003:[0,1]},x:'unexpected'},
+ ]){
+  assert.equal(observeMonotonicSuspend(prior,v1(changed)).ok,false,
+   'reject: '+JSON.stringify(changed));
+ }
+ // Legacy F5 numeric c is intentionally not interpreted as RC21 c identity.
+ const f5=JSON.stringify({v:1,p:'AIRTRUST-F5-V4D',c:1,a:1,m:1,d:[0],f:[],study:false});
+ assert.equal(observeMonotonicSuspend(v1(),f5).ok,false);
+ assert.equal(observeMonotonicSuspend(f5,v1()).ok,false);
+});
+
 test('Factory V3 MGM v4 treats a as cursor and s as scenario state',()=>{
  const v4=(overrides={})=>JSON.stringify({
   v:4,p:'MGM_RC4_SHA_BOUND',a:1,d:[0],s:{},g:[],h:{},

@@ -23,6 +23,50 @@ export function observeMonotonicSuspend(beforeRaw,afterRaw){
       return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
     return {ok:true,reason:beforeRaw===afterRaw?'BYTE_IDENTICAL':'MONOTONIC_CHECKPOINT'};
   }
+  // Offshore RC21 uses a different, tightly bound v1 checkpoint:
+  // a = numeric cursor, c = course identity, p = exact edition,
+  // d = comma-separated completed slide indices, r = case answers,
+  // g = keyed stage-visit arrays and f = terminal completion flag.
+  // Older F5 v1 uses c as a numeric cursor: do not reinterpret that form.
+  if ((before.v===1&&typeof before.c==='string') ||
+      (after.v===1&&typeof after.c==='string')) {
+    const plain=value=>value!==null&&typeof value==='object'&&
+      !Array.isArray(value)&&Object.getPrototypeOf(value)===Object.prototype;
+    const done=value=>typeof value==='string'&&
+      (value===''||/^(0|[1-9]\d*)(,(0|[1-9]\d*))*$/.test(value))&&
+      new Set(value===''?[]:value.split(',')).size===(value===''?0:value.split(',').length)&&
+      (value===''||value.split(',').every(x=>Number.isSafeInteger(Number(x))));
+    const valid=value=>plain(value)&&
+      Object.keys(value).sort().join(',')==='a,c,d,f,g,p,r,v'&&
+      value.v===1&&typeof value.c==='string'&&value.c.length>0&&
+      typeof value.p==='string'&&value.p.length>0&&
+      Number.isSafeInteger(value.a)&&value.a>=0&&
+      done(value.d)&&plain(value.r)&&plain(value.g)&&
+      Object.values(value.r).every(x=>Number.isSafeInteger(x)&&x>=0)&&
+      Object.values(value.g).every(x=>Array.isArray(x)&&
+        x.every(y=>Number.isSafeInteger(y)&&y>=0)&&
+        new Set(x).size===x.length)&&typeof value.f==='boolean';
+    if(!valid(before)||!valid(after))
+      return {ok:false,reason:'RC21_V1_SUSPEND_SCHEMA_INVALID'};
+    if(before.c!==after.c||before.p!==after.p)
+      return {ok:false,reason:'PACKAGE_IDENTITY_DRIFT'};
+    if(before.a!==after.a)
+      return {ok:false,reason:'RESUME_CURSOR_DRIFT'};
+    const previousSlides=before.d===''?[]:before.d.split(',');
+    const currentSlides=new Set(after.d===''?[]:after.d.split(','));
+    if(previousSlides.some(x=>!currentSlides.has(x)))
+      return {ok:false,reason:'COMPLETION_LOST_D'};
+    for(const [id,answer] of Object.entries(before.r)){
+      if(!Object.hasOwn(after.r,id)||after.r[id]!==answer)
+        return {ok:false,reason:'ANSWER_LOST_R'};
+    }
+    for(const [id,visits] of Object.entries(before.g)){
+      if(!Array.isArray(after.g[id])||visits.some(x=>!after.g[id].includes(x)))
+        return {ok:false,reason:'GATES_LOST_G'};
+    }
+    if(before.f&&!after.f)return {ok:false,reason:'COMPLETION_FLAG_DOWNGRADE'};
+    return {ok:true,reason:beforeRaw===afterRaw?'BYTE_IDENTICAL':'MONOTONIC_CHECKPOINT'};
+  }
   // Factory V3 MGM writes suspend schema v4. Its numeric resume cursor is
   // "a"; "s" is a keyed scenario-answer map, and "c" is a boolean completion
   // flag. Interpreting "s" as the numeric cursor falsely rejects actual D1
