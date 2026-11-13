@@ -24,12 +24,29 @@ const STATUS_OPTIONS: { value: CvRdvWorkflowStatus | ''; label: string }[] = [
   { value: 'cancelado', label: 'Cancelado' },
 ];
 
+const COORDENACAO_NEXT_ACTION: Record<CvRdvWorkflowStatus, string> = {
+  rascunho: 'Aguardando preenchimento e envio pelo piloto',
+  enviado: 'Pendente: iniciar revisão pela Coordenação',
+  em_revisao: 'Pendente: aprovar ou devolver ao piloto',
+  devolvido: 'Aguardando correção e reenvio pelo piloto',
+  reaberto: 'Pendente: reiniciar revisão pela Coordenação',
+  aprovado_coordenacao: 'Pendente: finalizar relatório pela Coordenação',
+  finalizado: 'Concluído — elegível ao XML após validação dos dados',
+  cancelado: 'Cancelado — fora da exportação',
+};
+
+const COORDENACAO_ACTIONABLE = new Set<CvRdvWorkflowStatus>([
+  'enviado', 'em_revisao', 'reaberto', 'aprovado_coordenacao',
+]);
+
 export default function ControleVoosCoordenacaoFila() {
   const [status, setStatus] = useState<CvRdvWorkflowStatus | ''>('');
+  const [somentePendentes, setSomentePendentes] = useState(true);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [xmlDate, setXmlDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [xmlLoading, setXmlLoading] = useState(false);
+  const [xmlErrorMessage, setXmlErrorMessage] = useState('');
 
   const {
     data: fila = [],
@@ -43,6 +60,14 @@ export default function ControleVoosCoordenacaoFila() {
     data_inicio: dataInicio || undefined,
     data_fim: dataFim || undefined,
   });
+
+  const pendentesCoordenacao = fila.filter((item) => COORDENACAO_ACTIONABLE.has(item.workflow_status)).length;
+  const filaVisivel = fila.filter((item) => !somentePendentes || COORDENACAO_ACTIONABLE.has(item.workflow_status));
+  const pendenciasPorEtapa = {
+    revisar: fila.filter((item) => item.workflow_status === 'enviado' || item.workflow_status === 'reaberto').length,
+    decidir: fila.filter((item) => item.workflow_status === 'em_revisao').length,
+    finalizar: fila.filter((item) => item.workflow_status === 'aprovado_coordenacao').length,
+  };
 
   return (
     <AppLayout>
@@ -64,6 +89,25 @@ export default function ControleVoosCoordenacaoFila() {
             </Link>
           </div>
 
+          <section aria-label="Trabalho pendente da Coordenação" className="mb-4 rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Sua fila de trabalho: {pendentesCoordenacao} RDV(s) exigem ação</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Confira, aprove ou devolva, depois finalize. Enviar pelo piloto não encerra o relatório.</p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                <input type="checkbox" checked={somentePendentes} onChange={(event) => setSomentePendentes(event.target.checked)} data-testid="coordenacao-somente-pendentes" />
+                Mostrar somente o que depende da Coordenação
+              </label>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20"><p className="text-2xl font-bold text-blue-900 dark:text-blue-200">{pendenciasPorEtapa.revisar}</p><p className="text-sm font-medium">Iniciar revisão</p></div>
+              <div className="rounded-lg bg-amber-50 p-3 dark:bg-amber-950/20"><p className="text-2xl font-bold text-amber-900 dark:text-amber-200">{pendenciasPorEtapa.decidir}</p><p className="text-sm font-medium">Aprovar ou devolver</p></div>
+              <div className="rounded-lg bg-teal-50 p-3 dark:bg-teal-950/20"><p className="text-2xl font-bold text-teal-900 dark:text-teal-200">{pendenciasPorEtapa.finalizar}</p><p className="text-sm font-medium">Finalizar após aprovação</p></div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Contagens dos RDVs carregados conforme os filtros de data e status abaixo, não do total geral.</p>
+          </section>
+
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
             <div className="mr-auto">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Exportação diária Petrobras</p>
@@ -71,12 +115,27 @@ export default function ControleVoosCoordenacaoFila() {
             </div>
             <label className="space-y-1 text-xs">
               <span className="block font-medium text-slate-500 dark:text-slate-400">Data operacional</span>
-              <input type="date" value={xmlDate} onChange={(event) => setXmlDate(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+              <input type="date" aria-label="Data operacional para exportação XML" disabled={xmlLoading} value={xmlDate} onChange={(event) => { setXmlDate(event.target.value); setXmlErrorMessage(''); }} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
             </label>
-            <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { toast.error(xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
+            <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); setXmlErrorMessage(''); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { const message = xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'; setXmlErrorMessage(message); if (!message.includes('Nenhum RDV finalizado')) toast.error(message); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
               <FileDown className="h-4 w-4" /> {xmlLoading ? 'Gerando…' : 'Gerar XML do dia'}
             </button>
           </div>
+
+          {xmlErrorMessage && (
+            <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+              <p className="font-semibold">Não foi possível gerar o XML de {formatDate(xmlDate)}.</p>
+              <p className="mt-1">{xmlErrorMessage}</p>
+              {xmlErrorMessage.includes('Nenhum RDV finalizado') && (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <p>Somente RDVs no status Finalizado e com a mesma data operacional entram no XML. Enviado à Coordenação e Aprovado ainda não são Finalizado.</p>
+                  <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { setStatus(''); setSomentePendentes(true); setDataInicio(xmlDate); setDataFim(xmlDate); }}>
+                    Ver pendências desta data
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <label className="space-y-1 text-xs">
@@ -141,16 +200,16 @@ export default function ControleVoosCoordenacaoFila() {
             </div>
           )}
 
-          {!isLoading && !error && fila.length === 0 && (
+          {!isLoading && !error && filaVisivel.length === 0 && (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center dark:border-slate-700 dark:bg-slate-900">
               <ClipboardList className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Nenhum RDV encontrado para os filtros selecionados. Voos ainda sem RDV podem ser consultados em “Todos os voos”.
+                {somentePendentes && fila.length > 0 ? 'Nenhum RDV exige ação da Coordenação com estes filtros. Desmarque “Mostrar somente o que depende da Coordenação” para ver os demais.' : 'Nenhum RDV encontrado para os filtros selecionados. Voos ainda sem RDV podem ser consultados em “Todos os voos”.'}
               </p>
             </div>
           )}
 
-          {!isLoading && !error && fila.length > 0 && (
+          {!isLoading && !error && filaVisivel.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -172,6 +231,9 @@ export default function ControleVoosCoordenacaoFila() {
                         Status RDV
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
+                        Próxima ação / responsável
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
                         Status do voo
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-slate-600 dark:text-slate-300">
@@ -187,7 +249,7 @@ export default function ControleVoosCoordenacaoFila() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {fila.map((item) => (
+                    {filaVisivel.map((item) => (
                       <tr
                         key={item.id}
                         className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
@@ -207,6 +269,11 @@ export default function ControleVoosCoordenacaoFila() {
                         </td>
                         <td className="px-4 py-3">
                           <ControleVoosRdvWorkflowBadge status={item.workflow_status} />
+                        </td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          <span className={COORDENACAO_ACTIONABLE.has(item.workflow_status) ? 'text-amber-700 dark:text-amber-300' : ''}>
+                            {COORDENACAO_NEXT_ACTION[item.workflow_status]}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <ControleVoosStatusBadge
@@ -230,9 +297,9 @@ export default function ControleVoosCoordenacaoFila() {
                         <td className="px-4 py-3">
                           <Link
                             to={`/controle-voos/rdv/${item.voo_id}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400"
+                            className={COORDENACAO_ACTIONABLE.has(item.workflow_status) ? 'inline-flex min-h-10 items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800' : 'inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline dark:text-purple-400'}
                           >
-                            <FileSearch className="h-3.5 w-3.5" /> {item.workflow_status === 'rascunho' ? 'Visualizar' : 'Revisar'}
+                            <FileSearch className="h-3.5 w-3.5" /> {item.workflow_status === 'enviado' || item.workflow_status === 'reaberto' ? 'Iniciar revisão' : item.workflow_status === 'em_revisao' ? 'Decidir' : item.workflow_status === 'aprovado_coordenacao' ? 'Finalizar RDV' : 'Visualizar'}
                           </Link>
                         </td>
                       </tr>

@@ -8,6 +8,7 @@ import ControleVoosMeusVoos from '../ControleVoosMeusVoos';
 import ControleVoosCoordenacaoFila from '../ControleVoosCoordenacaoFila';
 import ControleVoosRdvWorkflowPanel from '../components/ControleVoosRdvWorkflowPanel';
 import { apiClient } from '@/react-app/services/apiClient';
+import { fetchWithAuth } from '@/react-app/config/api';
 import type { CvRdv } from '@/react-app/hooks/useControleVoos';
 
 vi.mock('@/react-app/components/AppLayout', () => ({
@@ -26,6 +27,11 @@ vi.mock('../components/ControleVoosPageHeader', () => ({
 }));
 vi.mock('../components/ControleVoosNovoVooDialog', () => ({
   default: () => null,
+}));
+
+vi.mock('@/react-app/config/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/react-app/config/api')>()),
+  fetchWithAuth: vi.fn(),
 }));
 
 vi.mock('@/react-app/services/apiClient', () => ({
@@ -167,7 +173,8 @@ describe('ControleVoosCoordenacaoFila', () => {
     expect(screen.getByText('Enviado à Coordenação')).toBeInTheDocument();
     expect(screen.getByText('Voo realizado')).toBeInTheDocument();
     expect(screen.getByText('Macaé, RJ (SBME) → Unidade Teste (PAGS · 9PGS)')).toBeInTheDocument();
-    expect(screen.getByText('Revisar')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Iniciar revisão' })).toHaveAttribute('href', '/controle-voos/rdv/601');
+    expect(screen.getByText(/Sua fila de trabalho: 1 RDV/)).toBeInTheDocument();
   });
 
   it('exibe rascunho sincronizado para conferência sem exigir envio do piloto', async () => {
@@ -201,12 +208,54 @@ describe('ControleVoosCoordenacaoFila', () => {
 
     renderWithClient(<ControleVoosCoordenacaoFila />);
 
-    await waitFor(() => expect(screen.getByText('RDV-RASCUNHO')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Sua fila de trabalho: 0 RDV/)).toBeInTheDocument());
+    expect(screen.queryByText('RDV-RASCUNHO')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('coordenacao-somente-pendentes'));
+    expect(screen.getByText('RDV-RASCUNHO')).toBeInTheDocument();
     expect(screen.getByTestId('coordenacao-status-filter')).toHaveValue('');
     expect(getMock).toHaveBeenCalledWith(expect.stringMatching(new RegExp('/rdv/fila$')));
     expect(screen.getByText('Última atualização no servidor')).toBeInTheDocument();
     expect(screen.getByText('Ainda não enviado')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Visualizar' })).toHaveAttribute('href', '/controle-voos/rdv/602');
+  });
+
+  it('impede mudar a data de exportação enquanto a requisição está pendente', async () => {
+    getMock.mockImplementation(async () => apiOk([]));
+    let failExport: ((response: Response) => void) | undefined;
+    vi.mocked(fetchWithAuth).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => { failExport = resolve; }),
+    );
+    renderWithClient(<ControleVoosCoordenacaoFila />);
+
+    const dateInput = screen.getByLabelText('Data operacional para exportação XML');
+    fireEvent.change(dateInput, { target: { value: '2026-10-24' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar XML do dia' }));
+
+    await waitFor(() => expect(dateInput).toBeDisabled());
+    expect(dateInput).toHaveValue('2026-10-24');
+
+    failExport?.({
+      ok: false,
+      json: async () => ({ error: 'Nenhum RDV finalizado encontrado para a data selecionada' }),
+    } as Response);
+    await waitFor(() => expect(dateInput).not.toBeDisabled());
+    expect(screen.getByText('Não foi possível gerar o XML de 24/10/2026.')).toBeInTheDocument();
+  });
+
+  it('coordenação identifica RDV aprovado ainda pendente de finalização', async () => {
+    getMock.mockImplementation(async (url: string) => {
+      if (url.includes('/rdv/fila')) return apiOk([{
+        id: 3, voo_id: 603, numero: 'RDV-APROVADO', data_voo: '2026-10-27',
+        workflow_status: 'aprovado_coordenacao', status: 'preenchimento_finalizado',
+        prefixo: 'ATX-1003', modelo_aeronave: 'AW139',
+        flight_status: 'concluido_operacionalmente', rota_pontos: [],
+      }]);
+      throw new Error(`unexpected url ${url}`);
+    });
+    renderWithClient(<ControleVoosCoordenacaoFila />);
+    await waitFor(() => expect(screen.getByText('RDV-APROVADO')).toBeInTheDocument());
+    expect(screen.getByText('Pendente: finalizar relatório pela Coordenação')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Finalizar RDV' })).toHaveAttribute('href', '/controle-voos/rdv/603');
   });
 
   it('mostra estado vazio quando nenhum RDV corresponde aos filtros', async () => {
@@ -302,7 +351,7 @@ describe('ControleVoosRdvWorkflowPanel', () => {
       <ControleVoosRdvWorkflowPanel vooId="601" rdv={buildRdv({ workflow_status: 'em_revisao' })} isCoordenacao={true} />,
     );
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Aprovar' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aprovar dados conferidos' })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Devolver ao piloto' }));
 
     const confirmar = await screen.findByRole('button', { name: 'Confirmar' });
