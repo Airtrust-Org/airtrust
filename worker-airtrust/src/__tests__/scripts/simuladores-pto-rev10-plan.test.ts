@@ -18,7 +18,9 @@ const FUNCTIONAL_SESSION_CODES = [
 
 function makePlanPayload(v18 = false) {
   const aircraftModels = Array.from({ length: v18 ? 82 : 66 }, (_, modelIndex) => ({
-    codigo: `MODEL-${String(modelIndex + 1).padStart(2, '0')}`,
+    codigo: v18
+      ? `${modelIndex < 37 ? 'A139' : 'S76'}-I-${String(modelIndex + 1).padStart(2, '0')}`
+      : `MODEL-${String(modelIndex + 1).padStart(2, '0')}`,
     titulo: `Modelo ${modelIndex + 1}`,
     programa: 'Inicial',
     natureza: 'Instrução',
@@ -43,6 +45,7 @@ function makePlanPayload(v18 = false) {
   const aircraftItems = aircraftModels.flatMap((model) =>
     Array.from({ length: 18 }, (_, itemIndex) => ({
       modelo: model.codigo,
+      ...(v18 ? { aeronave: model.aeronave } : {}),
       ordem: itemIndex + 1,
       codigo: `MAN-${String(itemIndex + 1).padStart(2, '0')}`,
       nome: `Manobra ${itemIndex + 1}`,
@@ -60,6 +63,7 @@ function makePlanPayload(v18 = false) {
       const catalog = functionalCatalog[(modelIndex * 18 + itemIndex) % functionalCatalog.length];
       return {
         modelo: model.codigo,
+        ...(v18 ? { aeronave: null } : {}),
         ordem: itemIndex + 1,
         codigo: catalog.codigo,
         nome: catalog.nome,
