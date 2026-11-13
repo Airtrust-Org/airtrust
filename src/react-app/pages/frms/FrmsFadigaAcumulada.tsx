@@ -227,23 +227,33 @@ function MonthPicker({ value, onChange }: { value: string; onChange: (v: string)
 export default function FrmsFadigaAcumulada() {
   const navigate = useNavigate();
   const [mes, setMes] = useState(getMesAtual);
-  const [selectedTrip, setSelectedTrip] = useState<string | null>(null);
   const [expandedTrip, setExpandedTrip] = useState<string | null>(null);
 
-  const { data: frotaRaw, loading } = useApi<FrotaResponse>(
+  // These pages consume `success/data`, not the inner payload returned by
+  // useApi's default unwrapping. Without this explicit contract a valid 200
+  // response falsely looks like an empty monthly roster.
+  const { data: frotaRaw, loading, error: frotaError, refetch: refetchFrota } = useApi<FrotaResponse>(
     `/api/frms/fadiga-acumulada/frota?mes=${mes}`,
+    { preserveEnvelope: true, bypassGetCache: true },
   );
-  const frota = frotaRaw?.data?.frota || [];
-  const resumo = frotaRaw?.data?.resumo;
-  const thresholds = frotaRaw?.data?.thresholds ?? null;
-  const limites = frotaRaw?.data?.limites ?? null;
+  const validFrota = frotaRaw?.success === true &&
+    Array.isArray(frotaRaw.data?.frota) && frotaRaw.data?.resumo != null &&
+    frotaRaw.data?.thresholds != null && frotaRaw.data?.limites != null;
+  const useFleetData = !loading && !frotaError && validFrota;
+  const frota = useMemo(() => useFleetData ? (frotaRaw?.data?.frota ?? []) : [], [useFleetData, frotaRaw]);
+  const resumo = useFleetData ? frotaRaw?.data?.resumo : null;
+  const thresholds = useFleetData ? (frotaRaw?.data?.thresholds ?? null) : null;
+  const limites = useFleetData ? (frotaRaw?.data?.limites ?? null) : null;
   const legenda = thresholds ? buildFadigaAcumuladaLegenda(thresholds) : [];
 
-  const { data: individualRaw } = useApi<IndividualResponse>(
+  const { data: individualRaw, loading: individualLoading, error: individualError, refetch: refetchIndividual } = useApi<IndividualResponse>(
     expandedTrip ? `/api/frms/fadiga-acumulada?mes=${mes}&tripulante_id=${expandedTrip}` : null,
+    { preserveEnvelope: true, bypassGetCache: true },
   );
-  const evolucao = individualRaw?.data?.evolucao || [];
-  const sourceReconciliation = individualRaw?.data?.source_reconciliation;
+  const validIndividual = individualRaw?.success === true && Array.isArray(individualRaw.data?.evolucao);
+  const useIndividualData = !individualLoading && !individualError && validIndividual;
+  const evolucao = useIndividualData ? (individualRaw?.data?.evolucao ?? []) : [];
+  const sourceReconciliation = useIndividualData ? individualRaw?.data?.source_reconciliation : null;
 
   const sorted = useMemo(() => {
     return [...frota].sort((a, b) => {
@@ -322,6 +332,12 @@ export default function FrmsFadigaAcumulada() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+          </div>
+        ) : frotaError || !validFrota ? (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+            <p className="font-semibold">Não foi possível confirmar o acumulado legal.</p>
+            <p className="mt-2">Dados indisponíveis ou resposta inválida não comprovam ausência de jornadas, conformidade ou aptidão.</p>
+            <button type="button" onClick={() => void refetchFrota()} className="mt-3 rounded-lg border border-amber-500 px-3 py-2 font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/50">Tentar novamente</button>
           </div>
         ) : sorted.length === 0 ? (
           <div className="text-center py-20 text-slate-400">
@@ -429,6 +445,15 @@ export default function FrmsFadigaAcumulada() {
                 {/* Expanded detail: source reconciliation + daily evolution */}
                 {expandedTrip === t.tripulante_id && (
                   <div className="mt-1 ml-4 mr-4 space-y-3">
+                    {individualLoading ? (
+                      <p className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500">Carregando evolução e reconciliação de fontes...</p>
+                    ) : individualError || !validIndividual ? (
+                      <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                        <p>Não foi possível confirmar a evolução operacional deste tripulante. Não interpretar como ausência de jornada.</p>
+                        <button type="button" className="mt-2 rounded-lg border border-amber-500 px-3 py-2 font-semibold" onClick={() => void refetchIndividual()}>Tentar novamente</button>
+                      </div>
+                    ) : (
+                    <>
                     {sourceReconciliation ? (
                       <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -560,6 +585,8 @@ export default function FrmsFadigaAcumulada() {
                       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                         Não há evolução operacional elegível neste período. Consulte a reconciliação de fontes acima; a existência de FIRA, isoladamente, não cria uma jornada operacional para o acumulado.
                       </div>
+                    )}
+                    </>
                     )}
                   </div>
                 )}

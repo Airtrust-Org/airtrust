@@ -99,6 +99,28 @@ describe('FRMS Data Transparency - historico', () => {
     expect(screen.queryByText(/^apto$/i)).not.toBeInTheDocument();
   });
 
+  it('não transforma falha HTTP ou dado antigo em histórico vazio confirmado', () => {
+    const retry = vi.fn();
+    useFrmsFadigaHistoricoMock.mockReturnValue({
+      data: [{ id: 'cached', funcionario_id: 1, funcionario_nome: 'QA Entrada Antiga' }],
+      loading: false, error: 'HTTP 503', refetch: retry,
+    });
+    render(<MemoryRouter><FrmsFadigaHistorico /></MemoryRouter>);
+    expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível consultar o histórico de check-ins.');
+    expect(screen.queryByText('QA Entrada Antiga')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhum registro encontrado.')).not.toBeInTheDocument();
+    expect(screen.getByText('Registros (—)')).toBeInTheDocument();
+    screen.getByRole('button', { name: 'Tentar novamente' }).click();
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it('interpreta resposta de histórico malformada como indisponibilidade', () => {
+    useFrmsFadigaHistoricoMock.mockReturnValue({ data: { status: 'unknown' }, loading: false, error: null, refetch: vi.fn() });
+    render(<MemoryRouter><FrmsFadigaHistorico /></MemoryRouter>);
+    expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível consultar o histórico de check-ins.');
+    expect(screen.queryByText('Nenhum registro encontrado.')).not.toBeInTheDocument();
+  });
+
   it('oculta VERDE e APTO históricos incompatíveis com KSS 9 informado', () => {
     useFrmsFadigaHistoricoMock.mockReturnValue({
       data: [{
