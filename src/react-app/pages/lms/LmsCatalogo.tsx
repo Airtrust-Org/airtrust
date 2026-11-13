@@ -854,7 +854,7 @@ function CourseDrawer({
     const errs = validateForm(form);
     if (form.tipo_conteudo === 'scorm' &&
         !canUseLegacyEvaluatedPolicy(form.scorm_assessment_policy, initial?.scorm_assessment_policy)) {
-      errs.scorm_assessment_policy = 'A prova final AirTrust ainda não está habilitada para novas edições. Mantenha o modo formativo e ative a avaliação somente depois da prova publicada e homologada.';
+      errs.scorm_assessment_policy = 'A modalidade de uma edição SCORM publicada não pode ser trocada somente no cadastro. Ative uma nova edição compatível e homologada; cursos com avaliação obrigatória não podem perder essa exigência sem nova edição.';
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
