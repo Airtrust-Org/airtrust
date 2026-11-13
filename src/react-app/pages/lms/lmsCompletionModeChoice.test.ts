@@ -3,11 +3,16 @@ import {
   DEFAULT_NEW_SCORM_COMPLETION_POLICY,
   SCORM_COMPLETION_MODE_CHOICES,
   canUseLegacyEvaluatedPolicy,
+  defaultNewScormModeForRole,
 } from './lmsCompletionModeChoice';
 
 describe('modalidade de conclusão para novas edições SCORM', () => {
   it('inicia novos cursos como formativos, não com avaliação obrigatória', () => {
     expect(DEFAULT_NEW_SCORM_COMPLETION_POLICY).toBe('FORMATIVE');
+  });
+  it('alinha seleção de novo curso à permissão real no backend', () => {
+    expect(defaultNewScormModeForRole(true)).toBe('FORMATIVE');
+    expect(defaultNewScormModeForRole(false)).toBe('SCORED');
   });
   it('oferece somente as duas modalidades decididas pelo proprietário', () => {
     expect(SCORM_COMPLETION_MODE_CHOICES).toEqual([
