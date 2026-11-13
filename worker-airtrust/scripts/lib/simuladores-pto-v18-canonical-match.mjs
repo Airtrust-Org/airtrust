@@ -13,6 +13,8 @@ export const PTO_V18_CANONICAL_SESSIONS_SHA =
   '0d3fa1f4ee9bcd812b99627bd6251b6729ad5ae3d34cd53fae953dc21d560fec';
 export const PTO_V18_CANONICAL_NOTECHS_SHA =
   '1f4196556c5b3aff77f163cd1a6c35ce3d7eedf6319698b3e58a19e72132e78b';
+export const PTO_V18_CANONICAL_FUNCTIONAL_SHA =
+  '42aa89a4aa582bdcbe25ea47afb02503c154a6e5c2ec1e7c6371c05c0ca7d54c';
 
 function approvedJson(name, expectedSha) {
   const path = new URL('../../../scripts/operations/pto-v18-canonical/' + name, import.meta.url);
@@ -25,6 +27,7 @@ function approvedJson(name, expectedSha) {
 
 const approvedSessions = approvedJson('sessoes_pto_v18.json', PTO_V18_CANONICAL_SESSIONS_SHA);
 const approvedNotechs = approvedJson('notechs_pto_v18.json', PTO_V18_CANONICAL_NOTECHS_SHA);
+const approvedFunctional = approvedJson('funcionais_pto_v18.json', PTO_V18_CANONICAL_FUNCTIONAL_SHA);
 const canonicalCodes = new Set(approvedSessions.map((s) => s.codigo));
 
 export function assertPtoV18CanonicalPlan(plan) {
@@ -83,11 +86,33 @@ export function assertPtoV18CanonicalPlan(plan) {
   }
 
   const functional = models.filter((model) => !canonicalCodes.has(model.codigo));
-  if (functional.length !== 6 || functional.some((m) =>
-    !['INSTRUTOR', 'EXAMINADOR'].includes(m.tipo_estruturado) ||
-    m.aeronave !== null ||
-    (bySession.get(m.codigo) || []).length !== 18)) {
-    throw new Error('PTO V18: seis sessões funcionais não preservadas');
+  const allowedFunctional = new Set(approvedFunctional.map((session) => session.codigo));
+  if (functional.length !== 6 || functional.some((m) => !allowedFunctional.has(m.codigo))) {
+    throw new Error('PTO V18: seis sessões funcionais canônicas obrigatórias');
+  }
+  for (const session of approvedFunctional) {
+    const model = byModel.get(session.codigo);
+    const expectedType = session.codigo.startsWith('INST-') ? 'INSTRUTOR' : 'EXAMINADOR';
+    if (!model || model.titulo !== session.titulo ||
+        model.carga_sessao !== session.carga || model.aeronave !== null ||
+        model.tipo_estruturado !== expectedType) {
+      throw new Error('PTO V18: título/carga/função do modelo funcional difere do PTO: ' + session.codigo);
+    }
+    const rows = (bySession.get(session.codigo) || []).slice()
+      .sort((a, b) => a.ordem - b.ordem);
+    if (rows.length !== 18) {
+      throw new Error('PTO V18: exige 18 atividades funcionais em ' + session.codigo);
+    }
+    for (let i = 0; i < 18; i += 1) {
+      const expected = session.itens[i];
+      const row = rows[i];
+      if (row.ordem !== expected.ordem || row.codigo !== expected.codigo ||
+          row.nome !== expected.nome || row.aeronave !== null ||
+          row.execucao_pf !== 'AB') {
+        throw new Error('PTO V18: divergência funcional código/nome/ordem na sessão ' +
+          session.codigo + ', posição ' + (i + 1));
+      }
+    }
   }
   if (plan.notechs?.length !== 15) {
     throw new Error('PTO V18: 15 competências NOTECHS obrigatórias');

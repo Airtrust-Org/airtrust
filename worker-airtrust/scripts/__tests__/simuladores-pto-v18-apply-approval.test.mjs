@@ -12,9 +12,9 @@ const sourceNotechs = JSON.parse(readFileSync(new URL(
   '../../../scripts/operations/pto-v18-canonical/notechs_pto_v18.json', import.meta.url,
 ), 'utf8'));
 
-const functionalCodes = [
-  'INST-E01', 'INST-E02', 'EXA-01/04', 'EXA-02/04', 'EXA-03/04', 'EXA-04/04',
-];
+const sourceFunctional = JSON.parse(readFileSync(new URL(
+  '../../../scripts/operations/pto-v18-canonical/funcionais_pto_v18.json', import.meta.url,
+), 'utf8'));
 const plan = Object.freeze({
   schema_version: 2,
   approved_source_sha256: source,
@@ -26,9 +26,10 @@ const plan = Object.freeze({
       aeronave: s.aeronave === 'S76' ? 'SK76' : 'AW139',
       tipo_estruturado: 'INICIAL',
     })),
-    ...functionalCodes.map((codigo) => ({
-      codigo, aeronave: null,
-      tipo_estruturado: codigo.startsWith('INST') ? 'INSTRUTOR' : 'EXAMINADOR',
+    ...sourceFunctional.map((session) => ({
+      codigo: session.codigo, titulo: session.titulo, carga_sessao: session.carga,
+      aeronave: null,
+      tipo_estruturado: session.codigo.startsWith('INST') ? 'INSTRUTOR' : 'EXAMINADOR',
     })),
   ],
   items: [
@@ -40,10 +41,9 @@ const plan = Object.freeze({
       nome: item.nome,
       execucao_pf: item.ordem <= 9 ? 'A' : 'B',
     }))),
-    ...functionalCodes.flatMap((codigo) => Array.from({ length: 18 }, (_, index) => ({
-      modelo: codigo, aeronave: null, ordem: index + 1,
-      codigo: 'FUNC-' + (index + 1), nome: 'Exercício funcional',
-      execucao_pf: 'AB',
+    ...sourceFunctional.flatMap((session) => session.itens.map((item) => ({
+      modelo: session.codigo, aeronave: null, ordem: item.ordem,
+      codigo: item.codigo, nome: item.nome, execucao_pf: 'AB',
     }))),
   ],
   notechs: sourceNotechs.map((row, index) => ({
@@ -114,6 +114,30 @@ test('canonical V18 gate rejects swapped model name, duration and aircraft', () 
     const models = plan.models.map((model, i) => i === 0 ? { ...model, ...delta } : model);
     assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, models }),
       /modelo difere da fonte aprovada/);
+  }
+});
+
+test('canonical V18 gate rejects changed functional title, load or instruction role', () => {
+  for (const delta of [
+    { titulo: 'Título antigo' }, { carga_sessao: '3 horas' },
+    { tipo_estruturado: 'EXAMINADOR' }, { aeronave: 'AW139' },
+  ]) {
+    const models = plan.models.map((model, index) =>
+      index === 82 ? { ...model, ...delta } : model);
+    assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, models }),
+      /modelo funcional difere do PTO/);
+  }
+});
+
+test('canonical V18 gate rejects altered functional procedure, code, order or aircraft', () => {
+  for (const delta of [
+    { codigo: 'FUNC-ALTERADO' }, { nome: 'Atividade inventada' },
+    { ordem: 19 }, { aeronave: 'SK76' }, { execucao_pf: 'A' },
+  ]) {
+    const items = plan.items.map((item, index) =>
+      index === 1476 ? { ...item, ...delta } : item);
+    assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, items }),
+      /divergência funcional código\/nome\/ordem/);
   }
 });
 
