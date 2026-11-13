@@ -27,7 +27,7 @@ export function assessExecutedTechnicalItems(
     const codigo = String(item.codigo || '').trim();
     const raw = String(item.resultado ?? '').trim();
     // Duplicated or unidentified executed items are ambiguous, hence fail closed.
-    if (!codigo || seen.has(codigo) || !/^(?:10|[1-9])(?:\\.0+)?$/.test(raw)) {
+    if (!codigo || seen.has(codigo) || !/^(?:10|[1-9])(?:\.0+)?$/.test(raw)) {
       invalid.push(codigo || '(sem código)');
       continue;
     }
