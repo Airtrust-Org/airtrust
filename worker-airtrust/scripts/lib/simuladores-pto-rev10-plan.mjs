@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { assertPtoV18ModelIsolation } from './simuladores-pto-v18-plan-isolation.mjs';
 
 export const PTO_REV10_PLAN_SCHEMA_VERSION = 1; // legado, somente compatibilidade histórica
 export const PTO_REV10_V18_PLAN_SCHEMA_VERSION = 2;
@@ -151,6 +152,10 @@ export function assertPtoRev10Plan(plan) {
     if (!functionalItemCodes.has(code)) {
       throw new Error(`código funcional sem vínculo de sessão: ${code}`);
     }
+  }
+
+  if (plan.schema_version === PTO_REV10_V18_PLAN_SCHEMA_VERSION) {
+    assertPtoV18ModelIsolation(plan);
   }
 
   const requestedCodes = new Set(plan.items.map((item) => item.codigo));
