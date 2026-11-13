@@ -10,7 +10,6 @@ declare const interactions: unknown;
 declare const moduleQuiz: unknown;
 declare const MODULE_QUIZZES: unknown;
 declare const completionReady: unknown;
-declare const Scorm: unknown;
 
 /**
  * Browser-only certification driver for supported AirTrust Factory M8 SCOs.
@@ -430,9 +429,13 @@ function driveFactoryCourse() {
       : null;
     const state = () => {
       if (!Array.isArray(modularSlides) || modularSlides.length === 0 || modularSlides.length > 1000 ||
-          typeof current !== 'number' || !(completed instanceof Set) ||
-          !(scenarioDone instanceof Set) || !(interactions instanceof Map) ||
-          !moduleQuiz || typeof moduleQuiz !== 'object' || typeof completionReady !== 'function') return null;
+          typeof current !== 'number' ||
+          typeof completed === 'undefined' || !(completed instanceof Set) ||
+          typeof scenarioDone === 'undefined' || !(scenarioDone instanceof Set) ||
+          typeof interactions === 'undefined' || !(interactions instanceof Map) ||
+          typeof moduleQuiz === 'undefined' || !moduleQuiz ||
+          typeof moduleQuiz !== 'object' ||
+          typeof completionReady !== 'function') return null;
       return {
         slides: modularSlides,
         current: current as number,
