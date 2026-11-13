@@ -364,6 +364,7 @@ async function loadAlertableEnrollments(
   empresaId: number,
   ids: number[],
   access: Awaited<ReturnType<typeof getEmployeeSectorAccess>>,
+  eadOnly = false,
 ) {
   const placeholders = ids.map(() => '?').join(',');
   const scope = employeeSectorSql(access, 'f');
@@ -373,10 +374,13 @@ async function loadAlertableEnrollments(
        FROM lms_matriculas m
        JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id AND c.deleted_at IS NULL
        JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=m.empresa_id
+       LEFT JOIN qualificacoes_tipos qt ON qt.id=c.qualificacao_tipo_id AND qt.empresa_id=c.empresa_id AND qt.deleted_at IS NULL
+       LEFT JOIN qualificacoes_formatos qf ON qf.id=COALESCE(c.formato_id,qt.formato_id) AND qf.deleted_at IS NULL
       WHERE m.empresa_id=? AND m.id IN (${placeholders}) AND m.deleted_at IS NULL
         AND UPPER(COALESCE(m.status,'')) IN ('NAO_INICIADO','EM_ANDAMENTO')
         AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
         AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
+        AND ${eadOnly ? "(UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD' OR UPPER(TRIM(COALESCE(c.categoria, qt.categoria, ''))) IN ('EAD','TREINAMENTO EAD'))" : '1=1'}
         AND ${scope.clause}`,
   ).bind(empresaId, ...ids, ...scope.bindings).all<AlertableEnrollment>();
 }
@@ -402,7 +406,7 @@ app.post('/lote/preview', requirePermission('lms', 'criar', 'admin', 'manager'),
   const empresaId = getEmpresaIdSafe(c);
   const access = await getEmployeeSectorAccess(c, empresaId);
   const [enrollments, history] = await Promise.all([
-    loadAlertableEnrollments(c.env.DB, empresaId, ids, access),
+    loadAlertableEnrollments(c.env.DB, empresaId, ids, access, true),
     readSameDayTrainingAlerts(c.env.DB, empresaId, access),
   ]);
   const rows = enrollments.results || [];
@@ -525,7 +529,7 @@ app.post('/lote', requirePermission('lms', 'criar', 'admin', 'manager'), async (
   }
 
   const access = await getEmployeeSectorAccess(c, empresaId);
-  const { results } = await loadAlertableEnrollments(db, empresaId, ids, access);
+  const { results } = await loadAlertableEnrollments(db, empresaId, ids, access, mode === 'alerta');
 
   const encontrados = new Set((results || []).map((row) => Number(row.id)));
   const summary = {
