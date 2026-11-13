@@ -17,7 +17,7 @@ const template = {
 };
 
 test('SQL de aceitação usa CHECK e segue dentro do BEGIN/COMMIT', () => {
-  const sql = buildPtoRev10AtomicPostconditions(template);
+  const sql = buildPtoRev10AtomicPostconditions({ plan: template, empresaId: tenant });
   assert.match(sql, /CREATE TEMP TABLE __pto_rev10_atomic_check/);
   assert.match(sql, /CHECK\(ok=1\)/);
   assert.match(sql, /COUNT\(DISTINCT codigo_canonico\)/);
@@ -27,17 +27,17 @@ test('SQL de aceitação usa CHECK e segue dentro do BEGIN/COMMIT', () => {
 
 test('rejeita tenant errado, modelo duplicado e ID legado inválido', () => {
   assert.throws(
-    () => buildPtoRev10AtomicPostconditions({ ...template, empresa_id: 7 }),
+    () => buildPtoRev10AtomicPostconditions({ plan: { ...template, empresa_id: 7 }, empresaId: tenant }),
     /parâmetros/,
   );
   assert.throws(
     () => buildPtoRev10AtomicPostconditions({
-      ...template, models: [template.models[0], template.models[0]],
+      plan: { ...template, models: [template.models[0], template.models[0]] }, empresaId: tenant,
     }), /duplicados/,
   );
   assert.throws(
     () => buildPtoRev10AtomicPostconditions({
-      ...template, superseded_models: [{ id: '1 OR 1=1' }],
+      plan: { ...template, superseded_models: [{ id: '1 OR 1=1' }] }, empresaId: tenant,
     }), /IDs substituídos inválidos/,
   );
 });
@@ -65,7 +65,7 @@ function runTransaction({ linkCount = 18, crossTenant = false }) {
         `INSERT INTO modelos_sessao_manobras VALUES(${i + 1},10,NULL);`).join('\n')}
       INSERT INTO manobras VALUES(200,${crossTenant ? 7 : 6});
       INSERT INTO simuladores_matriz_manobra_resolution VALUES(6,'PTO-V18-CHECK',200);
-      ${buildPtoRev10AtomicPostconditions(template)}
+      ${buildPtoRev10AtomicPostconditions({ plan: template, empresaId: tenant })}
       COMMIT;
     `;
     const result = spawnSync('sqlite3', ['-bail', db], { input: sql, encoding: 'utf8' });
