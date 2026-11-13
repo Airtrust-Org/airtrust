@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const route = readFileSync(
-  fileURLToPath(new URL('../../routes/simuladores-fichas-acoes.ts', import.meta.url)),
+  fileURLToPath(new URL('../../routes/simuladores-fichas-acoes.ts', import.meta.url).href),
   'utf8',
 );
 const sqlite = spawnSync('sqlite3', ['-version']).status === 0;
