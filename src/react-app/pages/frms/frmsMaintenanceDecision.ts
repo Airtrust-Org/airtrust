@@ -35,6 +35,13 @@ export function classifyMaintenanceItem(item: FrmsMaintenanceTeamItem): Maintena
   // Uma sessão PVT concluída não é evidência de prontidão preservada enquanto
   // o baseline individual não estiver confirmado. Nenhum score é alterado.
   if (readiness !== 'preserved' || item.baseline_ready !== 1) return 'PENDING';
+  // A completed check-in and preserved PVT are not proof of a safe fatigue
+  // assessment. Legacy/partial check-ins may have NULL risk, status or review
+  // flag; interpreting these as 'normal' would silently bypass the evidence
+  // required for an operational decision. Do not derive new fatigue thresholds.
+  if (risk !== 'normal' || operationalStatus !== 'apto' || item.requires_operational_review !== 0) {
+    return 'PENDING';
+  }
   return 'NORMAL';
 }
 
@@ -50,6 +57,11 @@ export function maintenanceActionText(bucket: MaintenanceDecisionBucket, item?: 
       if (item?.checkin_id && item.readiness_id) {
         if (normalized(item.readiness_classification) === 'baseline_building' || item.baseline_ready !== 1) {
           return 'Check-in e PVT recebidos, mas baseline individual ainda não confirmado; prontidão inconclusiva. Encaminhar à gestão de Manutenção para avaliação antes de tarefa crítica.';
+        }
+        if (normalized(item.computed_risk_level) !== 'normal' ||
+            normalized(item.status_operacional) !== 'apto' ||
+            item.requires_operational_review !== 0) {
+          return 'Check-in e PVT recebidos, mas avaliação de risco ou condição operacional não confirmada. Conferir o registro e solicitar revisão à gestão de Manutenção antes da atividade.';
         }
         return 'Check-in e PVT recebidos, mas classificação da prontidão não confirmada. Solicitar revisão pela gestão de Manutenção.';
       }
