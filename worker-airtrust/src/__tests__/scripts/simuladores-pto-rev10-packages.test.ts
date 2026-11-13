@@ -183,9 +183,10 @@ describe('PTO Rev10 package loader', () => {
   it('centralizes canonical loads without inferring them from titles', () => {
     expect(durationMinutesFromCanonicalLoad('1 hora')).toBe(60);
     expect(durationMinutesFromCanonicalLoad('2 horas')).toBe(120);
+    expect(durationMinutesFromCanonicalLoad('2 horas práticas em FFS')).toBe(120);
     expect(durationMinutesFromCanonicalLoad('3 horas')).toBe(180);
     expect(durationMinutesFromCanonicalLoad('90 minutos (mínimo)')).toBe(90);
-    expect(durationMinutesFromCanonicalLoad('1 hora prática (mínimo); 1 hora de solo associada')).toBe(60);
+    expect(durationMinutesFromCanonicalLoad('1 hora prática (mínimo); 1 hora de solo associada')).toBe(120);
     expect(
       durationMinutesFromCanonicalLoad('Integrada às 9 horas do ciclo; sem carga adicional de FFS'),
     ).toBe(0);

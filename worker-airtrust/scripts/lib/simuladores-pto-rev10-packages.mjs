@@ -61,8 +61,10 @@ export function durationMinutesFromCanonicalLoad(load) {
   const value = nonEmpty(load, 'carga_sessao');
   if (value === '1 hora') return 60;
   if (value === '2 horas') return 120;
+  if (value === '2 horas práticas em FFS') return 120;
   if (value === '3 horas') return 180;
   if (value.startsWith('4 horas por tripulação:')) return 240;
+  if (value === '1 hora prática (mínimo); 1 hora de solo associada') return 120;
   if (value.startsWith('1 hora prática')) return 60;
   if (value.startsWith('90 minutos')) return 90;
   if (value.startsWith('Integrada às 9 horas do ciclo; sem carga adicional de FFS')) return 0;
