@@ -1,3 +1,7 @@
+// source_reference: issue #2215 (production tenant6 targeted D1 readback 2026-11-13), PR #2253.
+// operational_decision: repair cycles #2671/#2305 only; preserve #508=100%, all CMI, score and qualifications.
+// dry_run_required: immutable same-SHA reviewed artifact and prestate SHA256 before any apply.
+// rollback_plan_required: official D1 Time Travel checkpoint; stop on drift and recover under governance.
 import {DatabaseSync} from 'node:sqlite';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
