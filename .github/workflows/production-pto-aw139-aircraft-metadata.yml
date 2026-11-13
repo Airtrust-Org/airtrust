@@ -1,0 +1,107 @@
+name: Production PTO AW139 Aircraft Metadata
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha: {required: true, type: string}
+      mode: {required: true, type: choice, options: [dry-run, apply]}
+      confirmation: {required: true, type: string}
+      reviewed_dry_run_run_id: {required: false, type: string}
+permissions: {contents: read, actions: read, checks: read, statuses: read}
+concurrency: {group: production-pto-aw139-aircraft-metadata, cancel-in-progress: false}
+jobs:
+  d1_update_aircraft:
+    name: Correct nine AW139 model aircraft fields under tenant 6
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      MODE: ${{ inputs.mode }}
+      PTO_AW139_CONFIRMATION: ${{ inputs.confirmation }}
+      PTO_AW139_DB: airtrust-db
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0}
+      - name: Validate exact current main and confirmation
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]] || exit 1
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$PTO_AW139_CONFIRMATION" == AIRTRUST_PTO_AW139_METADATA_9_DRY_RUN ]] || exit 1
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$PTO_AW139_CONFIRMATION" == AIRTRUST_PTO_AW139_METADATA_9_EXACT_ROWS_APPLY ]] || exit 1
+          else exit 1; fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - name: Verify all official CI release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: RELEASE_SHA="$EXPECTED_SHA" node scripts/ci/verify-release-gates.mjs
+      - name: Verify source and local SQLite fail-closed contract
+        run: |
+          set -euo pipefail
+          node --check scripts/production/fix-pto-aw139-aircraft-metadata.mjs
+          node --check scripts/production/lib/pto-aw139-aircraft-metadata.mjs
+          command -v sqlite3 >/dev/null
+          node --test scripts/__tests__/pto-aw139-aircraft-metadata.test.mjs
+          npm --prefix worker-airtrust ci
+          node -e "const lock=require('./worker-airtrust/package-lock.json');const wrangler=require('./worker-airtrust/node_modules/wrangler/package.json');if(wrangler.version!==lock.packages?.['node_modules/wrangler']?.version)process.exit(1)"
+      - name: Verify production D1 credentials
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]] || exit 1
+      - name: Validate reviewed dry-run result and SHA
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_RUN: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_RUN" =~ ^[1-9][0-9]*$ ]] || exit 1
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN")"
+          [[ "$(jq -r .name <<<"$run")" == 'Production PTO AW139 Aircraft Metadata' ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$run")" == success ]] || exit 1
+          [[ "$(jq -r .head_sha <<<"$run")" == "$EXPECTED_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED_RUN" -R "$GITHUB_REPOSITORY" -n "pto-aw139-metadata-dry-run-$EXPECTED_SHA" -D "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/result.json"
+          jq -e --arg sha "$EXPECTED_SHA" '.mode=="dry-run" and .source_sha==$sha and .tenant==6 and .count==9 and .changes==0 and .postconditions_verified==false and (.before_hash|test("^[a-f0-9]{64}$"))' "$f" >/dev/null
+          echo "PTO_AW139_EXPECTED_HASH=$(jq -r .before_hash "$f")" >> "$GITHUB_ENV"
+      - name: Capture D1 Time Travel checkpoint
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/recovery.txt"
+          test -s "$RUNNER_TEMP/recovery.txt"
+          echo "D1 recovery point UTC: $ts; use scoped rollback for nine models before considering database restore" >> "$GITHUB_STEP_SUMMARY"
+      - name: Read or apply nine guarded metadata updates
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$EXPECTED_SHA" node scripts/production/fix-pto-aw139-aircraft-metadata.mjs "$MODE" > "$RUNNER_TEMP/result.json"
+          test -s "$RUNNER_TEMP/result.json"
+          if [[ "$MODE" == apply ]]; then
+            jq -e '.postconditions_verified==true and .tenant==6 and .count==9 and .changes==9' "$RUNNER_TEMP/result.json" >/dev/null
+          fi
+      - name: Publish summary
+        if: always()
+        run: |
+          if test -s "$RUNNER_TEMP/result.json"; then
+            jq '{mode,source_sha,tenant,count,changes,before_hash,post_hash,postconditions_verified}' "$RUNNER_TEMP/result.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pto-aw139-metadata-${{ inputs.mode }}-${{ inputs.expected_sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30
