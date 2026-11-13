@@ -4,6 +4,7 @@
 // from clicks on the package's own controls.
 declare const SLIDES: unknown;
 declare const COURSE: unknown;
+declare const Scorm: unknown;
 declare const QUIZ: unknown;
 declare const quizIndex: unknown;
 declare const quizComplete: unknown;
@@ -442,7 +443,12 @@ function driveFactoryCourse() {
       type LegacyQuestion = { q?: string; answer?: number; options?: unknown[] };
       const legacySlides = typeof SLIDES !== 'undefined' ? SLIDES as LegacySlide[] : null;
       const questions = typeof QUIZ !== 'undefined' ? QUIZ as LegacyQuestion[] : null;
-      const learnerScorm = w.Scorm;
+      // The real Rev13 scorm_api.js declares `const Scorm` at classic-script
+      // global lexical scope, not as window.Scorm. Read the authored adapter
+      // without changing or fabricating any SCORM state.
+      const learnerScorm = typeof Scorm !== 'undefined'
+        ? Scorm as { get?: (key: string) => string | null }
+        : w.Scorm;
       const fail = (reason: string, steps: number) => ({
         supported: true, completed: false, steps, reason,
       });
