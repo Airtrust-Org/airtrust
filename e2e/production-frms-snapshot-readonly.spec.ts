@@ -136,6 +136,65 @@ test('production FRMS snapshot: permitted tenant 6, no browser abort or operatio
   expect(abortedSnapshotRequests, 'FRMS_PRODUCTION_ABORTED_SNAPSHOT_GET').toEqual([]);
   expect(snapshotRequests.length, 'FRMS_PRODUCTION_DUPLICATE_GET_AFTER_REFRESH').toBe(2);
 
+  // Extend the same authorized tenant-6 browser session across the read-only
+  // operational workspaces. Never trigger any FRMS case mutation or export
+  // (which may contain personally identifiable operational data).
+  const workspaceResponses = new Map<string, Response[]>();
+  const workspaceFailures: string[] = [];
+  const endpointKey = (request: Request): string | null => {
+    const uri = new URL(request.url());
+    if (!ALLOWED_HOSTS.has(uri.hostname) || request.method() !== 'GET') return null;
+    if (uri.pathname === '/api/frms/alertas') return 'cases';
+    if (uri.pathname === '/api/frms/relatorios/compliance') return 'compliance';
+    if (uri.pathname === '/api/frms/relatorios/mapa-fadiga') return 'fatigue-map';
+    if (uri.pathname === '/api/frms/relatorios/alertas-historico') return 'alert-history';
+    return null;
+  };
+  page.on('response', (response) => {
+    const key = endpointKey(response.request());
+    if (key) workspaceResponses.set(key, [...(workspaceResponses.get(key) ?? []), response]);
+  });
+  page.on('requestfailed', (request) => {
+    const key = endpointKey(request);
+    if (key) workspaceFailures.push(key + ':' + (request.failure()?.errorText ?? 'UNKNOWN'));
+  });
+  async function assertWorkspaceResponse(key: string) {
+    await expect.poll(() => workspaceResponses.get(key)?.length ?? 0, { timeout: 30_000 }).toBeGreaterThan(0);
+    const response = workspaceResponses.get(key)!.at(-1)!;
+    expect(response.status(), 'FRMS_WORKSPACE_' + key + '_HTTP').toBe(200);
+    const body = await response.json() as {
+      success?: boolean;
+      data?: unknown[];
+      total?: number;
+      meta?: { tenant_id?: number | string };
+    };
+    expect(body.success, 'FRMS_WORKSPACE_' + key + '_SUCCESS').toBe(true);
+    expect(Array.isArray(body.data), 'FRMS_WORKSPACE_' + key + '_ARRAY').toBe(true);
+    if (key === 'cases') {
+      expect(Number.isInteger(body.total) && body.total! >= body.data!.length,
+        'FRMS_GLOBAL_FILTERED_COUNT').toBe(true);
+    } else {
+      expect(Number(body.meta?.tenant_id), 'FRMS_REPORT_TENANT_ISOLATION').toBe(6);
+    }
+  }
+
+  await page.goto(FRONTEND + '/frms/alertas', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Casos', exact: true })).toBeVisible({ timeout: 30_000 });
+  await assertWorkspaceResponse('cases');
+  await expect(page.getByText('Não foi possível atualizar os casos. Tente novamente antes de tomar uma decisão operacional.')).toHaveCount(0);
+
+  await page.goto(FRONTEND + '/frms/relatorios', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Relatórios FRMS', exact: true })).toBeVisible({ timeout: 30_000 });
+  await assertWorkspaceResponse('compliance');
+  await page.getByRole('button', { name: /Resumo de consumo de limites/ }).click();
+  await assertWorkspaceResponse('fatigue-map');
+  await page.getByRole('button', { name: /Histórico de Alertas/ }).click();
+  await assertWorkspaceResponse('alert-history');
+  await expect(page.getByText('Não foi possível gerar este relatório')).toHaveCount(0);
+  expect(workspaceFailures, 'FRMS_WORKSPACE_ABORTED_GET').toEqual([]);
+  expect(violations, 'FRMS_PRODUCTION_NETWORK_GUARD').toEqual([]);
+  console.log('FRMS_PRODUCTION_WORKSPACE_READONLY_PASS;tenant=6;routes=cases,compliance,fatigue-map,alert-history;operational_writes=0;aborts=0');
+
   console.log('FRMS_PRODUCTION_READONLY_PASS;tenant=6;responses=2;aborts=0;operational_writes=0;durations_ms=' +
     durations.join(','));
 });
