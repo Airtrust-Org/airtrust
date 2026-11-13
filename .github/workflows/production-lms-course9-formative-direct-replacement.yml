@@ -77,6 +77,20 @@ jobs:
         env:
           REPLACEMENT_MODE: preflight
         run: node scripts/production/lms-terrenos-r32-direct-release.mjs
+      - name: Verify D1 Time Travel recovery before administrative edition mutation
+        if: inputs.mode == 'apply'
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+          npm --prefix worker-airtrust ci --ignore-scripts >/dev/null
+          cd worker-airtrust
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$RUNNER_TEMP/d1-recovery-check.txt"
+          test -s "$RUNNER_TEMP/d1-recovery-check.txt"
+          rm -f "$RUNNER_TEMP/d1-recovery-check.txt"
       - name: Fetch private R32 from isolated R2 handoff
         if: inputs.mode == 'apply'
         shell: bash

@@ -110,5 +110,5 @@ async function main() {
 }
 
 if (import.meta.url === new URL('file://' + process.argv[1]).href) {
-  main().catch(error => { console.error('FAIL', String(error?.message || 'UNKNOWN').slice(0,180));process.exitCode=1; });
+  main().catch(error => { const message=String(error?.message||'UNKNOWN'); console.error('FAIL', /^[A-Z0-9_-]{3,160}$/.test(message) ? message : 'UNEXPECTED_EXECUTOR_ERROR'); process.exitCode=1; });
 }
