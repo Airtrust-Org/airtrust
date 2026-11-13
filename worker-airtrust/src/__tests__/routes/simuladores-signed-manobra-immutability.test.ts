@@ -19,6 +19,13 @@ const inserts = [...route.matchAll(/`(INSERT INTO fichas_sessao_manobras\([\s\S]
   .map((m) => m[1]);
 const updates = [...route.matchAll(/`(UPDATE fichas_sessao_manobras[\s\S]*?\))`/g)]
   .map((m) => m[1]);
+const populateRoute = source.slice(
+  source.indexOf('// POST /fichas-simulador/:id/popular-manobras'),
+  source.indexOf("app.post(\n  '/fichas-simulador/:id/gerar-qualificacao'"),
+);
+const populateInsert = [...populateRoute.matchAll(/`(INSERT INTO fichas_sessao_manobras\([\s\S]*?\))`/g)]
+  .map((m) => m[1]);
+
 const sqliteAvailable = spawnSync('sqlite3', ['-version']).status === 0;
 
 function sqlLiteral(input: string | number | null) {
@@ -45,7 +52,7 @@ function query(caseSql: string): Array<{ ficha_id: number; ordem: number; result
       CREATE TABLE fichas_sessao_manobras (
         id INTEGER PRIMARY KEY, ficha_id INTEGER, ordem INTEGER,
         codigo TEXT, descricao TEXT, categoria TEXT,
-        resultado TEXT, observacoes TEXT, updated_at TEXT, deleted_at TEXT
+        resultado TEXT, observacoes TEXT, nome TEXT, tripulante TEXT, updated_at TEXT, deleted_at TEXT
       );
       INSERT INTO fichas_sessao VALUES
         (1,6,NULL,NULL,0),
@@ -123,6 +130,32 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     const rows = query(sql);
     expect(rows.filter((row) => row.ordem === 2)).toEqual([
       { ficha_id: 1, ordem: 2, resultado: '5' },
+    ]);
+  });
+
+  it('protects batch population using the same signed-state guard', () => {
+    expect(populateInsert).toHaveLength(1);
+    expect(populateRoute).toContain('FICHA_ALREADY_SIGNED');
+    expect(populateRoute).toContain('FICHA_MANOBRA_CONCURRENT_SIGNATURE');
+    expect(populateRoute).toContain('written.some');
+    expect(populateInsert[0]).toContain('f.empresa_id = ?');
+    expect(populateInsert[0]).toContain('f.assinatura_instrutor_timestamp IS NULL');
+    expect(populateInsert[0]).toMatch(/COALESCE\(f\.assinatura_instrutor,\s*0\)\s*=\s*0/);
+  });
+
+  it.skipIf(!sqliteAvailable)('batch population does not insert after signature or across tenants', () => {
+    const values = (id: number): Array<string | number | null> => [
+      id, 'T03', 'Technical', 'Item 3', 'TECNICA', 3, 'AB', id, 6,
+    ];
+    const rows = query([
+      bind(populateInsert[0], values(2)),
+      bind(populateInsert[0], values(3)),
+      bind(populateInsert[0], values(4)),
+      bind(populateInsert[0], values(5)),
+      bind(populateInsert[0], values(1)),
+    ].join('\n'));
+    expect(rows.filter((row) => row.ordem === 3)).toEqual([
+      { ficha_id: 1, ordem: 3, resultado: null },
     ]);
   });
 
