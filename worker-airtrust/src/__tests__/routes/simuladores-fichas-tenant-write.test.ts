@@ -59,6 +59,7 @@ function createDbMock(options?: {
   sessionDate?: string;
   sessionTime?: string;
   signedInstructor?: boolean;
+  hasInstructorMeta?: boolean;
 }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
   const batchSizes: number[] = [];
@@ -73,6 +74,11 @@ function createDbMock(options?: {
             query.includes('deleted_at IS NULL')
           ) {
             return { id: Number(args[0]) };
+          }
+
+          if (query.includes("SELECT 1 as found FROM sqlite_master") &&
+              String(args[0]) === 'fichas_sessao_instrutor_meta') {
+            return { found: options?.hasInstructorMeta ? 1 : 0 };
           }
 
           // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
@@ -315,6 +321,27 @@ describe('simuladores fichas tenant-aware writes', () => {
     expect(child).toContain('fs.empresa_id = ?');
     expect(header).toContain('assinatura_instrutor_timestamp IS NULL');
     expect(header).toContain('COALESCE(assinatura_instrutor,0)=0');
+  });
+
+  it('instructor-meta UPSERT checks unsigned tenant parent on INSERT and conflict UPDATE', async () => {
+    const { db } = createDbMock({ hasInstructorMeta: true });
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas/901', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacoes: 'Draft with metadata' }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(200);
+    const queries = (db.prepare as unknown as { mock: { calls: Array<[string]> } })
+      .mock.calls.map(([sql]) => sql);
+    const metadataSql = queries.find((sql) => sql.includes('INSERT INTO fichas_sessao_instrutor_meta'));
+    expect(metadataSql).toContain('ON CONFLICT(ficha_id) DO UPDATE SET');
+    expect(metadataSql).toContain('WHERE EXISTS');
+    expect((metadataSql?.match(/assinatura_instrutor_timestamp IS NULL/g) || []).length).toBe(2);
+    expect((metadataSql?.match(/COALESCE\(fs.assinatura_instrutor,0\)=0/g) || []).length).toBe(2);
+    expect((metadataSql?.match(/fs.empresa_id = \?/g) || []).length).toBe(2);
   });
 
   it('PUT /fichas/:id bloqueia recálculo quando ficha não tem manobras', async () => {
