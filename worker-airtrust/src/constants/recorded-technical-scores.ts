@@ -19,10 +19,8 @@ export function assessRecordedTechnicalScores(rows: readonly RecordedTechnicalRo
   const invalid: string[] = [];
   let scored = 0;
   let nonPerformed = 0;
-  let technicalRows = 0;
   for (const row of rows) {
     if (String(row.categoria || '').trim().toUpperCase() === 'NOTECHS') continue;
-    technicalRows++;
     const codigo = String(row.codigo || '').trim();
     const raw = String(row.resultado ?? '').trim();
     if (raw.toUpperCase() === 'NR' || raw.toUpperCase() === 'NAO_REALIZADA') {
@@ -37,9 +35,10 @@ export function assessRecordedTechnicalScores(rows: readonly RecordedTechnicalRo
     scored++;
     if (nota < 6) belowMinimum.push({ codigo, nota });
   }
-  // When technical rows exist, an ALL-NR sheet is not evidence of a performed
-  // maneuver. No technical rows is handled separately by curricular validation;
-  // do not infer a complete PTO session from this negative safety assessment.
-  return { eligible: invalid.length === 0 && belowMinimum.length === 0 && (technicalRows === 0 || scored > 0),
+  // A PTO simulator session without any scored technical maneuver has no
+  // affirmative execution evidence. This also covers NOTECHS-only / empty
+  // datasets; the session-specific 18-item curriculum still requires separate
+  // versioned validation and is not inferred by this negative safety gate.
+  return { eligible: scored > 0 && invalid.length === 0 && belowMinimum.length === 0,
     scored, nonPerformed, belowMinimum, invalid };
 }
