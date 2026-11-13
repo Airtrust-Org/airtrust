@@ -324,11 +324,45 @@ export async function assignSyntheticQaCourse(adminToken, learnerToken, courseId
     assert(Number(match.funcionario_id) === funcionarioId &&
       (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
     'QA_ASSIGN_OWNERSHIP_MISMATCH');
-    assert(String(match.status || '').toUpperCase() === 'NAO_INICIADO',
-      'QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
     const id = Number(match.id);
     assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
-    return id;
+    const status = String(match.status || '').toUpperCase();
+    if (status === 'NAO_INICIADO' || status === 'EM_ANDAMENTO') return id;
+    if (status === 'CONCLUIDO' || status === 'REPROVADO') {
+      // Existing official LMS service archives CMI, xAPI and prior cycle
+      // transactionally. This route is scoped to the canonical synthetic
+      // employee, an administrator and the exact course/enrollment.
+      const renewed = await fetchJson(`${API}/api/lms/matriculas/${id}/qa-novo-ciclo`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          expected_course_id: courseId,
+          confirmation: 'AIRTRUST_QA_LMS_NEW_CYCLE',
+          reason: `Reexecução QA LMS ${process.env.QA_RUN_ID}/${process.env.QA_RUN_ATTEMPT}, navegador ${BROWSER_NAME}; arquivar evidências e testar novo ciclo`,
+        }),
+      });
+      assert(renewed.status === 200 && renewed.json?.success === true &&
+        Number(renewed.json?.data?.matricula_id) === id &&
+        Number(renewed.json?.data?.curso_id) === courseId &&
+        Number(renewed.json?.data?.funcionario_id) === funcionarioId &&
+        renewed.json?.data?.status === 'NAO_INICIADO' &&
+        renewed.json?.data?.previous_cycle_archived === true,
+      'QA_GOVERNED_CYCLE_RENEWAL_UNVERIFIED');
+      const readback = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+        headers: {Authorization: `Bearer ${learnerToken}`},
+      });
+      assert(readback.status === 200 && Array.isArray(readback.json?.data) &&
+        readback.json.data.some(r => Number(r.id) === id &&
+          Number(r.curso_id) === courseId &&
+          Number(r.funcionario_id) === funcionarioId &&
+          String(r.status).toUpperCase() === 'NAO_INICIADO'),
+      'QA_NEW_CYCLE_LEARNER_READBACK_UNVERIFIED');
+      return id;
+    }
+    throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
   }
 
   // Only an authenticated tenant administrator can designate training to QA.

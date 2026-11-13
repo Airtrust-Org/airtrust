@@ -818,6 +818,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/schema-v2/validate-lms-qa-0581.mjs r2-preflight
 
+      - name: Preserve resumable exact-key R2 manifest before D1 deletion
+        if: ${{ inputs.change_id == 'lms-qa-synthetic-purge-0581' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-lms-r2-0581-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/airtrust-qa-lms-0581-r2-keys.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Backup governance ledger
         shell: bash
         working-directory: worker-airtrust

@@ -145,14 +145,14 @@ function validateSummary() {
     && f.educational_certification_validated===false,
     'QA_SAVED_RESULTS_NOT_VERIFIED');
 }
-async function r2Cleanup() {
+export async function r2Cleanup() {
   check(process.env.GITHUB_ACTIONS==='true' && process.env.GITHUB_REF==='refs/heads/main',
     'R2_GOVERNED_WORKFLOW_REQUIRED');
   const preflight = MODE==='r2-preflight';
   if (!preflight) check(process.env.QA_R2_PURGE_CONFIRMATION==='AIRTRUST_QA_R2_0581_POST_D1',
     'R2_CONFIRMATION_REQUIRED');
   const items=JSON.parse(readFileSync(KEYS_PATH,'utf8'));
-  check(items.length===132,'R2_KEYS_COUNT_DRIFT');
+  check(items.length===132 && new Set(items.map(x=>x.key)).size===132,'R2_KEYS_COUNT_DRIFT');
   const token=process.env.CLOUDFLARE_WORKER_API_TOKEN;
   const accountId=process.env.CLOUDFLARE_ACCOUNT_ID;
   check(token && /^[0-9a-f]{32}$/.test(accountId||''),'R2_SCOPE_CREDENTIAL_REQUIRED');
