@@ -1,3 +1,7 @@
+// source_reference: AirTrust PR #2241 / Schema V2 0581 exact synthetic QA cleanup.
+// operational_decision: IN_MEMORY_TEST_ONLY; no remote D1/R2 writes from this file.
+// dry_run_required: Local node:sqlite fixture is ephemeral; real production preflight is mandatory.
+// rollback_plan_required: Production executes only through governed Schema V2 with D1 Time Travel.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
