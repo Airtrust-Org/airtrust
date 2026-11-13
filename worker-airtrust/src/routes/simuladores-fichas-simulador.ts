@@ -62,20 +62,16 @@ app.put(
     // Record-level tenant boundary must be proven before availability/model
     // lookups or any read/write by ficha_id.
     const fichaTenant = await c.env.DB.prepare(
-      'SELECT id, assinatura_instrutor_timestamp, assinatura_instrutor FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
     )
       .bind(fichaId, empresaId)
-      .first<{ id: number; assinatura_instrutor_timestamp: string | null; assinatura_instrutor: number | null }>();
+      .first<{ id: number }>();
     if (!fichaTenant) {
       return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
     }
 
-    // Existing final signatures are immutable. The D1 write statements
-    // below re-check this predicate atomically to reject concurrent signing.
-    if (fichaTenant.assinatura_instrutor_timestamp || Number(fichaTenant.assinatura_instrutor) === 1) {
-      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
-        error: 'Ficha já assinada. Utilize o procedimento formal de retificação.' }, 409);
-    }
+    // Mutations below prove unsigned state inside each D1 statement, not
+    // solely through a potentially stale pre-read during concurrent signing.
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
     if (!availability.available) {
