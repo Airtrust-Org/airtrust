@@ -63,7 +63,7 @@ import {
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
-import { SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
+import { SCORM_COMPLETION_MODE_CHOICES, canSaveScormModeForRole, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -853,7 +853,7 @@ function CourseDrawer({
     }
     const errs = validateForm(form);
     if (form.tipo_conteudo === 'scorm' &&
-        !canUseLegacyEvaluatedPolicy(form.scorm_assessment_policy, initial?.scorm_assessment_policy)) {
+        !canSaveScormModeForRole(form.scorm_assessment_policy, initial?.scorm_assessment_policy, isAdmin, isEditing)) {
       errs.scorm_assessment_policy = 'A modalidade de uma edição SCORM publicada não pode ser trocada somente no cadastro. Ative uma nova edição compatível e homologada; cursos com avaliação obrigatória não podem perder essa exigência sem nova edição.';
     }
     setErrors(errs);
