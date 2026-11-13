@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   PTO_V18_SHA256,
   assertPtoV18CurricularParity,
+  assertPtoV18SessionLoad,
 } from '../lib/simuladores-pto-v18-parity.mjs';
 
 function fixture() {
@@ -21,9 +22,10 @@ function fixture() {
         nome: `Procedimento ${n + 1}`,
         perna: n < 9 ? '1 - PF A' : '2 - PF B',
       }));
-      contract.push({ codigo: code, titulo: `Sessão ${number}`, aeronave: aircraft, itens: items });
+      contract.push({ codigo: code, titulo: `Sessão ${number}`, aeronave: aircraft, carga: '2 horas', itens: items });
       projection.aeronaves[aircraft].sessoes.push({
         codigo: code, titulo: `Sessão ${number}`,
+        carga_sessao: '2 horas', duracao_estimada_minutos: 120,
         itens_tecnicos: items.map(({ perna, ...item }) => ({ ...item, perna_pf: perna })),
       });
     }
@@ -89,4 +91,59 @@ test('V18: NOTECHS ausente bloqueia pacote', () => {
   const input = fixture();
   input.projection.notechs.pop();
   assert.throws(() => assertPtoV18CurricularParity(input), /NOTECHS incompleto/);
+});
+
+test('V18: três horas canônicas não podem ser substituídas por uma hora', () => {
+  const input = fixture();
+  input.contract[0].carga = '3 horas';
+  input.projection.aeronaves.AW139.sessoes[0].carga_sessao = '1 hora';
+  input.projection.aeronaves.AW139.sessoes[0].duracao_estimada_minutos = 60;
+  assert.throws(() => assertPtoV18CurricularParity(input), /carga da sessão divergente/);
+});
+
+test('V18: duas horas práticas em FFS aceitam duas horas no modelo simulador', () => {
+  assert.equal(assertPtoV18SessionLoad({
+    code: 'A139-I-12/12', canonical: '2 horas práticas em FFS',
+    projected: '2 horas', projectedMinutes: 120,
+  }).session_minutes, 120);
+});
+
+test('V18: competência noturna mínima de 90 minutos aceita duração correspondente', () => {
+  assert.equal(assertPtoV18SessionLoad({
+    code: 'S76-NOT-01', canonical: '90 minutos (mínimo)',
+    projected: '90 minutos', projectedMinutes: 90,
+  }).session_minutes, 90);
+});
+
+test('V18: recuperação exige prática e solo, não basta declarar duas horas genéricas', () => {
+  assert.throws(() => assertPtoV18SessionLoad({
+    code: 'A139-REC-01',
+    canonical: '1 hora prática (mínimo); 1 hora de solo associada',
+    projected: '2 horas', projectedMinutes: 120,
+  }), /carga da sessão divergente/);
+  assert.equal(assertPtoV18SessionLoad({
+    code: 'A139-REC-01',
+    canonical: '1 hora prática (mínimo); 1 hora de solo associada',
+    projected: '1 hora prática (mínimo); 1 hora de solo associada',
+    projectedMinutes: 120,
+  }).session_minutes, 120);
+});
+
+test('V18: 3h na carga mas 60 minutos no plano não podem passar', () => {
+  assert.throws(() => assertPtoV18SessionLoad({
+    code: 'S76-P-AD-01/01-C1',
+    canonical: '3 horas', projected: '3 horas',
+    projectedMinutes: 60,
+  }), /duração estimada em minutos divergente/);
+});
+
+test('V18: rejeita carga canônica ou projetada desconhecida', () => {
+  assert.throws(() => assertPtoV18SessionLoad({
+    code: 'S76-I-01/12', canonical: '2.5 horas',
+    projected: '2.5 horas',
+  }), /carga canônica PTO desconhecida/);
+  assert.throws(() => assertPtoV18SessionLoad({
+    code: 'S76-I-01/12', canonical: '2 horas',
+    projected: '',
+  }), /carga da sessão divergente/);
 });
