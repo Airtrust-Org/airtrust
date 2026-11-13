@@ -33,4 +33,30 @@ describe('PTO Rev.10 §4.2 — executed technical items', () => {
     ]).eligible).toBe(false);
     expect(assessExecutedTechnicalItems([{ codigo: '', resultado: 6 }]).eligible).toBe(false);
   });
+
+  it.each([
+    ['6.00', true],
+    ['10.000', true],
+    [' 6 ', true],
+    ['5.999', false],
+    ['10.1', false],
+    ['-6', false],
+    ['6e0', false],
+    ['Infinity', false],
+    ['NaN', false],
+    ['6,0', false],
+  ] as const)('handles technical grade %s with eligibility %s', (resultado, eligible) => {
+    expect(assessExecutedTechnicalItems([{ codigo: 'T01', resultado }]).eligible).toBe(eligible);
+  });
+
+  it('does not silently accept a missing grade when other items are satisfactory', () => {
+    const assessment = assessExecutedTechnicalItems([
+      { codigo: 'T01', resultado: '6' },
+      { codigo: 'T02', resultado: null },
+      { codigo: 'T03', resultado: '10' },
+    ]);
+    expect(assessment.eligible).toBe(false);
+    expect(assessment.evaluated).toBe(3);
+    expect(assessment.invalid).toEqual(['T02']);
+  });
 });
