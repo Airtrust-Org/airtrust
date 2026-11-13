@@ -63,7 +63,7 @@ import {
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
-import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy } from './lmsCompletionModeChoice';
+import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -305,7 +305,7 @@ async function fetchFreshQualificacaoTipoById(
   return tipos.find((tipo) => sameTipoId(tipo.id, qualificacaoTipoId)) ?? null;
 }
 
-function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
+function buildInitialForm(initial?: Partial<LmsCurso>, isAdmin = false): CreateCursoDTO {
   return {
     titulo: initial?.titulo ?? '',
     descricao: initial?.descricao ?? '',
@@ -320,7 +320,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
-    scorm_assessment_policy: initial?.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY,
+    scorm_assessment_policy: initial?.scorm_assessment_policy ?? defaultNewScormModeForRole(isAdmin),
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -733,7 +733,7 @@ function CourseDrawer({
   const { data: latestCourse } = useLmsCurso(initial?.id ?? 0);
   const courseSnapshot = latestCourse ?? initial;
   const storedThumbPreview = useLmsCourseThumbnailUrl(courseSnapshot);
-  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial));
+  const [form, setForm] = useState<CreateCursoDTO>(() => buildInitialForm(initial, isAdmin));
   const [contentFile, setContentFile] = useState<File | null>(null);
   const [scormProfile, setScormProfile] = useState<ScormReplacementProfile | 'CHECKING'>('CHECKING');
   const [qaCandidateReceipt, setQaCandidateReceipt] = useState<{
@@ -970,7 +970,7 @@ function CourseDrawer({
                               ...c,
                               tipo_conteudo: e.target.value as TipoConteudo,
                               scorm_assessment_policy: e.target.value === 'scorm'
-                                ? (c.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY)
+                                ? (isEditing ? (c.scorm_assessment_policy ?? 'SCORED') : defaultNewScormModeForRole(isAdmin))
                                 : 'SCORED',
                               scorm_versao:
                                 e.target.value === 'video' ? null : (c.scorm_versao ?? '1.2'),
@@ -1034,7 +1034,7 @@ function CourseDrawer({
                         <select
                           aria-label="Modalidade de conclusão SCORM"
                           disabled={form.tipo_conteudo !== 'scorm'}
-                          value={form.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY}
+                          value={form.scorm_assessment_policy ?? defaultNewScormModeForRole(isAdmin)}
                           onChange={(e) =>
                             setForm((c) => ({
                               ...c,
