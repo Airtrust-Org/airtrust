@@ -113,6 +113,8 @@ jobs:
             for (const t of r.tenants) {
               p(`tenant ${t.empresaId}`, `regProfiles=${t.activeRegulatoryProfileCount} assignments=${t.activeAssignmentCount} state=${t.assignmentState} revision=${t.resolvedRevision ? t.resolvedRevision.id : "n/a"} params=${t.resolvedParameterCount ?? "n/a"}`);
             }
+            p("assignment coverage ready", r.verdict.assignmentCoverageReady ? "YES" : "NO");
+            p("inventory conclusive", r.verdict.inventoryConclusive ? "YES" : "NO");
             p("profile decision proven", r.profileDecision.proven ? "YES" : "NO");
             p("profile decision reason", r.profileDecision.reason);
             if (r.profileDecision.proven) {
