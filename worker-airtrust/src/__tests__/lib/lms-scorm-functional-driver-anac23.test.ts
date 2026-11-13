@@ -116,6 +116,25 @@ describe('ANAC #23 legacy real-control functional driver',()=>{
     expect(state.clickCount).toBeGreaterThan(45);
     expect(buildScormFunctionalDriverScript()).not.toContain('LMSSetValue(');
   });
+  it('reads a classic-script lexical Scorm adapter when window.Scorm is absent',()=>{
+    const sco=createLegacySCO();
+    const adapter=g.Scorm;
+    delete g.Scorm;
+    expect(g.window.Scorm).toBeUndefined();
+    // A function parameter is lexically visible to the serialized browser
+    // script, just like the real package's top-level `const Scorm`.
+    const lexicalDrive=new Function('Scorm','return '+buildScormFunctionalDriverScript());
+    const result=lexicalDrive(adapter) as {supported:boolean;completed:boolean;reason:string|null};
+    expect(result).toMatchObject({supported:true,completed:true,reason:null});
+    expect(sco.state().finishCalls).toBe(1);
+    expect(sco.state().done).toHaveLength(25);
+  });
+  it('fails closed if both lexical adapter and window.Scorm are missing',()=>{
+    const sco=createLegacySCO();
+    delete g.Scorm;
+    expect(drive()).toMatchObject({supported:true,completed:false,reason:'LEGACY_ANAC23_AUTHORING_CONTRACT_INVALID'});
+    expect(sco.state().finishCalls).toBe(0);
+  });
   it('rejects incorrect author answer key before clicking anything',()=>{
     const sco=createLegacySCO({invalidQuiz:true});
     expect(drive()).toMatchObject({supported:true,completed:false,reason:'LEGACY_ANAC23_AUTHORING_CONTRACT_INVALID'});
