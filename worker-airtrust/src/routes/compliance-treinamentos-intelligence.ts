@@ -308,6 +308,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     }
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
     const notificationStats = await loadComplianceNotificationStats(c.env.DB, empresaId);
+    const eligibleEadIds = await eligibleEadQualificationIds(c.env.DB, empresaId);
     const statusPriority: Record<string, number> = {
       VENCIDO: 0,
       NAO_REALIZADO: 1,
@@ -359,6 +360,7 @@ export function createTrainingComplianceIntelligenceRoutes({
               funcao_id: person.funcao_id,
               funcao_nome: person.funcao_nome,
               qualificacao_tipo_id: requirement.qualificacao_tipo_id,
+              alerta_ead_permitido: eligibleEadIds.has(Number(requirement.qualificacao_tipo_id)),
               qualificacao_tipo_nome: requirement.qualificacao_tipo_nome,
               qualificacao_tipo_codigo: requirement.qualificacao_tipo_codigo,
               status_compliance: requirement.status_compliance,
