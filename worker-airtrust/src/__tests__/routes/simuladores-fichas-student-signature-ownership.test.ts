@@ -225,13 +225,27 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     await expect(response.json()).resolves.toMatchObject({ code: 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET' });
   });
 
-  it('permite NR técnico sem inferir execução quando os NOTECHS estão válidos', async () => {
-    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true, technicalScore: 'NR' });
+  it.each(['NR', 'NAO_REALIZADA'])('recusa aprovação sem nenhuma nota técnica executada (%s)', async (technicalScore) => {
+    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true, technicalScore });
     const response = await simuladoresFichasRoutes.fetch(new Request(baseUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: 'INSTRUTOR', aprovado: true }),
     }), env);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET',
+      details: { technicalScores: { eligible: false, scored: 0, nonPerformed: 1 } },
+    });
+  });
+
+  it('permite registrar reprovação mesmo quando a única manobra técnica está NR', async () => {
+    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true, technicalScore: 'NR' });
+    const response = await simuladoresFichasRoutes.fetch(new Request(baseUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'INSTRUTOR', aprovado: false }),
+    }), env);
     expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ data: { status: 'NAO_APROVADO' } });
   });
 
   it('recusa assinatura concorrente quando as notas mudam após a validação', async () => {
