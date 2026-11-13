@@ -669,16 +669,14 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
         qh.qualificacao_id,
         qh.data_vencimento,
         qh.codigo as tipo_codigo,
-        COALESCE(qh.categoria, qt.categoria) as categoria,
+        COALESCE(qt.categoria, qh.categoria) as categoria,
         qt.nome as tipo_nome,
-        qf.codigo as formato_codigo,
         f.nome as funcionario_nome,
         f.email as funcionario_email,
         f.telefone as funcionario_telefone
       FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id
-      LEFT JOIN qualificacoes_formatos qf ON qf.id = COALESCE(qh.formato_id, qt.formato_id) AND qf.deleted_at IS NULL
       WHERE qh.id = ?
         AND qh.deleted_at IS NULL
         AND f.empresa_id = ?
@@ -748,9 +746,7 @@ app.post('/alertas/ead-vencido/:id', async (c: Context<{ Bindings: Env }>) => {
 
     // Cobranças por vencimento são exclusivas de EAD; convocações são separadas.
     const categoria = String(r.categoria || '').trim().toUpperCase();
-    const formatoCodigo = String(r.formato_codigo || '').trim().toUpperCase();
-    const isEAD =
-      formatoCodigo === 'EAD' || categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
+    const isEAD = categoria === 'EAD' || categoria === 'TREINAMENTO EAD';
 
     if (!isEAD) {
       return alertasErrorResponse(
