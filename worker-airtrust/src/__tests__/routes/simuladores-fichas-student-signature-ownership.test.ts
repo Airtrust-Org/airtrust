@@ -51,7 +51,7 @@ import { errorHandler } from '../../middleware/error-handler';
 // status code instead of Hono's generic 500.
 simuladoresFichasRoutes.onError(errorHandler);
 
-function createDb(options: { alunoJaAssinou?: boolean; notechsScore?: string; notechsMissing?: boolean; concurrentChange?: boolean; instrutorJaAssinou?: boolean } = {}) {
+function createDb(options: { alunoJaAssinou?: boolean; notechsScore?: string; notechsMissing?: boolean; concurrentChange?: boolean; instrutorJaAssinou?: boolean; technicalScore?: string } = {}) {
   const fichaRow = {
     id: 500,
     uuid: 'ficha-500-uuid',
@@ -100,7 +100,7 @@ function createDb(options: { alunoJaAssinou?: boolean; notechsScore?: string; no
         all: async () => {
           if (query.includes('SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes FROM fichas_sessao_manobras')) {
             return { results: (options.notechsMissing ? NOTECHS_CANONICAL_ITEMS.slice(0, 14) : NOTECHS_CANONICAL_ITEMS)
-              .map((item, index) => ({ id: index + 1, codigo: item.codigo, categoria: 'NOTECHS', resultado: options.notechsScore ?? '8.0', ordem: index + 1, descricao: null, observacoes: null })) };
+              .map((item, index) => ({ id: index + 1, codigo: item.codigo, categoria: 'NOTECHS', resultado: options.notechsScore ?? '8.0', ordem: index + 1, descricao: null, observacoes: null })).concat([{ id: 100, codigo: 'T01', categoria: 'GERAL', resultado: options.technicalScore ?? '8', ordem: 1, descricao: null, observacoes: null }]) };
           }
           return { results: [] };
         },
@@ -127,6 +127,7 @@ function mockEnv(overrides: Record<string, unknown> = {}) {
       notechsMissing: Boolean(overrides.notechsMissing),
       concurrentChange: Boolean(overrides.concurrentChange),
       instrutorJaAssinou: Boolean(overrides.instrutorJaAssinou),
+      technicalScore: typeof overrides.technicalScore === 'string' ? overrides.technicalScore : undefined,
     }),
     __mockUserId: overrides.userId ?? 101,
     __mockUserRole: overrides.userRole ?? 'manager',
@@ -212,6 +213,25 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     await expect(response.json()).resolves.toMatchObject({
       code: 'NOTECHS_INDIVIDUAL_MINIMUM_NOT_MET',
     });
+  });
+
+  it.each(['5', '5.0', '0', '11', '6.5'])('recusa aprovação com nota técnica inválida ou inferior ao mínimo: %s', async (technicalScore) => {
+    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true, technicalScore });
+    const response = await simuladoresFichasRoutes.fetch(new Request(baseUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'INSTRUTOR', aprovado: true }),
+    }), env);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET' });
+  });
+
+  it('permite NR técnico sem inferir execução quando os NOTECHS estão válidos', async () => {
+    const env = mockEnv({ userId: 101, userRole: 'instrutor', alunoJaAssinou: true, technicalScore: 'NR' });
+    const response = await simuladoresFichasRoutes.fetch(new Request(baseUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'INSTRUTOR', aprovado: true }),
+    }), env);
+    expect(response.status).toBe(200);
   });
 
   it('recusa assinatura concorrente quando as notas mudam após a validação', async () => {

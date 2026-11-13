@@ -18,6 +18,7 @@ import {
 } from './simuladores-fichas-helpers';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import { evaluateNotechsApproval } from '../constants/notechs-approval';
+import { assessRecordedTechnicalScores } from '../constants/recorded-technical-scores';
 import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
@@ -481,6 +482,18 @@ app.post('/fichas/:id/assinar', async (c) => {
         )
           .bind(id)
           .all<{ id: number; codigo: string | null; categoria: string | null; resultado: string | null; ordem: number | null; descricao: string | null; observacoes: string | null }>();
+        // Negative safety gate: a scored technical maneuver below six forbids
+        // final approval even if an average would otherwise pass. NR is not
+        // evidence of execution. Curriculum/version completeness is separate.
+        const technicalScores = assessRecordedTechnicalScores(notechsRows.results || []);
+        if (!technicalScores.eligible) {
+          return c.json({
+            success: false,
+            code: 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET',
+            error: 'A aprovação exige nota mínima 6 em cada manobra técnica avaliada.',
+            details: { technicalScores, ficha_id: Number(id) },
+          }, 409);
+        }
         const notechs = evaluateNotechsApproval(notechsRows.results || []);
         // The final signature must attest the *same* complete maneuver evidence
         // that was observed during validation. This is deliberately independent
