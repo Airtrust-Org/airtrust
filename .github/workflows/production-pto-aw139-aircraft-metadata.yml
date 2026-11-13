@@ -9,7 +9,7 @@ on:
 permissions: {contents: read, actions: read, checks: read, statuses: read}
 concurrency: {group: production-pto-aw139-aircraft-metadata, cancel-in-progress: false}
 jobs:
-  update_aircraft:
+  d1_update_aircraft:
     name: Correct nine AW139 model aircraft fields under tenant 6
     runs-on: ubuntu-latest
     environment: production
