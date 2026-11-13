@@ -1415,6 +1415,12 @@ app.get('/', async (c) => {
 
   if (somentePublicados) {
     where += ' AND c.publicado = 1';
+    // Hide only SCORM without version prefix AND without a legacy launch file.
+    // Legacy flat-path packages can launch with a NULL version prefix.
+    // repair publication. Existing enrollment history is never modified.
+    if (!hasRole(c, 'admin', 'manager')) {
+      where += " AND (c.tipo_conteudo != 'scorm' OR NULLIF(TRIM(c.scorm_package_r2_prefix), '') IS NOT NULL OR NULLIF(TRIM(c.scorm_launch_file), '') IS NOT NULL)";
+    }
   }
   if (categoria) {
     where += ' AND c.categoria = ?';
