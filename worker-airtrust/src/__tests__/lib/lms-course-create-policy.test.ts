@@ -9,6 +9,15 @@ describe('new LMS course assessment default', () => {
       .toMatchObject({ scorm_assessment_policy: 'FORMATIVE' });
   });
 
+  it('preserves the previous default for manager requests without formative permission', () => {
+    expect(withNewCourseAssessmentDefault({ tipo_conteudo: 'scorm' }, false))
+      .toMatchObject({ scorm_assessment_policy: 'SCORED' });
+    expect(withNewCourseAssessmentDefault({ tipo_conteudo: 'scorm', titulo: 'Manager course' }, false))
+      .toMatchObject({ scorm_assessment_policy: 'SCORED', titulo: 'Manager course' });
+    expect(withNewCourseAssessmentDefault({ tipo_conteudo: 'scorm' }, true))
+      .toMatchObject({ scorm_assessment_policy: 'FORMATIVE' });
+  });
+
   it('keeps non-SCORM formats scored unless separately configured', () => {
     for (const tipo_conteudo of ['pptx', 'pdf', 'video', 'h5p']) {
       expect(withNewCourseAssessmentDefault({ tipo_conteudo }))
