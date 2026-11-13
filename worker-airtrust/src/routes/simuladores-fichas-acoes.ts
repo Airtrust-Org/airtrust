@@ -488,14 +488,14 @@ app.post('/fichas/:id/assinar', async (c) => {
         const technicalScores = assessRecordedTechnicalScores(notechsRows.results || []);
         if (!technicalScores.eligible) {
           const withoutExecutedTechnicalEvidence = technicalScores.scored === 0 &&
-            technicalScores.nonPerformed > 0 && technicalScores.invalid.length === 0;
+            technicalScores.invalid.length === 0;
           return c.json({
             success: false,
             code: withoutExecutedTechnicalEvidence
               ? 'TECHNICAL_EXECUTION_EVIDENCE_MISSING'
               : 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET',
             error: withoutExecutedTechnicalEvidence
-              ? 'Não é possível aprovar ficha com todas as manobras técnicas marcadas como não realizadas.'
+              ? 'Não é possível aprovar uma ficha sem nenhuma manobra técnica avaliada como executada.'
               : 'A aprovação exige nota mínima 6 em cada manobra técnica avaliada.',
             details: { technicalScores, ficha_id: Number(id) },
           }, 409);
