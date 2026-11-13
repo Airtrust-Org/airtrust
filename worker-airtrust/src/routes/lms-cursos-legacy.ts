@@ -780,7 +780,7 @@ async function parseCursoCreateRequest(c: Context) {
       setor_ids: parsedSetorIds.length > 0 ? parsedSetorIds : undefined,
     };
 
-    const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(payload));
+    const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(payload, hasRole(c, 'admin')));
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
     }
@@ -789,7 +789,7 @@ async function parseCursoCreateRequest(c: Context) {
   }
 
   const body = await c.req.json<unknown>();
-  const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(body));
+  const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(body, hasRole(c, 'admin')));
   if (!parsed.success) {
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
   }
