@@ -266,7 +266,14 @@ export function buildQualificacoesParaNotificarQuery(): string {
           AND COALESCE(qh.qualificacao_codigo, '') = COALESCE(qt.codigo, '')
         )
       )
+    LEFT JOIN qualificacoes_formatos qf
+      ON qf.id = COALESCE(qh.formato_id, qt.formato_id)
+     AND qf.deleted_at IS NULL
     WHERE qh.deleted_at IS NULL
+      AND (
+        UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+        OR UPPER(TRIM(COALESCE(qh.categoria, qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+      )
       AND f.deleted_at IS NULL
       AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
       AND qh.data_vencimento IS NOT NULL
