@@ -105,7 +105,7 @@ export default function FrmsFadigaHistorico() {
     return base;
   }, [fim, inicio, searchTerm]);
 
-  const { data, loading, refetch } = useFrmsFadigaHistorico(filtros);
+  const { data, loading, error, refetch } = useFrmsFadigaHistorico(filtros);
   const dataAsRecord =
     data && typeof data === 'object' && !Array.isArray(data)
       ? (data as Record<string, unknown>)
@@ -123,6 +123,8 @@ export default function FrmsFadigaHistorico() {
         : [];
 
   const rows = baseRows as FrmsFadigaCheckinRow[];
+  const validHistoryResponse = Array.isArray(data) || Array.isArray(dataAsRecord?.data) || Array.isArray(nestedData?.data);
+  const historyUnavailable = Boolean(error) || (!loading && !validHistoryResponse);
 
   return (
     <AppLayout>
@@ -186,12 +188,18 @@ export default function FrmsFadigaHistorico() {
           <div className="mb-4 flex items-center justify-between">
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
               <History className="h-4 w-4" />
-              Registros ({rows.length})
+              Registros ({loading || historyUnavailable ? '—' : rows.length})
             </div>
           </div>
 
           {loading ? (
             <div className="py-10 text-center text-sm text-slate-400">Carregando histórico...</div>
+          ) : historyUnavailable ? (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+              <p className="font-semibold">Não foi possível consultar o histórico de check-ins.</p>
+              <p className="mt-2">Falha de leitura ou resposta inválida não comprova ausência de check-ins, fadiga ou pendências.</p>
+              <Button variant="secondary" onClick={() => void refetch()}>Tentar novamente</Button>
+            </div>
           ) : rows.length === 0 ? (
             <div className="py-10 text-center text-sm text-slate-400">
               Nenhum registro encontrado.

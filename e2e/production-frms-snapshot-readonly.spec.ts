@@ -148,6 +148,7 @@ test('production FRMS snapshot: permitted tenant 6, no browser abort or operatio
     if (uri.pathname === '/api/frms/relatorios/compliance') return 'compliance';
     if (uri.pathname === '/api/frms/relatorios/mapa-fadiga') return 'fatigue-map';
     if (uri.pathname === '/api/frms/relatorios/alertas-historico') return 'alert-history';
+    if (uri.pathname === '/api/frms/fadiga-acumulada/frota') return 'legal-fleet';
     return null;
   };
   page.on('response', (response) => {
@@ -191,6 +192,32 @@ test('production FRMS snapshot: permitted tenant 6, no browser abort or operatio
   await page.getByRole('button', { name: /Histórico de Alertas/ }).click();
   await assertWorkspaceResponse('alert-history');
   await expect(page.getByText('Não foi possível gerar este relatório')).toHaveCount(0);
+  // Regression for the actual success/data contract: useApi normally unwraps
+  // an envelope, so the Accumulated Legal screen must explicitly preserve it.
+  // A successful fleet GET must never be rendered as an empty roster by the UI.
+  await page.goto(FRONTEND + '/frms/fadiga-acumulada', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Acumulado Legal de Trabalho e Voo' })).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => workspaceResponses.get('legal-fleet')?.length ?? 0, { timeout: 40_000 }).toBeGreaterThan(0);
+  const legalFleetResponse = workspaceResponses.get('legal-fleet')!.at(-1)!;
+  expect(legalFleetResponse.status(), 'FRMS_LEGAL_FLEET_HTTP').toBe(200);
+  const legal = await legalFleetResponse.json() as {
+    success?: boolean;
+    data?: { frota?: unknown[]; resumo?: { total_tripulantes?: number }; limites?: unknown; thresholds?: unknown };
+  };
+  expect(legal.success, 'FRMS_LEGAL_FLEET_SUCCESS').toBe(true);
+  expect(Array.isArray(legal.data?.frota), 'FRMS_LEGAL_FLEET_ARRAY').toBe(true);
+  expect(legal.data?.resumo?.total_tripulantes, 'FRMS_LEGAL_FLEET_COUNT').toBe(legal.data!.frota!.length);
+  expect(legal.data?.limites, 'FRMS_LEGAL_LIMITS_PRESENT').toBeTruthy();
+  expect(legal.data?.thresholds, 'FRMS_LEGAL_THRESHOLDS_PRESENT').toBeTruthy();
+  await expect(page.getByText('Tripulantes', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Não foi possível confirmar o acumulado legal.')).toHaveCount(0);
+  if (legal.data!.frota!.length > 0) {
+    await expect(page.getByText(/Nenhuma jornada registrada em/)).toHaveCount(0);
+  } else {
+    await expect(page.getByText(/Nenhuma jornada registrada em/)).toBeVisible();
+  }
+  console.log('FRMS_PRODUCTION_LEGAL_FLEET_READONLY_PASS;tenant=6;scope=legal-fleet;operational_writes=0');
+
   expect(workspaceFailures, 'FRMS_WORKSPACE_ABORTED_GET').toEqual([]);
   expect(violations, 'FRMS_PRODUCTION_NETWORK_GUARD').toEqual([]);
   console.log('FRMS_PRODUCTION_WORKSPACE_READONLY_PASS;tenant=6;routes=cases,compliance,fatigue-map,alert-history;operational_writes=0;aborts=0');
