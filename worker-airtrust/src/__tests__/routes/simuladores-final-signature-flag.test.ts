@@ -29,6 +29,64 @@ describe('simulator instructor signature — legacy flag preserves finality', ()
     expect(updateSql).toContain('deleted_at IS NULL');
   });
 
+  it('student signature requires absent student and instructor flags inside SQL', () => {
+    const start = route.indexOf("if (b.tipo === 'ALUNO') {");
+    const end = route.indexOf("} else if (b.tipo === 'INSTRUTOR')", start);
+    expect(start).toBeGreaterThan(0);
+    const aluno = route.slice(start, end);
+    expect(aluno).toContain('f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1');
+    expect(aluno).toContain('AND assinatura_aluno_timestamp IS NULL');
+    expect(aluno).toContain('COALESCE(assinatura_tripulante,0)=0');
+    expect(aluno).toContain('AND assinatura_instrutor_timestamp IS NULL');
+    expect(aluno).toContain('COALESCE(assinatura_instrutor,0)=0');
+    expect(aluno).toContain("FICHA_CONCURRENT_UPDATE");
+    expect(aluno).toContain("Number(escritaAluno.meta?.changes || 0) !== 1");
+  });
+
+  it.skipIf(!sqlite)('student cannot re-sign a timestamp/flag-signed ficha or cross tenant', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pto-student-sign-'));
+    const db = join(dir, 'fichas.db');
+    try {
+      const sql = `
+        CREATE TABLE fichas_sessao(
+          id INTEGER, empresa_id INTEGER, deleted_at TEXT,
+          assinatura_aluno_timestamp TEXT, assinatura_tripulante INTEGER,
+          assinatura_instrutor_timestamp TEXT, assinatura_instrutor INTEGER,
+          aluno_ip TEXT
+        );
+        INSERT INTO fichas_sessao VALUES
+          (1,6,NULL,NULL,0,NULL,0,NULL),
+          (2,6,NULL,'2026-11-12',1,NULL,0,NULL),
+          (3,6,NULL,NULL,1,NULL,0,NULL),
+          (4,6,NULL,NULL,0,'2026-11-12',1,NULL),
+          (5,7,NULL,NULL,0,NULL,0,NULL),
+          (6,6,'2026-11-12',NULL,0,NULL,0,NULL);
+        UPDATE fichas_sessao
+          SET assinatura_aluno_timestamp='2026-11-13', assinatura_tripulante=1, aluno_ip='new'
+          WHERE empresa_id=6 AND deleted_at IS NULL
+            AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0
+            AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0;
+        SELECT id,aluno_ip FROM fichas_sessao ORDER BY id;
+      `;
+      const run = spawnSync('sqlite3', ['-json', db], { input: sql, encoding: 'utf8' });
+      expect(run.status, run.stderr).toBe(0);
+      const rows = JSON.parse(run.stdout) as Array<{id:number; aluno_ip:string|null}>;
+      expect(rows.map((row) => row.aluno_ip)).toEqual(['new',null,null,null,null,null]);
+      const retry = spawnSync('sqlite3',['-json', db], {
+        input: `UPDATE fichas_sessao SET aluno_ip='overwritten'
+          WHERE id=1 AND empresa_id=6 AND deleted_at IS NULL
+            AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0
+            AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0;
+            SELECT aluno_ip FROM fichas_sessao WHERE id=1;`,
+        encoding: 'utf8',
+      });
+      expect(retry.status,retry.stderr).toBe(0);
+      expect(JSON.parse(retry.stdout)[0].aluno_ip).toBe('new');
+    } finally {
+      rmSync(dir,{recursive:true,force:true});
+    }
+  });
+
   it.skipIf(!sqlite)('rejects a timestamp/flag-signed or foreign-tenant ficha in SQLite', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pto-instructor-sign-'));
     const db = join(dir, 'fichas.db');
