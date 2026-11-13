@@ -23,10 +23,12 @@ function fail(code) {
   process.exit(1);
 }
 
-if (!['dry-run', 'apply'].includes(mode)) fail('INVALID_MODE');
+const enrollmentOnly = ['enroll-dry-run', 'enroll-apply'].includes(mode);
+if (!['dry-run', 'apply', 'enroll-dry-run', 'enroll-apply'].includes(mode)) fail('INVALID_MODE');
 const confirmation = process.env.TRAINING_COMPLIANCE_MATRIX_REPAIR_CONFIRMATION || '';
-if (mode === 'dry-run' && confirmation !== DRY_CONFIRM) fail('DRYRUN_CONFIRMATION_REQUIRED');
+if (['dry-run', 'enroll-dry-run'].includes(mode) && confirmation !== DRY_CONFIRM) fail('DRYRUN_CONFIRMATION_REQUIRED');
 if (mode === 'apply' && confirmation !== APPLY_CONFIRM) fail('APPLY_CONFIRMATION_REQUIRED');
+if (mode === 'enroll-apply' && confirmation !== 'AIRTRUST_PRODUCTION_ENROLL_ONLY_MANDATORY_EAD_NO_CANCEL_NO_EMAIL') fail('ENROLL_ONLY_CONFIRMATION_REQUIRED');
 if ((process.env.TRAINING_COMPLIANCE_PRODUCTION_DB_NAME || DB_NAME) !== DB_NAME) fail('PRODUCTION_DB_TARGET_REJECTED');
 
 function sha(values) {
@@ -342,6 +344,7 @@ async function readState(token) {
   let suppressedByValidEvidenceCount = 0;
   let modalityManualReviewCount = 0;
   let policyManualReviewCount = 0;
+  let oneShotPolicyOverrideCount = 0;
   let renewalWindowCount = 0;
   for (const row of topology.targetRows) {
     const key = pairKey(row.funcionario_id, row.qualificacao_tipo_id);
@@ -359,8 +362,12 @@ async function readState(token) {
     // auto-enrollment opt-in permits a new LMS enrollment. Never infer it
     // from an absent historical qualification or a mandatory rule alone.
     if (Number(row.auto_matricular_ead) !== 1) {
-      policyManualReviewCount += 1;
-      continue;
+      if (!enrollmentOnly) {
+        policyManualReviewCount += 1;
+        continue;
+      }
+      // One-shot owner-authorized enrollment; never persistently change the rule's opt-in.
+      oneShotPolicyOverrideCount += 1;
     }
     if (
       String(requirement?.status_compliance || '').toUpperCase() === 'CONFORME' &&
@@ -418,6 +425,7 @@ async function readState(token) {
     redundant_manual_review_count: redundantManualReviewRows.length,
     modality_manual_review_count: modalityManualReviewCount,
     policy_manual_review_count: policyManualReviewCount,
+    one_shot_policy_override_count: oneShotPolicyOverrideCount,
     no_course_types: noCourseTypes,
     no_course_count: noCourseTypes.length,
     no_course_hash: sha(noCourseTypes.map((row) => String(row.id))),
@@ -496,8 +504,8 @@ function chunk(items, size = 200) {
   return out;
 }
 
-async function enrollMissingPairs(token) {
-  const state = await readState(token);
+async function enrollMissingPairs(token, state) {
+  // Use precisely the candidate set whose count/hash was approved immediately before apply.
   if (state.ambiguous_course_types.length > 0) fail('AMBIGUOUS_ACTIVE_COURSE_MAPPING');
   if (state.no_course_count > 0) fail('REQUIRED_EAD_COURSE_STILL_MISSING_AFTER_CREATE');
 
@@ -672,6 +680,8 @@ function sanitizedSummary(state) {
     redundant_manual_review_count: state.redundant_manual_review_count,
     modality_manual_review_count: state.modality_manual_review_count,
     policy_manual_review_count: state.policy_manual_review_count,
+    one_shot_policy_override_count: state.one_shot_policy_override_count,
+    cancellation_scope: enrollmentOnly ? 'none' : 'legacy-repair',
     historical_evidence_preserved: true,
     no_course_count: state.no_course_count,
     no_course_hash: state.no_course_hash,
@@ -701,7 +711,7 @@ async function main() {
   summary.cancelled_wrong_with_evidence_enrollments = 0;
   summary.cancelled_redundant_valid_evidence_enrollments = 0;
 
-  if (mode === 'dry-run') {
+  if (mode === 'dry-run' || mode === 'enroll-dry-run') {
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
     return;
   }
@@ -711,23 +721,25 @@ async function main() {
   if (before.no_course_count !== 0) fail('PUBLISHED_EAD_CONTENT_MISSING_MANUAL_REVIEW');
   verifyReviewedState(before);
 
-  const enrollmentResult = await enrollMissingPairs(token);
+  const enrollmentResult = await enrollMissingPairs(token, before);
   summary.created_enrollments = enrollmentResult.created;
   summary.ignored_existing = enrollmentResult.ignored;
 
-  summary.cancelled_wrong_enrollments = cancelReviewedWrongEnrollments(
-    before.wrong_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
-  );
-  // Evidenced/cancelled-historical candidates are intentionally review-only.
-  summary.cancelled_wrong_with_evidence_enrollments = 0;
-  summary.cancelled_redundant_valid_evidence_enrollments = cancelReviewedRedundantEnrollments(
-    before.redundant_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
-  );
+  if (!enrollmentOnly) {
+    summary.cancelled_wrong_enrollments = cancelReviewedWrongEnrollments(
+      before.wrong_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
+    );
+    // Evidenced/cancelled-historical candidates are intentionally review-only.
+    summary.cancelled_wrong_with_evidence_enrollments = 0;
+    summary.cancelled_redundant_valid_evidence_enrollments = cancelReviewedRedundantEnrollments(
+      before.redundant_rows.map((row) => Number(row.id)).sort((a, b) => a - b),
+    );
+  }
 
   const after = await readState(token);
   if (after.missing_count !== 0) fail(`POST_MISSING_EXPECTED_PAIRS_${after.missing_count}`);
-  if (after.wrong_count !== 0) fail(`POST_WRONG_GLOBAL_PAIRS_${after.wrong_count}`);
-  if (after.redundant_count !== 0) fail(`POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS_${after.redundant_count}`);
+  if (!enrollmentOnly && after.wrong_count !== 0) fail(`POST_WRONG_GLOBAL_PAIRS_${after.wrong_count}`);
+  if (!enrollmentOnly && after.redundant_count !== 0) fail(`POST_REDUNDANT_VALID_EVIDENCE_ENROLLMENTS_${after.redundant_count}`);
   if (after.no_course_count !== 0) fail(`POST_REQUIRED_EAD_COURSE_MISSING_${after.no_course_count}`);
   // Manual review candidates with evidence must remain untouched and may persist.
 

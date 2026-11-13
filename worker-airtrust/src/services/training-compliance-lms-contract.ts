@@ -1,4 +1,5 @@
 import { ApiError } from '../middleware/error-handler';
+import { complianceAllowsEadEnrollment } from './training-compliance-enrollment-policy';
 
 export type TrainingLmsContractState =
   | 'NON_EAD'
@@ -24,14 +25,14 @@ type ContractRow = {
 };
 
 export function classifyTrainingLmsContract(row: Pick<ContractRow,
-  'categoria' | 'qualification_active' | 'qualification_deleted_at' | 'auto_matricular_ead' | 'modalidade_requerida' | 'published_courses'>): TrainingLmsContractState {
+  'categoria' | 'qualification_active' | 'qualification_deleted_at' | 'auto_matricular_ead' | 'modalidade_requerida' | 'published_courses'>, empresaId = 0): TrainingLmsContractState {
   if (Number(row.qualification_active) !== 1 || row.qualification_deleted_at !== null)
     return 'QUALIFICATION_UNAVAILABLE';
   if (!['EAD', 'TREINAMENTO EAD'].includes(String(row.categoria || '').trim().toUpperCase()))
     return Number(row.auto_matricular_ead) === 1 ? 'INVALID_AUTO_CONFIGURATION' : 'NON_EAD';
   if (Number(row.published_courses) === 0) return 'NO_PUBLISHED_COURSE';
   if (Number(row.published_courses) !== 1) return 'MULTIPLE_PUBLISHED_COURSES';
-  if (Number(row.auto_matricular_ead) === 1 && row.modalidade_requerida !== 'EAD')
+  if (Number(row.auto_matricular_ead) === 1 && !complianceAllowsEadEnrollment(row.auto_matricular_ead,row.modalidade_requerida,empresaId))
     return 'INVALID_AUTO_CONFIGURATION';
   if (Number(row.auto_matricular_ead) !== 1)
     return 'EAD_OPT_OUT';
@@ -48,7 +49,7 @@ export async function assertTrainingComplianceAutoEnrollmentContract(
   optedIn: number, modalidade: string | null,
 ): Promise<void> {
   if (optedIn !== 1) return;
-  if (modalidade !== 'EAD') throw new ApiError(
+  if (!complianceAllowsEadEnrollment(optedIn,modalidade,empresaId)) throw new ApiError(
     'Matrícula EAD automática exige modalidade EAD explicitamente selecionada', 409,
   );
   const qualification = await db.prepare(
@@ -99,7 +100,7 @@ export async function inspectTrainingComplianceLmsContracts(
     EAD_OPT_OUT: 0, EAD_READY: 0,
   };
   const checks = (results || []).map((row) => {
-    const state = classifyTrainingLmsContract(row);
+    const state = classifyTrainingLmsContract(row,empresaId);
     summary[state]++;
     return {
       rule_id: row.id, qualification_id: row.qualificacao_tipo_id,

@@ -89,7 +89,7 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
     LEFT JOIN lms_cursos lc ON lc.empresa_id=f.empresa_id AND lc.qualificacao_tipo_id=qt.id AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL
     WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
       AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND tr_assigned.modalidade_requerida='EAD' AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
+      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND (tr_assigned.modalidade_requerida='EAD' OR (tr_assigned.modalidade_requerida IS NULL AND tr_assigned.empresa_id=6)) AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
       AND ${predicate}
     GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
   for(const row of results||[]){
@@ -276,7 +276,7 @@ async function inspectAssignedConditionEnrollmentContract(
     .all<{qualificacao_tipo_id:number;auto_matricular_ead:number|null;modalidade_requerida:string|null;course_count:number}>();
   if((results||[]).some(x=>Number(x.course_count)===0)) return 'UNMAPPED_MANDATORY_QUALIFICATION';
   if((results||[]).some(x=>Number(x.course_count)!==1 || Number(x.auto_matricular_ead)!==1
-      || x.modalidade_requerida!=='EAD')) return 'NO_EAD_POLICY';
+      || (x.modalidade_requerida!=='EAD' && !(empresaId===6 && x.modalidade_requerida==null)))) return 'NO_EAD_POLICY';
   return null;
 }
 

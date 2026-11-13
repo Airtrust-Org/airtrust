@@ -27,6 +27,7 @@ import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/use
 import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
+import { authorizeScormAssetSession } from './scormAssetSessionDeadline';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -288,6 +289,8 @@ export default function LmsPlayer() {
   const {
     data: matricula,
     isLoading: matriculaLoading,
+    isError: matriculaIsError,
+    error: matriculaError,
     refetch: refetchMatricula,
   } = useMatriculaDetalhe(id);
   // Keep the asset-session effect scoped to session identity. Query hook
@@ -639,6 +642,17 @@ export default function LmsPlayer() {
     // established asset session. The short-lived HttpOnly asset cookie
     // remains valid, while a real logout is handled by the auth guard below.
     if (!playerToken) {
+      // A refresh may be pending, but absence of a token must never leave
+      // the initial asset authorization spinner indefinitely. Preserve an
+      // already mounted SCO; only report a recoverable first-launch failure.
+      if (assetSessionKeyRef.current !== sessionKey) {
+        const waitForRefresh = window.setTimeout(() => {
+          if (assetSessionKeyRef.current !== sessionKey) {
+            setAssetSessionError('A autorização do conteúdo não foi concluída. Verifique sua sessão e tente novamente.');
+          }
+        }, 20_000);
+        return () => window.clearTimeout(waitForRefresh);
+      }
       return;
     }
 
@@ -646,9 +660,9 @@ export default function LmsPlayer() {
 
     async function syncAssetSession() {
       try {
-        const response = await fetchWithAuth('/api/lms/assets/session', {
-          method: 'POST',
-          body: JSON.stringify({ matricula_id: id, expected_handoff_id: activeHandoffId }),
+        const response = await authorizeScormAssetSession({
+          matriculaId: id,
+          expectedHandoffId: activeHandoffId,
         });
         if (cancelled) return;
 
@@ -680,10 +694,12 @@ export default function LmsPlayer() {
           setAssetSessionReady(false);
           setAssetSessionError(`Não foi possível autorizar a abertura do conteúdo (HTTP ${response.status}).`);
         }
-      } catch {
+      } catch (error) {
         if (!cancelled && assetSessionKeyRef.current !== sessionKey) {
           setAssetSessionReady(false);
-          setAssetSessionError('Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
+          setAssetSessionError(error instanceof Error && error.message === 'ASSET_SESSION_TIMEOUT'
+            ? 'Tempo limite ao autorizar o conteúdo. Seu progresso foi preservado. Tente novamente.'
+            : 'Não foi possível conectar ao conteúdo. Verifique a conexão e tente novamente.');
         }
       }
     }
@@ -1367,8 +1383,36 @@ export default function LmsPlayer() {
 
   if (matriculaLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-5 text-white"
+        role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+        <p className="text-sm text-white/70">Consultando a matrícula e o progresso já salvo...</p>
+      </div>
+    );
+  }
+
+  if (matriculaIsError && !matricula) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-950 px-5 text-center text-white"
+        role="alert">
+        <AlertTriangle className="h-9 w-9 text-amber-400" />
+        <h1 className="text-lg font-semibold">Não foi possível carregar o treinamento</h1>
+        <p className="max-w-lg text-sm text-white/75">
+          {matriculaError instanceof Error ? matriculaError.message : 'Não foi possível consultar a matrícula.'}
+        </p>
+        <p className="max-w-lg text-xs text-white/55">
+          Seu progresso permanece salvo. Não é necessário reiniciar o curso.
+        </p>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={() => void refetchMatricula()}
+            className="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300">
+            Tentar novamente
+          </button>
+          <button type="button" onClick={() => navigate('/lms')}
+            className="rounded-lg border border-white/25 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
+            Voltar aos treinamentos
+          </button>
+        </div>
       </div>
     );
   }
@@ -1454,6 +1498,16 @@ export default function LmsPlayer() {
           </button>
         </div>
       </header>
+
+      {matriculaIsError && matricula ? (
+        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-400/40 bg-amber-950/70 px-4 py-2 text-xs text-amber-100">
+          <span>A atualização do progresso não respondeu. O conteúdo aberto foi preservado; verifique o registro antes de encerrar o curso.</span>
+          <button type="button" onClick={() => void refetchMatricula()}
+            className="rounded-lg border border-amber-300/40 px-3 py-1.5 font-semibold hover:bg-amber-900/60">
+            Atualizar situação
+          </button>
+        </div>
+      ) : null}
 
       {newEditionRequired && editionMismatch && !effectiveReviewMode && (
         <div className="flex w-full shrink-0 flex-col items-stretch gap-3 border-b border-amber-400/40 bg-amber-950/95 px-4 py-3 text-amber-100 sm:flex-row sm:items-start">

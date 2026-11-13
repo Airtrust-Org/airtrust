@@ -43,10 +43,18 @@ describe('Compliance ↔ LMS rule contract', () => {
     await assertTrainingComplianceAutoEnrollmentContract(db, 6, 201, 0, null);
     expect(calls).toEqual([]);
   });
-  it('rejects contradictory opt-in without explicit EAD modality', async () => {
+  it('tenant 6: accepts explicit opt-in with null evidence modality, only for unique published EAD course', async () => {
     const { db, calls } = fakeDb('EAD', 1);
     await expect(assertTrainingComplianceAutoEnrollmentContract(db, 6, 201, 1, null))
-      .rejects.toMatchObject({ statusCode: 409 });
+      .resolves.toBeUndefined();
+    expect(calls).toHaveLength(2);
+    expect(classifyTrainingLmsContract(row({ modalidade_requerida:null }), 6)).toBe('EAD_READY');
+    expect(classifyTrainingLmsContract(row({ modalidade_requerida:'PRATICO' }), 6)).toBe('INVALID_AUTO_CONFIGURATION');
+  });
+  it('other tenants reject a null evidence modality even with EAD catalog', async () => {
+    const { db, calls } = fakeDb('EAD', 1);
+    await expect(assertTrainingComplianceAutoEnrollmentContract(db, 7, 201, 1, null))
+      .rejects.toMatchObject({ statusCode:409 });
     expect(calls).toEqual([]);
   });
   it('requires an eligible qualification in the same tenant', async () => {
