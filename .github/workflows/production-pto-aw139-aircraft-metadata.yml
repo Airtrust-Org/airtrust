@@ -6,7 +6,7 @@ on:
       mode: {required: true, type: choice, options: [dry-run, apply]}
       confirmation: {required: true, type: string}
       reviewed_dry_run_run_id: {required: false, type: string}
-permissions: {contents: read, actions: read, checks: read, statuses: read}
+permissions: {contents: read, actions: read, checks: read, statuses: read, pull-requests: read}
 concurrency: {group: production-pto-aw139-aircraft-metadata, cancel-in-progress: false}
 jobs:
   d1_update_aircraft:
@@ -40,11 +40,35 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: worker-airtrust/package-lock.json
-      - name: Verify all official CI release gates
+      - name: Verify eight gates of merged and unchanged reviewed sources
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: RELEASE_SHA="$EXPECTED_SHA" node scripts/ci/verify-release-gates.mjs
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_SHA: 04550d726013dd5f28efdfdcc5070f1d97c17f52
+          REVIEW_MERGE_SHA: 274e8bbf57d53f6d13ae20c0058951e3a8adf519
+        run: |
+          set -euo pipefail
+          # GitHub protects and runs the eight gates on the PR HEAD. A squash
+          # merge creates a new SHA with no PR check runs. Verify provenance
+          # and byte-identical executable source instead of pretending that
+          # the squash SHA has a green test suite.
+          git merge-base --is-ancestor "$REVIEW_MERGE_SHA" "$GITHUB_SHA"
+          pull="$(gh api "repos/$GITHUB_REPOSITORY/pulls/2250")"
+          jq -e --arg head "$REVIEW_SHA" --arg merge "$REVIEW_MERGE_SHA" \
+            '.merged == true and .head.sha == $head and .merge_commit_sha == $merge' \
+            <<<"$pull" > /dev/null
+          git fetch --no-tags origin "$REVIEW_SHA"
+          for file in \
+            scripts/production/fix-pto-aw139-aircraft-metadata.mjs \
+            scripts/production/lib/pto-aw139-aircraft-metadata.mjs \
+            scripts/__tests__/pto-aw139-aircraft-metadata.test.mjs; do
+            cmp -s <(git show "$REVIEW_SHA:$file") "$file" || {
+              echo "PTO_AW139_REVIEWED_FILE_DRIFT:$file" >&2
+              exit 1
+            }
+          done
+          RELEASE_SHA="$REVIEW_SHA" node scripts/ci/verify-release-gates.mjs
       - name: Verify source and local SQLite fail-closed contract
         run: |
           set -euo pipefail
