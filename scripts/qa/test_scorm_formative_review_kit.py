@@ -78,6 +78,48 @@ class FormativeReviewTest(unittest.TestCase):
         self.assertEqual(result["packageSha256"], self.sha)
         self.assertNotIn("signature", result)
 
+    def test_rc21_course_data_case_label_review_intake(self):
+        """Exact RC21 format can be reviewed without exporting answer keys."""
+        model = {"slides": [
+            {"id": "case_1", "title": "Operational situation", "type": "case",
+             "lead": "An operational event requires a decision.",
+             "question": "What should the agent do?", "options": [
+                 {"label": "Ignore the procedure", "correct": False, "feedback": "Unsafe"},
+                 {"label": "Consult the valid procedure", "correct": True, "feedback": "Correct"}]},
+            {"id": "end", "type": "summary"}]}
+        with ZipFile(self.zip, "w") as z:
+            z.writestr("course_data.js", "window.COURSE_DATA=" +
+                       json.dumps(model) + ";")
+            z.writestr("airtrust-completion-manifest.json",
+                       json.dumps(self.manifest | {
+                           "content": {"requiredSlides": ["case_1", "end"]},
+                           "formative": {"requiredActivities": ["case_1"]}}))
+        digest = hashlib.sha256(self.zip.read_bytes()).hexdigest()
+        rows = kit.inventory(self.zip, digest, 78)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(json.loads(rows[0]["options_json"]),
+                         ["Ignore the procedure", "Consult the valid procedure"])
+        self.assertNotIn("correct", rows[0]["options_json"])
+        self.assertEqual(rows[0]["review_state"], "PENDING")
+        rows[0].update(reviewer_selected_index="1",
+                       reviewer_evidence="The approved operational procedure must be consulted first.",
+                       reviewer_name="Independent Reviewer", reviewer_date="2026-10-25",
+                       review_state="APPROVED")
+        kit.write_template(self.csv, rows)
+        approved = converter.convert(self.csv, digest, "reviewer_id_123",
+                                     "approval_workflow_record",
+                                     "2026-10-25T12:00:00.000Z",
+                                     zip_path=self.zip, course_id=78)
+        self.assertEqual(approved["items"][0]["selectedIndex"], 1)
+        self.csv.unlink()
+        rows[0]["options_json"] = '["tampered"]'
+        kit.write_template(self.csv, rows)
+        with self.assertRaisesRegex(ValueError, "ZIP_CONTENT_DRIFT"):
+            converter.convert(self.csv, digest, "reviewer_id_123",
+                              "approval_workflow_record",
+                              "2026-10-25T12:00:00.000Z",
+                              zip_path=self.zip, course_id=78)
+
     def test_reject_wrong_zip_sha(self):
         with self.assertRaisesRegex(ValueError, "ZIP_SHA_MISMATCH"):
             kit.inventory(self.zip, "0"*64, 15)

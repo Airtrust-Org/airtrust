@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZipFile
-from scorm_formative_review_kit import inventory
+from scorm_formative_review_kit import inventory, read_course_model
 
 COUNTS = {
     "cdc5a3cf30e4d37697c1f411977d87e16538bc75a6c03379252bbc2c8c06f6d2": (15, 80),
@@ -59,8 +59,7 @@ def convert(csv_path: Path, package_sha: str, reviewer_ref: str,
             for item in formative
         }
         with ZipFile(zip_path) as package:
-            model_js = package.read("content.js").decode("utf-8")
-        source = json.loads(model_js.split(" = ", 1)[1].strip().removesuffix(";"))
+            source = read_course_model(package)
         slides = source["slides"]
     names, seen, items = set(), set(), []
     for row in rows:
