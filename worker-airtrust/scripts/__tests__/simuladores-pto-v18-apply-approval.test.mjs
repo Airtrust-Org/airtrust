@@ -1,18 +1,63 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { assertNewPtoV18ApplyReady } from '../lib/simuladores-pto-v18-apply-approval.mjs';
+import { assertPtoV18CanonicalPlan, PTO_V18_CANONICAL_SESSIONS_SHA } from '../lib/simuladores-pto-v18-canonical-match.mjs';
 
 const source = '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912';
+const sourceSessions = JSON.parse(readFileSync(new URL(
+  '../../../scripts/operations/pto-v18-canonical/sessoes_pto_v18.json', import.meta.url,
+), 'utf8'));
+const sourceNotechs = JSON.parse(readFileSync(new URL(
+  '../../../scripts/operations/pto-v18-canonical/notechs_pto_v18.json', import.meta.url,
+), 'utf8'));
+
+const functionalCodes = [
+  'INST-E01', 'INST-E02', 'EXA-01/04', 'EXA-02/04', 'EXA-03/04', 'EXA-04/04',
+];
 const plan = Object.freeze({
   schema_version: 2,
   approved_source_sha256: source,
-  canonical_contract_sha256: 'a'.repeat(64),
+  canonical_contract_sha256: PTO_V18_CANONICAL_SESSIONS_SHA,
   plan_sha256: 'b'.repeat(64),
+  models: [
+    ...sourceSessions.map((s) => ({
+      codigo: s.codigo, titulo: s.titulo, carga_sessao: s.carga,
+      aeronave: s.aeronave === 'S76' ? 'SK76' : 'AW139',
+      tipo_estruturado: 'INICIAL',
+    })),
+    ...functionalCodes.map((codigo) => ({
+      codigo, aeronave: null,
+      tipo_estruturado: codigo.startsWith('INST') ? 'INSTRUTOR' : 'EXAMINADOR',
+    })),
+  ],
+  items: [
+    ...sourceSessions.flatMap((s) => s.itens.map((item) => ({
+      modelo: s.codigo,
+      aeronave: s.aeronave === 'S76' ? 'SK76' : 'AW139',
+      ordem: item.ordem,
+      codigo: item.codigo,
+      nome: item.nome,
+      execucao_pf: item.ordem <= 9 ? 'A' : 'B',
+    }))),
+    ...functionalCodes.flatMap((codigo) => Array.from({ length: 18 }, (_, index) => ({
+      modelo: codigo, aeronave: null, ordem: index + 1,
+      codigo: 'FUNC-' + (index + 1), nome: 'Exercício funcional',
+      execucao_pf: 'AB',
+    }))),
+  ],
+  notechs: sourceNotechs.map((row, index) => ({
+    codigo: row.codigo,
+    nome: row.elemento,
+    categoria: row.categoria,
+    evidencia_observavel: row.evidencia,
+    ordem: 1001 + index,
+  })),
 });
 const approval = Object.freeze({
   status: 'VALIDADO_PARA_PRODUCAO',
   pto_sha256: source,
-  contract_sha256: 'a'.repeat(64),
+  contract_sha256: PTO_V18_CANONICAL_SESSIONS_SHA,
   plan_sha256: 'b'.repeat(64),
   guide_count: 82,
   technical_items_verified: 1476,
@@ -41,6 +86,57 @@ test('new v18 plan can dry-run without operational approval', () => {
   assert.equal(assertNewPtoV18ApplyReady({
     plan, existingState: 'NEW', dryRun: true,
   }).mode, 'CURRICULAR_DRY_RUN_ONLY');
+});
+
+test('canonical V18 gate rejects hash-only forgery even in dry-run', () => {
+  assert.throws(() => assertNewPtoV18ApplyReady({
+    plan: { ...plan, canonical_contract_sha256: 'a'.repeat(64) },
+    existingState: 'NEW', dryRun: true,
+  }), /checksum não é o do contrato canônico/);
+});
+
+test('canonical V18 gate rejects changed technical code and PF assignment', () => {
+  for (const delta of [
+    { codigo: 'A139-NOT-APPROVED' }, { execucao_pf: 'B' }, { ordem: 19 },
+    { nome: 'Manobra alterada sem PTO' },
+  ]) {
+    const items = plan.items.map((item, i) => i === 0 ? { ...item, ...delta } : item);
+    assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, items }),
+      /divergência código\/nome\/ordem\/perna/);
+  }
+});
+
+test('canonical V18 gate rejects swapped model name, duration and aircraft', () => {
+  for (const delta of [
+    { titulo: 'Título não aprovado' }, { carga_sessao: '90 minutos' },
+    { aeronave: 'SK76' },
+  ]) {
+    const models = plan.models.map((model, i) => i === 0 ? { ...model, ...delta } : model);
+    assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, models }),
+      /modelo difere da fonte aprovada/);
+  }
+});
+
+test('canonical V18 gate rejects altered NOTECHS name or observable evidence', () => {
+  for (const delta of [
+    { nome: 'Não corresponde ao PTO' },
+    { categoria: 'Categoria inventada' },
+    { evidencia_observavel: 'Sem evidência válida' },
+    { ordem: 777 },
+  ]) {
+    const notechs = plan.notechs.map((row, i) => i === 0 ? { ...row, ...delta } : row);
+    assert.throws(() => assertPtoV18CanonicalPlan({ ...plan, notechs }),
+      /catálogo NOTECHS diferente/);
+  }
+});
+
+test('canonical V18 gate rejects missing NOTECHS and a missing session', () => {
+  assert.throws(() => assertPtoV18CanonicalPlan({
+    ...plan, notechs: plan.notechs.slice(1),
+  }), /15 competências NOTECHS obrigatórias/);
+  assert.throws(() => assertPtoV18CanonicalPlan({
+    ...plan, models: plan.models.slice(1),
+  }), /exigidos 82 modelos/);
 });
 
 test('new v18 plan may not apply a review-only package', () => {
