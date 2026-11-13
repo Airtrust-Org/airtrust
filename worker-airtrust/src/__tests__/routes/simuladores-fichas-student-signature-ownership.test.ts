@@ -233,7 +233,7 @@ describe('POST /fichas/:id/assinar — student signature ownership', () => {
     }), env);
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
-      code: 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET',
+      code: 'TECHNICAL_EXECUTION_EVIDENCE_MISSING',
       details: { technicalScores: { eligible: false, scored: 0, nonPerformed: 1 } },
     });
   });
