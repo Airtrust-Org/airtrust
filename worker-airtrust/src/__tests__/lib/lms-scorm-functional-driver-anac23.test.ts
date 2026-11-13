@@ -4,7 +4,8 @@ import { buildScormFunctionalDriverScript } from '../../lib/lms/lms-scorm-functi
 
 type LegacySlide = { id: string; layout: string; required?: boolean; objectives?: unknown[]; options?: Array<{correct:boolean}> };
 type LegacyQuestion = {q:string;options:string[];answer:number};
-const g=globalThis as typeof globalThis & Record<string,unknown>;
+type TestGlobal = typeof globalThis & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+const g=globalThis as TestGlobal;
 
 function createLegacySCO(options: {invalidQuiz?:boolean;wrongStatus?:boolean;noNext?:boolean;nonemptyStart?:boolean;unknownCourse?:boolean}={}) {
   const slides:LegacySlide[]=[
@@ -31,9 +32,9 @@ function createLegacySCO(options: {invalidQuiz?:boolean;wrongStatus?:boolean;noN
     Scorm:{get:(key:string)=>key==='cmi.core.lesson_status'?status:key==='cmi.core.score.raw'?rawScore:''},
   });
   const render=()=>{
-    document.body.innerHTML='';
+    g.document.body.innerHTML='';
     if(!options.noNext){
-      const next=document.createElement('button');next.id='nextBtn';
+      const next=g.document.createElement('button');next.id='nextBtn';
       next.addEventListener('click',()=>{
         clickCount++;
         if(current<slides.length-1){
@@ -43,33 +44,33 @@ function createLegacySCO(options: {invalidQuiz?:boolean;wrongStatus?:boolean;noN
           completed.add(slide.id);current++;sync();render();
         }else if(quizComplete&&quizScore>=70)finishCalls++;
       });
-      document.body.append(next);
+      g.document.body.append(next);
     }
     const slide=slides[current];
     if(slide.layout==='objectives'){
       for(let i=0;i<2;i++){
-        const button=document.createElement('button');button.dataset.touch=String(i);
+        const button=g.document.createElement('button');button.dataset.touch=String(i);
         button.addEventListener('click',()=>{
           clickCount++;
           if(!interactions.has(slide.id))interactions.set(slide.id,new Set());
           interactions.get(slide.id)?.add(i);sync();render();
         });
-        document.body.append(button);
+        g.document.body.append(button);
       }
     }
     if(slide.layout==='scenario'){
-      const choice=document.createElement('button');choice.dataset.opt='1';
+      const choice=g.document.createElement('button');choice.dataset.opt='1';
       choice.addEventListener('click',()=>{clickCount++;completed.add(slide.id);sync();render();});
-      document.body.append(choice);
+      g.document.body.append(choice);
     }
     if(slide.layout==='quiz'&&!quizComplete){
       const q=questions[quizIndex];
       for(let i=0;i<q.options.length;i++){
-        const button=document.createElement('button');button.dataset.quiz=String(i);
+        const button=g.document.createElement('button');button.dataset.quiz=String(i);
         button.addEventListener('click',()=>{clickCount++;answers[quizIndex]=i;sync();render();});
-        document.body.append(button);
+        g.document.body.append(button);
       }
-      const nextQuestion=document.createElement('button');nextQuestion.id='quizNext';
+      const nextQuestion=g.document.createElement('button');nextQuestion.id='quizNext';
       nextQuestion.disabled=answers[quizIndex]===undefined;
       nextQuestion.addEventListener('click',()=>{
         clickCount++;
@@ -82,7 +83,7 @@ function createLegacySCO(options: {invalidQuiz?:boolean;wrongStatus?:boolean;noN
           rawScore=String(quizScore);sync();render();
         }
       });
-      document.body.append(nextQuestion);
+      g.document.body.append(nextQuestion);
     }
   };
   sync();render();
@@ -95,7 +96,7 @@ function drive(){
 }
 describe('ANAC #23 legacy real-control functional driver',()=>{
   beforeEach(()=>{
-    document.body.innerHTML='';
+    g.document.body.innerHTML='';
     for(const k of ['COURSE','SLIDES','QUIZ','current','completed','interactions',
       'quizIndex','quizComplete','quizScore','quizAnswers','Scorm'])delete g[k];
   });
