@@ -7,6 +7,7 @@
  * - Geração automática de qualificação ao concluir
  */
 import { completedCancelBlock, completedCancelBlockById } from '../services/lms-matricula-cancel-guard';
+import { canSetEnrollmentNotStarted } from '../services/lms-administrative-reset-guard';
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../lib/lms/lms-effective-assessment-policy';
 import { Hono } from 'hono';
 import { mayNotifyEnrollmentForCourse } from '../services/lms-draft-enrollment-policy';
@@ -2046,27 +2047,13 @@ app.patch('/:id/status', requirePermission('lms', 'editar', 'admin', 'manager'),
   const { status, observacoes } = parsed.data;
   const now = getTodayIsoSaoPaulo();
 
-  // #1325 / #2215: uma simples alteração administrativa de status não pode
-  // reiniciar um percurso com progresso, nem deixar CMI/SCORM existente
-  // associado a NAO_INICIADO. Reset verdadeiro exige procedimento governado
-  // próprio, com revisão de evidências e ciclo de matrícula.
-  if (status === 'NAO_INICIADO') {
-    const started = Number(existing.progresso_pct ?? 0) > 0
-      || Boolean(existing.data_inicio);
-    const hasScormRuntime = String(existing.tipo_conteudo ?? '').toLowerCase() === 'scorm'
-      ? Boolean(await db.prepare(
-          `SELECT 1 AS has_runtime FROM lms_progresso_scorm
-             WHERE matricula_id=? AND empresa_id=? LIMIT 1`,
-        ).bind(matriculaId, empresaId).first())
-      : false;
-    if (started || hasScormRuntime) {
-      return c.json({
-        success: false,
-        code: 'LMS_RESET_REQUIRES_GOVERNED_RECOVERY',
-        error: 'Matrícula com início, progresso ou evidência SCORM não pode ser redefinida como NÃO INICIADA apenas pelo status administrativo.',
-        data: { matricula_id: matriculaId, status_atual: existing.status },
-      }, 409);
-    }
+  // A troca administrativa de status não pode apagar a semântica do SCORM.
+  if (status === 'NAO_INICIADO' && !(await canSetEnrollmentNotStarted(db, empresaId, matriculaId, existing))) {
+    return c.json({
+      success: false, code: 'LMS_RESET_REQUIRES_GOVERNED_RECOVERY',
+      error: 'Matrícula com início, progresso ou evidência SCORM exige recuperação governada.',
+      data: { matricula_id: matriculaId, status_atual: existing.status },
+    }, 409);
   }
 
   // ── Gate obrigatório para CONCLUIDO ─────────────────────────────────────────
