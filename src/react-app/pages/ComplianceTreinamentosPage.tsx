@@ -83,6 +83,7 @@ type Training = {
   qualificacao_tipo_id: number;
   qualificacao_tipo_nome: string;
   qualificacao_tipo_codigo?: string | null;
+  alerta_ead_permitido?: boolean;
   pessoas: number;
   conformes: number;
   vencendo: number;
@@ -1102,14 +1103,14 @@ export default function ComplianceTreinamentosPage() {
                             </button>
                           </td>
                           <td className="px-3 py-3 text-right">
-                            <TrainingComplianceNoticeAction
+                            {item.alerta_ead_permitido && <TrainingComplianceNoticeAction
                               scopeLabel={`treinamento ${item.qualificacao_tipo_nome}`}
                               pendingCount={item.nao_realizados + item.vencendo + item.vencidos}
                               setorId={setorId}
                               funcaoId={funcaoId}
                               qualificacaoTipoId={item.qualificacao_tipo_id}
                               search={searchQuery}
-                            />
+                            />}
                           </td>
                         </tr>
                       ))}
