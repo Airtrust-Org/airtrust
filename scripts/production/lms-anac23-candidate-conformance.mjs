@@ -101,21 +101,37 @@ export async function main(env=process.env) {
   const selected=validatePinnedCandidateList(listing.json.data);
   const report={schemaVersion:1,mode,tenant:6,course:23,
     candidates:[],writes:0,activationPerformed:false};
+  const output=String(env.ANAC23_REPORT_PATH||'qa-state/anac23-conformance.json');
+  const save = () => {
+    fs.mkdirSync(path.dirname(output),{recursive:true});
+    fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n',{mode:0o600});
+  };
+  save(); // Auditable baseline even if one browser request fails.
   for(const item of selected) {
     if(mode==='inspect') {
       report.candidates.push({id:item.id,shaPrefix:item.shaPrefix,status:'VALIDATED'});
+      save();
       continue;
     }
-    const outcome=await authJson(api,token,
-      `/api/lms/cursos/23/scorm-package-versions/${item.id}/conformance`,'POST');
-    assert(outcome.status===200&&outcome.json?.success===true,
-      'CANDIDATE_CONFORMANCE_HTTP_FAILURE');
-    report.candidates.push(summarizeConformance(outcome.json.data,item));
-    report.writes++;
+    try {
+      const outcome=await authJson(api,token,
+        `/api/lms/cursos/23/scorm-package-versions/${item.id}/conformance`,'POST');
+      assert(outcome.status===200&&outcome.json?.success===true,
+        'CANDIDATE_CONFORMANCE_HTTP_FAILURE');
+      report.candidates.push(summarizeConformance(outcome.json.data,item));
+      report.writes++;
+    } catch (error) {
+      // Previous candidates may have committed their QA audits. Preserve the
+      // partial receipt; reruns must re-read every immutable candidate first.
+      report.candidates.push({
+        id:item.id,shaPrefix:item.shaPrefix,status:'ERROR',
+        reason:'CANDIDATE_QA_REQUEST_UNCONFIRMED',
+      });
+      save();
+      throw error;
+    }
+    save();
   }
-  const output=String(env.ANAC23_REPORT_PATH||'qa-state/anac23-conformance.json');
-  fs.mkdirSync(path.dirname(output),{recursive:true});
-  fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n',{mode:0o600});
   process.stdout.write(JSON.stringify(report)+'\n');
   assert(mode==='inspect'||report.candidates.every(c=>c.status==='PASS'),
     'CANDIDATE_CONFORMANCE_NOT_ALL_PASS');
