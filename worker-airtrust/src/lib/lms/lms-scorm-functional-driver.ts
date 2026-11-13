@@ -509,11 +509,11 @@ function driveFactoryCourse() {
             continue;
           }
           const allCovered = legacySlides.every(s => completed.has(s.id));
-          const allAnswered = quizAnswers.length === questions.length &&
+          const allAnswered = Number(quizAnswers.length) === questions.length &&
             questions.every((q, i) => quizAnswers[i] === q.answer);
           const status = read('cmi.core.lesson_status').toLowerCase();
           const raw = Number(read('cmi.core.score.raw'));
-          if (!allCovered || !allAnswered || quizScore < 70 ||
+          if (!allCovered || !allAnswered || Number(quizScore) < 70 ||
               status !== 'passed' || !Number.isFinite(raw) || raw < 70 ||
               raw !== Number(quizScore)) {
             return fail('LEGACY_ANAC23_COMPLETION_EVIDENCE_MISSING',step);
