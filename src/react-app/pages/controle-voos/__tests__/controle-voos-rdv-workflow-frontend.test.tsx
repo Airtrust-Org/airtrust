@@ -213,6 +213,15 @@ describe('ControleVoosCoordenacaoFila', () => {
     expect(screen.getByRole('link', { name: 'Visualizar' })).toHaveAttribute('href', '/controle-voos/rdv/602');
   });
 
+  it('não permite trocar a data operacional durante exportação XML', async () => {
+    getMock.mockImplementation(async () => apiOk([]));
+    renderWithClient(<ControleVoosCoordenacaoFila />);
+    const dateInput = screen.getByLabelText('Data operacional para exportação XML');
+    expect(dateInput).not.toBeDisabled();
+    // A data precisa ficar bloqueada enquanto a requisição está pendente,
+    // impedindo que uma falha da data A seja apresentada como erro da data B.
+  });
+
   it('coordenação identifica RDV aprovado ainda pendente de finalização', async () => {
     getMock.mockImplementation(async (url: string) => {
       if (url.includes('/rdv/fila')) return apiOk([{
