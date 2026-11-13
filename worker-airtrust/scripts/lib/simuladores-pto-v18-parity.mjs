@@ -22,6 +22,38 @@ function normalized(value) {
     .replace(/[^A-Z0-9]+/g, '');
 }
 
+/**
+ * O PTO V18 tem cinco formas de carga nas 82 tabelas de aeronaves. A carga
+ * prática no FFS não é confundida com a duração total que inclui solo.
+ * Valores desconhecidos são bloqueados — nunca inferidos por texto livre.
+ */
+export function assertPtoV18SessionLoad({ code, canonical, projected, projectedMinutes }) {
+  const clean = (value) => String(value ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase().replace(/\s+/g, ' ');
+  const wanted = clean(canonical);
+  const got = clean(projected);
+  const specs = new Map([
+    ['2 horas', { total: 120, modes: ['2 horas'] }],
+    ['3 horas', { total: 180, modes: ['3 horas'] }],
+    ['2 horas praticas em ffs', { total: 120, modes: ['2 horas praticas em ffs', '2 horas'] }],
+    ['90 minutos (minimo)', { total: 90, modes: ['90 minutos (minimo)', '90 minutos'] }],
+    ['1 hora pratica (minimo); 1 hora de solo associada', {
+      total: 120, modes: ['1 hora pratica (minimo); 1 hora de solo associada'],
+    }],
+  ]);
+  const spec = specs.get(wanted);
+  if (!spec) fail(`${code}: carga canônica PTO desconhecida ou ausente: ${canonical}`);
+  if (!spec.modes.includes(got)) {
+    fail(`${code}: carga da sessão divergente do PTO V18: esperado ${canonical}, recebido ${projected}`);
+  }
+  if (projectedMinutes !== null && projectedMinutes !== undefined &&
+      (!Number.isInteger(projectedMinutes) || projectedMinutes !== spec.total)) {
+    fail(`${code}: duração estimada em minutos divergente da carga PTO V18 (${spec.total})`);
+  }
+  return Object.freeze({ session_minutes: spec.total, source_load: canonical });
+}
+
 export function assertPtoV18CurricularParity({ projection, contract, sourceManifest, contractSha256 }) {
   if (sourceManifest?.sha256_fonte !== PTO_V18_SHA256) {
     fail('hash da fonte V18 não corresponde ao PTO aprovado');
@@ -72,6 +104,10 @@ export function assertPtoV18CurricularParity({ projection, contract, sourceManif
     if (!got) fail(`${code}: sessão ausente no pacote`);
     if (got.aeronave !== wanted.aeronave) fail(`${code}: aeronave incorreta`);
     if (normalized(got.titulo) !== normalized(wanted.titulo)) fail(`${code}: título divergente`);
+    assertPtoV18SessionLoad({
+      code, canonical: wanted.carga, projected: got.carga_sessao,
+      projectedMinutes: got.duracao_estimada_minutos,
+    });
     const items = got.itens_tecnicos;
     if (!Array.isArray(items) || items.length !== 18) fail(`${code}: deve conter 18 itens técnicos`);
     for (let i = 0; i < 18; i += 1) {
