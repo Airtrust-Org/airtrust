@@ -30,6 +30,7 @@ export default function ControleVoosCoordenacaoFila() {
   const [dataFim, setDataFim] = useState('');
   const [xmlDate, setXmlDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [xmlLoading, setXmlLoading] = useState(false);
+  const [xmlErrorMessage, setXmlErrorMessage] = useState('');
 
   const {
     data: fila = [],
@@ -71,12 +72,27 @@ export default function ControleVoosCoordenacaoFila() {
             </div>
             <label className="space-y-1 text-xs">
               <span className="block font-medium text-slate-500 dark:text-slate-400">Data operacional</span>
-              <input type="date" value={xmlDate} onChange={(event) => setXmlDate(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+              <input type="date" value={xmlDate} onChange={(event) => { setXmlDate(event.target.value); setXmlErrorMessage(''); }} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
             </label>
-            <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { toast.error(xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
+            <button type="button" disabled={!xmlDate || xmlLoading} onClick={async () => { setXmlLoading(true); setXmlErrorMessage(''); try { await baixarPetrobrasRveXml(xmlDate); toast.success('XML Petrobras gerado.'); } catch (xmlError) { const message = xmlError instanceof Error ? xmlError.message : 'Falha ao gerar XML Petrobras'; setXmlErrorMessage(message); if (!message.includes('Nenhum RDV finalizado')) toast.error(message); } finally { setXmlLoading(false); } }} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">
               <FileDown className="h-4 w-4" /> {xmlLoading ? 'Gerando…' : 'Gerar XML do dia'}
             </button>
           </div>
+
+          {xmlErrorMessage && (
+            <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+              <p className="font-semibold">Não foi possível gerar o XML de {formatDate(xmlDate)}.</p>
+              <p className="mt-1">{xmlErrorMessage}</p>
+              {xmlErrorMessage.includes('Nenhum RDV finalizado') && (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <p>Somente RDVs no status Finalizado e com a mesma data operacional entram no XML. Enviado à Coordenação e Aprovado ainda não são Finalizado.</p>
+                  <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { setStatus('finalizado'); setDataInicio(xmlDate); setDataFim(xmlDate); }}>
+                    Consultar RDVs finalizados desta data
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <label className="space-y-1 text-xs">
