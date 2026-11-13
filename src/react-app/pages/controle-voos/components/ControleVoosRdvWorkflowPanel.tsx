@@ -220,6 +220,16 @@ export default function ControleVoosRdvWorkflowPanel({
         </span>
       </div>
 
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/20 dark:text-blue-200" role="status">
+        {rdv.workflow_status === 'enviado' && 'Pendente da Coordenação: clique em Iniciar revisão, confira os dados operacionais e aprove ou devolva com justificativa. O envio do piloto não finaliza o RDV.'}
+        {rdv.workflow_status === 'em_revisao' && 'Revisão em andamento: a Coordenação deve conferir os dados e escolher Aprovar ou Devolver ao piloto. O relatório ainda não pode ser exportado no XML.'}
+        {rdv.workflow_status === 'aprovado_coordenacao' && 'Aprovação registrada. Falta clicar em Finalizar relatório para tornar este RDV elegível à exportação XML Petrobras.'}
+        {rdv.workflow_status === 'reaberto' && 'Pendente da Coordenação: inicie uma nova revisão para corrigir e reapreciar este relatório.'}
+        {(rdv.workflow_status === 'rascunho' || rdv.workflow_status === 'devolvido') && 'Pendente do piloto: conclua o preenchimento, corrija eventuais alertas e envie o RDV à Coordenação.'}
+        {rdv.workflow_status === 'finalizado' && 'RDV finalizado. A exportação XML depende também da data selecionada e da validação dos identificadores Petrobras, etapas e horários.'}
+        {rdv.workflow_status === 'cancelado' && 'RDV cancelado. Não participa da exportação XML.'}
+      </div>
+
       {rdv.motivo_devolucao &&
         (rdv.workflow_status === 'rascunho' || rdv.workflow_status === 'devolvido') && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
