@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
           node --check scripts/production/fix-pto-aw139-aircraft-metadata.mjs
           node --check scripts/production/lib/pto-aw139-aircraft-metadata.mjs
+          command -v sqlite3 >/dev/null
           node --test scripts/__tests__/pto-aw139-aircraft-metadata.test.mjs
           npm --prefix worker-airtrust ci
           node -e "const lock=require('./worker-airtrust/package-lock.json');const wrangler=require('./worker-airtrust/node_modules/wrangler/package.json');if(wrangler.version!==lock.packages?.['node_modules/wrangler']?.version)process.exit(1)"
