@@ -1,0 +1,590 @@
+[
+  {
+    "codigo": "INST-E01",
+    "titulo": "Treinamento Prático de Instrutor 1/2 — Procedimentos Normais e Técnica de Instrução",
+    "carga": "1 hora",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "INST-ACT-001",
+        "nome": "Planejamento e objetivos"
+      },
+      {
+        "ordem": 2,
+        "codigo": "INST-ACT-002",
+        "nome": "Conhecimento do equipamento"
+      },
+      {
+        "ordem": 3,
+        "codigo": "INST-ACT-003",
+        "nome": "Briefing da instrução"
+      },
+      {
+        "ordem": 4,
+        "codigo": "INST-ACT-004",
+        "nome": "Assentos e comandos"
+      },
+      {
+        "ordem": 5,
+        "codigo": "INST-ACT-005",
+        "nome": "Medidas de segurança"
+      },
+      {
+        "ordem": 6,
+        "codigo": "INST-ACT-006",
+        "nome": "Técnica de demonstração"
+      },
+      {
+        "ordem": 7,
+        "codigo": "INST-ACT-007",
+        "nome": "Procedimentos normais"
+      },
+      {
+        "ordem": 8,
+        "codigo": "INST-ACT-008",
+        "nome": "Uso das listas normais"
+      },
+      {
+        "ordem": 9,
+        "codigo": "INST-ACT-009",
+        "nome": "Partida e táxi"
+      },
+      {
+        "ordem": 10,
+        "codigo": "INST-ACT-010",
+        "nome": "Decolagem normal"
+      },
+      {
+        "ordem": 11,
+        "codigo": "INST-ACT-011",
+        "nome": "Condução normal"
+      },
+      {
+        "ordem": 12,
+        "codigo": "INST-ACT-012",
+        "nome": "Gerenciamento da automação"
+      },
+      {
+        "ordem": 13,
+        "codigo": "INST-ACT-013",
+        "nome": "Coordenação PF/PM"
+      },
+      {
+        "ordem": 14,
+        "codigo": "INST-ACT-014",
+        "nome": "Aproximação normal"
+      },
+      {
+        "ordem": 15,
+        "codigo": "INST-ACT-015",
+        "nome": "Pouso normal"
+      },
+      {
+        "ordem": 16,
+        "codigo": "INST-ACT-016",
+        "nome": "Identificação dos desvios do aluno"
+      },
+      {
+        "ordem": 17,
+        "codigo": "INST-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "INST-ACT-018",
+        "nome": "Preenchimento da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  },
+  {
+    "codigo": "INST-E02",
+    "titulo": "Treinamento Prático de Instrutor 2/2 — Procedimentos Não Normais, Emergências, Intervenção e Atuação Integrada",
+    "carga": "2 horas",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "INST-ACT-019",
+        "nome": "Briefing de risco"
+      },
+      {
+        "ordem": 2,
+        "codigo": "INST-ACT-020",
+        "nome": "Seleção e inserção da condição"
+      },
+      {
+        "ordem": 3,
+        "codigo": "INST-ACT-021",
+        "nome": "Reconhecimento da falha"
+      },
+      {
+        "ordem": 4,
+        "codigo": "INST-ACT-022",
+        "nome": "Ações de memória"
+      },
+      {
+        "ordem": 5,
+        "codigo": "INST-ACT-023",
+        "nome": "Aplicação do QRH/ECL"
+      },
+      {
+        "ordem": 6,
+        "codigo": "INST-ACT-024",
+        "nome": "Falha de motor"
+      },
+      {
+        "ordem": 7,
+        "codigo": "INST-ACT-025",
+        "nome": "Decolagem rejeitada ou continuada"
+      },
+      {
+        "ordem": 8,
+        "codigo": "INST-ACT-026",
+        "nome": "Potência e limitações OEI"
+      },
+      {
+        "ordem": 9,
+        "codigo": "INST-ACT-027",
+        "nome": "Condução OEI"
+      },
+      {
+        "ordem": 10,
+        "codigo": "INST-ACT-028",
+        "nome": "Aproximação e pouso OEI"
+      },
+      {
+        "ordem": 11,
+        "codigo": "INST-ACT-029",
+        "nome": "Emergência de sistema"
+      },
+      {
+        "ordem": 12,
+        "codigo": "INST-ACT-005",
+        "nome": "Medidas de segurança"
+      },
+      {
+        "ordem": 13,
+        "codigo": "INST-ACT-030",
+        "nome": "Intervenção a partir do assento aplicável"
+      },
+      {
+        "ordem": 14,
+        "codigo": "INST-ACT-031",
+        "nome": "Consequências de intervenção imprópria ou tardia"
+      },
+      {
+        "ordem": 15,
+        "codigo": "INST-ACT-032",
+        "nome": "Recuperação do cenário"
+      },
+      {
+        "ordem": 16,
+        "codigo": "INST-ACT-033",
+        "nome": "Treinamento corretivo"
+      },
+      {
+        "ordem": 17,
+        "codigo": "INST-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "INST-ACT-034",
+        "nome": "Preenchimento e avaliação da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  },
+  {
+    "codigo": "EXA-01/04",
+    "titulo": "Treinamento Prático de Examinador 1/4 — SOP Normal e Condução do Exame",
+    "carga": "1 hora",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "EXA-ACT-001",
+        "nome": "Planejamento da sessão"
+      },
+      {
+        "ordem": 2,
+        "codigo": "EXA-ACT-002",
+        "nome": "Briefing e critérios"
+      },
+      {
+        "ordem": 3,
+        "codigo": "EXA-ACT-003",
+        "nome": "Preparação do dispositivo"
+      },
+      {
+        "ordem": 4,
+        "codigo": "EXA-ACT-004",
+        "nome": "Medidas de segurança"
+      },
+      {
+        "ordem": 5,
+        "codigo": "EXA-ACT-005",
+        "nome": "Verificação documental"
+      },
+      {
+        "ordem": 6,
+        "codigo": "EXA-ACT-006",
+        "nome": "Condução sem coaching"
+      },
+      {
+        "ordem": 7,
+        "codigo": "EXA-ACT-007",
+        "nome": "Procedimentos normais"
+      },
+      {
+        "ordem": 8,
+        "codigo": "EXA-ACT-008",
+        "nome": "Uso das listas"
+      },
+      {
+        "ordem": 9,
+        "codigo": "EXA-ACT-009",
+        "nome": "Coordenação e comunicação"
+      },
+      {
+        "ordem": 10,
+        "codigo": "EXA-ACT-010",
+        "nome": "Observação do desempenho"
+      },
+      {
+        "ordem": 11,
+        "codigo": "EXA-ACT-011",
+        "nome": "Aplicação dos padrões"
+      },
+      {
+        "ordem": 12,
+        "codigo": "EXA-ACT-012",
+        "nome": "Registro de evidências"
+      },
+      {
+        "ordem": 13,
+        "codigo": "EXA-ACT-013",
+        "nome": "Julgamento técnico"
+      },
+      {
+        "ordem": 14,
+        "codigo": "EXA-ACT-014",
+        "nome": "Gestão do tempo"
+      },
+      {
+        "ordem": 15,
+        "codigo": "EXA-ACT-015",
+        "nome": "Decisão sobre cada item"
+      },
+      {
+        "ordem": 16,
+        "codigo": "EXA-ACT-016",
+        "nome": "Resultado fundamentado"
+      },
+      {
+        "ordem": 17,
+        "codigo": "EXA-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "EXA-ACT-018",
+        "nome": "Preenchimento da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  },
+  {
+    "codigo": "EXA-02/04",
+    "titulo": "Treinamento Prático de Examinador 2/4 — Procedimentos Não Normais e de Emergência I",
+    "carga": "1 hora",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "EXA-ACT-019",
+        "nome": "Planejamento da anormalidade"
+      },
+      {
+        "ordem": 2,
+        "codigo": "EXA-ACT-020",
+        "nome": "Preparação do IOS"
+      },
+      {
+        "ordem": 3,
+        "codigo": "EXA-ACT-021",
+        "nome": "Briefing de segurança"
+      },
+      {
+        "ordem": 4,
+        "codigo": "EXA-ACT-022",
+        "nome": "Inserção da condição"
+      },
+      {
+        "ordem": 5,
+        "codigo": "EXA-ACT-023",
+        "nome": "Reconhecimento"
+      },
+      {
+        "ordem": 6,
+        "codigo": "EXA-ACT-024",
+        "nome": "Ações imediatas"
+      },
+      {
+        "ordem": 7,
+        "codigo": "EXA-ACT-025",
+        "nome": "Aplicação do QRH/ECL"
+      },
+      {
+        "ordem": 8,
+        "codigo": "EXA-ACT-026",
+        "nome": "Prioridades operacionais"
+      },
+      {
+        "ordem": 9,
+        "codigo": "EXA-ACT-027",
+        "nome": "Monitoramento da trajetória"
+      },
+      {
+        "ordem": 10,
+        "codigo": "EXA-ACT-028",
+        "nome": "Coordenação PF/PM"
+      },
+      {
+        "ordem": 11,
+        "codigo": "EXA-ACT-029",
+        "nome": "Avaliação sem coaching"
+      },
+      {
+        "ordem": 12,
+        "codigo": "EXA-ACT-011",
+        "nome": "Aplicação dos padrões"
+      },
+      {
+        "ordem": 13,
+        "codigo": "EXA-ACT-030",
+        "nome": "Necessidade de intervenção"
+      },
+      {
+        "ordem": 14,
+        "codigo": "EXA-ACT-031",
+        "nome": "Segurança da sessão"
+      },
+      {
+        "ordem": 15,
+        "codigo": "EXA-ACT-032",
+        "nome": "Registro das evidências"
+      },
+      {
+        "ordem": 16,
+        "codigo": "EXA-ACT-016",
+        "nome": "Resultado fundamentado"
+      },
+      {
+        "ordem": 17,
+        "codigo": "EXA-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "EXA-ACT-033",
+        "nome": "Encerramento da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  },
+  {
+    "codigo": "EXA-03/04",
+    "titulo": "Treinamento Prático de Examinador 3/4 — Procedimentos Não Normais e de Emergência II",
+    "carga": "1 hora",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "EXA-ACT-034",
+        "nome": "Planejamento da emergência"
+      },
+      {
+        "ordem": 2,
+        "codigo": "EXA-ACT-035",
+        "nome": "Seleção de evento distinto"
+      },
+      {
+        "ordem": 3,
+        "codigo": "EXA-ACT-003",
+        "nome": "Preparação do dispositivo"
+      },
+      {
+        "ordem": 4,
+        "codigo": "EXA-ACT-036",
+        "nome": "Inserção no gate previsto"
+      },
+      {
+        "ordem": 5,
+        "codigo": "EXA-ACT-037",
+        "nome": "Reconhecimento e diagnóstico"
+      },
+      {
+        "ordem": 6,
+        "codigo": "EXA-ACT-038",
+        "nome": "Ações de memória"
+      },
+      {
+        "ordem": 7,
+        "codigo": "EXA-ACT-025",
+        "nome": "Aplicação do QRH/ECL"
+      },
+      {
+        "ordem": 8,
+        "codigo": "EXA-ACT-039",
+        "nome": "Gerenciamento de sistemas"
+      },
+      {
+        "ordem": 9,
+        "codigo": "EXA-ACT-040",
+        "nome": "Tomada de decisão"
+      },
+      {
+        "ordem": 10,
+        "codigo": "EXA-ACT-041",
+        "nome": "Gestão de potência ou automação"
+      },
+      {
+        "ordem": 11,
+        "codigo": "EXA-ACT-042",
+        "nome": "Continuação, desvio ou pouso"
+      },
+      {
+        "ordem": 12,
+        "codigo": "EXA-ACT-043",
+        "nome": "Critérios de estabilização"
+      },
+      {
+        "ordem": 13,
+        "codigo": "EXA-ACT-044",
+        "nome": "Observação sem coaching"
+      },
+      {
+        "ordem": 14,
+        "codigo": "EXA-ACT-045",
+        "nome": "Intervenção somente por segurança"
+      },
+      {
+        "ordem": 15,
+        "codigo": "EXA-ACT-011",
+        "nome": "Aplicação dos padrões"
+      },
+      {
+        "ordem": 16,
+        "codigo": "EXA-ACT-016",
+        "nome": "Resultado fundamentado"
+      },
+      {
+        "ordem": 17,
+        "codigo": "EXA-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "EXA-ACT-018",
+        "nome": "Preenchimento da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  },
+  {
+    "codigo": "EXA-04/04",
+    "titulo": "Treinamento Prático de Examinador 4/4 — Atuação na Função de Examinador",
+    "carga": "1 hora",
+    "itens": [
+      {
+        "ordem": 1,
+        "codigo": "EXA-ACT-046",
+        "nome": "Planejamento completo do exame"
+      },
+      {
+        "ordem": 2,
+        "codigo": "EXA-ACT-047",
+        "nome": "Verificação de elegibilidade"
+      },
+      {
+        "ordem": 3,
+        "codigo": "EXA-ACT-048",
+        "nome": "Briefing do candidato"
+      },
+      {
+        "ordem": 4,
+        "codigo": "EXA-ACT-049",
+        "nome": "Preparação do meio"
+      },
+      {
+        "ordem": 5,
+        "codigo": "EXA-ACT-050",
+        "nome": "Seleção dos eventos"
+      },
+      {
+        "ordem": 6,
+        "codigo": "EXA-ACT-051",
+        "nome": "Condução integral"
+      },
+      {
+        "ordem": 7,
+        "codigo": "EXA-ACT-052",
+        "nome": "Controle do tempo"
+      },
+      {
+        "ordem": 8,
+        "codigo": "EXA-ACT-044",
+        "nome": "Observação sem coaching"
+      },
+      {
+        "ordem": 9,
+        "codigo": "EXA-ACT-011",
+        "nome": "Aplicação dos padrões"
+      },
+      {
+        "ordem": 10,
+        "codigo": "EXA-ACT-053",
+        "nome": "Registro objetivo"
+      },
+      {
+        "ordem": 11,
+        "codigo": "EXA-ACT-054",
+        "nome": "Avaliação dos procedimentos normais"
+      },
+      {
+        "ordem": 12,
+        "codigo": "EXA-ACT-055",
+        "nome": "Avaliação dos procedimentos não normais"
+      },
+      {
+        "ordem": 13,
+        "codigo": "EXA-ACT-056",
+        "nome": "Avaliação das emergências"
+      },
+      {
+        "ordem": 14,
+        "codigo": "EXA-ACT-057",
+        "nome": "Avaliação NOTECHS"
+      },
+      {
+        "ordem": 15,
+        "codigo": "EXA-ACT-058",
+        "nome": "Decisão final"
+      },
+      {
+        "ordem": 16,
+        "codigo": "EXA-ACT-059",
+        "nome": "Fundamentação do resultado"
+      },
+      {
+        "ordem": 17,
+        "codigo": "EXA-ACT-017",
+        "nome": "Debriefing"
+      },
+      {
+        "ordem": 18,
+        "codigo": "EXA-ACT-060",
+        "nome": "Conclusão e assinatura da ficha"
+      }
+    ],
+    "status": "PENDENTE_DE_VALIDACAO_TECNICA"
+  }
+]
