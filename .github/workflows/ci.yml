@@ -116,6 +116,11 @@ jobs:
         run: |
           node --test scripts/ci/check-ci-schema-bootstrap.test.mjs
           node scripts/ci/check-ci-schema-bootstrap.mjs
+      - name: validate immutable approved PTO Rev10 V18 canonical curriculum
+        run: |
+          python3 scripts/operations/check-pto-v18-canonical-contract.py
+          python3 -m unittest discover -s scripts/operations -p 'test_pto_v18_canonical_contract.py' -v
+
       - name: validate staging simulator planning read-only preflight
         run: |
           node --test scripts/__tests__/staging-simulator-matrix-baseline-audit.test.mjs
