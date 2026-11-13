@@ -56,7 +56,7 @@ function query(sql){
   Array.isArray(parsed[0].results),'D1_RESPONSE_INVALID');
  return parsed[0].results;
 }
-const UPDATE=[
+export const UPDATE=[
  'WITH eligible AS (SELECT COUNT(*) n FROM lms_matricula_ciclos c',
  'JOIN lms_matriculas m ON m.id=c.matricula_id AND m.empresa_id=c.empresa_id',
  "WHERE c.empresa_id=6 AND c.ciclo_atual=1 AND c.deleted_at IS NULL AND m.deleted_at IS NULL AND m.status='EM_ANDAMENTO'",
@@ -70,7 +70,7 @@ const UPDATE=[
  'WHERE empresa_id=6 AND ciclo_atual=1 AND deleted_at IS NULL AND id IN (2671,2305)',
  'AND (SELECT n FROM eligible)=2 RETURNING id'
 ].join(' ');
-const AUDIT=[
+export const AUDIT=[
  'INSERT INTO audit_logs(action,entity_type,entity_id,empresa_id,old_values,new_values,detalhes,created_at)',
  "SELECT 'LMS_CYCLE_PROGRESS_GOVERNED_REPAIR_2215','lms_matricula_ciclos',id,6,",
  "CASE id WHEN 2671 THEN '{\"status\":\"NAO_INICIADO\",\"progresso_pct\":0}' ELSE '{\"status\":\"EM_ANDAMENTO\",\"progresso_pct\":2}' END,",
