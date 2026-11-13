@@ -176,8 +176,8 @@ export default function LmsProva(): React.ReactElement {
 
       {exam && !attempt ? (
         <section className={card} aria-label="Situação da prova">
-          {exam.state === 'NOT_AVAILABLE' ? <p>Este treinamento não tem prova final disponível para você no momento.</p> : null}
-          {exam.state === 'STUDY_PENDING' ? <p>Conclua todo o conteúdo do treinamento para liberar a prova.</p> : null}
+          {exam.state === 'NOT_AVAILABLE' ? <p>Este treinamento não tem avaliação disponível para você no momento.</p> : null}
+          {exam.state === 'STUDY_PENDING' ? <p>Conclua todo o conteúdo do treinamento para liberar a avaliação.</p> : null}
           {exam.state === 'COMPLETED' ? (
             <>
               <p className="mb-3">Treinamento já concluído.</p>

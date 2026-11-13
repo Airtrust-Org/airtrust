@@ -135,7 +135,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await page.goto(`/lms/player/${MATRICULA}`);
   const cta = page.getByTestId('lms-open-exam');
   await expect(cta).toBeVisible();
-  await expect(cta).toHaveText('Ir para a prova final');
+  await expect(cta).toHaveText('Fazer avaliação');
   await page.waitForLoadState('networkidle');
   await cta.click();
   await expect(page).toHaveURL(new RegExp(`/lms/provas/${MATRICULA}$`));

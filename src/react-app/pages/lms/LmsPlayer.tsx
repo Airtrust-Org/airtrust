@@ -1697,7 +1697,7 @@ export default function LmsPlayer() {
                             SCORE_BELOW_MASTERY: 'nota abaixo do mínimo exigido',
                             MASTERY_SCORE_MISSING: 'curso sem nota mínima válida configurada',
                             COMPLETION_EVIDENCE_INSUFFICIENT: 'o conteúdo ainda não informou conclusão válida',
-                            EXTERNAL_ASSESSMENT_PENDING: 'estudo concluído; falta a avaliação externa para certificar',
+                            EXTERNAL_ASSESSMENT_PENDING: 'estudo concluído; falta realizar a avaliação para certificar',
                             EXPLICIT_FAILURE: 'avaliação não aprovada',
                             SCORM_ASSESSMENT_POLICY_INVALID: 'política de avaliação inválida',
                           } as Record<string, string>)[closureReadiness.code] ??
@@ -1720,7 +1720,7 @@ export default function LmsPlayer() {
                         onClick={() => navigate(`/lms/provas/${id}`)}
                         className="mt-1 inline-flex items-center justify-center rounded-lg border border-emerald-300/40 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-400/20"
                       >
-                        Ir para a prova final
+                        Fazer avaliação
                       </button>
                     ) : null}
                     {!isCompletedState && closureReadiness?.missing?.includes('manifest_required_units') &&

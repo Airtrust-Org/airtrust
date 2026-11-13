@@ -62,6 +62,8 @@ import {
 } from '@/react-app/hooks/useQualificacoesExt';
 import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
+import { getLmsExamAction } from './lmsExamAction';
+import { DEFAULT_NEW_SCORM_COMPLETION_POLICY, SCORM_COMPLETION_MODE_CHOICES, canUseLegacyEvaluatedPolicy } from './lmsCompletionModeChoice';
 import { getQualificationAreaBadgeClass } from '../qualificacoes/qualificationAreaUi';
 import {
   formatMinutes,
@@ -318,7 +320,7 @@ function buildInitialForm(initial?: Partial<LmsCurso>): CreateCursoDTO {
     qualificacao_area_id: null,
     gerar_qualificacao_ao_concluir: initial?.gerar_qualificacao_ao_concluir ?? 0,
     scorm_mastery_score: initial?.scorm_mastery_score ?? 70,
-    scorm_assessment_policy: initial?.scorm_assessment_policy ?? 'SCORED',
+    scorm_assessment_policy: initial?.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY,
     scorm_versao: initial?.scorm_versao ?? '1.2',
     tipo_conteudo: initial?.tipo_conteudo ?? 'scorm',
     publicado: initial?.publicado ?? 0,
@@ -850,6 +852,10 @@ function CourseDrawer({
       return;
     }
     const errs = validateForm(form);
+    if (form.tipo_conteudo === 'scorm' &&
+        !canUseLegacyEvaluatedPolicy(form.scorm_assessment_policy, initial?.scorm_assessment_policy)) {
+      errs.scorm_assessment_policy = 'A prova final AirTrust ainda não está habilitada para novas edições. Mantenha o modo formativo e ative a avaliação somente depois da prova publicada e homologada.';
+    }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     // A candidate ZIP and course metadata are deliberately separate operations.
@@ -964,7 +970,7 @@ function CourseDrawer({
                               ...c,
                               tipo_conteudo: e.target.value as TipoConteudo,
                               scorm_assessment_policy: e.target.value === 'scorm'
-                                ? (c.scorm_assessment_policy ?? 'SCORED')
+                                ? (c.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY)
                                 : 'SCORED',
                               scorm_versao:
                                 e.target.value === 'video' ? null : (c.scorm_versao ?? '1.2'),
@@ -1024,11 +1030,11 @@ function CourseDrawer({
                         />
                       </div>
                       <div className="space-y-2">
-                        <FieldLabel label="Versão / critério de conclusão" />
+                        <FieldLabel label="Modalidade de conclusão" />
                         <select
-                          aria-label="Critério de conclusão SCORM"
+                          aria-label="Modalidade de conclusão SCORM"
                           disabled={form.tipo_conteudo !== 'scorm'}
-                          value={form.scorm_assessment_policy ?? 'SCORED'}
+                          value={form.scorm_assessment_policy ?? DEFAULT_NEW_SCORM_COMPLETION_POLICY}
                           onChange={(e) =>
                             setForm((c) => ({
                               ...c,
@@ -1037,10 +1043,17 @@ function CourseDrawer({
                           }
                           className={fieldCls}
                         >
-                          <option value="SCORED">Avaliação com nota mínima obrigatória</option>
-                          <option value="FORMATIVE">Participação integral — avaliação formativa, sem nota eliminatória</option>
+                          {SCORM_COMPLETION_MODE_CHOICES.map((choice) => (
+                            <option key={choice.value} value={choice.value}
+                              disabled={choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'}>
+                              {choice.label}{choice.value === 'SCORED' && initial?.scorm_assessment_policy !== 'SCORED'
+                                ? ' — disponível após habilitação das provas' : ''}
+                            </option>
+                          ))}
                         </select>
-                        <div className="grid grid-cols-2 gap-3">
+                        <FieldError message={errors.scorm_assessment_policy} />
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
                           <select
                             value={form.scorm_versao ?? '1.2'}
                             onChange={(e) =>
@@ -1055,27 +1068,12 @@ function CourseDrawer({
                             <option value="1.2">SCORM 1.2</option>
                             <option value="2004">SCORM 2004</option>
                           </select>
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={form.scorm_mastery_score ?? 70}
-                            disabled={form.scorm_assessment_policy === 'FORMATIVE'}
-                            aria-label="Nota mínima SCORM"
-                            onChange={(e) =>
-                              setForm((c) => ({
-                                ...c,
-                                scorm_mastery_score: Number(e.target.value),
-                              }))
-                            }
-                            className={fieldCls}
-                          />
                         </div>
-                        <FieldError message={errors.scorm_mastery_score} />
                         <p className="text-xs text-slate-600">
                           {form.scorm_assessment_policy === 'FORMATIVE'
-                            ? 'A conclusão depende da evidência SCORM persistida e da sessão válida, sem exigir nota. Não confundir com aprovação em prova.'
-                            : 'A conclusão exige uma nota SCORM real igual ou superior à mínima configurada.'}
+                            ? 'Sem prova final: o AirTrust conclui após confirmar todas as unidades e interações obrigatórias, e gera a qualificação quando configurada.'
+                            : 'Nas edições com prova do AirTrust, o aluno deverá fazer a avaliação após o estudo. A prova precisa estar publicada e vinculada à edição; cursos legados com avaliação dentro do SCORM conservam sua regra até migração.'}
+                          {' '}A troca exige uma edição SCORM compatível e não reclassifica matrículas anteriores.
                         </p>
                       </div>
                     </div>
@@ -1614,6 +1612,29 @@ function CourseCard({
   const typeMeta = getTypeMeta(curso.tipo_conteudo);
   const previewPath = canManage ? getAdminCoursePreviewPath(curso) : null;
   const enrollmentProgress = getEnrollmentProgress(matricula);
+  const [examAction, setExamAction] = useState<'READY' | 'PASSED' | null>(null);
+  // Show an exam action only after the authenticated Worker confirms the
+  // active learner/edition/cycle is eligible. Never infer it from 99% alone.
+  useEffect(() => {
+    setExamAction(null);
+    if (canManage || curso.tipo_conteudo !== 'scorm' ||
+        matricula?.status !== 'EM_ANDAMENTO' || enrollmentProgress < 99) return;
+    const controller = new AbortController();
+    void fetchWithAuth(`/api/lms/exams/matriculas/${matricula.id}/prova`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    }).then(async response => {
+      if (!response.ok) return; // runtime disabled/unbound: no false CTA
+      const result = await response.json() as {
+        success?: boolean; data?: { state?: string };
+      };
+      const state = result.data?.state;
+      if (!controller.signal.aborted && result.success === true && getLmsExamAction(state)) {
+        setExamAction(state as 'READY' | 'PASSED');
+      }
+    }).catch(() => { /* unavailable exam service must not become a false CTA */ });
+    return () => controller.abort();
+  }, [canManage, curso.tipo_conteudo, matricula?.id, matricula?.status, enrollmentProgress]);
   const deadlineMeta = !canManage && shouldShowLmsEnrollmentDeadline(matricula?.status, matricula?.data_expiracao)
     ? getEnrollmentDeadlineMeta(matricula?.data_expiracao)
     : null;
@@ -1789,6 +1810,16 @@ function CourseCard({
                 <Eye className="h-4 w-4" />
               </Button>
             </div>
+            {!canManage && examAction && matricula ? (
+              <button
+                type="button"
+                data-testid="lms-course-exam-action"
+                onClick={() => navigate(`/lms/provas/${matricula.id}`)}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                {getLmsExamAction(examAction)}
+              </button>
+            ) : null}
             {canManage ? (
               <div className="flex flex-wrap gap-1.5">
                 {canUpdateCourse ? (
