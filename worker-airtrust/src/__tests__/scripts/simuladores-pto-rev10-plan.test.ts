@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PTO_REV10_EXPECTED_PLAN_TOTALS,
+  PTO_REV10_V18_EXPECTED_PLAN_TOTALS,
   assertPtoRev10Plan,
   sealPtoRev10Plan,
 } from '../../../scripts/lib/simuladores-pto-rev10-plan.mjs';
@@ -15,9 +16,11 @@ const FUNCTIONAL_SESSION_CODES = [
   'EXA-04/04',
 ];
 
-function makePlanPayload() {
-  const aircraftModels = Array.from({ length: 66 }, (_, modelIndex) => ({
-    codigo: `MODEL-${String(modelIndex + 1).padStart(2, '0')}`,
+function makePlanPayload(v18 = false) {
+  const aircraftModels = Array.from({ length: v18 ? 82 : 66 }, (_, modelIndex) => ({
+    codigo: v18
+      ? `${modelIndex < 37 ? 'A139' : 'S76'}-I-${String(modelIndex + 1).padStart(2, '0')}`
+      : `MODEL-${String(modelIndex + 1).padStart(2, '0')}`,
     titulo: `Modelo ${modelIndex + 1}`,
     programa: 'Inicial',
     natureza: 'Instrução',
@@ -25,7 +28,7 @@ function makePlanPayload() {
     carga_sessao: '2 horas',
     duracao_estimada_minutos: 120,
     ordem_curricular: modelIndex + 1,
-    aeronave: modelIndex < 31 ? 'AW139' : 'SK76',
+    aeronave: modelIndex < (v18 ? 37 : 31) ? 'AW139' : 'SK76',
   }));
   const functionalModels = FUNCTIONAL_SESSION_CODES.map((codigo, index) => ({
     codigo,
@@ -42,6 +45,7 @@ function makePlanPayload() {
   const aircraftItems = aircraftModels.flatMap((model) =>
     Array.from({ length: 18 }, (_, itemIndex) => ({
       modelo: model.codigo,
+      ...(v18 ? { aeronave: model.aeronave } : {}),
       ordem: itemIndex + 1,
       codigo: `MAN-${String(itemIndex + 1).padStart(2, '0')}`,
       nome: `Manobra ${itemIndex + 1}`,
@@ -59,6 +63,7 @@ function makePlanPayload() {
       const catalog = functionalCatalog[(modelIndex * 18 + itemIndex) % functionalCatalog.length];
       return {
         modelo: model.codigo,
+        ...(v18 ? { aeronave: null } : {}),
         ordem: itemIndex + 1,
         codigo: catalog.codigo,
         nome: catalog.nome,
@@ -70,7 +75,8 @@ function makePlanPayload() {
   const items = [...aircraftItems, ...functionalItems];
   const uniqueCodes = [...new Set(items.map((item) => item.codigo))];
   return {
-    schema_version: 1,
+    schema_version: v18 ? 2 : 1,
+    ...(v18 ? { approved_source_sha256: '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912', canonical_contract_sha256: 'a'.repeat(64) } : {}),
     kind: 'PTO_REV10_SIMULATORS',
     generated_at: '2026-07-31T00:00:00.000Z',
     versao_matriz: 'PTO-REV10-2026-07-30',
@@ -79,7 +85,7 @@ function makePlanPayload() {
     base_fingerprint: 'fingerprint',
     catalog_fingerprint: 'catalog-fingerprint',
     superseded_models: [{ id: 77, codigo: 'OLD-SESSION', codigo_canonico: 'OLD-SESSION' }],
-    totals: { ...PTO_REV10_EXPECTED_PLAN_TOTALS },
+    totals: { ...(v18 ? PTO_REV10_V18_EXPECTED_PLAN_TOTALS : PTO_REV10_EXPECTED_PLAN_TOTALS) },
     models,
     items,
     notechs: Array.from({ length: 15 }, (_, index) => ({
@@ -100,9 +106,20 @@ function makePlanPayload() {
 }
 
 describe('PTO Rev10 sealed plan', () => {
-  it('accepts the complete 72/1296/1080 contract', () => {
+  it('accepts the historical 72/1296/1080 contract for readback compatibility', () => {
     const plan = sealPtoRev10Plan(makePlanPayload());
     expect(assertPtoRev10Plan(plan)).toBe(true);
+  });
+
+  it('accepts the V18 88/1584/1320 plan schema 2', () => {
+    const plan = sealPtoRev10Plan(makePlanPayload(true));
+    expect(assertPtoRev10Plan(plan)).toBe(true);
+  });
+
+  it('rejects V18 plan without approved source hash', () => {
+    const payload = makePlanPayload(true);
+    delete (payload as Record<string, unknown>).approved_source_sha256;
+    expect(() => assertPtoRev10Plan(sealPtoRev10Plan(payload))).toThrow('documento aprovado não comprovado');
   });
 
   it('fails closed when content is changed after sealing', () => {

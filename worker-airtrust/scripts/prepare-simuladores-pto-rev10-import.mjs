@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildOperationalProjection } from './lib/simuladores-pto-rev10-packages.mjs';
+import { assertPtoV18CurricularParity } from './lib/simuladores-pto-v18-parity.mjs';
 import {
   assertRealTenantFingerprintState,
   buildTenantFingerprint,
@@ -72,6 +74,9 @@ export function preparePtoRev10Plan({
   s76Dir,
   tenantState,
   empresaId,
+  contract = null,
+  sourceManifest = null,
+  contractSha256 = null,
   generatedAt = new Date().toISOString(),
 }) {
   if (!Number.isInteger(empresaId) || empresaId <= 0) fail('empresa_id inválido');
@@ -88,6 +93,12 @@ export function preparePtoRev10Plan({
   if (!tenantState.migration_state?.has_0440) fail('migration 0440 não confirmada no snapshot');
 
   const projection = buildOperationalProjection({ manifest, aw139Dir, s76Dir });
+  const parity = contract && sourceManifest
+    ? assertPtoV18CurricularParity({ projection, contract, sourceManifest, contractSha256 })
+    : null;
+  if (projection.aeronaves.AW139.sessoes.length === 37 && !parity) {
+    fail('pacote V18 exige contrato canônico e identidade da fonte');
+  }
   if (!Array.isArray(tenantState.active_aircraft_models) || tenantState.active_aircraft_models.length === 0) {
     fail('snapshot sem catálogo ativo AW139/S-76');
   }
@@ -173,10 +184,12 @@ export function preparePtoRev10Plan({
     catalogFingerprint,
     supersededModels,
     manobraResolution,
+    approvedSourceSha256: parity?.source_sha256,
+    canonicalContractSha256: parity?.contract_sha256,
   });
   const plan = sealPtoRev10Plan({ generated_at: generatedAt, ...payload });
   assertPtoRev10Plan(plan);
-  return { plan, projection };
+  return { plan, projection, parity };
 }
 
 export function runCli(argv = process.argv) {
@@ -186,20 +199,28 @@ export function runCli(argv = process.argv) {
   const tenantStatePath = arg(argv, '--tenant-state');
   const empresaId = Number(arg(argv, '--empresa-id'));
   const out = arg(argv, '--out');
-  if (!manifestPath || !aw139Dir || !s76Dir || !tenantStatePath || !out) {
+  const contractPath = arg(argv, '--pto-v18-contract');
+  const sourceManifestPath = arg(argv, '--pto-v18-manifest');
+  if (!manifestPath || !aw139Dir || !s76Dir || !tenantStatePath || !out || !contractPath || !sourceManifestPath) {
     fail(
-      'uso: --manifest <json> --aw139-dir <dir> --s76-dir <dir> --tenant-state <json> --empresa-id <id> --out <plan.json>',
+      'uso: --manifest <json> --aw139-dir <dir> --s76-dir <dir> --tenant-state <json> --empresa-id <id> --out <plan.json> --pto-v18-contract <sessoes_pto_v18.json> --pto-v18-manifest <manifesto_validacao.json>',
     );
   }
 
   const manifest = readJson(manifestPath, 'manifesto');
+  const contract = readJson(contractPath, 'contrato canônico PTO V18');
+  const contractSha256 = crypto.createHash('sha256').update(fs.readFileSync(contractPath)).digest('hex');
+  const sourceManifest = readJson(sourceManifestPath, 'identidade da fonte PTO V18');
   const tenantState = readJson(tenantStatePath, 'snapshot tenant-scoped');
-  const { plan } = preparePtoRev10Plan({
+  const { plan, parity } = preparePtoRev10Plan({
     manifest,
     aw139Dir,
     s76Dir,
     tenantState,
     empresaId,
+    contract,
+    sourceManifest,
+    contractSha256,
   });
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   fs.writeFileSync(out, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
@@ -211,6 +232,7 @@ export function runCli(argv = process.argv) {
         out,
         plan_sha256: plan.plan_sha256,
         totals: plan.totals,
+        parity,
         unique_manoeuvres: plan.manobra_resolution.length,
       },
       null,

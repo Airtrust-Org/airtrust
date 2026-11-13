@@ -1,11 +1,13 @@
 export const PTO_REV10_PLAN_SCHEMA_VERSION: number;
 export const PTO_REV10_PLAN_KIND: string;
+export const PTO_REV10_V18_PLAN_SCHEMA_VERSION: number;
 export const PTO_REV10_EXPECTED_PLAN_TOTALS: Readonly<{
   models: number;
   links: number;
   notechs_links: number;
   functional_codes: number;
 }>;
+export const PTO_REV10_V18_EXPECTED_PLAN_TOTALS: typeof PTO_REV10_EXPECTED_PLAN_TOTALS;
 export function stableJson(value: unknown): string;
 export function sha256(value: unknown): string;
 export function sealPtoRev10Plan<T extends Record<string, any>>(
