@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertPtoV18ModelIsolation } from '../lib/simuladores-pto-v18-plan-isolation.mjs';
+import { assertPtoRev10Plan, sealPtoRev10Plan, PTO_REV10_PLAN_KIND } from '../lib/simuladores-pto-rev10-plan.mjs';
 
 function fixture() {
   const models = [
@@ -71,4 +72,45 @@ test('bloqueia currículo com apenas 87 modelos, mesmo que números declarados d
   const plan = fixture();
   plan.models.pop();
   assert.throws(() => assertPtoV18ModelIsolation(plan), /88 modelos/);
+});
+
+function sealedPlan() {
+  const f = fixture();
+  const models = f.models.map((m) => ({
+    ...m, titulo: 'Sessão de teste', carga_sessao: '2 horas',
+    duracao_estimada_minutos: 120,
+  }));
+  const items = f.items.map((item) => ({
+    ...item, nome: item.codigo, categoria: item.aeronave ? 'GERAL' : 'Instrutor',
+  }));
+  const functional_catalog = f.functional_catalog.map((item) => ({
+    ...item, nome: item.codigo, categoria: 'Instrutor',
+  }));
+  const manobra_resolution = [...new Set(items.map((item) => item.codigo))]
+    .map((codigo_canonico) => ({ codigo_canonico }));
+  return sealPtoRev10Plan({
+    schema_version: 2,
+    approved_source_sha256: '040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912',
+    canonical_contract_sha256: 'a'.repeat(64),
+    kind: PTO_REV10_PLAN_KIND,
+    empresa_id: 6,
+    base_fingerprint: 'base',
+    catalog_fingerprint: 'catalog',
+    superseded_models: [],
+    totals: { models: 88, links: 1584, notechs_links: 1320, functional_codes: 94 },
+    models, items, notechs: f.notechs, functional_catalog, manobra_resolution,
+  });
+}
+
+test('valida plano V18 selado completo pela entrada pública do importador', () => {
+  const plan = sealedPlan();
+  assert.equal(assertPtoRev10Plan(plan), true);
+});
+
+test('plano selado com vinculacão AW139 em modelo S76 falha dentro do importador', () => {
+  const plan = sealedPlan();
+  plan.items[37 * 18].aeronave = 'AW139';
+  const { plan_sha256, ...payload } = plan;
+  assert.throws(() => assertPtoRev10Plan(sealPtoRev10Plan(payload)),
+    /vínculo de aeronave cruzado/);
 });
