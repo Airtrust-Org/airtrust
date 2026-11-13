@@ -1,0 +1,16 @@
+{
+  "source_document": "PRG-OPS-001_PTO_Rev10_V18.docx",
+  "source_sha256": "040a0287f966925cea3c8cafa23172673a94530cc044b4cfb33c8ccf4de06912",
+  "sessions_sha256": "0d3fa1f4ee9bcd812b99627bd6251b6729ad5ae3d34cd53fae953dc21d560fec",
+  "notechs_sha256": "1f4196556c5b3aff77f163cd1a6c35ce3d7eedf6319698b3e58a19e72132e78b",
+  "session_count": 82,
+  "aw139_session_count": 37,
+  "s76_session_count": 45,
+  "technical_positions": 1476,
+  "technical_positions_per_session": 18,
+  "pf_a_positions_per_session": 9,
+  "pf_b_positions_per_session": 9,
+  "notechs_competencies": 15,
+  "status": "CANONICAL_NORMATIVE_REFERENCE_NOT_OPERATIONAL_GUIDE",
+  "approval_scope": "PTO documents approved; technical guide SOP/RFM/QRH/ECL acceptance remains separate"
+}
