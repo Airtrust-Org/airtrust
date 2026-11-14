@@ -64,7 +64,7 @@ describe('system health routes', () => {
     } as unknown as Env;
 
     let completed = false;
-    const pending = app.request('/api/health', {}, env).then((response) => {
+    const pending = Promise.resolve(app.request('/api/health', {}, env)).then((response) => {
       completed = true;
       return response;
     });
