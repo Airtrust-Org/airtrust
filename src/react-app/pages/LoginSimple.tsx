@@ -4,7 +4,6 @@ import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { clearActiveSessionRole, useAuth } from '../hooks/useAuth';
 import { resolveSessionEntryDestination, sessionEntryOptions, type SessionRole } from '../lib/session-entry-options';
 import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
 import { useSystemSettings } from '../hooks/useSystemSettings';
 import { useLanguage } from '../i18n/useLanguage';
 import { logger } from '../utils/logger';
@@ -287,14 +286,13 @@ export default function LoginPage() {
                 </label>
 
                 <div className="pt-1">
-                  <Button
+                  <button
                     type="submit"
-                    variant="primary"
-                    className="w-full h-10"
+                    className="min-h-[44px] min-w-[44px] w-full h-10 px-4 py-2 font-medium rounded-lg transition-all duration-200 flex items-center gap-2 justify-center disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-all motion-safe:duration-200 bg-primary-600 text-white shadow-sm hover:bg-primary-700 hover:shadow focus-visible:ring-primary-500"
                     disabled={isLoading}
                   >
                     {isLoading ? t('auth.login.submitting') : t('auth.login.submit')}
-                  </Button>
+                  </button>
                 </div>
               </form>
 
