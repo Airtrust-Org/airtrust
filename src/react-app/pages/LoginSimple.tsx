@@ -234,6 +234,9 @@ export default function LoginPage() {
                 <button
                   key={option.id}
                   type="button"
+                  // Stable, server-authorized role selector for accessibility/QA.
+                  // This is presentation metadata, never an authorization grant.
+                  data-session-role={option.role}
                   disabled={isLoading}
                   onClick={() => void handleProfileSelect(option.role)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
