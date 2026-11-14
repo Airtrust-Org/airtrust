@@ -593,7 +593,7 @@ export default function ComplianceTreinamentosPage() {
 
   return (
     <AppLayout>
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-5" data-no-auto-i18n="true">
         <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
