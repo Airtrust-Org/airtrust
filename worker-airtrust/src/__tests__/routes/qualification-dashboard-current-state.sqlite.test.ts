@@ -129,17 +129,28 @@ describe('qualification dashboard current-state contract', () => {
     const dashboard = source('../../routes/dashboard.ts');
     const service = source('../../services/dashboardService.ts');
     const stats = source('../../routes/qualificacoes/estatisticas.ts');
+    const canonical = source('../../lib/qualificacoes/operational-qualification-predicates.ts');
+    const canonicalImport = "from '../lib/qualificacoes/operational-qualification-predicates'";
 
     expect(dashboard).toContain('currentOperationalPredicate');
     expect(dashboard).toContain('WHEN ${vencimentoExpr} IS NULL THEN 1');
     expect(dashboard).toContain('PLANNED_QUALIFICATION_STATUS_VALUES');
     expect(dashboard).toContain('CANCELLED_STATUS_VALUES');
 
+    // Service and statistics share one canonical predicate module instead of
+    // keeping private copies of the rule.
+    expect(canonical).toContain('export function buildCurrentOperationalQualificationPredicate');
+    expect(canonical).toContain('qh_next.renovacao_de = ${alias}.id');
+    expect(canonical).toContain('PLANNED_QUALIFICATION_STATUS_VALUES');
+    expect(canonical).toContain('CANCELLED_STATUS_VALUES');
+
+    expect(service).toContain(canonicalImport);
+    expect(service).not.toContain('function buildCurrentOperationalQualificationPredicate');
     expect(service).toContain('buildCurrentOperationalQualificationPredicate');
     expect(service).toContain('WHEN ${vencimentoExpr} IS NULL THEN 1');
-    expect(service).toContain('qh_next.renovacao_de = ${alias}.id');
-    expect(service).toContain('PLANNED_QUALIFICATION_STATUS_VALUES');
 
+    expect(stats).toContain("from '../../lib/qualificacoes/operational-qualification-predicates'");
+    expect(stats).not.toContain('function buildCurrentOperationalQualificationPredicate');
     expect(stats).toContain('buildCurrentOperationalQualificationPredicate');
     expect(stats).toContain("getQualificacoesVencimentoExpr('qh', 'qt')");
     expect(stats).toContain("error: 'Erro interno do servidor'");

@@ -128,7 +128,7 @@ app.get('/qualificacoes', async (c) => {
       ? `EXISTS (
           SELECT 1 FROM qualificacoes_historico qh_renovadora
           WHERE qh_renovadora.deleted_at IS NULL
-            AND qh_renovadora.empresa_id = qh.empresa_id
+            AND +qh_renovadora.empresa_id = qh.empresa_id
             AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
             AND qh_renovadora.renovacao_de = qh.id
         )`

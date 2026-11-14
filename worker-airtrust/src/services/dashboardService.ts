@@ -14,13 +14,7 @@ import type {
   UtilizacaoSimuladores,
   SystemHealth,
 } from '../../../src/react-app/types/dashboard.types';
-import {
-  CANCELLED_STATUS_VALUES,
-  COMPLETED_STATUS_SQL,
-  PLANNED_QUALIFICATION_STATUS_VALUES,
-  SCHEDULED_SESSION_STATUS_SQL,
-  sqlStatusEqualsAny,
-} from '../lib/status/status-codes';
+import { COMPLETED_STATUS_SQL, SCHEDULED_SESSION_STATUS_SQL } from '../lib/status/status-codes';
 import {
   getTaxaConclusaoMensalMetricRows,
   getUtilizacaoSimuladoresMetricRows,
@@ -32,70 +26,15 @@ import {
   getQualificacoesVencimentoExpr,
 } from '../utils/qualificacoes-alerta-config';
 import {
+  buildCurrentOperationalQualificationPredicate,
+  buildHistoricalOperationalQualificationPredicate,
+} from '../lib/qualificacoes/operational-qualification-predicates';
+import {
   trainingComplianceEffectiveRequirementPredicateSql,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
 } from './training-compliance-rule-engine';
 
 const SIMULADORES_OPERATIONAL_TIMEZONE = 'America/Sao_Paulo';
-
-function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
-  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
-  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
-  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
-  const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
-  const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
-  const successorPlanned = sqlStatusEqualsAny(
-    successorStatusExpr,
-    PLANNED_QUALIFICATION_STATUS_VALUES,
-  );
-
-  return `(${alias}.deleted_at IS NULL
-    AND NOT (${cancelled})
-    AND NOT (${planned})
-    AND ${alias}.data_conclusao IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM qualificacoes_historico qh_next
-      WHERE qh_next.empresa_id = ${alias}.empresa_id
-        AND qh_next.renovacao_de = ${alias}.id
-        AND qh_next.deleted_at IS NULL
-        AND qh_next.data_conclusao IS NOT NULL
-        AND NOT (${successorCancelled})
-        AND NOT (${successorPlanned})
-    ))`;
-}
-
-function buildHistoricalOperationalQualificationPredicate(
-  alias: string,
-  cutoffSql: string,
-): string {
-  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
-  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
-  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
-  const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
-  const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
-  const successorPlanned = sqlStatusEqualsAny(
-    successorStatusExpr,
-    PLANNED_QUALIFICATION_STATUS_VALUES,
-  );
-
-  return `(${alias}.deleted_at IS NULL
-    AND NOT (${cancelled})
-    AND NOT (${planned})
-    AND ${alias}.data_conclusao IS NOT NULL
-    AND date(${alias}.data_conclusao) <= date(${cutoffSql})
-    AND NOT EXISTS (
-      SELECT 1
-      FROM qualificacoes_historico qh_next
-      WHERE qh_next.empresa_id = ${alias}.empresa_id
-        AND qh_next.renovacao_de = ${alias}.id
-        AND qh_next.deleted_at IS NULL
-        AND qh_next.data_conclusao IS NOT NULL
-        AND date(qh_next.data_conclusao) <= date(${cutoffSql})
-        AND NOT (${successorCancelled})
-        AND NOT (${successorPlanned})
-    ))`;
-}
 
 function getSaoPauloDateTimeKey(now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
