@@ -157,10 +157,11 @@ setup('real staging login', async ({ page }) => {
       throw new Error('QA_SESSION_PROFILE_SELECTION_REQUIRED_FOR_NON_ADMIN_PAIR');
     }
 
+    // Select only a server-provided manager/admin entry by its stable role
+    // identity, not localized/collapsed button text. The backend still
+    // validates the requested role when this button is clicked.
     const qaOperationalRole = page
-      .getByRole('button', {
-        name: /entrar como (administrador(?: geral| da empresa)?|gestor)/i,
-      })
+      .locator('button[data-session-role="GESTOR"], button[data-session-role="ADMINISTRADOR"]')
       .first();
 
     try {
