@@ -96,7 +96,11 @@ export async function importWithRetry<T>(
     try {
       const module = await importer();
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem(`${LAZY_RETRY_PREFIX}${key}`);
+        try {
+          window.sessionStorage.removeItem(`${LAZY_RETRY_PREFIX}${key}`);
+        } catch {
+          // Storage may be disabled by browser privacy policy; a successful import must still resolve.
+        }
       }
       return module;
     } catch (error) {
@@ -113,9 +117,16 @@ export async function importWithRetry<T>(
         !isReloadProtectedInteractivePath(window.location.pathname)
       ) {
         const retryKey = `${LAZY_RETRY_PREFIX}${key}`;
-        const hasRetried = sessionStorage.getItem(retryKey) === '1';
-        if (!hasRetried) {
-          sessionStorage.setItem(retryKey, '1');
+        let canReload = false;
+        try {
+          if (window.sessionStorage.getItem(retryKey) !== '1') {
+            window.sessionStorage.setItem(retryKey, '1');
+            canReload = true;
+          }
+        } catch {
+          // Cannot persist the reload guard: retry import without reloading to avoid a loop.
+        }
+        if (canReload) {
           await clearAirtrustCaches();
           window.location.reload();
           await new Promise<never>(() => {
