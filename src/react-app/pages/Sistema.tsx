@@ -53,7 +53,8 @@ export default function Sistema() {
   // The deep result, not the D1-only response, is authoritative for R2 health.
   const health = deepRequested && !deepError && deepHealth ? deepHealth : quickHealth;
   const healthLoading = quickLoading && !deepHealth;
-  const healthError = quickError;
+  // A successful deep probe supersedes a transient quick-probe error.
+  const healthError = deepRequested && !deepError && deepHealth ? null : quickError;
 
   const {
     data: version,
