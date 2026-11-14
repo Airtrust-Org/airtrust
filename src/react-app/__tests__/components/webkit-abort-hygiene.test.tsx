@@ -165,4 +165,37 @@ describe('WebKit navigation abort hygiene', () => {
     view.unmount();
     queryClient.removeQueries({ queryKey: ['webkit-bfcache-probe'] });
   });
+
+  it('preserves HTTP 404 status on useOperationalAccess errors so React Query does not schedule delayed retries', async () => {
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      success: false,
+      code: 404,
+      error: 'NOT_FOUND',
+    });
+
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: (_failureCount, error) => {
+            const status = (error as { status?: number } | undefined)?.status;
+            return status !== 401 && status !== 403 && status !== 404;
+          },
+          retryDelay: 10,
+        },
+      },
+    });
+
+    const view = render(
+      <QueryClientProvider client={client}>
+        <OperationalAccessProbe />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(getSpy).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(getSpy).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    client.clear();
+  });
 });
