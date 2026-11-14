@@ -1,3 +1,4 @@
+import 'material-symbols/outlined.css';
 import { useEffect, useRef } from 'react';
 
 interface ModalProps {

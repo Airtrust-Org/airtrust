@@ -18,6 +18,7 @@ import { LanguageProvider } from './i18n/LanguageContext';
 import { useLanguage } from './i18n/useLanguage';
 import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
+
 import { resolveTrainingEntryPath } from './lib/training-entry';
 import { canonicalizeLegacyFrmsOperationalQuery } from './pages/frms/frmsLegacyOperationalQuery';
 import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
