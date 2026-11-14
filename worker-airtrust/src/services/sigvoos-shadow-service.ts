@@ -507,44 +507,29 @@ export async function runSigvoosShadowIngestion(
         const seenAt = now();
 
         if (!existing) {
-          await db
-            .prepare(
+          // F14-09: a primeira evidência e a perna precisam existir juntas.
+          // Em caso de falha de INSERT na trilha, o D1 reverte também a perna.
+          await db.batch([
+            db.prepare(
               `INSERT INTO sigvoos_shadow_legs
                 (id, empresa_id, run_id, flight_report_id, leg_number, external_identity_quality,
                  identity_key, source_fingerprint, raw_hash, normalized_json, source_state,
                  crew_resolution_method, crew_funcionario_id, timezone_status,
                  first_seen_at, last_seen_at, active, deleted_at, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'ACTIVE', ?, ?, ?, ?, ?, 1, NULL, ?, ?)`,
-            )
-            .bind(
-              shadowLegId,
-              tenantId,
-              runId,
-              leg.flightReportId,
-              leg.legNumber,
-              identity.quality,
-              identity.identityKey,
-              fingerprint,
-              normalizedJson,
-              crew.method,
-              crew.funcionarioId,
-              timezoneStatus,
-              seenAt,
-              seenAt,
-              seenAt,
-              seenAt,
-            )
-            .run();
-          await db
-            .prepare(
+            ).bind(
+              shadowLegId, tenantId, runId, leg.flightReportId, leg.legNumber,
+              identity.quality, identity.identityKey, fingerprint, normalizedJson,
+              crew.method, crew.funcionarioId, timezoneStatus,
+              seenAt, seenAt, seenAt, seenAt,
+            ),
+            db.prepare(
               `INSERT INTO sigvoos_shadow_leg_history
                 (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
                  field_differences_json, recorded_at)
-               SELECT ?, ?, id, ?, ?, ?, 'CREATED', NULL, ?
-                 FROM sigvoos_shadow_legs WHERE empresa_id = ? AND identity_key = ? AND active = 1`,
-            )
-            .bind(generateId(), tenantId, runId, fingerprint, normalizedJson, seenAt, tenantId, identity.identityKey)
-            .run();
+               VALUES (?, ?, ?, ?, ?, ?, 'CREATED', NULL, ?)`,
+            ).bind(generateId(), tenantId, shadowLegId, runId, fingerprint, normalizedJson, seenAt),
+          ]);
         } else if (existing.source_fingerprint === fingerprint) {
           // Same identity, same content — idempotent no-op besides last_seen_at.
           await db
@@ -566,45 +551,38 @@ export async function runSigvoosShadowIngestion(
             const afterVal = afterFields[key] ?? null;
             if (beforeVal !== afterVal) diffs[key] = { before: beforeVal, after: afterVal };
           }
-          await db
-            .prepare(
+          // Under D1.batch transaction, a stale fingerprint CAS must not
+          // create audit evidence or advance the success checkpoint.
+          // INSERT-SELECT is gated by the old fingerprint, followed by UPDATE
+          // under the identical predicate. Both operations are serialized.
+          const casResults = await db.batch([
+            db.prepare(
+              `INSERT INTO sigvoos_shadow_leg_history
+                (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
+                 field_differences_json, recorded_at)
+               SELECT ?, empresa_id, id, ?, ?, ?, 'SOURCE_CHANGED', ?, ?
+                 FROM sigvoos_shadow_legs
+                WHERE id = ? AND empresa_id = ? AND active = 1 AND source_fingerprint = ?`,
+            ).bind(
+              generateId(), runId, fingerprint, normalizedJson,
+              JSON.stringify(diffs), seenAt, existing.id, tenantId, existing.source_fingerprint,
+            ),
+            db.prepare(
               `UPDATE sigvoos_shadow_legs
                   SET source_fingerprint = ?, normalized_json = ?, source_state = 'SOURCE_CHANGED',
                       crew_resolution_method = ?, crew_funcionario_id = ?, timezone_status = ?,
                       last_seen_at = ?, run_id = ?, updated_at = ?
-                WHERE id = ? AND empresa_id = ?`,
-            )
-            .bind(
-              fingerprint,
-              normalizedJson,
-              crew.method,
-              crew.funcionarioId,
-              timezoneStatus,
-              seenAt,
-              runId,
-              seenAt,
-              existing.id,
-              tenantId,
-            )
-            .run();
-          await db
-            .prepare(
-              `INSERT INTO sigvoos_shadow_leg_history
-                (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
-                 field_differences_json, recorded_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'SOURCE_CHANGED', ?, ?)`,
-            )
-            .bind(
-              generateId(),
-              tenantId,
-              existing.id,
-              runId,
-              fingerprint,
-              normalizedJson,
-              JSON.stringify(diffs),
-              seenAt,
-            )
-            .run();
+                WHERE id = ? AND empresa_id = ? AND active = 1 AND source_fingerprint = ?`,
+            ).bind(
+              fingerprint, normalizedJson, crew.method, crew.funcionarioId,
+              timezoneStatus, seenAt, runId, seenAt, existing.id, tenantId, existing.source_fingerprint,
+            ),
+          ]);
+          if (Number(casResults[0]?.meta?.changes ?? 0) !== 1 ||
+              Number(casResults[1]?.meta?.changes ?? 0) !== 1) {
+            throw new Error('SIGVOOS_SHADOW_SOURCE_FINGERPRINT_CAS_MISS');
+          }
+
         }
 
         await upsertShadowLegCrew(db, {
