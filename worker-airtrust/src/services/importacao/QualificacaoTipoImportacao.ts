@@ -188,7 +188,7 @@ export class QualificacaoTipoImportacaoService {
           // Validade do modelo mudou: reflete nos historicos vinculados (mesma
           // regra do PATCH de tipos) para Matriz/Ficha/Compliance nao divergirem.
           if (shouldResyncTipoValidity(existing.validade, validade)) {
-            await resyncTipoHistoricoValidity(this.db, empresaId, Number(existing.id));
+            await resyncTipoHistoricoValidity(this.db, empresaId, Number(existing.id), existing.validade);
           }
 
           result.updated++;

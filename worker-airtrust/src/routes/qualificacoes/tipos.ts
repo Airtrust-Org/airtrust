@@ -21,6 +21,7 @@ import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
   buildHistoricoTipoSyncEligibleStatusPredicate,
+  shouldPreserveHistoricoExpiryOnTipoUpdate,
   shouldSyncHistoricoSnapshotsOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from '../../services/qualificacoes-tipos-sync';
@@ -1607,6 +1608,7 @@ router.put(
     const historyUpdateStatements: D1PreparedStatement[] = [];
     let historicosSincronizados = 0;
     let historicosIgnorados = 0;
+    let vencimentosPreservados = 0;
     const warnings: string[] = [];
 
     if (shouldSyncHistoricoSnapshotsOnTipoUpdate(data)) {
@@ -1694,13 +1696,35 @@ router.put(
           cargaHorariaRecorrente: tipoAtualizado.carga_horaria_recorrente,
         };
 
+        const tipoAnteriorSnapshot: QualificacaoTipoSnapshot = {
+          codigo: rowAtual.codigo,
+          nome: rowAtual.nome,
+          categoria: rowAtual.categoria,
+          validade: rowAtual.validade,
+          cargaHoraria: rowAtual.carga_horaria,
+          cargaHorariaInicial: rowAtual.carga_horaria_inicial,
+          cargaHorariaRecorrente: rowAtual.carga_horaria_recorrente,
+        };
         const statements = (historicos.results || []).flatMap((historico: HistoricoTipoSyncRow) => {
-          const snapshot = buildHistoricoTipoSnapshot(tipoSnapshot, {
+          const historyInput = {
             dataConclusao: historico.data_conclusao,
             dataVencimentoAtual: historico.data_vencimento,
             tipoTreinamento: historico.tipo_treinamento,
             nascimentoFuncionario: historico.nascimento_funcionario,
-          });
+            validadeMesesAtual: historico.validade_meses_atual,
+          };
+          const preservarVencimento = shouldPreserveHistoricoExpiryOnTipoUpdate(
+            tipoAnteriorSnapshot,
+            historyInput,
+          );
+          if (preservarVencimento) vencimentosPreservados += 1;
+          const snapshot = buildHistoricoTipoSnapshot(tipoSnapshot, historyInput);
+          const validadeMesesFinal = preservarVencimento
+            ? historico.validade_meses_atual
+            : snapshot.validadeMeses;
+          const dataVencimentoFinal = preservarVencimento
+            ? historico.data_vencimento
+            : snapshot.dataVencimento;
           const qualificacaoCodigoFinal =
             historico.conflito_codigo === 1 &&
             snapshot.qualificacaoCodigo !== historico.qualificacao_codigo
@@ -1715,9 +1739,9 @@ router.put(
           const shouldUpdateCategoria =
             String(historico.categoria_atual || '') !== String(snapshot.categoria || '');
           const shouldUpdateValidade =
-            Number(historico.validade_meses_atual || 0) !== Number(snapshot.validadeMeses || 0);
+            Number(historico.validade_meses_atual || 0) !== Number(validadeMesesFinal || 0);
           const shouldUpdateVencimento =
-            String(historico.data_vencimento || '') !== String(snapshot.dataVencimento || '');
+            String(historico.data_vencimento || '') !== String(dataVencimentoFinal || '');
           const shouldUpdateCargaHoraria =
             Number(historico.carga_horaria_atual || 0) !== Number(snapshot.cargaHoraria || 0);
 
@@ -1755,8 +1779,8 @@ router.put(
                 qualificacaoCodigoFinal,
                 snapshot.tipo,
                 snapshot.categoria,
-                snapshot.validadeMeses,
-                snapshot.dataVencimento,
+                validadeMesesFinal,
+                dataVencimentoFinal,
                 snapshot.cargaHoraria,
                 historico.id,
                 empresaId,
@@ -1766,6 +1790,13 @@ router.put(
 
         historyUpdateStatements.push(...statements);
       }
+    }
+    if (vencimentosPreservados > 0) {
+      warnings.push(
+        String(vencimentosPreservados) +
+          ' prazo(s) historico(s) preservado(s): divergem da regra anterior; ' +
+          'revisao retroativa requer procedimento explicito e auditavel.',
+      );
     }
 
     // Cloudflare D1 executa batch de modo transacional: a falha em qualquer

@@ -17,6 +17,7 @@
 import {
   buildHistoricoTipoSnapshot,
   buildHistoricoTipoSyncEligibleStatusPredicate,
+  shouldPreserveHistoricoExpiryOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from './qualificacoes-tipos-sync';
 
@@ -55,6 +56,7 @@ export async function resyncTipoHistoricoValidity(
   db: D1Database,
   empresaId: number,
   tipoId: number,
+  previousValidade?: number | null,
 ): Promise<{ updated: number; unchanged: number }> {
   const tipo = await db
     .prepare(
@@ -99,12 +101,22 @@ export async function resyncTipoHistoricoValidity(
       unchanged += 1;
       continue;
     }
-    const next = buildHistoricoTipoSnapshot(snapshot, {
+    const historyInput = {
       dataConclusao: row.data_conclusao,
       dataVencimentoAtual: row.data_vencimento,
       tipoTreinamento: row.tipo_treinamento,
       nascimentoFuncionario: row.nascimento_funcionario,
-    });
+      validadeMesesAtual: row.validade_meses,
+    };
+    const oldSnapshot: QualificacaoTipoSnapshot = {
+      ...snapshot,
+      validade: previousValidade === undefined ? row.validade_meses : previousValidade,
+    };
+    if (shouldPreserveHistoricoExpiryOnTipoUpdate(oldSnapshot, historyInput)) {
+      unchanged += 1;
+      continue;
+    }
+    const next = buildHistoricoTipoSnapshot(snapshot, historyInput);
     if (
       next.validadeMeses == null ||
       next.dataVencimento == null ||
