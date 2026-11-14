@@ -135,11 +135,36 @@ export function shouldInvalidateQueryForDataChange(
   );
 }
 
+// One successful mutation can affect several domains. Invalidate every
+// matching observed query only once per microtask, rather than cancelling and
+// restarting unabortable dashboard HTTP requests for every emitted scope.
+const pendingQueryInvalidations = new Map<number, Set<DataChangeScope>>();
+let queryInvalidationFlushScheduled = false;
+
 onDataChanged((scope) => {
   const tenantId = getCurrentTenantId();
-  if (tenantId == null) return;
-  void queryClient.invalidateQueries({
-    predicate: (query) => shouldInvalidateQueryForDataChange(query.queryKey, scope, tenantId),
+  if (tenantId === null) return;
+  const scopes = pendingQueryInvalidations.get(tenantId) ?? new Set<DataChangeScope>();
+  scopes.add(scope);
+  pendingQueryInvalidations.set(tenantId, scopes);
+  if (queryInvalidationFlushScheduled) return;
+
+  queryInvalidationFlushScheduled = true;
+  queueMicrotask(() => {
+    queryInvalidationFlushScheduled = false;
+    const activeTenantId = getCurrentTenantId();
+    const affectedScopes =
+      activeTenantId === null ? undefined : pendingQueryInvalidations.get(activeTenantId);
+    pendingQueryInvalidations.clear();
+    if (activeTenantId === null || !affectedScopes?.size) return;
+
+    const scopeBatch = [...affectedScopes];
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        scopeBatch.some((domain) =>
+          shouldInvalidateQueryForDataChange(query.queryKey, domain, activeTenantId),
+        ),
+    });
   });
 });
 
