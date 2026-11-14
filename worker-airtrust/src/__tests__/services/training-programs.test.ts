@@ -52,7 +52,7 @@ function mockDb(history: HistoryRow, modelProgramId = 10): D1Database {
           return statement;
         },
         async first<T>() {
-          if (sql.includes('sqlite_master') && sql.includes('name=?')) {
+          if (sql.includes('sqlite_master') && (sql.includes('name=?') || sql.includes('name = ?'))) {
             return { name: String(binds[0]) } as T;
           }
           if (sql.includes('FROM qualificacoes_historico')) {
