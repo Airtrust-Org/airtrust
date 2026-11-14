@@ -62,6 +62,10 @@ async function requireComplianceTab(page: Page, label: string) {
 test('training compliance intelligent staging flow is live and read-only', async ({ page }) => {
   expect(QA_CODE).toMatch(/^QA-COMP-/);
   const guard = installReadOnlyGuard(page);
+  // Keep Portuguese selectors deterministic on US-hosted CI runners regardless of /public/locale IP geolocation.
+  await page.addInitScript(() => {
+    window.localStorage.setItem('airtrust:language:manual', 'pt-BR');
+  });
 
   const capabilitiesP = waitApi(page, '/api/compliance-treinamentos/capabilities');
   const catalogsP = waitApi(page, '/api/compliance-treinamentos/catalogos');
@@ -273,6 +277,18 @@ test('training compliance intelligent staging flow is live and read-only', async
   await trainingSelector.selectOption(selectedTipoId);
   const rules = await rulesP.then(payload);
   expect(Array.isArray(rules.data)).toBe(true);
+
+  const directPeopleP = waitApi(page, '/api/compliance-treinamentos/pessoas');
+  await (await requireComplianceTab(page, 'Pessoas')).click();
+  const directPeople = await directPeopleP.then(payload);
+  expect(Array.isArray(directPeople.data)).toBe(true);
+  await expect(page.getByRole('columnheader', { name: 'Pessoa' })).toBeVisible();
+
+  const returnPendingsP = waitApi(page, '/api/compliance-treinamentos/pendencias');
+  await (await requireComplianceTab(page, 'Pendências')).click();
+  const returnPendings = await returnPendingsP.then(payload);
+  expect(Array.isArray(returnPendings.data)).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Central de pendências' })).toBeVisible();
 
   // Prove the backend rejects a requested sector outside the real Gestor
   // assignment; a merely permissive assertion of 'restricted' is insufficient.
