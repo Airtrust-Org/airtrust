@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '@/react-app/App';
 import { ErrorBoundary } from '@/react-app/components/common/ErrorBoundary';
@@ -7,21 +8,29 @@ import '@/react-app/index.css';
 import '@/react-app/styles/semantic-theme.css';
 import '@/react-app/styles/native-theme-controls.css';
 import '@/react-app/styles/responsive-navigation.css';
-// Material Symbols font — local bundle (removes CDN dependency)
-import 'material-symbols/outlined.css';
+// Icon font is deferred to the authenticated legacy UI components that render glyphs.
 // Service Worker descomissionado: mantemos apenas limpeza de runtime legado
 import { registerServiceWorker } from '@/lib/sw-manager';
 import { installGlobalApiFetch } from '@/react-app/lib/apiFetch';
 import { installTableWheelScrollLock } from '@/react-app/lib/tableWheelScrollLock';
 import { installFrontendVersionMonitor } from '@/react-app/lib/frontendVersionMonitor';
 import FrontendUpdateNotice from '@/react-app/components/FrontendUpdateNotice';
-import { installChunkErrorListeners } from '@/react-app/utils/lazyWithRetry';
+import { installChunkErrorListeners, lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
 import { initializeThemePreference } from '@/react-app/theme/theme';
-import InstallAppPage from '@/react-app/pages/InstallAppPage';
-import ForgotPasswordPage from '@/react-app/pages/ForgotPasswordPage';
-import ResetPasswordPage from '@/react-app/pages/ResetPasswordPage';
+const InstallAppPage = lazyWithRetry(
+  () => import('@/react-app/pages/InstallAppPage'),
+  'InstallAppPage',
+);
+const ForgotPasswordPage = lazyWithRetry(
+  () => import('@/react-app/pages/ForgotPasswordPage'),
+  'ForgotPasswordPage',
+);
+const ResetPasswordPage = lazyWithRetry(
+  () => import('@/react-app/pages/ResetPasswordPage'),
+  'ResetPasswordPage',
+);
 
 initializeThemePreference();
 
@@ -145,6 +154,7 @@ const isResetPasswordRoute = pathname === '/reset-password';
 // StrictMode removido — causa double-invoke de effects que quebra dedup guards em dev
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
+    <Suspense fallback={<div role="status" className="p-6 text-center">Carregando página...</div>}>
     {isInstallRoute ? (
       <InstallAppPage />
     ) : isForgotPasswordRoute ? (
@@ -159,5 +169,6 @@ createRoot(document.getElementById('root')!).render(
         <FrontendUpdateNotice />
       </>
     )}
+    </Suspense>
   </ErrorBoundary>,
 );
