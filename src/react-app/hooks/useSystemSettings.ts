@@ -17,6 +17,14 @@ export function useSystemSettings() {
   useEffect(() => {
     let mounted = true;
     let requestGeneration = 0;
+    let activeController: AbortController | null = null;
+
+    const abortInFlight = () => {
+      if (activeController) {
+        activeController.abort();
+        activeController = null;
+      }
+    };
 
     const applyCachedForTenant = (tenantId: number | null) => {
       const latest = getSystemSettings(tenantId);
@@ -27,16 +35,21 @@ export function useSystemSettings() {
     };
 
     const loadForCurrentTenant = () => {
+      abortInFlight();
       const tenantId = getCurrentTenantId();
       const generation = ++requestGeneration;
       applyCachedForTenant(tenantId);
 
       if (!tenantId) return;
 
-      fetchSystemSettingsFromServer()
+      const controller = new AbortController();
+      activeController = controller;
+
+      fetchSystemSettingsFromServer(controller.signal)
         .then((server) => {
           if (
             !mounted ||
+            controller.signal.aborted ||
             generation !== requestGeneration ||
             server.empresaId !== tenantId ||
             getCurrentTenantId() !== tenantId
@@ -49,6 +62,11 @@ export function useSystemSettings() {
         })
         .catch(() => {
           // Tenant-scoped local cache remains the safe fallback.
+        })
+        .finally(() => {
+          if (activeController === controller) {
+            activeController = null;
+          }
         });
     };
 
@@ -73,16 +91,19 @@ export function useSystemSettings() {
     );
     window.addEventListener('storage', handleSettingsUpdate);
     window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, handleTokenChange);
+    window.addEventListener('pagehide', abortInFlight);
 
     return () => {
       mounted = false;
       requestGeneration += 1;
+      abortInFlight();
       window.removeEventListener(
         'airtrust:system-settings-updated',
         handleSettingsUpdate as EventListener,
       );
       window.removeEventListener('storage', handleSettingsUpdate);
       window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, handleTokenChange);
+      window.removeEventListener('pagehide', abortInFlight);
     };
   }, []);
 

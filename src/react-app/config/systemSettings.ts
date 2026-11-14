@@ -129,7 +129,9 @@ export function saveSystemSettings(
   );
 }
 
-export async function fetchSystemSettingsFromServer(): Promise<ServerSystemSettings> {
+export async function fetchSystemSettingsFromServer(
+  signal?: AbortSignal,
+): Promise<ServerSystemSettings> {
   const token = getAccessToken();
   if (!token) {
     throw new Error('Sem autenticação para carregar configurações do sistema');
@@ -139,6 +141,7 @@ export async function fetchSystemSettingsFromServer(): Promise<ServerSystemSetti
     method: 'GET',
     headers: getAuthHeaders(),
     credentials: 'include',
+    signal,
   });
 
   if (!response.ok) {
