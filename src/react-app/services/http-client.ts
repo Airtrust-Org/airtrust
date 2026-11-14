@@ -144,11 +144,10 @@ class HttpClient {
       ...(fetchOptions.headers as Record<string, string>),
     };
 
-    if (method === 'GET') {
-      headers['Cache-Control'] = headers['Cache-Control'] || 'no-cache, no-store, max-age=0';
-      headers.Pragma = headers.Pragma || 'no-cache';
-      headers['X-AirTrust-Bypass-Cache'] = headers['X-AirTrust-Bypass-Cache'] || '1';
-    }
+    const requestInit: RequestInit =
+      method === 'GET' && !fetchOptions.cache
+        ? { ...fetchOptions, cache: 'no-store' }
+        : fetchOptions;
 
     // JWT token
     if (token) {
@@ -174,7 +173,7 @@ class HttpClient {
           url,
           method,
           headers,
-          fetchOptions,
+          requestInit,
           Boolean(token),
         );
 

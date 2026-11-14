@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PASTA_VIRTUAL_CATEGORIAS, type TipoDocumento } from '@/react-app/config/pastaVirtual';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import { previewPdfBeforeDownload } from '@/react-app/utils/pdfPreview';
 import { api } from '@/react-app/utils/api-client';
+import { notifyDataChanged, onDataChanged } from '@/react-app/utils/data-sync';
 
 export type { TipoDocumento } from '@/react-app/config/pastaVirtual';
 
@@ -79,17 +80,9 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
     setLoading(true);
     setError(null);
     try {
-      const token = getAccessToken();
-      const headers: Record<string, string> = {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        Pragma: 'no-cache',
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const timestamp = Date.now();
-      const categoryRes = await fetch(
-        `${API_BASE_URL}/pasta-virtual/by-category/${funcionarioId}?_t=${timestamp}`,
-        { headers },
+      const categoryRes = await fetchWithAuth(
+        `/api/pasta-virtual/by-category/${funcionarioId}`,
+        { cache: 'no-store' },
       );
 
       if (!categoryRes.ok) throw new Error(`API retornou ${categoryRes.status}`);
@@ -155,21 +148,26 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
 
   useEffect(() => {
     refetch();
+    return onDataChanged(
+      () => {
+        void refetch();
+      },
+      ['funcionarios', 'qualificacoes'],
+    );
   }, [refetch]);
 
   const deleteDocumento = useCallback(
     async (id: number) => {
-      const token = getAccessToken();
-      const fetchConfig: RequestInit = { method: 'DELETE' };
-      if (token) fetchConfig.headers = { Authorization: `Bearer ${token}` };
-
-      const res = await fetch(`${API_BASE_URL}/pasta-virtual/delete/${id}`, fetchConfig);
+      const res = await fetchWithAuth(`/api/pasta-virtual/delete/${id}`, {
+        method: 'DELETE',
+      });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || `Falha ao excluir (${res.status})`);
       }
 
       await res.json().catch(() => ({}));
+      notifyDataChanged('funcionarios');
       try {
         await Promise.race([
           refetch(),
@@ -215,21 +213,21 @@ export function usePastaVirtual(funcionarioId: number | undefined): UsePastaVirt
       return;
     }
 
-    const fetchConfig: RequestInit = { headers };
-    const endpoint = `${API_BASE_URL}/pasta-virtual/download/${doc.id}`;
-    const res = await fetch(endpoint, fetchConfig);
+    const endpoint = `/api/pasta-virtual/download/${doc.id}`;
+    const res = await fetchWithAuth(endpoint);
     if (!res.ok) throw new Error('Erro ao baixar');
     const data = await res.json();
     if (!data.success || !data.data?.url) throw new Error('URL de download não fornecida');
 
-    const urlPath = data.data.url.startsWith('/') ? data.data.url.slice(1) : data.data.url;
     const streamUrl = data.data.url.startsWith('http')
       ? data.data.url
-      : `${API_BASE_URL}/${urlPath}`;
+      : data.data.url.startsWith('/api/')
+        ? data.data.url
+        : `/api/${data.data.url.replace(/^\/+/, '')}`;
     await previewPdfBeforeDownload({
       fileName: doc.nome,
       title: doc.nome,
-      fetcher: () => fetch(streamUrl, fetchConfig),
+      fetcher: () => fetchWithAuth(streamUrl),
     });
   }, []);
 
