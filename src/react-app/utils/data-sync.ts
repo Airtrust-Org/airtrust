@@ -21,6 +21,15 @@ const CHANNEL_NAME = 'airtrust-data-sync';
 
 type Detail = { scope: DataChangeScope; at: number; tenantId: number | null };
 
+/** Cross-tab signals are hints, never a reason to touch a different tenant. */
+export function canApplyCrossTabDataChange(
+  eventTenantId: number | null,
+  activeTenantId: number | null,
+): boolean {
+  return eventTenantId !== null && activeTenantId !== null && eventTenantId === activeTenantId;
+}
+
+
 let channel: BroadcastChannel | null = null;
 function getChannel(): BroadcastChannel | null {
   if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
@@ -74,8 +83,7 @@ export function onDataChanged(
   const onMessage = (event: MessageEvent<Detail>) => {
     if (
       event.data &&
-      event.data.tenantId !== null &&
-      event.data.tenantId === getCurrentTenantId() &&
+      canApplyCrossTabDataChange(event.data.tenantId, getCurrentTenantId()) &&
       matches(event.data.scope)
     ) callback(event.data.scope);
   };

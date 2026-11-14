@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { dataChangeScopesForMutation } from '../apiFetch';
+import { canApplyCrossTabDataChange } from '@/react-app/utils/data-sync';
 import { shouldInvalidateQueryForDataChange } from '../query-client';
 
 describe('tenant-aware mutation cache invalidation', () => {
+  it('rejects cross-tab invalidation from a different or unresolved tenant', () => {
+    expect(canApplyCrossTabDataChange(6, 6)).toBe(true);
+    expect(canApplyCrossTabDataChange(6, 7)).toBe(false);
+    expect(canApplyCrossTabDataChange(null, 6)).toBe(false);
+    expect(canApplyCrossTabDataChange(6, null)).toBe(false);
+  });
+
   it('routes supported mutations to affected domains', () => {
     expect(dataChangeScopesForMutation('/api/qualificacoes/123')).toEqual(['qualificacoes', 'compliance']);
     expect(dataChangeScopesForMutation('/api/funcionarios/99')).toContain('funcionarios');
