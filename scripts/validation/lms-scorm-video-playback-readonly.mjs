@@ -52,3 +52,40 @@ export async function startRealVisibleVideo(frame){
     return {kind:'unavailable',duration:before.duration};
   }
 }
+
+
+/**
+ * Focused read-only SCORM certification must budget for authored video playback
+ * AND the remainder of the course. The first observed video is only a lower
+ * bound: later slides can include more real video lessons. Grant extra time,
+ * never synthetic completion, seeks, altered playback rates or skipped gates.
+ *
+ * Applies only when the caller explicitly selected one or more course IDs.
+ * The global 80-minute per-browser workflow remains the outer safety limit.
+ */
+export function computeFocusedCourseBudgetMs({
+  slideCount = 0,
+  requiredInteractions = 0,
+  observedVideoSeconds = 0,
+} = {}) {
+  const safeCount = (value, maximum) => {
+    const count = Number(value);
+    return Number.isFinite(count) && count > 0
+      ? Math.min(Math.ceil(count), maximum)
+      : 0;
+  };
+  const slides = safeCount(slideCount, 500);
+  const interactions = safeCount(requiredInteractions, 20);
+  const observedSeconds = safeCount(observedVideoSeconds, 600);
+
+  // Ten seconds of overhead/reading per slide would be too generous for the
+  // batch survey, but in focused mode eight seconds plus authored video is
+  // appropriate to verify actual navigation without skipping media.
+  const readingAndNavigationMs = slides * 8_000;
+  const requiredInteractionsMs = interactions * 50_000;
+  const knownVideoMs = observedSeconds * 1_000;
+  return Math.min(
+    1_200_000,
+    Math.max(180_000, 180_000 + readingAndNavigationMs + requiredInteractionsMs + knownVideoMs),
+  );
+}
