@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { safeHttpClientErrorMessage } from '../http-client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import httpClient, { safeHttpClientErrorMessage } from '../http-client';
 
 describe('safeHttpClientErrorMessage', () => {
   it('preserves useful business feedback', () => {
@@ -31,5 +31,32 @@ describe('safeHttpClientErrorMessage', () => {
     expect(
       safeHttpClientErrorMessage('TypeError: Failed to fetch', 'NETWORK_ERROR'),
     ).toBe('Falha de rede. Verifique sua conexão e tente novamente.');
+  });
+});
+
+describe('httpClient CORS preflight hygiene (PERF-07)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('omits non-CORS-safelisted cache-bypass headers on default GET requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await httpClient.get('/health', { skipRequestControl: true, retry: 0 });
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.cache).toBe('no-store');
+    const headers = (init?.headers || {}) as Record<string, string>;
+    expect(headers['Cache-Control']).toBeUndefined();
+    expect(headers.Pragma).toBeUndefined();
+    expect(headers['X-AirTrust-Bypass-Cache']).toBeUndefined();
   });
 });
