@@ -42,17 +42,29 @@ function isRecoverableAssetError(error: Error): boolean {
   );
 }
 
-async function clearLegacyAirtrustCaches(): Promise<void> {
+export async function clearLegacyAirtrustCaches(): Promise<void> {
   try {
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((reg) => reg.unregister()));
+      await Promise.all(
+        registrations
+          .filter((reg) => {
+            // The Pilot offline app owns a separate Service Worker scope.
+            // Browser recovery in the main app must not unregister it.
+            try {
+              return !new URL(reg.scope).pathname.startsWith('/pilot/');
+            } catch {
+              return true;
+            }
+          })
+          .map((reg) => reg.unregister()),
+      );
     }
     if ('caches' in window) {
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames
-          .filter((name) => name.startsWith('airtrust-'))
+          .filter((name) => name.startsWith('airtrust-') && !name.startsWith('airtrust-pilot-'))
           .map((name) => caches.delete(name)),
       );
     }
