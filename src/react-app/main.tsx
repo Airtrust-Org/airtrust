@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '@/react-app/App';
+import { lazyWithRetry } from '@/react-app/utils/lazyWithRetry';
 import { ErrorBoundary } from '@/react-app/components/common/ErrorBoundary';
 // Enable Tailwind + Design System styles across the app
 import '@/react-app/index.css';
@@ -19,9 +21,9 @@ import { installChunkErrorListeners } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
 import { initializeThemePreference } from '@/react-app/theme/theme';
-import InstallAppPage from '@/react-app/pages/InstallAppPage';
-import ForgotPasswordPage from '@/react-app/pages/ForgotPasswordPage';
-import ResetPasswordPage from '@/react-app/pages/ResetPasswordPage';
+const InstallAppPage = lazyWithRetry(() => import('@/react-app/pages/InstallAppPage'), 'InstallAppPage');
+const ForgotPasswordPage = lazyWithRetry(() => import('@/react-app/pages/ForgotPasswordPage'), 'ForgotPasswordPage');
+const ResetPasswordPage = lazyWithRetry(() => import('@/react-app/pages/ResetPasswordPage'), 'ResetPasswordPage');
 
 initializeThemePreference();
 
@@ -145,19 +147,21 @@ const isResetPasswordRoute = pathname === '/reset-password';
 // StrictMode removido — causa double-invoke de effects que quebra dedup guards em dev
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    {isInstallRoute ? (
-      <InstallAppPage />
-    ) : isForgotPasswordRoute ? (
-      <ForgotPasswordPage />
-    ) : isResetPasswordRoute ? (
-      <ResetPasswordPage />
-    ) : (
-      <>
-        <App />
-        <GlobalConfirmDialogHost />
-        <GlobalAlertDialogHost />
-        <FrontendUpdateNotice />
-      </>
-    )}
+    <Suspense fallback={null}>
+      {isInstallRoute ? (
+        <InstallAppPage />
+      ) : isForgotPasswordRoute ? (
+        <ForgotPasswordPage />
+      ) : isResetPasswordRoute ? (
+        <ResetPasswordPage />
+      ) : (
+        <>
+          <App />
+          <GlobalConfirmDialogHost />
+          <GlobalAlertDialogHost />
+          <FrontendUpdateNotice />
+        </>
+      )}
+    </Suspense>
   </ErrorBoundary>,
 );

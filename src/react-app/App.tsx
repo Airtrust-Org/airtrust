@@ -18,12 +18,12 @@ import { LanguageProvider } from './i18n/LanguageContext';
 import { useLanguage } from './i18n/useLanguage';
 import { syncRuntimeTranslation } from './i18n/runtimeTranslator';
 import { ThemeProvider } from './theme/ThemeProvider';
-import HomeRouter from './pages/HomeRouter';
 import { resolveTrainingEntryPath } from './lib/training-entry';
 import { canonicalizeLegacyFrmsOperationalQuery } from './pages/frms/frmsLegacyOperationalQuery';
 import { CANONICAL_DUPLICATE_ROUTE_TARGETS } from './lib/canonical-duplicate-routes';
 
 // 🚀 LAZY LOADING: Páginas principais (code splitting)
+const HomeRouter = lazyWithRetry(() => import('./pages/HomeRouter'), 'HomeRouter');
 const TrocarSenhaPage = lazyWithRetry(() => import('./pages/TrocarSenhaPage'), 'TrocarSenhaPage');
 const Funcionarios = lazyWithRetry(() => import('./pages/Funcionarios'), 'Funcionarios');
 const Qualificacoes = lazyWithRetry(() => import('./pages/Qualificacoes'), 'Qualificacoes');
