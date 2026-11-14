@@ -19,4 +19,5 @@ assert_count notification-detached 0 "SELECT COUNT(*) count FROM notificacoes_lo
 assert_count D1-crew-rules-only 2 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=22 AND id IN (486,487) AND obrigatoriedade='OBRIGATORIA' AND ativo=1 AND deleted_at IS NULL;"
 assert_count retired-rules 0 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND id IN (488,489,490,538,671) AND ativo=1 AND deleted_at IS NULL;"
 assert_count no-active-corporate-rule 0 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=194 AND ativo=1 AND deleted_at IS NULL;"
+assert_count global-fk-integrity 0 "SELECT COUNT(*) count FROM pragma_foreign_key_check;"
 echo AVSEC_0584_POSTCONDITIONS_PASS
