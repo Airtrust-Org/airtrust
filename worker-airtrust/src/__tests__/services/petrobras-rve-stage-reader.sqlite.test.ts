@@ -70,14 +70,22 @@ describe('PERF-05 daily Petrobras RDV export stage reader', () => {
     expect([...buildDailyPetrobrasRveXml(actual).bytes]).toEqual([...buildDailyPetrobrasRveXml(expected).bytes]);
   });
 
-  it('chunks a large selection under the SQLite bind limit, not one query per flight', async () => {
+  it.each([
+    { count: 99, expectedQueries: 2 },
+    { count: 100, expectedQueries: 2 },
+    { count: 205, expectedQueries: 3 },
+  ])('respects the D1 100-bind budget for $count flights', async ({ count, expectedQueries }) => {
     const db = setup();
-    const ids = Array.from({ length: PETROBRAS_RVE_STAGE_READ_CHUNK + 5 }, (_, i) => 700 + i);
+    const ids = Array.from({ length: count }, (_, i) => 700 + i);
     for (const id of ids) addStage(db, 1, id, 1);
     const prepare = vi.spyOn(db, 'prepare');
     const grouped = await readPetrobrasStagesByFlight(db.asD1(), 1, ids);
-    expect(prepare).toHaveBeenCalledTimes(2);
-    expect(grouped.size).toBe(ids.length);
+    expect(prepare).toHaveBeenCalledTimes(expectedQueries);
+    for (const [sql] of prepare.mock.calls) {
+      // One tenant bind plus the flight-ID placeholders, including every chunk.
+      expect((String(sql).match(/\\?/g) || []).length).toBeLessThanOrEqual(100);
+    }
+    expect(grouped.size).toBe(count);
     expect(grouped.get(ids[ids.length - 1])).toHaveLength(1);
   });
 
