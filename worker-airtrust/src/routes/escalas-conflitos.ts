@@ -258,11 +258,25 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
             });
           }
         }
-      } catch {
-        /* silencioso */
+      } catch (error) {
+        // Uma falha D1/schema não equivale a tripulação regular.
+        console.error('[CONFLITOS] Verificação de qualificações indisponível:', error);
+        return c.json({
+          success: false,
+          code: 'COMPLIANCE_CHECK_UNAVAILABLE',
+          verificacao_indisponivel: true,
+          error: 'Não foi possível verificar as qualificações da tripulação. A escala não deve ser considerada livre de conflitos.',
+        }, 503);
       }
     } catch (e) {
-      console.warn('[CONFLITOS] Erro ao verificar compliance NOP-OPS-038:', e);
+      // Qualquer falha no cômputo NOP-OPS-038 impede atestar ausência de conflito.
+      console.error('[CONFLITOS] Erro ao verificar compliance NOP-OPS-038:', e);
+      return c.json({
+        success: false,
+        code: 'COMPLIANCE_CHECK_UNAVAILABLE',
+        verificacao_indisponivel: true,
+        error: 'Não foi possível verificar o compliance operacional da tripulação. A escala não deve ser considerada livre de conflitos.',
+      }, 503);
     }
 
     return c.json({
