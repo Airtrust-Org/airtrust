@@ -56,6 +56,13 @@ binding = "AI"
 [env.staging]
 name = "airtrust-api-staging"
 
+# PERF-03: staging-only proximity experiment for D1 primary in ENAM/IAD.
+# Production placement remains unchanged. Compare D1 latency before/after
+# through /api/health checks.database.latency (read-only) and authenticated
+# staging requests; roll back this stanza if p50/p95 regress.
+[env.staging.placement]
+region = "aws:us-east-1"
+
 # Persist Worker invocation/custom/error logs. Staging captures every request so
 # governed QA can correlate a release SHA with runtime failures.
 [env.staging.observability]
