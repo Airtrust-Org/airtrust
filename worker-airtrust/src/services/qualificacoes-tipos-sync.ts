@@ -1,5 +1,21 @@
 import { tryAddCalendarMonthsClamped } from '../../../src/shared/utils/validade-meses';
 import { isCmaCode, resolveCmaValidity } from '../utils/cma-validity';
+import {
+  CANCELLED_STATUS_VALUES,
+  PLANNED_QUALIFICATION_STATUS_VALUES,
+  sqlStatusEqualsAny,
+} from '../lib/status/status-codes';
+
+/** Historical snapshots can only be refreshed for realized, non-cancelled records.
+ * The importer and the HTTP PATCH must share this exact predicate.
+ * The alias is a trusted constant selected by the server, not user SQL.
+ */
+export function buildHistoricoTipoSyncEligibleStatusPredicate(alias = 'qh'): string {
+  const status = `UPPER(TRIM(COALESCE(${alias}.status, '')))`;
+  return `NOT (${sqlStatusEqualsAny(status, CANCELLED_STATUS_VALUES)})
+    AND NOT (${sqlStatusEqualsAny(status, PLANNED_QUALIFICATION_STATUS_VALUES)})`;
+}
+
 type TipoTreinamento = 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' | 'UPGRADE' | 'ESPECIFICO';
 
 export type QualificacaoTipoSnapshot = {
