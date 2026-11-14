@@ -337,7 +337,20 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     const relevantScopes = (Object.keys(apiCacheDomains) as Array<Exclude<DataChangeScope, 'all'>>)
       .filter((scope) => apiCacheDomains[scope].some((part) => requestedUrl.includes(part)));
     if (relevantScopes.length === 0) return;
-    return onDataChanged(() => { void refetch(); }, relevantScopes);
+    let queued = false;
+    let subscribed = true;
+    const unsubscribe = onDataChanged(() => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        if (subscribed) void refetch();
+      });
+    }, relevantScopes);
+    return () => {
+      subscribed = false;
+      unsubscribe();
+    };
   }, [enabled, optionsMethod, refetch, url]);
 
   return { data, loading, error, refetch };
