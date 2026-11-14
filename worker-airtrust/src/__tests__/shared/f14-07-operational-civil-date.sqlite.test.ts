@@ -32,7 +32,7 @@ function createFixture() {
     CREATE TABLE qualificacoes_tipos (id INTEGER, empresa_id INTEGER, deleted_at TEXT, codigo TEXT, validade INTEGER);
     CREATE TABLE qualificacoes_historico (
       id INTEGER, funcionario_id TEXT, empresa_id INTEGER, deleted_at TEXT, status TEXT,
-      qualificacao_id INTEGER, qualificacao_codigo TEXT,
+      renovacao_de INTEGER, qualificacao_id INTEGER, qualificacao_codigo TEXT,
       validade_meses INTEGER, data_conclusao TEXT, data_vencimento TEXT
     );
     CREATE TABLE frms_jornada (tripulante_id TEXT, data TEXT, horas_voo_minutos INTEGER, deleted_at TEXT, created_at TEXT);
@@ -50,8 +50,8 @@ function createFixture() {
       ('2','Outro Tenant','Outro','A002',7,'COMANDANTE',NULL,NULL,NULL,NULL,1);
     INSERT INTO qualificacoes_tipos VALUES (10,6,NULL,'CMA',12);
     INSERT INTO qualificacoes_historico VALUES
-      (1,'1',6,NULL,'CONCLUIDA',10,'CMA',12,'2025-11-14','2026-11-14'),
-      (2,'2',7,NULL,'CONCLUIDA',10,'CMA',12,'2025-11-14','2026-11-14');
+      (1,'1',6,NULL,'CONCLUIDA',NULL,10,'CMA',12,'2025-11-14','2026-11-14'),
+      (2,'2',7,NULL,'CONCLUIDA',NULL,10,'CMA',12,'2025-11-14','2026-11-14');
     INSERT INTO simulador_agendamentos VALUES (10,'AGENDADO',NULL,'2026-11-14');
     INSERT INTO sessoes_participantes VALUES ('1',10,NULL);
     INSERT INTO aeronaves VALUES (20,'AW139','PT-TST','AW139',NULL);
@@ -114,4 +114,17 @@ describe('F14-07 — mesma data civil America/Sao_Paulo em consumidores operacio
       expect(frms.frms_score).toBe(2);
     } finally { sqlite.close(); }
   });
+  it('não considera CMA planejado sem conclusão como habilitação vigente', async () => {
+    vi.setSystemTime(new Date('2026-11-15T02:30:00Z'));
+    const { db, sqlite } = createFixture();
+    try {
+      sqlite.exec("UPDATE qualificacoes_historico SET data_vencimento='2026-11-13' WHERE id=1;");
+      sqlite.exec("INSERT INTO qualificacoes_historico VALUES (9,'1',6,NULL,'PLANEJADA',NULL,10,'CMA',12,NULL,'2028-11-14');");
+      const c = await getTripulanteOperacional(db, '1', 6);
+      expect(c?.cma_valido).toBe(false);
+      expect(c?.status_operacional).toBe('BLOQUEADO_CMA');
+      expect(c?.pode_ser_alocado).toBe(false);
+    } finally { sqlite.close(); }
+  });
+
 });

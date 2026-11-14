@@ -1,10 +1,10 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import {
-  CANCELLED_STATUS_VALUES,
   SESSION_STATUS,
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { buildCurrentOperationalQualificationPredicate } from '../lib/qualificacoes/operational-qualification-predicates';
 
 export type StatusOperacional =
   | 'APTO'
@@ -100,7 +100,7 @@ WITH operational_clock AS (SELECT date(?) AS today_sp),
       WHERE qh.funcionario_id = f.id
         AND qh.empresa_id = f.empresa_id
         AND qh.deleted_at IS NULL
-        AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
+        AND ${buildCurrentOperationalQualificationPredicate('qh')}
         AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
         AND ${getQualificacoesVencimentoExpr()} >= date((SELECT today_sp FROM operational_clock))
     ) THEN 1 ELSE 0 END AS cma_valido,
@@ -113,7 +113,7 @@ WITH operational_clock AS (SELECT date(?) AS today_sp),
         WHERE qh2.funcionario_id = f.id
           AND qh2.empresa_id = f.empresa_id
           AND qh2.deleted_at IS NULL
-          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh2.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
+          AND ${buildCurrentOperationalQualificationPredicate('qh2')}
           AND UPPER(COALESCE(qh2.qualificacao_codigo, qt2.codigo, '')) = 'CMA'
       )) - JULIANDAY((SELECT today_sp FROM operational_clock))
     ) AS INTEGER) AS cma_dias_restantes,
@@ -125,7 +125,7 @@ WITH operational_clock AS (SELECT date(?) AS today_sp),
       WHERE qh3.funcionario_id = f.id
         AND qh3.empresa_id = f.empresa_id
         AND qh3.deleted_at IS NULL
-        AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh3.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
+        AND ${buildCurrentOperationalQualificationPredicate('qh3')}
         AND UPPER(COALESCE(qh3.qualificacao_codigo, qt3.codigo, '')) = 'CMA'
     ) AS cma_validade_fim,
 
@@ -211,7 +211,7 @@ WITH operational_clock AS (SELECT date(?) AS today_sp),
         WHERE qh4.funcionario_id = f.id
           AND qh4.empresa_id = f.empresa_id
           AND qh4.deleted_at IS NULL
-          AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh4.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
+          AND ${buildCurrentOperationalQualificationPredicate('qh4')}
           AND UPPER(COALESCE(qh4.qualificacao_codigo, qt4.codigo, '')) = 'CMA'
           AND ${getQualificacoesVencimentoExpr('qh4', 'qt4')} >= date((SELECT today_sp FROM operational_clock))
       ) THEN 'BLOQUEADO_CMA'
@@ -231,10 +231,7 @@ WITH operational_clock AS (SELECT date(?) AS today_sp),
           WHERE qh5.funcionario_id = f.id
             AND qh5.empresa_id = f.empresa_id
             AND qh5.deleted_at IS NULL
-            AND ${sqlStatusNotEqualsAny(
-              "UPPER(COALESCE(qh5.status, 'CONCLUIDA'))",
-              CANCELLED_STATUS_VALUES,
-            )}
+            AND ${buildCurrentOperationalQualificationPredicate('qh5')}
             AND UPPER(COALESCE(qh5.qualificacao_codigo, qt5.codigo, '')) = 'CMA'
         )) - JULIANDAY((SELECT today_sp FROM operational_clock))
       ) AS INTEGER) <= 30 THEN 'ATENCAO_CMA'
