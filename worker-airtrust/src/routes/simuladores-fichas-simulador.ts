@@ -62,12 +62,16 @@ app.put(
     // Record-level tenant boundary must be proven before availability/model
     // lookups or any read/write by ficha_id.
     const fichaTenant = await c.env.DB.prepare(
-      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT id, assinatura_aluno_timestamp, assinatura_tripulante FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
     )
       .bind(fichaId, empresaId)
-      .first<{ id: number }>();
+      .first<{ id: number; assinatura_aluno_timestamp: string | null; assinatura_tripulante: number | null }>();
     if (!fichaTenant) {
       return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
+    }
+    if (fichaTenant.assinatura_aluno_timestamp || Number(fichaTenant.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha. Utilize a retificação formal para alterar manobras.' }, 409);
     }
 
     // Mutations below prove unsigned state inside each D1 statement, not
@@ -163,6 +167,8 @@ app.put(
                WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
                  AND f.assinatura_instrutor_timestamp IS NULL
                  AND COALESCE(f.assinatura_instrutor, 0) = 0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0) = 0
             )`,
         )
           .bind(
@@ -199,6 +205,8 @@ app.put(
                WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
                  AND f.assinatura_instrutor_timestamp IS NULL
                  AND COALESCE(f.assinatura_instrutor, 0) = 0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0) = 0
             )`,
         )
           .bind(
@@ -240,6 +248,8 @@ app.put(
                WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
                  AND f.assinatura_instrutor_timestamp IS NULL
                  AND COALESCE(f.assinatura_instrutor, 0)=0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0)=0
             )`,
       )
         .bind(
@@ -308,6 +318,10 @@ app.post('/fichas-simulador/:id/popular-manobras', requireOperacoesFicha('create
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
         error: 'Ficha já assinada. Não é permitido repopular manobras.' }, 409);
     }
+    if (f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha. Utilize a retificação formal para repopular manobras.' }, 409);
+    }
 
     const m = await c.env.DB.prepare(
       'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE empresa_id = ? AND tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem',
@@ -337,6 +351,8 @@ app.post('/fichas-simulador/:id/popular-manobras', requireOperacoesFicha('create
              WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
                AND f.assinatura_instrutor_timestamp IS NULL
                AND COALESCE(f.assinatura_instrutor,0)=0
+                AND f.assinatura_aluno_timestamp IS NULL
+                AND COALESCE(f.assinatura_tripulante,0)=0
           )`,
       ).bind(fid, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem,
         ma.tripulante || 'AB', fid, empresaId),
