@@ -9,6 +9,7 @@ import {
   shouldResyncTipoValidity,
 } from '../../services/qualificacoes-tipos-history-resync';
 import { QualificacaoTipoImportacaoService } from '../../services/importacao/QualificacaoTipoImportacao';
+import { buildHistoricoTipoSyncEligibleStatusPredicate } from '../../services/qualificacoes-tipos-sync';
 
 let sqlite: SqliteD1Database;
 
@@ -65,6 +66,29 @@ describe('resyncTipoHistoricoValidity', () => {
     expect(row(2)).toEqual({ v: 12, d: '2026-01-15' });
     expect(row(3)).toEqual({ v: 12, d: '2026-01-15' });
     expect(row(4)).toEqual({ v: 12, d: '2026-01-15' });
+  });
+
+  it('paridade de PATCH/importador: não modifica CANCELADA, CANCELADO, PLANEJADA ou PLANEJADO', async () => {
+    const statuses = ['CONCLUIDA', 'CANCELADA', 'CANCELADO', 'PLANEJADA', 'PLANEJADO'];
+    for (let i = 0; i < statuses.length; i += 1) {
+      addHistory(i + 1, 6, statuses[i], '2025-01-15', '2026-01-15');
+    }
+    // Exercita SQL real do predicado único aplicado tanto pelo PATCH quanto
+    // pelo importador. Uma alteração acidental no enum/status quebra o teste.
+    const sql = `SELECT id FROM qualificacoes_historico qh
+      WHERE qh.empresa_id = 6
+        AND ${buildHistoricoTipoSyncEligibleStatusPredicate('qh')}
+      ORDER BY id`;
+    const matches = sqlite.database.prepare(sql).all() as { id: number }[];
+    expect(matches.map((r) => r.id)).toEqual([1]);
+
+    sqlite.database.exec('UPDATE qualificacoes_tipos SET validade = 24 WHERE id = 10');
+    const result = await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10);
+    expect(result).toEqual({ updated: 1, unchanged: 0 });
+    expect(row(1)).toEqual({ v: 24, d: '2027-01-15' });
+    for (let id = 2; id <= statuses.length; id += 1) {
+      expect(row(id)).toEqual({ v: 12, d: '2026-01-15' });
+    }
   });
 
   it('ignora vencimento_fim_mes legado (vence no dia) e e idempotente', async () => {

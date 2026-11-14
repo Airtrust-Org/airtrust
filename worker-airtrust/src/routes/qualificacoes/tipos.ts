@@ -20,6 +20,7 @@ import { getSchemaColumns, hasSchemaTable } from '../../utils/db-schema';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
+  buildHistoricoTipoSyncEligibleStatusPredicate,
   shouldSyncHistoricoSnapshotsOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from '../../services/qualificacoes-tipos-sync';
@@ -1662,9 +1663,10 @@ router.put(
                     END AS conflito_codigo,
                     f.nascimento AS nascimento_funcionario
               FROM qualificacoes_historico qh
-               LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+               LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id AND f.deleted_at IS NULL
               WHERE qh.empresa_id = ?
                 AND qh.deleted_at IS NULL
+                AND ${buildHistoricoTipoSyncEligibleStatusPredicate('qh')}
                 AND (
                   qh.qualificacao_id = ?
                   OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = ?
