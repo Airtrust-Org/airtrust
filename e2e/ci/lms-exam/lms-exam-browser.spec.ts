@@ -193,6 +193,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   // 6) finalizar pelo endpoint canonico -> CONCLUIDO + qualificacao + certificado
   await page.getByRole('button', { name: 'Concluir treinamento' }).click();
   await expect(page).toHaveURL(/\/lms(\/|$)/);
+  await expect(page.getByRole('heading', { name: 'Meus treinamentos', exact: true })).toBeVisible();
   await page.waitForLoadState('networkidle').catch(() => null);
   await expect.poll(async () => (await evidence(page)).matricula.status).toBe('CONCLUIDO');
   await expect.poll(async () => (await evidence(page)).historico[0]?.numero_certificado ?? null, { timeout: 15_000 }).toBeTruthy();
