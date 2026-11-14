@@ -38,6 +38,12 @@ import {
   sha256Hex,
 } from '../lib/guias-instrutor/storage';
 import { requireOperationalAccess } from '../middleware/operational-domain-access';
+import {
+  FUNCIONAL_AERONAVE_CODIGO,
+  FUNCIONAL_AERONAVE_NOME,
+  GUIAS_PROGRAMAS,
+  isProgramaFuncional,
+} from '../lib/guias-instrutor/programas';
 
 // Guias de instrutor são fixed-domain OPERACOES — see
 // docs/rbac/gestor-operational-autonomy.md. Additive to the existing
@@ -59,19 +65,29 @@ const GUIA_HTML_CSP =
   "font-src 'self' data:; script-src 'none'; connect-src 'none'; frame-src 'none'; " +
   "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
 
-const ProgramaEnum = z.enum(['INICIAL', 'PERIODICO', 'SEMESTRAL', 'CHECK']);
+const ProgramaEnum = z.enum(GUIAS_PROGRAMAS);
 
-const CreateGuiaSchema = z.object({
-  modelo_aeronave_id: z.coerce.number().int().positive(),
-  programa: ProgramaEnum,
-  ciclo: z.coerce.number().int().positive().nullish(),
-  sessao_numero: z.coerce.number().int().positive().nullish(),
-  sessao_total: z.coerce.number().int().positive().nullish(),
-  codigo: z.string().min(1).max(40),
-  titulo: z.string().min(1).max(200),
-  descricao: z.string().max(1000).nullish(),
-  versao: z.string().min(1).max(20),
-});
+const CreateGuiaSchema = z
+  .object({
+    modelo_aeronave_id: z.coerce.number().int().positive().nullish(),
+    programa: ProgramaEnum,
+    ciclo: z.coerce.number().int().positive().nullish(),
+    sessao_numero: z.coerce.number().int().positive().nullish(),
+    sessao_total: z.coerce.number().int().positive().nullish(),
+    codigo: z.string().min(1).max(40),
+    titulo: z.string().min(1).max(200),
+    descricao: z.string().max(1000).nullish(),
+    versao: z.string().min(1).max(20),
+  })
+  .superRefine((val, ctx) => {
+    if (!isProgramaFuncional(val.programa) && val.modelo_aeronave_id == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['modelo_aeronave_id'],
+        message: 'modelo_aeronave_id é obrigatório para programas de aeronave',
+      });
+    }
+  });
 
 const UpdateGuiaSchema = z.object({
   titulo: z.string().min(1).max(200).optional(),
@@ -86,7 +102,7 @@ const UpdateGuiaSchema = z.object({
 type GuiaRow = {
   id: number;
   empresa_id: number;
-  modelo_aeronave_id: number;
+  modelo_aeronave_id: number | null;
   programa: string;
   ciclo: number | null;
   sessao_numero: number | null;
@@ -117,6 +133,23 @@ type GuiaRow = {
   descricao_sessao?: string | null;
 };
 
+async function resolveAeronaveMeta(
+  db: D1Database,
+  modeloAeronaveId: number | null,
+): Promise<{ nome: string; codigo: string }> {
+  if (modeloAeronaveId == null) {
+    return { nome: FUNCIONAL_AERONAVE_NOME, codigo: FUNCIONAL_AERONAVE_CODIGO };
+  }
+  const aeronave = await db
+    .prepare('SELECT nome, codigo FROM modelos_aeronave WHERE id = ?')
+    .bind(modeloAeronaveId)
+    .first<{ nome: string; codigo: string }>();
+  return {
+    nome: aeronave?.nome || '',
+    codigo: aeronave?.codigo || '',
+  };
+}
+
 async function loadGuia(
   db: D1Database,
   empresaId: number,
@@ -134,8 +167,8 @@ async function loadGuia(
               g.substituido_por_id, g.publicado_em, g.created_by, g.updated_by,
               g.created_at, g.updated_at, g.deleted_at,
               msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
-       FROM simuladores_guias_instrutor g
-       LEFT JOIN simuladores_modelos_sessao_guias msg 
+       FROM simuladores_guias_instrutor_v2 g
+       LEFT JOIN simuladores_modelos_sessao_guias_v2 msg 
          ON msg.guia_id = g.id AND msg.empresa_id = g.empresa_id AND msg.deleted_at IS NULL AND msg.principal = 1
        LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
        WHERE g.id = ? AND g.empresa_id = ? AND g.deleted_at IS NULL ${statusClause}
@@ -160,7 +193,7 @@ async function registrarAuditoria(
   try {
     await db
       .prepare(
-        `INSERT INTO simuladores_guias_instrutor_auditoria
+        `INSERT INTO simuladores_guias_instrutor_auditoria_v2
            (empresa_id, guia_id, usuario_id, acao, valores_anteriores, valores_novos)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
@@ -230,11 +263,13 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
   const admin = c.req.query('admin') === '1' && isManage;
 
   let sql = `
-    SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo,
+    SELECT g.*,
+           COALESCE(ma.nome, '${FUNCIONAL_AERONAVE_NOME}') as aeronave_nome,
+           COALESCE(ma.codigo, '${FUNCIONAL_AERONAVE_CODIGO}') as aeronave_codigo,
            msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
-    FROM simuladores_guias_instrutor g
-    JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
-    LEFT JOIN simuladores_modelos_sessao_guias msg 
+    FROM simuladores_guias_instrutor_v2 g
+    LEFT JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
+    LEFT JOIN simuladores_modelos_sessao_guias_v2 msg 
       ON msg.guia_id = g.id AND msg.empresa_id = g.empresa_id AND msg.deleted_at IS NULL AND msg.principal = 1
     LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
     WHERE g.empresa_id = ? AND g.deleted_at IS NULL
@@ -248,7 +283,9 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
     sql += " AND g.status = 'ATIVO'";
   }
 
-  if (aeronave) {
+  if (aeronave === FUNCIONAL_AERONAVE_CODIGO) {
+    sql += ' AND g.modelo_aeronave_id IS NULL';
+  } else if (aeronave) {
     sql += ' AND (ma.codigo = ? OR CAST(g.modelo_aeronave_id AS TEXT) = ?)';
     params.push(aeronave, aeronave);
   }
@@ -261,7 +298,7 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
     params.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
 
-  sql += ' ORDER BY ma.nome, g.programa, g.ciclo, g.sessao_numero';
+  sql += " ORDER BY COALESCE(ma.nome, 'ZZZ'), g.programa, g.ciclo, g.sessao_numero, g.codigo";
 
   const result = await c.env.DB.prepare(sql)
     .bind(...params)
@@ -295,10 +332,10 @@ app.get('/guias-instrutor/proximas-sessoes', requireGuiaInstrutorRead(), async (
       g.id as guia_id
     FROM simulador_agendamentos sa
     LEFT JOIN simuladores s ON sa.simulador_id = s.id
-    LEFT JOIN simuladores_modelos_sessao_guias msg
+    LEFT JOIN simuladores_modelos_sessao_guias_v2 msg
       ON msg.modelo_sessao_id = sa.template_id AND msg.empresa_id = sa.empresa_id
       AND msg.deleted_at IS NULL AND msg.principal = 1
-    LEFT JOIN simuladores_guias_instrutor g
+    LEFT JOIN simuladores_guias_instrutor_v2 g
       ON g.id = msg.guia_id AND g.status = 'ATIVO' AND g.deleted_at IS NULL
     WHERE sa.deleted_at IS NULL AND sa.empresa_id = ? AND sa.data >= date('now')
   `;
@@ -339,11 +376,13 @@ app.get('/sessoes/:sessaoId/guias-instrutor', requireGuiaInstrutorRead(), async 
   }
 
   const row = await c.env.DB.prepare(
-    `SELECT g.*, ma.nome as aeronave_nome, ma.codigo as aeronave_codigo,
+    `SELECT g.*,
+            COALESCE(ma.nome, '${FUNCIONAL_AERONAVE_NOME}') as aeronave_nome,
+            COALESCE(ma.codigo, '${FUNCIONAL_AERONAVE_CODIGO}') as aeronave_codigo,
             msg.modelo_sessao_id, ms.nome as nome_sessao, ms.descricao as descricao_sessao
-     FROM simuladores_modelos_sessao_guias msg
-     JOIN simuladores_guias_instrutor g ON g.id = msg.guia_id
-     JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
+     FROM simuladores_modelos_sessao_guias_v2 msg
+     JOIN simuladores_guias_instrutor_v2 g ON g.id = msg.guia_id
+     LEFT JOIN modelos_aeronave ma ON ma.id = g.modelo_aeronave_id
      LEFT JOIN modelos_sessao ms ON ms.id = msg.modelo_sessao_id
      WHERE msg.modelo_sessao_id = ? AND msg.empresa_id = ? AND msg.deleted_at IS NULL
        AND g.status = 'ATIVO' AND g.deleted_at IS NULL
@@ -368,15 +407,11 @@ app.get('/guias-instrutor/:id', requireGuiaInstrutorRead(), async (c) => {
   const row = await loadGuia(c.env.DB, empresaId, id, { anyStatus: isManage });
   if (!row) return notFound('Guia não encontrado');
 
-  const aeronave = await c.env.DB.prepare(
-    'SELECT nome, codigo FROM modelos_aeronave WHERE id = ?',
-  )
-    .bind(row.modelo_aeronave_id)
-    .first<{ nome: string; codigo: string }>();
+  const aeronave = await resolveAeronaveMeta(c.env.DB, row.modelo_aeronave_id);
 
   return c.json({
     success: true,
-    data: publicGuiaShape(row, aeronave?.nome || '', aeronave?.codigo || ''),
+    data: publicGuiaShape(row, aeronave.nome, aeronave.codigo),
   });
 });
 
@@ -424,12 +459,10 @@ async function servePdf(
     return notFound('Arquivo não encontrado');
   }
 
-  const aeronave = await c.env.DB.prepare('SELECT nome FROM modelos_aeronave WHERE id = ?')
-    .bind(row.modelo_aeronave_id)
-    .first<{ nome: string }>();
+  const aeronave = await resolveAeronaveMeta(c.env.DB, row.modelo_aeronave_id);
 
   const filename = buildDownloadFilename({
-    aeronaveNome: aeronave?.nome || 'Aeronave',
+    aeronaveNome: aeronave.nome || 'Aeronave',
     programa: row.programa,
     ciclo: row.ciclo,
     sessaoNumero: row.sessao_numero,
@@ -479,14 +512,14 @@ app.post('/guias-instrutor', requireGuiaInstrutorManage(), requireOperacoesGuia(
   const input = body.data;
 
   const result = await c.env.DB.prepare(
-    `INSERT INTO simuladores_guias_instrutor
+    `INSERT INTO simuladores_guias_instrutor_v2
        (empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
         codigo, titulo, descricao, versao, status, created_by, updated_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RASCUNHO', ?, ?)`,
   )
     .bind(
       empresaId,
-      input.modelo_aeronave_id,
+      input.modelo_aeronave_id ?? null,
       input.programa,
       input.ciclo ?? null,
       input.sessao_numero ?? null,
@@ -533,7 +566,7 @@ app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), requireOperacoesGu
   const input = body.data;
 
   await c.env.DB.prepare(
-    `UPDATE simuladores_guias_instrutor
+    `UPDATE simuladores_guias_instrutor_v2
      SET titulo = COALESCE(?, titulo),
          descricao = COALESCE(?, descricao),
          ciclo = COALESCE(?, ciclo),
@@ -563,7 +596,7 @@ app.put('/guias-instrutor/:id', requireGuiaInstrutorManage(), requireOperacoesGu
     if (!modeloSessao) return badRequest('modelo_sessao_id inválido');
 
     await c.env.DB.prepare(
-      `INSERT INTO simuladores_modelos_sessao_guias
+      `INSERT INTO simuladores_modelos_sessao_guias_v2
          (empresa_id, modelo_sessao_id, guia_id, principal, ordem)
        VALUES (?, ?, ?, ?, 1)
        ON CONFLICT(modelo_sessao_id, guia_id) WHERE deleted_at IS NULL DO UPDATE SET
@@ -656,13 +689,11 @@ app.post(
     htmlStatus = sanitized.aprovado ? 'VALIDO' : 'REJEITADO';
   }
 
-  const aeronave = await c.env.DB.prepare('SELECT codigo FROM modelos_aeronave WHERE id = ?')
-    .bind(base.modelo_aeronave_id)
-    .first<{ codigo: string }>();
+  const aeronave = await resolveAeronaveMeta(c.env.DB, base.modelo_aeronave_id);
 
   const pdfKey = buildGuiaR2Key({
     empresaId,
-    aeronaveCodigo: aeronave?.codigo || 'AERONAVE',
+    aeronaveCodigo: aeronave.codigo || 'AERONAVE',
     programa: base.programa,
     codigo: base.codigo,
     versao,
@@ -671,7 +702,7 @@ app.post(
   const htmlKey = htmlFile
     ? buildGuiaR2Key({
         empresaId,
-        aeronaveCodigo: aeronave?.codigo || 'AERONAVE',
+        aeronaveCodigo: aeronave.codigo || 'AERONAVE',
         programa: base.programa,
         codigo: base.codigo,
         versao,
@@ -685,7 +716,7 @@ app.post(
 
   try {
     const insertResult = await c.env.DB.prepare(
-      `INSERT INTO simuladores_guias_instrutor
+      `INSERT INTO simuladores_guias_instrutor_v2
          (empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
           codigo, titulo, descricao, versao, status, created_by, updated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RASCUNHO', ?, ?)`,
@@ -726,7 +757,7 @@ app.post(
     }
 
     await c.env.DB.prepare(
-      `UPDATE simuladores_guias_instrutor
+      `UPDATE simuladores_guias_instrutor_v2
        SET pdf_r2_key = ?, pdf_nome = ?, pdf_mime_type = 'application/pdf',
            pdf_tamanho_bytes = ?, pdf_sha256 = ?,
            html_r2_key = ?, html_nome = ?, html_mime_type = ?, html_tamanho_bytes = ?,
@@ -770,7 +801,7 @@ app.post(
       );
     }
     if (newId !== null) {
-      await c.env.DB.prepare('DELETE FROM simuladores_guias_instrutor WHERE id = ? AND empresa_id = ?')
+      await c.env.DB.prepare('DELETE FROM simuladores_guias_instrutor_v2 WHERE id = ? AND empresa_id = ?')
         .bind(newId, empresaId)
         .run()
         .catch((cleanupErr) =>
@@ -807,7 +838,7 @@ app.post(
   const htmlHash = await sha256Hex(htmlBytes.buffer as ArrayBuffer);
 
   await c.env.DB.prepare(
-    `UPDATE simuladores_guias_instrutor
+    `UPDATE simuladores_guias_instrutor_v2
      SET html_status_validacao = ?, html_sha256 = ?, html_tamanho_bytes = ?,
          updated_by = ?, updated_at = datetime('now')
      WHERE id = ? AND empresa_id = ?`,
@@ -851,7 +882,7 @@ app.post(
   }
 
   const vinculo = await c.env.DB.prepare(
-    `SELECT 1 FROM simuladores_modelos_sessao_guias
+    `SELECT 1 FROM simuladores_modelos_sessao_guias_v2
      WHERE guia_id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1`,
   )
     .bind(id, empresaId)
@@ -861,13 +892,14 @@ app.post(
   }
 
   const outrasAtivas = await c.env.DB.prepare(
-    `SELECT id FROM simuladores_guias_instrutor
-     WHERE empresa_id = ? AND modelo_aeronave_id = ? AND programa = ?
+    `SELECT id FROM simuladores_guias_instrutor_v2
+     WHERE empresa_id = ? AND (modelo_aeronave_id IS ? OR modelo_aeronave_id = ?) AND programa = ?
        AND (ciclo IS ? OR ciclo = ?) AND (sessao_numero IS ? OR sessao_numero = ?)
        AND codigo = ? AND status = 'ATIVO' AND deleted_at IS NULL AND id != ?`,
   )
     .bind(
       empresaId,
+      row.modelo_aeronave_id,
       row.modelo_aeronave_id,
       row.programa,
       row.ciclo,
@@ -883,7 +915,7 @@ app.post(
   for (const antiga of outrasAtivas.results || []) {
     statements.push(
       c.env.DB.prepare(
-        `UPDATE simuladores_guias_instrutor
+        `UPDATE simuladores_guias_instrutor_v2
          SET status = 'SUBSTITUIDO', substituido_por_id = ?, updated_by = ?, updated_at = datetime('now')
          WHERE id = ? AND empresa_id = ?`,
       ).bind(id, userId, antiga.id, empresaId),
@@ -891,7 +923,7 @@ app.post(
   }
   statements.push(
     c.env.DB.prepare(
-      `UPDATE simuladores_guias_instrutor
+      `UPDATE simuladores_guias_instrutor_v2
        SET status = 'ATIVO', publicado_em = datetime('now'), updated_by = ?, updated_at = datetime('now')
        WHERE id = ? AND empresa_id = ?`,
     ).bind(userId, id, empresaId),
@@ -925,7 +957,7 @@ app.post(
   if (row.status !== 'ATIVO') return badRequest('Apenas versões ativas podem ser desativadas');
 
   await c.env.DB.prepare(
-    `UPDATE simuladores_guias_instrutor
+    `UPDATE simuladores_guias_instrutor_v2
      SET status = 'INATIVO', updated_by = ?, updated_at = datetime('now')
      WHERE id = ? AND empresa_id = ?`,
   )
@@ -953,14 +985,15 @@ app.get('/guias-instrutor/:id/versoes', requireGuiaInstrutorManage(), async (c) 
 
   const result = await c.env.DB.prepare(
     `SELECT id, versao, status, html_status_validacao, publicado_em, created_at, updated_at
-     FROM simuladores_guias_instrutor
-     WHERE empresa_id = ? AND modelo_aeronave_id = ? AND programa = ?
+     FROM simuladores_guias_instrutor_v2
+     WHERE empresa_id = ? AND (modelo_aeronave_id IS ? OR modelo_aeronave_id = ?) AND programa = ?
        AND (ciclo IS ? OR ciclo = ?) AND (sessao_numero IS ? OR sessao_numero = ?)
        AND codigo = ? AND deleted_at IS NULL
      ORDER BY created_at DESC`,
   )
     .bind(
       empresaId,
+      row.modelo_aeronave_id,
       row.modelo_aeronave_id,
       row.programa,
       row.ciclo,
@@ -983,7 +1016,7 @@ app.get('/guias-instrutor/:id/auditoria', requireGuiaInstrutorManage(), async (c
 
   const result = await c.env.DB.prepare(
     `SELECT id, usuario_id, acao, valores_anteriores, valores_novos, created_at
-     FROM simuladores_guias_instrutor_auditoria
+     FROM simuladores_guias_instrutor_auditoria_v2
      WHERE empresa_id = ? AND guia_id = ?
      ORDER BY created_at DESC`,
   )

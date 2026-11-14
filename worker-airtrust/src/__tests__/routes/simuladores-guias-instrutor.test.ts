@@ -175,7 +175,7 @@ function createMockEnv(guias: GuiaRow[]) {
           if (sql.includes('FROM modelos_aeronave')) {
             return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
           }
-          if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
+          if (sql.includes('FROM simuladores_guias_instrutor_v2') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
             const [id, empresaId] = binder._params as [number, number];
             const anyStatus = !sql.includes("status = 'ATIVO'");
             const row = guias.find(
@@ -190,7 +190,7 @@ function createMockEnv(guias: GuiaRow[]) {
           return null;
         },
         async all<T = unknown>(): Promise<{ results: T[] }> {
-          if (sql.includes('FROM simuladores_guias_instrutor g') && sql.includes('JOIN modelos_aeronave')) {
+          if (sql.includes('FROM simuladores_guias_instrutor_v2 g') && sql.includes('JOIN modelos_aeronave')) {
             const empresaId = binder._params[0] as number;
             const filterAtivoOnly = sql.includes("g.status = 'ATIVO'");
             const results = guias
@@ -440,21 +440,21 @@ describe('simuladores-guias-instrutor — segurança e isolamento', () => {
             if (sql.includes('FROM modelos_aeronave')) {
               return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
             }
-            if (sql.includes('FROM simuladores_guias_instrutor') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
+            if (sql.includes('FROM simuladores_guias_instrutor_v2') && sql.includes('WHERE g.id = ? AND g.empresa_id = ?')) {
               return base as unknown as T;
             }
             return null;
           },
           async run() {
-            if (sql.trim().startsWith('UPDATE simuladores_guias_instrutor')) {
+            if (sql.trim().startsWith('UPDATE simuladores_guias_instrutor_v2')) {
               updateAttempted = true;
               throw new Error('simulated D1 write failure');
             }
-            if (sql.trim().startsWith('DELETE FROM simuladores_guias_instrutor')) {
+            if (sql.trim().startsWith('DELETE FROM simuladores_guias_instrutor_v2')) {
               deletedDraftId = binder._params[0] as number;
               return { meta: {} };
             }
-            if (sql.trim().startsWith('INSERT INTO simuladores_guias_instrutor')) {
+            if (sql.trim().startsWith('INSERT INTO simuladores_guias_instrutor_v2')) {
               return { meta: { last_row_id: 777 } };
             }
             return { meta: {} };

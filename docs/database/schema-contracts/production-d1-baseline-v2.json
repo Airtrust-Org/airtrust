@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-14",
-    "last_reconciled_against": "0585 DGR maintenance legacy model consolidation, data-only; reviewed production apply pending",
-    "schema_v2_digest": "66b5fadf6bda89685c68cd4c73aa99dfbfdf7c66cf9d18de4f2ecc16e38d04b1",
+    "last_reconciled_against": "0586 instructor guides _v2 schema for PTO Rev.10 V18 (10 programs + nullable modelo_aeronave_id); reviewed production apply pending",
+    "schema_v2_digest": "d8e012630617b6f549df7c412073736af21a76d4f4863af3636a3b5a5c2b2c85",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1854,6 +1854,22 @@
       "reviewed_manifest": "dgr-legacy-maintenance-consolidation-0585.json",
       "evidence": "worker-airtrust/schema-v2/plans/dgr-legacy-maintenance-consolidation-0585.md",
       "note": "Data-only tenant 6: D4 label aligned with ANAC terminology, 2 expired inactive histories linked to D4 with original snapshots, role-specific safeguard, Supervisor rule #220 retargeted, legacy model #137 soft-retired. 8 gates, SHA, D1 Time Travel, pre/post mandatory."
+    },
+    {
+      "change_file": "0586_simuladores_guias_instrutor_v18.sql",
+      "change_id": "simuladores-guias-instrutor-v18-0586",
+      "sha256": "a1eb04a3556aa9a2c5067d776ee0469a483abee2845ddd15ad3d76dab3b8ca42",
+      "targets": [
+        "simuladores_guias_instrutor_v2",
+        "simuladores_modelos_sessao_guias_v2",
+        "simuladores_guias_instrutor_auditoria_v2"
+      ],
+      "domain": "Simulators: additive _v2 instructor guide, link, and audit tables supporting all 10 PTO Rev.10 V18 programs and nullable modelo_aeronave_id for functional INSTRUTOR/EXAMINADOR guides",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simuladores-guias-instrutor-v18-0586.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simuladores-guias-instrutor-v18-0586.md",
+      "note": "Additive _v2 DDL + idempotent ID-preserving backfill from legacy guide tables; zero DROP/RENAME, legacy tables preserved intact. Apply 0586 before deploying _v2 Worker routes. Does not publish unreviewed V18 guides."
     }
   ]
 }

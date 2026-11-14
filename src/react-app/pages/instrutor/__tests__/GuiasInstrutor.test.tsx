@@ -47,5 +47,8 @@ describe('GuiasInstrutorContent — gate de acesso', () => {
     renderContent();
     expect(screen.queryByText('Acesso restrito')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Buscar por título ou código…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AW139' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'S-76' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Funcional (INST/EXA)' })).toBeInTheDocument();
   });
 });

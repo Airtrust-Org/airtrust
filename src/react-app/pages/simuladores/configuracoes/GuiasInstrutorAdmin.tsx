@@ -20,6 +20,7 @@ import { useTenantQueryKey } from '@/react-app/hooks/useTenantQueryKey';
 import { fetchWithAuth, API_BASE_URL } from '@/react-app/config/api';
 import { useGuiasInstrutor, type GuiaInstrutor } from '@/react-app/hooks/guias-instrutor/api';
 import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
+import { GUIAS_PROGRAMAS, isProgramaFuncional } from '@/react-app/types/guias-instrutor';
 
 async function postJson(path: string, body: unknown) {
   const res = await fetchWithAuth(`${API_BASE_URL}${path}`, {
@@ -80,13 +81,15 @@ function NovoGuiaForm({ onCriado }: { onCriado: () => void }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const programaFuncional = isProgramaFuncional(form.programa);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSalvando(true);
     setErro(null);
     try {
       await postJson('/simuladores/guias-instrutor', {
-        modelo_aeronave_id: Number(form.modelo_aeronave_id),
+        modelo_aeronave_id: form.modelo_aeronave_id ? Number(form.modelo_aeronave_id) : null,
         programa: form.programa,
         ciclo: form.ciclo ? Number(form.ciclo) : null,
         sessao_numero: form.sessao_numero ? Number(form.sessao_numero) : null,
@@ -111,19 +114,21 @@ function NovoGuiaForm({ onCriado }: { onCriado: () => void }) {
         <Select
           value={form.modelo_aeronave_id}
           onChange={(e) => setForm((f) => ({ ...f, modelo_aeronave_id: e.target.value }))}
-          required
-          placeholder="Aeronave…"
+          required={!programaFuncional}
+          placeholder={programaFuncional ? 'Funcional (INST/EXA) — sem aeronave' : 'Aeronave…'}
           options={(aeronaves || []).map((a) => ({ value: String(a.id), label: a.nome }))}
         />
         <Select
           value={form.programa}
-          onChange={(e) => setForm((f) => ({ ...f, programa: e.target.value }))}
-          options={[
-            { value: 'INICIAL', label: 'Inicial' },
-            { value: 'PERIODICO', label: 'Periódico' },
-            { value: 'SEMESTRAL', label: 'Semestral' },
-            { value: 'CHECK', label: 'Check' },
-          ]}
+          onChange={(e) => {
+            const programa = e.target.value;
+            setForm((f) => ({
+              ...f,
+              programa,
+              modelo_aeronave_id: isProgramaFuncional(programa) ? '' : f.modelo_aeronave_id,
+            }));
+          }}
+          options={GUIAS_PROGRAMAS.map((p) => ({ value: p.key, label: p.label }))}
         />
         <Input
           placeholder="Código oficial (ex: A139-P-02/04-C1)"
