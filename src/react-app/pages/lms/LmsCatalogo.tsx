@@ -809,7 +809,7 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
-    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
+    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
@@ -831,7 +831,10 @@ function CourseDrawer({
         navigate(`/lms/cursos/${courseId}`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM');
+      const message = error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM';
+      toast.error(message === 'O servidor não conseguiu concluir a operação.'
+        ? 'O servidor não confirmou o recebimento. Consulte as edições do curso antes de repetir o envio.'
+        : message);
     } finally {
       candidateUploadLock.current = false;
       setIsCandidateUploading(false);
@@ -1284,7 +1287,7 @@ function CourseDrawer({
                           <p className="mt-1">{directReplacement
                             ? 'Ao enviar o ZIP SCORM válido, o conteúdo anterior será substituído e o curso permanecerá ativo. Históricos concluídos são preservados.'
                             : scormProfile === 'PRIVATE'
-                              ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
+                              ? 'Este ZIP está marcado para revisão: não pode substituir o conteúdo publicado. É permitido enviá-lo somente como edição inativa para análise, sem ativação.'
                               : 'A substituição automática é feita por administradores. Este perfil não pode publicar o curso.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
@@ -1529,9 +1532,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'Enviar ZIP para revisão (INATIVO)' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
