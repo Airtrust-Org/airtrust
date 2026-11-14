@@ -281,6 +281,12 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
  */
 export type ScormReplacementProfile = 'FORMATIVE' | 'EXTERNAL' | 'GOVERNED' | 'PRIVATE';
 
+/** Only a contract-proven non-scored edition can use direct replacement.
+ * GOVERNED needs the inactive candidate/homologation path; PRIVATE is blocked. */
+export function canDirectReplaceScormProfile(profile: ScormReplacementProfile | 'CHECKING'): boolean {
+  return profile === 'FORMATIVE' || profile === 'EXTERNAL';
+}
+
 function isDirectFormativeContract(prepared: PreparedPackage): boolean {
   const file = prepared.files.find(item => item.path.toLowerCase() === 'airtrust-completion-manifest.json');
   if (!file) return false;
