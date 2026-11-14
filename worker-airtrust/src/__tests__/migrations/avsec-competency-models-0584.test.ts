@@ -31,6 +31,14 @@ describe('AVSEC Tripulantes only 0584', () => {
     expect(sql).not.toMatch(/INSERT INTO qualificacoes_tipos/);
     expect(read('.github/workflows/apply-schema-change-v2.yml')).toContain('Preflight AVSEC competency models 0584');
     expect(read('.github/workflows/apply-schema-change-v2.yml')).toContain('Post-validate AVSEC competency models 0584');
+    // The Worker may be at a reviewed, CI-green ancestor of the latest main:
+    // the schema guard must check exact deployed Worker SHA, ancestor and eight gates.
+    const workflow = read('.github/workflows/apply-schema-change-v2.yml');
+    const preflight = workflow.split('      - name: Preflight AVSEC competency models 0584')[1]?.split('      - name:')[0];
+    expect(preflight).toContain('EXPECTED_WORKER_SHA: feff1daa3b640163594b2920fd8ae8fa077dd4f1');
+    expect(preflight).toContain('git merge-base --is-ancestor "$EXPECTED_WORKER_SHA" "$GITHUB_SHA"');
+    expect(preflight).toContain('node scripts/ci/verify-release-gates.mjs');
+    expect(preflight).not.toContain('EXPECTED_WORKER_SHA: ${{ github.sha }}');
     expect(read('scripts/schema-v2/validate-0584-production-preflight.sh')).toContain('AVSEC_0584_WORKER_SHA_MISMATCH');
     expect(read('scripts/schema-v2/validate-0584-production-postconditions.sh')).toContain('corporate-history-erased');
   });
