@@ -14,6 +14,7 @@ import { registerServiceWorker } from '@/lib/sw-manager';
 import { installGlobalApiFetch } from '@/react-app/lib/apiFetch';
 import { installTableWheelScrollLock } from '@/react-app/lib/tableWheelScrollLock';
 import { installFrontendVersionMonitor } from '@/react-app/lib/frontendVersionMonitor';
+import FrontendUpdateNotice from '@/react-app/components/FrontendUpdateNotice';
 import { installChunkErrorListeners } from '@/react-app/utils/lazyWithRetry';
 import GlobalConfirmDialogHost from '@/react-app/components/modals/GlobalConfirmDialogHost';
 import GlobalAlertDialogHost from '@/react-app/components/modals/GlobalAlertDialogHost';
@@ -155,6 +156,7 @@ createRoot(document.getElementById('root')!).render(
         <App />
         <GlobalConfirmDialogHost />
         <GlobalAlertDialogHost />
+        <FrontendUpdateNotice />
       </>
     )}
   </ErrorBoundary>,

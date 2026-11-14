@@ -1,67 +1,76 @@
 import { describe, expect, it, vi } from 'vitest';
-import { installFrontendVersionMonitor, shouldSkipAutomaticRefresh } from '../frontendVersionMonitor';
+import {
+  installFrontendVersionMonitor,
+  shouldSkipAutomaticRefresh,
+  onFrontendUpdateAvailable,
+  getPendingFrontendUpdate,
+} from '../frontendVersionMonitor';
+
+function browserMocks(pathname = '/controle-voos/voos') {
+  let focusListener: (() => void) | undefined;
+  const location = { pathname };
+  const windowApi = {
+    location,
+    addEventListener: vi.fn((event: string, callback: () => void) => {
+      if (event === 'focus') focusListener = callback;
+    }),
+    removeEventListener: vi.fn(),
+    setInterval: vi.fn(() => 1 as unknown as number),
+    clearInterval: vi.fn(),
+  } as any;
+  const documentApi = {
+    visibilityState: 'visible',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    querySelector: vi.fn(),
+  } as any;
+  return { windowApi, documentApi, location, focus: () => focusListener?.() };
+}
 
 describe('frontendVersionMonitor', () => {
-  it('refreshes when the served frontend version differs from the loaded document version', async () => {
-    let focusListener: (() => void) | undefined;
-    const refresh = vi.fn(async () => undefined);
-    const windowApi = {
-      location: { pathname: '/controle-voos/voos' },
-      addEventListener: vi.fn((event: string, cb: () => void) => { if (event === 'focus') focusListener = cb; }),
-      removeEventListener: vi.fn(),
-      setInterval: vi.fn(() => 1 as unknown as number),
-      clearInterval: vi.fn(),
-    } as any;
-    const documentApi = {
-      visibilityState: 'visible',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      querySelector: vi.fn(),
-    } as any;
+  it('announces a new version once instead of reloading the active page', async () => {
+    const browser = browserMocks();
+    const notified = vi.fn();
+    const unsubscribe = onFrontendUpdateAvailable(notified);
+    notified.mockClear(); // subscriptions can replay a previously announced version
 
+    const fetchVersion = vi.fn(async () => 'new-sha-1');
     const dispose = installFrontendVersionMonitor({
-      windowApi,
-      documentApi,
+      windowApi: browser.windowApi,
+      documentApi: browser.documentApi,
       readCurrentVersion: () => 'old-sha',
-      fetchVersion: vi.fn(async () => 'new-sha'),
-      refresh,
-      pollIntervalMs: 60_000,
+      fetchVersion,
     });
 
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-    focusListener?.();
-    await Promise.resolve();
-    expect(refresh).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(notified).toHaveBeenCalledWith('new-sha-1'));
+    expect(getPendingFrontendUpdate()).toBe('new-sha-1');
+    browser.focus();
+    await vi.waitFor(() => expect(fetchVersion).toHaveBeenCalledTimes(2));
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(browser.windowApi.location.pathname).toBe('/controle-voos/voos');
+
     dispose();
+    unsubscribe();
   });
 
-  it('does not refresh when versions match', async () => {
-    const refresh = vi.fn(async () => undefined);
+  it('does not announce an update when versions match', async () => {
+    const browser = browserMocks();
+    const notified = vi.fn();
+    const unsubscribe = onFrontendUpdateAvailable(notified);
+    notified.mockClear();
     installFrontendVersionMonitor({
-      windowApi: {
-        location: { pathname: '/controle-voos/voos' },
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        setInterval: vi.fn(() => 1 as unknown as number),
-        clearInterval: vi.fn(),
-      } as any,
-      documentApi: {
-        visibilityState: 'visible',
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        querySelector: vi.fn(),
-      } as any,
+      windowApi: browser.windowApi,
+      documentApi: browser.documentApi,
       readCurrentVersion: () => 'same-sha',
       fetchVersion: vi.fn(async () => 'same-sha'),
-      refresh,
     });
-
     await Promise.resolve();
     await Promise.resolve();
-    expect(refresh).not.toHaveBeenCalled();
+    expect(notified).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
-  it('skips LMS player and FRMS check-in routes to avoid interrupting active work', () => {
+  it('skips LMS player and FRMS check-in routes', () => {
     expect(shouldSkipAutomaticRefresh('/lms/player/123')).toBe(true);
     expect(shouldSkipAutomaticRefresh('/frms/checkin')).toBe(true);
     expect(shouldSkipAutomaticRefresh('/frms/checkin/')).toBe(true);
@@ -69,39 +78,35 @@ describe('frontendVersionMonitor', () => {
     expect(shouldSkipAutomaticRefresh('/controle-voos/voos')).toBe(false);
   });
 
-  it('defers an available update during FRMS check-in and refreshes after leaving it', async () => {
-    let focusListener: (() => void) | undefined;
-    const refresh = vi.fn(async () => undefined);
-    const location = { pathname: '/frms/checkin' };
-    const fetchVersion = vi.fn(async () => 'new-sha');
+  it('defers update notification during check-in and announces after leaving', async () => {
+    const browser = browserMocks('/frms/checkin');
+    const fetchVersion = vi.fn(async () => 'new-sha-2');
+    const notified = vi.fn();
+    const unsubscribe = onFrontendUpdateAvailable(notified);
+    notified.mockClear();
 
-    installFrontendVersionMonitor({
-      windowApi: {
-        location,
-        addEventListener: vi.fn((event: string, cb: () => void) => {
-          if (event === 'focus') focusListener = cb;
-        }),
-        removeEventListener: vi.fn(),
-        setInterval: vi.fn(() => 1 as unknown as number),
-        clearInterval: vi.fn(),
-      } as any,
-      documentApi: {
-        visibilityState: 'visible',
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        querySelector: vi.fn(),
-      } as any,
+    const dispose = installFrontendVersionMonitor({
+      windowApi: browser.windowApi,
+      documentApi: browser.documentApi,
       readCurrentVersion: () => 'old-sha',
       fetchVersion,
-      refresh,
     });
 
     await Promise.resolve();
     expect(fetchVersion).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
+    expect(notified).not.toHaveBeenCalled();
 
-    location.pathname = '/frms/controle-operacional';
-    focusListener?.();
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    browser.location.pathname = '/frms/controle-operacional';
+    browser.focus();
+    await vi.waitFor(() => expect(notified).toHaveBeenCalledWith('new-sha-2'));
+    dispose();
+    unsubscribe();
+  });
+
+  it('replays available update to a listener mounted after bootstrap', async () => {
+    const listener = vi.fn();
+    const unsubscribe = onFrontendUpdateAvailable(listener);
+    expect(listener).toHaveBeenCalledWith(getPendingFrontendUpdate());
+    unsubscribe();
   });
 });
