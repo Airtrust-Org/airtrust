@@ -145,7 +145,10 @@ export function lazyWithRetry<T extends ComponentType<any>>(
   key: string,
 ) {
   return lazy(async () => {
-    return importWithRetry(importer, key, { reloadOnChunkError: true, maxAttempts: 2 });
+    // A deployment can invalidate a chunk while the user has unsaved forms.
+    // Retry the import in place; the ErrorBoundary offers an explicit,
+    // user-controlled recovery if the chunk is still unavailable.
+    return importWithRetry(importer, key, { reloadOnChunkError: false, maxAttempts: 2 });
   });
 }
 
