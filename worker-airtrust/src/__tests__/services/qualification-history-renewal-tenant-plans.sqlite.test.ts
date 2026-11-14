@@ -14,6 +14,9 @@ const schema = readFileSync(
 
 function openDb(): DatabaseSyncType {
   const db = new DatabaseSync(':memory:');
+  // The schema snapshot intentionally omits FK parents unrelated to renewal;
+  // this test verifies query results/index selection, not referential integrity.
+  db.exec('PRAGMA foreign_keys = OFF');
   db.exec(schema);
   return db;
 }
