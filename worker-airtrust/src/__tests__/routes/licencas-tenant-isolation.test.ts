@@ -221,41 +221,32 @@ function createMockEnv() {
           };
         }
 
-        if (query.includes('date(data_vencimento) < date(')) {
-          const empresaId = Number(args[0]);
-          return {
-            total: licencas.filter(
-              (item) =>
-                item.empresa_id === empresaId &&
-                item.deleted_at === null &&
-                item.data_vencimento < '2026-06-08',
-            ).length,
-          };
+        if (query.includes('date(data_vencimento) < date(?)')) {
+          const hojeSp = String(args[0]);
+          const empresaId = Number(args[1]);
+          return { total: licencas.filter(item => item.empresa_id===empresaId
+            && item.deleted_at===null && item.data_vencimento < hojeSp).length };
         }
 
-        if (query.includes("date(data_vencimento) BETWEEN date('now') AND date('now', '+60 days')")) {
-          const empresaId = Number(args[0]);
-          return {
-            total: licencas.filter(
-              (item) =>
-                item.empresa_id === empresaId &&
-                item.deleted_at === null &&
-                item.data_vencimento >= '2026-06-08' &&
-                item.data_vencimento <= '2026-08-07',
-            ).length,
-          };
+        const dayPlus = (iso: string,days: number) => {
+          const utc = new Date(`${iso}T00:00:00.000Z`);
+          utc.setUTCDate(utc.getUTCDate()+days);
+          return utc.toISOString().slice(0,10);
+        };
+        if (query.includes("date(data_vencimento) BETWEEN date(?) AND date(?, '+60 days')")) {
+          const hojeSp = String(args[0]);
+          const empresaId = Number(args[2]);
+          const limite = dayPlus(hojeSp,60);
+          return {total:licencas.filter(item=>item.empresa_id===empresaId
+            && item.deleted_at===null && item.data_vencimento >= hojeSp
+            && item.data_vencimento <= limite).length};
         }
-
-        if (query.includes("date(data_vencimento) > date('now', '+60 days')")) {
-          const empresaId = Number(args[0]);
-          return {
-            total: licencas.filter(
-              (item) =>
-                item.empresa_id === empresaId &&
-                item.deleted_at === null &&
-                item.data_vencimento > '2026-08-07',
-            ).length,
-          };
+        if (query.includes("date(data_vencimento) > date(?, '+60 days')")) {
+          const hojeSp = String(args[0]);
+          const empresaId = Number(args[1]);
+          const limite = dayPlus(hojeSp,60);
+          return {total:licencas.filter(item=>item.empresa_id===empresaId
+            && item.deleted_at===null && item.data_vencimento > limite).length};
         }
 
         return null;
