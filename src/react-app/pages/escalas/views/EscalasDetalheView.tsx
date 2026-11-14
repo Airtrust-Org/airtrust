@@ -210,6 +210,7 @@ export default function EscalasDetalheView() {
     totalPilotos,
     totalEventos,
     totalConflitos,
+    conflitosVerificados,
     exibirAcoesOperacionais,
     fdpAlertas,
     aeronavePainelDisponibilidade,
@@ -645,7 +646,11 @@ export default function EscalasDetalheView() {
                     <span>·</span>
                     <span>{totalEventos} eventos</span>
                     <span>·</span>
-                    {totalConflitos > 0 ? (
+                    {!conflitosVerificados ? (
+                      <span className="text-amber-700 flex items-center gap-1" role="alert">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Verificação indisponível
+                      </span>
+                    ) : totalConflitos > 0 ? (
                       <button
                         type="button"
                         onClick={() => abrirModal({ tipo: 'conflitos', escalaId: escalaAtual.id })}
@@ -716,7 +721,9 @@ export default function EscalasDetalheView() {
                     className={`lg:hidden relative flex items-center gap-1 px-2 py-1.5 border rounded-lg text-xs font-medium transition-colors ${totalConflitos > 0 ? 'border-red-200 text-red-700 bg-red-50 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20' : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'}`}
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    {totalConflitos > 0 && <span className="font-semibold">{totalConflitos}</span>}
+                    {!conflitosVerificados ? (
+                      <span className="font-semibold text-amber-700">Sem verificação</span>
+                    ) : totalConflitos > 0 && <span className="font-semibold">{totalConflitos}</span>}
                   </button>
 
                   {/* Botão de ação principal por status */}
@@ -1811,6 +1818,7 @@ export default function EscalasDetalheView() {
               escalaLabel={`Escala ${MESES[escalaAtual.mes - 1]}/${escalaAtual.ano}`}
               cobertura={resumoCoberturaTripulantes}
               totalConflitos={totalConflitos}
+              conflitosVerificados={conflitosVerificados}
               totalAlocacoes={alocacoesOperacionaisVisiveis.length}
               numeroRevisaoAtual={escalaAtual.numero_revisao ?? 0}
               onConfirmar={async (justificativa) => {
