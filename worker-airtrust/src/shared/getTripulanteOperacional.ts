@@ -4,7 +4,7 @@ import {
   SESSION_STATUS,
   sqlStatusNotEqualsAny,
 } from '../lib/status/status-codes';
-import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 export type StatusOperacional =
   | 'APTO'
@@ -81,7 +81,8 @@ interface TripulanteOperacionalRow {
 }
 
 const TRIPULANTE_OPERACIONAL_CTE = `
-WITH tripulante_operacional AS (
+WITH operational_clock AS (SELECT date(?) AS today_sp),
+ tripulante_operacional AS (
   SELECT
     f.id AS funcionario_id,
     f.nome,
@@ -101,7 +102,7 @@ WITH tripulante_operacional AS (
         AND qh.deleted_at IS NULL
         AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
         AND UPPER(COALESCE(qh.qualificacao_codigo, qt.codigo, '')) = 'CMA'
-        AND ${getQualificacoesVencimentoExpr()} >= date('now')
+        AND ${getQualificacoesVencimentoExpr()} >= date((SELECT today_sp FROM operational_clock))
     ) THEN 1 ELSE 0 END AS cma_valido,
 
     CAST((
@@ -114,7 +115,7 @@ WITH tripulante_operacional AS (
           AND qh2.deleted_at IS NULL
           AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh2.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh2.qualificacao_codigo, qt2.codigo, '')) = 'CMA'
-      )) - JULIANDAY('now')
+      )) - JULIANDAY((SELECT today_sp FROM operational_clock))
     ) AS INTEGER) AS cma_dias_restantes,
 
     (
@@ -131,9 +132,9 @@ WITH tripulante_operacional AS (
     (
       WITH base AS (
         SELECT
-          COALESCE(SUM(CASE WHEN date(data) >= date('now', '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
-          COALESCE(SUM(CASE WHEN date(data) >= date('now', '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
-          COUNT(DISTINCT CASE WHEN date(data) >= date('now', '-28 days') THEN date(data) END) AS dias_28
+          COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
+          COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
+          COUNT(DISTINCT CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN date(data) END) AS dias_28
         FROM frms_jornada
         WHERE tripulante_id = f.id
           AND deleted_at IS NULL
@@ -154,9 +155,9 @@ WITH tripulante_operacional AS (
       WHEN (
         WITH base AS (
           SELECT
-            COALESCE(SUM(CASE WHEN date(data) >= date('now', '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
-            COALESCE(SUM(CASE WHEN date(data) >= date('now', '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
-            COUNT(DISTINCT CASE WHEN date(data) >= date('now', '-28 days') THEN date(data) END) AS dias_28
+            COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
+            COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
+            COUNT(DISTINCT CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN date(data) END) AS dias_28
           FROM frms_jornada
           WHERE tripulante_id = f.id
             AND deleted_at IS NULL
@@ -185,7 +186,7 @@ WITH tripulante_operacional AS (
           "UPPER(COALESCE(sa.status, 'AGENDADO'))",
           [SESSION_STATUS.CONCLUIDA, SESSION_STATUS.CANCELADA],
         )}
-        AND date(sa.data) >= date('now')
+        AND date(sa.data) >= date((SELECT today_sp FROM operational_clock))
     ) AS simuladores_pendentes,
 
     (
@@ -199,7 +200,7 @@ WITH tripulante_operacional AS (
           "UPPER(COALESCE(sa2.status, 'AGENDADO'))",
           [SESSION_STATUS.CONCLUIDA, SESSION_STATUS.CANCELADA],
         )}
-        AND date(sa2.data) >= date('now')
+        AND date(sa2.data) >= date((SELECT today_sp FROM operational_clock))
     ) AS proximo_simulador_data,
 
     CASE
@@ -212,7 +213,7 @@ WITH tripulante_operacional AS (
           AND qh4.deleted_at IS NULL
           AND ${sqlStatusNotEqualsAny("UPPER(COALESCE(qh4.status, 'CONCLUIDA'))", CANCELLED_STATUS_VALUES)}
           AND UPPER(COALESCE(qh4.qualificacao_codigo, qt4.codigo, '')) = 'CMA'
-          AND ${getQualificacoesVencimentoExpr('qh4', 'qt4')} >= date('now')
+          AND ${getQualificacoesVencimentoExpr('qh4', 'qt4')} >= date((SELECT today_sp FROM operational_clock))
       ) THEN 'BLOQUEADO_CMA'
       WHEN EXISTS (
         SELECT 1
@@ -235,7 +236,7 @@ WITH tripulante_operacional AS (
               CANCELLED_STATUS_VALUES,
             )}
             AND UPPER(COALESCE(qh5.qualificacao_codigo, qt5.codigo, '')) = 'CMA'
-        )) - JULIANDAY('now')
+        )) - JULIANDAY((SELECT today_sp FROM operational_clock))
       ) AS INTEGER) <= 30 THEN 'ATENCAO_CMA'
       WHEN EXISTS (
         SELECT 1
@@ -262,11 +263,12 @@ export async function getFrmsOperationalState(
 ): Promise<{ frms_score: number; frms_status: 'ok' | 'atencao' | 'critico' }> {
   const row = await db
     .prepare(
-      `WITH score_base AS (
+      `WITH operational_clock AS (SELECT date(?) AS today_sp),
+       score_base AS (
          SELECT
-           COALESCE(SUM(CASE WHEN date(data) >= date('now', '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
-           COALESCE(SUM(CASE WHEN date(data) >= date('now', '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
-           COUNT(DISTINCT CASE WHEN date(data) >= date('now', '-28 days') THEN date(data) END) AS dias_28
+           COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-7 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_7,
+           COALESCE(SUM(CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN COALESCE(horas_voo_minutos, 0) ELSE 0 END), 0) AS minutos_28,
+           COUNT(DISTINCT CASE WHEN date(data) >= date((SELECT today_sp FROM operational_clock), '-28 days') THEN date(data) END) AS dias_28
          FROM frms_jornada
          WHERE tripulante_id = ?
            AND deleted_at IS NULL
@@ -287,7 +289,7 @@ export async function getFrmsOperationalState(
          END AS frms_status
        FROM score_base`,
     )
-    .bind(funcionarioId, funcionarioId)
+    .bind(getTodayIsoSaoPaulo(), funcionarioId, funcionarioId)
     .first<{ frms_score: number | null; frms_status: 'ok' | 'atencao' | 'critico' }>();
 
   return {
@@ -329,6 +331,7 @@ function toTripulanteOperacional(
 export async function getHabilitacoesBatch(
   db: D1Database,
   ids: string[],
+  todaySp: string = getTodayIsoSaoPaulo(),
 ): Promise<Record<string, HabilitacaoModelo[]>> {
   if (ids.length === 0) return {};
 
@@ -345,9 +348,9 @@ export async function getHabilitacoesBatch(
         AND fa.deleted_at IS NULL
         AND COALESCE(fa.ativo, 1) = 1
         AND a.deleted_at IS NULL
-        AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))`,
+        AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date(?))`,
     )
-    .bind(...ids)
+    .bind(...ids, todaySp)
     .all<{ funcionario_id: string; modelo_id: string; modelo_codigo: string }>();
 
   const rowsLegado = await db
@@ -395,6 +398,7 @@ export async function getTripulanteOperacional(
   funcionarioId: string,
   empresaId: number,
 ): Promise<TripulanteOperacional | null> {
+  const todaySp = getTodayIsoSaoPaulo();
   const row = await db
     .prepare(
       `${TRIPULANTE_OPERACIONAL_CTE}
@@ -403,12 +407,12 @@ export async function getTripulanteOperacional(
        WHERE empresa_id = ?
          AND funcionario_id = ?`,
     )
-    .bind(empresaId, funcionarioId)
+    .bind(todaySp, empresaId, funcionarioId)
     .first<TripulanteOperacionalRow>();
 
   if (!row) return null;
 
-  const habilitacoes = await getHabilitacoesBatch(db, [funcionarioId]);
+  const habilitacoes = await getHabilitacoesBatch(db, [funcionarioId], todaySp);
   return toTripulanteOperacional(row, habilitacoes[funcionarioId] || []);
 }
 
@@ -418,6 +422,7 @@ export async function getTripulantesOperacionaisPorModelo(
   modeloId: string,
   escalaId?: string,
 ): Promise<TripulanteOperacional[]> {
+  const todaySp = getTodayIsoSaoPaulo();
   const aliases = getModeloAliases(modeloId);
   if (aliases.length === 0) return [];
 
@@ -458,7 +463,7 @@ export async function getTripulantesOperacionaisPorModelo(
                 AND fa.deleted_at IS NULL
                 AND COALESCE(fa.ativo, 1) = 1
                 AND a.deleted_at IS NULL
-                AND (fa.data_fim IS NULL OR date(fa.data_fim) >= date('now'))
+                AND (fa.data_fim IS NULL OR date(fa.data_fim) >= (SELECT today_sp FROM operational_clock))
                 AND ${aeronaveModeloSql} IN (${aliasPlaceholders})
            )
            OR ${modeloDiretoSql} IN (${aliasPlaceholders})
@@ -499,6 +504,7 @@ export async function getTripulantesOperacionaisPorModelo(
          v.nome`,
     )
     .bind(
+      todaySp,
       escalaId || '',
       escalaId || '',
       escalaId || '',
@@ -512,7 +518,7 @@ export async function getTripulantesOperacionaisPorModelo(
     .all<TripulanteOperacionalRow>();
 
   const ids = (rows.results || []).map((row) => String(row.funcionario_id));
-  const habilitacoes = await getHabilitacoesBatch(db, ids);
+  const habilitacoes = await getHabilitacoesBatch(db, ids, todaySp);
 
   return (rows.results || []).map((row) =>
     toTripulanteOperacional(row, habilitacoes[String(row.funcionario_id)] || []),
@@ -524,6 +530,7 @@ export async function getTripulantesOperacionaisTodos(
   empresaId: number,
   escalaId?: string,
 ): Promise<TripulanteOperacional[]> {
+  const todaySp = getTodayIsoSaoPaulo();
   const rows = await db
     .prepare(
       `${TRIPULANTE_OPERACIONAL_CTE}
@@ -557,11 +564,11 @@ export async function getTripulantesOperacionaisTodos(
          END,
          v.nome`,
     )
-    .bind(escalaId || '', escalaId || '', escalaId || '', escalaId || '', empresaId)
+    .bind(todaySp, escalaId || '', escalaId || '', escalaId || '', escalaId || '', empresaId)
     .all<TripulanteOperacionalRow>();
 
   const ids = (rows.results || []).map((row) => String(row.funcionario_id));
-  const habilitacoes = await getHabilitacoesBatch(db, ids);
+  const habilitacoes = await getHabilitacoesBatch(db, ids, todaySp);
 
   return (rows.results || []).map((row) =>
     toTripulanteOperacional(row, habilitacoes[String(row.funcionario_id)] || []),
