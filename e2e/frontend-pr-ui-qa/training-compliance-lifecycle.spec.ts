@@ -400,8 +400,15 @@ test('full training compliance lifecycle recalculates organization, enrollments 
       employeeIds.includes(Number(row.funcionario_id))).length;
   };
   expect(await enrolledCount(), 'mandatory alone cannot auto-enroll').toBe(0);
-  const onlyOptIn = await setExplicitEadEnrollment(page, sectorRuleId, true, null, 'opt-in with NULL modality');
-  expect(onlyOptIn.json.data.auto_enrollment.created).toBe(0);
+  // The canonical API deliberately rejects an invalid opt-in (409) rather
+  // than persisting an ambiguous rule. This is stronger fail-closed behavior
+  // than the legacy QA assumption of a 200 with zero enrollments.
+  const invalidOptIn = await api(page, `/api/compliance-treinamentos/regras/${sectorRuleId}`, {
+    method: 'PUT',
+    body: { auto_matricular_ead: true, modalidade_requerida: null },
+  });
+  expect(invalidOptIn.status, JSON.stringify(invalidOptIn.json)).toBe(409);
+  expect(invalidOptIn.json).toMatchObject({ success: false });
   expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
   const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD', 'opt-out with EAD modality');
   expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
