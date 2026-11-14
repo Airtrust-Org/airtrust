@@ -109,6 +109,35 @@ describe('F14-01/02 — paridade real Dashboard/Qualificações', () => {
     } finally { sqlite.close(); }
   });
 
+  it('schema legado sem renovacao_de mantém as métricas com SQLite real', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-15T02:30:00Z'));
+    const { sqlite, db, app } = setup();
+    try {
+      // The previous unconditional canonical predicate referenced a missing
+      // qh_next.renovacao_de and returned HTTP 500 in a supported legacy schema.
+      sqlite.exec('ALTER TABLE qualificacoes_historico DROP COLUMN renovacao_de');
+      // A bogus newer row with no completion date must not expire the real CMA.
+      sqlite.exec(`
+        INSERT INTO qualificacoes_historico
+          (id,funcionario_id,empresa_id,qualificacao_id,qualificacao_codigo,tipo,
+           data_conclusao,data_vencimento,validade_meses,status,deleted_at,renovada)
+        VALUES (300,2,42,10,'CMA','CMA',NULL,'2099-11-14',12,'CONCLUIDA',NULL,0);
+      `);
+      const response = await app.fetch(
+        new Request('http://localhost/dashboard/qualificacoes'),
+        { DB: db } as Env,
+        {} as ExecutionContext,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json() as { success:boolean; data:Record<string,unknown> };
+      expect(body.success).toBe(true);
+      expect(body.data).toMatchObject({
+        total_ativas:2,validas:0,a_vencer_30_dias:1,vencidas:1,renovadas:1,
+      });
+    } finally { sqlite.close(); }
+  });
+
   it('muda classificação somente após meia-noite BRT, sem modificar o total corrente', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-15T03:30:00Z'));

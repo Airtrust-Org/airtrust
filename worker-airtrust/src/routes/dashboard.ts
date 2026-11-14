@@ -59,6 +59,7 @@ function buildNewerDashboardQualificationExists(alias = 'qh'): string {
     WHERE qh_next.empresa_id = ${alias}.empresa_id
       AND qh_next.funcionario_id = ${alias}.funcionario_id
       AND qh_next.deleted_at IS NULL
+      AND qh_next.data_conclusao IS NOT NULL
       AND NOT (${successorCancelled})
       AND NOT (${successorPlanned})
       AND ${identity} <> ''
@@ -73,6 +74,18 @@ function buildNewerDashboardQualificationExists(alias = 'qh'): string {
         )
       )
   )`;
+}
+
+// Schema V1 fallback: no renovacao_de column. The canonical builder may ONLY
+// be used when its required column exists; otherwise use chronological
+// successor selection with the same cancelled/planned/completed safeguards.
+function buildLegacyCurrentQualificationPredicate(alias = 'qh'): string {
+  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
+  return `(${alias}.deleted_at IS NULL
+    AND ${alias}.data_conclusao IS NOT NULL
+    AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
+    AND NOT (${sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES)})
+    AND NOT (${buildNewerDashboardQualificationExists(alias)}))`;
 }
 
 function buildDashboardRenewalSqlPredicates() {
@@ -118,7 +131,9 @@ app.get('/qualificacoes', async (c) => {
       }, 503);
     }
     const { legacyRenewedPredicate } = buildDashboardRenewalSqlPredicates();
-    const currentOperationalPredicate = buildCanonicalCurrentQualificationPredicate('qh');
+    const currentOperationalPredicate = hasRenovacaoDe
+      ? buildCanonicalCurrentQualificationPredicate('qh')
+      : buildLegacyCurrentQualificationPredicate('qh');
     const newerQualificationExistsPredicate = buildNewerDashboardQualificationExists('qh');
 
     // Canonical rule: older realizations of the same employee+qualification are
