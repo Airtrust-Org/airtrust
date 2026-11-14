@@ -131,6 +131,9 @@ function createSqliteD1(): D1Database {
     prepare(sql: string) {
       let binds: unknown[] = [];
       const statement = {
+        // Only the test driver uses this; mirrors bound D1PreparedStatement
+        // passed to D1.batch without exposing raw SQL in production code.
+        testRenderBoundSql: () => interpolate(sql, binds),
         bind: (...args: unknown[]) => {
           binds = args;
           return statement;
@@ -146,6 +149,19 @@ function createSqliteD1(): D1Database {
         },
       };
       return statement;
+    },
+    batch: async (statements: unknown[]) => {
+      const sql = statements
+        .map((statement) => (statement as { testRenderBoundSql: () => string }).testRenderBoundSql())
+        .map((query) => query + ';')
+        .join('\n');
+      // sqlite3 -bail aborts before COMMIT on failure, rolling back the batch.
+      const result = spawnSync('sqlite3', ['-bail', databasePath], {
+        input: 'BEGIN IMMEDIATE;\n' + sql + '\nCOMMIT;',
+        encoding: 'utf8',
+      });
+      if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+      return statements.map(() => ({ meta: { changes: 1 } }));
     },
   } as unknown as D1Database;
 }
@@ -332,6 +348,75 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     expect(legs.results?.length).toBe(1);
     expect(legs.results?.[0].source_state).toBe('MISSING_FROM_SOURCE');
     expect(legs.results?.[0].deleted_at).toBeNull();
+  });
+
+  it('8b. falha no INSERT de auditoria reverte a transição MISSING atomicamente', async () => {
+    const db = createSqliteD1();
+    await runSigvoosShadowIngestion(
+      db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+      { createClient: () => makeClient([[rawLeg()], []]) },
+    );
+    // Simula escrita de histórico rejeitada após a tentativa de UPDATE:
+    // atomicidade exige que o estado da perna também permaneça ACTIVE.
+    await db.prepare(`
+      CREATE TRIGGER reject_missing_shadow_history
+      BEFORE INSERT ON sigvoos_shadow_leg_history
+      WHEN NEW.transition = 'MISSING_FROM_SOURCE'
+      BEGIN
+        SELECT RAISE(ABORT, 'HISTORY_WRITE_FAILED');
+      END
+    `).run();
+    const result = await runSigvoosShadowIngestion(
+      db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+      { createClient: () => makeClient([[], []]) },
+    );
+    expect(result.status).toBe('FAILED');
+    const legs = await db.prepare(
+      "SELECT source_state FROM sigvoos_shadow_legs WHERE empresa_id = 10",
+    ).all<{ source_state: string }>();
+    expect(legs.results?.map((leg) => leg.source_state)).toEqual(['ACTIVE']);
+    const audit = await db.prepare(
+      "SELECT transition FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 ORDER BY recorded_at",
+    ).all<{ transition: string }>();
+    expect(audit.results?.map((record) => record.transition)).toEqual(['CREATED']);
+  });
+
+  it('8c. stale reconciliation read cannot append duplicate MISSING history', async () => {
+    const inner = createSqliteD1();
+    const period = { from: '2026-08-01', to: '2026-08-01' };
+    await runSigvoosShadowIngestion(
+      inner, 10, period, {}, { createClient: () => makeClient([[rawLeg()], []]) },
+    );
+    const stale = await inner.prepare(
+      "SELECT id, identity_key, source_fingerprint, normalized_json FROM sigvoos_shadow_legs WHERE empresa_id = 10",
+    ).all();
+    await runSigvoosShadowIngestion(
+      inner, 10, period, {}, { createClient: () => makeClient([[], []]) },
+    );
+    const before = (await inner.prepare(
+      "SELECT COUNT(*) AS c FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'MISSING_FROM_SOURCE'",
+    ).first<{ c: number }>())!.c;
+    expect(before).toBe(1);
+
+    // Simulate a stale SELECT racing with an already-committed transition.
+    const db = {
+      prepare(sql: string) {
+        if (sql.includes('SELECT id, identity_key, source_fingerprint, normalized_json') &&
+            sql.includes('FROM sigvoos_shadow_legs')) {
+          return { bind: () => ({ all: async () => stale }) };
+        }
+        return inner.prepare(sql);
+      },
+      batch: inner.batch.bind(inner),
+    } as unknown as D1Database;
+    const replay = await runSigvoosShadowIngestion(
+      db, 10, period, {}, { createClient: () => makeClient([[], []]) },
+    );
+    expect(replay.status).toBe('COMPLETE');
+    const after = (await inner.prepare(
+      "SELECT COUNT(*) AS c FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'MISSING_FROM_SOURCE'",
+    ).first<{ c: number }>())!.c;
+    expect(after).toBe(1);
   });
 
   it('9. retry after a failure converges without duplicating', async () => {

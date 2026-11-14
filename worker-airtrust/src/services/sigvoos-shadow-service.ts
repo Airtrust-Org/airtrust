@@ -771,20 +771,33 @@ async function reconcileMissingLegs(
   const timestamp = now();
   for (const row of rows.results || []) {
     if (seen.has(row.identity_key)) continue;
-    await db
-      .prepare(
-        `UPDATE sigvoos_shadow_legs SET source_state = 'MISSING_FROM_SOURCE', updated_at = ? WHERE id = ? AND empresa_id = ?`,
-      )
-      .bind(timestamp, row.id, empresaId)
-      .run();
-    await db
-      .prepare(
-        `INSERT INTO sigvoos_shadow_leg_history
-          (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
-           field_differences_json, recorded_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'MISSING_FROM_SOURCE', NULL, ?)`,
-      )
-      .bind(generateId(), empresaId, row.id, runId, row.source_fingerprint, row.normalized_json, timestamp)
-      .run();
+    // F14-09: estado MISSING e respectiva evidência histórica formam UMA unidade.
+    // Se a gravação do histórico falhar, D1.batch reverte também a transição.
+    // A escrita do último estado sem trilha de auditoria é proibida.
+    await db.batch([
+      // Insert evidence only if the transition is still eligible. D1.batch
+      // executes both statements in one transaction, serializing competing
+      // reconciliations and rolling back the evidence if the UPDATE fails.
+      db
+        .prepare(
+          `INSERT INTO sigvoos_shadow_leg_history
+            (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
+             field_differences_json, recorded_at)
+           SELECT ?, empresa_id, id, ?, source_fingerprint, normalized_json,
+                  'MISSING_FROM_SOURCE', NULL, ?
+             FROM sigvoos_shadow_legs
+            WHERE id = ? AND empresa_id = ? AND active = 1
+              AND source_state != 'MISSING_FROM_SOURCE'`,
+        )
+        .bind(generateId(), runId, timestamp, row.id, empresaId),
+      db
+        .prepare(
+          `UPDATE sigvoos_shadow_legs
+             SET source_state = 'MISSING_FROM_SOURCE', updated_at = ?
+           WHERE id = ? AND empresa_id = ? AND active = 1
+             AND source_state != 'MISSING_FROM_SOURCE'`,
+        )
+        .bind(timestamp, row.id, empresaId),
+    ]);
   }
 }
