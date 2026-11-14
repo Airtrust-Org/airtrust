@@ -95,6 +95,8 @@ export function useEscalaConflitosQuery(id: string | null) {
     data: result.data ?? null,
     loading: result.isLoading,
     isLoading: result.isLoading,
+    isFetching: result.isFetching,
+    isSuccess: result.isSuccess,
     error: result.error?.message ?? null,
     refetch: result.refetch,
   };
