@@ -6,6 +6,7 @@
  */
 
 import { Hono } from 'hono';
+import { reorderModelManeuversAtomically } from '../services/simuladores/model-maneuver-reorder';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getTenantContext } from '../middleware/tenant';
@@ -823,27 +824,9 @@ app.put('/modelos-sessao/:id/manobras/reordenar', requirePermission('simuladores
       return c.json({ success: false, error: 'Modelo não encontrado' }, 404);
     }
 
-    for (const item of manobras) {
-      const relacaoId = Number(item?.id);
-      const ordem = Number(item?.ordem);
-
-      if (
-        !Number.isInteger(relacaoId) ||
-        relacaoId <= 0 ||
-        !Number.isInteger(ordem) ||
-        ordem <= 0
-      ) {
-        continue;
-      }
-
-      await c.env.DB.prepare(
-        `UPDATE modelos_sessao_manobras
-         SET ordem = ?, updated_at = datetime('now')
-         WHERE id = ? AND modelo_id = ? AND deleted_at IS NULL`,
-      )
-        .bind(ordem, relacaoId, id)
-        .run();
-    }
+    // One D1 round trip instead of a sequential write per maneuver. D1 batch
+    // executes sequentially in one transaction; no half-reordered template.
+    await reorderModelManeuversAtomically(c.env.DB, id, manobras);
 
     await audit(c.env.DB, {
       tabela: 'modelos_sessao_manobras',
