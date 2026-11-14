@@ -1,0 +1,8 @@
+{
+  "changeId": "avsec-competency-models-0584",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0584_avsec_competency_models.sql",
+  "fileHash": "fb31f59f6c2a8aa086c7a632786ed59d08d07fb62c5c4b7ecb5f9aec3df014d7",
+  "planPath": "worker-airtrust/schema-v2/plans/avsec-competency-models-0584.md",
+  "planHash": "ebb5aa407b282b15f77a8b942704f79d300effa16374573cfdc10249c88c23d8"
+}
