@@ -7,7 +7,7 @@ import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices, classifyRequiredDecisionStall } from './lms-scorm-required-decision-diagnostics.mjs';
-import { readVisibleVideo, startRealVisibleVideo, computeFocusedCourseBudgetMs } from './lms-scorm-video-playback-readonly.mjs';
+import { readVisibleVideo, startRealVisibleVideo, computeFocusedCourseBudgetMs, countAuthoredVideoSlides } from './lms-scorm-video-playback-readonly.mjs';
 import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
@@ -1766,11 +1766,15 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
   const model = loaded.model;
   const answerPlan = extractAnswerPlan(loaded.runtime ?? model);
   const requiredDecisionSlideIndices = collectRequiredDecisionSlideIndices(model);
+  // Read the actual edition's media paths, not the first video observed in
+  // the short suspend probe. No answer-key inspection is needed for budgeting.
+  const authoredVideoSlides = countAuthoredVideoSlides((loaded.runtime ?? model)?.slides);
   const modelMeta = model && typeof model === 'object'
     ? {
         schema: typeof model.schema === 'string' ? model.schema : null,
         slide_count: Array.isArray(model.slides) ? model.slides.length : null,
         answer_plan_count: answerPlan.length,
+        video_slide_count: authoredVideoSlides,
         assessment_question_shape: (() => {
           const slide = Array.isArray(model.slides)
             ? model.slides.find((item) => item?.kind === 'assessment' && Array.isArray(item.assessmentQuestions) && item.assessmentQuestions.length)
@@ -1781,7 +1785,8 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
             : null;
         })(),
       }
-    : { schema: null, slide_count: null, answer_plan_count: 0 };
+    : { schema: null, slide_count: null, answer_plan_count: 0,
+        video_slide_count: authoredVideoSlides };
 
   let steps = 0;
   let driveDiagnostics = null;
@@ -1948,6 +1953,7 @@ async function certifyScormCourse(browser, token, listed) {
         slideCount,
         requiredInteractions: Number(manifest.requiredInteractions || 0),
         observedVideoSeconds,
+        authoredVideoSlides: Number(suspend.model?.video_slide_count || 0),
       })
     : 0;
   const completionBudgetMs = Math.max(
