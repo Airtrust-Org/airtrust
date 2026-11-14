@@ -409,7 +409,7 @@ test('full training compliance lifecycle recalculates organization, enrollments 
   });
   expect(invalidOptIn.status, JSON.stringify(invalidOptIn.json)).toBe(409);
   expect(invalidOptIn.json).toMatchObject({ success: false });
-  expect(await enrolledCount(), 'invalid NULL modality cannot enroll').toBe(0);
+  expect(await enrolledCount(), 'NULL modality must fail closed').toBe(0);
   const onlyModality = await setExplicitEadEnrollment(page, sectorRuleId, false, 'EAD', 'opt-out with EAD modality');
   expect(onlyModality.json.data.auto_enrollment.created).toBe(0);
   expect(await enrolledCount(), 'opt-in=0 must fail closed').toBe(0);
