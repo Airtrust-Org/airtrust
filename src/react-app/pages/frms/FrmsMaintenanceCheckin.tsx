@@ -10,12 +10,7 @@ import {
   useSubmitReadiness,
 } from '@/react-app/hooks/useOperationalReadiness';
 import { useSubmitFrmsMaintenanceCheckin } from '@/react-app/hooks/useFrmsOperationalAccess';
-
-function localTodayIso(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
-}
+import { frmsBrazilOperationalTodayIso } from './frmsOperationalDate';
 
 const SLEEP_OPTIONS = [
   { hours: 3.5, label: 'Menos de 4 horas' },
@@ -54,7 +49,7 @@ function optionClass(selected: boolean, risk = false): string {
 }
 
 export default function FrmsMaintenanceCheckin() {
-  const today = localTodayIso();
+  const today = frmsBrazilOperationalTodayIso();
   const [sleepHours, setSleepHours] = useState<number | null>(null);
   const [wakeTime, setWakeTime] = useState('');
   const [sleepQuality, setSleepQuality] = useState<number | null>(null);
