@@ -293,4 +293,110 @@ describe('Escalas CRUD — reconciliação idempotente de turmas planejadas (#22
     expect(augTrainingRows).toHaveLength(1);
     expect(augTrainingRows[0]).toEqual({ funcionario_id: '20', data_inicio: '2027-08-18' });
   });
+
+  it('reconcilia apenas intervalos descobertos quando faixa sem dias sobrepoe parcialmente evento preservado', async () => {
+    const db = createEscalasFixture();
+    db.database.exec(`
+      INSERT INTO escalas_mensais (id, mes, ano, titulo, status, empresa_id, created_by)
+      VALUES ('esc-abr-2027', 4, 2027, 'Abril 2027', 'rascunho', 6, '1');
+
+      -- Existing preserved shortened event covering only April 15
+      INSERT INTO escala_eventos (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim, status, observacoes, origem, created_by)
+      VALUES
+        ('evt-partial-start', 'esc-abr-2027', 'treinamento:50', '30', 'treinamento_solo', '2027-04-15', '2027-04-15', 'confirmado', 'Encurtado manualmente', 'treinamento', '1'),
+        ('evt-partial-mid', 'esc-abr-2027', 'treinamento:51', '31', 'treinamento_solo', '2027-04-22', '2027-04-22', 'confirmado', 'Dia central editado', 'treinamento', '1');
+
+      INSERT INTO treinamentos_planejados (id, empresa_id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status, titulo, codigo_turma, created_by)
+      VALUES
+        (50, 6, 1, '2027-04-15', '2027-04-15', '2027-04-17', 'PLANEJADO', 'Faixa 15-17', 'T50', 1),
+        (51, 6, 1, '2027-04-20', '2027-04-20', '2027-04-24', 'CONFIRMADO', 'Faixa 20-24', 'T51', 1);
+
+      INSERT INTO treinamentos_participantes (treinamento_id, funcionario_id, status_participacao) VALUES
+        (50, 30, 'MATRICULADO'),
+        (51, 31, 'MATRICULADO');
+    `);
+
+    const inserted = await syncTreinamentosPlanejadosForMonth({
+      db: db as unknown as D1Database,
+      empresaId: 6,
+      ano: 2027,
+      mes: 4,
+      escalaId: 'esc-abr-2027',
+    });
+    expect(inserted).toBe(3);
+
+    const rows50 = db.database
+      .prepare(
+        "SELECT id, data_inicio, data_fim, status, observacoes FROM escala_eventos WHERE tripulacao_id = 'treinamento:50' AND deleted_at IS NULL ORDER BY data_inicio",
+      )
+      .all() as Array<Record<string, unknown>>;
+    expect(rows50).toHaveLength(2);
+    expect(rows50[0]).toMatchObject({
+      id: 'evt-partial-start',
+      data_inicio: '2027-04-15',
+      data_fim: '2027-04-15',
+      status: 'confirmado',
+      observacoes: 'Encurtado manualmente',
+    });
+    expect(rows50[1]).toMatchObject({
+      data_inicio: '2027-04-16',
+      data_fim: '2027-04-17',
+      status: 'pendente',
+    });
+
+    const rows51 = db.database
+      .prepare(
+        "SELECT id, data_inicio, data_fim, status FROM escala_eventos WHERE tripulacao_id = 'treinamento:51' AND deleted_at IS NULL ORDER BY data_inicio",
+      )
+      .all() as Array<Record<string, unknown>>;
+    expect(rows51).toHaveLength(3);
+    expect(rows51.map((r) => [r.data_inicio, r.data_fim])).toEqual([
+      ['2027-04-20', '2027-04-21'],
+      ['2027-04-22', '2027-04-22'],
+      ['2027-04-23', '2027-04-24'],
+    ]);
+  });
+
+  it('evita eventos duplicados quando duas reconciliacoes ocorrem concorrentemente no mesmo mes', async () => {
+    const db = createEscalasFixture();
+    db.database.exec(`
+      INSERT INTO escalas_mensais (id, mes, ano, titulo, status, empresa_id, created_by)
+      VALUES ('esc-mai-2027', 5, 2027, 'Maio 2027', 'rascunho', 6, '1');
+
+      INSERT INTO treinamentos_planejados (id, empresa_id, qualificacao_tipo_id, data_prevista, data_inicio, data_fim, status, titulo, codigo_turma, created_by)
+      VALUES (60, 6, 1, '2027-05-10', '2027-05-10', '2027-05-12', 'CONFIRMADO', 'Turma Concorrente', 'T60', 1);
+
+      INSERT INTO treinamentos_participantes (treinamento_id, funcionario_id, status_participacao)
+      VALUES (60, 40, 'MATRICULADO');
+    `);
+
+    const [firstCount, secondCount] = await Promise.all([
+      syncTreinamentosPlanejadosForMonth({
+        db: db as unknown as D1Database,
+        empresaId: 6,
+        ano: 2027,
+        mes: 5,
+        escalaId: 'esc-mai-2027',
+      }),
+      syncTreinamentosPlanejadosForMonth({
+        db: db as unknown as D1Database,
+        empresaId: 6,
+        ano: 2027,
+        mes: 5,
+        escalaId: 'esc-mai-2027',
+      }),
+    ]);
+
+    expect(firstCount + secondCount).toBe(1);
+    const active = db.database
+      .prepare("SELECT funcionario_id, data_inicio, data_fim FROM escala_eventos WHERE tripulacao_id = 'treinamento:60' AND deleted_at IS NULL")
+      .all() as Array<Record<string, unknown>>;
+    expect(active).toEqual([
+      {
+        funcionario_id: '40',
+        data_inicio: '2027-05-10',
+        data_fim: '2027-05-12',
+      },
+    ]);
+  });
 });

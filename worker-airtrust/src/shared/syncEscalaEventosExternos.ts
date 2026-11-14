@@ -134,12 +134,80 @@ async function buildMonthEscalaMap(
   return map;
 }
 
+function addDaysIso(isoDate: string, deltaDays: number): string {
+  const d = parseIsoDate(isoDate);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return formatIsoDate(d);
+}
+
+function subtractCoveredIntervals(
+  segment: { dataInicio: string; dataFim: string },
+  covered: Array<{ data_inicio: string; data_fim: string }>,
+): Array<{ dataInicio: string; dataFim: string }> {
+  const clipped = covered
+    .map((row) => ({
+      start: row.data_inicio > segment.dataInicio ? row.data_inicio : segment.dataInicio,
+      end: row.data_fim < segment.dataFim ? row.data_fim : segment.dataFim,
+    }))
+    .filter((r) => r.start <= r.end)
+    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.end.localeCompare(b.end)));
+
+  if (clipped.length === 0) {
+    return [segment];
+  }
+
+  const uncovered: Array<{ dataInicio: string; dataFim: string }> = [];
+  let cursor = segment.dataInicio;
+
+  for (const interval of clipped) {
+    if (interval.start > cursor) {
+      uncovered.push({
+        dataInicio: cursor,
+        dataFim: addDaysIso(interval.start, -1),
+      });
+    }
+    const nextCursor = addDaysIso(interval.end, 1);
+    if (nextCursor > cursor) {
+      cursor = nextCursor;
+    }
+    if (cursor > segment.dataFim) {
+      break;
+    }
+  }
+
+  if (cursor <= segment.dataFim) {
+    uncovered.push({
+      dataInicio: cursor,
+      dataFim: segment.dataFim,
+    });
+  }
+
+  return uncovered;
+}
+
 const INSERT_ESCALA_EVENTO_SQL = `
   INSERT INTO escala_eventos
   (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
    turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
    origem, observacoes, created_by, created_at, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+const INSERT_ESCALA_EVENTO_IF_UNCOVERED_SQL = `
+  INSERT INTO escala_eventos
+  (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
+   turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
+   origem, observacoes, created_by, created_at, updated_at)
+  SELECT ?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM escala_eventos existing
+      WHERE existing.escala_id = ?
+        AND existing.tripulacao_id = ?
+        AND existing.funcionario_id = ?
+        AND existing.deleted_at IS NULL
+        AND NOT (existing.data_fim < ? OR existing.data_inicio > ?)
+   )
 `;
 
 export async function removeManagedEscalaEvents(
@@ -721,49 +789,60 @@ export async function syncTreinamentosPlanejadosForMonth(
     for (const seg of segments) {
       for (const funcionarioId of people) {
         const funcKey = String(funcionarioId);
-        const dedupKey = `${linkId}::${funcKey}::${seg.dataInicio}::${seg.dataFim}`;
-        if (seenKeys.has(dedupKey)) continue;
-        seenKeys.add(dedupKey);
-
         const existing = existingByKey.get(`${linkId}::${funcKey}`) || [];
-        const alreadyCovered = existing.some(
-          (row) => !(row.data_fim < seg.dataInicio || row.data_inicio > seg.dataFim),
-        );
-        if (alreadyCovered) continue;
+        const uncoveredRanges = subtractCoveredIntervals(seg, existing);
 
-        insertStmts.push(
-          db
-            .prepare(INSERT_ESCALA_EVENTO_SQL)
-            .bind(
-              crypto.randomUUID(),
-              targetEscalaId,
-              linkId,
-              funcKey,
-              'treinamento_solo',
-              seg.dataInicio,
-              seg.dataFim,
-              null,
-              null,
-              null,
-              motivoAutomatico,
-              statusEvento,
-              'treinamento',
-              observacoes,
-              createdBy,
-              now,
-              now,
-            ),
-        );
+        for (const range of uncoveredRanges) {
+          const dedupKey = `${linkId}::${funcKey}::${range.dataInicio}::${range.dataFim}`;
+          if (seenKeys.has(dedupKey)) continue;
+          seenKeys.add(dedupKey);
+
+          insertStmts.push(
+            db
+              .prepare(INSERT_ESCALA_EVENTO_IF_UNCOVERED_SQL)
+              .bind(
+                crypto.randomUUID(),
+                targetEscalaId,
+                linkId,
+                funcKey,
+                'treinamento_solo',
+                range.dataInicio,
+                range.dataFim,
+                null,
+                null,
+                null,
+                motivoAutomatico,
+                statusEvento,
+                'treinamento',
+                observacoes,
+                createdBy,
+                now,
+                now,
+                targetEscalaId,
+                linkId,
+                funcKey,
+                range.dataInicio,
+                range.dataFim,
+              ),
+          );
+        }
       }
     }
   }
 
+  let insertedCount = 0;
   if (insertStmts.length > 0) {
     const BATCH_SIZE = 100;
     for (let i = 0; i < insertStmts.length; i += BATCH_SIZE) {
-      await db.batch(insertStmts.slice(i, i + BATCH_SIZE) as Parameters<typeof db.batch>[0]);
+      const results = await db.batch(
+        insertStmts.slice(i, i + BATCH_SIZE) as Parameters<typeof db.batch>[0],
+      );
+      for (const res of results) {
+        const changes = (res as { meta?: { changes?: number } } | undefined)?.meta?.changes;
+        insertedCount += typeof changes === 'number' ? changes : 1;
+      }
     }
   }
 
-  return insertStmts.length;
+  return insertedCount;
 }
