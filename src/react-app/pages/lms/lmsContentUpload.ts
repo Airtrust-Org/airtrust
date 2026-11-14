@@ -236,6 +236,19 @@ async function preparePackageUpload(file: File, tipoConteudo: UploadTipoConteudo
  * staging intake. Never POST a private/non-publishable F5 ZIP from this UI.
  * The Worker still enforces independent certification and activation.
  */
+/** Release metadata is untrusted for approval, but an explicit review/private
+ * marker must veto the immediate-publication path (including version prefixes
+ * such as RC7_PRIVATE_REVIEW_NOT_CERTIFIED). */
+export function hasBlockingScormReleaseMarker(release: Record<string, unknown> | null): boolean {
+  if (!release) return false;
+  const status = typeof release.status === 'string' ? release.status.trim().toUpperCase() : '';
+  const marker = /(?:^|[_.\s-])(?:PRIVATE|DRAFT|NOT_CERTIFIED|NOT_APPROVED|UNAPPROVED|DO_NOT_ACTIVATE|REVIEW_REQUIRED|PENDING_REVIEW)(?=$|[_.\s-])/;
+  return marker.test(status) ||
+    release.humanEditorialReviewRequired === true ||
+    release.regulatoryReviewRequired === true ||
+    release.productionUnchanged === true;
+}
+
 function assertScormReplacementCandidate(prepared: PreparedPackage) {
   const manifest = prepared.files.find(file =>
     file.path.toLowerCase() === 'airtrust-completion-manifest.json');
@@ -252,13 +265,9 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
     ? contract.release as Record<string, unknown> : null;
   const assessment = contract.assessment && typeof contract.assessment === 'object'
     ? contract.assessment as Record<string, unknown> : null;
-  const releaseStatus = typeof release?.status === 'string'
-    ? release.status.trim().toUpperCase() : '';
-  // R5 authoring uses more than one immutable private-candidate marker.
-  // The "Substituir conteúdo" button eventually activates a package, so
-  // every private/non-activatable edition must be rejected before network I/O.
-  if (releaseStatus.startsWith('PRIVATE_') ||
-      releaseStatus.includes('DO_NOT_ACTIVATE')) {
+  // The "Substituir conteúdo" button eventually activates a package.
+  // Self-declared PRIVATE/REVIEW flags can only block, never authorize, release.
+  if (hasBlockingScormReleaseMarker(release)) {
     throw new Error(
       'Este SCORM está marcado como privado ou NÃO ATIVAR. ' +
       'A substituição foi bloqueada antes do upload; o conteúdo ativo permanece inalterado. ' +
@@ -288,8 +297,7 @@ function isDirectFormativeContract(prepared: PreparedPackage): boolean {
       items.every(id => typeof id === 'string' && id.trim().length > 0) &&
       new Set(items.map((id: string) => id.toLowerCase())).size === items.length;
     const slides = content?.requiredSlides, activities = f?.requiredActivities;
-    const status = String(release?.status ?? '').toUpperCase();
-    return !status.startsWith('PRIVATE_') && !status.includes('DO_NOT_ACTIVATE') &&
+    return !hasBlockingScormReleaseMarker(release) &&
       a?.mode === 'NONE' && a.scoringBySCORM === false &&
       Array.isArray(a.requiredInteractions) && a.requiredInteractions.length === 0 &&
       !Object.prototype.hasOwnProperty.call(a, 'masteryScore') &&
@@ -316,9 +324,8 @@ function isDirectExternalContract(prepared: PreparedPackage): boolean {
       value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
     const a = rec(manifest.assessment), c = rec(manifest.completion),
       content = rec(manifest.content), release = rec(manifest.release);
-    const status = String(release?.status ?? '').trim().toUpperCase();
     const slides = content?.requiredSlides;
-    return !status.startsWith('PRIVATE_') && !status.includes('DO_NOT_ACTIVATE') &&
+    return !hasBlockingScormReleaseMarker(release) &&
       a?.mode === 'EXTERNAL' && a.scoringBySCORM === false &&
       Array.isArray(a.requiredInteractions) && a.requiredInteractions.length === 0 &&
       !Object.prototype.hasOwnProperty.call(a, 'masteryScore') &&
@@ -340,8 +347,9 @@ export async function inspectScormReplacementProfile(file: File): Promise<ScormR
   if (completion) {
     try {
       const parsed = JSON.parse(strFromU8(completion.bytes)) as { release?: { status?: unknown } };
-      const status = typeof parsed.release?.status === 'string' ? parsed.release.status.toUpperCase() : '';
-      if (status.startsWith('PRIVATE_') || status.includes('DO_NOT_ACTIVATE')) return 'PRIVATE';
+      const release = parsed.release && typeof parsed.release === 'object'
+        ? parsed.release as Record<string, unknown> : null;
+      if (hasBlockingScormReleaseMarker(release)) return 'PRIVATE';
     } catch { /* Malformed contracts follow the governed path and server validation. */ }
   }
   return isDirectFormativeContract(prepared) ? 'FORMATIVE' : isDirectExternalContract(prepared) ? 'EXTERNAL' : 'GOVERNED';
