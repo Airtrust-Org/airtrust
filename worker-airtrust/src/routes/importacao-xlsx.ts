@@ -780,7 +780,7 @@ app.post('/tipos', auth(), requireRole('admin', 'manager'), async (c) => {
     if (!execution.blocked && !execution.transactionFailed) {
       for (const tipoId of tiposComValidadeAlterada) {
         try {
-          await resyncTipoHistoricoValidity(db, empresaId, tipoId);
+          await resyncTipoHistoricoValidity(db, empresaId, tipoId, validadeAnteriorById.get(tipoId));
         } catch (resyncError) {
           errors.push({
             linha: 0,
