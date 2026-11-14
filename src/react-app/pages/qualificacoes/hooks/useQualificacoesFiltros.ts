@@ -4,7 +4,13 @@ import { readUserPreference } from '@/react-app/utils/userPreferences';
 import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
 import { ALL_STATUS_VALUES, QUALIFICACOES_PREFS_KEY } from '../qualificacoes.constants';
 import { createDefaultQualificationHistoryStatusSet } from '@/react-app/lib/qualificationHistoryFilters';
-import type { SortConfig } from '@/react-app/utils/types';
+
+// Mesmo formato de SortConfig em `@/components/ui/DataTable` (estruturalmente compatível);
+// definido aqui para não ampliar a superfície de imports do diretório legado `@/components/`.
+export interface SortConfig {
+  column: string | null;
+  direction: 'asc' | 'desc' | null;
+}
 
 export const VALID_TABS = ['historico', 'planejados', 'tipos', 'categorias'] as const;
 export const VALID_PLANNED_VIEWS = ['lista', 'calendario', 'turmas'] as const;
