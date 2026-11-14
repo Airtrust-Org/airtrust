@@ -271,7 +271,10 @@ sgso.post('/relatos', async (c) => {
     }
 
     const ts = now();
-    await db
+    // F14-09: relato e estado inicial fazem parte de um mesmo registro
+    // operacional. Falha no histórico deve reverter o registro pai.
+    await db.batch([
+      db
       .prepare(
         `INSERT INTO sgso_relatos (
           id, empresa_id, numero_protocolo, tipo, anonimo, relator_id,
@@ -330,18 +333,19 @@ sgso.post('/relatos', async (c) => {
         uid,
         ts,
         ts,
-      )
-      .run();
+      ),
 
     // Registrar histórico de status inicial
-    await db
+      db
       .prepare(
         `INSERT INTO sgso_relatos_historico_status
          (relato_id, empresa_id, status_anterior, status_novo, motivo, alterado_por, alterado_em)
          VALUES (?, ?, NULL, 'ABERTO', 'Relato criado', ?, ?)`,
       )
       .bind(id, empresaId, uid, ts)
-      .run();
+      ,
+
+    ]);
 
     return c.json(
       {

@@ -93,8 +93,12 @@ nextGen.post('/relprev/submissoes', async (c) => {
     const descricaoCompleta =
       d.descricao?.trim() || `${d.o_que}. Local: ${d.onde}. Momento: ${d.quando}.`;
 
-    await db
-      .prepare(
+    // F14-09: A base do relato, a trilha de status, a captura e os dados
+    // de privacidade formam UMA unidade de escrita. A falha em qualquer
+    // tabela não pode deixar um RELPREV sem sua evidência obrigatória.
+    await db.batch([
+      db
+        .prepare(
         `INSERT INTO sgso_relatos (
           id, empresa_id, numero_protocolo, tipo, anonimo, relator_id,
           aeronave_id, aeronave_matricula, aeronave_modelo,
@@ -137,20 +141,19 @@ nextGen.post('/relprev/submissoes', async (c) => {
         uid,
         ts,
         ts,
-      )
-      .run();
+      ),
 
-    await db
-      .prepare(
+      db
+        .prepare(
         `INSERT INTO sgso_relatos_historico_status
          (relato_id, empresa_id, status_anterior, status_novo, motivo, alterado_por, alterado_em)
          VALUES (?, ?, NULL, 'ABERTO', 'Relato RELPREV criado', ?, ?)`,
       )
       .bind(id, empresaId, uid, ts)
-      .run();
+      ,
 
-    await db
-      .prepare(
+      db
+        .prepare(
         `INSERT INTO sgso_relato_capturas (
           relato_id, empresa_id, client_submission_id, canal_origem, sync_status, sync_tentativas,
           offline_capturado_em, sincronizado_em,
@@ -179,11 +182,10 @@ nextGen.post('/relprev/submissoes', async (c) => {
         d.metadata_json ? JSON.stringify(d.metadata_json) : null,
         ts,
         ts,
-      )
-      .run();
+      ),
 
-    await db
-      .prepare(
+      db
+        .prepare(
         `INSERT INTO sgso_relato_privacidade (
           relato_id, empresa_id, modo_sigilo, consentimento_contato,
           relator_ciphertext, relator_nonce, relator_hash_busca,
@@ -207,8 +209,9 @@ nextGen.post('/relprev/submissoes', async (c) => {
           : null,
         ts,
         ts,
-      )
-      .run();
+      ),
+
+    ]);
 
     const ai = await runAiCoValidator(db, empresaId, descricaoCompleta, id, c.env);
 
