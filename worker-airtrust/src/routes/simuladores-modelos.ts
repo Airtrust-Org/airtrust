@@ -826,7 +826,7 @@ app.put('/modelos-sessao/:id/manobras/reordenar', requirePermission('simuladores
 
     // One D1 round trip instead of a sequential write per maneuver. D1 batch
     // executes sequentially in one transaction; no half-reordered template.
-    await reorderModelManeuversAtomically(c.env.DB, id, manobras);
+    await reorderModelManeuversAtomically(c.env.DB, id, empresaId, manobras);
 
     await audit(c.env.DB, {
       tabela: 'modelos_sessao_manobras',
