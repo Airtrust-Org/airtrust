@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { hasSchemaTable } from '../utils/db-schema';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 
@@ -206,11 +207,7 @@ export function inferInvestigationType(relatoTipo: string): InvestigationType {
 }
 
 export async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`)
-    .bind(tableName)
-    .first<{ ok: number }>();
-  return row?.ok === 1;
+  return hasSchemaTable(db, tableName);
 }
 
 export async function callEdAppApi(
