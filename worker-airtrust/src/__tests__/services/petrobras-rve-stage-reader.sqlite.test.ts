@@ -83,7 +83,7 @@ describe('PERF-05 daily Petrobras RDV export stage reader', () => {
     expect(prepare).toHaveBeenCalledTimes(expectedQueries);
     for (const [sql] of prepare.mock.calls) {
       // One tenant bind plus the flight-ID placeholders, including every chunk.
-      expect((String(sql).match(/\\?/g) || []).length).toBeLessThanOrEqual(100);
+      expect((String(sql).match(/\?/g) || []).length).toBeLessThanOrEqual(100);
     }
     expect(grouped.size).toBe(count);
     expect(grouped.get(ids[ids.length - 1])).toHaveLength(1);
