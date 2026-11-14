@@ -1769,6 +1769,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
         error: 'Ficha assinada: somente retificação formal pode alterá-la.' }, 409);
     }
+    // F14-04: the student signature attests to the scores the student saw, but it
+    // carries no content hash. Any later edit of scores, observations or instructor
+    // metadata would silently keep that signature attached to different content.
+    // Fail closed (including legacy rows that kept only the boolean flag) until the
+    // owner decides between formal rectification and signature invalidation.
+    if (a.assinatura_aluno_timestamp || Number(a.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha: as notas e observações não podem mais ser alteradas por edição direta. Utilize o fluxo formal de retificação.' }, 409);
+    }
 
     const expectedUpdatedAt =
       typeof b?.expected_updated_at === 'string' && b.expected_updated_at.trim()
@@ -2036,13 +2045,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // version and the compare-and-set header update runs last in the transaction.
     const writeTimestamp = new Date().toISOString();
     const statements: D1PreparedStatement[] = [];
-    // Always guard child DML by tenant + UNSIGNED parent. The version check is
+    // Always guard child DML by tenant + parent without instructor/student signature. The version check is
     // additional, never a substitute for preserving signed evidence.
     const versionGuard = ` AND EXISTS (
       SELECT 1 FROM fichas_sessao fs
        WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
          AND fs.assinatura_instrutor_timestamp IS NULL
          AND COALESCE(fs.assinatura_instrutor,0)=0
+         AND fs.assinatura_aluno_timestamp IS NULL
+         AND COALESCE(fs.assinatura_tripulante,0)=0
          ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
     )`;
 
@@ -2086,6 +2097,8 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
          WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
            AND fs.assinatura_instrutor_timestamp IS NULL
            AND COALESCE(fs.assinatura_instrutor,0)=0
+           AND fs.assinatura_aluno_timestamp IS NULL
+           AND COALESCE(fs.assinatura_tripulante,0)=0
            ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
       )`;
       const metaGuardArgs = expectedUpdatedAt
@@ -2151,7 +2164,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     statements.push(
       expectedUpdatedAt
         ? c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND updated_at = ?',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0 AND updated_at = ?',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
@@ -2161,7 +2174,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             expectedUpdatedAt,
           )
         : c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
