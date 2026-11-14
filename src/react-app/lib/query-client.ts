@@ -57,6 +57,12 @@ export const queryClient = new QueryClient({
 const clearReactQueryOnly = queryClient.clear.bind(queryClient);
 registerTenantCacheReset('react-query', clearReactQueryOnly);
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    void queryClient.cancelQueries();
+  });
+}
+
 // Existing logout paths already call queryClient.clear(). Make that call the
 // complete data-layer reset rather than clearing React Query alone.
 queryClient.clear = () => {
