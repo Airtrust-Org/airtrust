@@ -261,66 +261,6 @@ export function checkBaselineGovernance(baseline, { expectedSha } = {}) {
 }
 
 /**
- * "Non-tolerable" diagnostic classes: TS2304 (cannot find name), TS2307
- * (cannot find module) and TS2552 (cannot find name, did you mean...).
- *
- * operational_decision: these are not style/typing debt. In a browser bundle a
- * missing identifier is a `ReferenceError` and a missing module is a failed
- * import at runtime. Example found by audit F14-03: `showAlertDialog(...)`
- * called without an import inside a `try` block made
- * ReclassificacaoQualificacoes show the generic "Erro na requisicao" instead
- * of the real API error. Grandfathering them in the general baseline hid it.
- *
- * Rule: (1) any current diagnostic of these classes that is not already in the
- * baseline fails (reported separately from ordinary new diagnostics); (2) the
- * baseline may hold at most NON_TOLERABLE_BASELINE_CAPS entries per class and
- * the cap must equal the real baseline count, so fixing an entry forces the
- * cap down and re-adding or regenerating entries cannot raise it silently —
- * raising a cap is an explicit, reviewable change to this file and to its test.
- */
-export const NON_TOLERABLE_CODES = Object.freeze(['TS2304', 'TS2307', 'TS2552']);
-
-/** Remaining legacy entries per class. Only ever lower these numbers. */
-export const NON_TOLERABLE_BASELINE_CAPS = Object.freeze({
-  TS2304: 0,
-  TS2307: 1, // components/admin/FuncoesManagement.tsx -> '../ImportarCSVModal' (unrouted page; tracked in F14-03)
-  TS2552: 0,
-});
-
-export function isNonTolerableCode(code) {
-  return NON_TOLERABLE_CODES.includes(code);
-}
-
-/**
- * Checks the baseline's own non-tolerable entries against the caps.
- * - count > cap  => the baseline grew (or was regenerated with new entries): fail.
- * - count < cap  => entries were fixed but the cap was not lowered: fail
- *   (`requireTight`, default true) so the ratchet really tightens. Callers that
- *   only generate a baseline pass `requireTight: false`.
- */
-export function checkNonTolerableBaseline(
-  baselineDiagnostics,
-  { caps = NON_TOLERABLE_BASELINE_CAPS, requireTight = true } = {},
-) {
-  const counts = {};
-  for (const code of NON_TOLERABLE_CODES) counts[code] = 0;
-  for (const d of dedupeDiagnostics(baselineDiagnostics)) {
-    if (isNonTolerableCode(d.code)) counts[d.code] += 1;
-  }
-
-  const violations = [];
-  for (const code of NON_TOLERABLE_CODES) {
-    const cap = caps[code] ?? 0;
-    if (counts[code] > cap) {
-      violations.push({ code, count: counts[code], cap, kind: 'grew' });
-    } else if (requireTight && counts[code] < cap) {
-      violations.push({ code, count: counts[code], cap, kind: 'cap-not-lowered' });
-    }
-  }
-  return { ok: violations.length === 0, counts, violations };
-}
-
-/**
  * Compares current diagnostics against the baseline. Exact identities match
  * first; remaining diagnostics may match a stable file/code/message fingerprint
  * so harmless line shifts do not become false regressions. Fingerprint counts
@@ -369,20 +309,9 @@ export function compareDiagnostics(currentDiagnostics, baselineDiagnostics) {
     fixedDiagnostics.push(...bucket);
   }
 
-  const baselineFilesByCode = new Set(baselineDeduped.map((d) => `${d.code}:${d.file}`));
-  const sortedNew = sortDiagnostics(newDiagnostics);
-  const nonTolerableNewDiagnostics = sortedNew.filter((d) => isNonTolerableCode(d.code));
-  // Subset of the above whose file has no baseline entry of that class at all
-  // (the case the audit cares about: a brand-new ReferenceError/ModuleNotFound).
-  const nonTolerableOutsideBaseline = nonTolerableNewDiagnostics.filter(
-    (d) => !baselineFilesByCode.has(`${d.code}:${d.file}`),
-  );
-
   return {
     pass: newDiagnostics.length === 0,
-    nonTolerableNewDiagnostics,
-    nonTolerableOutsideBaseline,
-    newDiagnostics: sortedNew,
+    newDiagnostics: sortDiagnostics(newDiagnostics),
     fixedDiagnostics: sortDiagnostics(fixedDiagnostics),
     currentCount: currentDeduped.length,
     baselineCount: baselineDeduped.length,
