@@ -101,6 +101,21 @@ class ReviewGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'posição alterada'):
             auditor.audit_rows(rows,guides,c)
 
+    def test_rejects_modified_session_title(self):
+        c,e=setup()
+        rows,guides,_=builder.build_ledger(c,e)
+        rows[0]['titulo_sessao']='Sessão diferente da fonte aprovada'
+        with self.assertRaisesRegex(ValueError,'posição alterada'):
+            auditor.audit_rows(rows,guides,c)
+
+    def test_rejects_guide_with_wrong_aircraft(self):
+        c,e=setup()
+        rows,guides,_=builder.build_ledger(c,e)
+        original=guides[0]['aeronave']
+        guides[0]['aeronave']='S76' if original!='S76' else 'AW139'
+        with self.assertRaisesRegex(ValueError,'identidade/cobertura de guia'):
+            auditor.audit_rows(rows,guides,c)
+
     def test_rejects_duplicate_guide(self):
         c,e=setup()
         rows,guides,_=builder.build_ledger(c,e)
