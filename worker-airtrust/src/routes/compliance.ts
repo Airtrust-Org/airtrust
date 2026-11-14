@@ -22,6 +22,8 @@ import {
   getQualificacoesAlertaDias,
   getTodayIsoSaoPaulo,
 } from '../utils/qualificacoes-alerta-config';
+import { loadComplianceCurrentQualificacoes } from '../lib/qualificacoes/compliance-current-qualifications';
+import { collectByBindChunks } from '../utils/d1-bind-chunks';
 
 type Env = {
   DB: D1Database;
@@ -295,8 +297,6 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
     }
 
     const ids = funcionarios.map((f) => Number(f.id));
-    const placeholders = ids.map(() => '?').join(',');
-
     // 2. Buscar schema de qualificacoes_historico (cached)
     const histCols = await getTableColumns(c.env.DB, 'qualificacoes_historico');
     const colInicio = histCols.has('data_realizacao') ? 'data_realizacao' : 'data_conclusao';
@@ -305,71 +305,60 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
       ? 'tipo_qualificacao_id'
       : 'qualificacao_id';
 
-    // 3. Buscar qualificações vigentes (uma por código) em uma query
-    const statusExpr = histCols.has('status') ? 'UPPER(COALESCE(q.status, \"\"))' : "''";
-    const qualRaw = await c.env.DB.prepare(
-      `WITH qualificacoes_ativas AS (
-         SELECT
-           q.funcionario_id,
-           q.${colFim} as data_vencimento,
-           tq.codigo,
-           ROW_NUMBER() OVER (
-             PARTITION BY q.funcionario_id, tq.codigo
-             ORDER BY datetime(COALESCE(q.${colFim}, q.${colInicio}, q.updated_at, q.created_at)) DESC,
-                      q.id DESC
-           ) AS rn
-         FROM qualificacoes_historico q
-         JOIN qualificacoes_tipos tq ON q.${colTipo} = tq.id
-         WHERE q.funcionario_id IN (${placeholders})
-           AND q.deleted_at IS NULL
-           AND ${statusExpr} != 'CANCELADA'
-           AND COALESCE(q.${colFim}, q.${colInicio}) IS NOT NULL
-       )
-       SELECT funcionario_id, data_vencimento, codigo
-       FROM qualificacoes_ativas
-       WHERE rn = 1`,
-    )
-      .bind(...ids)
-      .all();
+    // 3. Qualificação operacional corrente: predicado canônico, tenant e
+    // conclusão cronológica (nunca maior data de vencimento). Os IDs são
+    // particionados conforme o orçamento de parâmetros do D1.
+    const qualRaw = await loadComplianceCurrentQualificacoes(
+      c.env.DB, empresaId, ids,
+      {
+        tipoCol: colTipo,
+        inicioCol: colInicio,
+        fimCol: colFim,
+        hasStatus: histCols.has('status'),
+        hasTenant: histCols.has('empresa_id'),
+        hasRenewalLink: histCols.has('renovacao_de'),
+      },
+    );
     const qualByEmployee = new Map<
       number,
       Array<{ codigo: string; data_vencimento: string | null }>
     >();
-    for (const q of qualRaw.results || []) {
-      const row = q as Record<string, unknown>;
-      const empId = Number(row.funcionario_id);
+    for (const row of qualRaw) {
+      const empId = row.funcionario_id;
       if (!qualByEmployee.has(empId)) qualByEmployee.set(empId, []);
       qualByEmployee.get(empId)!.push({
-        codigo: row.codigo as string,
-        data_vencimento: (row.data_vencimento as string) || null,
+        codigo: row.codigo,
+        data_vencimento: row.data_vencimento,
       });
     }
 
-    // 4. Buscar todas as licenças dos funcionários em uma query (1 query, tolerando ausência da tabela)
+    // 4. Licenças em lotes limitados pelo D1. A tabela é opcional em schema
+    // legado, mas erros SQL de tabelas existentes não devem ser silenciados.
     const licByEmployee = new Map<
-      number,
-      Array<{ tipo: string; data_vencimento: string | null }>
+      number, Array<{ tipo: string; data_vencimento: string | null }>
     >();
-    try {
-      const licCols = await getTableColumns(c.env.DB, 'licencas');
-      if (licCols.size > 0) {
-        const licRaw = await c.env.DB.prepare(
-          `SELECT funcionario_id, tipo, data_vencimento FROM licencas WHERE funcionario_id IN (${placeholders}) AND deleted_at IS NULL`,
-        )
-          .bind(...ids)
-          .all();
-        for (const l of licRaw.results || []) {
-          const row = l as Record<string, unknown>;
-          const empId = Number(row.funcionario_id);
-          if (!licByEmployee.has(empId)) licByEmployee.set(empId, []);
-          licByEmployee.get(empId)!.push({
-            tipo: row.tipo as string,
-            data_vencimento: (row.data_vencimento as string) || null,
-          });
-        }
+    const licCols = await getTableColumns(c.env.DB, 'licencas');
+    if (licCols.size > 0) {
+      const licRaw = await collectByBindChunks<number, Record<string, unknown>>(
+        ids, licCols.has('empresa_id') ? 1 : 0, async (batch) => {
+          const placeholders = batch.map(() => '?').join(',');
+          const { results } = await c.env.DB.prepare(
+            `SELECT funcionario_id, tipo, data_vencimento FROM licencas
+               WHERE funcionario_id IN (${placeholders})
+                 ${licCols.has('empresa_id') ? 'AND empresa_id = ?' : ''}
+                 AND deleted_at IS NULL`,
+          ).bind(...batch, ...(licCols.has('empresa_id') ? [empresaId] : [])).all();
+          return (results || []) as Array<Record<string, unknown>>;
+        },
+      );
+      for (const row of licRaw) {
+        const employeeId = Number(row.funcionario_id);
+        if (!licByEmployee.has(employeeId)) licByEmployee.set(employeeId, []);
+        licByEmployee.get(employeeId)!.push({
+          tipo: row.tipo as string,
+          data_vencimento: (row.data_vencimento as string) || null,
+        });
       }
-    } catch {
-      /* licencas table may not exist */
     }
 
     // 5. Buscar todos os requisitos de compliance de uma vez (1 query)
@@ -386,27 +375,28 @@ app.get('/compliance/funcionarios', auth(), async (c: Context<{ Bindings: Env }>
         if (!reqMap.has(fn)) reqMap.set(fn, []);
         reqMap.get(fn)!.push(row);
       }
-    } catch {
-      /* requisitos_compliance may not exist */
+    } catch (error) {
+      throw new Error('COMPLIANCE_REQUIREMENTS_UNAVAILABLE', { cause: error });
     }
 
-    // 5.1 Buscar matrículas LMS de todos os funcionários (para verificar cursos obrigatórios)
+    // 5.1 LMS: o estado de matrícula é parte do compliance. Falha de D1 não
+    // pode ser transformada silenciosamente em lista vazia/conforme.
     const lmsByEmployee = new Map<number, Array<Record<string, unknown>>>();
-    try {
-      const lmsRaw = await c.env.DB.prepare(
-        `SELECT funcionario_id, curso_id, status, data_expiracao FROM lms_matriculas
-         WHERE funcionario_id IN (${placeholders}) AND empresa_id = ? AND deleted_at IS NULL`,
-      )
-        .bind(...ids, empresaId)
-        .all();
-      for (const m of lmsRaw.results || []) {
-        const row = m as Record<string, unknown>;
-        const empId = Number(row.funcionario_id);
-        if (!lmsByEmployee.has(empId)) lmsByEmployee.set(empId, []);
-        lmsByEmployee.get(empId)!.push(row);
-      }
-    } catch {
-      /* ignore */
+    const lmsRaw = await collectByBindChunks<number, Record<string, unknown>>(
+      ids, 1, async (batch) => {
+        const placeholders = batch.map(() => '?').join(',');
+        const { results } = await c.env.DB.prepare(
+          `SELECT funcionario_id, curso_id, status, data_expiracao
+             FROM lms_matriculas WHERE funcionario_id IN (${placeholders})
+               AND empresa_id = ? AND deleted_at IS NULL`,
+        ).bind(...batch, empresaId).all();
+        return (results || []) as Array<Record<string, unknown>>;
+      },
+    );
+    for (const row of lmsRaw) {
+      const employeeId = Number(row.funcionario_id);
+      if (!lmsByEmployee.has(employeeId)) lmsByEmployee.set(employeeId, []);
+      lmsByEmployee.get(employeeId)!.push(row);
     }
 
     // 6. Processar em memória

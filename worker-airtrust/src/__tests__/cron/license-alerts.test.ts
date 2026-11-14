@@ -5,7 +5,7 @@ vi.mock('../../services/setores-gestores', () => ({
   getSetorGestoresBySetor: vi.fn(),
 }));
 
-import { processLicenseAlerts } from '../../cron/license-alerts';
+import { getLicenseAlertTodaySaoPaulo, processLicenseAlerts } from '../../cron/license-alerts';
 import { getSetorGestoresBySetor } from '../../services/setores-gestores';
 
 function isoDateIn(days: number): string {
@@ -160,7 +160,10 @@ describe('license alerts', () => {
     const body = JSON.parse(String(request.body)) as { subject: string; textContent: string };
     expect(body.subject).toContain('vencida há 3 dias');
     expect(body.textContent).toContain('está vencida há 3 dias');
-    expect(binds.some(({ query }) => query.includes("date(enviado_em) = date('now')"))).toBe(true);
+    expect(binds).toContainEqual(expect.objectContaining({
+      query: expect.stringContaining("date(enviado_em, '-3 hours') = date(?)"),
+      args: [6, '[LICENCA:501:VENCIDA]', getLicenseAlertTodaySaoPaulo()],
+    }));
   });
 
   it('não repete o mesmo estágio já entregue', async () => {
