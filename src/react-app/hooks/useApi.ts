@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
+import { onDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { requestController } from '../utils/request-control';
 import { logger } from '../utils/logger';
@@ -45,6 +46,29 @@ interface UseApiOptions {
 
 const inMemoryGetCache = new LruTtlCache<string, unknown>(100, 5 * 60 * 1000);
 registerTenantCacheReset('useApi', () => inMemoryGetCache.clear());
+
+const apiCacheDomains: Record<Exclude<DataChangeScope, 'all'>, string[]> = {
+  treinamentos: ['/treinamentos', '/lms', '/qualificacoes', '/compliance', '/dashboard'],
+  escala: ['/escalas', '/evd', '/frms', '/dashboard'],
+  qualificacoes: ['/qualificacoes', '/categorias', '/certificados', '/compliance', '/dashboard'],
+  simuladores: ['/simuladores', '/fichas', '/qualificacoes', '/dashboard'],
+  funcionarios: ['/funcionarios', '/setores', '/usuarios', '/qualificacoes', '/compliance', '/dashboard'],
+  lms: ['/lms', '/treinamentos', '/qualificacoes', '/compliance', '/dashboard'],
+  frms: ['/frms', '/fadiga', '/dashboard'],
+  compliance: ['/compliance', '/qualificacoes', '/treinamentos', '/dashboard'],
+};
+
+onDataChanged((scope) => {
+  if (scope === 'all') {
+    inMemoryGetCache.clear();
+    return;
+  }
+  const fragments = apiCacheDomains[scope];
+  inMemoryGetCache.deleteMatching((key) =>
+    fragments.some((fragment) => key.toLowerCase().includes(fragment)),
+  );
+});
+
 
 export function clearApiCacheByPattern(urlFragment: string): void {
   inMemoryGetCache.deleteMatching((key) => key.includes(urlFragment));

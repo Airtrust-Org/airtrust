@@ -1,5 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { onDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
 import { frontendErrorMessage } from '@/react-app/lib/api-contract';
 import {
   getCurrentTenantId,
@@ -103,6 +104,44 @@ export const queryKeys = {
 
   dashboard: (empresaId?: number | null) => tenantQueryKey(empresaId, 'dashboard'),
 };
+
+
+/**
+ * Tenant-scoped, domain-aware invalidation. Only keys under the active tenant
+ * can be touched; global/unscoped and other-company queries remain untouched.
+ */
+const dataChangeQueryDomains: Record<Exclude<DataChangeScope, 'all'>, string[]> = {
+  treinamentos: ['treinamento', 'lms', 'matricula', 'ead', 'compliance', 'qualificac', 'dashboard'],
+  escala: ['escala', 'evd', 'frms', 'dashboard'],
+  qualificacoes: ['qualificac', 'categoria', 'historico', 'certificado', 'compliance', 'dashboard'],
+  simuladores: ['simulador', 'ficha', 'qualificac', 'dashboard'],
+  funcionarios: ['funcionario', 'setor', 'usuario', 'qualificac', 'compliance', 'dashboard'],
+  lms: ['lms', 'matricula', 'curso', 'treinamento', 'ead', 'qualificac', 'compliance', 'dashboard'],
+  frms: ['frms', 'fadiga', 'jornada', 'readiness', 'dashboard'],
+  compliance: ['compliance', 'qualificac', 'treinamento', 'dashboard'],
+};
+
+export function shouldInvalidateQueryForDataChange(
+  queryKey: readonly unknown[],
+  scope: DataChangeScope,
+  tenantId: number,
+): boolean {
+  if (queryKey[0] !== 'tenant' || queryKey[1] !== tenantId) return false;
+  if (scope === 'all') return true;
+  const domains = dataChangeQueryDomains[scope];
+  return queryKey.slice(2).some((keyPart) =>
+    typeof keyPart === 'string' &&
+    domains.some((domain) => keyPart.toLowerCase().includes(domain)),
+  );
+}
+
+onDataChanged((scope) => {
+  const tenantId = getCurrentTenantId();
+  if (tenantId == null) return;
+  void queryClient.invalidateQueries({
+    predicate: (query) => shouldInvalidateQueryForDataChange(query.queryKey, scope, tenantId),
+  });
+});
 
 export const cacheTimes = {
   STATIC: 1000 * 60 * 60,

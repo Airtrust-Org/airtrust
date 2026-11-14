@@ -1,3 +1,5 @@
+import { getCurrentTenantId } from '@/react-app/lib/tenant-data-layer';
+
 // A5: sinal leve de "dados mudaram" entre páginas/abas, sem polling agressivo.
 // Mutações (treinamentos, escala, etc.) chamam notifyDataChanged(); páginas que não
 // usam React Query (ex.: Visão Mensal Integrada via useApi) assinam onDataChanged()
@@ -8,12 +10,16 @@ export type DataChangeScope =
   | 'escala'
   | 'qualificacoes'
   | 'simuladores'
+  | 'funcionarios'
+  | 'lms'
+  | 'frms'
+  | 'compliance'
   | 'all';
 
 const EVENT_NAME = 'airtrust:data-changed';
 const CHANNEL_NAME = 'airtrust-data-sync';
 
-type Detail = { scope: DataChangeScope; at: number };
+type Detail = { scope: DataChangeScope; at: number; tenantId: number | null };
 
 let channel: BroadcastChannel | null = null;
 function getChannel(): BroadcastChannel | null {
@@ -30,14 +36,14 @@ function getChannel(): BroadcastChannel | null {
 
 export function notifyDataChanged(scope: DataChangeScope = 'all'): void {
   if (typeof window === 'undefined') return;
-  const detail: Detail = { scope, at: Date.now() };
+  const detail: Detail = { scope, at: Date.now(), tenantId: getCurrentTenantId() };
   try {
     window.dispatchEvent(new CustomEvent<Detail>(EVENT_NAME, { detail }));
   } catch {
     /* no-op */
   }
   const ch = getChannel();
-  if (ch) {
+  if (ch && detail.tenantId !== null) {
     try {
       ch.postMessage(detail);
     } catch {
@@ -66,7 +72,12 @@ export function onDataChanged(
 
   const ch = getChannel();
   const onMessage = (event: MessageEvent<Detail>) => {
-    if (event.data && matches(event.data.scope)) callback(event.data.scope);
+    if (
+      event.data &&
+      event.data.tenantId !== null &&
+      event.data.tenantId === getCurrentTenantId() &&
+      matches(event.data.scope)
+    ) callback(event.data.scope);
   };
   ch?.addEventListener('message', onMessage as EventListener);
 
