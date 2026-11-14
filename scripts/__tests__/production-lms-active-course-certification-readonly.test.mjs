@@ -142,6 +142,8 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /COURSE_IDS\.size > 0 \? 3_600 : 0/);
   assert.match(source, /focusedCompletionBudgetMs/);
   assert.match(source, /computeFocusedCourseBudgetMs\(\{/);
+  assert.match(source, /countAuthoredVideoSlides\(/);
+  assert.match(source, /authoredVideoSlides: Number\(suspend\.model\?\.video_slide_count/);
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
