@@ -147,6 +147,30 @@ export function buildHistoricoTipoSnapshot(
   };
 }
 
+/**
+ * F14-06: explicit historic evidence must not be silently overwritten when
+ * the model changes. Without a persisted source/provenance field, a date or
+ * duration that differs from the previous computed rule is treated as an
+ * override, and is only revised by an explicit audited reconciliation.
+ */
+export function shouldPreserveHistoricoExpiryOnTipoUpdate(
+  previousTipo: QualificacaoTipoSnapshot,
+  historico: QualificacaoHistoricoSyncInput & { validadeMesesAtual: number | null },
+): boolean {
+  const originalMonths = resolveHistoricoValidadeMeses(previousTipo, historico);
+  const persistedMonths = toPositiveNumber(historico.validadeMesesAtual);
+  if (historico.validadeMesesAtual != null && persistedMonths === null) return true;
+  if (persistedMonths !== null && originalMonths !== persistedMonths) return true;
+
+  const persistedExpiry = String(historico.dataVencimentoAtual || '').trim();
+  if (!persistedExpiry) return false;
+
+  const completion = String(historico.dataConclusao || '').trim();
+  const priorMonths = persistedMonths ?? originalMonths;
+  if (!completion || !priorMonths) return true;
+  return calcularDataVencimentoSnapshot(completion, priorMonths) !== persistedExpiry;
+}
+
 export function shouldSyncHistoricoSnapshotsOnTipoUpdate(data: Record<string, unknown>): boolean {
   return [
     'nome',

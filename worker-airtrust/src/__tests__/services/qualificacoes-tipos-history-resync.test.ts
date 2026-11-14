@@ -101,6 +101,24 @@ describe('resyncTipoHistoricoValidity', () => {
     expect((await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10)).updated).toBe(0);
   });
 
+  it('preserva vencimento manual e atualiza o calculado com SQLite real', async () => {
+    addHistory(1, 6, 'CONCLUIDA', '2025-01-15', '2026-02-01');
+    addHistory(2, 6, 'CONCLUIDA', '2025-01-15', '2026-01-15');
+    sqlite.database.exec('UPDATE qualificacoes_tipos SET validade = 24 WHERE id = 10');
+    const result = await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10, 12);
+    expect(result).toEqual({updated: 1, unchanged: 1});
+    expect(row(1)).toEqual({v: 12, d: '2026-02-01'});
+    expect(row(2)).toEqual({v: 24, d: '2027-01-15'});
+  });
+
+  it('preserva meses personalizados por funcionario em vez de sobrescrever com o modelo', async () => {
+    addHistory(1, 6, 'CONCLUIDA', '2025-01-15', '2026-07-15');
+    sqlite.database.exec('UPDATE qualificacoes_historico SET validade_meses = 18 WHERE id = 1');
+    sqlite.database.exec('UPDATE qualificacoes_tipos SET validade = 24 WHERE id = 10');
+    expect((await resyncTipoHistoricoValidity(sqlite.asD1(), 6, 10, 12)).updated).toBe(0);
+    expect(row(1)).toEqual({v: 18, d: '2026-07-15'});
+  });
+
   it('nunca apaga vencimento quando a validade nova e vazia/zero', () => {
     expect(shouldResyncTipoValidity(12, null)).toBe(false);
     expect(shouldResyncTipoValidity(12, 0)).toBe(false);
@@ -112,6 +130,19 @@ describe('resyncTipoHistoricoValidity', () => {
 });
 
 describe('QualificacaoTipoImportacaoService.import', () => {
+  it('UPDATE importado nao destrói vencimento manual preexistente', async () => {
+    addHistory(1, 6, 'CONCLUIDA', '2025-01-15', '2026-02-01');
+    addHistory(2, 6, 'CONCLUIDA', '2025-01-15', '2026-01-15');
+    const service = new QualificacaoTipoImportacaoService(sqlite.asD1(), 6);
+    const out = await service.import(
+      [{tipo: 'Curso', codigo: 'NR35', nome: 'NR-35', categoria: 'Geral', validade: 24}],
+      'UPDATE',
+    );
+    expect(out.errors).toEqual([]);
+    expect(row(1)).toEqual({v: 12, d: '2026-02-01'});
+    expect(row(2)).toEqual({v: 24, d: '2027-01-15'});
+  });
+
   it('UPDATE de validade pelo importador reflete nos historicos do tipo', async () => {
     addHistory(1, 6, 'CONCLUIDA', '2025-01-15', '2026-01-15');
     const service = new QualificacaoTipoImportacaoService(sqlite.asD1(), 6);

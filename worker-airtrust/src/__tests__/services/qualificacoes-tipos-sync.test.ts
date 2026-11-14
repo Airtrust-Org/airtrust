@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildHistoricoTipoSnapshot,
+  shouldPreserveHistoricoExpiryOnTipoUpdate,
   shouldSyncHistoricoSnapshotsOnTipoUpdate,
 } from '../../services/qualificacoes-tipos-sync';
 
@@ -163,5 +164,67 @@ describe('qualificacoes-tipos-sync', () => {
 
     expect(snapshot.validadeMeses).toBe(24);
     expect(snapshot.dataVencimento).toBe('2020-08-08');
+  });
+});
+
+describe('F14-06 — vencimento historico explicito', () => {
+  const tipoAnterior = {
+    codigo: 'NR35',
+    nome: 'NR-35',
+    categoria: 'GERAL',
+    validade: 12,
+    cargaHoraria: null,
+    cargaHorariaInicial: null,
+    cargaHorariaRecorrente: null,
+  };
+  const historico = {
+    dataConclusao: '2025-01-15',
+    dataVencimentoAtual: '2026-01-15',
+    tipoTreinamento: 'INICIAL',
+    nascimentoFuncionario: null,
+    validadeMesesAtual: 12,
+  };
+
+  it('permite atualizar vencimento que coincide com a regra anterior', () => {
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(tipoAnterior, historico)).toBe(false);
+  });
+
+  it('preserva data explicita diferente do vencimento que seria calculado', () => {
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(tipoAnterior, {
+      ...historico,
+      dataVencimentoAtual: '2026-02-01',
+    })).toBe(true);
+  });
+
+  it('preserva duracao individual apesar de a data bater com essa duracao', () => {
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(tipoAnterior, {
+      ...historico,
+      validadeMesesAtual: 18,
+      dataVencimentoAtual: '2026-07-15',
+    })).toBe(true);
+  });
+
+  it('nao inventa proveniencia quando o modelo anterior nao tinha validade', () => {
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate({...tipoAnterior, validade: null}, historico)).toBe(true);
+  });
+
+  it('permite preencher um historico sem vencimento explicito', () => {
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(tipoAnterior, {
+      ...historico,
+      dataVencimentoAtual: null,
+    })).toBe(false);
+  });
+
+  it('respeita a duracao etaria do CMA', () => {
+    const cma = {...tipoAnterior, codigo: 'CMA'};
+    const h = {
+      ...historico,
+      dataConclusao: '2026-04-01',
+      dataVencimentoAtual: '2026-10-01',
+      validadeMesesAtual: 6,
+      nascimentoFuncionario: '1960-01-01',
+    };
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(cma, h)).toBe(false);
+    expect(shouldPreserveHistoricoExpiryOnTipoUpdate(cma, {...h, validadeMesesAtual: 12})).toBe(true);
   });
 });
