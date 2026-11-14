@@ -12,6 +12,30 @@
 export const CRON_RUNS_RETENTION_DAYS = 60;
 export const CRON_RUNS_PURGE_BATCH = 5000;
 
+/**
+ * Use the production 0451 lookup index for each scope, not a scan of every
+ * historical run per candidate. The extra range predicate is implied by the
+ * existing strict-newer comparison and therefore cannot change which UUID
+ * is preserved. id is only a tie-breaker within equal started_at values.
+ */
+export const CRON_RUNS_PURGE_SQL = `DELETE FROM cron_job_runs
+       WHERE id IN (
+         SELECT r.id
+           FROM cron_job_runs r
+          WHERE r.finished_at IS NOT NULL
+            AND datetime(r.finished_at) < datetime('now', ?)
+            AND EXISTS (
+              SELECT 1 FROM cron_job_runs n INDEXED BY idx_cron_job_runs_lookup
+               WHERE n.job_name = r.job_name
+                 AND n.scope_key = r.scope_key
+                 AND n.started_at >= r.started_at
+                 AND (n.started_at > r.started_at
+                      OR (n.started_at = r.started_at AND n.id > r.id))
+            )
+          ORDER BY r.started_at, r.id
+          LIMIT ?
+       )`;
+
 export async function purgeOldCronJobRuns(
   db: D1Database,
   retentionDays: number = CRON_RUNS_RETENTION_DAYS,
@@ -20,24 +44,7 @@ export async function purgeOldCronJobRuns(
   const days = Math.max(7, Math.floor(retentionDays));
   const limit = Math.max(1, Math.floor(batchSize));
   const result = await db
-    .prepare(
-      `DELETE FROM cron_job_runs
-       WHERE id IN (
-         SELECT r.id
-           FROM cron_job_runs r
-          WHERE r.finished_at IS NOT NULL
-            AND datetime(r.finished_at) < datetime('now', ?)
-            AND EXISTS (
-              SELECT 1 FROM cron_job_runs n
-               WHERE n.job_name = r.job_name
-                 AND n.scope_key = r.scope_key
-                 AND (n.started_at > r.started_at
-                      OR (n.started_at = r.started_at AND n.id > r.id))
-            )
-          ORDER BY r.started_at, r.id
-          LIMIT ?
-       )`,
-    )
+    .prepare(CRON_RUNS_PURGE_SQL)
     .bind(`-${days} days`, limit)
     .run();
   return Number(result.meta?.changes ?? 0);
