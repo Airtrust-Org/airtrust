@@ -241,7 +241,7 @@ app.put(
     if (!created) {
       const updated = await c.env.DB.prepare(
         `UPDATE fichas_sessao_manobras
-            SET resultado=?, observacoes=?, updated_at=datetime("now")
+            SET resultado=?, observacoes=?, updated_at=datetime('now')
           WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL
             AND EXISTS (
               SELECT 1 FROM fichas_sessao f
