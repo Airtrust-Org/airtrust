@@ -1,4 +1,5 @@
 import type { PetrobrasRveStageRow } from './petrobras-rve-daily-export';
+import { chunkByBindBudget, D1_MAX_LIST_BINDS } from '../../utils/d1-bind-chunks';
 
 /**
  * Read all steps for a day's finalized flights using a bounded number of D1
@@ -8,7 +9,8 @@ import type { PetrobrasRveStageRow } from './petrobras-rve-daily-export';
  * No JOIN to RDV: the flight query can return repeated flight IDs and the
  * original exporter repeats the same list of stages for each such row.
  */
-export const PETROBRAS_RVE_STAGE_READ_CHUNK = 200;
+// Reserve one bind for empresaId; the shared D1 budget also caps IN lists at 90.
+export const PETROBRAS_RVE_STAGE_READ_CHUNK = D1_MAX_LIST_BINDS;
 
 export async function readPetrobrasStagesByFlight(
   db: D1Database,
@@ -24,8 +26,7 @@ export async function readPetrobrasStagesByFlight(
   const grouped = new Map<number, PetrobrasRveStageRow[]>(
     uniqueFlightIds.map((id) => [id, []]),
   );
-  for (let offset = 0; offset < uniqueFlightIds.length; offset += PETROBRAS_RVE_STAGE_READ_CHUNK) {
-    const chunk = uniqueFlightIds.slice(offset, offset + PETROBRAS_RVE_STAGE_READ_CHUNK);
+  for (const chunk of chunkByBindBudget(uniqueFlightIds, 1)) {
     const placeholders = chunk.map(() => '?').join(',');
     const { results } = await db.prepare(
       `SELECT voo_id, numero_etapa, origem_icao, destino_icao,
