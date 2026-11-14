@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,5 +122,47 @@ describe('WebKit navigation abort hygiene', () => {
     const cancelSpy = vi.spyOn(queryClient, 'cancelQueries').mockResolvedValue(undefined);
     window.dispatchEvent(new Event('pagehide'));
     expect(cancelSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes active queries cancelled on pagehide when restored via persisted pageshow', async () => {
+    let calls = 0;
+    function RestorableQueryProbe() {
+      const { data, fetchStatus } = useQuery({
+        queryKey: ['webkit-bfcache-probe'],
+        queryFn: ({ signal }) => {
+          calls += 1;
+          if (calls === 1) {
+            return new Promise<{ status: string }>((_resolve, reject) => {
+              signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {
+                once: true,
+              });
+            });
+          }
+          return Promise.resolve({ status: 'restored-ok' });
+        },
+        retry: false,
+      });
+      return <div data-testid="bfcache-probe">{data ? data.status : `loading:${fetchStatus}`}</div>;
+    }
+
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <RestorableQueryProbe />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(calls).toBe(1));
+    await waitFor(() => expect(view.getByTestId('bfcache-probe').textContent).toBe('loading:fetching'));
+
+    window.dispatchEvent(new Event('pagehide'));
+    await waitFor(() => expect(view.getByTestId('bfcache-probe').textContent).toBe('loading:idle'));
+
+    const pageShowEvent = Object.assign(new Event('pageshow'), { persisted: true });
+    window.dispatchEvent(pageShowEvent);
+
+    await waitFor(() => expect(view.getByTestId('bfcache-probe').textContent).toBe('restored-ok'));
+    expect(calls).toBe(2);
+    view.unmount();
+    queryClient.removeQueries({ queryKey: ['webkit-bfcache-probe'] });
   });
 });
