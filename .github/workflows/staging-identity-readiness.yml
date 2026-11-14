@@ -118,6 +118,21 @@ jobs:
               headers: { Authorization: `Bearer ${token}` },
             });
             if (me.status !== 200) throw new Error('identity endpoint failed');
+            // Prove the operational QA profile actually authorized by the
+            // staging backend, not only password validity or sector membership.
+            const profiles = await fetchJson(`${baseUrl}/api/me/operational-access/session-profiles`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const roles = profiles.json?.data?.roles;
+            if (
+              profiles.status !== 200 ||
+              !Array.isArray(roles) ||
+              !roles.some((role) => role === 'GESTOR' || role === 'ADMINISTRADOR')
+            ) {
+              console.error('RESULT=QA_EXAMINER_OPERATIONAL_PROFILE_MISSING');
+              process.exit(1);
+            }
+            console.log('RESULT=QA_EXAMINER_OPERATIONAL_PROFILE_READY');
             console.log('RESULT=QA_EXAMINER_IDENTITY_READY');
           } catch {
             console.error('RESULT=QA_EXAMINER_IDENTITY_AUTH_FAILED');
