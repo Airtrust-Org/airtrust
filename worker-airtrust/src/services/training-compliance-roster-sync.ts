@@ -16,6 +16,25 @@ export type BuildRosterSnapshot = (
 
 const ALL_ACCESS: { mode: 'all'; setorIds: []; funcionarioId: null } = { mode: 'all', setorIds: [], funcionarioId: null };
 
+// Matrículas do tenant com marcadores de evidência. `+h.empresa_id` (unário)
+// impede o planner de usar idx_qualificacoes_historico_empresa_deleted na
+// subconsulta has_history: sem isso cada matrícula varria todo o histórico da
+// empresa (8,4 mi de linhas e ~2,1 s por execução do cron de 10 min). O filtro
+// de tenant continua aplicado; o índice usado passa a ser
+// idx_qual_historico_lms_matricula. Ver o teste
+// qualification-correlated-subquery-plans.sqlite.test.ts.
+export const ROSTER_ENROLLMENT_EVIDENCE_SQL = `SELECT m.id,m.funcionario_id,m.curso_id,m.status,m.deleted_at,
+        m.progresso_pct,m.data_inicio,m.data_conclusao,m.qualificacao_historico_id,
+        EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.matricula_id=m.id AND s.empresa_id=m.empresa_id) has_scorm,
+        EXISTS(SELECT 1 FROM lms_xapi_statements x WHERE x.matricula_id=m.id AND x.empresa_id=m.empresa_id) has_xapi,
+        EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.lms_matricula_id=m.id AND +h.empresa_id=m.empresa_id AND h.deleted_at IS NULL) has_history,
+        EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots d WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id) has_diagnostics,
+        EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
+          AND cy.deleted_at IS NULL AND (COALESCE(cy.progresso_pct,0)>0 OR cy.data_inicio IS NOT NULL
+            OR cy.data_conclusao IS NOT NULL OR cy.qualificacao_historico_id IS NOT NULL
+            OR cy.historico_importado_id IS NOT NULL OR UPPER(TRIM(COALESCE(cy.status,''))) NOT IN ('NAO_INICIADO','CANCELADO'))) has_cycle_evidence
+       FROM lms_matriculas m WHERE m.empresa_id=?`;
+
 export async function readTrainingRosterPlan(
   db: D1Database, empresaId: number, buildSnapshot: BuildRosterSnapshot,
 ) {
@@ -28,17 +47,7 @@ export async function readTrainingRosterPlan(
         AND qt.ativo=1 AND qt.deleted_at IS NULL
         AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')`)
       .bind(empresaId).all<RosterCourse>(),
-    db.prepare(`SELECT m.id,m.funcionario_id,m.curso_id,m.status,m.deleted_at,
-        m.progresso_pct,m.data_inicio,m.data_conclusao,m.qualificacao_historico_id,
-        EXISTS(SELECT 1 FROM lms_progresso_scorm s WHERE s.matricula_id=m.id AND s.empresa_id=m.empresa_id) has_scorm,
-        EXISTS(SELECT 1 FROM lms_xapi_statements x WHERE x.matricula_id=m.id AND x.empresa_id=m.empresa_id) has_xapi,
-        EXISTS(SELECT 1 FROM qualificacoes_historico h WHERE h.lms_matricula_id=m.id AND h.empresa_id=m.empresa_id AND h.deleted_at IS NULL) has_history,
-        EXISTS(SELECT 1 FROM lms_completion_diagnostics_snapshots d WHERE d.matricula_id=m.id AND d.empresa_id=m.empresa_id) has_diagnostics,
-        EXISTS(SELECT 1 FROM lms_matricula_ciclos cy WHERE cy.matricula_id=m.id AND cy.empresa_id=m.empresa_id
-          AND cy.deleted_at IS NULL AND (COALESCE(cy.progresso_pct,0)>0 OR cy.data_inicio IS NOT NULL
-            OR cy.data_conclusao IS NOT NULL OR cy.qualificacao_historico_id IS NOT NULL
-            OR cy.historico_importado_id IS NOT NULL OR UPPER(TRIM(COALESCE(cy.status,''))) NOT IN ('NAO_INICIADO','CANCELADO'))) has_cycle_evidence
-       FROM lms_matriculas m WHERE m.empresa_id=?`)
+    db.prepare(ROSTER_ENROLLMENT_EVIDENCE_SQL)
       .bind(empresaId).all<RosterEnrollment>(),
   ]);
   let keep = new Set<number>();
