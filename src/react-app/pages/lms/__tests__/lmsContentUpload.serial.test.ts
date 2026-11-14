@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithAuth } from '@/react-app/config/api';
-import { inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
+import { canDirectReplaceScormProfile, inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
 
 const { extractBrowserLmsPackageMock } = vi.hoisted(() => ({
   extractBrowserLmsPackageMock: vi.fn(),
@@ -83,6 +83,16 @@ const CANDIDATE_VALIDATED = {
   diagnostics: { status: 'PASS', errors: [] },
 };
 
+
+describe('SCORM replacement profile authority', () => {
+  it('rejects direct replacement for unverified/governed/private packages', () => {
+    expect(canDirectReplaceScormProfile('FORMATIVE')).toBe(true);
+    expect(canDirectReplaceScormProfile('EXTERNAL')).toBe(true);
+    expect(canDirectReplaceScormProfile('GOVERNED')).toBe(false);
+    expect(canDirectReplaceScormProfile('PRIVATE')).toBe(false);
+    expect(canDirectReplaceScormProfile('CHECKING')).toBe(false);
+  });
+});
 
 describe('production SCORM inactive candidate upload: never activates', () => {
   beforeEach(() => {
