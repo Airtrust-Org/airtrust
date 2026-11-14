@@ -54,57 +54,95 @@ export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
   const vencExpr = getQualificacoesVencimentoExpr();
   const vencExprQh2 = getQualificacoesVencimentoExpr('qh2', 'qt');
   return `WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE},
-       ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE}
-       SELECT DISTINCT
-           qh.id AS qualificacao_historico_id,
-           qh.funcionario_id,
-           qh.empresa_id,
-           qt.id AS qualificacao_id,
-           lc.id AS curso_id,
-           lc.titulo AS curso_titulo
-         FROM qualificacoes_historico qh
-         JOIN qualificacoes_tipos qt
-           ON qt.empresa_id = qh.empresa_id
-          AND qt.deleted_at IS NULL
-          AND (
-            qt.id = qh.qualificacao_id
-            OR (
-              qh.qualificacao_id IS NULL
-              AND UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = UPPER(TRIM(COALESCE(qt.codigo, '')))
+       ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE},
+       ead_eligible_courses AS MATERIALIZED (
+         SELECT lc.id AS curso_id,
+                lc.titulo AS curso_titulo,
+                lc.empresa_id,
+                qt.id AS tipo_id,
+                UPPER(TRIM(COALESCE(qt.codigo, ''))) AS tipo_codigo_norm
+           FROM lms_cursos lc
+           CROSS JOIN qualificacoes_tipos qt
+             ON qt.id = lc.qualificacao_tipo_id
+            AND qt.empresa_id = lc.empresa_id
+            AND qt.deleted_at IS NULL
+          WHERE lc.ativo = 1
+            AND lc.publicado = 1
+            AND lc.deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM treinamento_requisitos tr_pre
+               WHERE tr_pre.empresa_id = lc.empresa_id
+                 AND tr_pre.qualificacao_tipo_id = qt.id
+                 AND tr_pre.ativo = 1
+                 AND tr_pre.deleted_at IS NULL
+                 AND tr_pre.obrigatoriedade = 'OBRIGATORIA'
+                 AND COALESCE(tr_pre.auto_matricular_ead, 0) = 1
             )
-          )
-         LEFT JOIN qualificacoes_formatos qf
-           ON qf.id = COALESCE(qh.formato_id, qt.formato_id)
-          AND qf.deleted_at IS NULL
-         JOIN lms_cursos lc
-           ON lc.qualificacao_tipo_id = qt.id
-          AND lc.ativo = 1
-          AND lc.publicado = 1
-          AND lc.deleted_at IS NULL
-          AND lc.empresa_id = qh.empresa_id
+       ),
+       ead_due_candidates AS MATERIALIZED (
+         SELECT DISTINCT
+                qh.id AS qualificacao_historico_id,
+                qh.funcionario_id,
+                qh.empresa_id,
+                qt.id AS qualificacao_id,
+                COALESCE(ec_id.curso_id, ec_cod.curso_id) AS curso_id,
+                COALESCE(ec_id.curso_titulo, ec_cod.curso_titulo) AS curso_titulo,
+                ${vencExpr} AS venc_expr
+           FROM qualificacoes_historico qh
+           LEFT JOIN ead_eligible_courses ec_id
+             ON ec_id.empresa_id = qh.empresa_id
+            AND ec_id.tipo_id = qh.qualificacao_id
+           LEFT JOIN ead_eligible_courses ec_cod
+             ON qh.qualificacao_id IS NULL
+            AND ec_cod.empresa_id = qh.empresa_id
+            AND ec_cod.tipo_codigo_norm = UPPER(TRIM(COALESCE(qh.qualificacao_codigo, '')))
+           CROSS JOIN qualificacoes_tipos qt
+             ON qt.id = COALESCE(ec_id.tipo_id, ec_cod.tipo_id)
+            AND qt.empresa_id = qh.empresa_id
+            AND qt.deleted_at IS NULL
+           LEFT JOIN qualificacoes_formatos qf
+             ON qf.id = COALESCE(qh.formato_id, qt.formato_id)
+            AND qf.deleted_at IS NULL
+           CROSS JOIN funcionarios f
+             ON f.id = qh.funcionario_id
+            AND f.empresa_id = qh.empresa_id
+            AND f.deleted_at IS NULL
+            AND COALESCE(f.ativo, 1) = 1
+            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+          WHERE qh.deleted_at IS NULL
+            AND COALESCE(qh.renovada, 0) = 0
+            AND (qh.data_vencimento IS NOT NULL OR qh.data_conclusao IS NOT NULL)
+            AND (ec_id.curso_id IS NOT NULL OR ec_cod.curso_id IS NOT NULL)
+            AND (
+              UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
+              OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+            )
+            AND date(${vencExpr}) <= date(${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}, '+' || ? || ' days')
+            AND qh.id > ?
+       )
+       SELECT DISTINCT
+           cand.qualificacao_historico_id,
+           cand.funcionario_id,
+           cand.empresa_id,
+           cand.qualificacao_id,
+           cand.curso_id,
+           cand.curso_titulo
+         FROM ead_due_candidates cand
+         JOIN qualificacoes_tipos qt
+           ON qt.id = cand.qualificacao_id
          JOIN funcionarios f
-           ON f.id = qh.funcionario_id
-          AND f.empresa_id = qh.empresa_id
-          AND f.deleted_at IS NULL
-          AND COALESCE(f.ativo, 1) = 1
-          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
+           ON f.id = cand.funcionario_id
          LEFT JOIN ${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME} av_superseded
-           ON av_superseded.empresa_id = qh.empresa_id
+           ON av_superseded.empresa_id = cand.empresa_id
           AND av_superseded.funcionario_id = f.id
-        WHERE qh.deleted_at IS NULL
-          AND (
-            UPPER(TRIM(COALESCE(qf.codigo, ''))) = 'EAD'
-            OR UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
-          )
-          AND ${trainingComplianceEffectiveRequirementPredicateSql({ qualificationExpr: 'qt.id', empresaExpr: 'qh.empresa_id', requireAutoEnrollment: true, avsecSupersededFromCte: true })}
-          AND COALESCE(qh.renovada, 0) = 0
-          AND (qh.data_vencimento IS NOT NULL OR qh.data_conclusao IS NOT NULL)
+        WHERE ${trainingComplianceEffectiveRequirementPredicateSql({ qualificationExpr: 'qt.id', empresaExpr: 'cand.empresa_id', requireAutoEnrollment: true, avsecSupersededFromCte: true })}
           AND NOT EXISTS (
             SELECT 1
               FROM qualificacoes_historico qh2
-             WHERE qh2.empresa_id = qh.empresa_id
-               AND qh2.funcionario_id = qh.funcionario_id
-               AND qh2.id <> qh.id
+             WHERE qh2.empresa_id = cand.empresa_id
+               AND qh2.funcionario_id = cand.funcionario_id
+               AND qh2.id <> cand.qualificacao_historico_id
                AND qh2.deleted_at IS NULL
                AND COALESCE(qh2.renovada, 0) = 0
                AND (qh2.data_vencimento IS NOT NULL OR qh2.data_conclusao IS NOT NULL)
@@ -112,11 +150,9 @@ export function buildQualificacoesEadRenovacaoResilienteQuery(): string {
                  qh2.qualificacao_id = qt.id
                  OR UPPER(TRIM(COALESCE(qh2.qualificacao_codigo, ''))) = UPPER(TRIM(COALESCE(qt.codigo, '')))
                )
-               AND date(${vencExprQh2}) > date(${vencExpr})
+               AND date(${vencExprQh2}) > date(cand.venc_expr)
           )
-          AND date(${vencExpr}) <= date(${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}, '+' || ? || ' days')
-          AND qh.id > ?
-        ORDER BY qh.id ASC
+        ORDER BY cand.qualificacao_historico_id ASC
         LIMIT ?`;
 }
 

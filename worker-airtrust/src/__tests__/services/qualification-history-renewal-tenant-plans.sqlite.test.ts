@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { buildRenewalSqlPredicates } from '../../routes/qualificacoes/historico';
+import {
+  buildRenewalSqlPredicates,
+  buildWindowedRenewalSqlContext,
+} from '../../routes/qualificacoes/historico';
 
 const DatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as {
   new (path: string): DatabaseSyncType;
@@ -76,5 +79,56 @@ describe('PERF-06 current/renewed history: tenant-scoped selective successor che
       expect(renewal.some(s=>s.includes('idx_qh_renovacao_de'))).toBe(true);
       expect(renewal.every(s=>!s.includes('idx_qualificacoes_historico_empresa_deleted'))).toBe(true);
     }finally{db.close()}
+  });
+
+  it('windowed renewal CTE matches buildRenewalSqlPredicates row-by-row including inverted renovacao_de and tenant isolation', () => {
+    const db = openDb();
+    try {
+      const insert = db.prepare(`INSERT INTO qualificacoes_historico
+        (id,empresa_id,funcionario_id,qualificacao_codigo,status,data_conclusao,data_vencimento,renovacao_de,deleted_at)
+        VALUES (?,?,?,?,'CONCLUIDA',?,'2028-01-01',?,?)`);
+      insert.run(10, 6, 1, 'CRM', '2025-01-01', null, null);
+      insert.run(11, 7, 1, 'CRM', '2026-01-01', null, null);
+      insert.run(20, 6, 1, 'HUET', '2025-01-01', null, null);
+      insert.run(21, 6, 1, 'HUET', '2026-01-01', 20, null);
+      insert.run(30, 6, 1, 'G1', '2025-01-01', null, null);
+      insert.run(31, 7, 2, 'G1', '2026-01-01', 30, null);
+      // Inverted renovacao_de (legacy row 40 points to newer 41 -> 41 must stay current=1, active_renewed=0)
+      insert.run(40, 6, 1, 'CMA', '2025-01-01', 41, null);
+      insert.run(41, 6, 1, 'CMA', '2026-01-01', null, null);
+      insert.run(50, 6, 1, 'AVSEC', '2025-01-01', null, null);
+      db.prepare(`INSERT INTO qualificacoes_historico
+        (id,empresa_id,funcionario_id,qualificacao_codigo,status,data_conclusao,data_vencimento)
+        VALUES (51,6,1,'AVSEC','CANCELADA','2026-01-01','2028-01-01')`).run();
+
+      const legacy = buildRenewalSqlPredicates(true);
+      const windowed = buildWindowedRenewalSqlContext(true);
+      const legacyRows = db.prepare(
+        `SELECT qh.id,
+          CAST(${legacy.operationalCurrentQualificationPredicate} AS INTEGER) AS current,
+          CAST(${legacy.renewedQualificationPredicate} AS INTEGER) AS renewed,
+          CAST(${legacy.activeRenewedQualificationPredicate} AS INTEGER) AS active_renewed,
+          CAST(${legacy.activePlannedQualificationPredicate} AS INTEGER) AS active_planned
+         FROM qualificacoes_historico qh
+         LEFT JOIN qualificacoes_tipos qt ON qt.id=qh.qualificacao_id
+         WHERE qh.empresa_id=6 ORDER BY qh.id`,
+      ).all();
+      const windowedRows = db.prepare(
+        `${windowed.withClause}
+         SELECT qh.id,
+          CAST(${windowed.operationalCurrentQualificationPredicate} AS INTEGER) AS current,
+          CAST(${windowed.renewedQualificationPredicate} AS INTEGER) AS renewed,
+          CAST(${windowed.activeRenewedQualificationPredicate} AS INTEGER) AS active_renewed,
+          CAST(${windowed.activePlannedQualificationPredicate} AS INTEGER) AS active_planned
+         FROM qualificacoes_historico qh
+         LEFT JOIN qualificacoes_tipos qt ON qt.id=qh.qualificacao_id
+         ${windowed.joinClause}
+         WHERE qh.empresa_id=6 ORDER BY qh.id`,
+      ).all(6);
+
+      expect(windowedRows).toEqual(legacyRows);
+    } finally {
+      db.close();
+    }
   });
 });

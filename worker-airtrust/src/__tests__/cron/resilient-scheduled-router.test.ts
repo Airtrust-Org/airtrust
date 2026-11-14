@@ -187,7 +187,7 @@ describe('bounded cron discovery', () => {
     expect(sql).toContain('FROM treinamento_requisitos tr');
     expect(sql).toContain('COALESCE(tr.auto_matricular_ead, 0) = 1');
     expect(sql).toContain('AND qh.id > ?');
-    expect(sql).toContain('ORDER BY qh.id ASC');
+    expect(sql).toContain('ORDER BY cand.qualificacao_historico_id ASC');
     expect(sql).toContain('LIMIT ?');
     expect(EAD_RENEWAL_DISCOVERY_BATCH).toBeLessThanOrEqual(100);
     expect(EAD_RENEWAL_PROCESS_BATCH).toBeLessThanOrEqual(50);

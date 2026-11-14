@@ -1,3 +1,4 @@
+import { hasSchemaTable } from '../utils/db-schema';
 import {
   countTrainingProgramModelRows,
   loadTrainingProgramModels,
@@ -41,11 +42,7 @@ const CONFIG_TABLE = 'simuladores_curriculos_voo_config';
 const ITEMS_TABLE = 'simuladores_curriculos_voo_itens';
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .bind(tableName)
-    .first<{ name: string }>();
-  return row?.name === tableName;
+  return hasSchemaTable(db, tableName);
 }
 
 export function resolveAnnualCurriculumCycle(params: {

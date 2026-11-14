@@ -115,6 +115,99 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   };
 }
 
+// Single-pass tenant window CTE equivalent to buildRenewalSqlPredicates:
+// computes has_newer_operational once via MAX(...) OVER and derives explicit
+// renovacao_de targets once from the same materialized tenant slice.
+export function buildWindowedRenewalSqlContext(hasRenovacaoDe: boolean) {
+  const cancelledStatusFilter = sqlStatusEqualsAny(
+    "UPPER(COALESCE(qh_w.status, ''))",
+    CANCELLED_STATUS_VALUES,
+  );
+  const identExpr = `UPPER(TRIM(COALESCE(
+    NULLIF(CAST(qh_w.qualificacao_id AS TEXT), ''),
+    NULLIF(qh_w.qualificacao_codigo, ''),
+    NULLIF(qh_w.tipo, '')
+  )))`;
+  const sortTimestampExpr =
+    'datetime(COALESCE(qh_w.data_conclusao, qh_w.data_vencimento, qh_w.updated_at, qh_w.created_at))';
+  const sortKeyExpr = `${sortTimestampExpr} || '|' || printf('%015d', qh_w.id)`;
+  const withCtes = [
+    `qh_tenant_active AS MATERIALIZED (
+      SELECT qh_w.id,
+             qh_w.empresa_id,
+             qh_w.funcionario_id,
+             qh_w.qualificacao_id,
+             qh_w.qualificacao_codigo,
+             qh_w.tipo,
+             qh_w.status,
+             qh_w.data_conclusao,
+             qh_w.data_vencimento,
+             qh_w.updated_at,
+             qh_w.created_at${hasRenovacaoDe ? ',\n             qh_w.renovacao_de' : ''}
+        FROM qualificacoes_historico qh_w
+       WHERE qh_w.empresa_id = ?
+         AND qh_w.deleted_at IS NULL
+    )`,
+    `qh_newer_flags AS (
+      SELECT qh_w.id,
+             CASE
+               WHEN qh_w.ident <> ''
+                AND qh_w.max_sort_key IS NOT NULL
+                AND qh_w.own_sort_key IS NOT NULL
+                AND qh_w.max_sort_key > qh_w.own_sort_key
+               THEN 1 ELSE 0
+             END AS has_newer_operational
+        FROM (
+          SELECT qh_w.id,
+                 ${identExpr} AS ident,
+                 ${sortKeyExpr} AS own_sort_key,
+                 MAX(
+                   CASE
+                     WHEN NOT (${cancelledStatusFilter})
+                      AND COALESCE(qh_w.data_vencimento, qh_w.data_conclusao) IS NOT NULL
+                      AND ${sortTimestampExpr} IS NOT NULL
+                     THEN ${sortKeyExpr}
+                   END
+                 ) OVER (PARTITION BY qh_w.empresa_id, qh_w.funcionario_id, ${identExpr}) AS max_sort_key
+            FROM qh_tenant_active qh_w
+        ) qh_w
+    )`,
+  ];
+  if (hasRenovacaoDe) {
+    withCtes.push(
+      `qh_explicit_renewals AS (
+        SELECT DISTINCT qh_w.renovacao_de AS id
+          FROM qh_tenant_active qh_w
+         WHERE qh_w.renovacao_de IS NOT NULL
+           AND NOT (${cancelledStatusFilter})
+      )`,
+    );
+  }
+  const withClause = `WITH ${withCtes.join(',\n')}`;
+  const joinClause = `LEFT JOIN qh_newer_flags qh_nf ON qh_nf.id = qh.id${
+    hasRenovacaoDe ? '\n      LEFT JOIN qh_explicit_renewals qh_er ON qh_er.id = qh.id' : ''
+  }`;
+  const hasNewerExpr = 'COALESCE(qh_nf.has_newer_operational, 0) = 1';
+  const noNewerExpr = 'COALESCE(qh_nf.has_newer_operational, 0) = 0';
+  const explicitRenewalExpr = hasRenovacaoDe ? 'qh_er.id IS NOT NULL' : '0 = 1';
+  const renewedQualificationPredicate = `((${explicitRenewalExpr}) OR (${hasNewerExpr}))`;
+  const operationalCurrentQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND COALESCE(qh.data_vencimento, qh.data_conclusao) IS NOT NULL AND ${noNewerExpr})`;
+  const activeRenewedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND ${renewedQualificationPredicate} AND NOT (${operationalCurrentQualificationPredicate}))`;
+  const activePlannedQualificationPredicate = `(qh.deleted_at IS NULL AND NOT (${cancelledQualificationPredicate}) AND NOT (${renewedQualificationPredicate}) AND (qh.data_conclusao IS NULL OR ${sqlStatusEqualsAny(
+    QUALIFICATION_STATUS_EXPR,
+    PLANNED_QUALIFICATION_STATUS_VALUES,
+  )}))`;
+
+  return {
+    withClause,
+    joinClause,
+    operationalCurrentQualificationPredicate,
+    renewedQualificationPredicate,
+    activeRenewedQualificationPredicate,
+    activePlannedQualificationPredicate,
+  };
+}
+
 export async function hasHistoricoRenovacaoDeColumn(db: D1Database): Promise<boolean> {
   try {
     return (await getSchemaColumns(db, 'qualificacoes_historico')).has('renovacao_de');
@@ -300,20 +393,23 @@ export const getHistoricoListHandler = safe(async (c) => {
 
     const tipoJoinClause = buildQualificacoesTipoResolutionJoin('f.empresa_id', 'qt', 'qh');
 
+    const {
+      withClause: renewalWindowWithClause,
+      joinClause: renewalWindowJoinClause,
+      operationalCurrentQualificationPredicate,
+      renewedQualificationPredicate,
+      activeRenewedQualificationPredicate,
+      activePlannedQualificationPredicate,
+    } = buildWindowedRenewalSqlContext(hasRenovacaoDe);
+
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
       ${tipoJoinClause}
       LEFT JOIN modelos_aeronave ma ON CAST(ma.id AS TEXT) = f.modelo_aeronave_id AND ma.deleted_at IS NULL
-      ${categoriaJoinClause}`;
-
-    const {
-      operationalCurrentQualificationPredicate,
-      renewedQualificationPredicate,
-      activeRenewedQualificationPredicate,
-      activePlannedQualificationPredicate,
-    } = buildRenewalSqlPredicates(hasRenovacaoDe);
+      ${categoriaJoinClause}
+      ${renewalWindowJoinClause}`;
 
     const query = c.req.query();
     const routeFuncionarioId =
@@ -538,7 +634,8 @@ export const getHistoricoListHandler = safe(async (c) => {
     };
 
     if (includeStats) {
-      const statsQuery = `SELECT
+      const statsQuery = `${renewalWindowWithClause}
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN ${operationalCurrentQualificationPredicate}
           AND ${vencimentoPredicates.valida} THEN 1 ELSE 0 END) as validas,
@@ -553,21 +650,25 @@ export const getHistoricoListHandler = safe(async (c) => {
 
       const statsResult = await db
         .prepare(statsQuery)
-        .bind(...params)
+        .bind(tenantCtx.empresaId, ...params)
         .first();
 
-      // Global counts (independent of status filter) for badge chips
-      const nonStatusWhere = nonStatusConditions.join(' AND ');
-      const globalCountsQuery = `SELECT
-        SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
-        SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
-      ${baseFromAndJoins}
-      WHERE ${nonStatusWhere}`;
+      let globalCountsResult = statsResult;
+      if (selectedStatuses.length > 0) {
+        // Global counts (independent of status filter) for badge chips
+        const nonStatusWhere = nonStatusConditions.join(' AND ');
+        const globalCountsQuery = `${renewalWindowWithClause}
+        SELECT
+          SUM(CASE WHEN ${activeRenewedQualificationPredicate} THEN 1 ELSE 0 END) as renovadas,
+          SUM(CASE WHEN ${activePlannedQualificationPredicate} THEN 1 ELSE 0 END) as planejadas
+        ${baseFromAndJoins}
+        WHERE ${nonStatusWhere}`;
 
-      const globalCountsResult = await db
-        .prepare(globalCountsQuery)
-        .bind(...nonStatusParams)
-        .first();
+        globalCountsResult = await db
+          .prepare(globalCountsQuery)
+          .bind(tenantCtx.empresaId, ...nonStatusParams)
+          .first();
+      }
 
       statsPayload = {
         total: Number((statsResult as any)?.total || 0),
@@ -578,13 +679,14 @@ export const getHistoricoListHandler = safe(async (c) => {
         planejadas: Number((globalCountsResult as any)?.planejadas || 0),
       };
     } else {
-      const totalOnlyQuery = `SELECT COUNT(*) as total
+      const totalOnlyQuery = `${renewalWindowWithClause}
+      SELECT COUNT(*) as total
       ${baseFromAndJoins}
       WHERE ${whereClause}`;
 
       const totalOnlyResult = await db
         .prepare(totalOnlyQuery)
-        .bind(...params)
+        .bind(tenantCtx.empresaId, ...params)
         .first();
       statsPayload.total = Number((totalOnlyResult as any)?.total || 0);
     }
@@ -608,7 +710,8 @@ export const getHistoricoListHandler = safe(async (c) => {
       ? `${fallbackCertificadoDocIdExpr} IS NOT NULL`
       : '0 = 1';
 
-    const dataQuery = `SELECT 
+    const dataQuery = `${renewalWindowWithClause}
+    SELECT 
       qh.id,
       qh.funcionario_id,
       f.nome as funcionario_nome,
@@ -694,7 +797,7 @@ export const getHistoricoListHandler = safe(async (c) => {
     ORDER BY ${buildOrderByClause(orderBy, order)}
     LIMIT ? OFFSET ?`;
 
-    const dataParams = [...params, limitNum, offset];
+    const dataParams = [tenantCtx.empresaId, ...params, limitNum, offset];
     const { results } = await db
       .prepare(dataQuery)
       .bind(...dataParams)
@@ -838,8 +941,12 @@ router.get(
     const access = await getEmployeeSectorAccess(c, tenantCtx.empresaId);
     const employeeScope = await buildHistoricoEmployeeScopeCompat(db, access, 'f');
     const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
-    const { renewedQualificationPredicate, activeRenewedQualificationPredicate } =
-      buildRenewalSqlPredicates(hasRenovacaoDe);
+    const {
+      withClause: renewalWindowWithClause,
+      joinClause: renewalWindowJoinClause,
+      renewedQualificationPredicate,
+      activeRenewedQualificationPredicate,
+    } = buildWindowedRenewalSqlContext(hasRenovacaoDe);
 
     const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
@@ -855,7 +962,8 @@ router.get(
         AND f.deleted_at IS NULL
         AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
       ${tipoJoinClause}
-      ${categoriaJoinClause}`;
+      ${categoriaJoinClause}
+      ${renewalWindowJoinClause}`;
 
     // Item 1 (read-side filtering — contagem): once RBAC is active, a
     // gestor's stats must also be narrowed to setores with a classified
@@ -878,7 +986,8 @@ router.get(
     const datePredicates = buildVencimentoStatusPredicates('date(qh.data_vencimento)');
     const statsResult = await db
       .prepare(
-        `SELECT
+        `${renewalWindowWithClause}
+        SELECT
         COUNT(*) as total,
         SUM(CASE
           WHEN ${renewedQualificationPredicate} THEN 0
@@ -901,7 +1010,7 @@ router.get(
         AND f.empresa_id = ?
         AND ${employeeScope.clause}${statsExtraClause}`,
       )
-      .bind(tenantCtx.empresaId, ...employeeScope.bindings, ...statsReadBindings)
+      .bind(tenantCtx.empresaId, tenantCtx.empresaId, ...employeeScope.bindings, ...statsReadBindings)
       .first();
 
     const stats = {
@@ -935,10 +1044,12 @@ router.get(
     const materialized = (c.req.query('materialized') || 'false') === 'true';
     const hasRenovacaoDe = await hasHistoricoRenovacaoDeColumn(db);
     const {
+      withClause: renewalWindowWithClause,
+      joinClause: renewalWindowJoinClause,
       renewedQualificationPredicate,
       activeRenewedQualificationPredicate,
       activePlannedQualificationPredicate,
-    } = buildRenewalSqlPredicates(hasRenovacaoDe);
+    } = buildWindowedRenewalSqlContext(hasRenovacaoDe);
 
     const hasCategoriaEmpresaId = await hasTableColumn(db, 'qualificacoes_categorias', 'empresa_id');
     const hasCategoriaIdColumn = await hasTableColumn(db, 'qualificacoes_tipos', 'categoria_id');
@@ -952,7 +1063,8 @@ router.get(
     const baseFromAndJoins = `FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       ${tipoJoinClause}
-      ${categoriaJoinClause}`;
+      ${categoriaJoinClause}
+      ${renewalWindowJoinClause}`;
 
     const whereClauses: string[] = [
       'qh.deleted_at IS NULL',
@@ -1017,7 +1129,8 @@ router.get(
       // M-4: reutilizar promise in-flight existente para evitar stampede
       stats = await histCache.inflight.get(cacheKey)!;
     } else {
-      const statsQuery = `SELECT 
+      const statsQuery = `${renewalWindowWithClause}
+      SELECT 
             COUNT(*) as total,
             SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN qh.data_vencimento IS NOT NULL AND ${datePredicates.valida} THEN 1 ELSE 0 END) as validas,
             SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN qh.data_conclusao IS NULL THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) as vencendo,
@@ -1042,7 +1155,7 @@ router.get(
           const day = getTodayIsoSaoPaulo();
           const statsResult = await db
             .prepare(statsQuery)
-            .bind(...bindings)
+            .bind(tenantCtx.empresaId, ...bindings)
             .first();
           result = {
             total: Number((statsResult as any)?.total || 0),
@@ -1069,7 +1182,7 @@ router.get(
         } else {
           const statsResult = await db
             .prepare(statsQuery)
-            .bind(...bindings)
+            .bind(tenantCtx.empresaId, ...bindings)
             .first();
           result = {
             total: Number((statsResult as any)?.total || 0),
@@ -1120,7 +1233,8 @@ router.get(
     let extendedData: unknown = undefined;
     if (extended) {
       try {
-        const extQuery = `SELECT qt.categoria AS categoria,
+        const extQuery = `${renewalWindowWithClause}
+             SELECT qt.categoria AS categoria,
                   COUNT(*) AS total,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN ${datePredicates.vencida} THEN 1 ELSE 0 END) AS vencidas,
                   SUM(CASE WHEN ${renewedQualificationPredicate} THEN 0 WHEN (${datePredicates.vencendo}) THEN 1 ELSE 0 END) AS vencendo,
@@ -1132,7 +1246,7 @@ router.get(
              LIMIT 50`;
         const { results: catRows } = await db
           .prepare(extQuery)
-          .bind(...bindings)
+          .bind(tenantCtx.empresaId, ...bindings)
           .all();
         extendedData = catRows || [];
       } catch (e) {

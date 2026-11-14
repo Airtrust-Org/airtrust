@@ -11,6 +11,7 @@ import {
   type SupportAccessLevel,
 } from '../lib/rbac/platform-access';
 import { forbidden } from './error-handler';
+import { hasSchemaTable } from '../utils/db-schema';
 
 const SUPPORT_REASON_HEADER = 'x-airtrust-support-reason';
 const SUPPORT_READ_ONLY_MODE = 1;
@@ -42,11 +43,7 @@ function normalizedSupportReason(
 }
 
 async function hasTable(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
-    .bind(tableName)
-    .first<{ found: number }>();
-  return Boolean(row?.found);
+  return hasSchemaTable(db, tableName);
 }
 
 async function updateSupportSessionEnd(
