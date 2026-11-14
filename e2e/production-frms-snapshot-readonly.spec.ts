@@ -1,4 +1,5 @@
 import { expect, test, type Request, type Response } from '@playwright/test';
+import { SUPPRESSED_EXTERNAL_RESOURCE_HOSTS } from './lib/production-read-only-network-guard.mjs';
 
 /**
  * Real, authenticated production FRMS read-only browser smoke.
@@ -47,7 +48,7 @@ test('production FRMS snapshot: permitted tenant 6, no browser abort or operatio
       return;
     }
     const host = url.hostname.toLowerCase();
-    if (['fonts.googleapis.com', 'fonts.gstatic.com'].includes(host) && ['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    if (SUPPRESSED_EXTERNAL_RESOURCE_HOSTS.includes(host) && ['GET', 'HEAD', 'OPTIONS'].includes(method)) {
       await route.abort('blockedbyclient');
       return;
     }
