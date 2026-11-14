@@ -10,11 +10,11 @@
  */
 
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
-import { publishDomainEvent } from '../shared/domainEvents';
+import { publishDomainEvent } from '../../shared/domainEvents';
 import {
   isDateWithinActiveFortnight,
   resolveFuncionarioActiveFortnightForDate,
-} from '../lib/escalas/active-fortnight';
+} from '../../lib/escalas/active-fortnight';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // removerFolgaAutomaticaOrfa

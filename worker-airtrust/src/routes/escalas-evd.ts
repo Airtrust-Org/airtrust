@@ -34,7 +34,7 @@ import {
   hasTenantOwnedEvdReferences,
   MSG_EVD_REFERENCE_NOT_FOUND,
 } from './escalas-evd-tenant-guards';
-import { verificarHabilitacaoModelo } from './escalas-alocacoes-helpers-internal';
+import { verificarHabilitacaoModelo } from '../services/escalas/alocacao-helpers';
 import { CANCELLED_STATUS_VALUES, COMPLETED_STATUS_VALUES, TRAINING_CONFIRMED_STATUS_VALUES, TRAINING_IN_PROGRESS_STATUS_VALUES, isConfirmedTrainingStatus, isInProgressTrainingStatus, normalizeTrainingStatusForCompatibility, sqlStatusEqualsAny, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 const evdRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 

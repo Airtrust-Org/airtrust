@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldAllowSameEscalaOperationalReassignment } from '../../routes/escalas-alocacoes-helpers-internal';
+import { shouldAllowSameEscalaOperationalReassignment } from '../../services/escalas/alocacao-helpers';
 
 describe('shouldAllowSameEscalaOperationalReassignment', () => {
   it('permite mover alocacao operacional para outra aeronave na mesma escala', () => {

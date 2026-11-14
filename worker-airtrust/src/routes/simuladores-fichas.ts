@@ -431,7 +431,7 @@ async function criarNotificacaoFicha(
 /**
  * Extrai o userId do contexto Hono autenticado sem recorrer a `as unknown
  * as` — o parâmetro é estruturalmente compatível com `Context['get']`
- * (mesmo padrão usado em `escalas-alocacoes-helpers-internal.ts`).
+ * (mesmo padrão usado em `services/escalas/alocacao-helpers.ts`).
  */
 function getContextUserId(c: { get: (k: string) => unknown }): string {
   return String(c.get('userId') || '');

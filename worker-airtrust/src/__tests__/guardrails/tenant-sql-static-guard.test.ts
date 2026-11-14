@@ -269,8 +269,6 @@ describe('Tenant SQL Guardrail — Regression Prevention', () => {
 
     const knownOk = new Set([
       // Helper modules — receive empresa_id as function parameter from callers
-      'escalas-alocacoes-engine.ts',
-      'escalas-alocacoes-helpers-internal.ts',
       'integracoes-edapp-helpers.ts',
       'sgso-next-gen-helpers.ts',
       '../services/qualificacoes/certificados-helpers.ts',
