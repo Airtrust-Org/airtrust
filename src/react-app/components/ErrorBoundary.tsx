@@ -13,7 +13,6 @@ import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from './UI/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './UI/Card';
-import { isReloadProtectedInteractivePath } from '@/react-app/lib/reloadProtection';
 
 interface Props {
   children: ReactNode;
@@ -72,19 +71,6 @@ async function forceHardRecover(): Promise<void> {
   window.location.replace(nextUrl.toString());
 }
 
-async function hardRecoverOnce(error: Error): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  if (!isRecoverableAssetError(error)) return false;
-  if (isReloadProtectedInteractivePath(window.location.pathname)) return false;
-
-  const key = `airtrust-hard-recover:${window.location.pathname}`;
-  if (sessionStorage.getItem(key) === '1') return false;
-  sessionStorage.setItem(key, '1');
-
-  await forceHardRecover();
-  return true;
-}
-
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -110,7 +96,8 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     this.setState({ errorInfo });
-    void hardRecoverOnce(error);
+    // Do not reload automatically after a chunk error: a user may have an
+    // incomplete form or LMS activity in another part of the current tab.
 
     if (typeof window !== 'undefined' && (window as any).Sentry) {
       (window as any).Sentry.captureException(error, {
@@ -132,6 +119,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleRetry = (): void => {
+    // Explicit user interaction only. No background or error-triggered reload.
     const error = this.state.error;
     if (error && isRecoverableAssetError(error)) {
       void forceHardRecover();
@@ -209,8 +197,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
               <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/60 dark:bg-blue-950/30">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>Dica:</strong> tente recarregar a página. Se o problema persistir, entre em
-                  contato com o suporte.
+                  {this.state.error && isRecoverableAssetError(this.state.error) ? (
+                    <>Uma parte do aplicativo não foi carregada. Recarregue somente depois de salvar seu trabalho; dados não salvos podem ser perdidos.</>
+                  ) : (
+                    <>Tente novamente. Se o problema persistir, entre em contato com o suporte.</>
+                  )}
                 </p>
               </div>
 
@@ -221,7 +212,9 @@ export class ErrorBoundary extends Component<Props, State> {
                   className="flex-1"
                   leftIcon={<RefreshCw size={16} />}
                 >
-                  Tentar Novamente
+                  {this.state.error && isRecoverableAssetError(this.state.error)
+                    ? 'Recarregar Página'
+                    : 'Tentar Novamente'}
                 </Button>
                 <Button
                   onClick={this.handleGoHome}
