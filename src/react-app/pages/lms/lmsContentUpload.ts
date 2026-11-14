@@ -263,8 +263,6 @@ function assertScormReplacementCandidate(prepared: PreparedPackage) {
   }
   const release = contract.release && typeof contract.release === 'object'
     ? contract.release as Record<string, unknown> : null;
-  const assessment = contract.assessment && typeof contract.assessment === 'object'
-    ? contract.assessment as Record<string, unknown> : null;
   // The "Substituir conteúdo" button eventually activates a package.
   // Self-declared PRIVATE/REVIEW flags can only block, never authorize, release.
   if (hasBlockingScormReleaseMarker(release)) {
