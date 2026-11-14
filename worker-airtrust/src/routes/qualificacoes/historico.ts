@@ -50,6 +50,10 @@ const cancelledQualificationPredicate = sqlStatusEqualsAny(
   CANCELLED_STATUS_VALUES,
 );
 
+// PERF-06: scope both successor checks to the qualification's own company.
+// The unary + on qh_renovadora.empresa_id prevents SQLite from choosing the
+// nonselective tenant+deleted index over idx_qh_renovacao_de.
+// Confirmed by read-only EXPLAIN QUERY PLAN on production D1, 2026-11-14.
 export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
   const qualificationIdentityExpr = (qhAlias: string, qtAlias: string) =>
     `UPPER(TRIM(COALESCE(
@@ -64,6 +68,7 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
     FROM qualificacoes_historico qh_newer
     LEFT JOIN qualificacoes_tipos qt_newer ON qt_newer.id = qh_newer.qualificacao_id
     WHERE qh_newer.funcionario_id = qh.funcionario_id
+      AND qh_newer.empresa_id = qh.empresa_id
       AND qh_newer.deleted_at IS NULL
       AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_newer.status, ''))", CANCELLED_STATUS_VALUES)})
       AND COALESCE(qh_newer.data_vencimento, qh_newer.data_conclusao) IS NOT NULL
@@ -88,6 +93,7 @@ export function buildRenewalSqlPredicates(hasRenovacaoDe: boolean) {
       SELECT 1
       FROM qualificacoes_historico qh_renovadora
       WHERE qh_renovadora.deleted_at IS NULL
+        AND +qh_renovadora.empresa_id = qh.empresa_id
         AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
         AND qh_renovadora.renovacao_de = qh.id
     )`
