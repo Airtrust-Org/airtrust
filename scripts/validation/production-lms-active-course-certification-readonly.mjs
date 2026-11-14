@@ -7,7 +7,7 @@ import { chromium, webkit } from '@playwright/test';
 import { evaluateScormFunctionalCertification, classifyScormProbeResult } from './lms-scorm-functional-certification-gate.mjs';
 import { extractAnswerPlan } from './lms-scorm-answer-plan.mjs';
 import { collectRequiredDecisionSlideIndices, classifyRequiredDecisionStall } from './lms-scorm-required-decision-diagnostics.mjs';
-import { readVisibleVideo, startRealVisibleVideo } from './lms-scorm-video-playback-readonly.mjs';
+import { readVisibleVideo, startRealVisibleVideo, computeFocusedCourseBudgetMs } from './lms-scorm-video-playback-readonly.mjs';
 import { classifyPptxAssetProbe, classifyReadOnlyContentAssetProbe, classifyUncoveredContentType, summarizeCourseFormatCoverage } from './lms-format-certification-verdict.mjs';
 import {
   assert,
@@ -1944,15 +1944,11 @@ async function certifyScormCourse(browser, token, listed) {
   // plus room for the remaining lessons and assessments. NEVER seek or skip.
   const observedVideoSeconds=Number(suspend.drive_diagnostics?.video_duration_seconds||0);
   const focusedCompletionBudgetMs = COURSE_IDS.size > 0
-    ? Math.min(
-        420_000,
-        Math.max(
-          180_000,
-          slideCount * 4_000 + Number(manifest.requiredInteractions || 0) * 50_000,
-          Number.isFinite(observedVideoSeconds) && observedVideoSeconds>0
-            ? observedVideoSeconds * 1000 + 180_000 : 0,
-        ),
-      )
+    ? computeFocusedCourseBudgetMs({
+        slideCount,
+        requiredInteractions: Number(manifest.requiredInteractions || 0),
+        observedVideoSeconds,
+      })
     : 0;
   const completionBudgetMs = Math.max(
     COURSE_TIMEOUT_MS,

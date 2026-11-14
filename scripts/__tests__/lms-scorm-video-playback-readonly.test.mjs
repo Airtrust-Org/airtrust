@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readVisibleVideo,startRealVisibleVideo}
+import {readVisibleVideo,startRealVisibleVideo,computeFocusedCourseBudgetMs}
   from '../validation/lms-scorm-video-playback-readonly.mjs';
 
 function fixture({clickStarts=true,playStarts=true,visible=true,paused=true,ended=false,readyState=4}={}){
@@ -55,4 +55,24 @@ test('not-ready or absent media does not start or skip a required lesson',async(
   assert.equal(loading.metrics().clicks,0);
   const missing=fixture({visible:false});
   assert.equal((await startRealVisibleVideo(missing.frame)).kind,'absent');
+});
+
+test('focused certification allocates actual media time plus 50-slide coverage',()=>{
+  const budget=computeFocusedCourseBudgetMs({
+    slideCount:50, requiredInteractions:0, observedVideoSeconds:109.088,
+  });
+  // Previous 420s cap could expire at slide 11 while real video was still
+  // playing. This bounds a genuine extra ~11 minutes for focused diagnostics.
+  assert.equal(budget,690_000);
+  assert.ok(budget>420_000);
+});
+
+test('focused budget is finite and bounded for malformed or huge manifests',()=>{
+  assert.equal(computeFocusedCourseBudgetMs({}),180_000);
+  assert.equal(computeFocusedCourseBudgetMs({
+    slideCount:Infinity, requiredInteractions:NaN, observedVideoSeconds:-20,
+  }),180_000);
+  assert.equal(computeFocusedCourseBudgetMs({
+    slideCount:5000, requiredInteractions:999, observedVideoSeconds:99999,
+  }),1_200_000);
 });
