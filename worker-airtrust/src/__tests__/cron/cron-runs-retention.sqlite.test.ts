@@ -1,7 +1,7 @@
 /** P13-08: retencao de cron_job_runs contra SQLite com as colunas reais de producao. */
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
-import { purgeOldCronJobRuns } from '../../cron/resilient/cron-runs-retention';
+import { CRON_RUNS_PURGE_SQL, purgeOldCronJobRuns } from '../../cron/resilient/cron-runs-retention';
 
 const opened: SqliteD1Database[] = [];
 afterEach(() => {
@@ -18,6 +18,12 @@ function fixture() {
       processed_count INTEGER, failed_count INTEGER, cursor_before TEXT, cursor_after TEXT,
       error_code TEXT, metadata_json TEXT, created_at TEXT, updated_at TEXT
     );
+    -- Mirror both indices in production migration 0451. The query's INDEXED BY
+    -- guard intentionally fails closed if the governed index is absent.
+    CREATE INDEX idx_cron_job_runs_lookup
+      ON cron_job_runs(job_name, scope_key, started_at DESC);
+    CREATE INDEX idx_cron_job_runs_outcome
+      ON cron_job_runs(outcome, started_at DESC);
   `);
   return db;
 }
@@ -42,6 +48,26 @@ const count = (db: SqliteD1Database) =>
   (db.database.prepare('SELECT COUNT(*) n FROM cron_job_runs').get() as { n: number }).n;
 
 describe('P13-08 retencao de cron_job_runs', () => {
+
+  it('uses the 0451 scope/date lookup index instead of scanning every newer run', () => {
+    const db = fixture();
+    const plan = db.database.prepare('EXPLAIN QUERY PLAN ' + CRON_RUNS_PURGE_SQL)
+      .all('-60 days', 5000) as Array<{ detail: string }>;
+    const details = plan.map((step) => step.detail).join('\n');
+    expect(details).toMatch(/SEARCH n USING INDEX idx_cron_job_runs_lookup/);
+    expect(details).toMatch(/started_at[>=? ]/);
+    expect(details).not.toMatch(/SCAN (?:TABLE )?n\\b/);
+  });
+
+  it('preserves UUID ordering only as a tie-breaker when timestamps are identical', async () => {
+    const db = fixture();
+    addRun(db, 'same-time', 'same-scope', 120, true, 'aaaaaaaa-0000-4000-8000-000000000000');
+    addRun(db, 'same-time', 'same-scope', 120, true, 'bbbbbbbb-0000-4000-8000-000000000000');
+    const removed = await purgeOldCronJobRuns(db as unknown as D1Database, 60, 5000);
+    expect(removed).toBe(1);
+    const retained = db.database.prepare('SELECT id FROM cron_job_runs').all() as Array<{ id: string }>;
+    expect(retained).toEqual([{ id: 'bbbbbbbb-0000-4000-8000-000000000000' }]);
+  });
   it('remove execucoes antigas e preserva as recentes', async () => {
     const db = fixture();
     for (let i = 0; i < 5; i += 1) addRun(db, 'ead-renewal', '1', 100 + i); // antigas
