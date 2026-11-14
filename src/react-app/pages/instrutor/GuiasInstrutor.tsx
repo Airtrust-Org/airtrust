@@ -37,14 +37,18 @@ import {
   useProximasSessoesComGuia,
   type GuiaInstrutor,
 } from '@/react-app/hooks/guias-instrutor/api';
+import {
+  GUIAS_PROGRAMAS_AERONAVE,
+  GUIAS_PROGRAMAS_FUNCIONAIS,
+} from '@/react-app/types/guias-instrutor';
 import { getNomeExibicaoGuia, formatarNomeSessaoVisivel } from '@/react-app/lib/guias-instrutor/helpers';
 
-const AERONAVES = ['AW139', 'SK76'] as const;
-const PROGRAMAS: Array<{ key: GuiaInstrutor['programa']; label: string }> = [
-  { key: 'INICIAL', label: 'Inicial' },
-  { key: 'PERIODICO', label: 'Periódico' },
-  { key: 'SEMESTRAL', label: 'Semestral' },
-];
+const AERONAVES = ['AW139', 'SK76', 'FUNCIONAL'] as const;
+const AERONAVE_LABELS: Record<(typeof AERONAVES)[number], string> = {
+  AW139: 'AW139',
+  SK76: 'S-76',
+  FUNCIONAL: 'Funcional (INST/EXA)',
+};
 
 function ordemSessao(g: GuiaInstrutor): number {
   return (g.ciclo ?? 0) * 100 + (g.sessao_numero ?? 0);
@@ -178,11 +182,21 @@ function ProximasSessoes() {
 }
 
 function BibliotecaAeronave({ aeronave, busca }: { aeronave: string; busca: string }) {
-  const [programaAtivo, setProgramaAtivo] = useState<GuiaInstrutor['programa']>('INICIAL');
+  const isFuncional = aeronave === 'FUNCIONAL';
+  const programas = useMemo(
+    () =>
+      isFuncional
+        ? GUIAS_PROGRAMAS_FUNCIONAIS
+        : GUIAS_PROGRAMAS_AERONAVE.filter((p) => p.key !== 'CHECK'),
+    [isFuncional],
+  );
+  const [programaAtivo, setProgramaAtivo] = useState<GuiaInstrutor['programa']>(
+    isFuncional ? 'INSTRUTOR' : 'INICIAL',
+  );
   const { data, isLoading, isError, refetch } = useGuiasInstrutor({ aeronave, q: busca || undefined });
 
   const porPrograma = useMemo(() => {
-    const grupos: Record<string, GuiaInstrutor[]> = { INICIAL: [], PERIODICO: [], SEMESTRAL: [], CHECK: [] };
+    const grupos: Record<string, GuiaInstrutor[]> = {};
     for (const g of data || []) {
       (grupos[g.programa] ||= []).push(g);
     }
@@ -227,16 +241,16 @@ function BibliotecaAeronave({ aeronave, busca }: { aeronave: string; busca: stri
   const checkGuias = porPrograma.CHECK || [];
 
   return (
-    <Tabs defaultValue="INICIAL" value={programaAtivo} onValueChange={(v) => setProgramaAtivo(v as GuiaInstrutor['programa'])}>
+    <Tabs defaultValue={isFuncional ? 'INSTRUTOR' : 'INICIAL'} value={programaAtivo} onValueChange={(v) => setProgramaAtivo(v as GuiaInstrutor['programa'])}>
       <TabsList>
-        {PROGRAMAS.map((p) => (
+        {programas.map((p) => (
           <TabsTrigger key={p.key} value={p.key}>
             {p.label} ({(porPrograma[p.key] || []).length})
           </TabsTrigger>
         ))}
       </TabsList>
 
-      {PROGRAMAS.map((p) => {
+      {programas.map((p) => {
         const guias = porPrograma[p.key] || [];
         const porCiclo = new Map<number | null, GuiaInstrutor[]>();
         for (const g of guias) {
@@ -364,12 +378,12 @@ export function GuiasInstrutorContent() {
                 : 'border-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
           >
-            {a === 'AW139' ? 'AW139' : 'S-76'}
+            {AERONAVE_LABELS[a]}
           </button>
         ))}
       </div>
 
-      <BibliotecaAeronave aeronave={aeronaveAtiva} busca={busca} />
+      <BibliotecaAeronave key={aeronaveAtiva} aeronave={aeronaveAtiva} busca={busca} />
     </div>
   );
 }

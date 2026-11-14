@@ -162,7 +162,7 @@ function createMockEnv(empresaId = 6, corsOrigins = PROD_CORS_ORIGINS): Env {
             return { id: 1, nome: 'AW139', codigo: 'AW139' } as unknown as T;
           }
           if (
-            sql.includes('FROM simuladores_guias_instrutor') &&
+            sql.includes('FROM simuladores_guias_instrutor_v2') &&
             (sql.includes('WHERE id = ? AND empresa_id = ?') ||
               sql.includes('WHERE g.id = ? AND g.empresa_id = ?'))
           ) {

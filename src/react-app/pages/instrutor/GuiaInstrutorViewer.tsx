@@ -21,6 +21,7 @@ import {
   guiaPdfUrl,
   useGuiaInstrutor,
 } from '@/react-app/hooks/guias-instrutor/api';
+import { PROGRAMA_LABEL } from '@/react-app/types/guias-instrutor';
 import { getNomeExibicaoGuia } from '@/react-app/lib/guias-instrutor/helpers';
 
 /**
@@ -59,13 +60,6 @@ function usePdfBlobUrl(guiaId: number | null, ativo: boolean) {
 
   return { url, erro };
 }
-
-const PROGRAMA_LABEL: Record<string, string> = {
-  INICIAL: 'Inicial',
-  PERIODICO: 'Periódico',
-  SEMESTRAL: 'Semestral',
-  CHECK: 'Check / Avaliação',
-};
 
 export default function GuiaInstrutorViewer() {
   const { id } = useParams<{ id: string }>();

@@ -9,7 +9,8 @@ export function formatarNomeSessaoVisivel(nomeSessao: string): string {
   if (limpo === nomeSessao) {
     // If it didn't match the specific XX/YY pattern, try a simpler one
     // just in case there are variations like "S-76 - INICIAL - EMERGÊNCIAS"
-    const fallbackRegex = /^(?:[^-]+-\s*)+(INICIAL|PERI[OÓ]DICO|SEMESTRAL|CHECK)\s*-\s*/i;
+    const fallbackRegex =
+      /^(?:[^-]+-\s*)+(INICIAL|TRANSI[CÇ][AÃ]O|PERI[OÓ]DICO|SEMESTRAL|REQUALIFICA[CÇ][AÃ]O|RECENTE|NOTURNO|CHECK|INSTRUTOR|EXAMINADOR)\s*-\s*/i;
     limpo = limpo.replace(fallbackRegex, '');
   }
 
