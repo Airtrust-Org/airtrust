@@ -266,7 +266,6 @@ export function buildCanonicalPtoV18Plan() {
 export function buildPtoV18CanonicalMigrationStatements({
   empresaId = 6,
   versaoMatriz = PTO_V18_MATRIX_VERSION,
-  versionNumber = 1,
 } = {}) {
   if (!Number.isInteger(empresaId) || empresaId <= 0) throw new Error('empresa_id inválido');
   const plan = buildCanonicalPtoV18Plan();
@@ -317,7 +316,6 @@ WHERE EXISTS (SELECT 1 FROM empresas WHERE id=${empresaId})
 
   // 3. Modelos de sessão (88) — append-only, preserva históricos e fichas
   for (const m of plan.models) {
-    const physicalCode = `${m.codigo}@${versaoMatriz}-V${versionNumber}`;
     const desc = `Programa: ${m.programa}; natureza: ${m.natureza}; carga: ${m.carga_sessao}`;
     const qualExpr = m.qualificacao_tipo_id == null
       ? 'NULL'
@@ -327,58 +325,29 @@ WHERE EXISTS (SELECT 1 FROM empresas WHERE id=${empresaId})
   codigo,nome,tipo,descricao,duracao_estimada,ordem_no_treinamento,ativo,
   tipo_sessao_id,modelo_aeronave,gera_qualificacao,qualificacao_tipo_id,empresa_id,created_at,updated_at
 )
-SELECT '${esc(physicalCode)}','${esc(m.titulo)}','${esc(m.tipo_dispositivo)}','${esc(desc)}',${m.duracao_estimada_minutos},${m.ordem_curricular},1,
+SELECT '${esc(m.codigo)}@${esc(versaoMatriz)}-V' || (COALESCE((SELECT MAX(versao_numero) FROM modelos_sessao_versionamento WHERE empresa_id=${empresaId} AND codigo_canonico='${esc(m.codigo)}'), 0) + 1),
+  '${esc(m.titulo)}','${esc(m.tipo_dispositivo)}','${esc(desc)}',${m.duracao_estimada_minutos},${m.ordem_curricular},1,
   (SELECT id FROM tipos_sessao WHERE empresa_id=${empresaId} AND codigo='${esc(m.tipo_sessao_codigo)}' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1),
   ${sqlText(m.aeronave)},${m.gera_qualificacao},${qualExpr},${empresaId},datetime('now'),datetime('now')
 WHERE EXISTS (SELECT 1 FROM empresas WHERE id=${empresaId})
-  AND NOT EXISTS (SELECT 1 FROM modelos_sessao WHERE empresa_id=${empresaId} AND codigo='${esc(physicalCode)}' AND deleted_at IS NULL);`,
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao_versionamento msv
+     WHERE msv.empresa_id=${empresaId} AND msv.codigo_canonico='${esc(m.codigo)}' AND msv.versao_matriz='${esc(versaoMatriz)}' AND msv.is_current=1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms
+     WHERE ms.empresa_id=${empresaId} AND ms.codigo LIKE '${esc(m.codigo)}@${esc(versaoMatriz)}-V%' AND ms.deleted_at IS NULL
+  );`,
     );
   }
 
-  // 4. Superar versões anteriores ativas (sem excluir nem mutar histórico/fichas)
-  statements.push(
-    `UPDATE modelos_sessao
-   SET ativo=0, updated_at=datetime('now')
- WHERE empresa_id=${empresaId}
-   AND ativo=1
-   AND deleted_at IS NULL
-   AND codigo NOT LIKE '%@${esc(versaoMatriz)}-V${versionNumber}';`,
-  );
-  statements.push(
-    `UPDATE modelos_sessao_versionamento
-   SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
- WHERE empresa_id=${empresaId}
-   AND is_current=1
-   AND versao_matriz != '${esc(versaoMatriz)}';`,
-  );
-
-  // 5. Registrar versionamento corrente dos 88 modelos PTO-REV10-V18
-  for (const m of plan.models) {
-    const physicalCode = `${m.codigo}@${versaoMatriz}-V${versionNumber}`;
-    statements.push(
-      `INSERT INTO modelos_sessao_versionamento(
-  modelo_id,empresa_id,codigo_canonico,versao_numero,versao_matriz,is_current,modelo_anterior_id,efetivo_em,efetivo_ate
-)
-SELECT ms.id,${empresaId},'${esc(m.codigo)}',${versionNumber},'${esc(versaoMatriz)}',1,
-  (SELECT msv_old.modelo_id FROM modelos_sessao_versionamento msv_old
-    WHERE msv_old.empresa_id=${empresaId} AND msv_old.codigo_canonico='${esc(m.codigo)}' AND msv_old.modelo_id != ms.id
-    ORDER BY msv_old.versao_numero DESC, msv_old.modelo_id DESC LIMIT 1),
-  CURRENT_TIMESTAMP,NULL
-FROM modelos_sessao ms
-WHERE ms.empresa_id=${empresaId}
-  AND ms.codigo='${esc(physicalCode)}'
-  AND ms.deleted_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM modelos_sessao_versionamento msv WHERE msv.modelo_id=ms.id);`,
-    );
-  }
-
-  // 6. Vincular as 1.584 posições (1.476 técnicas + 108 funcionais)
+  // 4. Vincular as 1.584 posições (1.476 técnicas + 108 funcionais) ANTES de publicar a versão (0440 immutability trigger)
   for (const itemsChunk of chunk(plan.items, 120)) {
-    const cte = `_pto_links(codigo_canonico,codigo_fisico,ordem,manobra_codigo,execucao_pf,nome) AS (VALUES
+    const cte = `_pto_links(codigo_canonico,ordem,manobra_codigo,execucao_pf,nome) AS (VALUES
   ${itemsChunk
     .map(
       (item) =>
-        `('${esc(item.modelo)}','${esc(`${item.modelo}@${versaoMatriz}-V${versionNumber}`)}',${item.ordem},'${esc(item.codigo)}','${esc(item.execucao_pf)}','${esc(item.nome)}')`,
+        `('${esc(item.modelo)}',${item.ordem},'${esc(item.codigo)}','${esc(item.execucao_pf)}','${esc(item.nome)}')`,
     )
     .join(',\n  ')}
 )`;
@@ -389,9 +358,15 @@ INSERT INTO modelos_sessao_manobras(
 )
 SELECT ms.id,man.id,link.ordem,1,link.execucao_pf,link.nome,datetime('now'),datetime('now')
 FROM _pto_links link
-JOIN modelos_sessao ms ON ms.empresa_id=${empresaId} AND ms.codigo=link.codigo_fisico AND ms.deleted_at IS NULL
+JOIN modelos_sessao ms
+  ON ms.empresa_id=${empresaId}
+ AND ms.codigo LIKE link.codigo_canonico || '@${esc(versaoMatriz)}-V%'
+ AND ms.deleted_at IS NULL
 JOIN manobras man ON man.empresa_id=${empresaId} AND man.codigo=link.manobra_codigo AND man.deleted_at IS NULL
 WHERE NOT EXISTS (
+  SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id=ms.id
+)
+  AND NOT EXISTS (
   SELECT 1 FROM modelos_sessao_manobras existing
    WHERE existing.modelo_id=ms.id AND existing.ordem=link.ordem AND existing.deleted_at IS NULL
 );`,
@@ -410,29 +385,71 @@ SELECT msm.id,${empresaId},json_object(
   'pto_sha256','${PTO_V18_APPROVED_SOURCE_SHA}'
 )
 FROM _pto_links link
-JOIN modelos_sessao ms ON ms.empresa_id=${empresaId} AND ms.codigo=link.codigo_fisico AND ms.deleted_at IS NULL
+JOIN modelos_sessao ms
+  ON ms.empresa_id=${empresaId}
+ AND ms.codigo LIKE link.codigo_canonico || '@${esc(versaoMatriz)}-V%'
+ AND ms.deleted_at IS NULL
 JOIN modelos_sessao_manobras msm ON msm.modelo_id=ms.id AND msm.ordem=link.ordem AND msm.deleted_at IS NULL
 WHERE NOT EXISTS (
+  SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id=ms.id
+)
+  AND NOT EXISTS (
   SELECT 1 FROM modelos_sessao_manobras_contexto ctx WHERE ctx.modelo_manobra_id=msm.id
 );`,
     );
   }
 
-  // 7. Atualizar currículos de voo (G1=33, G1-SEM=106, G2=40) para os modelos PTO-REV10-V18
+  // 5. Superar versões anteriores ativas e publicar versionamento corrente dos 88 modelos PTO-REV10-V18
+  statements.push(
+    `UPDATE modelos_sessao
+   SET ativo=0, updated_at=datetime('now')
+ WHERE empresa_id=${empresaId}
+   AND ativo=1
+   AND deleted_at IS NULL
+   AND codigo NOT LIKE '%@${esc(versaoMatriz)}-V%';`,
+  );
+  statements.push(
+    `UPDATE modelos_sessao_versionamento
+   SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP
+ WHERE empresa_id=${empresaId}
+   AND is_current=1
+   AND versao_matriz != '${esc(versaoMatriz)}';`,
+  );
+
+  for (const m of plan.models) {
+    statements.push(
+      `INSERT INTO modelos_sessao_versionamento(
+  modelo_id,empresa_id,codigo_canonico,versao_numero,versao_matriz,is_current,modelo_anterior_id,efetivo_em,efetivo_ate
+)
+SELECT ms.id,${empresaId},'${esc(m.codigo)}',
+  COALESCE((SELECT MAX(versao_numero) FROM modelos_sessao_versionamento WHERE empresa_id=${empresaId} AND codigo_canonico='${esc(m.codigo)}'), 0) + 1,
+  '${esc(versaoMatriz)}',1,
+  (SELECT msv_old.modelo_id FROM modelos_sessao_versionamento msv_old
+    WHERE msv_old.empresa_id=${empresaId} AND msv_old.codigo_canonico='${esc(m.codigo)}'
+    ORDER BY msv_old.versao_numero DESC, msv_old.modelo_id DESC LIMIT 1),
+  CURRENT_TIMESTAMP,NULL
+FROM modelos_sessao ms
+WHERE ms.empresa_id=${empresaId}
+  AND ms.codigo LIKE '${esc(m.codigo)}@${esc(versaoMatriz)}-V%'
+  AND ms.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM modelos_sessao_versionamento msv WHERE msv.modelo_id=ms.id);`,
+    );
+  }
+
+  // 6. Atualizar currículos de voo (G1=33, G1-SEM=106, G2=40) para os modelos PTO-REV10-V18
   statements.push(
     `UPDATE simuladores_curriculos_voo_itens
    SET deleted_at=datetime('now'), updated_at=datetime('now')
  WHERE empresa_id=${empresaId}
    AND qualificacao_tipo_id IN (33, 106, 40)
    AND deleted_at IS NULL
-   AND EXISTS (SELECT 1 FROM modelos_sessao ms WHERE ms.empresa_id=${empresaId} AND ms.codigo='A139-P-01/03-C1@${esc(versaoMatriz)}-V${versionNumber}' AND ms.deleted_at IS NULL)
+   AND EXISTS (SELECT 1 FROM modelos_sessao ms WHERE ms.empresa_id=${empresaId} AND ms.codigo LIKE 'A139-P-01/03-C1@${esc(versaoMatriz)}-V%' AND ms.deleted_at IS NULL)
    AND modelo_sessao_id NOT IN (
-     SELECT id FROM modelos_sessao WHERE empresa_id=${empresaId} AND codigo LIKE '%@${esc(versaoMatriz)}-V${versionNumber}' AND deleted_at IS NULL
+     SELECT id FROM modelos_sessao WHERE empresa_id=${empresaId} AND codigo LIKE '%@${esc(versaoMatriz)}-V%' AND deleted_at IS NULL
    );`,
   );
 
   for (const item of FLIGHT_CURRICULA_ITEMS) {
-    const physicalCode = `${item.codigoCanonico}@${versaoMatriz}-V${versionNumber}`;
     statements.push(
       `INSERT INTO simuladores_curriculos_voo_itens(
   empresa_id,qualificacao_tipo_id,ciclo,modelo_sessao_id,codigo_canonico,ordem,created_at,updated_at
@@ -440,7 +457,7 @@ WHERE NOT EXISTS (
 SELECT ${empresaId},${item.qualificacaoTipoId},${item.ciclo},ms.id,'${esc(item.codigoCanonico)}',${item.ordem},datetime('now'),datetime('now')
 FROM modelos_sessao ms
 WHERE ms.empresa_id=${empresaId}
-  AND ms.codigo='${esc(physicalCode)}'
+  AND ms.codigo LIKE '${esc(item.codigoCanonico)}@${esc(versaoMatriz)}-V%'
   AND ms.deleted_at IS NULL
   AND EXISTS (SELECT 1 FROM simuladores_curriculos_voo_config cfg WHERE cfg.empresa_id=${empresaId} AND cfg.qualificacao_tipo_id=${item.qualificacaoTipoId} AND cfg.deleted_at IS NULL)
   AND NOT EXISTS (
@@ -460,22 +477,61 @@ WHERE ms.empresa_id=${empresaId}
 export function buildPtoV18CanonicalRollbackStatements({
   empresaId = 6,
   versaoMatriz = PTO_V18_MATRIX_VERSION,
-  versionNumber = 1,
 } = {}) {
   return [
+    // 1. Criar modelos de reversão auditada antes de publicar no versionamento (0440)
+    `INSERT INTO modelos_sessao(
+  codigo,nome,tipo,descricao,duracao_estimada,ordem_no_treinamento,ativo,
+  tipo_sessao_id,modelo_aeronave,gera_qualificacao,qualificacao_tipo_id,empresa_id,created_at,updated_at
+)
+SELECT msv_v18.codigo_canonico || '@${esc(versaoMatriz)}-REVERSAL-V' || (msv_v18.versao_numero + 1),
+  ms_prev.nome,ms_prev.tipo,ms_prev.descricao,ms_prev.duracao_estimada,ms_prev.ordem_no_treinamento,1,
+  ms_prev.tipo_sessao_id,ms_prev.modelo_aeronave,ms_prev.gera_qualificacao,ms_prev.qualificacao_tipo_id,${empresaId},datetime('now'),datetime('now')
+FROM modelos_sessao_versionamento msv_v18
+JOIN modelos_sessao_versionamento msv_prev
+  ON msv_prev.modelo_id = msv_v18.modelo_anterior_id AND msv_prev.empresa_id = ${empresaId}
+JOIN modelos_sessao ms_prev ON ms_prev.id = msv_prev.modelo_id
+WHERE msv_v18.empresa_id = ${empresaId}
+  AND msv_v18.versao_matriz = '${esc(versaoMatriz)}'
+  AND msv_v18.is_current = 1
+  AND NOT EXISTS (
+    SELECT 1 FROM modelos_sessao ms_rev
+     WHERE ms_rev.empresa_id = ${empresaId}
+       AND ms_rev.codigo = msv_v18.codigo_canonico || '@${esc(versaoMatriz)}-REVERSAL-V' || (msv_v18.versao_numero + 1)
+  );`,
+    // 2. Copiar vínculos do modelo anterior para o modelo de reversão antes da publicação
+    `INSERT INTO modelos_sessao_manobras(
+  modelo_id,manobra_id,ordem,obrigatoria,tripulante,observacoes,created_at,updated_at
+)
+SELECT ms_rev.id,msm.manobra_id,msm.ordem,msm.obrigatoria,msm.tripulante,msm.observacoes,datetime('now'),datetime('now')
+FROM modelos_sessao_versionamento msv_v18
+JOIN modelos_sessao ms_rev
+  ON ms_rev.empresa_id = ${empresaId}
+ AND ms_rev.codigo = msv_v18.codigo_canonico || '@${esc(versaoMatriz)}-REVERSAL-V' || (msv_v18.versao_numero + 1)
+JOIN modelos_sessao_manobras msm ON msm.modelo_id = msv_v18.modelo_anterior_id AND msm.deleted_at IS NULL
+WHERE msv_v18.empresa_id = ${empresaId}
+  AND msv_v18.versao_matriz = '${esc(versaoMatriz)}'
+  AND msv_v18.is_current = 1
+  AND NOT EXISTS (SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id = ms_rev.id)
+  AND NOT EXISTS (SELECT 1 FROM modelos_sessao_manobras existing WHERE existing.modelo_id = ms_rev.id AND existing.ordem = msm.ordem);`,
+    // 3. Desativar V18 e fechar is_current=0
     `UPDATE modelos_sessao SET ativo=0, updated_at=datetime('now')
- WHERE empresa_id=${empresaId} AND codigo LIKE '%@${esc(versaoMatriz)}-V${versionNumber}' AND deleted_at IS NULL;`,
-    `UPDATE modelos_sessao_versionamento SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+ WHERE empresa_id=${empresaId} AND codigo LIKE '%@${esc(versaoMatriz)}-V%' AND deleted_at IS NULL;`,
+    `UPDATE modelos_sessao_versionamento SET is_current=0, efetivo_ate=CURRENT_TIMESTAMP
  WHERE empresa_id=${empresaId} AND versao_matriz='${esc(versaoMatriz)}' AND is_current=1;`,
-    `UPDATE modelos_sessao SET ativo=1, updated_at=datetime('now')
- WHERE empresa_id=${empresaId} AND deleted_at IS NULL
-   AND id IN (
-     SELECT msv.modelo_id FROM modelos_sessao_versionamento msv
-      WHERE msv.empresa_id=${empresaId} AND msv.versao_matriz IN ('M2026.07','M2026.07-REMEDIATION')
-        AND msv.versao_numero = (
-          SELECT MAX(m2.versao_numero) FROM modelos_sessao_versionamento m2
-           WHERE m2.empresa_id=${empresaId} AND m2.codigo_canonico=msv.codigo_canonico AND m2.versao_matriz != '${esc(versaoMatriz)}'
-        )
-   );`,
+    // 4. Publicar versão de reversão auditada com is_current=1 e predecessor = modelo V18
+    `INSERT INTO modelos_sessao_versionamento(
+  modelo_id,empresa_id,codigo_canonico,versao_numero,versao_matriz,is_current,modelo_anterior_id,efetivo_em,efetivo_ate
+)
+SELECT ms_rev.id,${empresaId},msv_v18.codigo_canonico,msv_v18.versao_numero + 1,'${esc(versaoMatriz)}-REVERSAL',1,
+  msv_v18.modelo_id,CURRENT_TIMESTAMP,NULL
+FROM modelos_sessao_versionamento msv_v18
+JOIN modelos_sessao ms_rev
+  ON ms_rev.empresa_id = ${empresaId}
+ AND ms_rev.codigo = msv_v18.codigo_canonico || '@${esc(versaoMatriz)}-REVERSAL-V' || (msv_v18.versao_numero + 1)
+WHERE msv_v18.empresa_id = ${empresaId}
+  AND msv_v18.versao_matriz = '${esc(versaoMatriz)}'
+  AND msv_v18.is_current = 0
+  AND NOT EXISTS (SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id = ms_rev.id);`,
   ];
 }

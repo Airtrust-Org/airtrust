@@ -68,9 +68,10 @@ function createTestDb() {
     );
     CREATE TABLE modelos_sessao_versionamento (
       modelo_id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, codigo_canonico TEXT NOT NULL,
-      versao_numero INTEGER NOT NULL, versao_matriz TEXT NOT NULL, is_current INTEGER NOT NULL DEFAULT 1,
+      versao_numero INTEGER NOT NULL CHECK(versao_numero >= 1), versao_matriz TEXT NOT NULL, is_current INTEGER NOT NULL DEFAULT 1,
       modelo_anterior_id INTEGER, efetivo_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, efetivo_ate TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(empresa_id, codigo_canonico, versao_numero)
     );
     CREATE TABLE modelos_sessao_manobras (
       id INTEGER PRIMARY KEY AUTOINCREMENT, modelo_id INTEGER NOT NULL, manobra_id INTEGER NOT NULL,
@@ -81,6 +82,44 @@ function createTestDb() {
       modelo_manobra_id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, metadados_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TRIGGER trg_modelo_manobra_versionada_imutavel_insert
+    BEFORE INSERT ON modelos_sessao_manobras
+    WHEN EXISTS (SELECT 1 FROM modelos_sessao_versionamento v WHERE v.modelo_id = NEW.modelo_id AND v.versao_matriz <> 'LEGACY')
+    BEGIN
+      SELECT RAISE(ABORT, 'vínculo de versão publicada é imutável');
+    END;
+    CREATE TRIGGER trg_modelo_manobra_contexto_tenant_insert
+    BEFORE INSERT ON modelos_sessao_manobras_contexto
+    WHEN EXISTS (
+      SELECT 1 FROM modelos_sessao_manobras msm
+      JOIN modelos_sessao_versionamento v ON v.modelo_id = msm.modelo_id
+      WHERE msm.id = NEW.modelo_manobra_id AND v.versao_matriz <> 'LEGACY'
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'contexto de versão publicada é imutável');
+    END;
+    CREATE TRIGGER trg_modelo_versao_mesmo_tenant_insert
+    BEFORE INSERT ON modelos_sessao_versionamento
+    BEGIN
+      SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM modelos_sessao ms WHERE ms.id = NEW.modelo_id AND ms.empresa_id = NEW.empresa_id
+      ) THEN RAISE(ABORT, 'modelo e empresa divergentes') END;
+      SELECT CASE WHEN NEW.modelo_anterior_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM modelos_sessao_versionamento previous
+        WHERE previous.modelo_id = NEW.modelo_anterior_id AND previous.empresa_id = NEW.empresa_id
+          AND previous.codigo_canonico = NEW.codigo_canonico AND previous.versao_numero = NEW.versao_numero - 1
+      ) THEN RAISE(ABORT, 'modelo anterior inexistente ou pertence a outro tenant') END;
+      SELECT CASE WHEN NEW.versao_numero = 1 AND NEW.modelo_anterior_id IS NOT NULL
+        THEN RAISE(ABORT, 'versão inicial não pode ter predecessor') END;
+      SELECT CASE WHEN NEW.versao_numero > 1 AND NEW.modelo_anterior_id IS NULL
+        THEN RAISE(ABORT, 'nova versão exige predecessor imediato') END;
+    END;
+    CREATE TRIGGER trg_modelo_versao_integridade_update
+    BEFORE UPDATE ON modelos_sessao_versionamento
+    BEGIN
+      SELECT CASE WHEN OLD.is_current = 0 AND NEW.is_current = 1
+        THEN RAISE(ABORT, 'versão histórica não pode voltar a vigente; crie versão de reversão auditada') END;
+    END;
     CREATE TABLE fichas_sessao (
       id INTEGER PRIMARY KEY AUTOINCREMENT, empresa_id INTEGER NOT NULL, modelo_id INTEGER NOT NULL,
       status TEXT, resultado_final TEXT, aprovado INTEGER, assinatura_instrutor INTEGER DEFAULT 0,
@@ -115,9 +154,11 @@ function createTestDb() {
     INSERT INTO manobras (id, codigo, nome, categoria, tipo_aeronave, empresa_id) VALUES
       (364, 'A139-APP-02', 'Non-precision approach', 'PROCEDIMENTOS', 'AW139', 6);
     INSERT INTO modelos_sessao (id, codigo, nome, tipo, duracao_estimada, ativo, modelo_aeronave, empresa_id) VALUES
+      (9, 'A139-I-01/12', 'Modelo Legado V1', 'SIMULADOR', 120, 0, 'AW139', 6),
       (10, 'A139-I-01/12@M2026.07-V2', 'Modelo Antigo', 'SIMULADOR', 120, 1, 'AW139', 6);
-    INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current) VALUES
-      (10, 6, 'A139-I-01/12', 2, 'M2026.07', 1);
+    INSERT INTO modelos_sessao_versionamento (modelo_id, empresa_id, codigo_canonico, versao_numero, versao_matriz, is_current, modelo_anterior_id, efetivo_ate) VALUES
+      (9, 6, 'A139-I-01/12', 1, 'LEGACY', 0, NULL, CURRENT_TIMESTAMP),
+      (10, 6, 'A139-I-01/12', 2, 'M2026.07', 1, 9, NULL);
     INSERT INTO simuladores_curriculos_voo_itens (empresa_id, qualificacao_tipo_id, ciclo, modelo_sessao_id, codigo_canonico, ordem) VALUES
       (6, 33, 1, 10, 'A139-P-04/04-C1-CHECK', 4);
     INSERT INTO fichas_sessao (id, empresa_id, modelo_id, status, resultado_final, aprovado, assinatura_instrutor, assinatura_instrutor_timestamp) VALUES
@@ -232,15 +273,17 @@ describe('PTO V18 canonical migration', () => {
 
     const rollbackSql = buildPtoV18CanonicalRollbackStatements({ empresaId: 6 }).join('\n');
     sqliteExec(dbPath, rollbackSql);
-    const [restoredLegacy] = sqliteJson<{ ativo: number }>(
+    const [restoredReversal] = sqliteJson<{ total: number }>(
       dbPath,
-      `SELECT ativo FROM modelos_sessao WHERE id = 10`,
+      `SELECT COUNT(*) as total FROM modelos_sessao ms
+       JOIN modelos_sessao_versionamento msv ON msv.modelo_id = ms.id
+       WHERE ms.empresa_id = 6 AND ms.ativo = 1 AND msv.is_current = 1 AND msv.versao_matriz = 'PTO-REV10-V18-REVERSAL' AND msv.codigo_canonico = 'A139-I-01/12'`,
     );
-    expect(restoredLegacy.ativo).toBe(1);
+    expect(restoredReversal.total).toBe(1);
     const [activeV18AfterRollback] = sqliteJson<{ total: number }>(
       dbPath,
       `SELECT COUNT(*) as total FROM modelos_sessao
-       WHERE empresa_id = 6 AND ativo = 1 AND codigo LIKE '%@PTO-REV10-V18-V1'`,
+       WHERE empresa_id = 6 AND ativo = 1 AND codigo LIKE '%@PTO-REV10-V18-V%' AND codigo NOT LIKE '%REVERSAL%'`,
     );
     expect(activeV18AfterRollback.total).toBe(0);
   });
