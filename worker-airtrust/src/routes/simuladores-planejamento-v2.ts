@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { hasSchemaTable } from '../utils/db-schema';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
@@ -107,11 +108,7 @@ function daysDistance(left: string, right: string): number {
 }
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .bind(tableName)
-    .first<{ name: string }>();
-  return row?.name === tableName;
+  return hasSchemaTable(db, tableName);
 }
 
 async function loadTrainingCoverageRules(

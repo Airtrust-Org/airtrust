@@ -13,7 +13,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env, Variables, JwtPayload } from '../types';
 import { extractBearerToken, verifyJWT } from '../utils/security';
-import { getUsuariosSchema, hasUsuariosEmpresasTable } from '../utils/db-schema';
+import { getUsuariosSchema, hasSchemaTable, hasUsuariosEmpresasTable } from '../utils/db-schema';
 import { normalizeAirtrustRole } from '../utils/role-resolution';
 import {
   parseSessionRoleFromCookieHeader,
@@ -33,9 +33,6 @@ export { isTransientD1Error, withD1Retry, resetPlatformAccessCache, invalidatePl
 import { readCourseAssetSessionPayload } from '../lib/lms/lms-asset-session';
 import { isScormHandoffSessionCurrent } from '../services/lms-scorm-handoff-session';
 import { isAccessTokenRevoked } from '../services/auth-session-revocation';
-
-const USUARIOS_TABLE_SQL =
-  "SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = 'usuarios' LIMIT 1";
 
 function isDevAuthBypassEnabled(env: Env): boolean {
   return env.ENVIRONMENT === 'development' && env.ENABLE_DEV_AUTH_BYPASS === 'true';
@@ -432,7 +429,7 @@ async function resolveDevEmpresaId(db: D1Database, userId: number): Promise<numb
     }
   }
 
-  const usuariosExists = await hasTable(db, USUARIOS_TABLE_SQL);
+  const usuariosExists = await hasSchemaTable(db, 'usuarios');
 
   if (usuariosExists) {
     const fallbackEmpresa = await withD1Retry(() =>

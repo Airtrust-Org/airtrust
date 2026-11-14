@@ -71,9 +71,18 @@ export async function hasSchemaTable(db: D1Database, tableName: string): Promise
     db
       .prepare("SELECT 1 as found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
       .bind(normalizedTableName)
-      .first<{ found: number }>(),
+      .first<Record<string, unknown>>(),
   );
-  const exists = Boolean(result?.found);
+  const exists = Boolean(
+    result &&
+      ('found' in result
+        ? result.found
+        : 'cnt' in result
+          ? result.cnt
+          : 'count' in result
+            ? result.count
+            : true),
+  );
   cache.set(normalizedTableName, exists);
   if (!isVitestEnvironment()) {
     _globalTableExistenceCache.set(normalizedTableName, exists);

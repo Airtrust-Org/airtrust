@@ -3,7 +3,7 @@ import {
   filterRequestedSetorIdsByAccess,
   type EmployeeSectorAccess,
 } from '../middleware/employee-sector-access';
-import { getSchemaColumns } from '../utils/db-schema';
+import { getSchemaColumns, hasSchemaTable } from '../utils/db-schema';
 
 export function buildCourseSetorScope(
   access: EmployeeSectorAccess,
@@ -139,17 +139,7 @@ export function buildCatalogCourseReadScope(
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
   try {
-    const row = await db
-      .prepare(
-        `SELECT 1 AS ok
-           FROM sqlite_master
-          WHERE type = 'table'
-            AND name = ?
-          LIMIT 1`,
-      )
-      .bind(tableName)
-      .first<{ ok: number }>();
-    return row?.ok === 1;
+    return await hasSchemaTable(db, tableName);
   } catch {
     return true;
   }

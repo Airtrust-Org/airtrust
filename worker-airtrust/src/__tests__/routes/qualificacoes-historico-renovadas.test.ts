@@ -86,6 +86,7 @@ vi.mock('../../middleware/employee-sector-access', () => ({
 
 import historicoRouter, {
   buildRenewalSqlPredicates,
+  buildWindowedRenewalSqlContext,
 } from '../../routes/qualificacoes/historico';
 
 function createApp(db: D1Database) {
@@ -274,8 +275,10 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(body.data.renovadas).toBe(160);
 
     const statsQuery = calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
-    expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
-    expect(statsQuery).toContain('qh_newer.id > qh.id');
+    expect(statsQuery).toContain('qh_explicit_renewals');
+    expect(statsQuery).toContain('qh_newer_flags');
+    expect(statsQuery).toContain('qh_er.id IS NOT NULL');
+    expect(statsQuery).toContain('COALESCE(qh_nf.has_newer_operational, 0) = 1');
   });
 
   it('mantem SQL valido quando a coluna renovacao_de ainda nao existe no D1 local', async () => {
@@ -292,7 +295,8 @@ describe('qualificacoes historico renovadas contract', () => {
     const statsQuery =
       calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
     expect(statsQuery).not.toContain('qh.renovacao_de');
-    expect(statsQuery).toContain('qh_newer.id > qh.id');
+    expect(statsQuery).not.toContain('qh_explicit_renewals');
+    expect(statsQuery).toContain('qh_newer_flags');
   });
 
   it('filtra e serializa renovadas pelo registro anterior que recebeu renovacao posterior', async () => {
@@ -318,8 +322,8 @@ describe('qualificacoes historico renovadas contract', () => {
 
     const statsQuery =
       calls.find((call) => call.query.includes('COUNT(*) as total'))?.query || '';
-    expect(statsQuery).toContain('qh_renovadora.renovacao_de = qh.id');
-    expect(statsQuery).toContain('qh_newer.id > qh.id');
+    expect(statsQuery).toContain('qh_explicit_renewals');
+    expect(statsQuery).toContain('qh_newer_flags');
   });
 
   it('tem_renovacao_posterior da linha usa o mesmo guard de vigencia operacional do contador (regressao AW139/Altemir)', async () => {
@@ -342,18 +346,13 @@ describe('qualificacoes historico renovadas contract', () => {
     expect(posteriorIdx).toBeGreaterThan(-1);
     expect(vigenteIdx).toBeGreaterThan(-1);
 
-    // A coluna tem_renovacao_posterior precisa excluir o registro que é o
-    // vigente operacional (nenhum qh_newer mais recente da mesma
-    // qualificação) — igual ao que activeRenewedQualificationPredicate faz
-    // para o contador global. Sem essa exclusão, um link renovacao_de
-    // gravado ao contrário derruba o registro atual como RENOVADA.
-    // A checagem "qh_newer" (mesma usada por vigente_operacional) precisa
-    // aparecer também antes da coluna tem_renovacao_posterior — prova de que
-    // ambas as colunas compartilham o mesmo guard de vigência operacional.
-    const occurrencesBeforePosterior = dataQuery
-      .slice(0, posteriorIdx)
-      .split('qh_newer.funcionario_id = qh.funcionario_id').length - 1;
-    expect(occurrencesBeforePosterior).toBeGreaterThanOrEqual(1);
+    const windowedPredicates = buildWindowedRenewalSqlContext(true);
+    expect(dataQuery.slice(0, posteriorIdx)).toContain(
+      windowedPredicates.activeRenewedQualificationPredicate,
+    );
+    expect(dataQuery.slice(0, posteriorIdx)).toContain(
+      windowedPredicates.operationalCurrentQualificationPredicate,
+    );
   });
 
   it('mantem a sessao vigente com renovacao_de como valida quando nao houve substituicao posterior', async () => {

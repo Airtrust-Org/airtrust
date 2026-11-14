@@ -1,12 +1,10 @@
+import { hasSchemaTable } from '../utils/db-schema';
+
 export type CanonicalSector = { id: number; nome: string };
 export type CanonicalFunction = { id: number; nome: string };
 
 async function tableExists(db: D1Database, name: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
-    .bind(name)
-    .first<{ ok: number }>();
-  return row?.ok === 1;
+  return hasSchemaTable(db, name);
 }
 
 export async function resolveCanonicalSector(

@@ -275,11 +275,13 @@ export const TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE = (() => {
   const otherPriority = trainingComplianceRulePrioritySql(other);
   return `${TRAINING_COMPLIANCE_AVSEC_SUPERSEDED_CTE_NAME}(empresa_id, funcionario_id) AS (
     SELECT DISTINCT ${f}.empresa_id, ${f}.id
-      FROM funcionarios ${f}
-      JOIN treinamento_requisitos ${special} ON ${special}.empresa_id=${f}.empresa_id
-      JOIN qualificacoes_tipos qt_avsec ON qt_avsec.id=${special}.qualificacao_tipo_id
-        AND qt_avsec.empresa_id=${special}.empresa_id AND qt_avsec.deleted_at IS NULL
-     WHERE ${f}.deleted_at IS NULL AND UPPER(TRIM(qt_avsec.codigo))='D1'
+      FROM qualificacoes_tipos qt_avsec
+      CROSS JOIN treinamento_requisitos ${special}
+        ON ${special}.qualificacao_tipo_id=qt_avsec.id
+       AND ${special}.empresa_id=qt_avsec.empresa_id
+      CROSS JOIN funcionarios ${f}
+        ON ${f}.empresa_id=${special}.empresa_id
+     WHERE qt_avsec.deleted_at IS NULL AND ${f}.deleted_at IS NULL AND UPPER(TRIM(qt_avsec.codigo))='D1'
        AND ${special}.ativo=1 AND ${special}.deleted_at IS NULL
        AND ${special}.obrigatoriedade='OBRIGATORIA'
        AND SUBSTR(UPPER(TRIM(COALESCE(${special}.perfil_competencia,''))),1,6)='AVSEC_'

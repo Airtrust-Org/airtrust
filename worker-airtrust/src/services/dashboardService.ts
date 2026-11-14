@@ -4,6 +4,7 @@
  */
 
 import type { D1Database } from '@cloudflare/workers-types';
+import { hasSchemaTable } from '../utils/db-schema';
 import type {
   DashboardMetrics,
   AlertaCritico,
@@ -52,19 +53,7 @@ function getSaoPauloDateTimeKey(now = new Date()): string {
 }
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare(
-      `SELECT name
-       FROM sqlite_master
-       WHERE type = 'table'
-         AND name = ?
-       LIMIT 1`,
-    )
-    .bind(tableName)
-    .first<{ name?: string }>()
-    .catch(() => null);
-
-  return Boolean(row?.name);
+  return hasSchemaTable(db, tableName);
 }
 
 export interface DashboardSimuladoresAlertasResumo {
