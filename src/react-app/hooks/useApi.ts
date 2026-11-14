@@ -328,6 +328,18 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     return fetchData();
   }, [fetchData, url]);
 
+  // Keep mounted legacy data readers fresh as well as the shared LRU cache.
+  // Migration to React Query can happen incrementally; stale values must not
+  // remain visible in an already-open tab after another form saves a change.
+  useEffect(() => {
+    if (!enabled || (optionsMethod || 'GET').toUpperCase() !== 'GET') return;
+    const requestedUrl = buildFullUrl(url).toLowerCase();
+    const relevantScopes = (Object.keys(apiCacheDomains) as Array<Exclude<DataChangeScope, 'all'>>)
+      .filter((scope) => apiCacheDomains[scope].some((part) => requestedUrl.includes(part)));
+    if (relevantScopes.length === 0) return;
+    return onDataChanged(() => { void refetch(); }, relevantScopes);
+  }, [enabled, optionsMethod, refetch, url]);
+
   return { data, loading, error, refetch };
 }
 
