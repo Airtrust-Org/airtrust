@@ -381,6 +381,44 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     expect(audit.results?.map((record) => record.transition)).toEqual(['CREATED']);
   });
 
+  it('8c. stale reconciliation read cannot append duplicate MISSING history', async () => {
+    const inner = createSqliteD1();
+    const period = { from: '2026-08-01', to: '2026-08-01' };
+    await runSigvoosShadowIngestion(
+      inner, 10, period, {}, { createClient: () => makeClient([[rawLeg()], []]) },
+    );
+    const stale = await inner.prepare(
+      "SELECT id, identity_key, source_fingerprint, normalized_json FROM sigvoos_shadow_legs WHERE empresa_id = 10",
+    ).all();
+    await runSigvoosShadowIngestion(
+      inner, 10, period, {}, { createClient: () => makeClient([[], []]) },
+    );
+    const before = (await inner.prepare(
+      "SELECT COUNT(*) AS c FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'MISSING_FROM_SOURCE'",
+    ).first<{ c: number }>())!.c;
+    expect(before).toBe(1);
+
+    // Simulate a stale SELECT racing with an already-committed transition.
+    const db = {
+      prepare(sql: string) {
+        if (sql.includes('SELECT id, identity_key, source_fingerprint, normalized_json') &&
+            sql.includes('FROM sigvoos_shadow_legs')) {
+          return { bind: () => ({ all: async () => stale }) };
+        }
+        return inner.prepare(sql);
+      },
+      batch: inner.batch.bind(inner),
+    } as unknown as D1Database;
+    const replay = await runSigvoosShadowIngestion(
+      db, 10, period, {}, { createClient: () => makeClient([[], []]) },
+    );
+    expect(replay.status).toBe('COMPLETE');
+    const after = (await inner.prepare(
+      "SELECT COUNT(*) AS c FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'MISSING_FROM_SOURCE'",
+    ).first<{ c: number }>())!.c;
+    expect(after).toBe(1);
+  });
+
   it('9. retry after a failure converges without duplicating', async () => {
     const db = createSqliteD1();
     let firstCall = true;
