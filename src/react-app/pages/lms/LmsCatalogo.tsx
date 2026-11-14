@@ -809,7 +809,7 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
-    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
+    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
@@ -1287,7 +1287,7 @@ function CourseDrawer({
                           <p className="mt-1">{directReplacement
                             ? 'Ao enviar o ZIP SCORM válido, o conteúdo anterior será substituído e o curso permanecerá ativo. Históricos concluídos são preservados.'
                             : scormProfile === 'PRIVATE'
-                              ? 'Este ZIP está marcado como PRIVADO / NÃO CERTIFICADO. Não pode ser enviado nem substituído pelo fluxo de produção. Faça a homologação fora da produção e utilize apenas uma edição liberada.'
+                              ? 'Este ZIP está marcado como PRIVADO / NÃO CERTIFICADO. Pode ser recebido somente como candidato INATIVO para homologação, sem substituir o conteúdo publicado.'
                               : 'A substituição automática é feita por administradores. Este perfil não pode publicar o curso.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
@@ -1532,9 +1532,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — substituição bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'Enviar ZIP para homologação (INATIVO)' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (
