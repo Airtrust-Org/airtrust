@@ -51,7 +51,7 @@ export default function Sistema() {
   });
 
   // The deep result, not the D1-only response, is authoritative for R2 health.
-  const health = deepRequested && deepHealth ? deepHealth : quickHealth;
+  const health = deepRequested && !deepError && deepHealth ? deepHealth : quickHealth;
   const healthLoading = quickLoading && !deepHealth;
   const healthError = quickError;
 
