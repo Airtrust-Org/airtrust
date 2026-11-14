@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-12",
-    "last_reconciled_against": "0581 tenant-6 synthetic LMS QA fixture purge reviewed; protected production apply pending",
-    "schema_v2_digest": "23b2490d092ffd8cc274dce7f006a3133d4dca780dd51989ef23e9f3d4181bb3",
+    "last_reconciled_at": "2026-11-14",
+    "last_reconciled_against": "0584 AVSEC D1 Tripulantes-only reviewed; governed production apply pending",
+    "schema_v2_digest": "d074f66891f68df54312772e0ab88d93fc339258ba973470fcd078f7a7cd98e9",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1830,6 +1830,18 @@
       "reviewed_manifest": "lms-cycle-progress-reconcile-0582.json",
       "evidence": "worker-airtrust/schema-v2/plans/lms-cycle-progress-reconcile-0582.md",
       "note": "Data-only CAS update of exactly two stale LMS cycles with hard pre/post snapshot checks, two audit rows, protected eight gates, D1 Time Travel and readback; no DDL and no automatic D1 writes on merge."
+    },
+    {
+      "change_file": "0584_avsec_competency_models.sql",
+      "change_id": "avsec-competency-models-0584",
+      "sha256": "fb31f59f6c2a8aa086c7a632786ed59d08d07fb62c5c4b7ecb5f9aec3df014d7",
+      "targets": [],
+      "domain": "Training Compliance tenant 6: D1 AVSEC Tripulantes only, retire corporate qualification and delete its single historical row as expressly authorized",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "avsec-competency-models-0584.json",
+      "evidence": "worker-airtrust/schema-v2/plans/avsec-competency-models-0584.md",
+      "note": "Data-only tenant 6 change. Keeps 31 AVSEC D1 tripulante histories, retires five non-tripulante/corporate requirements, detaches one notification FK and deletes the sole AVSEC corporate historical row. Requires exact SHA, eight release gates, D1 Time Travel, reviewed pre/postconditions and controlled production authorization; no remote write on merge."
     }
   ]
 }
