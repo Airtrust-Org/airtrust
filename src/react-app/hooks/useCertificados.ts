@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { useCallback, useEffect, useState } from 'react';
+import { fetchWithAuth } from '@/react-app/config/api';
 import { baixarCertificadoCanonico } from '@/react-app/utils/certificadoDownload';
+import { notifyDataChanged, onDataChanged } from '@/react-app/utils/data-sync';
 
 export interface Certificado {
   id: number;
@@ -29,17 +30,6 @@ export interface UseCertificadosReturn {
   refetch: () => Promise<void>;
 }
 
-const getToken = () => getAccessToken() || '';
-
-/**
- * Hook para gerenciar certificados de uma qualificação
- *
- * Usa endpoint ÚNICO e centralizado:
- *   GET /api/certificados/historico/:qualificacao_id/certificados
- *
- * @param qualificacao_id ID do histórico de qualificação
- * @returns Objeto com certificados, operações e estado
- */
 export function useCertificados(qualificacao_id: number | null): UseCertificadosReturn {
   const [certificados, setCertificados] = useState<Certificado[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +38,7 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
   /**
    * Carrega certificados da API
    */
-  const carregar = async () => {
+  const carregar = useCallback(async () => {
     if (!qualificacao_id) {
       setCertificados([]);
       return;
@@ -59,11 +49,8 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
       setError(null);
 
       // Endpoint único para listar certificados de uma qualificação
-      const response = await fetch(
-        `${API_BASE_URL}/certificados/historico/${qualificacao_id}/certificados`,
-        {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        },
+      const response = await fetchWithAuth(
+        `/api/certificados/historico/${qualificacao_id}/certificados`,
       );
 
       if (!response.ok) {
@@ -100,7 +87,7 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
     } finally {
       setLoading(false);
     }
-  };
+  }, [qualificacao_id]);
 
   /**
    * Gera novo certificado PDF
@@ -116,14 +103,10 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/certificados/historico/${qualificacao_id}/certificados/gerar`,
+      const response = await fetchWithAuth(
+        `/api/certificados/historico/${qualificacao_id}/certificados/gerar`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${getToken()}`,
-          },
         },
       );
 
@@ -135,8 +118,9 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
       const resultado = await response.json();
       console.log('✅ [useCertificados] Certificado gerado:', resultado.data);
 
-      // Recarregar lista de certificados para exibir o novo
+      // Recarregar lista de certificados e sincronizar módulos relacionados
       await carregar();
+      notifyDataChanged('qualificacoes');
 
       return resultado.data;
     } catch (err) {
@@ -183,7 +167,13 @@ export function useCertificados(qualificacao_id: number | null): UseCertificados
     if (qualificacao_id) {
       carregar();
     }
-  }, [qualificacao_id]);
+    return onDataChanged(
+      () => {
+        if (qualificacao_id) void carregar();
+      },
+      ['qualificacoes', 'lms'],
+    );
+  }, [qualificacao_id, carregar]);
 
   return {
     certificados,

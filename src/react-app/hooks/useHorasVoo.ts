@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
+import { fetchWithAuth } from '@/react-app/config/api';
+import { tenantQueryKey } from '@/react-app/lib/query-client';
 
 export interface HorasVooFilters {
   page?: number;
@@ -48,19 +49,11 @@ export interface LancamentoHorasVooDTO {
   numero_voo?: string | null;
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = getAccessToken();
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithAuth(`/api${path}`, {
     ...init,
     headers: {
-      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
       ...(init?.headers || {}),
     },
   });
@@ -84,7 +77,7 @@ function buildParams(filters: HorasVooFilters): string {
 
 export function useHorasVooTotais(funcionarioId: number) {
   return useQuery({
-    queryKey: ['horas-voo-totais', funcionarioId],
+    queryKey: tenantQueryKey(undefined, 'horas-voo-totais', funcionarioId),
     queryFn: () => requestJson(`/horas-voo/${funcionarioId}/totais`).then((r) => r.data),
     staleTime: 5 * 60 * 1000,
     enabled: Number.isFinite(funcionarioId) && funcionarioId > 0,
@@ -93,7 +86,7 @@ export function useHorasVooTotais(funcionarioId: number) {
 
 export function useHorasVooLancamentos(funcionarioId: number, filters: HorasVooFilters) {
   return useQuery({
-    queryKey: ['horas-voo-lancamentos', funcionarioId, filters],
+    queryKey: tenantQueryKey(undefined, 'horas-voo-lancamentos', funcionarioId, filters),
     queryFn: () => {
       const qs = buildParams(filters);
       return requestJson(`/horas-voo/${funcionarioId}/lancamentos${qs ? `?${qs}` : ''}`);
@@ -105,7 +98,7 @@ export function useHorasVooLancamentos(funcionarioId: number, filters: HorasVooF
 
 export function useHorasVooSaldo(funcionarioId: number) {
   return useQuery({
-    queryKey: ['horas-voo-saldo', funcionarioId],
+    queryKey: tenantQueryKey(undefined, 'horas-voo-saldo', funcionarioId),
     queryFn: () => requestJson(`/horas-voo/${funcionarioId}/saldo`).then((r) => r.data),
     enabled: Number.isFinite(funcionarioId) && funcionarioId > 0,
   });
@@ -120,8 +113,8 @@ export function useUpsertSaldoInicial(funcionarioId: number) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-totais', funcionarioId] });
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-saldo', funcionarioId] });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-totais', funcionarioId) });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-saldo', funcionarioId) });
     },
   });
 }
@@ -135,8 +128,8 @@ export function useCreateLancamentoHorasVoo(funcionarioId: number) {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-lancamentos', funcionarioId] });
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-totais', funcionarioId] });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-lancamentos', funcionarioId) });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-totais', funcionarioId) });
     },
   });
 }
@@ -149,8 +142,8 @@ export function useDeleteLancamentoHorasVoo(funcionarioId: number) {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-lancamentos', funcionarioId] });
-      queryClient.invalidateQueries({ queryKey: ['horas-voo-totais', funcionarioId] });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-lancamentos', funcionarioId) });
+      queryClient.invalidateQueries({ queryKey: tenantQueryKey(undefined, 'horas-voo-totais', funcionarioId) });
     },
   });
 }

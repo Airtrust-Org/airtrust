@@ -187,9 +187,8 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         if (requireAuth && !skipAuth && !authToken) return;
 
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (method === 'GET') {
-          headers['Cache-Control'] = 'no-cache';
-          if (bypassGetCache) headers['X-AirTrust-Bypass-Cache'] = '1';
+        if (method === 'GET' && bypassGetCache) {
+          headers['X-AirTrust-Bypass-Cache'] = '1';
         }
 
         let requestUrl = fullUrl;
@@ -210,6 +209,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         const response = await (skipAuth ? apiFetch : appFetch)(requestUrl, {
           method,
           headers,
+          ...(method === 'GET' ? { cache: 'no-store' as const } : {}),
           ...(requestAbortController ? { signal: requestAbortController.signal } : {}),
         });
         if (requestGeneration !== requestGenerationRef.current) return;

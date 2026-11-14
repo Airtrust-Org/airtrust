@@ -1,4 +1,12 @@
-const FRMS_INTERACTIVE_CHECKIN = /^\/frms\/(?:checkin|fadiga-checkin)(?:\/|$)/;
+const INTERACTIVE_PROTECTED_PATHS = [
+  /^\/frms\/(?:checkin|fadiga-checkin)(?:\/|$)/,
+  /^\/lms\/(?:provas?|player)(?:\/|$)/,
+  /^\/avaliacoes(?:\/|$)/,
+  /^\/escalas(?:\/|$)/,
+  /^\/simuladores(?:\/|$)/,
+  /^\/qualificacoes(?:\/|$)/,
+  /^\/pilot(?:\/|$)/,
+];
 
 /**
  * Interactive flows that must never be hard-reloaded automatically.
@@ -6,5 +14,6 @@ const FRMS_INTERACTIVE_CHECKIN = /^\/frms\/(?:checkin|fadiga-checkin)(?:\/|$)/;
  * refresh must defer until the operator leaves the flow.
  */
 export function isReloadProtectedInteractivePath(pathname: string): boolean {
-  return FRMS_INTERACTIVE_CHECKIN.test(String(pathname || ''));
+  const normalized = String(pathname || '');
+  return INTERACTIVE_PROTECTED_PATHS.some((pattern) => pattern.test(normalized));
 }
