@@ -26,6 +26,7 @@ import {
   PLANNED_QUALIFICATION_STATUS_VALUES,
   sqlStatusEqualsAny,
 } from '../lib/status/status-codes';
+import { buildCurrentOperationalQualificationPredicate as buildCanonicalCurrentQualificationPredicate } from '../lib/qualificacoes/operational-qualification-predicates';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,19 +75,6 @@ function buildNewerDashboardQualificationExists(alias = 'qh'): string {
   )`;
 }
 
-function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
-  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
-  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
-  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
-  const newerExists = buildNewerDashboardQualificationExists(alias);
-
-  return `(${alias}.deleted_at IS NULL
-    AND NOT (${cancelled})
-    AND NOT (${planned})
-    AND ${alias}.data_conclusao IS NOT NULL
-    AND NOT (${newerExists}))`;
-}
-
 function buildDashboardRenewalSqlPredicates() {
   const legacyRenewedPredicate = `(COALESCE(qh.renovada, 0) = 1 OR ${sqlStatusEqualsAny(
     QUALIFICATION_STATUS_EXPR,
@@ -130,7 +118,7 @@ app.get('/qualificacoes', async (c) => {
       }, 503);
     }
     const { legacyRenewedPredicate } = buildDashboardRenewalSqlPredicates();
-    const currentOperationalPredicate = buildCurrentOperationalQualificationPredicate('qh');
+    const currentOperationalPredicate = buildCanonicalCurrentQualificationPredicate('qh');
     const newerQualificationExistsPredicate = buildNewerDashboardQualificationExists('qh');
 
     // Canonical rule: older realizations of the same employee+qualification are
@@ -141,7 +129,9 @@ app.get('/qualificacoes', async (c) => {
           SELECT 1 FROM qualificacoes_historico qh_renovadora
           WHERE qh_renovadora.deleted_at IS NULL
             AND +qh_renovadora.empresa_id = qh.empresa_id
+            AND qh_renovadora.data_conclusao IS NOT NULL
             AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", CANCELLED_STATUS_VALUES)})
+            AND NOT (${sqlStatusEqualsAny("UPPER(COALESCE(qh_renovadora.status, ''))", PLANNED_QUALIFICATION_STATUS_VALUES)})
             AND qh_renovadora.renovacao_de = qh.id
         )`
       : legacyRenewedPredicate;
@@ -182,7 +172,7 @@ app.get('/qualificacoes', async (c) => {
         LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
           AND f.deleted_at IS NULL
           AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
-        LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
+        LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
         WHERE qh.deleted_at IS NULL
           AND f.id IS NOT NULL
           AND f.empresa_id = ?
@@ -221,7 +211,7 @@ app.get('/qualificacoes', async (c) => {
         `
         SELECT qt.categoria, COUNT(*) as total
         FROM qualificacoes_historico qh
-        LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.deleted_at IS NULL
+        LEFT JOIN qualificacoes_tipos qt ON qh.qualificacao_id = qt.id AND qt.empresa_id = qh.empresa_id AND qt.deleted_at IS NULL
         LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
           AND f.deleted_at IS NULL
           AND UPPER(COALESCE(f.status, 'ATIVO')) = 'ATIVO'
