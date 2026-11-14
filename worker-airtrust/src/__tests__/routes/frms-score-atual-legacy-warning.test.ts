@@ -61,7 +61,7 @@ function createMockDb() {
           };
         }
 
-        if (query.includes('WITH score_base AS')) {
+        if (query.includes('score_base AS')) {
           return {
             first: async () => ({ frms_score: 70, frms_status: 'critico' }),
           };
@@ -145,7 +145,7 @@ describe('GET /frms/score-atual/:funcionarioid legacy semantics', () => {
             if (query.includes("date(data) >= date('now','-28 days')")) {
               return { first: async () => ({ minutos: 1200 }) };
             }
-            if (query.includes('WITH score_base AS')) {
+            if (query.includes('score_base AS')) {
               return { first: async () => ({ frms_score: 70, frms_status: 'critico' }) };
             }
             return {
