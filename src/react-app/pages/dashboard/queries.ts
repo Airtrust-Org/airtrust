@@ -34,15 +34,21 @@ type ApiEnvelope<T> = {
   total?: number;
 };
 
-function buildApiError(json: ApiEnvelope<unknown> | null, fallbackMessage: string): Error {
+function buildApiError(
+  json: ApiEnvelope<unknown> | null,
+  fallbackMessage: string,
+  status?: number,
+): Error & { status?: number } {
   const message = String(json?.error || fallbackMessage).trim();
-  return new Error(message || fallbackMessage);
+  const error: Error & { status?: number } = new Error(message || fallbackMessage);
+  if (typeof status === 'number') error.status = status;
+  return error;
 }
 
-async function readJsonOrThrow<T>(res: Response, fallbackMessage: string): Promise<ApiEnvelope<T>> {
+export async function readJsonOrThrow<T>(res: Response, fallbackMessage: string): Promise<ApiEnvelope<T>> {
   const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!res.ok) {
-    throw buildApiError(json, fallbackMessage);
+    throw buildApiError(json, fallbackMessage, res.status);
   }
   if (!json?.success) {
     throw buildApiError(json, fallbackMessage);
@@ -55,9 +61,22 @@ function normalizeIsoDate(value: unknown): string {
   return raw ? raw.slice(0, 10) : '';
 }
 
+/**
+ * Avoid retry storms when the API is rate-limiting or denying requests.
+ * A single retry for transient/server failures caps dashboard amplification
+ * during D1 overload while preserving recovery from brief network glitches.
+ */
+export function shouldRetryDashboardQuery(failureCount: number, error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  if (typeof status === 'number' && status >= 400 && status < 500) return false;
+  return failureCount < 1;
+}
+
 const BASE_QUERY_BEHAVIOR = {
   refetchOnWindowFocus: false as const,
   refetchOnReconnect: true as const,
+  retry: shouldRetryDashboardQuery,
+  retryDelay: 650,
 };
 
 export const dashboardKeys = {

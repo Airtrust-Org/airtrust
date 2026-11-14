@@ -86,42 +86,48 @@ export function registerSystemRoutes(app: SystemApp) {
     const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
-    try {
-      const dbStart = Date.now();
-      const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{
-        test: number;
-      }>();
-      checks.database = {
-        status: dbTest?.test === 1 ? 'ok' : 'error',
-        latency: Date.now() - dbStart,
-      };
-      if (dbTest?.test !== 1) overallHealthy = false;
-    } catch {
-      checks.database = {
-        status: 'error',
-        error: 'Erro interno do servidor',
-      };
-      overallHealthy = false;
-    }
-
-    try {
-      if (c.env.BUCKET) {
-        const r2Start = Date.now();
-        await c.env.BUCKET.list({ limit: 1 });
-        checks.storage = {
-          status: 'ok',
-          latency: Date.now() - r2Start,
-        };
-      } else {
-        checks.storage = { status: 'ok', latency: 0 };
-      }
-    } catch {
-      checks.storage = {
-        status: 'error',
-        error: 'Erro interno do servidor',
-      };
-      overallHealthy = false;
-    }
+    // PERF-04: independent availability probes run together, not in a serial
+    // network waterfall. Preserve BOTH checks, 503 on either failure, and
+    // sanitized diagnostics required by the deployment health contract.
+    await Promise.all([
+      (async () => {
+        try {
+          const dbStart = Date.now();
+          const dbTest = await c.env.DB.prepare('SELECT 1 as test').first<{ test: number }>();
+          checks.database = {
+            status: dbTest?.test === 1 ? 'ok' : 'error',
+            latency: Date.now() - dbStart,
+          };
+          if (dbTest?.test !== 1) overallHealthy = false;
+        } catch {
+          checks.database = {
+            status: 'error',
+            error: 'Erro interno do servidor',
+          };
+          overallHealthy = false;
+        }
+      })(),
+      (async () => {
+        try {
+          if (c.env.BUCKET) {
+            const r2Start = Date.now();
+            await c.env.BUCKET.list({ limit: 1 });
+            checks.storage = {
+              status: 'ok',
+              latency: Date.now() - r2Start,
+            };
+          } else {
+            checks.storage = { status: 'ok', latency: 0 };
+          }
+        } catch {
+          checks.storage = {
+            status: 'error',
+            error: 'Erro interno do servidor',
+          };
+          overallHealthy = false;
+        }
+      })(),
+    ]);
 
     const metadata = getReleaseMetadata(c.env);
     const stats = {

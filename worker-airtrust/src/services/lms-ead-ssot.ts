@@ -496,7 +496,7 @@ export async function resolveUniqueQualificacaoTipoCode(
 
 export async function syncLmsCourseFromQualificacaoTipo(
   db: D1Database,
-  params: { empresaId: number; qualificacaoTipoId: string | number },
+  params: { empresaId: number; qualificacaoTipoId: string | number; preferredCourseId?: number },
 ) {
   const qualificacaoTipoId = normalizePositiveInteger(params.qualificacaoTipoId);
   if (!qualificacaoTipoId) return null;
@@ -507,7 +507,17 @@ export async function syncLmsCourseFromQualificacaoTipo(
     return null;
   }
 
-  const existingCurso = await fetchCursoByQualificacaoTipo(
+  // An explicit create/upload action owns its newly created draft: do not
+  // resurrect a soft-deleted prior edition with historical SCORM assets.
+  // Legacy qualification-driven sync keeps its original recovery policy.
+  const preferredCourse = params.preferredCourseId
+    ? await fetchCursoMirror(db,params.empresaId,params.preferredCourseId)
+    : null;
+  if (params.preferredCourseId && (
+    !preferredCourse || Number(preferredCourse.ativo)!==1
+    || Number(preferredCourse.qualificacao_tipo_id)!==qualificacaoTipoId
+  )) throw new Error('SSOT_PREFERRED_COURSE_NOT_ACTIVE_OR_MISMATCHED');
+  const existingCurso = preferredCourse || await fetchCursoByQualificacaoTipo(
     db,
     params.empresaId,
     qualificacaoTipoId,

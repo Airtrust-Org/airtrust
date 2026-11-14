@@ -33,6 +33,8 @@ import {
   getNotechsStatus,
   isFichaStatusFinalizado,
 } from '../constants/notechs';
+import { evaluateNotechsApproval } from '../constants/notechs-approval';
+import { isNotechsDraftScoreAllowed } from '../../../src/shared/simuladores/notechs-scoring';
 import { getSpecialEventSessionDefinition } from '../../../src/shared/simuladores/special-event-sessions';
 import {
   buildSimulatorDisplayName,
@@ -589,6 +591,124 @@ async function hasSimuladoresEvaluateCapability(
  *      — filtro de dados. Ter a capability não basta; ter uma linha
  *      "acidental" de instrutor_id não basta sem a capability.
  */
+/**
+ * Histórico longitudinal NOTECHS por funcionário — somente leitura.
+ * O vínculo ficha → colaborador é obtido do banco; jamais aceita empresa_id
+ * ou identidade de funcionário a partir do corpo do cliente.
+ *
+ * Gestores/administradores mantêm o mesmo isolamento de setores das fichas;
+ * demais perfis podem consultar somente o próprio histórico.
+ * Sem notas fabricadas, sem alterar assinaturas históricas.
+ */
+app.get('/fichas/notechs/historico/:funcionarioId', async (c) => {
+  try {
+    const userId = getContextUserId(c);
+    const role = getContextUserRole(c);
+    const empresaId = getEmpresaId(c);
+    const funcionarioId = Number(c.req.param('funcionarioId'));
+    if (!Number.isSafeInteger(funcionarioId) || funcionarioId <= 0) {
+      return c.json({ success: false, error: 'Funcionário inválido' }, 400);
+    }
+    const target = await c.env.DB.prepare(
+      'SELECT id FROM funcionarios WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+    ).bind(funcionarioId, empresaId).first<{ id: number }>();
+    if (!target) return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+
+    if (isFullAccess(role)) {
+      const access = await getEmployeeSectorAccess(c, empresaId);
+      if (access.mode === 'restricted') {
+        const setores = await effectiveFichaSetorIds({
+          db: c.env.DB, empresaId, userId: Number(userId),
+          role, legacySetorIds: access.setorIds,
+        });
+        const allowed = await getAllowedFuncionariosBySetorScope(
+          c.env.DB, empresaId, [funcionarioId], setores,
+        );
+        if (!allowed.has(funcionarioId)) {
+          return c.json({ success: false, error: 'Funcionário não encontrado' }, 404);
+        }
+      }
+    } else {
+      const ownId = await getFuncionarioId(c.env.DB, userId, empresaId);
+      if (!ownId || Number(ownId) !== funcionarioId) {
+        return c.json({ success: false, error: 'Acesso negado' }, 403);
+      }
+    }
+
+    const data = await c.env.DB.prepare(
+      `SELECT fs.id AS ficha_id, fs.data_sessao, fs.tipo_sessao,
+              fs.status, fs.resultado_final, fs.assinatura_instrutor_timestamp,
+              m.codigo, m.categoria, m.resultado, m.observacoes
+         FROM fichas_sessao fs
+         LEFT JOIN fichas_sessao_manobras m
+           ON m.ficha_id = fs.id
+          AND m.deleted_at IS NULL
+          AND UPPER(TRIM(m.categoria)) = 'NOTECHS'
+        WHERE fs.empresa_id = ?
+          AND fs.colaborador_id_aluno = ?
+          AND fs.deleted_at IS NULL
+        ORDER BY fs.data_sessao DESC, fs.id DESC, m.ordem
+        LIMIT 1000`,
+    ).bind(empresaId, funcionarioId).all<{
+      ficha_id: number;
+      data_sessao: string | null;
+      tipo_sessao: string | null;
+      status: string | null;
+      resultado_final: string | null;
+      assinatura_instrutor_timestamp: string | null;
+      codigo: string | null;
+      categoria: string | null;
+      resultado: string | null;
+      observacoes: string | null;
+    }>();
+    const rows = data.results || [];
+    if (rows.length >= 1000) {
+      return c.json({ success: false, code: 'NOTECHS_HISTORY_LIMIT_EXCEEDED',
+        error: 'Histórico excede o limite da consulta; use extração paginada controlada.' }, 409);
+    }
+    const sessions = new Map<number, {
+      ficha_id: number; data_sessao: string | null; tipo_sessao: string | null;
+      status: string | null; resultado_final: string | null;
+      assinada: boolean; notas: Array<{ codigo: string; resultado: string | null; observacoes: string | null }>;
+    }>();
+    for (const row of rows) {
+      if (!sessions.has(row.ficha_id)) {
+        sessions.set(row.ficha_id, {
+          ficha_id: row.ficha_id, data_sessao: row.data_sessao,
+          tipo_sessao: row.tipo_sessao, status: row.status,
+          resultado_final: row.resultado_final,
+          assinada: Boolean(row.assinatura_instrutor_timestamp), notas: [],
+        });
+      }
+      if (row.codigo) {
+        sessions.get(row.ficha_id)!.notas.push({
+          codigo: row.codigo, resultado: row.resultado, observacoes: row.observacoes,
+        });
+      }
+    }
+    const historico = [...sessions.values()].map((session) => ({
+      ...session,
+      avaliacao: evaluateNotechsApproval(
+        session.notas.map((nota) => ({ ...nota, categoria: 'NOTECHS' })),
+      ),
+    }));
+    return c.json({
+      success: true, data: {
+        funcionario_id: funcionarioId, total_fichas: historico.length,
+        fichas_com_15_notechs: historico.filter((entry) =>
+          entry.avaliacao.missing.length === 0 && entry.avaliacao.duplicate.length === 0).length,
+        fichas_com_suficiencia_individual: historico.filter((entry) => entry.avaliacao.eligible).length,
+        fichas_aprovadas_com_nota_incompleta: historico.filter((entry) =>
+          entry.resultado_final === 'APROVADO' && !entry.avaliacao.eligible).length,
+        historico,
+      },
+    });
+  } catch (error) {
+    console.error('Falha ao consultar histórico NOTECHS:', error);
+    return c.json({ success: false, error: 'Erro interno do servidor' }, 500);
+  }
+});
+
 app.get('/fichas/para-avaliar', async (c) => {
   try {
     const userId = getContextUserId(c);
@@ -842,6 +962,18 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
       return c.json({ success: false, error: 'Acesso negado', code: 'FORBIDDEN' }, 403);
     }
 
+    // A criação não pode marcar uma ficha como APROVADA/ASSINADA_TOTAL nem
+    // gravar aprovado=1 antes de notas NOTECHS, assinaturas e validações.
+    const novoStatus = String(b.status || 'AVALIACAO_PENDENTE').trim().toUpperCase();
+    const statusCriacaoPermitidos = new Set([
+      'AVALIACAO_PENDENTE', 'AGUARDANDO_ASSINATURA_ALUNO', 'AGUARDANDO_ASSINATURA_INSTRUTOR',
+    ]);
+    if (!statusCriacaoPermitidos.has(novoStatus) ||
+      (b.aprovado !== undefined && b.aprovado !== false && b.aprovado !== 0)) {
+      return c.json({ success: false, code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE',
+        error: 'Nova ficha não pode nascer aprovada; avaliação e assinatura do instrutor são obrigatórias.' }, 409);
+    }
+
     const uuid = crypto.randomUUID();
     const r = await c.env.DB.prepare(
       'INSERT INTO fichas_sessao(uuid,agendamento_slot_id,colaborador_id_aluno,instrutor_id,tipo_sessao,tipo_aeronave,status,data_sessao,aprovado,empresa_id)VALUES(?,?,?,?,?,?,?,?,?,?)',
@@ -853,9 +985,9 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
         instrutorId,
         b.tipo_sessao,
         b.tipo_aeronave || null,
-        b.status || 'AVALIACAO_PENDENTE',
+        novoStatus,
         b.data_sessao || new Date().toISOString(),
-        b.aprovado !== undefined ? b.aprovado : 0,
+        0,
         empresaId,
       )
       .run();
@@ -1252,6 +1384,7 @@ app.get('/fichas/:id', async (c) => {
       edicao_pendente: Number(f.edicoes_pendentes_count || 0) > 0,
       notechs_status: notechsStatus,
       missing_notechs_count: notechsMissingCount,
+      notechs_avaliacao: evaluateNotechsApproval(m.results || []),
       created_at: f.ficha_created_at || null,
       updated_at: f.updated_at || null,
     };
@@ -1630,6 +1763,21 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     const instructorMetaSchema = await getFichaInstructorMetaSchema(c.env.DB);
     const a = await getFichaWithInstructorMeta(c.env.DB, id, tenantEmpresaId, instructorMetaSchema);
     if (!a) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    // Never change any technical score, session header or instructor metadata
+    // after instructor final signature, including legacy rows with stale status.
+    if (a.assinatura_instrutor_timestamp || Number(a.assinatura_instrutor) === 1) {
+      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+        error: 'Ficha assinada: somente retificação formal pode alterá-la.' }, 409);
+    }
+    // F14-04: the student signature attests to the scores the student saw, but it
+    // carries no content hash. Any later edit of scores, observations or instructor
+    // metadata would silently keep that signature attached to different content.
+    // Fail closed (including legacy rows that kept only the boolean flag) until the
+    // owner decides between formal rectification and signature invalidation.
+    if (a.assinatura_aluno_timestamp || Number(a.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha: as notas e observações não podem mais ser alteradas por edição direta. Utilize o fluxo formal de retificação.' }, 409);
+    }
 
     const expectedUpdatedAt =
       typeof b?.expected_updated_at === 'string' && b.expected_updated_at.trim()
@@ -1718,12 +1866,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     >();
     if (Array.isArray(b.manobras) && b.manobras.length > 0) {
       const atuais = await c.env.DB.prepare(
-        'SELECT ordem, resultado FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
+        'SELECT ordem, resultado, categoria FROM fichas_sessao_manobras WHERE ficha_id = ? AND deleted_at IS NULL ORDER BY ordem',
       )
         .bind(id)
-        .all<{ ordem: number; resultado: unknown }>();
+        .all<{ ordem: number; resultado: unknown; categoria: string | null }>();
       const atuaisPorOrdem = new Map(
         (atuais.results || []).map((row) => [Number(row.ordem), row.resultado]),
+      );
+      const categoriasPorOrdem = new Map(
+        (atuais.results || []).map((row) => [Number(row.ordem), String(row.categoria || '').trim().toUpperCase()]),
       );
 
       for (const m of b.manobras as FichaUpdateManobraPayload[]) {
@@ -1740,6 +1891,15 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             },
             409,
           );
+        }
+        if (categoriasPorOrdem.get(ordem) === 'NOTECHS' &&
+            !isNotechsDraftScoreAllowed(m?.resultado)) {
+          return c.json({
+            success: false,
+            code: 'NOTECHS_SCORE_INVALID',
+            error: 'NOTECHS aceita somente notas inteiras de 1 a 10, NR ou sem nota durante o rascunho.',
+            details: { ordem },
+          }, 400);
         }
         const update = {
           ordem,
@@ -1834,6 +1994,23 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
       }
     }
 
+    // Os estados finais só podem ser criados pela assinatura formal do
+    // instrutor. Impede que PUT /fichas/:id burle a validação NOTECHS
+    // alterando diretamente o campo status.
+    if (
+      ['APROVADO', 'NAO_APROVADO', 'CONCLUIDA', 'APROVADA', 'ASSINADA_TOTAL'].includes(String(newStatus).toUpperCase()) &&
+      !a.assinatura_instrutor_timestamp
+    ) {
+      return c.json(
+        {
+          success: false,
+          code: 'FICHA_FINAL_STATUS_REQUIRES_SIGNATURE',
+          error: 'Status final exige assinatura formal do instrutor e validação dos NOTECHS.',
+        },
+        409,
+      );
+    }
+
     if (
       [
         'AGUARDANDO_ASSINATURA_ALUNO',
@@ -1868,9 +2045,17 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // version and the compare-and-set header update runs last in the transaction.
     const writeTimestamp = new Date().toISOString();
     const statements: D1PreparedStatement[] = [];
-    const versionGuard = expectedUpdatedAt
-      ? ' AND EXISTS (SELECT 1 FROM fichas_sessao fs WHERE fs.id = ? AND fs.empresa_id = ? AND fs.updated_at = ?)'
-      : '';
+    // Always guard child DML by tenant + parent without instructor/student signature. The version check is
+    // additional, never a substitute for preserving signed evidence.
+    const versionGuard = ` AND EXISTS (
+      SELECT 1 FROM fichas_sessao fs
+       WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
+         AND fs.assinatura_instrutor_timestamp IS NULL
+         AND COALESCE(fs.assinatura_instrutor,0)=0
+         AND fs.assinatura_aluno_timestamp IS NULL
+         AND COALESCE(fs.assinatura_tripulante,0)=0
+         ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
+    )`;
 
     // D1 counts every statement in a batch against the Worker invocation query budget.
     // A full ficha can contain dozens of maneuvers, so persisting one UPDATE per row can
@@ -1899,13 +2084,26 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
         writeTimestamp,
         id,
       ];
-      if (expectedUpdatedAt) {
-        bindValues.push(id, tenantEmpresaId, expectedUpdatedAt);
-      }
+      bindValues.push(id, tenantEmpresaId);
+      if (expectedUpdatedAt) bindValues.push(expectedUpdatedAt);
       statements.push(statement.bind(...bindValues));
     }
 
-    if (instructorMetaSchema.hasMetaTable && expectedUpdatedAt) {
+    if (instructorMetaSchema.hasMetaTable) {
+      // Guard both INSERT and UPSERT conflict-UPDATE: a signature can be
+      // added after the preflight SELECT but before db.batch starts.
+      const metaGuard = `EXISTS (
+        SELECT 1 FROM fichas_sessao fs
+         WHERE fs.id = ? AND fs.empresa_id = ? AND fs.deleted_at IS NULL
+           AND fs.assinatura_instrutor_timestamp IS NULL
+           AND COALESCE(fs.assinatura_instrutor,0)=0
+           AND fs.assinatura_aluno_timestamp IS NULL
+           AND COALESCE(fs.assinatura_tripulante,0)=0
+           ${expectedUpdatedAt ? 'AND fs.updated_at = ?' : ''}
+      )`;
+      const metaGuardArgs = expectedUpdatedAt
+        ? [id, tenantEmpresaId, expectedUpdatedAt]
+        : [id, tenantEmpresaId];
       statements.push(
         c.env.DB.prepare(
           `INSERT INTO fichas_sessao_instrutor_meta (
@@ -1913,48 +2111,18 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
              assento_instrucao_utilizado, created_at, updated_at
            )
            SELECT ?, ?, ?, ?, ?, datetime('now'), ?
-            WHERE EXISTS (
-              SELECT 1 FROM fichas_sessao
-               WHERE id = ? AND empresa_id = ? AND updated_at = ?
-            )
+            WHERE ${metaGuard}
            ON CONFLICT(ficha_id) DO UPDATE SET
              empresa_id = excluded.empresa_id,
              equipamento_utilizado = excluded.equipamento_utilizado,
              dispositivo_identificacao = excluded.dispositivo_identificacao,
              assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
-             updated_at = excluded.updated_at`,
+             updated_at = excluded.updated_at
+           WHERE ${metaGuard}`,
         ).bind(
-          id,
-          tenantEmpresaId,
-          equipamentoUtilizado,
-          dispositivoIdentificacao,
-          assentoInstrucaoCanonico,
-          writeTimestamp,
-          id,
-          tenantEmpresaId,
-          expectedUpdatedAt,
-        ),
-      );
-    } else if (instructorMetaSchema.hasMetaTable) {
-      statements.push(
-        c.env.DB.prepare(
-          `INSERT INTO fichas_sessao_instrutor_meta (
-             ficha_id, empresa_id, equipamento_utilizado, dispositivo_identificacao,
-             assento_instrucao_utilizado, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
-           ON CONFLICT(ficha_id) DO UPDATE SET
-             empresa_id = excluded.empresa_id,
-             equipamento_utilizado = excluded.equipamento_utilizado,
-             dispositivo_identificacao = excluded.dispositivo_identificacao,
-             assento_instrucao_utilizado = excluded.assento_instrucao_utilizado,
-             updated_at = excluded.updated_at`,
-        ).bind(
-          id,
-          tenantEmpresaId,
-          equipamentoUtilizado,
-          dispositivoIdentificacao,
-          assentoInstrucaoCanonico,
-          writeTimestamp,
+          id, tenantEmpresaId, equipamentoUtilizado, dispositivoIdentificacao,
+          assentoInstrucaoCanonico, writeTimestamp,
+          ...metaGuardArgs, ...metaGuardArgs,
         ),
       );
     } else if (instructorMetaSchema.legacyColumns.size > 0) {
@@ -1986,6 +2154,8 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
               ...legacyColumns.map((column) => legacyValues[column]),
               id,
               tenantEmpresaId,
+              id,
+              tenantEmpresaId,
             ),
       );
     }
@@ -1994,7 +2164,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     statements.push(
       expectedUpdatedAt
         ? c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND updated_at = ?',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0 AND updated_at = ?',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
@@ -2004,7 +2174,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
             expectedUpdatedAt,
           )
         : c.env.DB.prepare(
-            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ?',
+            'UPDATE fichas_sessao SET status = ?, observacoes = ?, updated_at = ? WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0 AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0',
           ).bind(
             newStatus,
             b.observacoes !== undefined ? b.observacoes : a.observacoes,
@@ -2015,7 +2185,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     );
 
     const batchResults = await c.env.DB.batch(statements);
-    if (expectedUpdatedAt && Number(batchResults[headerStatementIndex]?.meta?.changes || 0) === 0) {
+    if (Number(batchResults[headerStatementIndex]?.meta?.changes || 0) !== 1) {
       return c.json(
         {
           success: false,

@@ -22,7 +22,6 @@ export function buildTipoUpdatePayload(
     { key: 'categoria_id', norm: normalizeNumber },
     { key: 'area_id', norm: normalizeNumber },
     { key: 'validade', norm: normalizeNumber },
-    { key: 'vencimento_fim_mes', norm: (v: unknown) => (v ? 1 : 0) },
     { key: 'carga_horaria_inicial', norm: normalizeNumber },
     { key: 'carga_horaria_recorrente', norm: normalizeNumber },
     { key: 'conteudo_programatico', norm: normalizeString },

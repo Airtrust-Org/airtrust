@@ -38,7 +38,7 @@ describe('Prova final do aluno', () => {
   afterEach(() => cleanup());
 
   it.each([
-    ['NOT_AVAILABLE', /não tem prova final disponível/],
+    ['NOT_AVAILABLE', /não tem avaliação disponível/],
     ['STUDY_PENDING', /Conclua todo o conteúdo/],
     ['COMPLETED', /já concluído/],
   ])('mostra a situação %s sem oferecer prova', async (s, text) => {

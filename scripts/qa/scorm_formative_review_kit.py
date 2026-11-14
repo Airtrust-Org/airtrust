@@ -25,6 +25,41 @@ def _fail(reason):
     raise ValueError("FORMATIVE_REVIEW_" + reason)
 
 
+def read_course_model(package: ZipFile):
+    """Read exactly one supported authoring model; never infer reviewer answers.
+
+    Legacy packages ship content.js/AIRTRUST_CONTENT (scenario/text).
+    RC21 offshore formative packages ship course_data.js/COURSE_DATA
+    (case/label). Both forms keep the human review independent of the
+    authored `correct` flags.
+    """
+    names = set(package.namelist())
+    if "content.js" in names:
+        filename, prefix = "content.js", "window.AIRTRUST_CONTENT = "
+    elif "course_data.js" in names:
+        filename, prefix = "course_data.js", "window.COURSE_DATA="
+    else:
+        _fail("CONTENT_MODEL_MISSING")
+    raw = package.read(filename).decode("utf-8")
+    if not raw.startswith(prefix):
+        _fail("CONTENT_MODEL_INVALID")
+    try:
+        data = json.loads(raw[len(prefix):].rstrip(";\r\n "))
+    except json.JSONDecodeError:
+        _fail("CONTENT_MODEL_INVALID")
+    if not isinstance(data, dict) or not isinstance(data.get("slides"), list):
+        _fail("CONTENT_MODEL_INVALID")
+    return data
+
+
+def is_scenario(slide):
+    return slide.get("layout") == "scenario" or slide.get("type") == "case"
+
+
+def option_text(option):
+    return option.get("text") if isinstance(option.get("text"), str) else option.get("label")
+
+
 def inventory(zip_path: Path, expected_sha: str, course_id: int):
     if not (len(expected_sha) == 64 and all(c in SHA for c in expected_sha)):
         _fail("EXPECTED_SHA_INVALID")
@@ -42,15 +77,9 @@ def inventory(zip_path: Path, expected_sha: str, course_id: int):
             if any(n.startswith("/") or "\\" in n or ".." in n.split("/") for n in z.namelist()):
                 _fail("UNSAFE_ENTRY")
             contract = json.loads(z.read("airtrust-completion-manifest.json"))
-            raw = z.read("content.js").decode("utf-8")
+            model = read_course_model(z)
     except (BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         _fail("PACKAGE_PARSE_INVALID")
-    if not raw.startswith("window.AIRTRUST_CONTENT = "):
-        _fail("CONTENT_MODEL_INVALID")
-    try:
-        model = json.loads(raw.split(" = ", 1)[1].rstrip(";\r\n "))
-    except (IndexError, json.JSONDecodeError):
-        _fail("CONTENT_MODEL_INVALID")
     if contract.get("assessment", {}).get("mode") != "NONE" or \
        contract["assessment"].get("scoringBySCORM") is not False:
         _fail("NOT_FORMATIVE_WITHOUT_EXAM")
@@ -64,15 +93,15 @@ def inventory(zip_path: Path, expected_sha: str, course_id: int):
        [s.get("id") for s in slides] != required_slides:
         _fail("CONTENT_COVERAGE_INVALID")
     scenarios = [(idx + 1, slide) for idx, slide in enumerate(slides)
-                 if slide.get("layout") == "scenario"]
+                 if is_scenario(slide)]
     if len(scenarios) != len(required) or set(required) != {s.get("id") for _, s in scenarios}:
         _fail("ACTIVITY_SET_MISMATCH")
     rows = []
     for idx, s in scenarios:
         options = s.get("options")
         if not isinstance(options, list) or len(options) < 2 or len(options) > 20 or \
-           any(not isinstance(opt, dict) or not isinstance(opt.get("text"), str) or
-               not opt["text"].strip() or not isinstance(opt.get("feedback"), str) or
+           any(not isinstance(opt, dict) or not isinstance(option_text(opt), str) or
+               not option_text(opt).strip() or not isinstance(opt.get("feedback"), str) or
                not opt["feedback"].strip() or not isinstance(opt.get("correct"), bool)
                for opt in options) or sum(opt["correct"] for opt in options) != 1:
             _fail("FORMATIVE_OPTIONS_INCOMPLETE")
@@ -82,7 +111,7 @@ def inventory(zip_path: Path, expected_sha: str, course_id: int):
             "course_id": str(course_id), "package_sha256": expected_sha,
             "item_type": "FORMATIVE_SCENARIO", "slide_index": str(idx),
             "item_number": "1",
-            "options_json": json.dumps([o["text"] for o in options], ensure_ascii=False),
+            "options_json": json.dumps([option_text(o) for o in options], ensure_ascii=False),
             "reviewer_selected_index": "", "reviewer_evidence": "",
             "reviewer_name": "", "reviewer_date": "", "review_state": "PENDING",
             "slide_id": s["id"], "module": str(s.get("module") or ""),

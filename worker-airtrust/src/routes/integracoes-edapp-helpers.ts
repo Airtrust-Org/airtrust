@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from '../utils/sql-add-months';
 /**
  * INTEGRACOES EDAPP — Shared Helpers
  * Used by integracoes_edapp.ts and integracoes-edapp-eventos.ts
@@ -372,21 +373,18 @@ export function resolveEdAppCompletionDate(dataCompletedAt?: string): string {
 
 export function buildEdAppQualificacaoVencimentoExpr(rowAlias?: string): string {
   const prefix = rowAlias ? `${rowAlias}.` : '';
+  const tipoCodigo = `(SELECT qt.codigo FROM qualificacoes_tipos qt WHERE qt.id = ${prefix}qualificacao_id AND qt.deleted_at IS NULL)`;
+  const tipoValidade = `(SELECT qt.validade FROM qualificacoes_tipos qt WHERE qt.id = ${prefix}qualificacao_id AND qt.deleted_at IS NULL)`;
+  // CMA depende da idade: sem validade_meses persistido nao ha fallback (nem o default de 12 meses).
   return `COALESCE(
     ${prefix}data_vencimento,
-    date(
-      ${prefix}data_conclusao,
-      '+' || COALESCE(
-        ${prefix}validade_meses,
-        (
-          SELECT qt.validade
-          FROM qualificacoes_tipos qt
-          WHERE qt.id = ${prefix}qualificacao_id
-            AND qt.deleted_at IS NULL
-        ),
-        12
-      ) || ' months'
-    )
+    ${sqlAddMonthsClamped(
+      `${prefix}data_conclusao`,
+      `COALESCE(
+        ${sqlEffectiveValidityMonths(`${prefix}validade_meses`, tipoCodigo, tipoValidade)},
+        CASE WHEN UPPER(TRIM(COALESCE(${tipoCodigo}, ''))) = 'CMA' THEN NULL ELSE 12 END
+      )`,
+    )}
   )`;
 }
 
@@ -1026,7 +1024,7 @@ export async function createQualificacao(
   const tipoQualificacao = await db
     .prepare(
       `
-    SELECT id, validade, COALESCE(vencimento_fim_mes, 0) as vencimento_fim_mes
+    SELECT id, validade
     FROM qualificacoes_tipos
     WHERE codigo = ?
       AND (? IS NULL OR empresa_id = ?)
@@ -1034,7 +1032,7 @@ export async function createQualificacao(
   `,
     )
     .bind(qualificacaoCodigo, empresaId ?? null, empresaId ?? null)
-    .first<{ id: number; validade: number | null; vencimento_fim_mes: number | null }>();
+    .first<{ id: number; validade: number | null }>();
 
   if (!tipoQualificacao) {
     return {
@@ -1048,10 +1046,9 @@ export async function createQualificacao(
     typeof tipoQualificacao.validade === 'number' && tipoQualificacao.validade > 0
       ? tipoQualificacao.validade
       : null;
-  const vencimentoFimMes = Number(tipoQualificacao.vencimento_fim_mes || 0) === 1 ? 1 : 0;
   const dataVencimento = validadeMeses === null
     ? null
-    : calcularDataVencimento(dataConclusao, validadeMeses, vencimentoFimMes);
+    : calcularDataVencimento(dataConclusao, validadeMeses);
 
   const qualificacaoExistente = await db
     .prepare(

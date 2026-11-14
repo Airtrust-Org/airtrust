@@ -21,7 +21,7 @@ type FrmsDailyMonitorRow = FrmsDailyFatigueStatus & {
 export default function FrmsFadigaPainel() {
   const navigate = useNavigate();
   const [data, setData] = useState(frmsBrazilOperationalTodayIso());
-  const { data: dailyData, loading, refetch } = useFrmsDailyFatigue(data, 'team');
+  const { data: dailyData, loading, error: dailyError, refetch } = useFrmsDailyFatigue(data, 'team');
   const { data: alertsData, loading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useFrmsDailyFatigueAlerts(data);
   const { data: analyticsData } = useFrmsFadigaAnalytics(30);
 
@@ -34,7 +34,7 @@ export default function FrmsFadigaPainel() {
   const { alertIndex } = resumo;
   // Missing/malformed API data is unknown, NOT a confirmed empty roster or
   // zero alerts. Both sources must be complete for an operational risk summary.
-  const riskUnavailable = loading || alertsLoading || Boolean(alertsError) ||
+  const riskUnavailable = loading || alertsLoading || Boolean(dailyError) || Boolean(alertsError) ||
     !dailyItemsValid || !alertItemsValid;
 
   return (
@@ -89,12 +89,12 @@ export default function FrmsFadigaPainel() {
         <div className="grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Check-ins</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{loading || !dailyItemsValid ? '—' : Number(resumo.complete)}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{loading || dailyError || !dailyItemsValid ? '—' : Number(resumo.complete)}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Score médio</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {loading || !dailyItemsValid || resumo.mediaScore === null ? '—' : Math.round(resumo.mediaScore)}
+              {loading || dailyError || !dailyItemsValid || resumo.mediaScore === null ? '—' : Math.round(resumo.mediaScore)}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -104,7 +104,7 @@ export default function FrmsFadigaPainel() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Pendente/incompleto</p>
             <p className="mt-2 text-2xl font-bold text-violet-600">
-              {loading || !dailyItemsValid ? '—' : Number(resumo.pending)}
+              {loading || dailyError || !dailyItemsValid ? '—' : Number(resumo.pending)}
             </p>
           </div>
         </div>
@@ -117,10 +117,10 @@ export default function FrmsFadigaPainel() {
             </div>
             {loading || alertsLoading ? (
               <div className="py-10 text-center text-sm text-slate-400">Carregando painel e alertas...</div>
-            ) : alertsError || !alertItemsValid || !dailyItemsValid ? (
+            ) : dailyError || alertsError || !alertItemsValid || !dailyItemsValid ? (
               <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                <p>Não foi possível verificar os alertas de fadiga. A condição operacional não pode ser presumida como normal.</p>
-                <Button variant="secondary" onClick={() => refetchAlerts()}>Reconsultar alertas</Button>
+                <p>Não foi possível verificar os alertas de fadiga e os check-ins. A condição operacional não pode ser presumida como normal.</p>
+                <Button variant="secondary" onClick={() => { refetch(); refetchAlerts(); }}>Reconsultar dados e alertas</Button>
               </div>
             ) : itens.length === 0 ? (
               <div className="py-10 text-center text-sm text-slate-400">

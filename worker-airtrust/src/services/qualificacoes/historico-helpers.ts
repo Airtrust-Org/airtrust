@@ -6,6 +6,9 @@
 import type { Env } from '../../types';
 import { publishDomainEvent, type DomainEventTipo } from '../../shared/domainEvents';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
+import {
+  tryAddCalendarMonthsClamped,
+} from '../../../../src/shared/utils/validade-meses';
 
 export function inferModeloCodigoFromQualificacao(
   codigo: string | null | undefined,
@@ -189,35 +192,22 @@ export function calcularDataVencimento(params: {
   dataConclusao?: string | null;
   dataVencimento?: string | null;
   validadeMeses?: number | null;
-  vencimentoFimMes?: number | null;
 }): string | null {
   if (params.dataVencimento) return params.dataVencimento;
 
   const dataConclusao = String(params.dataConclusao || '').trim();
   const validadeMeses = toPositiveNumber(params.validadeMeses);
-  const vencimentoFimMes = Number(params.vencimentoFimMes || 0) === 1 ? 1 : 0;
 
   if (!dataConclusao || !validadeMeses) return null;
 
-  const dataBase = new Date(`${dataConclusao}T00:00:00Z`);
-  if (Number.isNaN(dataBase.getTime())) return null;
-
-  if (vencimentoFimMes === 1) {
-    const year = dataBase.getUTCFullYear();
-    const month = dataBase.getUTCMonth();
-    const endOfMonth = new Date(Date.UTC(year, month + validadeMeses + 1, 0));
-    return endOfMonth.toISOString().slice(0, 10);
-  }
-
-  dataBase.setUTCMonth(dataBase.getUTCMonth() + validadeMeses);
-  return dataBase.toISOString().slice(0, 10);
+  // Vence no dia (clamp ao ultimo dia do mes-alvo). vencimento_fim_mes e legado e ignorado.
+  return tryAddCalendarMonthsClamped(dataConclusao, validadeMeses);
 }
 
 export function resolveHistoricoReadExpiry(params: {
   dataVencimento?: string | null;
   dataConclusao?: string | null;
   validadeMeses?: number | null;
-  vencimentoFimMes?: number | null;
   codigoQualificacao?: string | null;
 }): string | null {
   if (params.dataVencimento) return params.dataVencimento;
@@ -225,7 +215,6 @@ export function resolveHistoricoReadExpiry(params: {
   return calcularDataVencimento({
     dataConclusao: params.dataConclusao,
     validadeMeses: params.validadeMeses,
-    vencimentoFimMes: params.vencimentoFimMes,
   });
 }
 
@@ -247,7 +236,6 @@ export function resolveParametrosRenovacaoQualificacao(params: {
   const dataVencimento = calcularDataVencimento({
     dataConclusao: params.dataConclusao,
     validadeMeses,
-    vencimentoFimMes: codigoQualificacao === 'G1-SEM' ? 0 : 1,
   });
 
   return {

@@ -42,7 +42,7 @@ export interface HistoricoQualificacao {
   qualificacao_categoria?: string;
   qualificacao_validade?: number; // agregado da view integrada (meses)
   validade_meses?: number; // validade em meses do tipo de qualificação
-  vencimento_fim_mes?: number; // 0 = dia exato, 1 = fim do mês
+  vencimento_fim_mes?: number; // LEGADO: ignorado (todo vencimento vence no dia)
   categoria?: string;
   tipo?: string;
   codigo?: string;
@@ -96,7 +96,7 @@ export interface QualificacaoTipoDTO {
   referencias?: string | null;
   ativo?: number | boolean | null;
   is_check?: number | boolean | null;
-  vencimento_fim_mes?: number | null;
+  vencimento_fim_mes?: number | null; // LEGADO: ignorado
   created_at?: string;
   updated_at?: string | null;
   setores?: Array<{ id: number; nome: string }>;

@@ -28,7 +28,8 @@ const FRMS_JOB = 'frms-reprocess';
 const GLOBAL_SCOPE = 'global';
 export const SIGVOOS_TENANT_BATCH = 25;
 export const SIGVOOS_TRIPULANTE_ENQUEUE_BATCH = 100;
-export const FRMS_REPROCESS_BATCH = 25;
+export const FRMS_REPROCESS_BATCH = 5;
+export const FRMS_QUEUE_SCOPE_BATCH = 2;
 
 interface SigvoosConfigCursorRow {
   empresa_id: number | null;
@@ -772,21 +773,66 @@ async function runFrmsQueueScope(
   }
 }
 
+/**
+ * 0451's partial index contains pending/failed work, but excludes completed
+ * history. The previous global NOT-SUCCEEDED scan and a UNION with PROCESSING
+ * each revisit every completed item as the table grows. Bound each indexed
+ * source before returning a scope. Delayed retries are not runnable yet.
+ */
+export function buildReadyFrmsQueueScopesQuery(): string {
+  return `SELECT DISTINCT scope_key
+            FROM cron_job_items INDEXED BY idx_cron_job_items_pending
+           WHERE job_name = ?
+             AND status IN ('PENDING', 'FAILED')
+             AND available_at <= datetime('now')
+           ORDER BY scope_key ASC
+           LIMIT ?`;
+}
+
+/**
+ * A crashed Worker can leave PROCESSING items behind. Their durable lease
+ * state is indexed by (job_name, scope_key), so stale scopes can be revisited
+ * without scanning every completed item to search for PROCESSING rows.
+ * An indexed EXISTS check prevents a former failed state without any stale
+ * PROCESSING items from monopolizing the small per-tick scope budget.
+ * runFrmsQueueScope still enforces its normal 30-minute stale-item guard.
+ */
+export function buildStaleFrmsQueueScopesQuery(): string {
+  return `SELECT scope_key
+            FROM cron_job_state
+           WHERE job_name = ?
+             AND last_started_at < datetime('now', '-30 minutes')
+             AND (last_success_at IS NULL OR last_started_at > last_success_at)
+             AND EXISTS (
+               SELECT 1 FROM cron_job_items AS pending_recovery
+                WHERE pending_recovery.job_name = cron_job_state.job_name
+                  AND pending_recovery.scope_key = cron_job_state.scope_key
+                  AND pending_recovery.status = 'PROCESSING'
+                  AND pending_recovery.updated_at <= datetime('now', '-30 minutes')
+             )
+           ORDER BY scope_key ASC
+           LIMIT ?`;
+}
+
 async function dispatchFrmsQueues(db: D1Database, env: Env, logger: CronJobLogger): Promise<void> {
-  const scopes = await db
-    .prepare(
-      `SELECT DISTINCT scope_key
-         FROM cron_job_items
-        WHERE job_name = ?
-          AND status != 'SUCCEEDED'
-        ORDER BY scope_key ASC
-        LIMIT 50`,
-    )
-    .bind(FRMS_JOB)
+  // Sequential reads avoid concurrent D1 bursts in a saturated 10-minute tick.
+  const ready = await db
+    .prepare(buildReadyFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
+    .all<{ scope_key: string }>();
+  const stale = await db
+    .prepare(buildStaleFrmsQueueScopesQuery())
+    .bind(FRMS_JOB, FRMS_QUEUE_SCOPE_BATCH)
     .all<{ scope_key: string }>();
 
-  for (const row of scopes.results || []) {
-    await runFrmsQueueScope(db, env, row.scope_key, logger);
+  // Prefer stale recovery, then ready work. Deduplicate scopes and keep the
+  // hard cap independent of the number of pending historical items.
+  const scopes = [...new Set([
+    ...(stale.results || []).map((row) => row.scope_key),
+    ...(ready.results || []).map((row) => row.scope_key),
+  ])].slice(0, FRMS_QUEUE_SCOPE_BATCH);
+  for (const scopeKey of scopes) {
+    await runFrmsQueueScope(db, env, scopeKey, logger);
   }
 }
 

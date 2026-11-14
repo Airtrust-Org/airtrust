@@ -17,6 +17,8 @@ import {
   type ResultadoGeracaoQualificacao,
 } from './simuladores-fichas-helpers';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
+import { evaluateNotechsApproval } from '../constants/notechs-approval';
+import { assessRecordedTechnicalScores } from '../constants/recorded-technical-scores';
 import {
   isInstructorSpecialSession,
   normalizeInstructionSeatValue,
@@ -305,6 +307,13 @@ app.post('/fichas/:id/assinar', async (c) => {
     const f = await getFichaWithInstructorMeta(c.env.DB, id, empresaId, instructorMetaSchema);
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
 
+    // Uma ficha já assinada pelo instrutor não pode ser regravada por uma
+    // segunda chamada de assinatura; usar fluxo auditável de retificação.
+    if (f.assinatura_instrutor_timestamp || Number(f.assinatura_instrutor) === 1) {
+      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+        error: 'Ficha já assinada pelo instrutor. Utilize o fluxo formal de retificação.' }, 409);
+    }
+
     const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
     if (!availability.available) {
       return c.json(
@@ -380,11 +389,27 @@ app.post('/fichas/:id/assinar', async (c) => {
     let ns = f.status;
 
     if (b.tipo === 'ALUNO') {
-      await c.env.DB.prepare(
-        "UPDATE fichas_sessao SET assinatura_aluno_ip=?,assinatura_aluno_timestamp=?,assinatura_aluno_imagem=?,assinatura_tripulante=1,status='AGUARDANDO_ASSINATURA_INSTRUTOR' WHERE id=? AND empresa_id = ?",
+      // A previously recorded student signature is immutable, even when a
+      // legacy row has only its boolean flag and no timestamp. The UPDATE
+      // repeats the guard to prevent a second signature racing this read.
+      if (f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1) {
+        return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+          error: 'Aluno já assinou esta ficha. Utilize retificação formal.' }, 409);
+      }
+      const escritaAluno = await c.env.DB.prepare(
+        `UPDATE fichas_sessao SET assinatura_aluno_ip=?, assinatura_aluno_timestamp=?,
+            assinatura_aluno_imagem=?, assinatura_tripulante=1,
+            status='AGUARDANDO_ASSINATURA_INSTRUTOR'
+          WHERE id=? AND empresa_id=? AND deleted_at IS NULL
+            AND assinatura_aluno_timestamp IS NULL AND COALESCE(assinatura_tripulante,0)=0
+            AND assinatura_instrutor_timestamp IS NULL AND COALESCE(assinatura_instrutor,0)=0`,
       )
         .bind(ip, ts, b.assinatura_imagem || null, id, empresaId)
         .run();
+      if (Number(escritaAluno.meta?.changes || 0) !== 1) {
+        return c.json({ success: false, code: 'FICHA_CONCURRENT_UPDATE',
+          error: 'Ficha já assinada ou alterada durante a assinatura do aluno. Recarregue.' }, 409);
+      }
       ns = 'AGUARDANDO_ASSINATURA_INSTRUTOR';
       console.log(`✍️ [FICHA ${id}] Aluno assinou → AGUARDANDO_ASSINATURA_INSTRUTOR`);
 
@@ -443,6 +468,70 @@ app.post('/fichas/:id/assinar', async (c) => {
         );
       }
 
+      let notechsFingerprint: string | null = null;
+      let fullManeuverFingerprint: string | null = null;
+      // NOTECHS: a ficha pertence a um funcionário e deve ter 15 notas
+      // individuais válidas (mínimo 6 para aprovação). Nunca inferir aprovação
+      // pela média nem tratar NR/NAO_REALIZADA como nota suficiente.
+      // A reprovação pode ser registrada mesmo com notas pendentes; nenhuma
+      // ficha histórica já assinada é modificada por esta verificação.
+      if (aprovadoInstrutor) {
+        const notechsRows = await c.env.DB.prepare(
+          `SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes FROM fichas_sessao_manobras
+           WHERE ficha_id = ? AND deleted_at IS NULL`,
+        )
+          .bind(id)
+          .all<{ id: number; codigo: string | null; categoria: string | null; resultado: string | null; ordem: number | null; descricao: string | null; observacoes: string | null }>();
+        // Negative safety gate: a scored technical maneuver below six forbids
+        // final approval even if an average would otherwise pass. NR is not
+        // evidence of execution. Curriculum/version completeness is separate.
+        const technicalScores = assessRecordedTechnicalScores(notechsRows.results || []);
+        if (!technicalScores.eligible) {
+          const withoutExecutedTechnicalEvidence = technicalScores.scored === 0 &&
+            technicalScores.invalid.length === 0;
+          return c.json({
+            success: false,
+            code: withoutExecutedTechnicalEvidence
+              ? 'TECHNICAL_EXECUTION_EVIDENCE_MISSING'
+              : 'TECHNICAL_INDIVIDUAL_MINIMUM_NOT_MET',
+            error: withoutExecutedTechnicalEvidence
+              ? 'Não é possível aprovar uma ficha sem nenhuma manobra técnica avaliada como executada.'
+              : 'A aprovação exige nota mínima 6 em cada manobra técnica avaliada.',
+            details: { technicalScores, ficha_id: Number(id) },
+          }, 409);
+        }
+        const notechs = evaluateNotechsApproval(notechsRows.results || []);
+        // The final signature must attest the *same* complete maneuver evidence
+        // that was observed during validation. This is deliberately independent
+        // of execution/NR semantics; it does not claim curricular eligibility.
+        // SQLite JSON arrays preserve NULL and avoid delimiter collisions.
+        fullManeuverFingerprint = JSON.stringify((notechsRows.results || [])
+          .slice()
+          .sort((a, b) => Number(a.id) - Number(b.id))
+          .map((row) => [row.id, row.codigo, row.categoria, row.resultado, row.ordem, row.descricao, row.observacoes]));
+        // Snapshot ordenado dos códigos e notas: o UPDATE da assinatura
+        // comparará atomicamente este fingerprint com os itens no mesmo D1.
+        // Assim outra edição simultânea não pode rebaixar uma nota após
+        // a validação e antes de a assinatura confirmar a aprovação.
+        notechsFingerprint = (notechsRows.results || [])
+          .filter((row) => String(row.categoria || '').trim().toUpperCase() === 'NOTECHS')
+          .sort((a, b) => String(a.codigo || '') < String(b.codigo || '') ? -1 :
+            String(a.codigo || '') > String(b.codigo || '') ? 1 : 0)
+          .map((row) => `${row.codigo}:${row.resultado ?? ''}`)
+          .join('|');
+        if (!notechs.eligible) {
+          return c.json(
+            {
+              success: false,
+              code: 'NOTECHS_INDIVIDUAL_MINIMUM_NOT_MET',
+              error: 'A aprovação exige nota individual mínima 6 em cada um dos 15 NOTECHS.',
+              details: { notechs, ficha_id: Number(id), colaborador_id: f.colaborador_id_aluno },
+            },
+            409,
+          );
+        }
+      }
+
       const resultadoFinal = aprovadoInstrutor ? 'APROVADO' : 'REPROVADO';
       const aprovado = aprovadoInstrutor ? 1 : 0;
       ns = aprovadoInstrutor ? 'APROVADO' : 'NAO_APROVADO';
@@ -457,11 +546,42 @@ app.post('/fichas/:id/assinar', async (c) => {
         );
       }
 
-      await c.env.DB.prepare(
-        "UPDATE fichas_sessao SET assinatura_instrutor_ip=?,assinatura_instrutor_timestamp=?,assinatura_instrutor_imagem=?,assinatura_instrutor=1,status=?,resultado_final=?,aprovado=?,updated_at=datetime('now') WHERE id=? AND empresa_id = ?",
-      )
-        .bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal, aprovado, id, empresaId)
-        .run();
+      const updateAssinatura = c.env.DB.prepare(
+        `UPDATE fichas_sessao
+            SET assinatura_instrutor_ip=?, assinatura_instrutor_timestamp=?,
+                assinatura_instrutor_imagem=?, assinatura_instrutor=1,
+                status=?, resultado_final=?, aprovado=?, updated_at=datetime('now')
+          WHERE id=? AND empresa_id=? AND assinatura_instrutor_timestamp IS NULL
+            AND COALESCE(assinatura_instrutor,0)=0 AND deleted_at IS NULL
+            ${aprovadoInstrutor ? `AND (
+              SELECT GROUP_CONCAT(snapshot.codigo || ':' || COALESCE(snapshot.resultado,''), '|')
+                FROM (
+                  SELECT codigo, resultado
+                    FROM fichas_sessao_manobras
+                   WHERE ficha_id=? AND deleted_at IS NULL
+                     AND UPPER(TRIM(categoria))='NOTECHS'
+                   ORDER BY codigo
+                ) snapshot
+            ) = ?
+            AND (SELECT json_group_array(json_array(snapshot.id, snapshot.codigo,
+                   snapshot.categoria, snapshot.resultado, snapshot.ordem,
+                   snapshot.descricao, snapshot.observacoes))
+                   FROM (
+                     SELECT id, codigo, categoria, resultado, ordem, descricao, observacoes
+                       FROM fichas_sessao_manobras
+                      WHERE ficha_id=? AND deleted_at IS NULL
+                      ORDER BY id
+                   ) snapshot) = ?` : ''}`,
+      );
+      const escrita = await (aprovadoInstrutor
+        ? updateAssinatura.bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal,
+          aprovado, id, empresaId, id, notechsFingerprint, id, fullManeuverFingerprint)
+        : updateAssinatura.bind(ip, ts, b.assinatura_imagem || null, ns, resultadoFinal,
+          aprovado, id, empresaId)).run();
+      if (Number(escrita.meta?.changes || 0) !== 1) {
+        return c.json({ success: false, code: 'FICHA_CONCURRENT_UPDATE',
+          error: 'Ficha ou evidências das manobras alteradas durante a assinatura. Recarregue e confira.' }, 409);
+      }
 
       console.log(`✍️ [FICHA ${id}] Instrutor assinou → ${ns} (${resultadoFinal})`);
 

@@ -3,6 +3,13 @@
 // reads them for decisions and verification; all course progress still comes
 // from clicks on the package's own controls.
 declare const SLIDES: unknown;
+declare const COURSE: unknown;
+declare const Scorm: unknown;
+declare const QUIZ: unknown;
+declare const quizIndex: unknown;
+declare const quizComplete: unknown;
+declare const quizScore: unknown;
+declare const quizAnswers: unknown;
 declare const current: unknown;
 declare const completed: unknown;
 declare const scenarioDone: unknown;
@@ -10,7 +17,6 @@ declare const interactions: unknown;
 declare const moduleQuiz: unknown;
 declare const MODULE_QUIZZES: unknown;
 declare const completionReady: unknown;
-declare const Scorm: unknown;
 
 /**
  * Browser-only certification driver for supported AirTrust Factory M8 SCOs.
@@ -421,6 +427,142 @@ function driveFactoryCourse() {
   };
   if (!Array.isArray(slides) || slides.length === 0 || slides.length > 1000 ||
       typeof getState !== 'function' || !w.document) {
+    // ANAC #23 Rev13 authored SCO: unlike Factory M8 it exposes one final
+    // 20-question quiz, classic-script lexical state and real DOM controls.
+    // The driver only clicks the SCO's own controls. It never uses LMSSetValue,
+    // modifies runtime state or promotes protocol PASS into certification.
+    const legacyCourse = typeof COURSE !== 'undefined' ? COURSE as {
+      id?: string; questionCount?: number; passingScore?: number;
+    } : null;
+    if (legacyCourse?.id === 'REGULACAO_ANAC_SCORM12_REV13_AIRTRUST_V4_PNG') {
+      type LegacySlide = {
+        id: string; layout: string; required?: boolean;
+        objectives?: unknown[]; steps?: unknown[]; lanes?: unknown[]; items?: unknown[];
+        options?: Array<{correct?: boolean}>;
+      };
+      type LegacyQuestion = { q?: string; answer?: number; options?: unknown[] };
+      const legacySlides = typeof SLIDES !== 'undefined' ? SLIDES as LegacySlide[] : null;
+      const questions = typeof QUIZ !== 'undefined' ? QUIZ as LegacyQuestion[] : null;
+      // The real Rev13 scorm_api.js declares `const Scorm` at classic-script
+      // global lexical scope, not as window.Scorm. Read the authored adapter
+      // without changing or fabricating any SCORM state.
+      const learnerScorm = typeof Scorm !== 'undefined'
+        ? Scorm as { get?: (key: string) => string | null }
+        : w.Scorm;
+      const fail = (reason: string, steps: number) => ({
+        supported: true, completed: false, steps, reason,
+      });
+      if (!Array.isArray(legacySlides) || legacySlides.length !== 25 ||
+          new Set(legacySlides.map(s => s?.id)).size !== 25 ||
+          !Array.isArray(questions) || questions.length !== 20 ||
+          Number(legacyCourse.questionCount) !== 20 ||
+          Number(legacyCourse.passingScore) !== 70 ||
+          questions.some(q => !q || typeof q.q !== 'string' || !Array.isArray(q.options) ||
+            q.options.length < 2 || q.options.length > 8 ||
+            !Number.isInteger(q.answer) || Number(q.answer) < 0 ||
+            Number(q.answer) >= q.options.length) ||
+          legacySlides[legacySlides.length - 1]?.layout !== 'quiz' ||
+          !learnerScorm?.get || !w.document ||
+          typeof current !== 'number' || current !== 0 ||
+          typeof completed === 'undefined' || !(completed instanceof Set) ||
+          completed.size !== 0 ||
+          typeof interactions === 'undefined' || !(interactions instanceof Map) ||
+          typeof quizIndex !== 'number' || quizIndex !== 0 ||
+          typeof quizComplete !== 'boolean' || quizComplete ||
+          typeof quizScore !== 'number' || quizScore !== 0 ||
+          typeof quizAnswers === 'undefined' || !Array.isArray(quizAnswers) ||
+          quizAnswers.length !== 0 ||
+          !w.document.querySelector('#nextBtn')) {
+        return fail('LEGACY_ANAC23_AUTHORING_CONTRACT_INVALID', 0);
+      }
+      const read = (key: string) => {
+        try { return String(learnerScorm.get?.(key) ?? ''); }
+        catch { return ''; }
+      };
+      const clickControl = (selector: string) => {
+        const el = w.document?.querySelector(selector);
+        if (!el || el.disabled) return false;
+        el.click();
+        return true;
+      };
+      const countRequired = (slide: LegacySlide) =>
+        (slide.objectives ?? slide.steps ?? slide.lanes ?? slide.items ?? []).length;
+      const limit = Math.min(240, legacySlides.length + questions.length * 2 + 15);
+      for (let step = 0; step < limit; step++) {
+        if (typeof current !== 'number' || current < 0 ||
+            current >= legacySlides.length) return fail('LEGACY_ANAC23_POSITION_INVALID',step);
+        const slide = legacySlides[current];
+        if (!slide || !slide.id) return fail('LEGACY_ANAC23_SLIDE_INVALID',step);
+        if (slide.layout === 'quiz') {
+          if (current !== legacySlides.length - 1) {
+            return fail('LEGACY_ANAC23_QUIZ_POSITION_INVALID',step);
+          }
+          if (!quizComplete) {
+            const index: number = Number(quizIndex);
+            const question = questions[index];
+            if (!Number.isInteger(index) || index < 0 || index >= questions.length ||
+                !question || quizAnswers[index] != null) {
+              return fail('LEGACY_ANAC23_QUESTION_STATE_INVALID',step);
+            }
+            if (!clickControl('[data-quiz="' + question.answer + '"]') ||
+                quizAnswers[index] !== question.answer ||
+                !clickControl('#quizNext')) {
+              return fail('LEGACY_ANAC23_QUESTION_CONTROL_MISSING',step);
+            }
+            if (!quizComplete && Number(quizIndex) !== index + 1) {
+              return fail('LEGACY_ANAC23_QUESTION_NOT_ADVANCED',step);
+            }
+            continue;
+          }
+          const allCovered = legacySlides.every(s => completed.has(s.id));
+          const allAnswered = Number(quizAnswers.length) === questions.length &&
+            questions.every((q, i) => quizAnswers[i] === q.answer);
+          const status = read('cmi.core.lesson_status').toLowerCase();
+          const raw = Number(read('cmi.core.score.raw'));
+          if (!allCovered || !allAnswered || Number(quizScore) < 70 ||
+              status !== 'passed' || !Number.isFinite(raw) || raw < 70 ||
+              raw !== Number(quizScore)) {
+            return fail('LEGACY_ANAC23_COMPLETION_EVIDENCE_MISSING',step);
+          }
+          // A final learner click closes the actual SCO session. Read before
+          // Finish: SCORM 1.2 returns 301 for GetValue after LMSFinish.
+          if (!clickControl('#nextBtn')) {
+            return fail('LEGACY_ANAC23_FINAL_CONTROL_MISSING',step);
+          }
+          return { supported:true, completed:true, steps:step+1, reason:null };
+        }
+        if (slide.layout === 'scenario' && !completed.has(slide.id)) {
+          const options = slide.options ?? [];
+          const correct = options.findIndex(o => o?.correct === true);
+          if (correct < 0 || !clickControl('[data-opt="' + correct + '"]') ||
+              !completed.has(slide.id)) {
+            return fail('LEGACY_ANAC23_SCENARIO_NOT_COMPLETED',step);
+          }
+        }
+        if (slide.required) {
+          const total = countRequired(slide);
+          if (!Number.isInteger(total) || total < 1 || total > 50) {
+            return fail('LEGACY_ANAC23_REQUIRED_GATE_INVALID',step);
+          }
+          for (let index = 0; index < total; index++) {
+            const seen = interactions.get(slide.id) as Set<number> | undefined;
+            if (!seen?.has(index)) {
+              if (!clickControl('[data-touch="' + index + '"]') ||
+                  !(interactions.get(slide.id) as Set<number> | undefined)?.has(index)) {
+                return fail('LEGACY_ANAC23_REQUIRED_INTERACTION_MISSING',step);
+              }
+            }
+          }
+        }
+        const before: number = current;
+        if (!clickControl('#nextBtn') || current !== before + 1 ||
+            !completed.has(slide.id)) {
+          return fail('LEGACY_ANAC23_NAVIGATION_UNVERIFIED',step);
+        }
+      }
+      return fail('LEGACY_ANAC23_MAX_STEPS_EXCEEDED',limit);
+    }
+
     // Earlier Factory M8 SCORM 1.2 packages use a modular renderer whose
     // bindings are classic-script lexical globals. Support only that explicit
     // authored contract and keep all state transitions behind actual controls.
@@ -430,9 +572,13 @@ function driveFactoryCourse() {
       : null;
     const state = () => {
       if (!Array.isArray(modularSlides) || modularSlides.length === 0 || modularSlides.length > 1000 ||
-          typeof current !== 'number' || !(completed instanceof Set) ||
-          !(scenarioDone instanceof Set) || !(interactions instanceof Map) ||
-          !moduleQuiz || typeof moduleQuiz !== 'object' || typeof completionReady !== 'function') return null;
+          typeof current !== 'number' ||
+          typeof completed === 'undefined' || !(completed instanceof Set) ||
+          typeof scenarioDone === 'undefined' || !(scenarioDone instanceof Set) ||
+          typeof interactions === 'undefined' || !(interactions instanceof Map) ||
+          typeof moduleQuiz === 'undefined' || !moduleQuiz ||
+          typeof moduleQuiz !== 'object' ||
+          typeof completionReady !== 'function') return null;
       return {
         slides: modularSlides,
         current: current as number,

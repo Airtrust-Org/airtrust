@@ -10,6 +10,7 @@ const mockState = vi.hoisted(() => ({
   alertCalls: 0,
   alertLoading: false,
   alertsMalformed: false,
+  dailyError: false,
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -30,6 +31,7 @@ vi.mock('@/react-app/hooks/useFrms', () => ({
   useFrmsDailyFatigue: () => ({
     data: { items: mockState.daily },
     loading: false,
+    error: mockState.dailyError ? 'HTTP 503 — indisponível' : null,
     refetch: () => {
       mockState.dailyCalls++;
       mockState.daily = [{
@@ -64,6 +66,7 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     mockState.alertCalls = 0;
     mockState.alertLoading = false;
     mockState.alertsMalformed = false;
+    mockState.dailyError = false;
   });
 
   it('reconsulta ambos ao clicar Atualizar e deixa de apresentar verde quando surge risco crítico', () => {
@@ -102,6 +105,17 @@ describe('FRMS Monitor — atualização consistente de check-ins e alertas', ()
     expect(row).not.toHaveClass('bg-emerald-50');
     expect(screen.getByText('Situação não determinada')).toBeInTheDocument();
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
+  });
+
+  it('falha fechado quando consulta diária falha e havia roster verde antigo em memória', () => {
+    mockState.dailyError = true;
+    render(<FrmsFadigaPainel />);
+    expect(screen.getByText(/Não foi possível verificar os alertas de fadiga e os check-ins/)).toBeInTheDocument();
+    expect(screen.queryByText('Preenchida — sem alerta identificado')).not.toBeInTheDocument();
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reconsultar dados e alertas' }));
+    expect(mockState.dailyCalls).toBe(1);
+    expect(mockState.alertCalls).toBe(1);
   });
 
   it('não converte resposta de alertas malformada em ausência confirmada de risco', () => {

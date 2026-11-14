@@ -65,13 +65,16 @@ function addMonths(dateValue: string, months: number): string | null {
   const normalizedDate = String(dateValue || '').trim();
   if (!normalizedDate) return null;
 
-  const baseDate = new Date(`${normalizedDate}T00:00:00Z`);
-  if (Number.isNaN(baseDate.getTime())) return null;
-
-  baseDate.setUTCMonth(baseDate.getUTCMonth() + months);
-  return baseDate.toISOString().slice(0, 10);
+  const civil = parseCivilDay(normalizedDate);
+  if (!civil) return null;
+  // months=0 devolve o proprio dia normalizado; >0 usa a soma canonica (com limite de fim de mes).
+  return months === 0 ? normalizedDate.slice(0, 10) : tryAddCalendarMonthsClamped(normalizedDate, months);
 }
 
+import {
+  parseCivilDay,
+  tryAddCalendarMonthsClamped,
+} from '../../../src/shared/utils/validade-meses';
 async function marcarG1SemAnteriorComoRenovada(
   db: D1Database,
   params: {

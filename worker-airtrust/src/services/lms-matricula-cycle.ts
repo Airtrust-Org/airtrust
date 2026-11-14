@@ -240,6 +240,38 @@ export async function syncMatriculaCycleFromMatricula(
   return ensureMatriculaCycle(db, params);
 }
 
+/** Mirrors learner progress without replacing SCORM assessment or historical cycle evidence.
+ * Unlike full snapshot sync, this is monotonic and tenant-scoped. */
+export async function syncMatriculaCycleProgressMonotonic(
+  db: D1Database,
+  params: { matriculaId: number; empresaId: number },
+) {
+  await db.prepare(
+    `UPDATE lms_matricula_ciclos
+        SET progresso_pct = MAX(COALESCE(progresso_pct, 0),
+              COALESCE((SELECT m.progresso_pct FROM lms_matriculas m
+                         WHERE m.id = lms_matricula_ciclos.matricula_id
+                           AND m.empresa_id = lms_matricula_ciclos.empresa_id
+                           AND m.deleted_at IS NULL), 0)),
+            status = CASE WHEN status = 'NAO_INICIADO' AND EXISTS (
+              SELECT 1 FROM lms_matriculas m
+               WHERE m.id = lms_matricula_ciclos.matricula_id
+                 AND m.empresa_id = lms_matricula_ciclos.empresa_id
+                 AND m.deleted_at IS NULL AND m.status = 'EM_ANDAMENTO'
+            ) THEN 'EM_ANDAMENTO' ELSE status END,
+            data_inicio = COALESCE(data_inicio, (
+              SELECT m.data_inicio FROM lms_matriculas m
+               WHERE m.id = lms_matricula_ciclos.matricula_id
+                 AND m.empresa_id = lms_matricula_ciclos.empresa_id
+                 AND m.deleted_at IS NULL)),
+            updated_at = datetime('now')
+      WHERE matricula_id = ? AND empresa_id = ? AND ciclo_atual = 1
+        AND deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM lms_matriculas m
+                     WHERE m.id = ? AND m.empresa_id = ? AND m.deleted_at IS NULL)`,
+  ).bind(params.matriculaId, params.empresaId, params.matriculaId, params.empresaId).run();
+}
+
 export async function syncMatriculaCycleHistoricoLink(
   db: D1Database,
   params: { matriculaId: number; historicoId: number; empresaId: number },

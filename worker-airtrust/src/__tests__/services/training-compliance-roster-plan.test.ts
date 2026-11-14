@@ -50,6 +50,18 @@ describe('Matrícula orientada por função e situação da qualificação',()=>
     expect(plan(snapshot(person(101,[requirement('NAO_REALIZADO')])),[{...course,publicado:undefined}]).enroll).toHaveLength(0);
     expect(plan(snapshot(person(101,[requirement('NAO_REALIZADO')])),[{...course,ativo:0}]).enroll).toHaveLength(0);
   });
+  it('tenant 6: opt-in explicito + modalidade histórica indefinida gera matrícula, sem reclassificar evidência',()=>{
+    const s=snapshot(
+      person(101,[requirement('NAO_REALIZADO',{modalidade_requerida:null})]),
+      person(102,[requirement('NAO_REALIZADO',{modalidade_requerida:null,auto_matricular_ead:0})]),
+      person(103,[requirement('NAO_REALIZADO',{modalidade_requerida:'PRESENCIAL'})]),
+    );
+    const result=buildTrainingComplianceRosterPlan(s,[course],[],new Set(),6);
+    expect(result.enroll.map(x=>x.funcionarioId)).toEqual([101]);
+    expect(result.skippedPolicyOptOut).toBe(1);
+    expect(result.skippedManualModality).toBe(1);
+    expect(buildTrainingComplianceRosterPlan(s,[course],[],new Set(),7).enroll).toHaveLength(0);
+  });
   it('matricula histórico vencido mas não quem permanece conforme ou vencendo',()=>{
     const result=plan(snapshot(
       person(101,[requirement('VENCIDO')]),

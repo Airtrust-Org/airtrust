@@ -101,10 +101,20 @@ export function createTrainingComplianceIntelligenceRoutes({
     };
   }
 
+  async function eligibleEadQualificationIds(db: D1Database, empresaId: number): Promise<Set<number>> {
+    const { results } = await db.prepare(`
+      SELECT qt.id FROM qualificacoes_tipos qt
+      WHERE qt.empresa_id = ? AND qt.deleted_at IS NULL
+        AND UPPER(TRIM(COALESCE(qt.categoria, ''))) IN ('EAD', 'TREINAMENTO EAD')
+    `).bind(empresaId).all<{ id: number }>();
+    return new Set((results || []).map((row) => Number(row.id)));
+  }
+
   function selectedComplianceTargets(
     empresaId: number,
     snapshot: TrainingComplianceSnapshot,
     requested: RequestedComplianceTarget[],
+    eligibleEadIds: Set<number>,
   ): ComplianceNotificationTarget[] {
     const requestedKeys = new Set(
       requested.map(
@@ -115,6 +125,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     for (const person of snapshot.people) {
       for (const requirement of person.requisitos) {
         if (requirement.obrigatoriedade !== 'OBRIGATORIA' || requirement.evidencia_pendente_validacao) continue;
+        if (!eligibleEadIds.has(Number(requirement.qualificacao_tipo_id))) continue;
         const key = `${person.id}:${requirement.qualificacao_tipo_id}`;
         if (!requestedKeys.has(key)) continue;
         targets.push(notificationTargetFrom(empresaId, person, requirement));
@@ -295,6 +306,7 @@ export function createTrainingComplianceIntelligenceRoutes({
     }
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access, undefined, { coalesce: true });
     const notificationStats = await loadComplianceNotificationStats(c.env.DB, empresaId);
+    const eligibleEadIds = await eligibleEadQualificationIds(c.env.DB, empresaId);
     const statusPriority: Record<string, number> = {
       VENCIDO: 0,
       NAO_REALIZADO: 1,
@@ -346,6 +358,7 @@ export function createTrainingComplianceIntelligenceRoutes({
               funcao_id: person.funcao_id,
               funcao_nome: person.funcao_nome,
               qualificacao_tipo_id: requirement.qualificacao_tipo_id,
+              alerta_ead_permitido: eligibleEadIds.has(Number(requirement.qualificacao_tipo_id)),
               qualificacao_tipo_nome: requirement.qualificacao_tipo_nome,
               qualificacao_tipo_codigo: requirement.qualificacao_tipo_codigo,
               status_compliance: requirement.status_compliance,
@@ -401,7 +414,8 @@ export function createTrainingComplianceIntelligenceRoutes({
     const requested = Array.isArray(payload.targets) ? payload.targets.slice(0, 200) : [];
     if (!requested.length) throw new ApiError('Selecione ao menos uma pendência', 400);
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const targets = selectedComplianceTargets(empresaId, snapshot, requested);
+    const eligibleEadIds = await eligibleEadQualificationIds(c.env.DB, empresaId);
+    const targets = selectedComplianceTargets(empresaId, snapshot, requested, eligibleEadIds);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
     const already = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);
@@ -441,7 +455,8 @@ export function createTrainingComplianceIntelligenceRoutes({
     if (!channels.email && !channels.whatsapp)
       throw new ApiError('Selecione e-mail e/ou WhatsApp', 400);
     const snapshot = await buildSnapshot(c.env.DB, empresaId, access);
-    const targets = selectedComplianceTargets(empresaId, snapshot, requested);
+    const eligibleEadIds = await eligibleEadQualificationIds(c.env.DB, empresaId);
+    const targets = selectedComplianceTargets(empresaId, snapshot, requested, eligibleEadIds);
     if (!targets.length)
       throw new ApiError('Nenhuma pendência válida encontrada no seu escopo', 404);
     const history = await readSameDayTrainingAlerts(c.env.DB, empresaId, access);

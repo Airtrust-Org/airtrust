@@ -19,6 +19,7 @@ import {
 import {
   assertCursoWriteScope,
   buildCourseSetorScope,
+  buildCatalogCourseReadScope,
   getCourseSetorSchema,
 } from './lms-cursos-setor-scope';
 import { getEmpresaIdSafe } from '../utils/tenant-resolution';
@@ -30,6 +31,7 @@ import {
 import { logAudit } from '../utils/db';
 import { getAuditContextSnapshot } from '../lib/audit/context';
 import { assertCoursePolicyChangeAllowed } from '../lib/lms/lms-course-policy-guard';
+import { withNewCourseAssessmentDefault } from '../lib/lms/lms-course-create-policy';
 import { recordAuditEventV2 } from '../lib/audit/audit-events-v2';
 import {
   ensureQualificacaoTipoForCurso,
@@ -747,7 +749,7 @@ async function uploadCursoThumbnail(params: {
   return { thumbnail_r2_key: key, version_tag: versionTag };
 }
 
-async function parseCursoCreateRequest(c: Context) {
+export async function parseCursoCreateRequest(c: Context) {
   const contentType = c.req.header('content-type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
@@ -769,7 +771,7 @@ async function parseCursoCreateRequest(c: Context) {
       tipo_conteudo: String(formData.get('tipo_conteudo') ?? 'scorm').trim() || 'scorm',
       scorm_versao: parseOptionalScormVersion(formText(formData.get('scorm_versao'))),
       scorm_mastery_score: parseOptionalInt(formText(formData.get('scorm_mastery_score'))),
-      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? 'SCORED',
+      scorm_assessment_policy: formText(formData.get('scorm_assessment_policy')) ?? undefined,
       qualificacao_tipo_id: parseOptionalInt(formText(formData.get('qualificacao_tipo_id'))),
       gerar_qualificacao_ao_concluir: parseOptionalBinary(
         formText(formData.get('gerar_qualificacao_ao_concluir')),
@@ -778,7 +780,7 @@ async function parseCursoCreateRequest(c: Context) {
       setor_ids: parsedSetorIds.length > 0 ? parsedSetorIds : undefined,
     };
 
-    const parsed = CursoCreateSchema.safeParse(payload);
+    const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(payload, hasRole(c, 'admin')));
     if (!parsed.success) {
       throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
     }
@@ -787,7 +789,7 @@ async function parseCursoCreateRequest(c: Context) {
   }
 
   const body = await c.req.json<unknown>();
-  const parsed = CursoCreateSchema.safeParse(body);
+  const parsed = CursoCreateSchema.safeParse(withNewCourseAssessmentDefault(body, hasRole(c, 'admin')));
   if (!parsed.success) {
     throw new ApiError(parsed.error.issues[0]?.message ?? 'Dados inválidos', 400);
   }
@@ -1414,6 +1416,12 @@ app.get('/', async (c) => {
 
   if (somentePublicados) {
     where += ' AND c.publicado = 1';
+    // Hide only SCORM without version prefix AND without a legacy launch file.
+    // Legacy flat-path packages can launch with a NULL version prefix.
+    // repair publication. Existing enrollment history is never modified.
+    if (!hasRole(c, 'admin', 'manager')) {
+      where += " AND (c.tipo_conteudo != 'scorm' OR NULLIF(TRIM(c.scorm_package_r2_prefix), '') IS NOT NULL OR NULLIF(TRIM(c.scorm_launch_file), '') IS NOT NULL)";
+    }
   }
   if (categoria) {
     where += ' AND c.categoria = ?';
@@ -1423,51 +1431,9 @@ app.get('/', async (c) => {
     where += ' AND c.titulo LIKE ?';
     binds.push(`%${q}%`);
   }
-  if (finalSetorIds !== null && finalSetorIds.length === 0) {
-    where += ' AND 1 = 0';
-  } else if (finalSetorIds !== null) {
-    const placeholders = finalSetorIds.map(() => '?').join(', ');
-    const directScope = courseSetorSchema.hasCursoSetores
-      ? `EXISTS (
-          SELECT 1 FROM lms_cursos_setores lcs_f
-          WHERE lcs_f.curso_id = c.id
-            AND lcs_f.empresa_id = c.empresa_id
-            AND lcs_f.setor_id IN (${placeholders})
-            AND lcs_f.deleted_at IS NULL
-        )`
-      : '';
-    const fallbackScope = courseSetorSchema.hasQualificacaoTipoSetores
-      ? `(
-          ${
-            courseSetorSchema.hasCursoSetores
-              ? `NOT EXISTS (
-            SELECT 1 FROM lms_cursos_setores lcs_chk
-            WHERE lcs_chk.curso_id = c.id AND lcs_chk.empresa_id = c.empresa_id AND lcs_chk.deleted_at IS NULL
-          )
-          AND `
-              : ''
-          }EXISTS (
-            SELECT 1 FROM qualificacoes_tipos_setores qts_f
-            WHERE qts_f.tipo_id = c.qualificacao_tipo_id
-              AND qts_f.empresa_id = c.empresa_id
-              AND qts_f.setor_id IN (${placeholders})
-              AND qts_f.deleted_at IS NULL
-          )
-        )`
-      : '';
-    const scopeClauses = [directScope, fallbackScope].filter(Boolean);
-    if (scopeClauses.length === 0) {
-      where += ' AND 1 = 0';
-    } else {
-      where += ` AND (${scopeClauses.join(' OR ')})`;
-      binds.push(
-        ...finalSetorIds,
-        ...(courseSetorSchema.hasCursoSetores && courseSetorSchema.hasQualificacaoTipoSetores
-          ? finalSetorIds
-          : []),
-      );
-    }
-  }
+  const catalogScope = buildCatalogCourseReadScope(access, finalSetorIds, courseSetorSchema);
+  where += catalogScope.clause;
+  binds.push(...catalogScope.bindings);
 
   const domainFilter = await applyLmsCursosDomainReadFilter({
     db,
@@ -2065,6 +2031,7 @@ app.post('/', requirePermission('lms', 'criar', 'admin', 'manager'), async (c) =
     await syncLmsCourseFromQualificacaoTipo(db, {
       empresaId,
       qualificacaoTipoId: Number(finalQualificacaoTipoId),
+      preferredCourseId: Number(id),
     });
 
     const reconcileTask = reconcileImportedEdappHistory(db, {

@@ -346,9 +346,11 @@ describe('qualificacoes tipos update sync', () => {
     expect(batchCall?.args).toContain(202);
     expect(batchCall?.args).toContain('AS350-B2');
     // A validade do modelo deve atualizar TODOS os históricos correspondentes,
-    // independentemente da data originalmente persistida (24 meses, fim do mês).
-    expect(batchCall?.args).toContain('2027-01-31');
-    expect(batchCall?.args).toContain('2027-02-28');
+    // independentemente da data originalmente persistida (24 meses, no dia; a flag legada
+    // vencimento_fim_mes = 1 enviada no PUT e ignorada).
+    expect(batchCall?.args).toContain('2027-01-15');
+    expect(batchCall?.args).toContain('2027-02-20');
+    expect(batchCall?.args).not.toContain('2027-01-31');
     expect(batchCall?.args).toContain(24);
   });
 

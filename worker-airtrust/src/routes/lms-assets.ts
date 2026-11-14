@@ -12,7 +12,7 @@ import { serveAuthorizedRenderedPptx } from './lms-pptx-rendered';
 import { registerScormCandidateQaRoutes } from './lms-scorm-candidate-qa';
 import { guessMime, normalizeR2Path, appendCacheBusterToRelativeAssetRefs } from '../lib/lms/lms-scorm-asset-paths';
 export { guessMime } from '../lib/lms/lms-scorm-asset-paths';
-import { assertCandidateQaScope, assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
+import { assertScormCandidateQaEnvironment, readScormQaCandidate } from '../lib/lms/lms-scorm-candidate-preview';
 import { auth, validateAccessTokenSecurityState } from '../middleware/auth';
 import { buildResumeStorageScript } from '../services/lms-scorm-local-resume';
 import {
@@ -23,6 +23,7 @@ import {
   buildScormProgressParsersScript,
   buildScormSessionCloseRuntimeScript,
   buildScormQueuedCommitScript,
+  buildScormCommitDeadlineScript,
   buildScormTerminalLockScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
@@ -1106,10 +1107,12 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     s76Rc3Active = active?.sha === S76_RC3_IMMUTABLE_SHA256;
   }
 
-  // Project the same 48/49 administrative indexes only for verified handoff
-  // #30. This changes launch CMI in memory, never the underlying D1 row.
-  if (s76Rc3Active && matricula.id === 690 &&
-      ciclo.id === 889 && verifiedHandoff?.id === 30 &&
+  // Project any governed same-cycle S76 RC3 administrative checkpoint into
+  // the immutable package's native V2 runtime, not merely the first historical
+  // handoff. The projector validates tenant, ACTIVE package SHA, immutable
+  // manifest, exact audited credits, cycle and zero terminal status. No D1/R2
+  // edits, fictitious responses or completion occur.
+  if (s76Rc3Active && verifiedHandoff?.id &&
       matricula.status === 'EM_ANDAMENTO' &&
       matricula.qualificacao_historico_id === null &&
       matricula.scorm_assessment_policy === 'FORMATIVE' &&
@@ -1947,7 +1950,7 @@ ${buildScormNativeResumeOwnershipScript()}
   }
 
 ${buildScormQueuedCommitScript()}
-
+${buildScormCommitDeadlineScript()}
   function commit(data, attempt, eventType) {
     if (PREVIEW_MODE || REVIEW_MODE || !COMMIT_URL || MATRICULA_ID == null) {
       diag(' COMMIT_SKIPPED preview=' + PREVIEW_MODE + ' review=' + REVIEW_MODE + ' url=' + (COMMIT_URL || 'null') + ' mid=' + MATRICULA_ID);
@@ -1981,7 +1984,7 @@ ${buildScormQueuedCommitScript()}
     // The wrapper never receives an access bearer. The browser sends only the
     // short-lived, HttpOnly, enrollment-scoped LMS capability cookie.
     var needsKeepalive = isFinalCommitEvent(eventType); // Preserve completion if the learner exits immediately.
-    var requestPromise = fetch(COMMIT_URL, {
+    var requestPromise = fetchBoundedScormCommit(COMMIT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -2098,7 +2101,13 @@ ${buildScormQueuedCommitScript()}
         attempt: currentAttempt,
       });
       if (eventType === 'SCORM_USER_FINALIZE' && completionPending) {
-        notifyCompletionError('SCORM_FINAL_COMMIT_MISSING', 'network-error');
+        notifyCompletionError(
+          'SCORM_FINAL_COMMIT_MISSING',
+          e && e.message === 'SCORM_COMMIT_TIMEOUT' ? 'commit-timeout' : 'network-error',
+          e && e.message === 'SCORM_COMMIT_TIMEOUT'
+            ? 'O servidor não confirmou o encerramento no prazo. Seu progresso não foi descartado; verifique a situação e tente novamente.'
+            : undefined,
+        );
       }
       return null;
     });

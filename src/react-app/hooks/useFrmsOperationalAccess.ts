@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { httpClient, type ApiResponse, type HttpClientOptions } from '@/react-app/services/http-client';
+import { useAuth } from '@/react-app/hooks/useAuth';
 
 export type FrmsWorkforceProfile = 'flight' | 'maintenance' | 'other';
 
@@ -187,24 +188,36 @@ async function fetchFrmsOperationalAccess(): Promise<FrmsOperationalAccess> {
   }
 }
 
+export function canFetchFrmsOperationalAccess(isLoading: boolean, isAuthenticated: boolean): boolean {
+  return !isLoading && isAuthenticated;
+}
+
 export function useFrmsOperationalAccess() {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-operational-access'],
+    // Never request operational permissions before the persisted session has
+    // been verified. Keep tenant/user/profile in the cache identity. A missing
+    // empresas response does not itself revoke a server-verified JWT.
+    queryKey: ['frms-operational-access', empresaAtualId, user?.id, user?.role],
     queryFn: fetchFrmsOperationalAccess,
+    enabled: canFetchFrmsOperationalAccess(isLoading, isAuthenticated),
     retry: false,
     staleTime: 2 * 60 * 1000,
   });
 }
 
 export function useFrmsMaintenanceTeam(referenceDate: string, enabled = true) {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-maintenance-team', referenceDate],
+    // Include tenant and authenticated identity: a previously cached team
+    // must never be displayed under a different company/user session.
+    queryKey: ['frms-maintenance-team', referenceDate, empresaAtualId, user?.id, user?.role],
     queryFn: () =>
       getEndpoint<FrmsMaintenanceTeam>(
         `/me/operational-access/frms-maintenance-team?date=${encodeURIComponent(referenceDate)}`,
         'maintenance-team',
       ),
-    enabled: enabled && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
+    enabled: enabled && !isLoading && isAuthenticated && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
     staleTime: 60 * 1000,
   });
 }

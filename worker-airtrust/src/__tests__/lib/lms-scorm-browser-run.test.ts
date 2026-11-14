@@ -81,7 +81,7 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
     const page = {
       setRequestInterception: vi.fn(async () => undefined),
       on: vi.fn(),
-      setContent: vi.fn(async () => undefined),
+      goto: vi.fn(async () => undefined),
       waitForFunction: vi.fn(async () => {
         if (waitFailure) throw new Error('TimeoutError: browser readiness timed out');
         return undefined;
@@ -106,12 +106,112 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
       assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
       launchBrowser: async () => browser as never,
     });
-    expect(page.setContent).toHaveBeenCalledWith(expect.any(String), {
+    expect(page.goto).toHaveBeenCalledWith('https://scorm-candidate.invalid/index.html', {
       waitUntil: 'domcontentloaded', timeout: 30000,
     });
     expect(page.waitForFunction).toHaveBeenCalledOnce();
     expect(runtime).toMatchObject({ status: 'PASS', initializeObserved: true, commitObserved: true, finishObserved: true });
   });
+
+  it('serves instrumented SCO on a real same-origin navigation, preserving localStorage availability', async () => {
+    const {page,browser}=fakeBrowser();
+    const html='<html><head></head><body><script src="app.js"></script></body></html>';
+    await runScormBrowserConformance({
+      browserBinding:{},candidateSha256:'c'.repeat(64),launchFile:'index.html',
+      assets:[
+        {path:'index.html',data:new TextEncoder().encode(html)},
+        {path:'app.js',data:new TextEncoder().encode('localStorage.setItem("proof","1");')},
+      ],
+      launchBrowser:async()=>browser as never,
+    });
+    const handler=page.on.mock.calls.find(([kind])=>kind==='request')?.[1];
+    expect(handler).toBeTypeOf('function');
+    const served=vi.fn(async (response:unknown)=>response);
+    await handler({
+      url:()=> 'https://scorm-candidate.invalid/index.html',
+      respond:served,
+      abort:vi.fn(async()=>undefined),
+    });
+    expect(served).toHaveBeenCalledOnce();
+    const response=served.mock.calls[0][0] as {body:string;headers:Record<string,string>};
+    expect(response.headers['Content-Type']).toMatch(/text\/html/);
+    expect(response.body).toContain('__AIRTRUST_SCORM_TRACE');
+    expect(response.body).toContain('<script src="app.js"></script>');
+    expect(page.goto).toHaveBeenCalledWith(
+      'https://scorm-candidate.invalid/index.html',expect.any(Object));
+    const denied=vi.fn(async (reason?:string)=>reason);
+    await handler({
+      url:()=> 'https://evil.example.invalid/app.js',
+      respond:vi.fn(async()=>undefined),abort:denied,
+    });
+    expect(denied).toHaveBeenCalledWith('blockedbyclient');
+  });
+
+  it.each(['INDEX.HTM','MAIN.HTML'])('serves case-insensitive authored HTML launch %s as executable document', async launchFile => {
+    const {page,browser}=fakeBrowser();
+    await runScormBrowserConformance({
+      browserBinding:{},candidateSha256:'d'.repeat(64),launchFile,
+      assets:[{path:launchFile,data:new TextEncoder().encode('<html><body>QA</body></html>')}],
+      launchBrowser:async()=>browser as never,
+    });
+    const handler=page.on.mock.calls.find(([kind])=>kind==='request')?.[1];
+    const served=vi.fn(async (response:unknown)=>response);
+    await handler({
+      url:()=> 'https://scorm-candidate.invalid/'+launchFile,
+      respond:served,abort:vi.fn(async()=>undefined),
+    });
+    expect(served.mock.calls[0][0]).toMatchObject({
+      status:200,headers:{'Content-Type':'text/html; charset=utf-8'},
+    });
+  });
+
+
+  it.each(['alert', 'confirm', 'prompt'] as const)(
+    'denies %s modal safely while preserving only proof from authored SCO',
+    async kind => {
+      const on = vi.fn();
+      const dismissed = vi.fn(async () => undefined);
+      const accepted = vi.fn(async () => undefined);
+      const page = {
+        setRequestInterception: vi.fn(async () => undefined),
+        on,
+        goto: vi.fn(async () => undefined),
+        waitForFunction: vi.fn(async () => undefined),
+        evaluate: vi.fn()
+          .mockImplementationOnce(async () => {
+            const handler = on.mock.calls.find(([event]) => event === 'dialog')?.[1] as
+              ((dialog: {type:()=>string;dismiss:()=>Promise<void>;accept:()=>Promise<void>}) => void) | undefined;
+            expect(handler).toBeTypeOf('function');
+            handler?.({ type: () => kind, dismiss: dismissed, accept: accepted });
+            await Promise.resolve();
+            return { supported: true, completed: true, steps: 45, reason: null };
+          })
+          .mockResolvedValueOnce(undefined)
+          .mockResolvedValueOnce({
+            trace: [
+              { method: 'LMSInitialize' },
+              { method: 'LMSSetValue', key: 'cmi.core.lesson_status', value: 'passed' },
+              { method: 'LMSCommit' },
+              { method: 'LMSFinish' },
+            ],
+            values: { 'cmi.core.lesson_status': 'passed', 'cmi.core.score.raw': '100' },
+            initialized: true, finished: true, lastError: '0',
+          }),
+      };
+      const browser = {newPage:async()=>page,close:vi.fn(async()=>undefined)};
+      const runtime = await runScormBrowserConformance({
+        browserBinding:{},candidateSha256:'e'.repeat(64),launchFile:'index.html',
+        assets:[{path:'index.html',data:new TextEncoder().encode('<html><body>SCORM QA</body></html>')}],
+        launchBrowser:async()=>browser as never,
+      });
+      expect(dismissed).toHaveBeenCalledOnce();
+      expect(accepted).not.toHaveBeenCalled();
+      expect(runtime.status).toBe('PASS');
+      expect(runtime.functionalCompletionVerified).toBe(kind==='alert');
+      expect(runtime.functionalCompletionReason).toBe(kind==='alert'
+        ? null:'SCORM_QA_INTERACTIVE_DIALOG_NOT_SUPPORTED');
+    },
+  );
 
   it('fails closed with a safe diagnostic when SCO never initializes', async () => {
     const { page, browser } = fakeBrowser(true);
@@ -120,7 +220,7 @@ describe('SCORM Browser Rendering bounded readiness rather than network-idle', (
       assets: [{ path: 'index.html', data: new TextEncoder().encode('<html><body>QA</body></html>') }],
       launchBrowser: async () => browser as never,
     });
-    expect(page.setContent).toHaveBeenCalledOnce();
+    expect(page.goto).toHaveBeenCalledOnce();
     expect(runtime).toMatchObject({
       status: 'TIMEOUT', failureStage: 'VERIFY_SCORM_INITIALIZATION',
       failureCategory: 'BROWSER_TIMEOUT',

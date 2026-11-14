@@ -17,7 +17,7 @@ import Button from '@/react-app/components/Button';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import { usePermissions } from '@/react-app/hooks/usePermissions';
 import { useLmsCurso, useMinhasMatriculas, useMatricularCurso, useScormPackageVersions } from '@/react-app/hooks/useLms';
-import type { LmsMatricula } from '@/react-app/hooks/useLms';
+import { LmsRequestError, type LmsMatricula } from '@/react-app/hooks/useLms';
 import ScormEditionPanel from './ScormEditionPanel';
 import {
   formatMinutes,
@@ -41,7 +41,7 @@ export default function LmsCursoDetalhe() {
   const funcionarioId = user?.funcionario_id ? Number(user.funcionario_id) : null;
 
   const canManage = isAdmin || isGestor;
-  const { data: curso, isLoading } = useLmsCurso(Number(id));
+  const { data: curso, isLoading, isError: cursoLoadFailed, error: cursoLoadError, refetch: retryCurso } = useLmsCurso(Number(id));
   const { data: matriculas } = useMinhasMatriculas(!canManage);
   const matricular = useMatricularCurso();
 
@@ -134,6 +134,34 @@ export default function LmsCursoDetalhe() {
               <div className="h-64 rounded-2xl bg-slate-100 dark:bg-slate-800" />
             </div>
           </div>
+        </LmsPageShell>
+      </AppLayout>
+    );
+  }
+
+  // Never translate a 401/403/5xx or network failure into "course removed".
+  // Only the server's explicit 404 means the requested course was not found.
+  if (cursoLoadFailed) {
+    const forbidden = cursoLoadError instanceof LmsRequestError && cursoLoadError.status === 403;
+    const notFound = cursoLoadError instanceof LmsRequestError && cursoLoadError.status === 404;
+    return (
+      <AppLayout>
+        <LmsPageShell>
+          <LmsEmptyState
+            icon={<AlertTriangle className="h-8 w-8" />}
+            title={notFound ? 'Curso não encontrado' : forbidden ? 'Acesso ao curso não autorizado' : 'Não foi possível carregar o curso'}
+            description={notFound
+              ? 'O curso solicitado não está disponível para esta empresa.'
+              : forbidden
+                ? 'Seu perfil não possui acesso a este curso. Verifique seu vínculo, matrícula e empresa ativa com o responsável pelos treinamentos.'
+                : 'A consulta falhou. Isso não significa que o curso ou sua matrícula tenham sido removidos.'}
+            action={
+              <div className="flex flex-wrap justify-center gap-3">
+                {!notFound && <Button variant="secondary" onClick={() => void retryCurso()}>Tentar novamente</Button>}
+                <Button variant="secondary" onClick={() => navigate('/lms/cursos')}>Voltar ao catálogo</Button>
+              </div>
+            }
+          />
         </LmsPageShell>
       </AppLayout>
     );

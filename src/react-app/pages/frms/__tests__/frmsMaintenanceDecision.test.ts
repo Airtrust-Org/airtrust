@@ -74,6 +74,35 @@ describe('baseline de prontidão e prioridade operacional', () => {
     expect(classifyMaintenanceItem(item({ baseline_ready: 1, readiness_classification: 'preserved' }))).toBe('NORMAL');
   });
 
+  it('recusa classificação verde se a avaliação de risco ou aptidão estiver ausente ou inválida', () => {
+    for (const overrides of [
+      { computed_risk_level: null },
+      { computed_risk_level: 'desconhecido' },
+      { computed_risk_level: '' },
+      { status_operacional: null },
+      { status_operacional: 'NAO_AVALIADO' },
+      { requires_operational_review: null },
+    ]) {
+      expect(classifyMaintenanceItem(item(overrides))).toBe('PENDING');
+    }
+    expect(maintenanceActionText('PENDING', item({ computed_risk_level: null })))
+      .toContain('avaliação de risco ou condição operacional não confirmada');
+  });
+
+  it('só considera NORMAL com check-in, risco normal, condição APTO, review zero e PVT preservado', () => {
+    const evaluated = item({
+      computed_risk_level: 'normal',
+      status_operacional: 'APTO',
+      requires_operational_review: 0,
+      readiness_classification: 'preserved',
+      baseline_ready: 1,
+    });
+    expect(classifyMaintenanceItem(evaluated)).toBe('NORMAL');
+    expect(classifyMaintenanceItem({ ...evaluated, requires_operational_review: null })).toBe('PENDING');
+    expect(classifyMaintenanceItem({ ...evaluated, checkin_id: null })).toBe('PENDING');
+    expect(classifyMaintenanceItem({ ...evaluated, readiness_id: null })).toBe('PENDING');
+  });
+
   it('prioriza sinais críticos e de atenção mesmo durante formação de baseline', () => {
     expect(classifyMaintenanceItem(item({
       readiness_classification: 'operational_review', baseline_ready: 0,

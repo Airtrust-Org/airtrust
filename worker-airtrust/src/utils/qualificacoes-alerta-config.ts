@@ -1,3 +1,4 @@
+import { sqlAddMonthsClamped, sqlEffectiveValidityMonths } from './sql-add-months';
 import type { D1Database } from '@cloudflare/workers-types';
 
 export const DEFAULT_QUALIFICACOES_ALERTA_DIAS = 30;
@@ -42,12 +43,17 @@ export function getQualificacoesVencimentoExpr(
   historicoAlias: string = 'qh',
   tipoAlias: string = 'qt',
 ): string {
+  const meses = sqlEffectiveValidityMonths(
+    `${historicoAlias}.validade_meses`,
+    `${tipoAlias}.codigo`,
+    `${tipoAlias}.validade`,
+  );
   return `COALESCE(
     ${historicoAlias}.data_vencimento,
     CASE
       WHEN ${historicoAlias}.data_conclusao IS NOT NULL
-        AND (${historicoAlias}.validade_meses IS NOT NULL OR ${tipoAlias}.validade IS NOT NULL)
-        THEN date(${historicoAlias}.data_conclusao, '+' || COALESCE(${historicoAlias}.validade_meses, ${tipoAlias}.validade) || ' months')
+        AND (${meses}) IS NOT NULL
+        THEN ${sqlAddMonthsClamped(`${historicoAlias}.data_conclusao`, meses)}
       ELSE NULL
     END
   )`;

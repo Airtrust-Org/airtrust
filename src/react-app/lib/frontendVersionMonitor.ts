@@ -2,8 +2,27 @@ import {
   fetchServedFrontendVersion,
   readServedFrontendVersionFromDocument,
 } from '@/react-app/config/deployment';
-import { hardRefreshApp } from '@/react-app/lib/hardRefresh';
 import { isReloadProtectedInteractivePath } from '@/react-app/lib/reloadProtection';
+
+// Runtime update notices do not alter credentials, offline caches, or page state.
+ // A notice is retained until this tab is voluntarily refreshed.
+let pendingFrontendVersion: string | null = null;
+const frontendUpdateListeners = new Set<(version: string) => void>();
+
+export function getPendingFrontendUpdate(): string | null {
+  return pendingFrontendVersion;
+}
+
+export function onFrontendUpdateAvailable(listener: (version: string) => void): () => void {
+  frontendUpdateListeners.add(listener);
+  if (pendingFrontendVersion !== null) listener(pendingFrontendVersion);
+  return () => frontendUpdateListeners.delete(listener);
+}
+
+function announceFrontendUpdate(version: string): void {
+  pendingFrontendVersion = version;
+  for (const listener of frontendUpdateListeners) listener(version);
+}
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const LMS_PLAYER_PATH = /^\/lms\/player\//;
@@ -16,7 +35,6 @@ interface FrontendVersionMonitorDeps {
   documentApi?: MonitorDocument;
   fetchVersion?: () => Promise<string | null>;
   readCurrentVersion?: () => string | null;
-  refresh?: () => Promise<void>;
   pollIntervalMs?: number;
 }
 
@@ -31,26 +49,26 @@ export function installFrontendVersionMonitor(deps: FrontendVersionMonitorDeps =
   const documentApi = deps.documentApi ?? document;
   const fetchVersion = deps.fetchVersion ?? (() => fetchServedFrontendVersion());
   const readCurrentVersion = deps.readCurrentVersion ?? (() => readServedFrontendVersionFromDocument());
-  const refresh = deps.refresh ?? hardRefreshApp;
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 
   let checking = false;
-  let refreshing = false;
+  let lastAnnouncedVersion: string | null = null;
 
   const checkForUpdate = async () => {
-    if (checking || refreshing || shouldSkipAutomaticRefresh(windowApi.location.pathname)) return;
+    if (checking || shouldSkipAutomaticRefresh(windowApi.location.pathname)) return;
     checking = true;
     try {
       const currentVersion = readCurrentVersion();
       const servedVersion = await fetchVersion();
       if (!currentVersion || !servedVersion || currentVersion === servedVersion) return;
 
-      refreshing = true;
-      console.info('[version] Frontend atualizado detectado; recarregando runtime', {
+      if (lastAnnouncedVersion === servedVersion) return;
+      lastAnnouncedVersion = servedVersion;
+      console.info('[version] Nova versão disponível; aguardando ação do usuário', {
         currentVersion,
         servedVersion,
       });
-      await refresh();
+      announceFrontendUpdate(servedVersion);
     } catch (error) {
       console.warn('[version] Falha ao verificar atualização do frontend:', error);
     } finally {

@@ -56,9 +56,9 @@ function createDbMock(options?: {
             async first<T>() {
             if (
               sql ===
-              'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
+              'SELECT id, assinatura_aluno_timestamp, assinatura_tripulante FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
             ) {
-              return { id: Number(args[0]) } as T;
+              return { id: Number(args[0]), assinatura_aluno_timestamp: null, assinatura_tripulante: 0 } as T;
             }
 
             // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
@@ -157,10 +157,11 @@ describe('simuladores fichas simulador observacoes guard', () => {
 
     const insert = runs.find((item) => item.query.includes('INSERT INTO fichas_sessao_manobras('));
     expect(insert).toBeDefined();
-    // Bind order is (ficha_id, codigo, descricao, categoria, ordem, resultado,
-    // observacoes) — empresa_id was removed: fichas_sessao_manobras has no
-    // such column in production (schema-compat hotfix).
-    expect(insert?.query).not.toContain('empresa_id');
+    // empresa_id belongs to the signed-state parent guard, not to the
+    // child row insert columns (no empresa_id column in this legacy table).
+    expect(insert?.query).toMatch(/INSERT INTO fichas_sessao_manobras\s*\( ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes \)/);
+    expect(insert?.query).toContain('f.empresa_id = ?');
+    expect(insert?.query).toContain('assinatura_instrutor_timestamp IS NULL');
     expect(insert?.args[1]).toBe('A139-CKL-01');
     expect(insert?.args[2]).toBe('Normal checklist');
   });
@@ -190,9 +191,10 @@ describe('simuladores fichas simulador observacoes guard', () => {
     ).toBe(false);
     expect(
       runs.some((item) =>
-        item.query.includes(
-          'UPDATE fichas_sessao_manobras SET resultado=?, observacoes=?, updated_at=datetime("now") WHERE ficha_id=? AND ordem=?',
-        ),
+        item.query.includes('UPDATE fichas_sessao_manobras') &&
+        item.query.includes("SET resultado=?, observacoes=?, updated_at=datetime('now')") &&
+        item.query.includes('assinatura_instrutor_timestamp IS NULL') &&
+        item.query.includes('f.empresa_id=?'),
       ),
     ).toBe(true);
   });

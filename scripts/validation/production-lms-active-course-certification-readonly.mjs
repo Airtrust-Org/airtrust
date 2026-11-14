@@ -301,7 +301,14 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       st.adaptiveByLocation ??= {};
       st.answerAcceptedByLocation ??= {};
       st.reviewVisitedByLocation ??= {};
-      const locationBase = String(location || 'unknown');
+      const countEl = document.querySelector('.bottomnav #count, .footer-center #count, #count');
+      const countText = countEl ? String(countEl.innerText || countEl.textContent || '').trim() : '';
+      const domCounterMatch = countText.match(/^(\d+)\s*\/\s*(\d+)$/) ||
+        String(document.body?.innerText || '').match(/\b(\d+)\s*\/\s*(\d+)\b/);
+      const effectiveLocation = (location && String(location).trim()) ||
+        (domCounterMatch ? domCounterMatch[1] + '/' + domCounterMatch[2] : '') ||
+        'unknown';
+      const locationBase = effectiveLocation;
       // cmi.core.lesson_location tracks the slide, not the question inside it.
       // Use the learner-visible ordinal to avoid treating each new quiz question
       // as a previously-clicked answer on the same slide.
@@ -441,8 +448,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           retry.test(text) ||
           forwardId.test(id) ||
           /^(start|finish|submit|retry|iniciar|come[cç]ar|refazer|finalizar|concluir)/i.test(id);
-        const certifiableChoice = el.matches(
-          'button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],[data-scenario]',
+        const certifiableChoice = Boolean(
+          el.matches(
+            '.rt-choice,.case-choice,[data-opt],button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],[data-scenario]',
+          ) ||
+          el.closest('.rt-case-choices,.case-choices,.quiz-choices,[data-case-choices]')
         );
         // Learner answers remain course controls even when their visible text contains
         // words such as "anterior" or they live under a menu-named layout wrapper.
@@ -462,9 +472,15 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           const id = clean(el.id);
           const key = clean(`${id} ${text}`);
           const className = clean(el.className);
+          const isCaseOrQuizChoice = Boolean(
+            el.matches('.rt-choice, .case-choice, [data-opt], [data-scenario], [data-quiz-choice], button.choice, button.option, button.answer') ||
+            el.closest('.rt-case-choices, .case-choices, .quiz-choices, [data-case-choices]')
+          );
           const multiToggle = Boolean(
-            el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
-            el.closest('[class*="checklist" i],[id*="checklist" i]')
+            !isCaseOrQuizChoice && (
+              el.matches('[aria-pressed],[aria-checked],[role=checkbox]') ||
+              el.closest('[class*="checklist" i],[id*="checklist" i]')
+            )
           );
           const role = clean(el.getAttribute('role'));
           const name = clean(el.getAttribute('name'));
@@ -483,6 +499,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             ariaPressed,
             ariaChecked,
             signature,
+            isCaseOrQuizChoice,
             multiToggle,
             chrome: isProductChrome(el, key),
           };
@@ -798,8 +815,9 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
       };
 
       const isChoiceButton = (item) =>
-        /(^|\s)(choice|option|answer)(\s|$)/i.test(item.className) ||
-        item.el.matches('[data-scenario]');
+        /(^|\s)(choice|option|answer|rt-choice|case-choice)(\s|$)/i.test(item.className) ||
+        item.el.matches('[data-scenario],[data-opt],[data-case-choice],[data-quiz-choice]') ||
+        Boolean(item.el.closest('.rt-case-choices,.case-choices,.quiz-choices,[data-case-choices]'));
 
       // Quiz templates reveal the correct option to the learner after an answer
       // by visibly marking a disabled option as ".correct". This is learner-visible
@@ -915,7 +933,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
       }
 
-      const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
+      const moduleRetry = items.find((item) => !item.isCaseOrQuizChoice && retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
         const probe = prepareAdaptiveProbe();
@@ -1138,7 +1156,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         return markAndClick(finalizeAssessment, 'assessment-finish');
       }
 
-      const toggle = items.find((item) => item.multiToggle && !alreadyClicked(item));
+      const toggle = items.find((item) => item.multiToggle && !isChoiceButton(item) && !alreadyClicked(item));
       if (toggle) return markAndClick(toggle, 'content-toggle');
 
       // A declared required decision must be answered BEFORE any Next/Continue
@@ -1154,7 +1172,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         if (!priorDecision) {
           const authoredIndex = plansHere.flatMap((entry) => entry?.indices || [])
             .find((index) => Number.isInteger(index) && index >= 0 && index < choices.length);
-          const target = Number.isInteger(authoredIndex) ? choices[authoredIndex] : null;
+          let target = null;
+          if (Number.isInteger(authoredIndex)) {
+            const byDataOpt = choices.find((item) => Number(item.el.getAttribute('data-opt')) === authoredIndex);
+            target = byDataOpt ?? choices[authoredIndex] ?? null;
+          }
           if (target) return markAndClick(target, 'required-decision-choice');
           // Do not guess a learner response merely because a button is visible.
           // Explicit authored mapping is required for this diagnostic preview.
@@ -1481,7 +1503,11 @@ async function captureVisibleControls(frame) {
       );
     };
     const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const classify = (text, id) => {
+    const classify = (text, id, el) => {
+      if (
+        el.matches('.rt-choice,.case-choice,[data-opt],[data-scenario],[data-quiz-choice],button.choice,button.option,button.answer') ||
+        el.closest('.rt-case-choices,.case-choices,.quiz-choices,[data-case-choices]')
+      ) return 'choice_or_other';
       if (/^(qnext|quiznext|next|nextbtn|btnnext|continue|continuebtn)$/i.test(id)) return 'next';
       if (/pr[oó]ximo|avan[cç]ar|continuar|prosseguir|next/.test(text)) return 'next';
       if (/confirmar|responder|enviar|verificar|submit/.test(text)) return 'submit';
@@ -1505,7 +1531,7 @@ async function captureVisibleControls(frame) {
           data_keys: Object.keys(el.dataset || {}).sort().slice(0, 12),
           aria_pressed: el.getAttribute('aria-pressed'),
           aria_checked: el.getAttribute('aria-checked'),
-          category: classify(text, id),
+          category: classify(text, id, el),
           disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true',
         };
       });
@@ -1706,7 +1732,10 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     let html = await response.text();
     const marker = '</body>';
     invariant(html.includes(marker), `SCORM_PREVIEW_BODY_MISSING:${course.id}`);
-    const reloadScript = `<script>(function(){var f=document.getElementById('scorm-frame');if(!f)return;var u=new URL(f.src,location.href);u.searchParams.set('airtrust_cert',Date.now().toString(36));f.src=u.toString();})();</script>`;
+    // Admin preview launches append ?preview=1 for human operators (#1882),
+    // which causes Factory V3/V4 courses to suppress SCORM writes. Strip it
+    // here so the read-only instrumented runtime tests the real learner path.
+    const reloadScript = `<script>(function(){var f=document.getElementById('scorm-frame');if(!f)return;var u=new URL(f.src,location.href);u.searchParams.delete('preview');u.searchParams.set('airtrust_cert',Date.now().toString(36));f.src=u.toString();})();</script>`;
     html = html.replace(marker, `${traceScript}${reloadScript}${marker}`);
     await route.fulfill({ response, body: html });
   });
@@ -1860,7 +1889,8 @@ function summarizePhase(phase) {
 }
 
 function basePhasePass(phase) {
-  return phase.initialized && phase.commit_observed && phase.finish_observed && !phase.calls_after_finish && phase.last_error === '0' && phase.asset_failures.length === 0 && phase.page_errors.length === 0;
+  const commitRequired = phase.phase !== 'reopen-completed';
+  return phase.initialized && (!commitRequired || phase.commit_observed) && phase.finish_observed && !phase.calls_after_finish && phase.last_error === '0' && phase.asset_failures.length === 0 && phase.page_errors.length === 0;
 }
 
 async function certifyScormCourse(browser, token, listed) {

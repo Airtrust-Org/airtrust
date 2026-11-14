@@ -211,13 +211,31 @@ export default function ControleVoosRdvWorkflowPanel({
     <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-          Fluxo Piloto → Coordenação
+          {isCoordenacao ? 'O que falta fazer neste RDV' : 'Andamento do RDV'}
         </h2>
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${WORKFLOW_COLORS[rdv.workflow_status]}`}
         >
           {WORKFLOW_LABELS[rdv.workflow_status]}
         </span>
+      </div>
+
+      {isCoordenacao && (
+        <ol aria-label="Etapas de aprovação do RDV" className="mb-3 flex flex-wrap gap-2 text-xs font-semibold">
+          <li className={['rascunho', 'enviado', 'reaberto'].includes(rdv.workflow_status) ? 'rounded-full bg-blue-700 px-3 py-2 text-white' : 'rounded-full bg-slate-100 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>1. Receber e revisar</li>
+          <li className={rdv.workflow_status === 'em_revisao' ? 'rounded-full bg-blue-700 px-3 py-2 text-white' : 'rounded-full bg-slate-100 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>2. Aprovar ou devolver</li>
+          <li className={rdv.workflow_status === 'aprovado_coordenacao' ? 'rounded-full bg-blue-700 px-3 py-2 text-white' : 'rounded-full bg-slate-100 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>3. Finalizar RDV</li>
+        </ol>
+      )}
+
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/20 dark:text-blue-200" role="status">
+        {rdv.workflow_status === 'enviado' && 'Pendente da Coordenação: clique em Iniciar revisão, confira os dados operacionais e aprove ou devolva com justificativa. O envio do piloto não finaliza o RDV.'}
+        {rdv.workflow_status === 'em_revisao' && 'Revisão em andamento: a Coordenação deve conferir os dados e escolher Aprovar ou Devolver ao piloto. O relatório ainda não pode ser exportado no XML.'}
+        {rdv.workflow_status === 'aprovado_coordenacao' && 'Aprovação registrada. Falta clicar em Finalizar relatório para tornar este RDV elegível à exportação XML Petrobras.'}
+        {rdv.workflow_status === 'reaberto' && 'Pendente da Coordenação: inicie uma nova revisão para corrigir e reapreciar este relatório.'}
+        {(rdv.workflow_status === 'rascunho' || rdv.workflow_status === 'devolvido') && 'Pendente do piloto: conclua o preenchimento, corrija eventuais alertas e envie o RDV à Coordenação.'}
+        {rdv.workflow_status === 'finalizado' && 'RDV finalizado. A exportação XML depende também da data selecionada e da validação dos identificadores Petrobras, etapas e horários.'}
+        {rdv.workflow_status === 'cancelado' && 'RDV cancelado. Não participa da exportação XML.'}
       </div>
 
       {rdv.motivo_devolucao &&
@@ -247,7 +265,7 @@ export default function ControleVoosRdvWorkflowPanel({
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-2" aria-label="Ações do RDV">
         {!isCoordenacao &&
           (rdv.workflow_status === 'rascunho' || rdv.workflow_status === 'devolvido') &&
           rdv.status === 'preenchimento_finalizado' && (
@@ -274,7 +292,7 @@ export default function ControleVoosRdvWorkflowPanel({
                 runAction(() => iniciarRevisao.mutateAsync({ vooId, body: { versao: rdv.versao } }))
               }
             >
-              Iniciar revisão
+              Iniciar conferência do RDV
             </ActionButton>
           )}
 
@@ -293,7 +311,7 @@ export default function ControleVoosRdvWorkflowPanel({
                 runAction(() => aprovar.mutateAsync({ vooId, body: { versao: rdv.versao } }))
               }
             >
-              {bloqueiosAprovacao.length > 0 ? 'Aprovação bloqueada por alertas' : 'Aprovar'}
+              {bloqueiosAprovacao.length > 0 ? 'Aprovação bloqueada por alertas' : 'Aprovar dados conferidos'}
             </ActionButton>
             {prompt === 'devolver' ? (
               <JustificativaPrompt
@@ -328,7 +346,7 @@ export default function ControleVoosRdvWorkflowPanel({
               runAction(() => finalizar.mutateAsync({ vooId, body: { versao: rdv.versao } }))
             }
           >
-            Finalizar relatório
+            Finalizar RDV aprovado
           </ActionButton>
         )}
 

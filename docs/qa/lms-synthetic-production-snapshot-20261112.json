@@ -1,0 +1,541 @@
+{
+  "report_type": "AIRTRUST_LMS_QA_SYNTHETIC_SNAPSHOT",
+  "snapshot_utc": "2026-11-12T23:19:13.001Z",
+  "tenant_id": 6,
+  "identity_scope": "qa-run-202611 browser/attempt employees; canonical QA-LMS-202611 excluded",
+  "educational_certification_validated": false,
+  "course_outcomes_verified": false,
+  "note": "Database status counters from synthetic test enrollments. Not proof of successful E2E homologation; preserve independent browser artifacts separately.",
+  "total_enrollments": 409,
+  "total_courses": 52,
+  "counts_by_status": {
+    "CONCLUIDO": 80,
+    "EM_ANDAMENTO": 58,
+    "NAO_INICIADO": 255,
+    "CANCELADO": 16
+  },
+  "results": [
+    {
+      "curso_id": 3,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 3,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 4,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 4,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 5,
+      "status": "EM_ANDAMENTO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 6,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 6,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 7,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 7,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 8,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 9,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 15,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 15,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 19,
+      "status": "CONCLUIDO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 21,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 22,
+      "status": "NAO_INICIADO",
+      "total": 28,
+      "avg_score": null
+    },
+    {
+      "curso_id": 23,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 25,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 25,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 26,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 27,
+      "status": "CANCELADO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 28,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 28,
+      "status": "NAO_INICIADO",
+      "total": 26,
+      "avg_score": null
+    },
+    {
+      "curso_id": 29,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 30,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 30,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 30,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 31,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 31,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 31,
+      "status": "NAO_INICIADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 32,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 32,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 33,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 33,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 34,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 39,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 41,
+      "status": "CANCELADO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 41,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 43,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 44,
+      "status": "EM_ANDAMENTO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 47,
+      "status": "CONCLUIDO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 47,
+      "status": "NAO_INICIADO",
+      "total": 24,
+      "avg_score": null
+    },
+    {
+      "curso_id": 49,
+      "status": "CONCLUIDO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 51,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 52,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 52,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 53,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 53,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 54,
+      "status": "CONCLUIDO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 54,
+      "status": "NAO_INICIADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 55,
+      "status": "CANCELADO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 55,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 56,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 56,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 56,
+      "status": "NAO_INICIADO",
+      "total": 24,
+      "avg_score": null
+    },
+    {
+      "curso_id": 57,
+      "status": "CONCLUIDO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 57,
+      "status": "NAO_INICIADO",
+      "total": 24,
+      "avg_score": null
+    },
+    {
+      "curso_id": 58,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 58,
+      "status": "NAO_INICIADO",
+      "total": 27,
+      "avg_score": null
+    },
+    {
+      "curso_id": 59,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 59,
+      "status": "NAO_INICIADO",
+      "total": 26,
+      "avg_score": null
+    },
+    {
+      "curso_id": 60,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 60,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 60,
+      "status": "NAO_INICIADO",
+      "total": 24,
+      "avg_score": null
+    },
+    {
+      "curso_id": 61,
+      "status": "CONCLUIDO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 62,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 63,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 64,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 65,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 65,
+      "status": "NAO_INICIADO",
+      "total": 26,
+      "avg_score": null
+    },
+    {
+      "curso_id": 67,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 67,
+      "status": "EM_ANDAMENTO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 68,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 68,
+      "status": "EM_ANDAMENTO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 68,
+      "status": "NAO_INICIADO",
+      "total": 24,
+      "avg_score": null
+    },
+    {
+      "curso_id": 69,
+      "status": "CANCELADO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 70,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 70,
+      "status": "CONCLUIDO",
+      "total": 2,
+      "avg_score": null
+    },
+    {
+      "curso_id": 70,
+      "status": "EM_ANDAMENTO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 71,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 71,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 72,
+      "status": "CANCELADO",
+      "total": 1,
+      "avg_score": null
+    },
+    {
+      "curso_id": 72,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 73,
+      "status": "CONCLUIDO",
+      "total": 3,
+      "avg_score": null
+    },
+    {
+      "curso_id": 73,
+      "status": "EM_ANDAMENTO",
+      "total": 5,
+      "avg_score": null
+    },
+    {
+      "curso_id": 78,
+      "status": "EM_ANDAMENTO",
+      "total": 4,
+      "avg_score": null
+    },
+    {
+      "curso_id": 79,
+      "status": "EM_ANDAMENTO",
+      "total": 4,
+      "avg_score": null
+    }
+  ]
+}

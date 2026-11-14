@@ -1,0 +1,1849 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+process.env.QA_RUN_ID = '43000000000';
+process.env.QA_RUN_ATTEMPT = '1';
+import {
+  buildLearnerAuthPayload,
+  checkCertificate,
+  checkLearnerQualifications,
+  determineSlideAction,
+  enrollLearner,
+  assignSyntheticQaCourse,
+  clickCanonicalLearnerRegistration,
+  shouldRetryCanonicalRegistration,
+  waitForCanonicalScormWrapperReady,
+  assertQaLearnerIdentity,
+  evaluateAssessmentPolicy,
+  evaluateCoursePath,
+  evaluateHomologationVerdict,
+  isLocationResumed,
+  resolveAdminToken,
+  resolveEffectiveLessonStatus,
+  resolveScormContentFrame,
+  runHomologation,
+  saveIncrementalReport,
+  safeQaErrorCode,
+  sanitizeQaReportValue,
+  setupAuthenticatedContext,
+} from '../lms-learner-e2e-homologation.mjs';
+
+
+function makeQaToken(funcionarioId, email = 'qa.lms.202611@airtrust.online', empresaId = 6, role = 'ALUNO') {
+  const encode = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+    email, empresa_id: empresaId, funcionario_id: funcionarioId, role,
+  })}.unit_test_signature`;
+}
+
+test('lms-learner-e2e-homologation exports runHomologation and evaluateHomologationVerdict', () => {
+  assert.equal(typeof runHomologation, 'function');
+  assert.equal(typeof evaluateHomologationVerdict, 'function');
+  assert.equal(typeof setupAuthenticatedContext, 'function');
+  assert.equal(typeof enrollLearner, 'function');
+  assert.equal(typeof resolveAdminToken, 'function');
+  assert.equal(typeof checkLearnerQualifications, 'function');
+  assert.equal(typeof checkCertificate, 'function');
+});
+
+test('evaluateHomologationVerdict yields PASS when all mandatory criteria pass', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 101, status: 'CONCLUIDA' },
+    cert: { id: 55, validPdf: true, sha256: 'abc', sizeBytes: 1024 },
+  });
+  assert.equal(result.pass, true);
+  assert.equal(result.reason, null);
+
+  // Proves VALIDA (active qualification with future expiration date) yields PASS
+  const resultValida = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 102, status: 'VALIDA', qualificacao_status: 'CONCLUIDA' },
+    cert: { id: 56, validPdf: true, sha256: 'def', sizeBytes: 2048 },
+  });
+  assert.equal(resultValida.pass, true);
+  assert.equal(resultValida.reason, null);
+});
+
+test('evaluateHomologationVerdict rejects PASS when resume verification fails', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: false,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
+});
+
+test('evaluateHomologationVerdict fails when lesson location stays empty and resume is unverified', () => {
+  // Simulates a course where traversal finishes and backend marks CONCLUIDO,
+  // but no nonempty lesson location was ever exposed to verify resumption.
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: false,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 202, status: 'CONCLUIDA' },
+    cert: { id: 77, validPdf: true, sha256: 'def', sizeBytes: 2048 },
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'RESUME_CHECKPOINT_FAILED');
+});
+
+test('evaluateHomologationVerdict rejects PASS when certificate PDF is invalid', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: { id: 101, status: 'CONCLUIDA' },
+    cert: { id: 55, validPdf: false, sha256: 'xyz', sizeBytes: 50 },
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'INVALID_CERTIFICATE_PDF');
+});
+
+test('evaluateHomologationVerdict rejects PASS when expected qualification is missing', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: true,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'EXPECTED_QUALIFICATION_NOT_GENERATED');
+});
+
+test('evaluateHomologationVerdict rejects PASS when reopen has progress downgrade', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: false,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'STATUS_OR_PROGRESS_DOWNGRADE_ON_REOPEN');
+});
+
+test('evaluateHomologationVerdict rejects PASS when progress is below 100', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: false,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'PROGRESS_BELOW_100');
+});
+
+test('evaluateHomologationVerdict rejects PASS when completion status is not reached', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: true,
+    isConcluido: false,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'COMPLETION_NOT_REACHED');
+});
+
+test('setupAuthenticatedContext adds access cookies and requests scoped asset session', async () => {
+  const addedCookies = [];
+  let requestedEndpoint = null;
+  let requestedOptions = null;
+
+  const mockContext = {
+    async addCookies(cookies) {
+      addedCookies.push(...cookies);
+    },
+    request: {
+      async post(url, options) {
+        requestedEndpoint = url;
+        requestedOptions = options;
+        return {
+          ok: () => true,
+          status: () => 200,
+        };
+      },
+    },
+  };
+
+  await setupAuthenticatedContext(mockContext, 'mock-jwt-token-123', 42);
+
+  assert.equal(addedCookies.length >= 3, true);
+  assert.equal(addedCookies[0].name, 'airtrust_access_token');
+  assert.equal(addedCookies[0].value, 'mock-jwt-token-123');
+  assert.equal(addedCookies.some((c) => c.name === 'airtrust_token'), true);
+  assert.equal(addedCookies.some((c) => c.name === 'auth_token'), true);
+  assert.equal(requestedEndpoint?.endsWith('/api/lms/assets/session'), true);
+  assert.equal(requestedOptions?.data?.matricula_id, 42);
+});
+
+test('enrollLearner reuses existing active enrollment from minhas-ead', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/lms/matriculas/minhas-ead')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 88, curso_id: 67, funcionario_id: 193, status: 'NAO_INICIADO', deleted_at: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const id = await enrollLearner(makeQaToken(193), 67, 193);
+    assert.equal(id, 88);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: stale employee link or sector-denied learner never uses administrator fallback', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET', auth: opts?.headers?.Authorization });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true, data: [] }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (String(url).endsWith('/api/lms/matriculas')) {
+        assert.equal(opts?.headers?.Authorization, 'Bearer ' + makeQaToken(193));
+        return new Response(JSON.stringify({
+          success: false, code: 'LMS_LEARNER_LINK_MISMATCH',
+        }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_URL');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(193), 44, 193, 'admin-token'),
+      /QA_SELF_ENROLLMENT_FORBIDDEN/);
+    assert.deepEqual(calls.map(x => x.method), ['GET', 'POST']);
+    assert.equal(calls.some(x => x.auth === 'Bearer admin-token'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: refuses unsafe reset for enrollLearner reactivates cancelled enrollment on 409 LMS_REMATRICULATION_REQUIRED', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'CANCELADO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('resolveAdminToken rejects admin token when tenant selection fails (TENANT_ACCESS_DENIED)', async () => {
+  const originalFetch = globalThis.fetch;
+  const prevEmail = process.env.PROD_SMOKE_EMAIL;
+  const prevPass = process.env.PROD_SMOKE_PASSWORD;
+  try {
+    process.env.PROD_SMOKE_EMAIL = 'admin@example.com';
+    process.env.PROD_SMOKE_PASSWORD = 'password123';
+
+    const makeJwt = (payload) => {
+      const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.fake_sig`;
+    };
+
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        return new Response(
+          JSON.stringify({
+            token: makeJwt({ id: 1, role: 'admin', empresa_id: 99 }),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/auth/select-empresa')) {
+        return new Response(
+          JSON.stringify({
+            error: 'Acesso negado para a empresa selecionada',
+            code: 'TENANT_ACCESS_DENIED',
+          }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const token = await resolveAdminToken();
+    assert.equal(token, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevEmail !== undefined) process.env.PROD_SMOKE_EMAIL = prevEmail;
+    else delete process.env.PROD_SMOKE_EMAIL;
+    if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
+    else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
+test('checkLearnerQualifications prioritizes qualificacaoHistoricoId and course matching', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/api/qualificacoes/funcionario/193')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [
+              { id: 10, lms_curso_id: 50, status: 'CONCLUIDA' },
+              { id: 20, lms_curso_id: 67, status: 'CONCLUIDA' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const exact = await checkLearnerQualifications('token', 193, 50, 20);
+    assert.equal(exact?.id, 20);
+
+    const byCourse = await checkLearnerQualifications('token', 193, 67);
+    assert.equal(byCourse?.id, 20);
+
+    const notFound = await checkLearnerQualifications('token', 193, 999);
+    assert.equal(notFound, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkCertificate validates PDF buffer and computes sha256', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/certificados/historico/20/certificados')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 701 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/701')) {
+        const dummyPdf = Buffer.from('%PDF-1.4 dummy certificate content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 20);
+    assert.equal(cert?.id, 701);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkCertificate resolves streaming URL from JSON metadata when download returns redirect', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (String(url).endsWith('/api/certificados/historico/30/certificados')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 702 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/702')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { url: '/api/pasta-virtual/stream/702', nome: 'cert.pdf' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/pasta-virtual/stream/702')) {
+        const dummyPdf = Buffer.from('%PDF-1.7 production streamed certificate content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 30);
+    assert.equal(cert?.id, 702);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial Tests: Course Path, Assessment Policy & Homologation Gate
+// ---------------------------------------------------------------------------
+
+test('adversarial: evaluateCoursePath fails when learner stops halfway', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 25,
+    atLastUnit: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateCoursePath fails when learner does not reach last unit', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 49,
+    atLastUnit: false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateCoursePath fails when mandatory activities are incomplete', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 30,
+    visitedUnits: 30,
+    atLastUnit: true,
+    totalActivities: 5,
+    completedActivities: 3,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'MANDATORY_ACTIVITIES_INCOMPLETE');
+});
+
+test('evaluateCoursePath passes when full journey and mandatory activities are completed', () => {
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 49,
+    visitedUnits: 49,
+    atLastUnit: true,
+    totalActivities: 4,
+    completedActivities: 4,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when scored course has lesson_status=failed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'failed',
+    scoreRaw: 50,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'ASSESSMENT_FAILED');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when scored course score is below mastery cut', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'incomplete',
+    scoreRaw: 70,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when formative course status is incomplete', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'FORMATIVE',
+    lessonStatus: 'incomplete',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'FORMATIVE_STATUS_INCOMPLETE');
+});
+
+test('evaluateAssessmentPolicy passes for formative course when lesson_status is completed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'FORMATIVE',
+    lessonStatus: 'completed',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('evaluateAssessmentPolicy passes for scored course when score meets cut and status is passed', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'passed',
+    scoreRaw: 85,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('adversarial: evaluateHomologationVerdict fails when percurso_ok is false', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: false,
+    avaliacao_ok: true,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: evaluateHomologationVerdict fails when avaliacao_ok is false', () => {
+  const result = evaluateHomologationVerdict({
+    percurso_ok: true,
+    avaliacao_ok: false,
+    isConcluido: true,
+    progress100: true,
+    resumedVerified: true,
+    reopenNoDowngrade: true,
+    qualExpected: false,
+    qual: null,
+    cert: null,
+  });
+  assert.equal(result.pass, false);
+  assert.equal(result.reason, 'ASSESSMENT_NOT_PASSED');
+});
+
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner triggers rematricular when course is already CONCLUIDO', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'CONCLUIDO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner triggers rematricular when enrollment is EM_ANDAMENTO (isolamento de navegador)', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 193,
+            empresa_id: 6, status: 'EM_ANDAMENTO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('adversarial: evaluateAssessmentPolicy fails when score is below cut even if status is passed (contradictory score)', () => {
+  const result = evaluateAssessmentPolicy({
+    policy: 'SCORED',
+    lessonStatus: 'passed',
+    scoreRaw: 20,
+    masteryScore: 80,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'SCORE_BELOW_MASTERY');
+});
+
+test('adversarial: missing, unknown and external assessment policies do not certify', () => {
+  assert.equal(evaluateAssessmentPolicy({ lessonStatus: 'completed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'UNKNOWN', lessonStatus: 'passed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'completed' }).ok, false);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'EXTERNAL', lessonStatus: 'passed', externalProofVerified: false }).reason, 'EXTERNAL_ASSESSMENT_NOT_ATTESTED');
+  assert.equal(evaluateAssessmentPolicy({ policy: 'UNRECOGNIZED_POLICY', lessonStatus: 'completed' }).reason, 'ASSESSMENT_POLICY_UNSUPPORTED');
+});
+
+test('PPTX_SLIDES policy remains explicitly supported when backend completed', () => {
+  assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'completed' }).ok, true);
+  assert.equal(evaluateAssessmentPolicy({ policy: 'PPTX_SLIDES', lessonStatus: 'incomplete' }).ok, false);
+});
+
+test('adversarial: evaluateCoursePath fails when units jump (skipping intermediate units)', () => {
+  // Learner visited only unit 1 and unit 45 (e.g. via direct jump), but totalUnits is 45
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: new Set([1, 45]),
+    atLastUnit: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('adversarial: unknown total and skipped slides never prove full course path', () => {
+  const unknown = evaluateCoursePath({ contentType: 'scorm', totalUnits: 0, visitedUnits: 1, atLastUnit: true });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.reason, 'COURSE_TOTAL_UNVERIFIED');
+  const skipped = evaluateCoursePath({ contentType: 'scorm', totalUnits: 45, visitedUnits: 2, atLastUnit: true });
+  assert.equal(skipped.ok, false);
+  assert.equal(skipped.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('evaluateCoursePath passes with distinctUnitsVisited set covering all units', () => {
+  const all45 = new Set(Array.from({ length: 45 }, (_, i) => i + 1));
+  const result = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: 45,
+    visitedUnits: 45,
+    distinctUnitsVisited: all45,
+    atLastUnit: true,
+    totalActivities: 2,
+    completedActivities: 2,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.reason, null);
+});
+
+test('adversarial: missing path or assessment evidence is not defaulted to PASS', () => {
+  const actual = evaluateHomologationVerdict({
+    isConcluido: true, progress100: true, resumedVerified: true,
+    reopenNoDowngrade: true, qualExpected: false, qual: null, cert: null,
+  });
+  assert.equal(actual.pass, false);
+  assert.equal(actual.reason, 'INCOMPLETE_COURSE_PATH');
+});
+
+test('regression: determineSlideAction does not oscillate between alternatives once question is answered and advances to qNext', () => {
+  let qIndex = 0;
+  let selectedOption = null;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '#qNext') {
+        return {
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          click: () => {
+            qIndex += 1;
+            selectedOption = null; // Next question starts with no answer selected
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector.includes('data-answer') || selector.includes('button.answer')) {
+        // Return 3 options for the current question
+        return [0, 1, 2].map((i) => ({
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          classList: {
+            contains: (cls) => cls === 'selected' && selectedOption === i,
+          },
+          click: () => {
+            selectedOption = i;
+          },
+        }));
+      }
+      return [];
+    },
+  };
+
+  // Step 1: No answer selected -> chooses an answer
+  const step1 = determineSlideAction(mockDoc);
+  assert.equal(step1.type, 'assessment-answer');
+  assert.equal(selectedOption, 0);
+
+  // Step 2: Answer 0 is selected -> MUST NOT choose another alternative, must advance with qNext
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'assessment-next-q');
+  assert.equal(qIndex, 1); // Advanced to question 2!
+
+  // Step 3: Question 2 has no answer -> chooses an answer
+  const step3 = determineSlideAction(mockDoc);
+  assert.equal(step3.type, 'assessment-answer');
+});
+
+test('regression: determineSlideAction does not oscillate between scenario options and advances to next-button', () => {
+  let selectedOption = null;
+  let nextClicked = false;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '#next') {
+        return {
+          disabled: false,
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          style: {},
+          click: () => {
+            nextClicked = true;
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector.includes('data-opt') || selector.includes('button.option')) {
+        // Return 4 scenario options A, B, C, D
+        return [0, 1, 2, 3].map((i) => ({
+          disabled: false,
+          getAttribute: (attr) => (attr === 'data-opt' ? String(i) : null),
+          hasAttribute: () => false,
+          style: {},
+          classList: {
+            contains: (cls) => cls === 'selected' && selectedOption === i,
+          },
+          click: () => {
+            selectedOption = i;
+          },
+        }));
+      }
+      return [];
+    },
+  };
+
+  // Step 1: No scenario option selected -> chooses option 0
+  const step1 = determineSlideAction(mockDoc);
+  assert.equal(step1.type, 'scenario-option');
+  assert.equal(selectedOption, 0);
+
+  // Step 2: Option 0 is already selected -> MUST NOT choose another option, must advance with next-button
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'next-button');
+  assert.equal(nextClicked, true);
+});
+
+test('regression: determineSlideAction does not treat "Concluir avaliação" as final-button, and advances to "Concluir curso"', () => {
+  let assessmentEvaluated = false;
+  let finalCourseClicked = false;
+
+  const mockDoc = {
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return { textContent: '45 / 45' };
+      }
+      if (selector === '#next') {
+        return {
+          disabled: false,
+          innerText: assessmentEvaluated ? 'Concluir curso' : 'Concluir avaliação',
+          getAttribute: () => null,
+          hasAttribute: () => false,
+          click: () => {
+            if (!assessmentEvaluated) {
+              assessmentEvaluated = true;
+            } else {
+              finalCourseClicked = true;
+            }
+          },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === 'button, input[type=button], a') {
+        return [
+          {
+            disabled: false,
+            innerText: assessmentEvaluated ? 'Concluir curso' : 'Concluir avaliação',
+            getAttribute: () => null,
+            hasAttribute: () => false,
+            click: () => {
+              if (!assessmentEvaluated) {
+                assessmentEvaluated = true;
+              } else {
+                finalCourseClicked = true;
+              }
+            },
+          },
+        ];
+      }
+      return [];
+    },
+  };
+
+  // Step 1: Assessment questions answered, button says "Concluir avaliação" -> MUST NOT be final-button, must be next-button
+  const step1 = determineSlideAction(mockDoc);
+  assert.notEqual(step1.type, 'final-button');
+  assert.equal(step1.type, 'next-button');
+  assert.equal(assessmentEvaluated, true);
+
+  // Step 2: Now assessment is evaluated and button says "Concluir curso" -> MUST be final-button
+  const step2 = determineSlideAction(mockDoc);
+  assert.equal(step2.type, 'final-button');
+  assert.equal(finalCourseClicked, true);
+});
+
+test('buildLearnerAuthPayload establishes full user session required by AuthContext and ProtectedRoute', () => {
+  // A mock JWT payload with claims
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const claims = Buffer.from(JSON.stringify({
+    id: 194,
+    funcionario_id: 194,
+    email: 'qa.lms.202611.chromium@airtrust.online',
+    nome: 'Aluno QA Chromium',
+    empresa_id: 6,
+  })).toString('base64url');
+  const mockJwt = `${header}.${claims}.signature`;
+
+  const payload = buildLearnerAuthPayload(mockJwt, 194);
+  assert.equal(payload.jwt, mockJwt);
+  assert.equal(payload.user.id, 194);
+  assert.equal(payload.user.funcionario_id, 194);
+  assert.equal(payload.user.email, 'qa.lms.202611.chromium@airtrust.online');
+  assert.equal(payload.user.role, 'ALUNO');
+  assert.equal(payload.user.empresa_id, 6);
+});
+
+test('resolveScormContentFrame excludes launch wrapper with hidden completion overlay and locates nested SCO content', async () => {
+  // Mock wrapper frame that contains #completion-overlay #btn-close
+  const mockWrapperFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/scorm/launch/2404',
+    evaluate: async (fn) => false, // not content
+    $: async (selector) => {
+      if (selector === '#scorm-frame') {
+        return {
+          contentFrame: async () => mockContentFrame,
+        };
+      }
+      return null;
+    },
+  };
+
+  // Mock nested content frame containing actual SCO course data
+  const mockContentFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/pkg-123/index.html',
+    evaluate: async (fn) => true, // has COURSE_DATA / slides
+  };
+
+  const mockPage = {
+    frames: () => [mockWrapperFrame, mockContentFrame],
+    evaluate: async () => false,
+    $: async (selector) => null,
+  };
+
+  const resolved = await resolveScormContentFrame(mockPage);
+  assert.equal(resolved, mockContentFrame);
+  assert.equal(resolved.url().includes('assets/scorm'), true);
+});
+
+test('regression: resolveScormContentFrame ignores about:blank frame until SCO course readiness is detected', async () => {
+  let contentReady = false;
+  const mockBlankFrame = {
+    url: () => 'about:blank',
+    evaluate: async () => false,
+  };
+  const mockSCOFrame = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/pkg-456/index.html',
+    evaluate: async () => contentReady,
+  };
+  const mockPage = {
+    frames: () => [mockBlankFrame, mockSCOFrame],
+    evaluate: async () => false,
+    $: async () => null,
+  };
+
+  // While SCO response is still loading, resolveScormContentFrame returns null rather than about:blank
+  assert.equal(await resolveScormContentFrame(mockPage), null);
+
+  // Once SCO content finishes loading, resolveScormContentFrame resolves the frame
+  contentReady = true;
+  const resolved = await resolveScormContentFrame(mockPage);
+  assert.equal(resolved, mockSCOFrame);
+});
+
+test('regression: determineSlideAction recognizes and clicks "Revisar cenário pendente" on study_end without stalling', () => {
+  let pendingClicked = false;
+  const mockDoc = {
+    querySelector: (sel) => {
+      if (sel === '.counter, #count') return { innerText: '45/45' };
+      if (sel === '#qNext') return null;
+      if (sel === '#next') {
+        return {
+          disabled: false,
+          innerText: 'Revisar cenário pendente (tela 24)',
+          click: () => { pendingClicked = true; },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('button, input[type=button], a')) {
+        return [{
+          disabled: false,
+          innerText: 'Revisar cenário pendente (tela 24)',
+          click: () => { pendingClicked = true; },
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.type, 'pending-scenario-review');
+  assert.equal(action.domCurrent, 45);
+  assert.equal(action.domTotal, 45);
+  assert.equal(pendingClicked, true);
+});
+
+test('regression: determineSlideAction recognizes and clicks "Voltar ao ponto atual" in preview mode', () => {
+  let returnClicked = false;
+  const mockDoc = {
+    querySelector: (sel) => {
+      if (sel === '.counter, #count') return { innerText: '5/45' };
+      if (sel === '#qNext') return null;
+      if (sel === '#next') {
+        return {
+          disabled: false,
+          innerText: 'Voltar ao ponto atual',
+          click: () => { returnClicked = true; },
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('button, input[type=button], a')) {
+        return [{
+          disabled: false,
+          innerText: 'Voltar ao ponto atual',
+          click: () => { returnClicked = true; },
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.type, 'return-to-journey');
+  assert.equal(action.domCurrent, 5);
+  assert.equal(action.domTotal, 45);
+  assert.equal(returnClicked, true);
+});
+
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner prioritizes reverter on CONCLUIDO when adminToken is provided to ensure full course journey reset', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 195,
+            empresa_id: 6, status: 'CONCLUIDO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(195), 67, 195, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: refuses unsafe reset for adversarial: enrollLearner on EM_ANDAMENTO uses governed administrative patch and reversal when /finalizar would reject incomplete runs', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 67, funcionario_id: 194,
+            empresa_id: 6, status: 'EM_ANDAMENTO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(194), 67, 194, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('regression: PPTX traversal resets to Slide 1 if player restored at an advanced slide', async () => {
+  let slide1Clicked = false;
+  const mockSlide1Btn = {
+    isVisible: async () => true,
+    evaluate: async (fn) => false, // not active
+    click: async () => { slide1Clicked = true; },
+  };
+
+  const mockPage = {
+    locator: (selector) => {
+      if (selector === 'button[aria-label^="Slide 1"]') {
+        return {
+          first: () => mockSlide1Btn,
+        };
+      }
+      return { first: () => ({ isVisible: async () => false }) };
+    },
+    waitForTimeout: async () => {},
+  };
+
+  const slide1Btn = mockPage.locator('button[aria-label^="Slide 1"]').first();
+  if (await slide1Btn.isVisible().catch(() => false)) {
+    const isSlide1Active = await slide1Btn.evaluate((el) => false).catch(() => true);
+    if (!isSlide1Active) {
+      await slide1Btn.click().catch(() => null);
+    }
+  }
+
+  assert.equal(slide1Clicked, true);
+});
+
+test('regression: determineSlideAction prioritizes canonical COURSE_DATA.slides.length over incidental counter text', () => {
+  const mockDoc = {
+    defaultView: {
+      COURSE_DATA: {
+        slides: new Array(45).fill({ kind: 'content' }),
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return {
+          innerText: '1 / 50',
+          textContent: '1 / 50',
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === '#next, #nextUnit, #nextBtn, button') {
+        return [{
+          id: 'next',
+          innerText: 'Continuar →',
+          disabled: false,
+          click: () => {},
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.domTotal, 45);
+  assert.equal(action.domCurrent, 1);
+  assert.equal(action.atLastUnit, false);
+});
+
+test('regression: determineSlideAction marks atLastUnit when domCurrent equals canonical slide length', () => {
+  const mockDoc = {
+    defaultView: {
+      COURSE_DATA: {
+        slides: new Array(45).fill({ kind: 'content' }),
+      },
+      __AIRTRUST_PLAYER_TEST__: {
+        getState: () => ({ active: 44 }), // 0-based index 44 = slide 45
+      },
+    },
+    querySelector: (selector) => {
+      if (selector === '.counter, #count') {
+        return {
+          innerText: '45 / 50',
+        };
+      }
+      return null;
+    },
+    querySelectorAll: (selector) => {
+      if (selector === 'button, input[type=button], a') {
+        return [{
+          innerText: 'Confirmar encerramento do estudo',
+          disabled: false,
+          click: () => {},
+        }];
+      }
+      return [];
+    },
+  };
+
+  const action = determineSlideAction(mockDoc);
+  assert.equal(action.domTotal, 45);
+  assert.equal(action.domCurrent, 45);
+  assert.equal(action.atLastUnit, true);
+  assert.equal(action.type, 'final-button');
+});
+
+test('resolveEffectiveLessonStatus prioritizes reopen terminal state over stale in-flight snapshot', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'completed' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'completed');
+});
+
+test('resolveEffectiveLessonStatus recognizes backend persisted scorm progression', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: null,
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'passed' },
+    isConcluido: true,
+    policy: 'SCORED',
+  });
+  assert.equal(status, 'passed');
+});
+
+test('adversarial: resolveEffectiveLessonStatus never fabricates completion when all snapshots are incomplete even if isConcluido is true', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'incomplete' },
+    lastRuntimeState: { lessonStatus: 'incomplete' },
+    scormProgresso: { lesson_status: 'incomplete' },
+    reopenScormProgresso: { lesson_status: 'incomplete' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'incomplete');
+});
+
+test('adversarial: resolveEffectiveLessonStatus preserves explicit failure even if isConcluido is true', () => {
+  const status = resolveEffectiveLessonStatus({
+    reopenState: { lessonStatus: 'failed' },
+    lastRuntimeState: { lessonStatus: 'failed' },
+    scormProgresso: { lesson_status: 'failed' },
+    reopenScormProgresso: { lesson_status: 'failed' },
+    isConcluido: true,
+    policy: 'FORMATIVE',
+  });
+  assert.equal(status, 'failed');
+});
+
+test('adversarial: isLocationResumed rejects regression/reset to first unit when saved checkpoint was 2/45', () => {
+  assert.equal(isLocationResumed('2/45', '1/45'), false);
+  assert.equal(isLocationResumed('3/45', '1/45'), false);
+});
+
+test('isLocationResumed accepts exact and canonical unit matches', () => {
+  assert.equal(isLocationResumed('2/45', '2/45'), true);
+  assert.equal(isLocationResumed('3/45', '3'), true);
+  assert.equal(isLocationResumed('4', '4/45'), true);
+});
+
+test('checkCertificate retries on initial empty list and succeeds on subsequent poll', async () => {
+  const originalFetch = globalThis.fetch;
+  let pollCount = 0;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/certificados/historico/40/certificados')) {
+        pollCount += 1;
+        if (pollCount === 1) {
+          // First poll returns empty list while backend worker asynchronously writes certificate
+          return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({ success: true, data: [{ id: 801 }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/certificados/download/801')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { url: '/api/pasta-virtual/stream/801', nome: 'cert_801.pdf' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (String(url).endsWith('/api/pasta-virtual/stream/801')) {
+        const dummyPdf = Buffer.from('%PDF-1.4 async certificate stream content');
+        return new Response(dummyPdf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const cert = await checkCertificate('token', 40, 5, 0);
+    assert.equal(pollCount, 2);
+    assert.equal(cert?.id, 801);
+    assert.equal(cert?.validPdf, true);
+    assert.equal(typeof cert?.sha256, 'string');
+    assert.equal(cert?.sizeBytes > 0, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('checkLearnerQualifications retries on initial empty list and resolves when qualification appears', async () => {
+  const originalFetch = globalThis.fetch;
+  let qualPollCount = 0;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/qualificacoes/funcionario/194')) {
+        qualPollCount += 1;
+        if (qualPollCount === 1) {
+          return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: [{ id: 7660, lms_curso_id: 67, status: 'CONCLUIDA' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const qual = await checkLearnerQualifications('token', 194, 67, 7660, 5, 0);
+    assert.equal(qualPollCount, 2);
+    assert.equal(qual?.id, 7660);
+    assert.equal(qual?.lms_curso_id, 67);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('resolveAdminToken forces refresh when requested to prevent stale token reuse', async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCalls = 0;
+  const prevEmail = process.env.PROD_SMOKE_EMAIL;
+  const prevPass = process.env.PROD_SMOKE_PASSWORD;
+  try {
+    process.env.PROD_SMOKE_EMAIL = 'admin@airtrust.online';
+    process.env.PROD_SMOKE_PASSWORD = 'password';
+
+    const makeJwt = (payload, callIdx) => {
+      const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.sig${callIdx}`;
+    };
+
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        loginCalls += 1;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            accessToken: makeJwt({ id: 1, role: 'ADMIN', empresa_id: 6 }, loginCalls),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    };
+
+    const token1 = await resolveAdminToken(true);
+    assert.ok(token1?.includes('sig1'));
+
+    // Without force refresh, it should return cached token
+    const tokenCached = await resolveAdminToken(false);
+    assert.equal(tokenCached, token1);
+    assert.equal(loginCalls, 1);
+
+    // With force refresh, it should call login again
+    const token2 = await resolveAdminToken(true);
+    assert.ok(token2?.includes('sig2'));
+    assert.equal(loginCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevEmail !== undefined) process.env.PROD_SMOKE_EMAIL = prevEmail;
+    else delete process.env.PROD_SMOKE_EMAIL;
+    if (prevPass !== undefined) process.env.PROD_SMOKE_PASSWORD = prevPass;
+    else delete process.env.PROD_SMOKE_PASSWORD;
+  }
+});
+
+test('regression: getMatriculaDetail scorm_progresso fallback correctly resolves lesson_location', async () => {
+  const detail = {
+    id: 123,
+    status: 'EM_ANDAMENTO',
+    scorm_progresso: {
+      lesson_location: 'slide_05',
+      progresso_percentual: 50,
+    },
+  };
+  const location = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location;
+  assert.equal(location, 'slide_05');
+});
+
+test('regression: unvisited gate selection excludes assessment and scenario answer buttons', () => {
+  const mockButtons = [
+    {
+      innerText: 'Alternativa B',
+      matches: (sel) => sel.includes('.answer') || sel.includes('[data-answer]'),
+      closest: (sel) => sel.includes('.answers'),
+      getAttribute: (attr) => (attr === 'data-answer' ? '1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+    {
+      innerText: 'Card de Informação 1',
+      matches: () => false,
+      closest: () => null,
+      getAttribute: (attr) => (attr === 'data-gate' ? 'card_1' : null),
+      classList: { contains: () => false },
+      disabled: false,
+    },
+  ];
+
+  const visible = () => true;
+  const clean = (s) => String(s || '').trim();
+  const clickedGates = [];
+  const clickedTouches = [];
+
+  const unvisitedGate = mockButtons.find((el) => {
+    if (!visible(el) || el.disabled) return false;
+    if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+      return false;
+    }
+    if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+      return false;
+    }
+    const key = el.getAttribute('data-gate') || el.id || clean(el.innerText || '');
+    if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+    return !el.classList.contains('seen');
+  });
+
+  assert.ok(unvisitedGate);
+  assert.equal(unvisitedGate.innerText, 'Card de Informação 1');
+});
+
+test('saveIncrementalReport writes incremental JSON and correctly computes pass/fail/blocked summary', () => {
+  const tmpPath = path.join(os.tmpdir(), `lms-test-report-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  try {
+    const mockResults = [
+      { course_id: 1, status: 'PASS' },
+      { course_id: 2, status: 'FAIL' },
+      { course_id: 3, status: 'BLOQUEADO' },
+      { course_id: 4, status: 'PASS' },
+    ];
+    const summary = saveIncrementalReport(mockResults, { browser: 'chromium', expected_sha: 'testsha' }, tmpPath);
+    assert.equal(summary.total_courses, 4);
+    assert.equal(summary.pass_count, 2);
+    assert.equal(summary.fail_count, 1);
+    assert.equal(summary.blocked_count, 1);
+    assert.equal(summary.browser, 'chromium');
+
+    assert.ok(fs.existsSync(tmpPath));
+    const fileContent = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+    assert.equal(fileContent.total_courses, 4);
+    assert.equal(fileContent.pass_count, 2);
+    assert.equal(fileContent.fail_count, 1);
+    assert.equal(fileContent.blocked_count, 1);
+    assert.equal(fileContent.results.length, 4);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
+test('determineSlideAction recognizes mandatory interaction cards under /interação obrigatória (0/N)/', () => {
+  let card1Clicked = false;
+  let card2Clicked = false;
+  const card1 = {
+    innerText: 'Card de Segurança Operacional 1',
+    getAttribute: (attr) => (attr === 'data-gate' ? 'card_1' : null),
+    hasAttribute: () => false,
+    click: () => { card1Clicked = true; },
+    disabled: false,
+    matches: () => false,
+  };
+  const card2 = {
+    innerText: 'Card de Segurança Operacional 2',
+    getAttribute: (attr) => (attr === 'data-gate' ? 'card_2' : null),
+    hasAttribute: () => false,
+    click: () => { card2Clicked = true; },
+    disabled: false,
+    matches: () => false,
+  };
+  const mockDoc = {
+    body: {
+      innerText: 'Atenção: Interação obrigatória (0/2) antes de avançar.',
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('.card') || sel.includes('[data-gate]')) {
+        return [card1, card2];
+      }
+      return [];
+    },
+    querySelector: () => null,
+  };
+
+  const action1 = determineSlideAction(mockDoc, { clickedGates: [] });
+  assert.equal(action1.type, 'required-card');
+  assert.equal(card1Clicked, true);
+  assert.equal(card2Clicked, false);
+
+  const action2 = determineSlideAction(mockDoc, { clickedGates: ['card_1'] });
+  assert.equal(action2.type, 'required-card');
+  assert.equal(card2Clicked, true);
+});
+
+test('SECURITY: refuses unsafe reset for enrollLearner retries rematricular with reversal when 409 LMS_COMPLETION_REVERSAL_REQUIRED is returned', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method || 'GET' });
+      if (String(url).includes('/minhas-ead')) {
+        return new Response(JSON.stringify({ success: true,
+          data: [{
+            id: 2405, curso_id: 55, funcionario_id: 194,
+            empresa_id: 6, status: 'CANCELADO', deleted_at: null,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('UNEXPECTED_QA_WRITE');
+    };
+    await assert.rejects(enrollLearner(makeQaToken(194), 55, 194, 'admin-token'),
+      /QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, 'GET');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: Playwright timeout call logs do not expose headers or signed tokens', () => {
+  const marker = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0In0', 'signedtoken123456789'].join('.');
+  const unsafe = new Error('apiRequestContext.post: Timeout 30000ms exceeded.\n' +
+    'Authorization: Bearer ' + marker + '\nCookie: auth_token=' + marker);
+  assert.equal(safeQaErrorCode(unsafe), 'QA_NETWORK_TIMEOUT');
+  const sanitized = sanitizeQaReportValue({
+    error: unsafe.message,
+    nested: { requestHeaders: { Authorization: 'Bearer ' + marker, Cookie: marker } },
+    token: marker,
+  });
+  assert.doesNotMatch(JSON.stringify(sanitized), /eyJhbGciOiJIUzI1NiJ9|signedtoken123456789|auth_token=/);
+  assert.match(JSON.stringify(sanitized), /REDACTED/);
+});
+
+test('SECURITY: incremental QA report sanitizes nested headers in persisted JSON', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'airtrust-lms-qa-redaction-'));
+  const file = path.join(dir, 'report.json');
+  const marker = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0In0', 'signedtoken123456789'].join('.');
+  try {
+    const report = saveIncrementalReport([{
+      status: 'FAIL', reason: 'Timeout\nAuthorization: Bearer ' + marker,
+      audit_evidence: { headers: { Cookie: 'auth_token=' + marker } },
+    }], {}, file);
+    const written = fs.readFileSync(file, 'utf8');
+    assert.equal(report.fail_count, 1);
+    assert.doesNotMatch(written, /signedtoken123456789|eyJhbGciOiJIUzI1NiJ9/);
+    assert.match(written, /REDACTED/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SECURITY: mismatch tenant/employee/role/email cannot enroll or reset', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('UNEXPECTED_NETWORK_WRITE'); };
+  try {
+    for (const token of [
+      makeQaToken(194), makeQaToken(193, 'real.employee@airtrust.online'),
+      makeQaToken(193, undefined, 7), makeQaToken(193, undefined, 6, 'ADMIN'),
+    ]) {
+      await assert.rejects(enrollLearner(token, 67, 193, 'admin-token'));
+    }
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SECURITY: missing positive enrollment ownership denies all administrative mutations', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    calls.push({ url: String(url), method: opts.method || 'GET' });
+    return new Response(JSON.stringify({ success: true, data: [
+      { id: 99, curso_id: 67, funcionario_id: 444, empresa_id: 9, status: 'CONCLUIDO' },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(enrollLearner(makeQaToken(193), 67, 193, 'admin-token'),
+      /QA_ENROLLMENT_OWNERSHIP_UNVERIFIED/);
+    assert.deepEqual(calls.map(x => x.method), ['GET']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('live QA driver does not click every generic button before navigation and reports safe action telemetry', () => {
+  const source = fs.readFileSync(new URL('../lms-learner-e2e-homologation.mjs', import.meta.url), 'utf8');
+  const gateSelector = source.match(/const unvisitedGate = Array\.from\(document\.querySelectorAll\(([\s\S]*?)\)\)\.find/);
+  assert.ok(gateSelector, 'live gate selector must exist');
+  assert.doesNotMatch(gateSelector[1], /button:not\(/, 'generic buttons must not preempt course navigation');
+  assert.match(source, /driver_action_counts: driverActionCounts/);
+  assert.match(source, /driver_last_action_types: driverLastActionTypes/);
+  assert.match(source, /\^\[a-z-\]\{1,40\}\$/, 'action types must be whitelist-shaped, not DOM content');
+});
+
+test('QA admin assignment: assigns only run-scoped ALUNO and verifies learner readback', async () => {
+  const old = globalThis.fetch;
+  const learner = makeQaToken(193);
+  const admin = makeQaToken(777, 'admin@airtrust.online', 6, 'ADMIN');
+  const calls = [];
+  let enrolled = false;
+  globalThis.fetch = async (url, options = {}) => {
+    const method = options.method || 'GET';
+    calls.push({ path: new URL(url).pathname, method, auth: options.headers?.Authorization });
+    const body = (data, status = 200) => new Response(JSON.stringify({ success: true, data }),
+      { status, headers: { 'Content-Type': 'application/json' } });
+    if (String(url).endsWith('/minhas-ead')) {
+      assert.equal(options.headers?.Authorization, 'Bearer ' + learner);
+      return body(enrolled ? [{ id: 9123, curso_id: 32, funcionario_id: 193,
+        empresa_id: 6, status: 'NAO_INICIADO' }] : []);
+    }
+    if (String(url).endsWith('/api/lms/matriculas') && method === 'POST') {
+      assert.equal(options.headers?.Authorization, 'Bearer ' + admin);
+      assert.deepEqual(JSON.parse(options.body), { curso_id: 32, funcionario_id: 193 });
+      enrolled = true;
+      return body({ id: 9123 }, 201);
+    }
+    throw new Error('UNEXPECTED_QA_REQUEST');
+  };
+  try {
+    const id = await assignSyntheticQaCourse(admin, learner, 32, 193);
+    assert.equal(id, 9123);
+    assert.deepEqual(calls.map(c => c.method), ['GET', 'POST', 'GET']);
+    assert.equal(calls.filter(c => c.method === 'POST').length, 1);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: invalid admin role, tenant or learner identity makes zero writes', async () => {
+  const old = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (...args) => { calls.push(args); throw new Error('UNEXPECTED_NETWORK'); };
+  try {
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ALUNO'), makeQaToken(193), 32, 193),
+      /QA_ASSIGN_ADMIN_ROLE_REQUIRED/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 7, 'ADMIN'), makeQaToken(193), 32, 193),
+      /QA_ASSIGN_ADMIN_TENANT_MISMATCH/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ADMIN'), makeQaToken(193, 'real@example.com'), 32, 193),
+      /QA_LEARNER_EMAIL_NOT_ALLOWLISTED/);
+    await assert.rejects(assignSyntheticQaCourse(makeQaToken(7, 'x', 6, 'ADMIN'), makeQaToken(193), 0, 193),
+      /QA_ASSIGN_COURSE_ID_INVALID/);
+    assert.equal(calls.length, 0);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: existing EM_ANDAMENTO is resumed without reset or reassignment', async () => {
+  const old = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push(options.method || 'GET');
+    return new Response(JSON.stringify({ success: true, data: [
+      { id: 901, curso_id: 32, funcionario_id: 193, status: 'EM_ANDAMENTO', empresa_id: 6 },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const id = await assignSyntheticQaCourse(
+      makeQaToken(7, 'admin@airtrust.online', 6, 'ADMIN'), makeQaToken(193), 32, 193,
+    );
+    assert.equal(id, 901);
+    assert.deepEqual(calls, ['GET']);
+  } finally { globalThis.fetch = old; }
+});
+
+test('QA admin assignment: mismatched readback fails closed without further mutations', async () => {
+  const old = globalThis.fetch;
+  let requests = 0, posts = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    requests += 1;
+    if ((options.method || 'GET') === 'POST') {
+      posts += 1;
+      return new Response(JSON.stringify({ success: true, data: { id: 9123 } }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }
+    const data = requests === 1 ? [] :
+      [{ id: 9123, curso_id: 32, funcionario_id: 999, status: 'NAO_INICIADO', empresa_id: 6 }];
+    return new Response(JSON.stringify({ success: true, data }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(assignSyntheticQaCourse(
+      makeQaToken(7, 'admin@airtrust.online', 6, 'ADMIN'), makeQaToken(193), 32, 193,
+    ), /QA_ASSIGN_READBACK_MISMATCH/);
+    assert.equal(posts, 1);
+    assert.equal(requests, 3);
+  } finally { globalThis.fetch = old; }
+});
+
+test('canonical learner registration waits for enabled student consent button', async () => {
+  let checks = 0;
+  let clicks = 0;
+  const control = {
+    isVisible: async () => true,
+    isEnabled: async () => (++checks) >= 3,
+    click: async () => { clicks += 1; },
+  };
+  const page = {
+    getByRole: (role, opts) => {
+      assert.equal(role, 'button');
+      assert.ok(['Registrar no AirTrust', 'Confirmar conclusão'].includes(opts.name));
+      return {
+        count: async () => opts.name === 'Registrar no AirTrust' ? 1 : 0,
+        nth: () => control,
+      };
+    },
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 2000), true);
+  assert.equal(clicks, 1);
+  assert.equal(checks, 3);
+});
+
+test('canonical learner registration refuses disabled, hidden or absent controls', async () => {
+  let clicks = 0;
+  const page = {
+    getByRole: () => ({
+      count: async () => 2,
+      nth: (n) => ({
+        isVisible: async () => n === 1,
+        isEnabled: async () => false,
+        click: async () => { clicks += 1; },
+      }),
+    }),
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 0), false);
+  assert.equal(clicks, 0);
+});
+
+test('canonical learner registration never clicks unrecognized buttons or fabricates a completion request', async () => {
+  const names = [];
+  const page = {
+    getByRole: (_, opts) => {
+      names.push(opts.name);
+      return { count: async () => 0, nth: () => { throw new Error('NO_CONTROL'); } };
+    },
+  };
+  assert.equal(await clickCanonicalLearnerRegistration(page, 0), false);
+  assert.deepEqual(names, ['Registrar no AirTrust', 'Confirmar conclusão']);
+});
+
+test('reloaded player does not consent before wrapper and delayed SCO are ready', async () => {
+  let framesReady = false;
+  let listenerReady = false;
+  let attemptedConsent = 0;
+  const sco = {
+    url: () => 'https://api.airtrust.online/api/lms/assets/scorm/qa-test/index.html',
+    evaluate: async () => framesReady,
+  };
+  const wrapper = {
+    url: () => 'https://api.airtrust.online/api/lms/scorm/launch/567',
+    evaluate: async () => listenerReady ? { location: '63/63', lessonStatus: 'completed' } : null,
+    $: async (sel) => sel === '#scorm-frame' ? { contentFrame: async () => framesReady ? sco : null } : null,
+  };
+  const page = {
+    evaluate: async () => false,
+    frames: () => framesReady ? [wrapper, sco] : [],
+    $: async () => null,
+    getByRole: () => { attemptedConsent++; throw new Error('CONSENT_PREMATURE'); },
+  };
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+  assert.equal(attemptedConsent, 0);
+  framesReady = true;
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+  assert.equal(attemptedConsent, 0);
+  listenerReady = true;
+  // Wrapper evaluate returns the same truthy state for both readiness reads.
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), true);
+  assert.equal(attemptedConsent, 0);
+});
+
+test('reloaded SCORM wrapper must never be inferred ready from just the player button', async () => {
+  const page = {
+    evaluate: async () => false,
+    frames: () => [],
+    $: async () => null,
+    getByRole: () => ({ count: async () => 1 }),
+  };
+  assert.equal(await waitForCanonicalScormWrapperReady(page, 0), false);
+});
+
+test('finalization retry requires authentic 100% backend and complete authored coverage', () => {
+  const allowed = { isPlayerRoute: true, atLastUnit: true, visitedUnits: 63, totalUnits: 63,
+    backendStatus: 'EM_ANDAMENTO', backendProgress: 100, assessmentFailed: false };
+  assert.equal(shouldRetryCanonicalRegistration(allowed), true);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, visitedUnits: 62 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, atLastUnit: false }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, totalUnits: 0 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendProgress: 99 }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendStatus: 'CONCLUIDO' }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, backendStatus: 'REPROVADO' }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, assessmentFailed: true }), false);
+  assert.equal(shouldRetryCanonicalRegistration({ ...allowed, isPlayerRoute: false }), false);
+});
+
+
+test('QA canonical Chromium -> WebKit reuses employee and creates only a governed new cycle', async () => {
+  const original = globalThis.fetch;
+  const learner = makeQaToken(193);
+  const admin = makeQaToken(777,'admin@airtrust.online',6,'ADMIN');
+  let status = 'NAO_INICIADO';
+  const writes = [];
+  const respond = (data,statusCode=200) => new Response(JSON.stringify({success:true,data}),
+    {status:statusCode,headers:{'Content-Type':'application/json'}});
+  try {
+    globalThis.fetch = async (url,options={}) => {
+      const path=new URL(url).pathname;
+      const method=options.method || 'GET';
+      if(path==='/api/lms/matriculas/minhas-ead') {
+        assert.equal(options.headers?.Authorization,'Bearer '+learner);
+        return respond([{id:9301,curso_id:32,funcionario_id:193,empresa_id:6,status}]);
+      }
+      if(path==='/api/lms/matriculas/9301/qa-novo-ciclo') {
+        assert.equal(method,'POST');
+        assert.equal(options.headers?.Authorization,'Bearer '+admin);
+        const body=JSON.parse(options.body);
+        assert.equal(body.confirmation,'AIRTRUST_QA_LMS_NEW_CYCLE');
+        assert.equal(body.expected_course_id,32);
+        assert.match(body.reason,/arquivar evidências/);
+        writes.push(path);
+        status='NAO_INICIADO';
+        return respond({matricula_id:9301,curso_id:32,funcionario_id:193,
+          status:'NAO_INICIADO',new_cycle_id:9302,previous_cycle_archived:true});
+      }
+      throw Error('UNEXPECTED_QA_NETWORK_OPERATION');
+    };
+    const chromium=await assignSyntheticQaCourse(admin,learner,32,193);
+    assert.equal(chromium,9301);
+    status='CONCLUIDO';
+    const webkit=await assignSyntheticQaCourse(admin,learner,32,193);
+    assert.equal(webkit,chromium);
+    assert.deepEqual(writes,['/api/lms/matriculas/9301/qa-novo-ciclo']);
+  } finally {globalThis.fetch=original;}
+});
+
+test('QA canonical repeated completion fails closed if protected cycle renewal is denied', async () => {
+  const original=globalThis.fetch;
+  const learner=makeQaToken(193);
+  const admin=makeQaToken(777,'admin@airtrust.online',6,'ADMIN');
+  try {
+    globalThis.fetch=async (url,options={}) => {
+      const path=new URL(url).pathname;
+      if(path.endsWith('/minhas-ead')) return new Response(JSON.stringify({
+        success:true,data:[{id:9301,curso_id:32,funcionario_id:193,empresa_id:6,status:'CONCLUIDO'}],
+      }),{status:200,headers:{'Content-Type':'application/json'}});
+      if(path.endsWith('/qa-novo-ciclo')) return new Response(JSON.stringify({
+        success:false,code:'QA_CYCLE_SCOPE_OR_STATUS_DENIED'
+      }),{status:409,headers:{'Content-Type':'application/json'}});
+      throw Error('UNEXPECTED_QA_NETWORK_OPERATION');
+    };
+    await assert.rejects(assignSyntheticQaCourse(admin,learner,32,193),
+      /QA_GOVERNED_CYCLE_RENEWAL_UNVERIFIED/);
+  } finally {globalThis.fetch=original;}
+});

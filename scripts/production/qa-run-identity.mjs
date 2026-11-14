@@ -1,0 +1,50 @@
+import { createHash } from 'node:crypto';
+
+export function assertQaRunScope(runId, attempt) {
+  const id = String(runId ?? '').trim();
+  const nth = String(attempt ?? '').trim();
+  if (!/^[1-9][0-9]{4,17}$/.test(id) || !/^[1-9][0-9]{0,3}$/.test(nth)) {
+    throw new Error('QA_RUN_SCOPE_REQUIRED');
+  }
+  return { id, nth };
+}
+
+export function qaRunEmail(runId, attempt, browser) {
+  const scope = assertQaRunScope(runId, attempt);
+  if (!['chromium', 'webkit'].includes(browser)) throw new Error('QA_BROWSER_NOT_ALLOWLISTED');
+  return `qa.lms.${scope.id}.${scope.nth}.${browser}@airtrust.online`;
+}
+
+export function qaRunCpfCandidate(runId, attempt, browser, cpfGenerator, ordinal = 0) {
+  const scope = assertQaRunScope(runId, attempt);
+  qaRunEmail(scope.id, scope.nth, browser);
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 31) {
+    throw new Error('QA_CPF_ORDINAL_INVALID');
+  }
+  const seed = `${scope.id}:${scope.nth}:${browser}${ordinal ? `:${ordinal}` : ''}`;
+  const digest = createHash('sha256').update(seed).digest('hex');
+  const prefix = '9' + (BigInt('0x' + digest.slice(0, 16)) % 100000000n).toString().padStart(8, '0');
+  return cpfGenerator(prefix);
+}
+
+export function qaRunLearners(runId, attempt, cpfGenerator) {
+  const scope = assertQaRunScope(runId, attempt);
+  return Object.fromEntries(['chromium','webkit'].map(browser => {
+    const code = browser === 'chromium' ? 'CHR' : 'WBK';
+    return [browser, Object.freeze({
+      nome: `AIRTRUST_QA_LMS_${code}_${scope.id}_${scope.nth}`,
+      matricula: `QA-LMS-${code}-${scope.id}-${scope.nth}`,
+      email: qaRunEmail(scope.id,scope.nth,browser),
+      cargo: 'Aluno de Teste QA', setor: 'Treinamento e Capacitação',
+      perfil: 'ALUNO', cpf: qaRunCpfCandidate(scope.id, scope.nth, browser, cpfGenerator),
+    })];
+  }));
+}
+
+
+export function qaProvisionSelection(runId, attempt, browser, cpfGenerator) {
+  const learners = qaRunLearners(runId, attempt, cpfGenerator);
+  if (browser == null || browser === '') return learners;
+  if (!Object.hasOwn(learners, browser)) throw new Error('QA_BROWSER_NOT_ALLOWLISTED');
+  return { [browser]: learners[browser] };
+}

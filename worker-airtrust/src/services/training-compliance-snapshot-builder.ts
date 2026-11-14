@@ -58,7 +58,7 @@ export type Rule = {
   qualificacao_tipo_nome: string | null;
   qualificacao_tipo_codigo: string | null;
   validade_meses: number | null;
-  /** 1 = vence no ultimo dia do mes (qualificacoes_tipos.vencimento_fim_mes). */
+  /** Coluna legada qualificacoes_tipos.vencimento_fim_mes: IGNORADA no calculo. */
   vencimento_fim_mes?: number | null;
   escopo: Scope;
   setor_id: number | null;
@@ -657,14 +657,9 @@ export function computeRequirement(
       data_validade = trainingComplianceIsoDay(evidence.data_vencimento);
     } else if (months) {
       const realizationDay = trainingComplianceIsoDay(evidence.data_realizacao);
-      if (realizationDay && Number(rule.vencimento_fim_mes) === 1) {
-        // Mesmo calculo do historico/Ficha: modelo "fim do mes" vence no ultimo dia do mes.
-        data_validade = calcularDataVencimento(realizationDay, months, 1);
-      } else {
-        const base = new Date(`${realizationDay}T12:00:00Z`);
-        base.setUTCMonth(base.getUTCMonth() + months);
-        data_validade = base.toISOString().slice(0, 10);
-      }
+      // Vence no dia: soma canonica com limite no ultimo dia do mes-alvo
+      // (vencimento_fim_mes e legado e ignorado).
+      data_validade = realizationDay ? calcularDataVencimento(realizationDay, months) : null;
     }
     if (!data_validade) {
       status_compliance = 'CONFORME';

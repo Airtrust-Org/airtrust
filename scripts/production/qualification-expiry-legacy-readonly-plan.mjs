@@ -33,7 +33,7 @@ SELECT
   h.status, h.data_conclusao, h.data_vencimento,
   h.validade_meses AS historical_months,
   t.validade AS model_months,
-  COALESCE(t.vencimento_fim_mes, 0) AS model_end_of_month,
+  0 AS model_end_of_month, -- LEGADO: qualificacoes_tipos.vencimento_fim_mes ignorada (todo vencimento vence no dia)
   h.origem_tipo, h.renovacao_de, h.certificado_arquivo_id,
   h.lms_matricula_id,
   CASE WHEN h.arquivo_url IS NOT NULL AND TRIM(h.arquivo_url) <> '' THEN 1 ELSE 0 END AS has_uploaded_certificate
@@ -64,15 +64,21 @@ function dateOnly(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === str ? str : null;
 }
 
-export function expectedExpiry(completed, months, endOfMonth = false) {
+/**
+ * Every expiry is "no dia": keep the day and clamp it to the last valid day of the target month
+ * (2025-01-31 + 1m -> 2025-02-28). The third parameter is accepted only for call-site compatibility
+ * and IGNORED: qualificacoes_tipos.vencimento_fim_mes is a legacy column (owner decision).
+ */
+// eslint-disable-next-line no-unused-vars
+export function expectedExpiry(completed, months, _endOfMonth = false) {
   const valid = dateOnly(completed);
   if (!valid || !Number.isInteger(months) || months < 1 || months > 600) return null;
-  const d = new Date(`${valid}T00:00:00Z`);
-  if (endOfMonth) {
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months + 1, 0)).toISOString().slice(0, 10);
-  }
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = valid.split('-').map(Number);
+  const total = (m - 1) + months;
+  const year = y + Math.floor(total / 12);
+  const month = total % 12;
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(d, last))).toISOString().slice(0, 10);
 }
 
 function asPositiveMonths(value) {
@@ -89,7 +95,6 @@ function classify(row) {
   const validity = asPositiveMonths(row.model_months);
   const historicValidity = asPositiveMonths(row.historical_months);
   const eomValue = Number(row.model_end_of_month ?? 0);
-  const eom = eomValue === 1;
   let reason = null;
 
   if (Number(row.empresa_id) !== 6 || !Number.isInteger(Number(row.id)) || Number(row.id) < 1) reason = 'invalid_tenant_or_id';
@@ -97,9 +102,9 @@ function classify(row) {
   else if (!REALIZED_STATUSES.has(status)) reason = 'non_realized_or_unrecognized_status';
   else if (!completed) reason = 'completion_date_invalid';
   else if (EXCEPTIONS.has(model) || model.startsWith('CMA_') || model.startsWith('CHT-')) reason = 'regulatory_special_case';
-  else if (validity === null || ![0, 1].includes(eomValue)) reason = 'model_validity_ambiguous';
+  else if (validity === null) reason = 'model_validity_ambiguous';
 
-  const wanted = reason ? null : expectedExpiry(completed, validity, eom);
+  const wanted = reason ? null : expectedExpiry(completed, validity);
   if (!reason && !wanted) reason = 'expiry_computation_invalid';
   const validityChanged = historicValidity !== validity;
   const expiryChanged = actual !== wanted;

@@ -610,12 +610,15 @@ export default function LmsMatriculas() {
       )
     : todasMatriculas;
 
-  const alertableMatriculas = matriculas.filter(isLmsEnrollmentAlertable);
+  const allowCourseAlerts = ['EAD', 'TREINAMENTO EAD'].includes(
+    String(curso?.categoria || '').trim().toUpperCase(),
+  );
+  const alertableMatriculas = allowCourseAlerts ? matriculas.filter(isLmsEnrollmentAlertable) : [];
   const selectedAlertTargets = todasMatriculas.filter(
-    (matricula) => alertTargetIds.includes(matricula.id) && isLmsEnrollmentAlertable(matricula),
+    (matricula) => allowCourseAlerts && alertTargetIds.includes(matricula.id) && isLmsEnrollmentAlertable(matricula),
   );
   const selectedAlertCount = [...selectedAlertIds].filter((id) =>
-    todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
+    allowCourseAlerts && todasMatriculas.some((matricula) => matricula.id === id && isLmsEnrollmentAlertable(matricula)),
   ).length;
   const allVisibleAlertableSelected =
     alertableMatriculas.length > 0 &&
@@ -884,14 +887,14 @@ export default function LmsMatriculas() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
-            <Button
+            {allowCourseAlerts && <Button
               variant="secondary"
               onClick={openSelectedAlerts}
               disabled={selectedAlertCount === 0}
             >
               <BellRing className="h-4 w-4" />
               Enviar alertas{selectedAlertCount > 0 ? ` (${selectedAlertCount})` : ''}
-            </Button>
+            </Button>}
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
@@ -1036,7 +1039,7 @@ export default function LmsMatriculas() {
                             <RowActionsMenu
                               label={`Mais ações para a matrícula de ${m.funcionario_nome ?? 'funcionário'}`}
                               actions={[
-                                ...(isLmsEnrollmentAlertable(m)
+                                ...(allowCourseAlerts && isLmsEnrollmentAlertable(m)
                                   ? [
                                       {
                                         label: 'Enviar alerta',

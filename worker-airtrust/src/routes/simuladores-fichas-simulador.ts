@@ -62,13 +62,20 @@ app.put(
     // Record-level tenant boundary must be proven before availability/model
     // lookups or any read/write by ficha_id.
     const fichaTenant = await c.env.DB.prepare(
-      'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
+      'SELECT id, assinatura_aluno_timestamp, assinatura_tripulante FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL',
     )
       .bind(fichaId, empresaId)
-      .first<{ id: number }>();
+      .first<{ id: number; assinatura_aluno_timestamp: string | null; assinatura_tripulante: number | null }>();
     if (!fichaTenant) {
       return c.json({ success: false, error: 'Ficha não encontrada' }, 404);
     }
+    if (fichaTenant.assinatura_aluno_timestamp || Number(fichaTenant.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha. Utilize a retificação formal para alterar manobras.' }, 409);
+    }
+
+    // Mutations below prove unsigned state inside each D1 statement, not
+    // solely through a potentially stale pre-read during concurrent signing.
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, fichaId);
     if (!availability.available) {
@@ -94,7 +101,8 @@ app.put(
       .bind(fichaId, ordem)
       .first<any>();
 
-    // 2) If not found, try to create from model
+    // 2) If not found, create in a single guarded statement.
+    let created = false;
     if (!manobra) {
       const ficha = await c.env.DB.prepare(
         `SELECT
@@ -149,10 +157,19 @@ app.put(
         const descricao = descricaoOverride || m?.descricao || `Manobra ordem ${ordem}`;
         const categoria = m?.categoria || 'GERAL';
 
-        await c.env.DB.prepare(
+        const inserted = await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
              ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0) = 0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0) = 0
+            )`,
         )
           .bind(
             fichaId,
@@ -162,8 +179,15 @@ app.put(
             Number(ordem),
             b.resultado ?? null,
             b.observacoes ?? '',
+            fichaId,
+            empresaId,
           )
           .run();
+        if (Number(inserted.meta?.changes || 0) !== 1) {
+          return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+            error: 'Ficha assinada durante inclusão da manobra.' }, 409);
+        }
+        created = true;
 
         manobra = await c.env.DB.prepare(
           'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=?',
@@ -171,10 +195,19 @@ app.put(
           .bind(fichaId, ordem)
           .first<any>();
       } else {
-        await c.env.DB.prepare(
+        const inserted = await c.env.DB.prepare(
           `INSERT INTO fichas_sessao_manobras(
              ficha_id, codigo, descricao, categoria, ordem, resultado, observacoes
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0) = 0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0) = 0
+            )`,
         )
           .bind(
             fichaId,
@@ -184,8 +217,15 @@ app.put(
             Number(ordem),
             b.resultado ?? null,
             b.observacoes ?? '',
+            fichaId,
+            empresaId,
           )
           .run();
+        if (Number(inserted.meta?.changes || 0) !== 1) {
+          return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+            error: 'Ficha assinada durante inclusão da manobra.' }, 409);
+        }
+        created = true;
 
         manobra = await c.env.DB.prepare(
           'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=?',
@@ -195,17 +235,37 @@ app.put(
       }
     }
 
-    // 3) Update (idempotent)
-    await c.env.DB.prepare(
-      'UPDATE fichas_sessao_manobras SET resultado=?, observacoes=?, updated_at=datetime("now") WHERE ficha_id=? AND ordem=?',
-    )
-      .bind(
-        b.resultado !== undefined ? b.resultado : manobra.resultado,
-        b.observacoes !== undefined ? b.observacoes : manobra.observacoes,
-        fichaId,
-        ordem,
+    // 3) For existing maneuvers, this is the ONLY write. Prevent a
+    // concurrent final signature or cross-tenant mutation inside SQL.
+    // Newly inserted rows already include their final result in the INSERT.
+    if (!created) {
+      const updated = await c.env.DB.prepare(
+        `UPDATE fichas_sessao_manobras
+            SET resultado=?, observacoes=?, updated_at=datetime('now')
+          WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM fichas_sessao f
+               WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL
+                 AND f.assinatura_instrutor_timestamp IS NULL
+                 AND COALESCE(f.assinatura_instrutor, 0)=0
+                  AND f.assinatura_aluno_timestamp IS NULL
+                  AND COALESCE(f.assinatura_tripulante, 0)=0
+            )`,
       )
-      .run();
+        .bind(
+          b.resultado !== undefined ? b.resultado : manobra.resultado,
+          b.observacoes !== undefined ? b.observacoes : manobra.observacoes,
+          fichaId,
+          ordem,
+          fichaId,
+          empresaId,
+        )
+        .run();
+      if (Number(updated.meta?.changes || 0) !== 1) {
+        return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+          error: 'Ficha assinada ou manobra alterada. Recarregue a ficha.' }, 409);
+      }
+    }
 
     const atual = await c.env.DB.prepare(
       'SELECT * FROM fichas_sessao_manobras WHERE ficha_id=? AND ordem=? AND deleted_at IS NULL',
@@ -254,6 +314,14 @@ app.post('/fichas-simulador/:id/popular-manobras', requireOperacoesFicha('create
       .bind(fid, empresaId)
       .first();
     if (!f) return c.json({ success: false, error: 'Não encontrada' }, 404);
+    if (f.assinatura_instrutor_timestamp || Number(f.assinatura_instrutor) === 1) {
+      return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
+        error: 'Ficha já assinada. Não é permitido repopular manobras.' }, 409);
+    }
+    if (f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1) {
+      return c.json({ success: false, code: 'FICHA_STUDENT_SIGNED',
+        error: 'O aluno já assinou esta ficha. Utilize a retificação formal para repopular manobras.' }, 409);
+    }
 
     const m = await c.env.DB.prepare(
       'SELECT codigo, COALESCE(nome, descricao) AS descricao, categoria, ordem FROM manobras WHERE empresa_id = ? AND tipo_sessao=? AND tipo_aeronave=? AND deleted_at IS NULL ORDER BY ordem',
@@ -274,10 +342,26 @@ app.post('/fichas-simulador/:id/popular-manobras', requireOperacoesFicha('create
     const manobras = buildOperationalFichaManobras(m.results as any[]);
     const insertStmts = manobras.map((ma: any) =>
       c.env.DB.prepare(
-        'INSERT INTO fichas_sessao_manobras(ficha_id,codigo,nome,descricao,categoria,ordem,tripulante)VALUES(?,?,?,?,?,?,?)',
-      ).bind(fid, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem, ma.tripulante || 'AB'),
+        `INSERT INTO fichas_sessao_manobras(
+           ficha_id,codigo,nome,descricao,categoria,ordem,tripulante
+         )
+         SELECT ?,?,?,?,?,?,?
+          WHERE EXISTS (
+            SELECT 1 FROM fichas_sessao f
+             WHERE f.id = ? AND f.empresa_id = ? AND f.deleted_at IS NULL
+               AND f.assinatura_instrutor_timestamp IS NULL
+               AND COALESCE(f.assinatura_instrutor,0)=0
+                AND f.assinatura_aluno_timestamp IS NULL
+                AND COALESCE(f.assinatura_tripulante,0)=0
+          )`,
+      ).bind(fid, ma.codigo, ma.nome, ma.descricao, ma.categoria, ma.ordem,
+        ma.tripulante || 'AB', fid, empresaId),
     );
-    await c.env.DB.batch(insertStmts);
+    const written = await c.env.DB.batch(insertStmts);
+    if (written.some((item) => Number(item.meta?.changes || 0) !== 1)) {
+      return c.json({ success: false, code: 'FICHA_MANOBRA_CONCURRENT_SIGNATURE',
+        error: 'Ficha assinada ou alterada durante a inclusão. Recarregue.' }, 409);
+    }
     return c.json({
       success: true,
       message: `${FICHA_TECNICAS_PADRAO_LIMITE} técnicas + 15 NOTECHS populados`,

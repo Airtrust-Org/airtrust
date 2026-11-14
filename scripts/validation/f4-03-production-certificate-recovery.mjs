@@ -106,7 +106,6 @@ const rows = query(`
     AND qh.observacoes LIKE '%LMS%'
     AND qh.data_conclusao IS NOT NULL
     AND qh.data_vencimento IS NOT NULL
-    AND COALESCE(qt.vencimento_fim_mes, 0) = 0
     AND qh.data_vencimento = date(qh.data_conclusao, '+' || CAST(qt.validade AS TEXT) || ' months')
   ORDER BY qh.id
 `);

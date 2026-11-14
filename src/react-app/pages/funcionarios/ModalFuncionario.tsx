@@ -1,3 +1,5 @@
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
+import { completedAgeYears } from '@/shared/utils/cma-validity';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -135,22 +137,15 @@ function isQualificacaoRenovada(qual: QualItem): boolean {
 }
 
 function addMonthsYmd(base: Date, months: number): string {
-  const d = new Date(base.getTime());
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().split('T')[0];
+  // Regra canonica de validade (dia preservado, limitado ao fim do mes-alvo), UTC-only.
+  // `base` vem de `${yyyy-mm-dd}T12:00:00` local: usa o dia civil local, nao o instante UTC.
+  const ymd = `${String(base.getFullYear()).padStart(4, '0')}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+  return tryAddCalendarMonthsClamped(ymd, months) ?? '';
 }
 
-/** Idade (anos completos) na data de realização do exame */
+/** Idade (anos completos) na data de realização do exame (regra compartilhada com o Worker). */
 function computeAgeAtRealizacao(nascimentoYmd: string, realizacaoYmd: string): number | null {
-  const [y1, m1, d1] = nascimentoYmd.split('-').map(Number);
-  const [y2, m2, d2] = realizacaoYmd.split('-').map(Number);
-  if (!y1 || !m1 || !d1 || !y2 || !m2 || !d2) return null;
-  const birth = new Date(y1, m1 - 1, d1);
-  const ref = new Date(y2, m2 - 1, d2);
-  let age = ref.getFullYear() - birth.getFullYear();
-  const md = ref.getMonth() - birth.getMonth();
-  if (md < 0 || (md === 0 && ref.getDate() < birth.getDate())) age--;
-  return age;
+  return completedAgeYears(nascimentoYmd, realizacaoYmd);
 }
 
 function qualBlobUpper(item: QualItem): string {

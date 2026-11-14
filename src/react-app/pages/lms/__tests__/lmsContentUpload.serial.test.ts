@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithAuth } from '@/react-app/config/api';
-import { inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
+import { canDirectReplaceScormProfile, inspectScormReplacementProfile, uploadScormInactiveProductionCandidate, uploadStructuredLmsPackage } from '../lmsContentUpload';
 
 const { extractBrowserLmsPackageMock } = vi.hoisted(() => ({
   extractBrowserLmsPackageMock: vi.fn(),
@@ -83,6 +83,16 @@ const CANDIDATE_VALIDATED = {
   diagnostics: { status: 'PASS', errors: [] },
 };
 
+
+describe('SCORM replacement profile authority', () => {
+  it('rejects direct replacement for unverified/governed/private packages', () => {
+    expect(canDirectReplaceScormProfile('FORMATIVE')).toBe(true);
+    expect(canDirectReplaceScormProfile('EXTERNAL')).toBe(true);
+    expect(canDirectReplaceScormProfile('GOVERNED')).toBe(false);
+    expect(canDirectReplaceScormProfile('PRIVATE')).toBe(false);
+    expect(canDirectReplaceScormProfile('CHECKING')).toBe(false);
+  });
+});
 
 describe('production SCORM inactive candidate upload: never activates', () => {
   beforeEach(() => {
@@ -284,6 +294,34 @@ describe('SCORM profile routing — prevent scored SOP bypass through admin form
     });
     expect(result).toMatchObject({ status: 'ACTIVE', packageSha256: sha });
     expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/62/scorm-replace?confirm=REPLACE_AFTER_VALIDATION');
+  });
+
+  it('routes RC7_PRIVATE_REVIEW_NOT_CERTIFIED to inactive intake instead of replacing the active course', async () => {
+    for (const release of [
+      { status: 'RC7_PRIVATE_REVIEW_NOT_CERTIFIED' },
+      { status: 'DRAFT', humanEditorialReviewRequired: true },
+      { status: 'RELEASED', regulatoryReviewRequired: true },
+    ]) {
+      const f = scormZipWithCompletionContract({ ...noExamContract(), release });
+      extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+      expect(await inspectScormReplacementProfile(scormFile(f.zip))).toBe('PRIVATE');
+    }
+    const f = scormZipWithCompletionContract({
+      ...noExamContract(),
+      release: { status: 'RC7_PRIVATE_REVIEW_NOT_CERTIFIED' },
+    });
+    extractBrowserLmsPackageMock.mockReturnValue(f.entries);
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(f.zip));
+    const sha = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    fetchWithAuthMock.mockResolvedValueOnce(response({
+      ...CANDIDATE_VALIDATED, packageSha256: sha,
+    }, 202));
+    const receipt = await uploadScormInactiveProductionCandidate({
+      cursoId: 23, file: scormFile(f.zip), replaceImmediately: false,
+    });
+    expect(receipt.status).toBe('VALIDATED');
+    expect(fetchWithAuthMock).toHaveBeenCalledTimes(1);
+    expect(fetchWithAuthMock.mock.calls[0]?.[0]).toBe('/api/lms/cursos/23/scorm-upload');
   });
 
   it('never directly replaces a private candidate or unproven/invalid manifest', async () => {

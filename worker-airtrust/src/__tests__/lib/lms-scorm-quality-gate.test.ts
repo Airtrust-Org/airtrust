@@ -224,4 +224,39 @@ describe('SCORM package quality gate', () => {
     }));
     expect(missingReview.authoringReview?.reviewed).toBe(false);
   });
+  it('treats prefixed RC7 review-only labels as private even when formative checks pass', () => {
+    const contract = {
+      ...validManifest,
+      content: { requiredSlides: ['intro', 'fixation'] },
+      formative: { requiredActivities: ['fixation'], scored: false },
+      assessment: {
+        mode: 'NONE', scoringBySCORM: false,
+        requiredInteractions: [], successStatus: 'completed',
+      },
+      completion: {
+        strategy: 'AIRTRUST_COMPLETION_CONTRACT_V1',
+        passStatusFromSCORM: false, workerApprovalRequired: true,
+      },
+    };
+    for (const release of [
+      { status: 'RC7_PRIVATE_REVIEW_NOT_CERTIFIED' },
+      { status: 'RC5_PRIVATE_REVIEW_NOT_APPROVED' },
+      { status: 'PUBLISHED', humanEditorialReviewRequired: true },
+      { status: 'PUBLISHED', regulatoryReviewRequired: true },
+      { status: 'PUBLISHED', productionUnchanged: true },
+    ]) {
+      const result = validateScormPackageQuality(pkg({ ...contract, release }));
+      expect(result.structural.status).toBe('PASS');
+      expect(result.completionManifest.status).toBe('PASS');
+      expect(result.certificationProfile).toBe('FORMATIVE_NO_EXAM_V1');
+      expect(result.authoringReview?.privateRelease).toBe(true);
+      expect(result.publishable).toBe(false);
+    }
+    const approvedLabel = validateScormPackageQuality(pkg({
+      ...contract, release: { status: 'RELEASED' },
+    }));
+    expect(approvedLabel.authoringReview?.privateRelease).toBe(false);
+    expect(approvedLabel.publishable).toBe(false); // Author release label never grants approval.
+  });
+
 });

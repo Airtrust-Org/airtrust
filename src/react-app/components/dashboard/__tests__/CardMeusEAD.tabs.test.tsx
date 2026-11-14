@@ -54,7 +54,7 @@ function renderCard() {
     <MemoryRouter initialEntries={['/inicio']}>
       <Routes>
         <Route path="/inicio" element={<CardMeusEAD />} />
-        <Route path="/lms" element={<div>Área de treinamentos</div>} />
+        <Route path="/lms" element={<><div>Área de treinamentos</div><CardMeusEAD showOpenPageLink={false} /></>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -98,6 +98,45 @@ describe('CardMeusEAD — organização por situação', () => {
     expect(screen.getByText('Treinamento 16')).toBeInTheDocument();
     expect(screen.getByText('Rever')).toBeInTheDocument();
     expect(screen.queryByText('Treinamento 15')).not.toBeInTheDocument();
+  });
+
+  it('oferece histórico direto sem esconder certificados dos cursos efetivamente concluídos', () => {
+    setMatriculas([
+      matricula(1223, 'EM_ANDAMENTO'),
+      matricula(1220, 'CONCLUIDO'),
+      matricula(691, 'CONCLUIDO'),
+    ]);
+    renderCard();
+    const openHistory = screen.getByRole('button', { name: /Cursos realizados \(2\)/ });
+    fireEvent.click(openHistory);
+    expect(screen.getByText('Área de treinamentos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Finalizados/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Treinamento 1220')).toBeInTheDocument();
+    expect(screen.getByText('Treinamento 691')).toBeInTheDocument();
+    expect(screen.queryByText('Treinamento 1223')).not.toBeInTheDocument();
+  });
+
+  it('mostra consulta pendente sem alegar zero treinamentos', () => {
+    useMinhasEADMock.mockReturnValue({
+      data: undefined, isLoading: true, isFetching: true, error: null,
+    } as unknown as ReturnType<typeof useMinhasEAD>);
+    renderCard();
+    expect(screen.getByText(/Consultando suas matrículas e cursos concluídos/)).toBeInTheDocument();
+    expect(screen.queryByText(/^0 treinamentos/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Carregando treinamentos')).toBeInTheDocument();
+  });
+
+  it('não trata uma falha de consulta como histórico vazio e permite repetir', () => {
+    const refetch = vi.fn();
+    useMinhasEADMock.mockReturnValue({
+      data: undefined, isLoading: false, isFetching: false,
+      error: new Error('Tempo limite ao consultar seus treinamentos.'),
+      refetch,
+    } as unknown as ReturnType<typeof useMinhasEAD>);
+    renderCard();
+    expect(screen.getByRole('alert')).toHaveTextContent('Isso não significa que seu histórico está vazio.');
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('prioriza não iniciados quando não há nenhum curso em andamento', () => {

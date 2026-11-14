@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { showToast } from '@/react-app/utils/toast';
+import { tryAddCalendarMonthsClamped } from '@/shared/utils/validade-meses';
 
 type HistoricoQualificacao = {
   id: number;
@@ -16,7 +17,6 @@ type HistoricoQualificacao = {
   data_vencimento?: string;
   observacoes?: string;
   validade_meses?: number;
-  vencimento_fim_mes?: number;
   renovada?: number | boolean; // Flag de renovação
 };
 
@@ -67,21 +67,11 @@ export default function ModalEditarQualificacaoSimples({
     }
 
     const calcularVencimento = () => {
-      // Criar data em UTC para evitar problemas de timezone
-      const [ano, mes, dia] = dataRealizacao.split('-').map(Number);
-      const data = new Date(Date.UTC(ano, mes - 1, dia)); // mes é 0-based
-
-      data.setUTCMonth(data.getUTCMonth() + (registro.validade_meses || 0));
-
-      // Se vencimento_fim_mes = 1, ajustar para último dia do mês
-      if (registro.vencimento_fim_mes === 1) {
-        data.setUTCMonth(data.getUTCMonth() + 1);
-        data.setUTCDate(0); // Último dia do mês anterior
-      }
-
-      const vencimento = data.toISOString().split('T')[0];
-      setDataVencimentoPreview(vencimento);
-      console.log('📅 Vencimento calculado (UTC):', vencimento);
+      // Regra canonica compartilhada com o Worker (UTC, sem deriva de fuso):
+      // vence no dia, limitado ao ultimo dia do mes-alvo.
+      const meses = registro.validade_meses || 0;
+      const vencimento = tryAddCalendarMonthsClamped(dataRealizacao, meses);
+      if (vencimento) setDataVencimentoPreview(vencimento);
     };
 
     calcularVencimento();
@@ -205,7 +195,6 @@ export default function ModalEditarQualificacaoSimples({
               </p>
               <p className="text-sm text-green-600 mt-1">
                 Validade: {registro.validade_meses} meses
-                {registro.vencimento_fim_mes === 1 && ' (fim do mês)'}
               </p>
             </div>
           )}

@@ -167,6 +167,87 @@ function exactIdParity(expected: string[], actual: string[]): boolean {
 }
 
 /**
+ * Rendered, structured teaching content is a semantic visual too. The M8
+ * authoring contract must not force stock imagery onto an already illustrated
+ * card, matrix, process, checklist or decision screen. These kinds are only
+ * accepted when their actual renderer inputs are present; merely claiming
+ * a kind, a caption, a release flag or a model.auditClosure never suffices.
+ *
+ * Slides whose primary kind is an image, hotspot or image sequence still need
+ * a real local visual asset (checked separately).
+ */
+const NON_RENDERED_STRUCTURAL_KEYS = new Set([
+  'id', 'kind', 'type', 'source', 'src', 'media', 'generated',
+  'icon', 'color', 'correct', 'required', 'requiredDecision',
+  'index', 'ordinal', 'score', 'metadata',
+]);
+
+function meaningfulVisualContent(value: unknown, depth = 0): boolean {
+  if (depth > 5) return false;
+  if (typeof value === 'string') return /[\p{L}\p{N}]/u.test(value.trim());
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(item => meaningfulVisualContent(item, depth + 1));
+  }
+  const record = asRecord(value);
+  if (!record) return false;
+  return Object.entries(record).some(([key, nested]) =>
+    !NON_RENDERED_STRUCTURAL_KEYS.has(key) && meaningfulVisualContent(nested, depth + 1));
+}
+
+function hasStructuredVisual(slide: Record<string, unknown>): boolean {
+  // Count only genuinely populated structures, never padded empty arrays.
+  // For grouped checklists, a heading alone is insufficient without items.
+  const list = (key: string, minimum: number): boolean =>
+    Array.isArray(slide[key]) && slide[key].length >= minimum &&
+    slide[key].every(item => meaningfulVisualContent(item));
+  const groups = (): boolean => list('groups', 2) &&
+    (slide.groups as unknown[]).every(group => {
+      const record = asRecord(group);
+      return record !== null && Array.isArray(record.items) &&
+        record.items.length > 0 && record.items.every(item => meaningfulVisualContent(item));
+    });
+  switch (slide.kind) {
+    case 'cover':
+      return typeof slide.title === 'string' && slide.title.trim().length > 0 &&
+        list('outcomes', 2);
+    case 'objectives':
+    case 'route':
+    case 'cards':
+    case 'section':
+      return list('cards', 2);
+    case 'compare':
+      return list('columns', 2);
+    case 'matrix':
+      return list('rows', 2) && list('headers', 2);
+    case 'checklist':
+    case 'rules':
+    case 'warning':
+      return list('items', 2);
+    case 'checklist_groups':
+      return groups();
+    case 'scenario':
+      return slide.requiredDecision === true &&
+        typeof slide.question === 'string' && slide.question.trim().length > 0 &&
+        list('scenarioOptions', 2);
+    case 'practice':
+      return list('practiceOptions', 2);
+    case 'process':
+    case 'timeline':
+    case 'topic_sequence':
+      return list('steps', 2);
+    case 'concept_map':
+      return list('nodes', 2);
+    case 'rule_exception':
+      return list('rules', 1) && list('exceptions', 1);
+    case 'bowtie':
+      return list('threats', 1) && list('barriers', 1);
+    default:
+      return false;
+  }
+}
+
+/**
  * Additional fail-closed contract for AirTrust's modern M8 authoring model.
  * Legacy packages are intentionally untouched: the checks activate only when
  * course-model.js explicitly declares AIRTRUST_TRAINING_MODEL_M8.
@@ -214,7 +295,7 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
     const refs: string[] = [];
     collectAssetRefs(slide, refs);
     const visualRefs = refs.filter((ref) => VISUAL_ASSET_RE.test(ref));
-    if (!visualRefs.length) slidesWithoutVisual += 1;
+    if (!visualRefs.length && !hasStructuredVisual(slide)) slidesWithoutVisual += 1;
     for (const ref of refs) {
       const normalized = normalizeAssetRef(ref);
       if (!normalized) continue;
@@ -225,7 +306,7 @@ export function validateModernM8AuditContract(pkg: ValidatedLmsPackage): GateSec
       }
     }
   }
-  if (slidesWithoutVisual) errors.push(`M8: ${slidesWithoutVisual} tela(s) sem recurso visual local`);
+  if (slidesWithoutVisual) errors.push(`M8: ${slidesWithoutVisual} tela(s) sem recurso visual local ou elemento visual estruturado`);
   if (externalAssets.size) errors.push(`M8: dependência(s) de mídia externa não permitida(s): ${[...externalAssets].slice(0, 5).join(', ')}`);
   if (missingAssets.size) errors.push(`M8: asset(s) de mídia ausente(s): ${[...missingAssets].slice(0, 5).join(', ')}`);
 
@@ -399,8 +480,13 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const declaredReviewed = release?.reviewed === true;
   const releaseStatus = typeof release?.status === 'string'
     ? release.status.trim().toUpperCase() : '';
-  const privateRelease = releaseStatus.startsWith('PRIVATE_') ||
-    releaseStatus.includes('DO_NOT_ACTIVATE');
+  // Release metadata cannot certify a ZIP. Explicit private/review markers
+  // may ONLY veto publication, including prefixed RC7_PRIVATE_* candidate labels.
+  const privateMarker = /(?:^|[_.\s-])(?:PRIVATE|DRAFT|NOT_CERTIFIED|NOT_APPROVED|UNAPPROVED|DO_NOT_ACTIVATE|REVIEW_REQUIRED|PENDING_REVIEW)(?=$|[_.\s-])/;
+  const privateRelease = privateMarker.test(releaseStatus) ||
+    release?.humanEditorialReviewRequired === true ||
+    release?.regulatoryReviewRequired === true ||
+    release?.productionUnchanged === true;
   // Only the assessment/completion contract decides eligibility. The ZIP's own
   // release.* marker (status, reviewed, functionalCertified) is self-declared
   // metadata and is deliberately never read here.

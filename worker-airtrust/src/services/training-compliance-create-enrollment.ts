@@ -83,7 +83,7 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
         JOIN treinamento_requisitos tr ON tr.id=? AND tr.empresa_id=f.empresa_id
           AND tr.qualificacao_tipo_id=c.qualificacao_tipo_id AND tr.ativo=1 AND tr.deleted_at IS NULL
           AND tr.obrigatoriedade='OBRIGATORIA' AND tr.auto_matricular_ead=1
-          AND tr.modalidade_requerida='EAD'
+          AND (tr.modalidade_requerida='EAD' OR (tr.modalidade_requerida IS NULL AND tr.empresa_id=6))
           AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
           AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
           ${conditionGuard('tr')}

@@ -33,7 +33,8 @@ describe('D1 production export/restore drill workflow', () => {
 
   it('restores into disposable SQLite and never uploads the dump', () => {
     expect(workflow).toContain('integrity_check == "ok"');
-    expect(workflow).toContain("trap 'rm -rf \"$out_dir\"' EXIT");
+    expect(workflow).toContain('trap \'rm -rf "$out_dir"; rm -f "$raw_report"\' EXIT');
+    expect(workflow).toContain('if: ${{ always() && steps.export_restore.outcome != \'skipped\' }}');
     expect(workflow).toContain('d1-production-backup-restore-report.json');
     expect(workflow).not.toContain('airtrust-db-production-backup-*.sql');
     expect(workflow).toContain('backup: {bytes: .backup.bytes, sha256: .backup.sha256}');

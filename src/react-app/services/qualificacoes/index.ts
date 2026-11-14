@@ -38,7 +38,6 @@ export interface TipoQualificacaoResumo {
   carga_horaria_recorrente?: number | null;
   validade: number | null;
   observacoes?: string | null;
-  vencimento_fim_mes?: number | null;
   is_check?: number | boolean | null;
   ativo?: number | boolean | null;
   created_at?: string;

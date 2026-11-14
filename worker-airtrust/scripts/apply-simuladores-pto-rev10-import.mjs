@@ -7,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { buildTenantFingerprint } from './lib/matriz-base-fingerprint.mjs';
 import { REUSE_RESOLUTION_TYPES, buildResolutionStatements } from './lib/matriz-apply-core.mjs';
 import { assertPtoRev10Plan, sha256 } from './lib/simuladores-pto-rev10-plan.mjs';
+import { assertNewPtoV18ApplyReady } from './lib/simuladores-pto-v18-apply-approval.mjs';
 import { buildPtoRev10ModelAndLinkStatements } from './lib/simuladores-pto-rev10-apply-core.mjs';
+import { buildPtoRev10AtomicPostconditions } from './lib/simuladores-pto-rev10-atomic-postconditions.mjs';
 
 const APPLY_CONFIRMATION = 'APLICAR_PTO_REV10_LOCAL';
 
@@ -268,7 +270,7 @@ export function classifyExistingPtoRev10Import(existingImport, planSha256) {
   return 'CONFLICT';
 }
 
-export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmation }) {
+export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmation, technicalApproval = null }) {
   assertRequiredSchema(dbPath);
   assertPtoRev10Plan(plan);
   const empresaId = Number(plan.empresa_id);
@@ -284,6 +286,7 @@ export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmati
     return { ok: true, idempotent: true, status: 'APPLIED' };
   }
   if (existingState === 'CONFLICT') fail('import-uuid já utilizado');
+  assertNewPtoV18ApplyReady({ plan, existingState, dryRun, technicalApproval });
 
   const fingerprint = loadPtoRev10Fingerprint(dbPath, empresaId);
   if (fingerprint.fingerprint !== plan.base_fingerprint) fail('fingerprint divergente');
@@ -353,6 +356,9 @@ export function applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmati
     ...resolutionStatements,
     ...supersededStatements,
     ...modelStatements,
+    // Fail atomically before marking APPLIED: the sqlite3 -bail process
+    // closes and rolls back the transaction if this temp CHECK fails.
+    buildPtoRev10AtomicPostconditions({ plan, empresaId }),
     `UPDATE simuladores_matriz_imports
         SET status='APPLIED',
             applied_at=CURRENT_TIMESTAMP,
@@ -391,6 +397,7 @@ export function runCli(argv = process.argv) {
   const dryRun = hasFlag(argv, '--dry-run');
   const apply = hasFlag(argv, '--apply');
   const confirmation = arg(argv, '--confirm');
+  const approvalFile = arg(argv, '--technical-approval');
   if (!planPath || !dbPath || !importUuid || dryRun === apply) {
     fail(
       'uso: --plan <json> --d1-local <sqlite> --import-uuid <uuid> (--dry-run|--apply --confirm APLICAR_PTO_REV10_LOCAL)',
@@ -399,7 +406,8 @@ export function runCli(argv = process.argv) {
   if (!fs.existsSync(planPath)) fail('plano inexistente');
   if (!fs.existsSync(dbPath)) fail('D1 local inexistente');
   const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
-  const result = applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmation });
+  const technicalApproval = approvalFile ? JSON.parse(fs.readFileSync(approvalFile, 'utf8')) : null;
+  const result = applyPtoRev10Plan({ dbPath, plan, importUuid, dryRun, confirmation, technicalApproval });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return result;
 }

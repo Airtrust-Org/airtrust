@@ -1,0 +1,2535 @@
+#!/usr/bin/env node
+/**
+ * AIRTRUST — Motor de Homologação LMS/EAD em Produção com Aluno Sintético
+ *
+ * Executa a homologação funcional completa do catálogo LMS/EAD:
+ * 1. Login autenticado como o aluno de teste QA-LMS-202611.
+ * 2. Matrícula oficial via API (POST /api/lms/matriculas).
+ * 3. Abertura do player em navegador real (Chromium e WebKit).
+ * 4. Percurso integral interagindo com slides, botões, accordions, quizzes e vídeos.
+ * 5. Teste obrigatório de persistência e retomada (Etapa C) com fechamento de sessão.
+ * 6. Finalização e persistência no banco (LMSCommit/LMSFinish/completeLmsMatricula).
+ * 7. Pós-conclusão: validação de status CONCLUÍDO, qualificação, certificado e reabertura sem downgrade.
+ * 8. Geração da Matriz de Homologação oficial com as 17 colunas exigidas.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import { createHash } from 'node:crypto';
+import { chromium, webkit } from '@playwright/test';
+import { SYNTHETIC_LEARNER } from './provision-synthetic-qa-learner.mjs';
+import { assertQaRunScope } from './qa-run-identity.mjs';
+import { extractAnswerPlan } from '../validation/lms-scorm-answer-plan.mjs';
+import { collectRequiredDecisionSlideIndices } from '../validation/lms-scorm-required-decision-diagnostics.mjs';
+import { readVisibleVideo, startRealVisibleVideo } from '../validation/lms-scorm-video-playback-readonly.mjs';
+import {
+  assert,
+  assertAllowedProductionBaseUrl,
+  decodeJwtPayload,
+  extractAccessToken,
+  fetchJson,
+  login,
+  selectEmpresa,
+} from '../smoke-auth-common.mjs';
+
+const API = assertAllowedProductionBaseUrl(
+  process.env.PROD_API_BASE_URL || 'https://api.airtrust.online',
+);
+const APP = String(process.env.PROD_APP_BASE_URL || 'https://airtrust.online').replace(/\/+$/, '');
+const TARGET_COMPANY_ID = Number(process.env.TARGET_COMPANY_ID || 6);
+const EXPECTED_SHA = String(process.env.EXPECTED_PRODUCTION_SHA || '').trim().toLowerCase();
+const BROWSER_NAME = String(process.env.HOMOLOGATION_BROWSER || 'chromium').trim().toLowerCase();
+const REPORT_PATH = process.env.HOMOLOGATION_REPORT_PATH || `qa-state/lms-homologation-${BROWSER_NAME}.json`;
+const COURSE_TIMEOUT_MS = Number(process.env.HOMOLOGATION_COURSE_TIMEOUT_MS || 300_000);
+const MAX_STEPS = Number(process.env.HOMOLOGATION_MAX_STEPS || 300);
+const COURSE_IDS = parseCourseIdFilter(process.env.HOMOLOGATION_COURSE_IDS);
+
+const TERMINAL_SCORM12 = new Set(['passed', 'completed']);
+const TERMINAL_SCORM2004_COMPLETION = new Set(['completed']);
+const TERMINAL_SCORM2004_SUCCESS = new Set(['passed']);
+
+function parseCourseIdFilter(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return new Set();
+  const parts = raw.split(',').map((item) => item.trim()).filter(Boolean);
+  return new Set(parts.map(Number));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function saveIncrementalReport(results = [], metadata = {}, targetPath = REPORT_PATH) {
+  const total = results.length;
+  const passCount = results.filter((r) => r.status === 'PASS').length;
+  const failCount = results.filter((r) => r.status === 'FAIL').length;
+  const blockedCount = results.filter((r) => r.status === 'BLOQUEADO').length;
+
+  const summary = {
+    browser: BROWSER_NAME,
+    total_courses: total,
+    pass_count: passCount,
+    fail_count: failCount,
+    blocked_count: blockedCount,
+    updated_at: new Date().toISOString(),
+    ...metadata,
+    results: sanitizeQaReportValue(results),
+  };
+
+  try {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, JSON.stringify(summary, null, 2), 'utf8');
+  } catch (err) {
+    console.warn(`[LMS_HOMOLOGATION] Falha ao salvar relatório incremental: ${safeQaErrorCode(err)}`);
+  }
+  return summary;
+}
+
+// Fail-closed diagnostic output: never serialize raw Playwright network exceptions.
+// Playwright may embed Authorization, Cookie, and signed JWT values in call logs.
+export function safeQaErrorCode(error) {
+  const message = typeof error === 'string' ? error : String(error?.message || '');
+  if (/timed? ?out|timeout|AbortSignal|operation was aborted/i.test(message)) return 'QA_NETWORK_TIMEOUT';
+  if (/\b401\b|INVALID_TOKEN|TOKEN_REVOKED/i.test(message)) return 'QA_AUTHENTICATION_FAILURE';
+  if (/\b403\b|FORBIDDEN/i.test(message)) return 'QA_AUTHORIZATION_FAILURE';
+  if (/\b429\b|rate.limit/i.test(message)) return 'QA_RATE_LIMITED';
+  const known = message.match(/^(INCOMPLETE_COURSE_PATH|SCORM_IFRAME_NOT_FOUND|LMS_[A-Z0-9_]{3,60}|QA_[A-Z0-9_]{3,70}|DRIVER_STALL_AT_UNIT_[0-9]{1,5}|ENROLL_FAILED_HTTP_[0-9]{1,6}_[0-9]{3}:[A-Z0-9_]{3,70})$/);
+  if (known) return known[1];
+  return 'QA_EXECUTION_ERROR';
+}
+
+export function sanitizeQaReportValue(value, key = '', depth = 0) {
+  if (depth > 16) return '[TRUNCATED]';
+  if (/authorization|cookie|token|password|secret|api.?key/i.test(key)) return '[REDACTED]';
+  if (Array.isArray(value)) return value.map((v) => sanitizeQaReportValue(v, '', depth + 1));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, sanitizeQaReportValue(v, k, depth + 1)]),
+    );
+  }
+  if (typeof value !== 'string') return value;
+  // A multiline error may include raw request headers, cookies and JWTs.
+  return value
+    .replace(/\b(?:Authorization|Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]*/gi, '[REDACTED_HEADER]')
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}(?:\.[A-Za-z0-9_-]+)?\b/g, '[REDACTED_JWT]');
+}
+
+function sha256(buffer) {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+async function assertPinnedProduction() {
+  if (EXPECTED_SHA) {
+    assert(/^[0-9a-f]{40}$/.test(EXPECTED_SHA), 'EXPECTED_PRODUCTION_SHA_INVALID');
+    const response = await fetchJson(`${API}/api/version`);
+    assert(response.status === 200, `PRODUCTION_VERSION_HTTP_${response.status}`);
+    const body =
+      response.json?.data && typeof response.json.data === 'object'
+        ? response.json.data
+        : response.json;
+    const actual = String(body?.sourceSha || body?.source_sha || '').toLowerCase();
+    assert(actual === EXPECTED_SHA, `PRODUCTION_SHA_MISMATCH:${actual || 'missing'}`);
+  }
+}
+
+async function getLearnerSession() {
+  const browserEmail = SYNTHETIC_LEARNER.email;
+  const preferredEmail = String(process.env.QA_LEARNER_EMAIL_OVERRIDE || '').trim().toLowerCase();
+  assert(preferredEmail === browserEmail, 'QA_EXPECTED_EMAIL_MISMATCH');
+  const password = String(process.env.QA_LEARNER_PASSWORD || '').trim();
+  assert(password, 'QA_LEARNER_PASSWORD_REQUIRED_FAIL_CLOSED');
+
+  const logged = await login(API, preferredEmail, password);
+  const activeEmail = preferredEmail;
+
+  let token = extractAccessToken(logged);
+  const empresas = await fetchJson(`${API}/api/auth/empresas`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert(empresas.status === 200, `AUTH_EMPRESAS_HTTP_${empresas.status}`);
+
+  const list = Array.isArray(empresas.json?.data?.empresas) ? empresas.json.data.empresas : [];
+  assert(
+    list.some((item) => Number(item?.id || 0) === TARGET_COMPANY_ID),
+    'TARGET_COMPANY_NOT_AUTHORIZED',
+  );
+
+  const current = Number(empresas.json?.data?.empresaAtualId || 0);
+  if (current !== TARGET_COMPANY_ID) {
+    const selected = await selectEmpresa(API, token, TARGET_COMPANY_ID);
+    assert(selected.status === 200, 'SELECT_EMPRESA_FAILED');
+    token = extractAccessToken(selected.json);
+  }
+
+  const claims = decodeJwtPayload(token);
+  assert(Number(claims?.empresa_id) === TARGET_COMPANY_ID, 'LEARNER_TENANT_MISMATCH');
+  const funcionarioId = Number(claims?.funcionario_id || 0);
+  assert(funcionarioId > 0, 'LEARNER_FUNCIONARIO_ID_MISSING');
+  assertQaLearnerIdentity(token, funcionarioId);
+
+  return { token, funcionarioId, email: activeEmail };
+}
+
+let cachedAdminToken = null;
+
+export async function resolveAdminToken(forceRefresh = false) {
+  if (cachedAdminToken && !forceRefresh) return cachedAdminToken;
+  const adminEmail = String(
+    process.env.PROD_SMOKE_EMAIL || process.env.QA_EXAMINER_ADMIN_EMAIL || '',
+  ).trim();
+  const adminPassword = String(
+    process.env.PROD_SMOKE_PASSWORD || process.env.QA_EXAMINER_ADMIN_PASSWORD || '',
+  );
+
+  if (!adminEmail || !adminPassword) return null;
+
+  try {
+    const logged = await login(API, adminEmail, adminPassword);
+    let t = extractAccessToken(logged);
+    const claimsBefore = decodeJwtPayload(t);
+    if (Number(claimsBefore?.empresa_id) !== TARGET_COMPANY_ID) {
+      const sel = await selectEmpresa(API, t, TARGET_COMPANY_ID);
+      assert(sel.status === 200, `SELECT_EMPRESA_HTTP_${sel.status}`);
+      t = extractAccessToken(sel.json);
+    }
+    const claimsAfter = decodeJwtPayload(t);
+    assert(Number(claimsAfter?.empresa_id) === TARGET_COMPANY_ID, 'ADMIN_TOKEN_TENANT_MISMATCH');
+    cachedAdminToken = t;
+    return t;
+  } catch (err) {
+    console.warn('[LMS_HOMOLOGATION] Fallback: não foi possível autenticar sessão administrativa no tenant alvo:', safeQaErrorCode(err));
+    return null;
+  }
+}
+
+async function listCourses(learnerToken) {
+  const adminToken = await resolveAdminToken();
+  const catalogToken = adminToken || learnerToken;
+
+  const out = [];
+  const limit = 200;
+  for (let page = 1; page <= 20; page += 1) {
+    const r = await fetchJson(`${API}/api/lms/cursos?page=${page}&limit=${limit}`, {
+      headers: { Authorization: `Bearer ${catalogToken}` },
+    });
+    assert(r.status === 200, `LMS_COURSES_HTTP_${r.status}`);
+    const rows = Array.isArray(r.json?.data) ? r.json.data : [];
+    out.push(...rows);
+    const total = Number(r.json?.pagination?.total || out.length);
+    if (!rows.length || out.length >= total) break;
+  }
+  const active = out.filter((row) => Number(row?.ativo || 0) === 1 && Number(row?.publicado || 0) === 1);
+  return COURSE_IDS.size > 0
+    ? active.filter((row) => COURSE_IDS.has(Number(row?.id || 0)))
+    : active;
+}
+
+export function assertQaLearnerIdentity(token, funcionarioId) {
+  const claims = decodeJwtPayload(token);
+  const email = String(claims?.email || '').trim().toLowerCase();
+  const expected = SYNTHETIC_LEARNER.email;
+  assert(BROWSER_NAME === 'chromium' || BROWSER_NAME === 'webkit', 'QA_BROWSER_NOT_ALLOWLISTED');
+  assert(TARGET_COMPANY_ID === 6, 'QA_COMPANY_NOT_ALLOWLISTED');
+  assert(email === expected, 'QA_LEARNER_EMAIL_NOT_ALLOWLISTED');
+  assert(String(claims?.role || '').toUpperCase() === 'ALUNO', 'QA_LEARNER_ROLE_INVALID');
+  assert(Number(claims?.empresa_id) === TARGET_COMPANY_ID, 'QA_LEARNER_TENANT_MISMATCH');
+  assert(Number(claims?.funcionario_id) === Number(funcionarioId) && Number(funcionarioId) > 0,
+    'QA_LEARNER_EMPLOYEE_MISMATCH');
+  return true;
+}
+
+export async function enrollLearner(token, cursoId, funcionarioId) {
+  // No administrative reversal, forced completion, DELETE or cycle reset is
+  // permitted in a production homologation. Use a newly provisioned synthetic
+  // learner or a separately approved, audited reset workflow instead.
+  assertQaLearnerIdentity(token, funcionarioId);
+  const existingRes = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert(existingRes.status === 200 && Array.isArray(existingRes.json?.data),
+    'QA_ENROLLMENT_OWNERSHIP_UNVERIFIED');
+
+  const match = existingRes.json.data.find(
+    (m) => Number(m.curso_id) === Number(cursoId) && !m.deleted_at,
+  );
+  if (match) {
+    // A list returned to a student does not alone prove that administrative
+    // mutation belongs to this employee, company or test cycle.
+    // /minhas-ead is tenant-scoped by the authenticated Worker (m.empresa_id
+    // predicate); its SELECT returns funcionario_id but omits empresa_id.
+    // Verify the employee unconditionally and verify tenant when included.
+    assert(Number(match.funcionario_id) === Number(funcionarioId) &&
+      (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
+      'QA_ENROLLMENT_OWNERSHIP_UNVERIFIED');
+    if (String(match.status || '').toUpperCase() !== 'NAO_INICIADO') {
+      throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
+    }
+    assert(Number(match.id) > 0, 'QA_ENROLLMENT_ID_INVALID');
+    return Number(match.id);
+  }
+
+  const create = async (authToken) => fetchJson(`${API}/api/lms/matriculas`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ curso_id: cursoId, funcionario_id: funcionarioId }),
+  });
+  let res = await create(token);
+  // No admin fallback on 403: the server may have rejected a stale learner-to-employee link.
+  // The runner may not override that denial using a privileged token.
+  if (res.status === 403) throw new Error('QA_SELF_ENROLLMENT_FORBIDDEN');
+  if (res.status === 200 || res.status === 201) {
+    const matriculaId = Number(res.json?.data?.id || 0);
+    assert(matriculaId > 0, 'QA_ENROLLMENT_ID_INVALID');
+    return matriculaId;
+  }
+  if (res.status === 409) throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
+  throw new Error(`QA_ENROLLMENT_HTTP_${Number(res.status) || 0}`);
+}
+
+/**
+ * QA-only administrative assignment. A published course is not necessarily
+ * self-enrollable: its sector policy may intentionally reject students.
+ * Explicit administrative assignment is the canonical workflow, performed
+ * ONLY for a run-scoped synthetic ALUNO after verifying tenant and identity.
+ *
+ * Never use this function as a fallback after a denied learner write, and
+ * never reset/reverse/delete a previous enrollment.
+ */
+export async function assignSyntheticQaCourse(adminToken, learnerToken, courseId, funcionarioId) {
+  assertQaLearnerIdentity(learnerToken, funcionarioId);
+  const adminClaims = decodeJwtPayload(adminToken || '');
+  assert(Number(adminClaims?.empresa_id) === TARGET_COMPANY_ID, 'QA_ASSIGN_ADMIN_TENANT_MISMATCH');
+  assert(['ADMIN', 'ADMINISTRADOR'].includes(String(adminClaims?.role || '').toUpperCase()),
+    'QA_ASSIGN_ADMIN_ROLE_REQUIRED');
+  assert(Number.isSafeInteger(courseId) && courseId > 0, 'QA_ASSIGN_COURSE_ID_INVALID');
+  assert(Number.isSafeInteger(funcionarioId) && funcionarioId > 0, 'QA_ASSIGN_EMPLOYEE_ID_INVALID');
+
+  // Read student-owned enrollments before every privileged operation.
+  const existing = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${learnerToken}` },
+  });
+  assert(existing.status === 200 && Array.isArray(existing.json?.data),
+    'QA_ASSIGN_OWNERSHIP_UNVERIFIED');
+  const matches = existing.json.data.filter(
+    (row) => Number(row.curso_id) === courseId && !row.deleted_at,
+  );
+  assert(matches.length <= 1, 'QA_ASSIGN_AMBIGUOUS_CYCLE');
+  if (matches.length) {
+    const match = matches[0];
+    assert(Number(match.funcionario_id) === funcionarioId &&
+      (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID),
+    'QA_ASSIGN_OWNERSHIP_MISMATCH');
+    const id = Number(match.id);
+    assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
+    const status = String(match.status || '').toUpperCase();
+    if (status === 'NAO_INICIADO' || status === 'EM_ANDAMENTO') return id;
+    if (status === 'CONCLUIDO' || status === 'REPROVADO') {
+      // Existing official LMS service archives CMI, xAPI and prior cycle
+      // transactionally. This route is scoped to the canonical synthetic
+      // employee, an administrator and the exact course/enrollment.
+      const renewed = await fetchJson(`${API}/api/lms/matriculas/${id}/qa-novo-ciclo`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          expected_course_id: courseId,
+          confirmation: 'AIRTRUST_QA_LMS_NEW_CYCLE',
+          reason: `Reexecução QA LMS ${process.env.QA_RUN_ID}/${process.env.QA_RUN_ATTEMPT}, navegador ${BROWSER_NAME}; arquivar evidências e testar novo ciclo`,
+        }),
+      });
+      assert(renewed.status === 200 && renewed.json?.success === true &&
+        Number(renewed.json?.data?.matricula_id) === id &&
+        Number(renewed.json?.data?.curso_id) === courseId &&
+        Number(renewed.json?.data?.funcionario_id) === funcionarioId &&
+        renewed.json?.data?.status === 'NAO_INICIADO' &&
+        renewed.json?.data?.previous_cycle_archived === true,
+      'QA_GOVERNED_CYCLE_RENEWAL_UNVERIFIED');
+      const readback = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+        headers: {Authorization: `Bearer ${learnerToken}`},
+      });
+      assert(readback.status === 200 && Array.isArray(readback.json?.data) &&
+        readback.json.data.some(r => Number(r.id) === id &&
+          Number(r.curso_id) === courseId &&
+          Number(r.funcionario_id) === funcionarioId &&
+          String(r.status).toUpperCase() === 'NAO_INICIADO'),
+      'QA_NEW_CYCLE_LEARNER_READBACK_UNVERIFIED');
+      return id;
+    }
+    throw new Error('QA_EXISTING_ENROLLMENT_REQUIRES_GOVERNED_RESET');
+  }
+
+  // Only an authenticated tenant administrator can designate training to QA.
+  const assigned = await fetchJson(`${API}/api/lms/matriculas`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ curso_id: courseId, funcionario_id: funcionarioId }),
+  });
+  assert(assigned.status === 200 || assigned.status === 201,
+    `QA_ASSIGN_HTTP_${Number(assigned.status) || 0}`);
+  const id = Number(assigned.json?.data?.id);
+  assert(Number.isSafeInteger(id) && id > 0, 'QA_ASSIGN_ENROLLMENT_ID_INVALID');
+
+  // Administrative success alone cannot prove the student owns this cycle.
+  const readback = await fetchJson(`${API}/api/lms/matriculas/minhas-ead`, {
+    headers: { Authorization: `Bearer ${learnerToken}` },
+  });
+  assert(readback.status === 200 && Array.isArray(readback.json?.data),
+    'QA_ASSIGN_READBACK_UNAVAILABLE');
+  const match = readback.json.data.find((row) => Number(row.id) === id);
+  assert(match && Number(match.curso_id) === courseId &&
+    Number(match.funcionario_id) === funcionarioId &&
+    (match.empresa_id == null || Number(match.empresa_id) === TARGET_COMPANY_ID) &&
+    String(match.status || '').toUpperCase() === 'NAO_INICIADO',
+  'QA_ASSIGN_READBACK_MISMATCH');
+  return id;
+}
+
+async function getMatriculaDetail(token, matriculaId) {
+  const res = await fetchJson(`${API}/api/lms/matriculas/${matriculaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert(res.status === 200, `MATRICULA_DETAIL_HTTP_${matriculaId}_${res.status}`);
+  return res.json?.data || {};
+}
+
+export async function setupAuthenticatedContext(context, token, matriculaId = null) {
+  const apiHost = new URL(API).hostname;
+  const appHost = new URL(APP).hostname;
+  const domains = [apiHost, appHost].filter((v, i, a) => a.indexOf(v) === i);
+  for (const domain of domains) {
+    await context.addCookies([
+      {
+        name: 'airtrust_access_token',
+        value: token,
+        domain,
+        path: '/',
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax',
+      },
+      {
+        name: 'airtrust_token',
+        value: token,
+        domain,
+        path: '/',
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax',
+      },
+      {
+        name: 'auth_token',
+        value: token,
+        domain,
+        path: '/',
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax',
+      },
+    ]);
+  }
+
+  if (matriculaId) {
+    const assetRes = await context.request.post(`${API}/api/lms/assets/session`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: { matricula_id: matriculaId },
+    });
+    assert(assetRes.ok(), `ASSET_SESSION_HTTP_${matriculaId}_${assetRes.status()}`);
+  }
+}
+
+export async function checkLearnerQualifications(token, funcionarioId, cursoId, qualificacaoHistoricoId = null, maxRetries = 1, delayMs = 200) {
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    if (attempt > 0 && delayMs > 0) {
+      await delay(delayMs);
+    }
+    const res = await fetchJson(`${API}/api/qualificacoes/funcionario/${funcionarioId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
+    });
+    if (res.status === 200 && Array.isArray(res.json?.data)) {
+      const list = res.json.data;
+      if (qualificacaoHistoricoId) {
+        const exact = list.find((q) => Number(q.id) === Number(qualificacaoHistoricoId));
+        if (exact) return exact;
+      }
+      // Look for qualification related to this course
+      const matching = list.find((q) => Number(q.lms_curso_id || 0) === cursoId);
+      if (matching) return matching;
+      if (!qualificacaoHistoricoId && !cursoId) return null;
+    }
+  }
+  return null;
+}
+
+export async function checkCertificate(token, qualificacaoHistoricoId, maxRetries = 15, delayMs = 1500) {
+  if (!qualificacaoHistoricoId) return null;
+  const httpSignal = () => (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20_000) : undefined);
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    if (attempt > 0 && delayMs > 0) {
+      await delay(delayMs);
+    }
+    const res = await fetchJson(`${API}/api/certificados/historico/${qualificacaoHistoricoId}/certificados`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
+    });
+    if (res.status === 200 && Array.isArray(res.json?.data) && res.json.data.length > 0) {
+      const cert = res.json.data[0];
+      const certId = cert.id;
+      // Download endpoint returns JSON metadata containing the streaming URL: { data: { url } }
+      const downloadRes = await fetch(`${API}/api/certificados/download/${certId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: httpSignal(),
+      });
+      let streamUrl = `${API}/api/pasta-virtual/stream/${certId}`;
+      if (downloadRes.ok) {
+        const contentType = String(downloadRes.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) {
+          const meta = await downloadRes.json().catch(() => null);
+          if (meta?.data?.url) {
+            streamUrl = String(meta.data.url).startsWith('http') ? meta.data.url : `${API}${meta.data.url}`;
+          }
+        } else {
+          // Direct stream returned by mock or legacy endpoint
+          const buffer = Buffer.from(await downloadRes.arrayBuffer());
+          const isPdf = buffer.slice(0, 4).toString() === '%PDF';
+          if (isPdf) {
+            return {
+              id: certId,
+              validPdf: true,
+              sha256: sha256(buffer),
+              sizeBytes: buffer.length,
+            };
+          }
+        }
+      }
+      const streamRes = await fetch(streamUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: httpSignal(),
+      });
+      if (streamRes.ok) {
+        const buffer = Buffer.from(await streamRes.arrayBuffer());
+        const isPdf = buffer.slice(0, 4).toString() === '%PDF';
+        if (isPdf) {
+          return {
+            id: certId,
+            validPdf: true,
+            sha256: sha256(buffer),
+            sizeBytes: buffer.length,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+export function isLocationResumed(savedLocation, restoredLocation) {
+  if (!savedLocation || !restoredLocation) return false;
+  const sStr = String(savedLocation).trim();
+  const rStr = String(restoredLocation).trim();
+  if (sStr === rStr) return true;
+  const sUnit = sStr.split('/')[0];
+  const rUnit = rStr.split('/')[0];
+  return Boolean(sUnit && rUnit && sUnit === rUnit);
+}
+
+export function resolveEffectiveLessonStatus({
+  reopenState = null,
+  lastRuntimeState = null,
+  scormProgresso = null,
+  reopenScormProgresso = null,
+} = {}) {
+  const pick = (s) => (s && TERMINAL_SCORM12.has(String(s).trim().toLowerCase()) ? String(s).trim().toLowerCase() : null);
+  return (
+    pick(reopenState?.lessonStatus) ||
+    pick(lastRuntimeState?.lessonStatus) ||
+    pick(scormProgresso?.lesson_status) ||
+    pick(reopenScormProgresso?.lesson_status) ||
+    (lastRuntimeState?.lessonStatus ? String(lastRuntimeState.lessonStatus).trim().toLowerCase() : null) ||
+    (scormProgresso?.lesson_status ? String(scormProgresso.lesson_status).trim().toLowerCase() : null) ||
+    'incomplete'
+  );
+}
+
+export function evaluateAssessmentPolicy({
+  policy = null,
+  lessonStatus = '',
+  scoreRaw = null,
+  scoreScaled = null,
+  masteryScore = null,
+  externalProofVerified = false,
+}) {
+  const normStatus = String(lessonStatus || '').trim().toLowerCase();
+  const normalizedPolicy = typeof policy === 'string' ? policy.trim().toUpperCase() : '';
+
+  if (normalizedPolicy === 'FORMATIVE') {
+    const ok = normStatus === 'completed' || normStatus === 'passed';
+    return {
+      ok,
+      policy: 'FORMATIVE',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : (normStatus === 'failed' ? 'ASSESSMENT_FAILED' : 'FORMATIVE_STATUS_INCOMPLETE'),
+    };
+  }
+
+  if (normalizedPolicy === 'SCORED') {
+    if (normStatus === 'failed') {
+      return {
+        ok: false,
+        policy: 'SCORED',
+        scoreRaw,
+        scoreScaled,
+        masteryScore,
+        status: normStatus,
+        reason: 'ASSESSMENT_FAILED',
+      };
+    }
+
+    if (masteryScore != null && Number.isFinite(Number(masteryScore))) {
+      const cut = Number(masteryScore);
+      const raw = scoreRaw != null && Number.isFinite(Number(scoreRaw)) ? Number(scoreRaw) : null;
+      const scaled = scoreScaled != null && Number.isFinite(Number(scoreScaled)) ? Number(scoreScaled) : null;
+
+      let scorePassed = false;
+      let scoreEvaluated = false;
+      if (raw != null) {
+        scoreEvaluated = true;
+        scorePassed = raw >= cut;
+      } else if (scaled != null) {
+        scoreEvaluated = true;
+        scorePassed = scaled >= (cut > 1 ? cut / 100 : cut);
+      }
+
+      if (!scorePassed) {
+        return {
+          ok: false,
+          policy: 'SCORED',
+          scoreRaw,
+          scoreScaled,
+          masteryScore: cut,
+          status: normStatus,
+          reason: 'SCORE_BELOW_MASTERY',
+        };
+      }
+
+      if (!scoreEvaluated && normStatus !== 'passed') {
+        return {
+          ok: false,
+          policy: 'SCORED',
+          scoreRaw,
+          scoreScaled,
+          masteryScore: cut,
+          status: normStatus,
+          reason: 'ASSESSMENT_NOT_PASSED',
+        };
+      }
+    }
+
+    const ok = normStatus === 'passed' || (normStatus === 'completed' && masteryScore == null);
+    return {
+      ok,
+      policy: 'SCORED',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'ASSESSMENT_NOT_PASSED',
+    };
+  }
+
+  if (normalizedPolicy === 'PPTX_SLIDES') {
+    const ok = normStatus === 'completed';
+    return {
+      ok,
+      policy: normalizedPolicy,
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'PPTX_NOT_COMPLETED',
+    };
+  }
+
+  if (normalizedPolicy === 'EXTERNAL') {
+    const ok = Boolean(externalProofVerified);
+    return {
+      ok,
+      policy: 'EXTERNAL',
+      scoreRaw,
+      scoreScaled,
+      masteryScore,
+      status: normStatus,
+      reason: ok ? null : 'EXTERNAL_ASSESSMENT_NOT_ATTESTED',
+    };
+  }
+
+  return {
+    ok: false,
+    policy: normalizedPolicy,
+    scoreRaw,
+    scoreScaled,
+    masteryScore,
+    status: normStatus,
+    reason: 'ASSESSMENT_POLICY_UNSUPPORTED',
+  };
+}
+
+export function evaluateCoursePath({
+  contentType = 'scorm',
+  totalUnits = 0,
+  visitedUnits = 0,
+  visitedUnitIds = null,
+  distinctUnitsVisited = null,
+  atLastUnit = false,
+  completedActivities = 0,
+  totalActivities = 0,
+}) {
+  if (contentType === 'pptx') {
+    const ok = totalUnits > 0 && visitedUnits >= totalUnits && atLastUnit;
+    return {
+      ok,
+      totalUnits,
+      visitedUnits,
+      atLastUnit,
+      reason: ok ? null : 'INCOMPLETE_COURSE_PATH',
+    };
+  }
+
+  if (!Number.isSafeInteger(totalUnits) || totalUnits < 1) {
+    return { ok: false, totalUnits, visitedUnits, atLastUnit, reason: 'COURSE_TOTAL_UNVERIFIED' };
+  }
+
+  const unitSet = visitedUnitIds instanceof Set
+    ? visitedUnitIds
+    : distinctUnitsVisited instanceof Set
+      ? distinctUnitsVisited
+      : Array.isArray(visitedUnitIds)
+        ? new Set(visitedUnitIds)
+        : Array.isArray(distinctUnitsVisited)
+          ? new Set(distinctUnitsVisited)
+          : null;
+
+  const uniqueVisitedCount = unitSet ? unitSet.size : visitedUnits;
+
+  if (uniqueVisitedCount < totalUnits || !atLastUnit) {
+    return {
+      ok: false,
+      totalUnits,
+      visitedUnits: uniqueVisitedCount,
+      atLastUnit,
+      reason: 'INCOMPLETE_COURSE_PATH',
+    };
+  }
+
+  if (totalActivities > 0 && completedActivities < totalActivities) {
+    return {
+      ok: false,
+      totalUnits,
+      visitedUnits: uniqueVisitedCount,
+      atLastUnit,
+      totalActivities,
+      completedActivities,
+      reason: 'MANDATORY_ACTIVITIES_INCOMPLETE',
+    };
+  }
+
+  return {
+    ok: true,
+    totalUnits,
+    visitedUnits: uniqueVisitedCount,
+    atLastUnit: true,
+    completedActivities,
+    totalActivities,
+    reason: null,
+  };
+}
+
+export function evaluateHomologationVerdict({
+  percurso_ok = false,
+  avaliacao_ok = false,
+  isConcluido,
+  progress100,
+  resumedVerified,
+  reopenNoDowngrade,
+  qualExpected,
+  qual,
+  cert,
+}) {
+  const percursoValid = percurso_ok === true;
+  const avaliacaoValid = avaliacao_ok === true;
+  const qualStatus = String(qual?.status || qual?.qualificacao_status || '').toUpperCase();
+  const qualValid = !qualExpected || Boolean(
+    qual && qual.id && ['CONCLUIDA', 'CONCLUIDO', 'VALIDA', 'VIGENTE', 'VENCENDO_30'].includes(qualStatus),
+  );
+  const certValid = !qualExpected || Boolean(cert && cert.validPdf === true && cert.sizeBytes > 0);
+  const pass = Boolean(
+    percursoValid &&
+    avaliacaoValid &&
+    isConcluido &&
+    progress100 &&
+    resumedVerified &&
+    reopenNoDowngrade &&
+    qualValid &&
+    certValid,
+  );
+  const reason = pass ? null
+    : !percursoValid ? 'INCOMPLETE_COURSE_PATH'
+    : !avaliacaoValid ? 'ASSESSMENT_NOT_PASSED'
+    : !isConcluido ? 'COMPLETION_NOT_REACHED'
+    : !progress100 ? 'PROGRESS_BELOW_100'
+    : !resumedVerified ? 'RESUME_CHECKPOINT_FAILED'
+    : !reopenNoDowngrade ? 'STATUS_OR_PROGRESS_DOWNGRADE_ON_REOPEN'
+    : !qualValid ? 'EXPECTED_QUALIFICATION_NOT_GENERATED'
+    : !certValid ? 'INVALID_CERTIFICATE_PDF'
+    : 'HOMOLOGATION_FAILED';
+
+  return { pass, reason, percursoValid, avaliacaoValid, qualValid, certValid };
+}
+
+// ---------------------------------------------------------------------------
+// PPTX Functional Homologation in Real Browser
+// ---------------------------------------------------------------------------
+async function drivePptxCourseInBrowser({
+  browserEngine,
+  token,
+  course,
+  matriculaId,
+  funcionarioId,
+}) {
+  const browser = await browserEngine.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    ignoreHTTPSErrors: true,
+  });
+
+  await setupAuthenticatedContext(context, token, matriculaId);
+
+  let page = await context.newPage();
+  await page.addInitScript((jwt) => {
+    try {
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+    } catch {}
+  }, token);
+
+  const playerUrl = `${APP}/lms/player/pptx/${matriculaId}`;
+  await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
+
+  // Guard against viewer loading failure
+  const viewerFailed = await page.evaluate(() => {
+    const text = document.body?.innerText || '';
+    return /não disponível|falha ao carregar|arquivo corrompido/i.test(text);
+  });
+  if (viewerFailed) {
+    await browser.close();
+    throw new Error('PPTX_VIEWER_LOAD_FAILED');
+  }
+
+  // Wait for slide display
+  await page.waitForSelector('.aspect-video, button[aria-label^="Slide 1"]', { timeout: 20_000 });
+
+  // Determine slide count
+  const totalSlides = await page.evaluate(() => {
+    const dots = document.querySelectorAll('button[aria-label^="Slide "]');
+    if (dots.length > 0) return dots.length;
+    const footer = document.querySelector('.aspect-video')?.parentElement?.innerText || '';
+    const match = footer.match(/Slide \d+ de (\d+)/i);
+    return match ? Number(match[1]) : 1;
+  });
+  assert(totalSlides > 0, 'PPTX_TOTAL_SLIDES_ZERO');
+
+  // Ensure traversal begins at Slide 1 even if player resumed at a later slide
+  const slide1Btn = page.locator('button[aria-label^="Slide 1"]').first();
+  if (await slide1Btn.isVisible().catch(() => false)) {
+    const isSlide1Active = await slide1Btn.evaluate((el) =>
+      el.classList.contains('h-2.5') || el.classList.contains('bg-blue-600') || el.getAttribute('aria-current') === 'true'
+    ).catch(() => true);
+    if (!isSlide1Active) {
+      await slide1Btn.click().catch(() => null);
+      await page.waitForTimeout(600);
+    }
+  }
+
+  let resumedVerified = false;
+  const checkpointSlide = Math.floor(totalSlides / 2);
+
+  for (let idx = 0; idx < totalSlides; idx += 1) {
+    // Dwell time on current slide: player requires ~1.7s to submit evidence
+    await page.waitForTimeout(2000);
+
+    if (idx === checkpointSlide && checkpointSlide > 0 && !resumedVerified) {
+      // Test interruption and resume
+      await page.close();
+      const resumePage = await context.newPage();
+      await resumePage.addInitScript((jwt) => {
+        try {
+          localStorage.setItem('airtrust_access_token', jwt);
+          localStorage.setItem('token', jwt);
+        } catch {}
+      }, token);
+      await resumePage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      await resumePage.waitForSelector('.aspect-video', { timeout: 15_000 });
+
+      const restoredSlide = await resumePage.evaluate(() => {
+        const active = document.querySelector('button[aria-label^="Slide "].h-2\\.5');
+        const label = active?.getAttribute('aria-label');
+        const m = label?.match(/Slide (\d+)/i);
+        return m ? Number(m[1]) - 1 : null;
+      });
+
+      if (restoredSlide === checkpointSlide || restoredSlide === checkpointSlide - 1) {
+        resumedVerified = true;
+      }
+      page = resumePage;
+      await page.waitForTimeout(1000);
+    }
+
+    if (idx < totalSlides - 1) {
+      // Advance to next slide via Next button
+      const nextBtn = page.locator('button:has-text("Próximo")').first();
+      await nextBtn.waitFor({ state: 'visible', timeout: 10_000 });
+      for (let w = 0; w < 10; w += 1) {
+        if (!(await nextBtn.isDisabled())) break;
+        await page.waitForTimeout(500);
+      }
+      await nextBtn.click();
+    }
+  }
+
+  // At the final slide, wait for and click Conclude button
+  const concludeBtn = page.locator('button:has-text("Concluir curso")').first();
+  await concludeBtn.waitFor({ state: 'visible', timeout: 10_000 });
+  for (let w = 0; w < 10; w += 1) {
+    if (!(await concludeBtn.isDisabled())) break;
+    await page.waitForTimeout(500);
+  }
+  await concludeBtn.click();
+
+  // Wait for Concluído status indicator
+  await page.locator('text=Concluído').first().waitFor({ state: 'visible', timeout: 12_000 });
+  await page.waitForTimeout(1000);
+  await browser.close();
+
+  // Verification in backend
+  const detail = await getMatriculaDetail(token, matriculaId);
+  const isConcluido = String(detail.status).toUpperCase() === 'CONCLUIDO';
+  const progress100 = Number(detail.progresso_pct || 0) === 100;
+
+  // Qualification and Certificate
+  const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id, 10, 1000);
+  const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId, 20, 1500) : null;
+
+  // Reopen in real browser to verify no status or progress downgrade
+  const reopenBrowser = await browserEngine.launch({ headless: true });
+  const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
+  await setupAuthenticatedContext(reopenContext, token, matriculaId);
+  const reopenPage = await reopenContext.newPage();
+  await reopenPage.addInitScript((jwt) => {
+    try {
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+    } catch {}
+  }, token);
+  await reopenPage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
+  await reopenPage.waitForSelector('text=Concluído, text=Status: concluído', { timeout: 15_000 }).catch(() => null);
+  await reopenBrowser.close();
+
+  const reopenDetail = await getMatriculaDetail(token, matriculaId);
+  const reopenNoDowngrade =
+    String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
+    Number(reopenDetail.progresso_pct || 0) === 100;
+
+  const pptxVisitedSet = new Set(Array.from({ length: totalSlides }, (_, i) => i + 1));
+  const pathVerdict = evaluateCoursePath({
+    contentType: 'pptx',
+    totalUnits: totalSlides,
+    visitedUnits: totalSlides,
+    distinctUnitsVisited: pptxVisitedSet,
+    atLastUnit: true,
+  });
+  const assessmentVerdict = evaluateAssessmentPolicy({
+    policy: 'PPTX_SLIDES',
+    lessonStatus: isConcluido ? 'completed' : 'incomplete',
+  });
+
+  const verdict = evaluateHomologationVerdict({
+    percurso_ok: pathVerdict.ok,
+    avaliacao_ok: assessmentVerdict.ok,
+    isConcluido,
+    progress100,
+    resumedVerified: resumedVerified || totalSlides <= 1,
+    reopenNoDowngrade,
+    qualExpected,
+    qual,
+    cert,
+  });
+
+  return {
+    course_id: course.id,
+    titulo: course.titulo,
+    tipo_conteudo: 'pptx',
+    edition_sha: 'n/a',
+    policy: 'PPTX_SLIDES',
+    matricula_id: matriculaId,
+    matricula_ok: true,
+    percurso_ok: pathVerdict.ok,
+    resumed_ok: resumedVerified || totalSlides <= 1,
+    avaliacao_ok: assessmentVerdict.ok,
+    finalizacao_ok: isConcluido && progress100,
+    status_pos_conclusao: detail.status,
+    qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
+    certificado_emitido: cert ? `SIM (${cert.sha256.slice(0, 12)}...)` : 'N/A',
+    reabertura_sem_downgrade: reopenNoDowngrade,
+    status: verdict.pass ? 'PASS' : 'FAIL',
+    reason: verdict.reason,
+    audit_evidence: {
+      units_visited: totalSlides,
+      total_units: totalSlides,
+      actions_count: totalSlides,
+      resume_tested: totalSlides > 1,
+      resume_verified: resumedVerified || totalSlides <= 1,
+      backend_status: detail.status,
+      backend_progresso: detail.progresso_pct,
+      qualificacao_id: qual?.id ?? null,
+      certificado_sha: cert?.sha256 ?? null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pure Slide Interaction Action Resolver (tested in unit & adversarial suites)
+// ---------------------------------------------------------------------------
+export function determineSlideAction(doc, {
+  plan = [],
+  requiredIndices = [],
+  submittedInSlide = false,
+  clickedGates = [],
+  clickedTouches = [],
+} = {}) {
+  const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+  const visible = (el) => {
+    if (!el) return false;
+    if (el.getAttribute && (el.getAttribute('aria-hidden') === 'true' || (el.hasAttribute && el.hasAttribute('hidden')))) return false;
+    if (el.style) {
+      if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+    }
+    return true;
+  };
+
+  let domCurrent = 0;
+  let domTotal = 0;
+  let atLastUnit = false;
+
+  const slidesArray = doc.defaultView?.COURSE_DATA?.slides || (typeof window !== 'undefined' ? window.COURSE_DATA?.slides : null);
+  const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
+
+  const counterEl = doc.querySelector?.('#count') || doc.querySelector?.('.counter') || doc.querySelector?.('.counter, #count');
+  const counterText = clean(counterEl?.innerText || counterEl?.textContent);
+  const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (counterMatch) {
+    domCurrent = Number(counterMatch[1]);
+    domTotal = canonicalSlidesCount > 0 ? canonicalSlidesCount : Number(counterMatch[2]);
+  } else if (canonicalSlidesCount > 0) {
+    domTotal = canonicalSlidesCount;
+  }
+  if (canonicalSlidesCount > 0 && !domCurrent && doc.defaultView?.__AIRTRUST_PLAYER_TEST__?.getState) {
+    const st = doc.defaultView.__AIRTRUST_PLAYER_TEST__.getState();
+    if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
+  }
+  atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(doc.querySelector('#slide-study-end, .study-end'));
+
+  // 0. Authentic final completion button (strictly excludes assessment evaluation buttons)
+  const finalBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
+    return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
+  });
+  if (finalBtn) {
+    finalBtn.click?.();
+    return { type: 'final-button', domCurrent, domTotal, atLastUnit: true };
+  }
+
+  // 0b. Pending scenario review button
+  const pendingScenarioBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    return visible(el) && !el.disabled && /revisar cen[áa]rio pendente/i.test(txt);
+  });
+  if (pendingScenarioBtn) {
+    pendingScenarioBtn.click?.();
+    return { type: 'pending-scenario-review', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 0c. Return to journey point button
+  const returnToJourneyBtn = Array.from(doc.querySelectorAll('button, input[type=button], a')).find((el) => {
+    const txt = clean(el.innerText || el.value || el.getAttribute?.('aria-label') || '').toLowerCase();
+    return visible(el) && !el.disabled && /voltar ao ponto atual/i.test(txt);
+  });
+  if (returnToJourneyBtn) {
+    returnToJourneyBtn.click?.();
+    return { type: 'return-to-journey', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 0d. Required interaction cards (e.g. "Interação obrigatória (0/4)")
+  const docText = clean(doc.body?.innerText || doc.body?.textContent || '');
+  const requiredMatch = docText.match(/intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i);
+  if (requiredMatch && Number(requiredMatch[1]) < Number(requiredMatch[2])) {
+    const rawCards = Array.from(doc.querySelectorAll('[data-touch], .touchable, [data-gate], [data-gate-id], .card, .interactive-card, [role=button], li, div')).filter((el) => {
+      if (!visible(el) || el.disabled) return false;
+      if (el.matches?.('button#next, button#prev, #nextBtn, #prevBtn, aside, nav, header, footer')) return false;
+      const key = el.getAttribute?.('data-touch') || el.getAttribute?.('data-gate') || el.id || clean(el.innerText || el.textContent);
+      if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+      const txt = clean(el.innerText || el.textContent);
+      return txt.length >= 6 && txt.length <= 400;
+    });
+    if (rawCards.length > 0) {
+      rawCards[0].click?.();
+      return { type: 'required-card', domCurrent, domTotal, atLastUnit };
+    }
+  }
+
+  // 1. Scenario options: stop selecting once an option is chosen in the scenario
+  const scenarioOptions = Array.from(doc.querySelectorAll('[data-opt], button.option')).filter(visible);
+  const hasSelectedScenarioOption = scenarioOptions.some((el) => {
+    return el.classList?.contains?.('selected') ||
+      el.classList?.contains?.('active') ||
+      el.getAttribute?.('aria-pressed') === 'true';
+  });
+
+  if (!hasSelectedScenarioOption && scenarioOptions.length > 0) {
+    const unselectedScenarioOpt = scenarioOptions.find((el) => !el.disabled);
+    if (unselectedScenarioOpt) {
+      unselectedScenarioOpt.click?.();
+      return { type: 'scenario-option', domCurrent, domTotal, atLastUnit, decisionResolved: true };
+    }
+  }
+
+  // 2. Assessment questions: stop selecting alternatives once the question already has an answer
+  const assessOptions = Array.from(doc.querySelectorAll('[data-answer], button.answer')).filter(visible);
+  const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+    return el.classList?.contains?.('selected') ||
+      el.classList?.contains?.('active') ||
+      el.getAttribute?.('aria-checked') === 'true' ||
+      el.getAttribute?.('aria-pressed') === 'true';
+  });
+
+  if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+    const unselectedAnswer = assessOptions.find((el) => !el.disabled);
+    if (unselectedAnswer) {
+      unselectedAnswer.click?.();
+      return { type: 'assessment-answer', domCurrent, domTotal, atLastUnit, decisionResolved: true };
+    }
+  }
+
+  const qNext = doc.querySelector('#qNext');
+  if (qNext && visible(qNext) && !qNext.disabled) {
+    qNext.click?.();
+    return { type: 'assessment-next-q', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 3. Interactive choices / radio options
+  const choices = Array.from(doc.querySelectorAll('button.choice, button.option, input[type=radio], .quiz-option')).filter(visible);
+  if (choices.length > 0) {
+    const hasSelectedChoice = choices.some((c) => c.classList?.contains?.('selected') || c.checked);
+    if (!hasSelectedChoice) {
+      const unselected = choices.find((c) => !c.disabled);
+      if (unselected) {
+        unselected.click?.();
+        return { type: 'quiz-choice', domCurrent, domTotal, atLastUnit };
+      }
+    }
+  }
+
+  // 3. Submit
+  const submitBtn = Array.from(doc.querySelectorAll('button, input[type=button]')).find((el) => {
+    const txt = clean(el.innerText || el.value).toLowerCase();
+    return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
+  });
+  if (submitBtn) {
+    submitBtn.click?.();
+    return { type: 'submit', domCurrent, domTotal, atLastUnit };
+  }
+
+  // 4. Next navigation
+  const nextBtn = doc.querySelector('#next');
+  if (nextBtn && visible(nextBtn) && !nextBtn.disabled) {
+    nextBtn.click?.();
+    return { type: 'next-button', domCurrent, domTotal, atLastUnit };
+  }
+
+  return { type: 'none', domCurrent, domTotal, atLastUnit };
+}
+
+// ---------------------------------------------------------------------------
+// SCORM Frame Driver with Interactive Gates & Accordion Support
+// ---------------------------------------------------------------------------
+export function buildLearnerAuthPayload(token, funcionarioId) {
+  const claims = decodeJwtPayload(token);
+  const user = {
+    id: claims?.id || funcionarioId,
+    funcionario_id: funcionarioId,
+    email: claims?.email || SYNTHETIC_LEARNER.email,
+    nome: claims?.nome || 'Aluno QA Sintético',
+    role: 'ALUNO',
+    empresa_id: TARGET_COMPANY_ID,
+  };
+  return { jwt: token, user };
+}
+
+export function injectLearnerSessionScript(page, token, funcionarioId) {
+  const payload = buildLearnerAuthPayload(token, funcionarioId);
+  return page.addInitScript(({ jwt, user }) => {
+    try {
+      localStorage.setItem('airtrust_token', jwt);
+      localStorage.setItem('auth_token', jwt);
+      localStorage.setItem('airtrust_access_token', jwt);
+      localStorage.setItem('token', jwt);
+      localStorage.setItem('airtrust_user', JSON.stringify(user));
+      localStorage.setItem('airtrust_empresa_id', '6');
+    } catch {}
+  }, payload);
+}
+
+export async function resolveScormWrapper(page) {
+  const hasApiOnPage = await page.evaluate(() => Boolean(window.API || window.API_1484_11)).catch(() => false);
+  if (hasApiOnPage) return page;
+
+  for (const frame of page.frames()) {
+    if (frame.url().includes('/api/lms/scorm/launch/')) {
+      return frame;
+    }
+  }
+  return null;
+}
+
+export async function resolveScormContentFrame(page) {
+  const isFrameReady = async (frame) => {
+    if (!frame || frame.url().includes('about:blank')) return false;
+    return await frame.evaluate(() =>
+      Boolean(
+        window.COURSE_DATA ||
+        document.querySelector('.counter, #count, .screen, [data-unit], #next, #nextUnit, body > *') ||
+        (document.readyState === 'complete' && document.body?.children?.length > 0)
+      )
+    ).catch(() => false);
+  };
+
+  // 1. Direct search by content asset URL, ensuring SCO content is loaded
+  for (const frame of page.frames()) {
+    if (frame.url().includes('/api/lms/assets/scorm/') && await isFrameReady(frame)) {
+      return frame;
+    }
+  }
+
+  // 2. Resolve inner #scorm-frame element inside the wrapper
+  const wrapper = await resolveScormWrapper(page);
+  if (wrapper && wrapper !== page) {
+    const frameEl = await wrapper.$('#scorm-frame');
+    const frame = await frameEl?.contentFrame();
+    if (await isFrameReady(frame)) {
+      return frame;
+    }
+  }
+
+  // 3. Direct launch fallback on page
+  const directFrameEl = await page.$('#scorm-frame');
+  const directFrame = await directFrameEl?.contentFrame();
+  if (await isFrameReady(directFrame)) {
+    return directFrame;
+  }
+  return null;
+}
+
+async function readWrapperRuntimeState(wrapper) {
+  if (!wrapper) return null;
+  return await wrapper.evaluate(() => {
+    const api = window.API || window.API_1484_11;
+    if (!api) return null;
+    const getVal = (k) => (api.LMSGetValue ? api.LMSGetValue(k) : api.GetValue ? api.GetValue(k) : '');
+    const lessonStatus = getVal('cmi.core.lesson_status') || getVal('cmi.completion_status');
+    const location = getVal('cmi.core.lesson_location') || getVal('cmi.location');
+    const scoreRaw = getVal('cmi.core.score.raw') || getVal('cmi.score.raw');
+    const scoreScaled = getVal('cmi.score.scaled') || null;
+    return {
+      lessonStatus: String(lessonStatus).toLowerCase(),
+      location,
+      scoreRaw: scoreRaw !== '' ? Number(scoreRaw) : null,
+      scoreScaled: scoreScaled !== '' && scoreScaled != null ? Number(scoreScaled) : null,
+    };
+  }).catch(() => null);
+}
+
+/**
+ * After a React player reload, a visible completion button is NOT proof that
+ * its wrapper postMessage listener exists yet. Wait until the actual SCORM
+ * wrapper and SCO are attached, initialized and readable before consenting.
+ */
+export async function waitForCanonicalScormWrapperReady(page, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const wrapper = await resolveScormWrapper(page);
+    const sco = await resolveScormContentFrame(page);
+    if (wrapper && sco) {
+      const runtime = await readWrapperRuntimeState(wrapper);
+      const loaded = await wrapper.evaluate(() =>
+        document.readyState === 'complete' &&
+        Boolean(window.API || window.API_1484_11) &&
+        Boolean(document.querySelector('#scorm-frame')?.contentWindow),
+      ).catch(() => false);
+      if (loaded && runtime) return true;
+    }
+    if (Date.now() >= deadline) break;
+    await delay(500);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+/**
+ * Click only the canonical, enabled learner registration control. It may be
+ * rendered asynchronously after the SCO has saved its terminal evidence.
+ * Returning false is an explicit failure to observe learner consent, never
+ * permission to synthesize a server-side completion or certificate.
+ */
+export async function clickCanonicalLearnerRegistration(page, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  const labels = ['Registrar no AirTrust', 'Confirmar conclusão'];
+  do {
+    for (const label of labels) {
+      const controls = page.getByRole('button', { name: label, exact: true });
+      const count = Math.min(await controls.count().catch(() => 0), 4);
+      for (let index = 0; index < count; index += 1) {
+        const control = controls.nth(index);
+        if (!await control.isVisible().catch(() => false) ||
+            !await control.isEnabled().catch(() => false)) continue;
+        try {
+          await control.click({ timeout: 3_000 });
+          return true;
+        } catch { /* Recheck the real control after a React rerender. */ }
+      }
+    }
+    if (Date.now() >= deadline) break;
+    await delay(500);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+/**
+ * A second REAL learner click is permitted only after the package's last
+ * authored unit was actually visited and the authenticated server confirms
+ * raw 100% progress without an accepted completion. A 99% display alone,
+ * a failed assessment or a partial journey never authorizes this retry.
+ */
+export function shouldRetryCanonicalRegistration({
+  isPlayerRoute, atLastUnit, visitedUnits, totalUnits, backendStatus, backendProgress,
+  assessmentFailed = false,
+}) {
+  return isPlayerRoute === true &&
+    atLastUnit === true &&
+    Number.isSafeInteger(totalUnits) && totalUnits > 0 &&
+    Number.isSafeInteger(visitedUnits) && visitedUnits === totalUnits &&
+    String(backendStatus || '').toUpperCase() === 'EM_ANDAMENTO' &&
+    Number(backendProgress) === 100 &&
+    assessmentFailed !== true;
+}
+
+async function driveScormCourseInBrowser({
+  browserEngine,
+  token,
+  adminToken = null,
+  course,
+  matriculaId,
+  funcionarioId,
+}) {
+  const browser = await browserEngine.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    ignoreHTTPSErrors: true,
+  });
+
+  // Setup authenticated cookies & scoped asset session in Playwright context
+  await setupAuthenticatedContext(context, token, matriculaId);
+
+  const attachPageListeners = (p) => {
+    p.on('console', (msg) => {
+      const txt = msg.text();
+      if (txt.includes('LMS') || txt.includes('COMMIT') || txt.includes('DIAG') || txt.includes('STATUS') || txt.includes('error') || txt.includes('Error')) {
+        console.log(`[PAGE_CONSOLE] [${msg.type()}] ${txt}`);
+      }
+    });
+    p.on('response', async (res) => {
+      const u = res.url();
+      if (u.includes('/api/lms/matriculas/scorm/commit') || (u.includes('/api/lms/matriculas') && u.includes('/finalizar'))) {
+        try {
+          const text = await res.text();
+          console.log(`[COMMIT_RESPONSE] ${res.status()} -> ${text.slice(0, 300)}`);
+        } catch {}
+      }
+    });
+  };
+
+  let page = await context.newPage();
+  attachPageListeners(page);
+
+  await injectLearnerSessionScript(page, token, funcionarioId);
+
+  const playerUrl = `${APP}/lms/player/${matriculaId}`;
+  const launchUrl = `${API}/api/lms/scorm/launch/${matriculaId}`;
+
+  // Prioritize navigating via canonical student LmsPlayer; fall back to direct launch wrapper
+  let targetUrl = playerUrl;
+  try {
+    await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page.waitForSelector('iframe, #scorm-frame', { timeout: 10_000 }).catch(() => null);
+  } catch (err) {
+    console.log(`[LMS_HOMOLOGATION] Navegação via LmsPlayer (${safeQaErrorCode(err)}); usando launchUrl direto...`);
+    targetUrl = launchUrl;
+    await page.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: COURSE_TIMEOUT_MS });
+  }
+
+  // Wait for initial SCORM frame to be attached (up to 30s)
+  let initialFrame = null;
+  for (let wait = 0; wait < 30; wait += 1) {
+    initialFrame = await resolveScormContentFrame(page);
+    if (initialFrame) break;
+    await page.waitForTimeout(1000);
+  }
+  assert(initialFrame, 'SCORM_IFRAME_NOT_FOUND');
+
+  // Detect authoritative canonical slide count from SCO COURSE_DATA.slides
+  const canonicalTotal = await initialFrame.evaluate(() => {
+    const s = window.COURSE_DATA?.slides;
+    return Array.isArray(s) && s.length > 0 ? s.length : 0;
+  }).catch(() => 0);
+
+  // Extract answer plan from package manifest/model (reading with adminToken when available due to RBAC)
+  const pkgVersions = await fetchJson(`${API}/api/lms/cursos/${course.id}/scorm-package-versions`, {
+    headers: { Authorization: `Bearer ${adminToken || token}` },
+  });
+  const activeVer = Array.isArray(pkgVersions.json?.data)
+    ? pkgVersions.json.data.find((v) => String(v?.status || '').toUpperCase() === 'ACTIVE')
+    : null;
+  const answerPlan = activeVer?.assessment ? extractAnswerPlan(activeVer) : [];
+  const requiredDecisionSlideIndices = activeVer ? collectRequiredDecisionSlideIndices(activeVer) : [];
+
+  let steps = 0;
+  let resumedVerified = false;
+  let checkpointTested = false;
+  let finalStatusReached = false;
+  let finalButtonClicked = false;
+  let registrationAttempted = false;
+  let maxVisitedUnit = 0;
+  const visitedUnitIds = new Set();
+  let totalUnitsDetected = canonicalTotal || 0;
+  let scormLocationTotal = 0;
+  let finalAtLastUnit = false;
+  let quizzesAnswered = 0;
+  let lastRuntimeState = null;
+
+  // Track verified decision indices
+  const resolvedDecisionIndices = new Set();
+
+  // Scoped in-memory driver state (NO DOM attribute mutations)
+  let currentSlideUnit = 0;
+  let submittedInCurrentSlide = false;
+  const clickedGateKeysInCurrentSlide = new Set();
+  const clickedTouchKeysInCurrentSlide = new Set();
+  let slideStallSteps = 0;
+  let lastStallSignature = '';
+  // Diagnostics contain only fixed action labels, never DOM text or credentials.
+  const driverActionCounts = Object.create(null);
+  const driverLastActionTypes = [];
+
+  const started = Date.now();
+
+  let effectiveMaxSteps = Math.max(MAX_STEPS, (totalUnitsDetected || canonicalTotal || 100) * 4);
+  let effectiveCourseTimeoutMs = Math.max(
+    COURSE_TIMEOUT_MS,
+    (totalUnitsDetected || canonicalTotal || 0) * 1500 + 60_000,
+  );
+
+  while (Date.now() - started < effectiveCourseTimeoutMs && steps < effectiveMaxSteps) {
+    steps += 1;
+    if (totalUnitsDetected > 0) {
+      effectiveMaxSteps = Math.max(effectiveMaxSteps, totalUnitsDetected * 4);
+      effectiveCourseTimeoutMs = Math.max(COURSE_TIMEOUT_MS, totalUnitsDetected * 1500 + 60_000);
+    }
+    const wrapper = await resolveScormWrapper(page);
+    const runtimeState = await readWrapperRuntimeState(wrapper);
+
+    if (runtimeState) {
+      lastRuntimeState = runtimeState;
+      if (runtimeState.location) {
+        const marker = String(runtimeState.location).match(/^(\d+)(?:\/(\d+))?$/);
+        if (marker) {
+          const cur = Number(marker[1]);
+          const tot = marker[2] ? Number(marker[2]) : null;
+          if (cur > 0) visitedUnitIds.add(cur);
+          if (cur > maxVisitedUnit) maxVisitedUnit = cur;
+          if (tot && tot > 0) {
+            scormLocationTotal = tot;
+            totalUnitsDetected = tot;
+          }
+        }
+      }
+    }
+
+    if (runtimeState?.lessonStatus && TERMINAL_SCORM12.has(runtimeState.lessonStatus)) {
+      finalStatusReached = true;
+    }
+
+    // Interruption & resume checkpoint (around step 3 with recorded location)
+    if (!checkpointTested && steps >= 3 && Boolean(runtimeState?.location)) {
+      checkpointTested = true;
+      // Allow scheduled commit (800ms debounce) to settle and dispatch to backend
+      await page.waitForTimeout(1500);
+      const postDebounceState = await readWrapperRuntimeState(wrapper);
+      const savedLocation = postDebounceState?.location || runtimeState.location;
+      await page.close({ runBeforeUnload: true });
+
+      const resumePage = await context.newPage();
+      attachPageListeners(resumePage);
+      await injectLearnerSessionScript(resumePage, token, funcionarioId);
+      await resumePage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      const frameMounted = await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
+      if (!frameMounted && targetUrl !== launchUrl) {
+        console.log(`[LMS_HOMOLOGATION] Frame não montado no player na retomada (${BROWSER_NAME}). Sincronizando com launch wrapper direto: ${launchUrl}`);
+        await resumePage.goto(launchUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
+      }
+      await resumePage.waitForTimeout(1500);
+
+      let restoredLocation = null;
+      for (let retries = 0; retries < 30; retries += 1) {
+        const resumeWrapper = await resolveScormWrapper(resumePage);
+        const state = await readWrapperRuntimeState(resumeWrapper);
+        restoredLocation = state?.location;
+        if (isLocationResumed(savedLocation, restoredLocation)) {
+          resumedVerified = true;
+          break;
+        }
+        if (retries % 3 === 0) {
+          const detail = await getMatriculaDetail(token, matriculaId).catch(() => null);
+          const backendLoc = detail?.scorm_progresso?.lesson_location || detail?.progresso_scorm?.lesson_location || detail?.scorm_progresso?.location || detail?.progresso_scorm?.location;
+          if (isLocationResumed(savedLocation, backendLoc)) {
+            resumedVerified = true;
+            break;
+          }
+        }
+        await resumePage.waitForTimeout(1000);
+      }
+
+      // If probe was diverted to launchUrl, restore learner context to playerUrl to ensure completion controls
+      if (targetUrl === playerUrl && resumePage.url().includes('/api/lms/scorm/launch/')) {
+        await resumePage.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await resumePage.waitForSelector('iframe, #scorm-frame', { timeout: 30_000 }).catch(() => null);
+      }
+      page = resumePage;
+    }
+
+    // Interactive traversal inside SCORM frame: resolve active Frame instance
+    const frame = await resolveScormContentFrame(page);
+    if (!frame) {
+      await page.waitForTimeout(300);
+      steps += 1;
+      continue;
+    }
+
+    // Handle visible videos
+    try {
+      const videoStatus = await readVisibleVideo(frame);
+      if (videoStatus.kind === 'paused') {
+        await startRealVisibleVideo(frame);
+      }
+    } catch { /* ignore media inspection errors */ }
+
+    // Evaluate action inside real Frame instance
+    const actionHandle = await frame.evaluateHandle(({
+      plan,
+      requiredIndices,
+      submittedInSlide,
+      clickedGates,
+      clickedTouches,
+    }) => {
+      const clean = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+      const visible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      };
+
+      // Detect current unit and total units from DOM
+      const slidesArray = window.COURSE_DATA?.slides;
+      const canonicalSlidesCount = Array.isArray(slidesArray) && slidesArray.length > 0 ? slidesArray.length : 0;
+
+      const counterEl = document.querySelector('#count, .counter');
+      const counterText = clean(counterEl?.innerText || counterEl?.textContent);
+      const counterMatch = counterText.match(/^(\d+)\s*\/\s*(\d+)$/);
+      let domCurrent = counterMatch ? Number(counterMatch[1]) : 0;
+      let domTotal = canonicalSlidesCount > 0 ? canonicalSlidesCount : (counterMatch ? Number(counterMatch[2]) : 0);
+
+      if (canonicalSlidesCount > 0) {
+        const activeIdx = Number(window.__AIRTRUST_PLAYER_TEST__?.getState?.()?.active ?? -1);
+        if (activeIdx >= 0 && !domCurrent) domCurrent = activeIdx + 1;
+      } else if (!domCurrent && window.__AIRTRUST_PLAYER_TEST__?.getState) {
+        const st = window.__AIRTRUST_PLAYER_TEST__.getState();
+        if (Number.isFinite(st?.active)) domCurrent = st.active + 1;
+      }
+
+      const atLastUnit = Boolean(domTotal > 0 && domCurrent >= domTotal) || Boolean(document.querySelector('#slide-study-end, .study-end'));
+
+      const result = (target, type, extra = {}) => ({
+        target,
+        type,
+        domCurrent,
+        domTotal,
+        atLastUnit: atLastUnit || Boolean(domTotal > 0 && domCurrent >= domTotal),
+        ...extra,
+      });
+
+      // 1. Check for authentic user completion/finish button in the frame UI
+      const finalSelectors = ['#completeCourse', '#completeStudy', '#finishBtn', '#btn-finish', '#btn-concluir', '#btnFinish', '#finish'];
+      for (const sel of finalSelectors) {
+        const el = document.querySelector(sel);
+        if (el && visible(el) && !el.disabled) {
+          return result(el, 'final-button');
+        }
+      }
+
+      const finalBtn = Array.from(document.querySelectorAll('button, input[type=button], a, [role=button]')).find((el) => {
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
+        return visible(el) && !el.disabled && /(confirmar encerramento|concluir curso|concluir treinamento|finalizar curso|finalizar treinamento)/i.test(txt);
+      });
+      if (finalBtn) {
+        return result(finalBtn, 'final-button');
+      }
+
+      // If at last unit, check if next button or terminal button acts as final confirmation
+      if (atLastUnit) {
+        const termBtn = Array.from(document.querySelectorAll('#next, #nextUnit, #nextBtn, button, a, [role=button]')).find((el) => {
+          if (!visible(el) || el.disabled) return false;
+          const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+          if (/avalia[çc][ãa]o|tentativa|m[óo]dulo|unidade/i.test(txt)) return false;
+          return /(confirmar|concluir|finalizar|encerrar|terminar|fechar|resultado|encerramento)/i.test(txt);
+        });
+        if (termBtn) {
+          return result(termBtn, 'final-button');
+        }
+        const nextAtEnd = document.querySelector('#next, #nextUnit, #nextBtn');
+        if (nextAtEnd && visible(nextAtEnd) && !nextAtEnd.disabled) {
+          return result(nextAtEnd, 'final-button');
+        }
+      }
+
+      // 1b. Pending scenario review button
+      const pendingScenarioBtn = Array.from(document.querySelectorAll('#next, #nextBtn, button, a')).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        return /revisar cen[áa]rio pendente/i.test(txt);
+      });
+      if (pendingScenarioBtn) {
+        return result(pendingScenarioBtn, 'pending-scenario-review');
+      }
+
+      // 1c. Return to journey point button
+      const returnToJourneyBtn = Array.from(document.querySelectorAll('#next, #nextBtn, button, a')).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        const txt = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').toLowerCase();
+        return /voltar ao ponto atual/i.test(txt);
+      });
+      if (returnToJourneyBtn) {
+        return result(returnToJourneyBtn, 'return-to-journey');
+      }
+
+      // 1d. Required Interaction Cards ("Interação obrigatória (0/4)")
+      const requiredInteractionMatch = clean(document.body?.innerText || '').match(
+        /intera[cç][aã]o\s+obrigat[oó]ria\s*\((\d+)\s*\/\s*(\d+)\)/i,
+      );
+      if (
+        requiredInteractionMatch &&
+        Number(requiredInteractionMatch[1]) < Number(requiredInteractionMatch[2])
+      ) {
+        const all = Array.from(document.querySelectorAll('*'));
+        const explicitRequiredItems = Array.from(
+          document.querySelectorAll('[data-touch], .touchable'),
+        ).filter((el) => {
+          if (el.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return false;
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          const text = clean(el.textContent);
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none' &&
+            style.opacity !== '0' &&
+            el.getAttribute('aria-hidden') !== 'true' &&
+            text.length > 0 &&
+            text.length <= 800
+          );
+        }).map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          const touch = clean(el.getAttribute('data-touch'));
+          return {
+            el,
+            signature: ['required-explicit', touch, index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+
+        const explicitCandidate = explicitRequiredItems.find((item) => !clickedGates.includes(item.signature) && !clickedTouches.includes(item.signature));
+        if (explicitCandidate) {
+          return result(explicitCandidate.el, 'required-card', { gateKey: explicitCandidate.signature });
+        }
+
+        const scope = Array.from(document.body.querySelectorAll('*'));
+        const rawCandidates = scope.filter((el) => {
+          if (!visible(el)) return false;
+          if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+          if (el.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return false;
+          const style = window.getComputedStyle(el);
+          const dataKeys = Object.keys(el.dataset || {}).join(' ');
+          const className = clean(el.className);
+          const rect = el.getBoundingClientRect();
+          const interactiveHint =
+            style.cursor === 'pointer' ||
+            el.tabIndex >= 0 ||
+            el.hasAttribute('onclick') ||
+            /(barrier|decision|interactive|interact|required|toggle|step|action|choice|clickable)/i.test(`${className} ${dataKeys}`);
+          const cardGeometryHint =
+            rect.width >= 100 &&
+            rect.height >= 60 &&
+            rect.width <= window.innerWidth * 0.75 &&
+            rect.height <= window.innerHeight * 0.8;
+          const cardShapeHint =
+            cardGeometryHint &&
+            (
+              parseFloat(style.borderTopWidth || '0') > 0 ||
+              style.boxShadow !== 'none' ||
+              parseFloat(style.borderRadius || '0') >= 8
+            ) &&
+            Boolean(el.querySelector('h1,h2,h3,h4,h5,h6,li,p'));
+          const structuredCardHint =
+            cardGeometryHint &&
+            Boolean(el.querySelector('li')) &&
+            Array.from(el.querySelectorAll('li')).length >= 2;
+          const text = clean(el.textContent);
+          return (interactiveHint || cardShapeHint || structuredCardHint) && text.length > 0 && text.length <= 800;
+        });
+
+        const candidates = rawCandidates.filter((el) =>
+          !rawCandidates.some((other) => other !== el && other.contains(el))
+        );
+        const requiredTotal = Number(requiredInteractionMatch[2]);
+        if (candidates.length < requiredTotal) {
+          const badge = Array.from(document.body.querySelectorAll('*'))
+            .filter((el) => {
+              const text = clean(el.textContent);
+              return text.length > 0 && text.length <= 240 && /intera[cç][aã]o\s+obrigat[oó]ria\s*\(\d+\s*\/\s*(\d+)\)/i.test(text);
+            })
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect();
+              const br = b.getBoundingClientRect();
+              return (ar.width * ar.height) - (br.width * br.height);
+            })[0] || null;
+          const badgeBottom = badge ? badge.getBoundingClientRect().bottom : 0;
+          const structuralGroups = Array.from(document.body.querySelectorAll('*'))
+            .map((parent) => {
+              if (parent.closest('aside,nav,header,footer,[class*="sidebar" i],[class*="topbar" i],[class*="bottom-nav" i],[class*="menu" i]:not(.app-shell),[id*="menu" i],[class*="toc" i],[id*="toc" i]')) return null;
+              const children = Array.from(parent.children).filter((el) => {
+                if (!visible(el)) return false;
+                if (el.matches('button,a,input,select,textarea,[role=button]')) return false;
+                const text = clean(el.textContent);
+                const rect = el.getBoundingClientRect();
+                return (
+                  text.length >= 12 &&
+                  text.length <= 800 &&
+                  rect.top >= badgeBottom - 8 &&
+                  rect.width >= 100 &&
+                  rect.height >= 60 &&
+                  rect.width <= window.innerWidth * 0.75 &&
+                  rect.height <= window.innerHeight * 0.8
+                );
+              });
+              if (children.length !== requiredTotal) return null;
+              const tops = children.map((el) => el.getBoundingClientRect().top);
+              const heights = children.map((el) => el.getBoundingClientRect().height);
+              const maxHeight = Math.max(...heights, 1);
+              if (Math.max(...tops) - Math.min(...tops) > Math.max(90, maxHeight * 0.6)) return null;
+              const pr = parent.getBoundingClientRect();
+              return { children, area: pr.width * pr.height };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.area - b.area);
+          const structuralCards = structuralGroups[0]?.children || [];
+          for (const el of structuralCards) {
+            if (!candidates.includes(el)) candidates.push(el);
+          }
+        }
+        const candidateItems = candidates.map((el) => {
+          const index = Math.max(0, all.indexOf(el));
+          const id = clean(el.id);
+          return {
+            el,
+            signature: ['required-card', index, id, el.tagName.toLowerCase()].join(':'),
+          };
+        });
+        const requiredCandidate = candidateItems.find((item) => !clickedGates.includes(item.signature) && !clickedTouches.includes(item.signature));
+        if (requiredCandidate) {
+          return result(requiredCandidate.el, 'required-card', { gateKey: requiredCandidate.signature });
+        }
+      }
+
+      // 2. Interactive Gate items: hotspots, section map tabs, data-gate, data-hotspot, data-gate-id, and unclicked interactive elements
+      // IMPORTANT: Exclude assessment, quiz, question and scenario buttons so answer-selection logic is not preempted.
+      const unvisitedGate = Array.from(document.querySelectorAll(
+        '[data-gate], [data-gate-id], [data-hotspot], button.spot, .section-map-tab, [data-touch], .touchable, [role=tab], .tab-btn, .tab, .card[role=button], .interactive-card'
+      )).find((el) => {
+        if (!visible(el) || el.disabled) return false;
+        // Exclude assessment, quiz, question and scenario choices so they are handled by their specialized logic
+        if (el.matches('.answer, .option, [data-answer], [data-opt], [data-choice], [data-question], [data-quiz], .quiz-btn, .quiz-option, .choice-btn, .alternative, [data-alternative]')) {
+          return false;
+        }
+        if (el.closest('.answers, .options, .quiz-options, .question-answers, [data-quiz-container], .choices')) {
+          return false;
+        }
+        const key = el.getAttribute('data-gate') || el.getAttribute('data-gate-id') || el.getAttribute('data-hotspot') || el.id || clean(el.innerText || el.getAttribute('aria-label') || '');
+        if (!key || clickedGates.includes(key) || clickedTouches.includes(key)) return false;
+        const txt = clean(el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
+        if (/voltar|anterior|sair|fechar|menu/i.test(txt)) return false;
+        return !el.classList.contains('seen') && el.getAttribute('aria-pressed') !== 'true';
+      });
+      if (unvisitedGate) {
+        const gateKey = unvisitedGate.getAttribute('data-gate') || unvisitedGate.getAttribute('data-gate-id') || unvisitedGate.getAttribute('data-hotspot') || unvisitedGate.id || clean(unvisitedGate.innerText || unvisitedGate.getAttribute('aria-label') || '');
+        return result(unvisitedGate, 'gate-item', { gateKey });
+      }
+
+      // 3. Scenario options and interactive decision choices
+      const scenarioOptions = Array.from(document.querySelectorAll('.screen.active [data-scenario][data-opt], .screen.active [data-choice], [data-opt], [data-choice], button.option')).filter(visible);
+      const hasSelectedScenarioOption = scenarioOptions.some((el) => {
+        return el.classList.contains('selected') ||
+          el.classList.contains('active') ||
+          el.getAttribute('aria-pressed') === 'true';
+      });
+
+      if (!hasSelectedScenarioOption && scenarioOptions.length > 0) {
+        let targetOpt = null;
+        // Try authored scenario in frame
+        const currentSlideObj = window.COURSE_DATA?.slides?.[domCurrent - 1];
+        if (currentSlideObj && Array.isArray(currentSlideObj.options)) {
+          const correctIdx = currentSlideObj.options.findIndex((o) =>
+            Array.isArray(o) ? o[1] === true : Boolean(o?.correct || o?.isCorrect)
+          );
+          if (correctIdx >= 0) {
+            targetOpt = scenarioOptions.find((el) => {
+              const optIdx = el.getAttribute('data-opt') ?? el.getAttribute('data-choice');
+              return optIdx != null && Number(optIdx) === correctIdx;
+            });
+          }
+        }
+        if (!targetOpt && Array.isArray(plan) && plan.length > 0) {
+          const planned = plan.find((p) => p.slideIndex === domCurrent || p.unit === domCurrent);
+          if (planned && planned.optionIndex != null) {
+            targetOpt = scenarioOptions.find((el) => {
+              const optIdx = el.getAttribute('data-opt') ?? el.getAttribute('data-choice');
+              return optIdx != null && Number(optIdx) === Number(planned.optionIndex);
+            });
+          }
+        }
+        if (!targetOpt) {
+          targetOpt = scenarioOptions.find((el) => !el.disabled);
+        }
+        if (targetOpt) {
+          return result(targetOpt, 'scenario-option', { decisionResolved: true });
+        }
+      }
+
+      // 4. Assessment questions: options and question navigation
+      const assessOptions = Array.from(document.querySelectorAll('#stage button[data-answer], [data-answer], button.answer')).filter(visible);
+      const hasSelectedAssessmentAnswer = assessOptions.some((el) => {
+        return el.classList.contains('selected') ||
+          el.classList.contains('active') ||
+          el.getAttribute('aria-checked') === 'true' ||
+          el.getAttribute('aria-pressed') === 'true';
+      });
+
+      if (!hasSelectedAssessmentAnswer && assessOptions.length > 0) {
+        let qIdx = 0;
+        const qMeta = document.querySelector('.qmeta')?.textContent || '';
+        const qMatch = qMeta.match(/quest[ãa]o\s*(\d+)/i);
+        if (qMatch) qIdx = Number(qMatch[1]) - 1;
+
+        let targetIndex = null;
+        const currentSlideObj = window.COURSE_DATA?.slides?.[domCurrent - 1] ||
+          window.COURSE_DATA?.slides?.find((s) => s.kind === 'assessment');
+        const qAuthored = currentSlideObj?.questions?.[qIdx] || currentSlideObj?.content?.questions?.[qIdx];
+        if (qAuthored) {
+          const ans = qAuthored.answer ?? qAuthored.correctIndex ?? qAuthored.correct;
+          if (Number.isInteger(ans)) targetIndex = Number(ans);
+        }
+
+        if (targetIndex === null && Array.isArray(plan) && plan.length > 0) {
+          const planned = plan.find((p) =>
+            (p.slideIndex === domCurrent || p.unit === domCurrent) &&
+            (p.path?.includes(`questions[${qIdx}]`) || p.questionIndex === qIdx)
+          ) || plan.find((p) => p.slideIndex === domCurrent || p.unit === domCurrent);
+          if (planned?.indices?.[0] != null) targetIndex = Number(planned.indices[0]);
+          else if (planned?.optionIndex != null) targetIndex = Number(planned.optionIndex);
+        }
+
+        let targetAns = null;
+        if (targetIndex !== null) {
+          targetAns = assessOptions.find((el) => {
+            const idx = el.getAttribute('data-answer');
+            return idx != null && Number(idx) === targetIndex;
+          });
+        }
+        if (!targetAns) {
+          targetAns = assessOptions.find((el) => !el.disabled);
+        }
+        if (targetAns) {
+          return result(targetAns, 'assessment-answer', { decisionResolved: true });
+        }
+      }
+
+      const qNext = document.querySelector('#qNext, #quizNext');
+      if (qNext && visible(qNext) && !qNext.disabled) {
+        return result(qNext, 'assessment-next-q');
+      }
+
+      const retryAssessment = document.querySelector('#retryAssessment');
+      if (retryAssessment && visible(retryAssessment) && !retryAssessment.disabled) {
+        return result(retryAssessment, 'assessment-retry');
+      }
+
+      // 5. Explicit touch targets
+      const touchTarget = Array.from(document.querySelectorAll('[data-touch], .touchable')).find((el) => {
+        const key = el.getAttribute('data-touch') || el.id || clean(el.innerText);
+        return visible(el) && !el.disabled && !clickedTouches.includes(key);
+      });
+      if (touchTarget) {
+        const touchKey = touchTarget.getAttribute('data-touch') || touchTarget.id || clean(touchTarget.innerText);
+        return result(touchTarget, 'touch-target', { touchKey });
+      }
+
+      // 6. Accordion handling: details & summary
+      const closedSummaries = Array.from(document.querySelectorAll('details:not([open]) > summary')).filter(visible);
+      if (closedSummaries.length > 0) {
+        return result(closedSummaries[0], 'accordion-expand');
+      }
+
+      // 7. Interactive choices / radio options / checklists
+      const choices = Array.from(document.querySelectorAll('button.choice, input[type=radio], .quiz-option, [data-module-quiz]')).filter(visible);
+      if (choices.length > 0) {
+        const hasSelectedChoice = choices.some((c) => c.classList.contains('selected') || c.checked);
+        if (!hasSelectedChoice) {
+          const unselected = choices.find((c) => !c.disabled);
+          if (unselected) {
+            return result(unselected, 'quiz-choice');
+          }
+        }
+      }
+
+      const unselectedCheckbox = Array.from(document.querySelectorAll('input[type=checkbox]')).find((c) => {
+        return visible(c) && !c.disabled && !c.checked && !c.closest('nav,aside,header,footer,[hidden]');
+      });
+      if (unselectedCheckbox) {
+        return result(unselectedCheckbox, 'checklist-checkbox');
+      }
+
+      // 8. Submit / Confirm buttons
+      const submitSelectors = ['#submitAssessment', '#reflectionReveal'];
+      for (const sel of submitSelectors) {
+        const el = document.querySelector(sel);
+        if (el && visible(el) && !el.disabled && !submittedInSlide) {
+          return result(el, 'submit');
+        }
+      }
+
+      const submitBtn = Array.from(document.querySelectorAll('button, input[type=button]')).find((el) => {
+        const txt = clean(el.innerText || el.value).toLowerCase();
+        return visible(el) && !el.disabled && !submittedInSlide && /(confirmar|responder|verificar|submit)/i.test(txt);
+      });
+      if (submitBtn) {
+        return result(submitBtn, 'submit');
+      }
+
+      // 9. Next / Advance navigation: prioritize #next
+      const nextBtnPrimary = document.querySelector('#next');
+      if (nextBtnPrimary && visible(nextBtnPrimary) && !nextBtnPrimary.disabled) {
+        return result(nextBtnPrimary, 'next-button');
+      }
+
+      const nextBtnAlt = document.querySelector('#nextBtn');
+      if (nextBtnAlt && visible(nextBtnAlt) && !nextBtnAlt.disabled) {
+        return result(nextBtnAlt, 'next-button');
+      }
+
+      const nextUnit = document.querySelector('#nextUnit');
+      if (nextUnit && visible(nextUnit) && !nextUnit.disabled) {
+        return result(nextUnit, 'next-unit');
+      }
+
+      const nextBtn = Array.from(document.querySelectorAll('button, a, [role=button]')).find((el) => {
+        const txt = clean(el.innerText || el.getAttribute('aria-label') || el.id).toLowerCase();
+        return visible(el) && !el.disabled && /(next|avan[cç]ar|pr[oó]ximo|continuar|prosseguir)/i.test(txt);
+      });
+      if (nextBtn) {
+        return result(nextBtn, 'next-button');
+      }
+
+      return result(null, 'none');
+    }, {
+      plan: answerPlan,
+      requiredIndices: requiredDecisionSlideIndices,
+      submittedInSlide: submittedInCurrentSlide,
+      clickedGates: Array.from(clickedGateKeysInCurrentSlide),
+      clickedTouches: Array.from(clickedTouchKeysInCurrentSlide),
+    }).catch(() => null);
+
+    let action = { type: 'none' };
+    let targetEl = null;
+    if (actionHandle) {
+      try {
+        const targetProp = await actionHandle.getProperty('target').catch(() => null);
+        targetEl = targetProp ? targetProp.asElement() : null;
+        action = await actionHandle.jsonValue().catch(() => ({ type: 'none' }));
+      } catch {
+        action = { type: 'none' };
+      } finally {
+        await actionHandle.dispose().catch(() => null);
+      }
+    }
+
+    // Keep bounded, non-sensitive diagnostics for persistent navigation failures.
+    const driverActionType = typeof action?.type === 'string' && /^[a-z-]{1,40}$/.test(action.type) ? action.type : 'none';
+    driverActionCounts[driverActionType] = (driverActionCounts[driverActionType] || 0) + 1;
+    driverLastActionTypes.push(driverActionType);
+    if (driverLastActionTypes.length > 12) driverLastActionTypes.shift();
+
+    if (targetEl) {
+      try {
+        await targetEl.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => null);
+        await targetEl.click({ timeout: 3000 });
+      } catch {
+        await targetEl.evaluate((node) => node.click?.()).catch(() => null);
+      }
+
+      if (action.type === 'accordion-expand') {
+        await targetEl.evaluate((summary) => {
+          summary.dispatchEvent(new Event('toggle', { bubbles: true }));
+          summary.closest('details')?.dispatchEvent(new Event('scroll', { bubbles: true }));
+        }).catch(() => null);
+      }
+    }
+
+    if (Number.isSafeInteger(action?.domCurrent) && action.domCurrent > 0) {
+      visitedUnitIds.add(action.domCurrent);
+      if (action.domCurrent > maxVisitedUnit) maxVisitedUnit = action.domCurrent;
+      if (action.domCurrent !== currentSlideUnit) {
+        currentSlideUnit = action.domCurrent;
+        submittedInCurrentSlide = false;
+        clickedGateKeysInCurrentSlide.clear();
+        clickedTouchKeysInCurrentSlide.clear();
+        slideStallSteps = 0;
+      }
+    }
+    if (scormLocationTotal > 0) {
+      totalUnitsDetected = scormLocationTotal;
+    } else if (canonicalTotal > 0) {
+      totalUnitsDetected = canonicalTotal;
+    } else if (action?.domTotal && action.domTotal > totalUnitsDetected) {
+      totalUnitsDetected = action.domTotal;
+    }
+    if (action?.atLastUnit && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+      finalAtLastUnit = true;
+    }
+
+    if ((action?.type === 'gate-item' || action?.type === 'required-card') && action.gateKey) {
+      clickedGateKeysInCurrentSlide.add(action.gateKey);
+    }
+    if (action?.type === 'touch-target' && action.touchKey) {
+      clickedTouchKeysInCurrentSlide.add(action.touchKey);
+    }
+    if (action?.type === 'submit') {
+      submittedInCurrentSlide = true;
+    }
+    if (
+      action?.type === 'scenario-option' ||
+      action?.type === 'assessment-answer' ||
+      action?.decisionResolved
+    ) {
+      if (action?.domCurrent > 0) {
+        resolvedDecisionIndices.add(action.domCurrent);
+      }
+    }
+
+    if (
+      action?.type === 'quiz-choice' ||
+      action?.type === 'submit' ||
+      action?.type === 'scenario-option' ||
+      action?.type === 'assessment-answer' ||
+      action?.type === 'gate-item' ||
+      action?.type === 'required-card' ||
+      action?.type === 'touch-target' ||
+      action?.type === 'pending-scenario-review' ||
+      action?.type === 'return-to-journey'
+    ) {
+      quizzesAnswered += 1;
+    }
+
+    // Check if completion overlay appeared on parent page
+    const overlayShow = await page.$('#completion-overlay.show, [data-testid="completion-overlay"]').catch(() => null);
+    if (overlayShow) {
+      const overlayClose = await page.$('#completion-overlay.show #btn-close, #btn-close').catch(() => null);
+      if (overlayClose) {
+        await overlayClose.click().catch(() => null);
+        await page.waitForTimeout(1000);
+      }
+      finalButtonClicked = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
+      break;
+    }
+
+    // If no action was resolved on this turn, scroll content container to trigger any scroll-bound unlocks
+    if (action?.type === 'none') {
+      await frame.evaluate(() => {
+        try {
+          window.scrollTo(0, document.body.scrollHeight);
+          const scrollables = document.querySelectorAll('*');
+          for (const el of scrollables) {
+            if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {
+              el.scrollTop = el.scrollHeight;
+            }
+          }
+        } catch {}
+      }).catch(() => null);
+      await page.waitForTimeout(400);
+    }
+
+    // Driver stall detection: fail if 60 iterations produce identical state without progress
+    const stallSig = `${action?.domCurrent}:${action?.type}:${visitedUnitIds.size}:${resolvedDecisionIndices.size}:${clickedGateKeysInCurrentSlide.size}:${submittedInCurrentSlide}`;
+    if (stallSig === lastStallSignature) {
+      slideStallSteps += 1;
+      if (slideStallSteps >= 60) {
+        if (action?.atLastUnit || (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected)) {
+          console.log(`[LMS_HOMOLOGATION] Última unidade alcançada (${maxVisitedUnit}/${totalUnitsDetected}). Finalizando curso...`);
+          finalButtonClicked = true;
+          finalAtLastUnit = true;
+          break;
+        }
+        throw new Error(`DRIVER_STALL_AT_UNIT_${action?.domCurrent || 'UNKNOWN'}`);
+      }
+    } else {
+      lastStallSignature = stallSig;
+      slideStallSteps = 0;
+    }
+
+    if (action?.type === 'final-button') {
+      finalButtonClicked = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
+      await page.waitForTimeout(1500);
+
+      // Wrapper overlay close button
+      const overlayClose = await page.$('#completion-overlay.show #btn-close');
+      if (overlayClose) {
+        await overlayClose.click().catch(() => null);
+        await page.waitForTimeout(1000);
+      }
+
+      // Check for LmsPlayer "Registrar no AirTrust" or "Confirmar conclusão" button
+      registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      if (registrationAttempted) {
+        console.log('[LMS_HOMOLOGATION] Confirmação canônica do aluno acionada na interface...');
+        await page.waitForTimeout(2000);
+      }
+
+      // Re-sample runtime state post-click from wrapper to observe terminal SCORM state
+      const postWrapper = await resolveScormWrapper(page);
+      for (let r = 0; r < 12; r += 1) {
+        const postState = await readWrapperRuntimeState(postWrapper);
+        if (postState) {
+          lastRuntimeState = postState;
+          if (TERMINAL_SCORM12.has(postState.lessonStatus)) {
+            finalStatusReached = true;
+            break;
+          }
+        }
+        await page.waitForTimeout(500);
+      }
+      break;
+    }
+
+    // Check if the wrapper overlay is showing and click Fechar
+    const overlayClose = await page.$('#completion-overlay.show #btn-close');
+    if (overlayClose) {
+      await overlayClose.click().catch(() => null);
+      finalButtonClicked = true;
+      if (totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected) {
+        finalAtLastUnit = true;
+      }
+      if (!registrationAttempted) {
+        registrationAttempted = await clickCanonicalLearnerRegistration(page, 10_000);
+        if (registrationAttempted) await page.waitForTimeout(2000);
+      }
+      break;
+    }
+
+    steps += 1;
+    await page.waitForTimeout(action?.type === 'accordion-expand' ? 400 : 250);
+  }
+
+  // Check if wrapper overlay became visible post-traversal
+  const finalOverlayBtn = await page.$('#completion-overlay.show #btn-close');
+  if (finalOverlayBtn) {
+    await finalOverlayBtn.click().catch(() => null);
+  }
+  if (!registrationAttempted && finalButtonClicked && finalAtLastUnit &&
+      totalUnitsDetected > 0 && visitedUnitIds.size === totalUnitsDetected) {
+    registrationAttempted = await clickCanonicalLearnerRegistration(page, 10_000);
+    if (!registrationAttempted && targetUrl === playerUrl) {
+      // A legitimate finished SCO can become ready only after a persisted
+      // server readback. Reopen the actual learner UI (not the API) and require
+      // its enabled, explicitly clicked completion control.
+      console.log('[LMS_HOMOLOGATION] Reabrindo player para localizar confirmação canônica...');
+      await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+      const wrapperReady = await waitForCanonicalScormWrapperReady(page, 20_000);
+      if (wrapperReady) {
+        registrationAttempted = await clickCanonicalLearnerRegistration(page, 15_000);
+      } else {
+        console.log('[LMS_HOMOLOGATION] Wrapper SCORM não pronto após reabertura; nenhuma confirmação sintética enviada.');
+      }
+    }
+    if (registrationAttempted) await page.waitForTimeout(2000);
+  }
+
+  // Re-sample final runtime state from wrapper before closing
+  const postWrapper = await resolveScormWrapper(page);
+  for (let r = 0; r < 8; r += 1) {
+    const postState = await readWrapperRuntimeState(postWrapper);
+    if (postState) {
+      if (TERMINAL_SCORM12.has(postState.lessonStatus) || !lastRuntimeState) {
+        lastRuntimeState = postState;
+      }
+      if (TERMINAL_SCORM12.has(postState.lessonStatus)) break;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  await page.waitForTimeout(1000);
+
+  // On some browsers, the first legitimate click commits a last-slide save
+  // but loses the explicit finalization during a React re-render. We verify
+  // the authoritative enrollment FIRST and retry the real UI once, never by
+  // sending a direct API completion or fabricating SCORM terminal evidence.
+  let detail = await getMatriculaDetail(token, matriculaId);
+  if (shouldRetryCanonicalRegistration({
+    isPlayerRoute: targetUrl === playerUrl,
+    atLastUnit: finalAtLastUnit,
+    visitedUnits: visitedUnitIds.size,
+    totalUnits: totalUnitsDetected,
+    backendStatus: detail.status,
+    backendProgress: detail.progresso_pct,
+    assessmentFailed: String(lastRuntimeState?.lessonStatus || '').toLowerCase() === 'failed',
+  })) {
+    await delay(1500);
+    detail = await getMatriculaDetail(token, matriculaId);
+    if (shouldRetryCanonicalRegistration({
+      isPlayerRoute: targetUrl === playerUrl,
+      atLastUnit: finalAtLastUnit,
+      visitedUnits: visitedUnitIds.size,
+      totalUnits: totalUnitsDetected,
+      backendStatus: detail.status,
+      backendProgress: detail.progresso_pct,
+      assessmentFailed: String(lastRuntimeState?.lessonStatus || '').toLowerCase() === 'failed',
+    })) {
+      console.log('[LMS_HOMOLOGATION] Matrícula 100% sem conclusão aceita; retentando UMA confirmação legítima no player...');
+      await page.goto(playerUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+      if (await waitForCanonicalScormWrapperReady(page, 20_000)) {
+        const retried = await clickCanonicalLearnerRegistration(page, 15_000);
+        if (retried) {
+          console.log('[LMS_HOMOLOGATION] Segunda confirmação legítima acionada; aguardando aceitação canônica...');
+          await delay(3000);
+        }
+      }
+    }
+  }
+
+  await browser.close();
+
+  // Poll for completion persistence in backend (up to 15s)
+  for (let poll = 0; poll < 15; poll += 1) {
+    if (String(detail.status).toUpperCase() === 'CONCLUIDO' && Number(detail.progresso_pct || 0) === 100) {
+      break;
+    }
+    await delay(1000);
+    detail = await getMatriculaDetail(token, matriculaId);
+  }
+  const isConcluido = String(detail.status).toUpperCase() === 'CONCLUIDO';
+  const progress100 = Number(detail.progresso_pct || 0) === 100;
+
+  // Qualification & Certificate
+  const qualExpected = Boolean(course.qualificacao_tipo_id || course.gerar_qualificacao_ao_concluir === 1);
+  const qual = await checkLearnerQualifications(token, funcionarioId, course.id, detail.qualificacao_historico_id, 10, 1000);
+  const certHistoricoId = detail.qualificacao_historico_id || qual?.id;
+  const cert = certHistoricoId ? await checkCertificate(token, certHistoricoId, 20, 1500) : null;
+
+  // Real browser reopen check in new isolated session
+  const reopenBrowser = await browserEngine.launch({ headless: true });
+  const reopenContext = await reopenBrowser.newContext({ viewport: { width: 1440, height: 900 } });
+  await setupAuthenticatedContext(reopenContext, token, matriculaId);
+  const reopenPage = await reopenContext.newPage();
+  await injectLearnerSessionScript(reopenPage, token, funcionarioId);
+  await reopenPage.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null);
+  await reopenPage.waitForTimeout(2000);
+  const reopenWrapper = await resolveScormWrapper(reopenPage);
+  const reopenState = await readWrapperRuntimeState(reopenWrapper);
+  await reopenBrowser.close();
+
+  const reopenDetail = await getMatriculaDetail(token, matriculaId);
+  const reopenNoDowngrade =
+    String(reopenDetail.status).toUpperCase() === 'CONCLUIDO' &&
+    Number(reopenDetail.progresso_pct || 0) === 100;
+
+  // Evaluate Course Path & Assessment Policy
+  const pathVerdict = evaluateCoursePath({
+    contentType: 'scorm',
+    totalUnits: totalUnitsDetected,
+    visitedUnits: visitedUnitIds.size,
+    visitedUnitIds,
+    atLastUnit: (finalAtLastUnit || isConcluido) && totalUnitsDetected > 0 && maxVisitedUnit >= totalUnitsDetected,
+    completedActivities: resolvedDecisionIndices.size,
+    totalActivities: requiredDecisionSlideIndices.length,
+  });
+
+  const effectiveLessonStatus = resolveEffectiveLessonStatus({
+    reopenState,
+    lastRuntimeState,
+    scormProgresso: detail?.scorm_progresso,
+    reopenScormProgresso: reopenDetail?.scorm_progresso,
+    isConcluido,
+    policy: course.scorm_assessment_policy,
+  });
+
+  const effectiveScoreRaw = lastRuntimeState?.scoreRaw ?? reopenState?.scoreRaw ?? detail?.scorm_progresso?.score_raw ?? null;
+  const effectiveScoreScaled = lastRuntimeState?.scoreScaled ?? reopenState?.scoreScaled ?? detail?.scorm_progresso?.score_scaled ?? null;
+
+  const assessmentVerdict = evaluateAssessmentPolicy({
+    policy: course.scorm_assessment_policy,
+    lessonStatus: effectiveLessonStatus,
+    scoreRaw: effectiveScoreRaw,
+    scoreScaled: effectiveScoreScaled,
+    masteryScore: course.scorm_mastery_score,
+  });
+
+  const verdict = evaluateHomologationVerdict({
+    percurso_ok: pathVerdict.ok,
+    avaliacao_ok: assessmentVerdict.ok,
+    isConcluido,
+    progress100,
+    resumedVerified: resumedVerified || totalUnitsDetected <= 1,
+    reopenNoDowngrade,
+    qualExpected,
+    qual,
+    cert,
+  });
+
+  return {
+    course_id: course.id,
+    titulo: course.titulo,
+    tipo_conteudo: course.tipo_conteudo || 'scorm',
+    edition_sha: activeVer?.packageSha256 || 'n/a',
+    policy: course.scorm_assessment_policy || 'FORMATIVE',
+    matricula_id: matriculaId,
+    matricula_ok: true,
+    percurso_ok: pathVerdict.ok,
+    resumed_ok: resumedVerified || totalUnitsDetected <= 1,
+    avaliacao_ok: assessmentVerdict.ok,
+    finalizacao_ok: isConcluido && progress100,
+    status_pos_conclusao: detail.status,
+    qualificacao_gerada: qual ? `SIM (#${qual.id})` : 'N/A',
+    certificado_emitido: cert ? `SIM (${cert.sha256.slice(0, 12)}...)` : 'N/A',
+    reabertura_sem_downgrade: reopenNoDowngrade,
+    status: verdict.pass ? 'PASS' : 'FAIL',
+    reason: verdict.reason,
+    audit_evidence: {
+      units_visited: visitedUnitIds.size,
+      visited_unit_ids: [...visitedUnitIds].sort((a, b) => a - b),
+      total_units: totalUnitsDetected,
+      distinct_units_visited_count: visitedUnitIds.size,
+      actions_count: steps,
+      driver_action_counts: driverActionCounts,
+      driver_last_action_types: driverLastActionTypes,
+      resume_tested: checkpointTested,
+      resume_verified: resumedVerified || totalUnitsDetected <= 1,
+      resolved_decisions_count: resolvedDecisionIndices.size,
+      required_decisions_count: requiredDecisionSlideIndices.length,
+      assessment: {
+        policy: course.scorm_assessment_policy || 'FORMATIVE',
+        status: effectiveLessonStatus || null,
+        score_raw: effectiveScoreRaw ?? null,
+        score_scaled: effectiveScoreScaled ?? null,
+        mastery_score: course.scorm_mastery_score ?? null,
+        passed: assessmentVerdict.ok,
+      },
+      backend_status: detail.status,
+      backend_progresso: detail.progresso_pct,
+      qualificacao_id: qual?.id ?? null,
+      certificado_sha: cert?.sha256 ?? null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main Runner
+// ---------------------------------------------------------------------------
+export async function runHomologation() {
+  assertQaRunScope(process.env.QA_RUN_ID, process.env.QA_RUN_ATTEMPT);
+  await assertPinnedProduction();
+  let learner = await getLearnerSession();
+  console.log(`[LMS_HOMOLOGATION] Aluno autenticado: ${learner.email} (funcionario_id: ${learner.funcionarioId})`);
+
+  let adminToken = await resolveAdminToken();
+  const courses = await listCourses(learner.token);
+  console.log(`[LMS_HOMOLOGATION] Cursos elegíveis no catálogo para teste: ${courses.length}`);
+
+  const engine = BROWSER_NAME === 'webkit' ? webkit : chromium;
+  const results = [];
+
+  // Initialize report file on disk immediately so artifact upload always succeeds
+  saveIncrementalReport(results, {
+    browser: BROWSER_NAME,
+    expected_sha: EXPECTED_SHA,
+  });
+
+  const onSignal = () => {
+    console.log(`\n[LMS_HOMOLOGATION] Interrupção detectada. Salvando relatório de progresso...`);
+    saveIncrementalReport(results, {
+      browser: BROWSER_NAME,
+      expected_sha: EXPECTED_SHA,
+      interrupted: true,
+    });
+    process.exit(1);
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  try {
+    for (const course of courses) {
+      console.log(`\n------------------------------------------------------------`);
+      console.log(`[LMS_HOMOLOGATION] Curso #${course.id}: ${course.titulo} (${course.tipo_conteudo || 'scorm'})`);
+
+      try {
+        // Re-authenticate session for each course to prevent JWT token expiration (1800s / 30m TTL)
+        try {
+          learner = await getLearnerSession();
+          adminToken = await resolveAdminToken(true);
+        } catch (authErr) {
+          console.warn(`[LMS_HOMOLOGATION] Falha ao renovar credenciais para curso #${course.id}:`, safeQaErrorCode(authErr));
+        }
+
+        // 1. Enroll learner
+        const matriculaId = await assignSyntheticQaCourse(
+          adminToken, learner.token, Number(course.id), learner.funcionarioId,
+        );
+        console.log(`[LMS_HOMOLOGATION] Matrícula confirmada: id=${matriculaId}`);
+
+        // 2. Drive course by content type in real browser
+        let outcome;
+        if (course.tipo_conteudo === 'pptx') {
+          outcome = await drivePptxCourseInBrowser({
+            browserEngine: engine,
+            token: learner.token,
+            course,
+            matriculaId,
+            funcionarioId: learner.funcionarioId,
+          });
+        } else {
+          outcome = await driveScormCourseInBrowser({
+            browserEngine: engine,
+            token: learner.token,
+            adminToken,
+            course,
+            matriculaId,
+            funcionarioId: learner.funcionarioId,
+          });
+        }
+
+        console.log(`[LMS_HOMOLOGATION] Resultado: ${outcome.status} ${outcome.reason ? `(${outcome.reason})` : ''}`);
+        results.push(outcome);
+      } catch (err) {
+        console.error(`[LMS_HOMOLOGATION] Erro ao testar curso #${course.id}:`, safeQaErrorCode(err));
+        results.push({
+          course_id: course.id,
+          titulo: course.titulo,
+          tipo_conteudo: course.tipo_conteudo || 'scorm',
+          edition_sha: 'n/a',
+          policy: course.scorm_assessment_policy || 'FORMATIVE',
+          matricula_id: null,
+          matricula_ok: false,
+          percurso_ok: false,
+          resumed_ok: false,
+          avaliacao_ok: false,
+          finalizacao_ok: false,
+          status_pos_conclusao: 'ERRO',
+          qualificacao_gerada: 'N/A',
+          certificado_emitido: 'N/A',
+          reabertura_sem_downgrade: false,
+          status: 'FAIL',
+          reason: safeQaErrorCode(err),
+        });
+      } finally {
+        saveIncrementalReport(results, {
+          browser: BROWSER_NAME,
+          expected_sha: EXPECTED_SHA,
+        });
+      }
+    }
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  }
+
+  const summary = saveIncrementalReport(results, {
+    browser: BROWSER_NAME,
+    expected_sha: EXPECTED_SHA,
+  });
+
+  console.log(`\n[LMS_HOMOLOGATION] Relatório final salvo em: ${REPORT_PATH}`);
+  console.log(`[LMS_HOMOLOGATION] PASS: ${summary.pass_count} | FAIL: ${summary.fail_count} | BLOQUEADO: ${summary.blocked_count}`);
+
+  return summary;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runHomologation()
+    .then((summary) => {
+      process.exit(summary.total_courses === 0 || summary.fail_count > 0 || summary.blocked_count > 0 ? 1 : 0);
+    })
+    .catch((err) => {
+      console.error('FATAL_HOMOLOGATION_ERROR:', safeQaErrorCode(err));
+      process.exit(1);
+    });
+}
