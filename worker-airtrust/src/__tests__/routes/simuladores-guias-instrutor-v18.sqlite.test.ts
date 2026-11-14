@@ -96,6 +96,7 @@ vi.mock('../../middleware/guias-instrutor-permissions', () => {
 });
 
 import guiasInstrutorRoutes from '../../routes/simuladores-guias-instrutor';
+import { assertNoV2GuideDivergence } from '../../lib/guias-instrutor/legacy-v2-guard';
 
 function createSqliteEnv() {
   const db = new DatabaseSync(':memory:');
@@ -417,5 +418,130 @@ describe('simuladores-guias-instrutor — PTO Rev.10 V18 (SQLite integration)', 
       ctx.env,
     );
     expect(otherTenantDetail.status).toBe(404);
+  });
+
+  it('mantém guia funcional visível na biblioteca FUNCIONAL mesmo se modelo_aeronave_id vier preenchido via API', async () => {
+    const createRes = await ctx.app.request(
+      '/api/simuladores/guias-instrutor',
+      {
+        method: 'POST',
+        headers: { ...gestorHeaders(6), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelo_aeronave_id: 5,
+          programa: 'EXAMINADOR',
+          sessao_numero: 1,
+          sessao_total: 4,
+          codigo: 'EXA-01/04',
+          titulo: 'Examinador Etapa 01',
+          versao: '1.0',
+        }),
+      },
+      ctx.env,
+    );
+    expect(createRes.status).toBe(201);
+    const { data: created } = (await createRes.json()) as { data: { id: number } };
+
+    const fd = new FormData();
+    fd.append('versao', '1.0');
+    fd.append('pdf', new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], 'exa.pdf', { type: 'application/pdf' }));
+    const verRes = await ctx.app.request(
+      `/api/simuladores/guias-instrutor/${created.id}/versoes`,
+      { method: 'POST', headers: gestorHeaders(6), body: fd },
+      ctx.env,
+    );
+    expect(verRes.status).toBe(201);
+    const { data: ver } = (await verRes.json()) as { data: { id: number } };
+
+    const linkRes = await ctx.app.request(
+      `/api/simuladores/guias-instrutor/${ver.id}`,
+      {
+        method: 'PUT',
+        headers: { ...gestorHeaders(6), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelo_sessao_id: 302, principal: 1 }),
+      },
+      ctx.env,
+    );
+    expect(linkRes.status).toBe(200);
+
+    const actRes = await ctx.app.request(
+      `/api/simuladores/guias-instrutor/${ver.id}/ativar`,
+      { method: 'POST', headers: gestorHeaders(6) },
+      ctx.env,
+    );
+    expect(actRes.status).toBe(200);
+
+    const listFunc = await ctx.app.request(
+      '/api/simuladores/guias-instrutor?aeronave=FUNCIONAL',
+      { headers: instrutorHeaders(6) },
+      ctx.env,
+    );
+    expect(listFunc.status).toBe(200);
+    const body = (await listFunc.json()) as { data: Array<{ id: number; codigo: string }> };
+    expect(body.data.some((g) => g.id === ver.id && g.codigo === 'EXA-01/04')).toBe(true);
+  });
+
+  it('relink legado propaga vínculo para a API _v2 antes da divergência e bloqueia fail-closed após criação de guia V18', async () => {
+    // 1. Estado pré-divergência: insere guia legado + vínculo em 301 e aplica 0586 novamente (ou re-executa) via trigger
+    ctx.db.exec(`
+      INSERT INTO simuladores_guias_instrutor
+        (id, empresa_id, modelo_aeronave_id, programa, sessao_numero, sessao_total, codigo, titulo, versao, status, created_by)
+      VALUES (1, 6, 5, 'INICIAL', 1, 12, 'A139-I-01/12', 'Guia Legado 1', '1.0', 'ATIVO', 1);
+      INSERT INTO simuladores_modelos_sessao_guias
+        (id, empresa_id, modelo_sessao_id, guia_id, principal, ordem)
+      VALUES (10, 6, 301, 1, 1, 1);
+    `);
+
+    // Estado sincronizado: guard não bloqueia antes de guias _v2 divergentes
+    await expect(
+      assertNoV2GuideDivergence(ctx.env.DB, 6, (m) => {
+        throw new Error(m);
+      }),
+    ).resolves.toBeUndefined();
+
+    // Relink atualiza simuladores_modelos_sessao_guias (desativa 301, insere vínculo em 302)
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare(
+        "UPDATE simuladores_modelos_sessao_guias SET deleted_at = '2026-11-14T22:10:00Z' WHERE id = 10",
+      ),
+      ctx.env.DB.prepare(
+        'INSERT INTO simuladores_modelos_sessao_guias (id, empresa_id, modelo_sessao_id, guia_id, principal, ordem) VALUES (11, 6, 302, 1, 1, 1)',
+      ),
+    ]);
+
+    // API principal (leitura _v2) deve enxergar imediatamente o novo modelo_sessao_id=302
+    const afterRelink = await ctx.app.request(
+      '/api/simuladores/guias-instrutor?aeronave=AW139',
+      { headers: instrutorHeaders(6) },
+      ctx.env,
+    );
+    expect(afterRelink.status).toBe(200);
+    const listBody = (await afterRelink.json()) as { data: Array<{ id: number; modelo_sessao_id: number | null }> };
+    expect(listBody.data.find((g) => g.id === 1)?.modelo_sessao_id).toBe(302);
+
+    // 2. Após criar guia V18 em _v2, o executor legado deve falhar fechado
+    const createV18 = await ctx.app.request(
+      '/api/simuladores/guias-instrutor',
+      {
+        method: 'POST',
+        headers: { ...gestorHeaders(6), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelo_aeronave_id: 5,
+          programa: 'TRANSICAO',
+          sessao_numero: 1,
+          sessao_total: 9,
+          codigo: 'A139-T-01/09',
+          titulo: 'Transicao V18',
+          versao: '1.0',
+        }),
+      },
+      ctx.env,
+    );
+    expect(createV18.status).toBe(201);
+
+    await expect(
+      assertNoV2GuideDivergence(ctx.env.DB, 6, (m) => {
+        throw new Error(m);
+      }),
+    ).rejects.toThrow(/Executor legado bloqueado/i);
   });
 });

@@ -284,7 +284,7 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
   }
 
   if (aeronave === FUNCIONAL_AERONAVE_CODIGO) {
-    sql += ' AND g.modelo_aeronave_id IS NULL';
+    sql += " AND (g.modelo_aeronave_id IS NULL OR g.programa IN ('INSTRUTOR', 'EXAMINADOR'))";
   } else if (aeronave) {
     sql += ' AND (ma.codigo = ? OR CAST(g.modelo_aeronave_id AS TEXT) = ?)';
     params.push(aeronave, aeronave);

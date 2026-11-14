@@ -14,9 +14,10 @@ Because Schema V2 forbids non-atomic table rebuilds (`DROP TABLE` + `ALTER TABLE
   - `simuladores_guias_instrutor_auditoria_v2`
 - **Legacy tables preserved**: `simuladores_guias_instrutor`, `simuladores_modelos_sessao_guias`, and `simuladores_guias_instrutor_auditoria` remain intact as read/archive history during and after rollout.
 - **No synthetic/non-approved guide publishing**: This change creates schema structure and copies existing historical rows with exact IDs. It does NOT publish any V18 draft guide or fabricate technical reviewer sign-offs.
-- **Zero-downtime deploy sequence**:
-  1. Merge code & apply `0586` via `Apply Schema Change V2` while the current Worker continues reading the original tables without interruption.
-  2. Deploy the updated Worker & Pages referencing the `_v2` tables via `Deploy AirTrust`.
+- **Zero-downtime deploy & transition sync**:
+  1. Legacy-to-`_v2` `AFTER INSERT` / `AFTER UPDATE` / `AFTER DELETE` triggers created in `0586` mirror any writes performed by the previous Worker (or compatible legacy relink executors before V18 divergence) directly into `_v2` during the transition window, preventing lost writes between applying `0586` and deploying the new Worker.
+  2. Merge code & apply `0586` via `Apply Schema Change V2` while the current Worker continues reading/writing the original tables without interruption.
+  3. Deploy the updated Worker & Pages referencing the `_v2` tables via `Deploy AirTrust`. Once the updated Worker writes to `_v2`, legacy relink executors fail closed on `_v2` divergence.
 
 ## Verification & Recovery
 - Automated SQLite tests verify additive creation, backfill fidelity (exact IDs, `substituido_por_id` self-FKs, link and audit counts), check constraints (`modelo_aeronave_id IS NULL` allowed strictly for `INSTRUTOR`/`EXAMINADOR` and rejected for aircraft programs), unique active index with `COALESCE(modelo_aeronave_id, -1)`, and idempotency.

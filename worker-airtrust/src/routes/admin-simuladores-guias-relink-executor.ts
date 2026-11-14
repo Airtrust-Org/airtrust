@@ -25,6 +25,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
+import { assertNoV2GuideDivergence } from '../lib/guias-instrutor/legacy-v2-guard';
 import {
   buildGuiaRelinkPlan,
   buildGuiaRelinkFingerprint,
@@ -148,6 +149,7 @@ app.post('/dry-run', async (c) => {
 
     const db = c.env.DB;
     await assertMigrationPresent(db);
+    await assertNoV2GuideDivergence(db, empresaId, fail);
     const { entries, byAircraft, fingerprint } = await computePlan(db, empresaId, versaoMatriz);
 
     return c.json({
@@ -191,6 +193,7 @@ app.post('/apply', async (c) => {
 
     const db = c.env.DB;
     await assertMigrationPresent(db);
+    await assertNoV2GuideDivergence(db, empresaId, fail);
 
     const existing = (
       await db
@@ -254,6 +257,7 @@ app.post('/rollback', async (c) => {
 
     const db = c.env.DB;
     await assertMigrationPresent(db);
+    await assertNoV2GuideDivergence(db, empresaId, fail);
 
     const relink = (
       await db

@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-14",
     "last_reconciled_against": "0586 instructor guides _v2 schema for PTO Rev.10 V18 (10 programs + nullable modelo_aeronave_id); reviewed production apply pending",
-    "schema_v2_digest": "d8e012630617b6f549df7c412073736af21a76d4f4863af3636a3b5a5c2b2c85",
+    "schema_v2_digest": "356c03d25c8fae2b36f8dee29faf0c3a8791063ce87b7b3e03bd23c4a1b078bd",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1858,11 +1858,14 @@
     {
       "change_file": "0586_simuladores_guias_instrutor_v18.sql",
       "change_id": "simuladores-guias-instrutor-v18-0586",
-      "sha256": "a1eb04a3556aa9a2c5067d776ee0469a483abee2845ddd15ad3d76dab3b8ca42",
+      "sha256": "e09ace7bc2a95bb9804042875ca2fe30532e43d1db18b11ebf94b5c2d236f163",
       "targets": [
+        "simuladores_guias_instrutor",
+        "simuladores_guias_instrutor_auditoria",
+        "simuladores_guias_instrutor_auditoria_v2",
         "simuladores_guias_instrutor_v2",
-        "simuladores_modelos_sessao_guias_v2",
-        "simuladores_guias_instrutor_auditoria_v2"
+        "simuladores_modelos_sessao_guias",
+        "simuladores_modelos_sessao_guias_v2"
       ],
       "domain": "Simulators: additive _v2 instructor guide, link, and audit tables supporting all 10 PTO Rev.10 V18 programs and nullable modelo_aeronave_id for functional INSTRUTOR/EXAMINADOR guides",
       "coverage": "OUT_OF_CONTRACT_SCOPE",

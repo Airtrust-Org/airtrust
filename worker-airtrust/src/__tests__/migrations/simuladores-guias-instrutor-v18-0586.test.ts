@@ -128,9 +128,12 @@ describe('Schema V2 0586 — simuladores_guias_instrutor_v2', () => {
     expect(entry).toMatchObject({
       sha256: hash(sql),
       targets: [
-        'simuladores_guias_instrutor_v2',
-        'simuladores_modelos_sessao_guias_v2',
+        'simuladores_guias_instrutor',
+        'simuladores_guias_instrutor_auditoria',
         'simuladores_guias_instrutor_auditoria_v2',
+        'simuladores_guias_instrutor_v2',
+        'simuladores_modelos_sessao_guias',
+        'simuladores_modelos_sessao_guias_v2',
       ],
       coverage: 'OUT_OF_CONTRACT_SCOPE',
       governance_state: 'REMOTE_APPLY_PENDING',
@@ -222,6 +225,73 @@ describe('Schema V2 0586 — simuladores_guias_instrutor_v2', () => {
           )
           .run(),
       ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('sincroniza escritas legadas pós-backfill durante a janela de transição até o cutover do Worker', () => {
+    const db = new DatabaseSync(':memory:');
+    try {
+      bootstrapLegacyTables(db);
+      db.exec(read(sqlPath));
+
+      // Simula Worker anterior escrevendo APÓS o backfill 0586 e ANTES do cutover:
+      // 1) Desativa guia legado 20 e cria novo guia legado 30 + vínculo + auditoria
+      db.prepare(
+        `UPDATE simuladores_guias_instrutor
+         SET status = 'INATIVO', updated_by = 9, updated_at = '2026-11-14T22:00:00Z'
+         WHERE id = 20`,
+      ).run();
+
+      db.prepare(
+        `INSERT INTO simuladores_guias_instrutor
+           (id, empresa_id, modelo_aeronave_id, programa, sessao_numero, sessao_total, codigo, titulo, versao, status, created_by)
+         VALUES (30, 6, 5, 'CHECK', 1, 1, 'A139-CHK-01', 'Check AW139 Pós-Backfill', '2.0', 'ATIVO', 9)`,
+      ).run();
+
+      db.prepare(
+        `UPDATE simuladores_modelos_sessao_guias
+         SET deleted_at = '2026-11-14T22:00:00Z'
+         WHERE id = 51`,
+      ).run();
+
+      db.prepare(
+        `INSERT INTO simuladores_modelos_sessao_guias
+           (id, empresa_id, modelo_sessao_id, guia_id, principal, ordem)
+         VALUES (52, 6, 100, 30, 1, 1)`,
+      ).run();
+
+      db.prepare(
+        `INSERT INTO simuladores_guias_instrutor_auditoria
+           (id, empresa_id, guia_id, usuario_id, acao, valores_novos)
+         VALUES (100, 6, 30, 9, 'CRIACAO', '{"codigo":"A139-CHK-01"}')`,
+      ).run();
+
+      const v2Twenty = db
+        .prepare('SELECT status, updated_by FROM simuladores_guias_instrutor_v2 WHERE id = 20')
+        .get() as { status: string; updated_by: number };
+      expect(v2Twenty).toEqual({ status: 'INATIVO', updated_by: 9 });
+
+      const v2Thirty = db
+        .prepare('SELECT id, codigo, status FROM simuladores_guias_instrutor_v2 WHERE id = 30')
+        .get() as { id: number; codigo: string; status: string };
+      expect(v2Thirty).toEqual({ id: 30, codigo: 'A139-CHK-01', status: 'ATIVO' });
+
+      const oldLink = db
+        .prepare('SELECT deleted_at FROM simuladores_modelos_sessao_guias_v2 WHERE id = 51')
+        .get() as { deleted_at: string | null };
+      expect(oldLink.deleted_at).toBe('2026-11-14T22:00:00Z');
+
+      const newLink = db
+        .prepare('SELECT modelo_sessao_id, guia_id FROM simuladores_modelos_sessao_guias_v2 WHERE id = 52')
+        .get() as { modelo_sessao_id: number; guia_id: number };
+      expect(newLink).toEqual({ modelo_sessao_id: 100, guia_id: 30 });
+
+      const auditNew = db
+        .prepare('SELECT guia_id, acao FROM simuladores_guias_instrutor_auditoria_v2 WHERE id = 100')
+        .get() as { guia_id: number; acao: string };
+      expect(auditNew).toEqual({ guia_id: 30, acao: 'CRIACAO' });
     } finally {
       db.close();
     }

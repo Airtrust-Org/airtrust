@@ -162,3 +162,148 @@ SELECT
   id, empresa_id, guia_id, usuario_id, acao, valores_anteriores, valores_novos, created_at
 FROM simuladores_guias_instrutor_auditoria
 ORDER BY id;
+
+-- Triggers de transição legado -> _v2: garantem zero perda de escrita caso o Worker
+-- anterior (ou executores legados compatíveis) escreva nas tabelas originais entre
+-- o apply da mudança 0586 e o cutover para o Worker atualizado.
+CREATE TRIGGER IF NOT EXISTS trg_guias_instrutor_legacy_sync_insert
+AFTER INSERT ON simuladores_guias_instrutor
+BEGIN
+  INSERT INTO simuladores_guias_instrutor_v2 (
+    id, empresa_id, modelo_aeronave_id, programa, ciclo, sessao_numero, sessao_total,
+    codigo, titulo, descricao, versao, status,
+    html_r2_key, html_nome, html_mime_type, html_tamanho_bytes, html_sha256, html_status_validacao,
+    pdf_r2_key, pdf_nome, pdf_mime_type, pdf_tamanho_bytes, pdf_sha256,
+    substituido_por_id, publicado_em, created_by, updated_by, created_at, updated_at, deleted_at
+  ) VALUES (
+    NEW.id, NEW.empresa_id, NEW.modelo_aeronave_id, NEW.programa, NEW.ciclo, NEW.sessao_numero, NEW.sessao_total,
+    NEW.codigo, NEW.titulo, NEW.descricao, NEW.versao, NEW.status,
+    NEW.html_r2_key, NEW.html_nome, NEW.html_mime_type, NEW.html_tamanho_bytes, NEW.html_sha256, NEW.html_status_validacao,
+    NEW.pdf_r2_key, NEW.pdf_nome, NEW.pdf_mime_type, NEW.pdf_tamanho_bytes, NEW.pdf_sha256,
+    NEW.substituido_por_id, NEW.publicado_em, NEW.created_by, NEW.updated_by, NEW.created_at, NEW.updated_at, NEW.deleted_at
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    empresa_id = excluded.empresa_id,
+    modelo_aeronave_id = excluded.modelo_aeronave_id,
+    programa = excluded.programa,
+    ciclo = excluded.ciclo,
+    sessao_numero = excluded.sessao_numero,
+    sessao_total = excluded.sessao_total,
+    codigo = excluded.codigo,
+    titulo = excluded.titulo,
+    descricao = excluded.descricao,
+    versao = excluded.versao,
+    status = excluded.status,
+    html_r2_key = excluded.html_r2_key,
+    html_nome = excluded.html_nome,
+    html_mime_type = excluded.html_mime_type,
+    html_tamanho_bytes = excluded.html_tamanho_bytes,
+    html_sha256 = excluded.html_sha256,
+    html_status_validacao = excluded.html_status_validacao,
+    pdf_r2_key = excluded.pdf_r2_key,
+    pdf_nome = excluded.pdf_nome,
+    pdf_mime_type = excluded.pdf_mime_type,
+    pdf_tamanho_bytes = excluded.pdf_tamanho_bytes,
+    pdf_sha256 = excluded.pdf_sha256,
+    substituido_por_id = excluded.substituido_por_id,
+    publicado_em = excluded.publicado_em,
+    created_by = excluded.created_by,
+    updated_by = excluded.updated_by,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at,
+    deleted_at = excluded.deleted_at;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_guias_instrutor_legacy_sync_update
+AFTER UPDATE ON simuladores_guias_instrutor
+BEGIN
+  UPDATE simuladores_guias_instrutor_v2
+  SET
+    empresa_id = NEW.empresa_id,
+    modelo_aeronave_id = NEW.modelo_aeronave_id,
+    programa = NEW.programa,
+    ciclo = NEW.ciclo,
+    sessao_numero = NEW.sessao_numero,
+    sessao_total = NEW.sessao_total,
+    codigo = NEW.codigo,
+    titulo = NEW.titulo,
+    descricao = NEW.descricao,
+    versao = NEW.versao,
+    status = NEW.status,
+    html_r2_key = NEW.html_r2_key,
+    html_nome = NEW.html_nome,
+    html_mime_type = NEW.html_mime_type,
+    html_tamanho_bytes = NEW.html_tamanho_bytes,
+    html_sha256 = NEW.html_sha256,
+    html_status_validacao = NEW.html_status_validacao,
+    pdf_r2_key = NEW.pdf_r2_key,
+    pdf_nome = NEW.pdf_nome,
+    pdf_mime_type = NEW.pdf_mime_type,
+    pdf_tamanho_bytes = NEW.pdf_tamanho_bytes,
+    pdf_sha256 = NEW.pdf_sha256,
+    substituido_por_id = NEW.substituido_por_id,
+    publicado_em = NEW.publicado_em,
+    created_by = NEW.created_by,
+    updated_by = NEW.updated_by,
+    created_at = NEW.created_at,
+    updated_at = NEW.updated_at,
+    deleted_at = NEW.deleted_at
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_guias_instrutor_legacy_sync_delete
+AFTER DELETE ON simuladores_guias_instrutor
+BEGIN
+  DELETE FROM simuladores_guias_instrutor_v2 WHERE id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_modelos_sessao_guias_legacy_sync_insert
+AFTER INSERT ON simuladores_modelos_sessao_guias
+BEGIN
+  INSERT INTO simuladores_modelos_sessao_guias_v2 (
+    id, empresa_id, modelo_sessao_id, guia_id, principal, ordem, created_at, updated_at, deleted_at
+  ) VALUES (
+    NEW.id, NEW.empresa_id, NEW.modelo_sessao_id, NEW.guia_id, NEW.principal, NEW.ordem, NEW.created_at, NEW.updated_at, NEW.deleted_at
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    empresa_id = excluded.empresa_id,
+    modelo_sessao_id = excluded.modelo_sessao_id,
+    guia_id = excluded.guia_id,
+    principal = excluded.principal,
+    ordem = excluded.ordem,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at,
+    deleted_at = excluded.deleted_at;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_modelos_sessao_guias_legacy_sync_update
+AFTER UPDATE ON simuladores_modelos_sessao_guias
+BEGIN
+  UPDATE simuladores_modelos_sessao_guias_v2
+  SET
+    empresa_id = NEW.empresa_id,
+    modelo_sessao_id = NEW.modelo_sessao_id,
+    guia_id = NEW.guia_id,
+    principal = NEW.principal,
+    ordem = NEW.ordem,
+    created_at = NEW.created_at,
+    updated_at = NEW.updated_at,
+    deleted_at = NEW.deleted_at
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_modelos_sessao_guias_legacy_sync_delete
+AFTER DELETE ON simuladores_modelos_sessao_guias
+BEGIN
+  DELETE FROM simuladores_modelos_sessao_guias_v2 WHERE id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_guias_instrutor_auditoria_legacy_sync_insert
+AFTER INSERT ON simuladores_guias_instrutor_auditoria
+BEGIN
+  INSERT OR IGNORE INTO simuladores_guias_instrutor_auditoria_v2 (
+    id, empresa_id, guia_id, usuario_id, acao, valores_anteriores, valores_novos, created_at
+  ) VALUES (
+    NEW.id, NEW.empresa_id, NEW.guia_id, NEW.usuario_id, NEW.acao, NEW.valores_anteriores, NEW.valores_novos, NEW.created_at
+  );
+END;

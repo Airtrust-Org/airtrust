@@ -2,7 +2,7 @@
   "changeId": "simuladores-guias-instrutor-v18-0586",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0586_simuladores_guias_instrutor_v18.sql",
-  "fileHash": "a1eb04a3556aa9a2c5067d776ee0469a483abee2845ddd15ad3d76dab3b8ca42",
+  "fileHash": "e09ace7bc2a95bb9804042875ca2fe30532e43d1db18b11ebf94b5c2d236f163",
   "planPath": "worker-airtrust/schema-v2/plans/simuladores-guias-instrutor-v18-0586.md",
-  "planHash": "1d0f1fbfab0edee5ce48f89a927071c828dd181ff62ebb09ce481b3ccd63de7a"
+  "planHash": "d6969038f4640fed3a8c4aa9c59be5ad8e2ca8bf39cc2840a55bf6de170a309b"
 }

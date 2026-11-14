@@ -89,7 +89,11 @@ function NovoGuiaForm({ onCriado }: { onCriado: () => void }) {
     setErro(null);
     try {
       await postJson('/simuladores/guias-instrutor', {
-        modelo_aeronave_id: form.modelo_aeronave_id ? Number(form.modelo_aeronave_id) : null,
+        modelo_aeronave_id: programaFuncional
+          ? null
+          : form.modelo_aeronave_id
+            ? Number(form.modelo_aeronave_id)
+            : null,
         programa: form.programa,
         ciclo: form.ciclo ? Number(form.ciclo) : null,
         sessao_numero: form.sessao_numero ? Number(form.sessao_numero) : null,
@@ -112,13 +116,16 @@ function NovoGuiaForm({ onCriado }: { onCriado: () => void }) {
       <h2 className="text-sm font-semibold mb-3">Cadastrar novo guia (rascunho)</h2>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Select
-          value={form.modelo_aeronave_id}
+          aria-label="Aeronave"
+          value={programaFuncional ? '' : form.modelo_aeronave_id}
           onChange={(e) => setForm((f) => ({ ...f, modelo_aeronave_id: e.target.value }))}
+          disabled={programaFuncional}
           required={!programaFuncional}
           placeholder={programaFuncional ? 'Funcional (INST/EXA) — sem aeronave' : 'Aeronave…'}
           options={(aeronaves || []).map((a) => ({ value: String(a.id), label: a.nome }))}
         />
         <Select
+          aria-label="Programa"
           value={form.programa}
           onChange={(e) => {
             const programa = e.target.value;

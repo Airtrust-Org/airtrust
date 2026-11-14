@@ -32,6 +32,7 @@ import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getTenantContext } from '../middleware/tenant';
+import { assertNoV2GuideDivergence } from '../lib/guias-instrutor/legacy-v2-guard';
 import { discoverRemediationTargets, buildRemediationApplyStatements, buildRemediationRollbackStatements } from '../../scripts/lib/matriz-remediation-core.mjs';
 import type { RemediationLinkRow } from '../../scripts/lib/matriz-remediation-core.mjs';
 import { assertRemediationPlanIntegrity, buildRemediationFingerprint } from '../../scripts/lib/matriz-remediation-plan.mjs';
@@ -235,6 +236,7 @@ app.post('/dry-run', async (c) => {
     const plan = await c.req.json<RemediationPlan>();
     const db = c.env.DB;
     await assertMigrationPresent(db);
+    await assertNoV2GuideDivergence(db, empresaId, fail);
 
     const inflight = await db
       .prepare(`SELECT remediation_uuid FROM simuladores_matriz_remediations WHERE empresa_id=?1 AND versao_matriz=?2 AND status='APPLYING'`)
@@ -273,6 +275,7 @@ app.post('/apply', async (c) => {
     const plan = await c.req.json<RemediationPlan>();
     const db = c.env.DB;
     await assertMigrationPresent(db);
+    await assertNoV2GuideDivergence(db, empresaId, fail);
 
     const existing = (
       await db
@@ -412,6 +415,7 @@ app.post('/rollback', async (c) => {
     if (!remediationUuid) fail('remediation_uuid obrigatório');
 
     const db = c.env.DB;
+    await assertNoV2GuideDivergence(db, empresaId, fail);
     const remediation = (
       await db.prepare('SELECT * FROM simuladores_matriz_remediations WHERE remediation_uuid=?1 AND empresa_id=?2').bind(remediationUuid, empresaId).all<Record<string, unknown>>()
     ).results?.[0];
