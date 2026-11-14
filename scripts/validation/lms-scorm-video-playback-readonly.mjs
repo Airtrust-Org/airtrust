@@ -55,6 +55,29 @@ export async function startRealVisibleVideo(frame){
 
 
 /**
+ * Count authored video-bearing slides from the actual loaded SCORM edition.
+ * This is read-only media inventory, never an assessment answer or a CMI gate.
+ * One slide counts once even when the ZIP repeats that media in body/metadata.
+ */
+export function countAuthoredVideoSlides(slides) {
+  if (!Array.isArray(slides)) return 0;
+  const videoUrl = /\.(?:mp4|webm|mov)(?:[?#].*)?$/i;
+  const isVideo = (entry) => {
+    if (typeof entry === 'string') return videoUrl.test(entry);
+    if (Array.isArray(entry)) return entry.some(isVideo);
+    if (entry && typeof entry === 'object') {
+      return [entry.src, entry.url, entry.href].some((value) =>
+        typeof value === 'string' && videoUrl.test(value));
+    }
+    return false;
+  };
+  return Math.min(500, slides.filter((slide) => (
+    isVideo(slide?.media) || isVideo(slide?.primaryMedia) ||
+    isVideo(slide?.assets)
+  )).length);
+}
+
+/**
  * Focused read-only SCORM certification must budget for authored video playback
  * AND the remainder of the course. The first observed video is only a lower
  * bound: later slides can include more real video lessons. Grant extra time,
@@ -67,6 +90,7 @@ export function computeFocusedCourseBudgetMs({
   slideCount = 0,
   requiredInteractions = 0,
   observedVideoSeconds = 0,
+  authoredVideoSlides = 0,
 } = {}) {
   const safeCount = (value, maximum) => {
     const count = Number(value);
@@ -77,6 +101,7 @@ export function computeFocusedCourseBudgetMs({
   const slides = safeCount(slideCount, 500);
   const interactions = safeCount(requiredInteractions, 20);
   const observedSeconds = safeCount(observedVideoSeconds, 600);
+  const videoSlides = safeCount(authoredVideoSlides, 500);
 
   // Ten seconds of overhead/reading per slide would be too generous for the
   // batch survey, but in focused mode eight seconds plus authored video is
@@ -84,8 +109,13 @@ export function computeFocusedCourseBudgetMs({
   const readingAndNavigationMs = slides * 8_000;
   const requiredInteractionsMs = interactions * 50_000;
   const knownVideoMs = observedSeconds * 1_000;
+  // Budget for ALL authored video-bearing slides. The first video observed
+  // during the 7s suspend probe is not the total duration of a 50-slide course.
+  // 180s per authored video is an upper-bound allowance, not a playback skip.
+  const remainingVideoAllowanceMs = videoSlides * 180_000;
   return Math.min(
-    1_200_000,
-    Math.max(180_000, 180_000 + readingAndNavigationMs + requiredInteractionsMs + knownVideoMs),
+    3_600_000,
+    Math.max(180_000, 180_000 + readingAndNavigationMs +
+      requiredInteractionsMs + knownVideoMs + remainingVideoAllowanceMs),
   );
 }

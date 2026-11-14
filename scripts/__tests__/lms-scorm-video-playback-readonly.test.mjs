@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readVisibleVideo,startRealVisibleVideo,computeFocusedCourseBudgetMs}
+import {readVisibleVideo,startRealVisibleVideo,computeFocusedCourseBudgetMs,countAuthoredVideoSlides}
   from '../validation/lms-scorm-video-playback-readonly.mjs';
 
 function fixture({clickStarts=true,playStarts=true,visible=true,paused=true,ended=false,readyState=4}={}){
@@ -74,5 +74,30 @@ test('focused budget is finite and bounded for malformed or huge manifests',()=>
   }),180_000);
   assert.equal(computeFocusedCourseBudgetMs({
     slideCount:5000, requiredInteractions:999, observedVideoSeconds:99999,
-  }),1_200_000);
+  }),3_600_000);
+});
+
+test('authored media inventory counts unique video-bearing slides, never answers',()=>{
+  assert.equal(countAuthoredVideoSlides(null),0);
+  assert.equal(countAuthoredVideoSlides([
+    {media:'media/a.mp4',originalContent:{media:[{src:'media/a.mp4'}]}},
+    {media:'media/b.webm?source=course'},
+    {media:{src:'media/c.mov'}},
+    {media:'media/c.png'},
+    {media:null},
+    {media:['media/d.jpg','media/d.mp4']},
+  ]),4);
+});
+
+test('50-slide course with 12 actual video lessons gets enough wall-clock budget',()=>{
+  // Active Offshore #7 SHA 2ffde6c8... has 12 distinct video-bearing
+  // lessons; their video durations alone total 1074.4s. The earlier 20min
+  // cap cannot validate real-time playback plus navigation. No skipping.
+  assert.equal(computeFocusedCourseBudgetMs({
+    slideCount:50,requiredInteractions:0,
+    observedVideoSeconds:109.088,authoredVideoSlides:12,
+  }),2_850_000);
+  assert.equal(computeFocusedCourseBudgetMs({
+    slideCount:50,authoredVideoSlides:999999,
+  }),3_600_000);
 });
