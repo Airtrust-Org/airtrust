@@ -10,7 +10,12 @@ describe('frontend initial-load budget preconditions', () => {
   it('loads Material Symbols from one source, without a second network stylesheet', () => {
     const main = read('src/react-app/main.tsx');
     const index = read('index.html');
-    expect(main).toContain("import 'material-symbols/outlined.css';");
+    expect(main).not.toContain("import 'material-symbols/outlined.css';");
+    expect(read('src/components/ui/Button.tsx')).toContain("import 'material-symbols/outlined.css';");
+    expect(read('src/components/ui/Modal.tsx')).toContain("import 'material-symbols/outlined.css';");
+    expect(read('src/components/ui/Form.tsx')).toContain("import 'material-symbols/outlined.css';");
+    expect(read('src/components/ui/DataTable.tsx')).toContain("import 'material-symbols/outlined.css';");
+    expect(read('src/react-app/pages/LoginSimple.tsx')).not.toContain("../../components/ui/Button");
     expect(index).not.toContain('family=Material+Symbols+Outlined');
     expect(index).toContain('family=Inter');
     expect(read('src/react-app/index.css')).not.toContain("@import url('https://fonts.googleapis.com/css2?family=Inter:");

@@ -8,8 +8,7 @@ import '@/react-app/index.css';
 import '@/react-app/styles/semantic-theme.css';
 import '@/react-app/styles/native-theme-controls.css';
 import '@/react-app/styles/responsive-navigation.css';
-// Material Symbols font — local bundle (removes CDN dependency)
-import 'material-symbols/outlined.css';
+// Icon font is deferred to the authenticated legacy UI components that render glyphs.
 // Service Worker descomissionado: mantemos apenas limpeza de runtime legado
 import { registerServiceWorker } from '@/lib/sw-manager';
 import { installGlobalApiFetch } from '@/react-app/lib/apiFetch';
