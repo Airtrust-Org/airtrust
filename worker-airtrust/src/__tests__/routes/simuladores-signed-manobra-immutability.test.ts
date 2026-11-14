@@ -47,7 +47,8 @@ function query(caseSql: string): Array<{ ficha_id: number; ordem: number; result
     const setup = `
       CREATE TABLE fichas_sessao (
         id INTEGER PRIMARY KEY, empresa_id INTEGER, deleted_at TEXT,
-        assinatura_instrutor_timestamp TEXT, assinatura_instrutor INTEGER
+        assinatura_instrutor_timestamp TEXT, assinatura_instrutor INTEGER,
+        assinatura_aluno_timestamp TEXT, assinatura_tripulante INTEGER
       );
       CREATE TABLE fichas_sessao_manobras (
         id INTEGER PRIMARY KEY, ficha_id INTEGER, ordem INTEGER,
@@ -55,11 +56,13 @@ function query(caseSql: string): Array<{ ficha_id: number; ordem: number; result
         resultado TEXT, observacoes TEXT, nome TEXT, tripulante TEXT, updated_at TEXT, deleted_at TEXT
       );
       INSERT INTO fichas_sessao VALUES
-        (1,6,NULL,NULL,0),
-        (2,6,NULL,'2026-11-12T12:00:00Z',1),
-        (3,7,NULL,NULL,0),
-        (4,6,NULL,NULL,1),
-        (5,6,'2026-11-12',NULL,0);
+        (1,6,NULL,NULL,0,NULL,0),
+        (2,6,NULL,'2026-11-12T12:00:00Z',1,NULL,0),
+        (3,7,NULL,NULL,0,NULL,0),
+        (4,6,NULL,NULL,1,NULL,0),
+        (5,6,'2026-11-12',NULL,0,NULL,0),
+        (6,6,NULL,NULL,0,'2026-11-12T12:00:00Z',0),
+        (7,6,NULL,NULL,0,NULL,1);
       INSERT INTO fichas_sessao_manobras
         (ficha_id,ordem,codigo,descricao,categoria,resultado,observacoes)
       VALUES
@@ -67,7 +70,9 @@ function query(caseSql: string): Array<{ ficha_id: number; ordem: number; result
         (2,1,'T01','Item 1','TECNICA','6','original'),
         (3,1,'T01','Item 1','TECNICA','6','original'),
         (4,1,'T01','Item 1','TECNICA','6','original'),
-        (5,1,'T01','Item 1','TECNICA','6','original');
+        (5,1,'T01','Item 1','TECNICA','6','original'),
+        (6,1,'T01','Item 1','TECNICA','6','original'),
+        (7,1,'T01','Item 1','TECNICA','6','original');
     `;
     const run = spawnSync('sqlite3', ['-bail', db], {
       input: setup + caseSql,
@@ -96,6 +101,8 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
       expect(statement).toContain('f.deleted_at IS NULL');
       expect(statement).toContain('f.assinatura_instrutor_timestamp IS NULL');
       expect(statement).toMatch(/COALESCE\(f\.assinatura_instrutor,\s*0\)\s*=\s*0/);
+      expect(statement).toContain('f.assinatura_aluno_timestamp IS NULL');
+      expect(statement).toMatch(/COALESCE\(f\.assinatura_tripulante,\s*0\)\s*=\s*0/);
     }
   });
 
@@ -106,12 +113,14 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
       bind(update, ['5','edited-other-tenant',3,1,3,6]),
       bind(update, ['5','edited-sign-flag',4,1,4,6]),
       bind(update, ['5','edited-deleted',5,1,5,6]),
+      bind(update, ['5','edited-student-timestamp',6,1,6,6]),
+      bind(update, ['5','edited-student-flag',7,1,7,6]),
       bind(update, ['7','edited-valid',1,1,1,6]),
     ].join('\n');
     const rows = query(sql);
     expect(rows.filter((row) => row.resultado === '5')).toHaveLength(0);
     expect(rows.find((row) => row.ficha_id === 1)?.resultado).toBe('7');
-    for (const id of [2,3,4,5]) {
+    for (const id of [2,3,4,5,6,7]) {
       expect(rows.find((row) => row.ficha_id === id)?.resultado).toBe('6');
     }
   });
@@ -125,6 +134,8 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
       bind(inserts[1], values(3)),
       bind(inserts[0], values(4)),
       bind(inserts[1], values(5)),
+      bind(inserts[0], values(6)),
+      bind(inserts[1], values(7)),
       bind(inserts[0], values(1)),
     ].join('\n');
     const rows = query(sql);
@@ -141,6 +152,9 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     expect(populateInsert[0]).toContain('f.empresa_id = ?');
     expect(populateInsert[0]).toContain('f.assinatura_instrutor_timestamp IS NULL');
     expect(populateInsert[0]).toMatch(/COALESCE\(f\.assinatura_instrutor,\s*0\)\s*=\s*0/);
+    expect(populateRoute).toContain('FICHA_STUDENT_SIGNED');
+    expect(populateInsert[0]).toContain('f.assinatura_aluno_timestamp IS NULL');
+    expect(populateInsert[0]).toMatch(/COALESCE\(f\.assinatura_tripulante,\s*0\)\s*=\s*0/);
   });
 
   it.skipIf(!sqliteAvailable)('batch population does not insert after signature or across tenants', () => {
@@ -152,6 +166,8 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
       bind(populateInsert[0], values(3)),
       bind(populateInsert[0], values(4)),
       bind(populateInsert[0], values(5)),
+      bind(populateInsert[0], values(6)),
+      bind(populateInsert[0], values(7)),
       bind(populateInsert[0], values(1)),
     ].join('\n'));
     expect(rows.filter((row) => row.ordem === 3)).toEqual([
@@ -159,7 +175,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     ]);
   });
 
-  it.skipIf(!sqliteAvailable)('rejects a signature inserted between read and guarded DML', () => {
+  it.skipIf(!sqliteAvailable)('rejects an instructor signature inserted between read and guarded DML', () => {
     const sql = [
       "UPDATE fichas_sessao SET assinatura_instrutor_timestamp='2026-11-13T12:00:00Z', assinatura_instrutor=1 WHERE id=1;",
       bind(updates[0], ['5','late-edit',1,1,1,6]),
@@ -168,5 +184,17 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     const rows = query(sql);
     expect(rows.find((row) => row.ficha_id === 1 && row.ordem === 1)?.resultado).toBe('6');
     expect(rows.some((row) => row.ficha_id === 1 && row.ordem === 3)).toBe(false);
+  });
+
+  it.skipIf(!sqliteAvailable)('rejects a student signature inserted between read and guarded DML', () => {
+    const sql = [
+      "UPDATE fichas_sessao SET assinatura_aluno_timestamp='2026-11-13T12:00:00Z', assinatura_tripulante=1 WHERE id=1;",
+      bind(updates[0], ['5','late-student-edit',1,1,1,6]),
+      bind(inserts[1], [1,'T03','Item 3','TECNICA',3,'5','late-student-insert',1,6]),
+      bind(populateInsert[0], [1, 'T04', 'Technical', 'Item 4', 'TECNICA', 4, 'AB', 1, 6]),
+    ].join('\n');
+    const rows = query(sql);
+    expect(rows.find((row) => row.ficha_id === 1 && row.ordem === 1)?.resultado).toBe('6');
+    expect(rows.some((row) => row.ficha_id === 1 && (row.ordem === 3 || row.ordem === 4))).toBe(false);
   });
 });
