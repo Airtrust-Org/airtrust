@@ -31,6 +31,7 @@ interface Props {
   escalaLabel: string;
   cobertura: CoberturaSummary;
   totalConflitos: number;
+  conflitosVerificados: boolean;
   totalAlocacoes: number;
   /** Número atual da revisão (só relevante em modo='revisao') */
   numeroRevisaoAtual?: number;
@@ -75,6 +76,7 @@ export default function ModalPublicarEscala({
   escalaLabel,
   cobertura,
   totalConflitos,
+  conflitosVerificados,
   totalAlocacoes,
   numeroRevisaoAtual = 0,
   onConfirmar,
@@ -88,12 +90,13 @@ export default function ModalPublicarEscala({
   const proximaRevisao = numeroRevisaoAtual + 1;
 
   const coberturaOk = cobertura.livres === 0;
-  const conflitosOk = totalConflitos === 0;
+  const conflitosOk = conflitosVerificados && totalConflitos === 0;
   const temAlocacoes = totalAlocacoes > 0;
 
-  const podePublicar = !loading && (isRevisao ? confirmado : true);
+  const podePublicar = !loading && conflitosVerificados && (isRevisao ? confirmado : true);
 
   async function handleConfirmar() {
+    if (!conflitosVerificados) return;
     setLoading(true);
     try {
       await onConfirmar(justificativa.trim() || undefined);
@@ -177,7 +180,7 @@ export default function ModalPublicarEscala({
                 <p
                   className={`text-lg font-bold ${totalConflitos > 0 ? 'text-red-700' : 'text-slate-400'}`}
                 >
-                  {totalConflitos}
+                  {conflitosVerificados ? totalConflitos : '—'}
                 </p>
                 <p className={`text-[11px] ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                   Conflitos
@@ -260,12 +263,16 @@ export default function ModalPublicarEscala({
                 label={
                   conflitosOk
                     ? 'Sem conflitos de escala detectados'
+                    : !conflitosVerificados
+                      ? 'Verificação de conflitos indisponível'
                     : `${totalConflitos} conflito(s) de escala ativo(s)`
                 }
                 detalhe={
-                  !conflitosOk
-                    ? 'Verifique os conflitos antes de publicar para evitar problemas operacionais.'
-                    : undefined
+                  !conflitosVerificados
+                    ? 'Não foi possível concluir a checagem operacional. Recarregue a escala; a publicação fica bloqueada.'
+                    : !conflitosOk
+                      ? 'Verifique os conflitos antes de publicar para evitar problemas operacionais.'
+                      : undefined
                 }
               />
             </div>
@@ -290,7 +297,7 @@ export default function ModalPublicarEscala({
               </div>
               <div className={`rounded-xl p-2 ${totalConflitos > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
                 <p className={`text-base font-bold ${totalConflitos > 0 ? 'text-red-700' : 'text-slate-400'}`}>
-                  {totalConflitos}
+                  {conflitosVerificados ? totalConflitos : '—'}
                 </p>
                 <p className={`text-[10px] leading-tight ${totalConflitos > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                   Conflitos
