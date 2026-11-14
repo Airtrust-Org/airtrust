@@ -37,6 +37,14 @@ function createMockDb(handlers: Array<[string, QueryHandler]>) {
   const calls: Array<{ query: string; args: unknown[]; method: 'first' | 'run' | 'all' }> = [];
 
   const db = {
+    // D1.batch is transactional in production; this mock deliberately
+    // executes the same bound statements for call-contract assertions.
+    // True rollback is tested with SQLite in sgso-relatos-atomic-core.sqlite.
+    batch: vi.fn(async (statements: D1PreparedStatement[]) => {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    }),
     prepare: vi.fn((query: string) => {
       const entry = handlers.find(([matcher]) => query.includes(matcher));
       if (!entry) {
