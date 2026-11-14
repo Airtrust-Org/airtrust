@@ -282,4 +282,7 @@ test('basePhasePass permits read-only completed reopen without redundant commit 
   assert.match(source, /rt-choice/);
   assert.match(source, /rt-case-choices/);
   assert.match(source, /data-opt/);
+  assert.match(source, /isCaseOrQuizChoice/);
+  assert.match(source, /!item\.isCaseOrQuizChoice/);
+  assert.match(source, /el\.closest\('\.rt-case-choices/);
 });

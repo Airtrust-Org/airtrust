@@ -448,8 +448,11 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
           retry.test(text) ||
           forwardId.test(id) ||
           /^(start|finish|submit|retry|iniciar|come[cç]ar|refazer|finalizar|concluir)/i.test(id);
-        const certifiableChoice = el.matches(
-          'button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],[data-scenario]',
+        const certifiableChoice = Boolean(
+          el.matches(
+            '.rt-choice,.case-choice,[data-opt],button.choice,button.answer,button.option,[data-quiz-choice],[data-module-quiz],[data-scenario]',
+          ) ||
+          el.closest('.rt-case-choices,.case-choices,.quiz-choices,[data-case-choices]')
         );
         // Learner answers remain course controls even when their visible text contains
         // words such as "anterior" or they live under a menu-named layout wrapper.
@@ -496,6 +499,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
             ariaPressed,
             ariaChecked,
             signature,
+            isCaseOrQuizChoice,
             multiToggle,
             chrome: isProductChrome(el, key),
           };
@@ -929,7 +933,7 @@ async function driveFrame(page, frame, answerPlan, untilMs, maxSteps = MAX_STEPS
         }
       }
 
-      const moduleRetry = items.find((item) => retry.test(item.key) && !/^resetbtn$/i.test(item.id));
+      const moduleRetry = items.find((item) => !item.isCaseOrQuizChoice && retry.test(item.key) && !/^resetbtn$/i.test(item.id));
       if (moduleRetry) {
         if (!allowAdaptiveRetry) return { type: 'retry-deferred' };
         const probe = prepareAdaptiveProbe();
@@ -1499,7 +1503,11 @@ async function captureVisibleControls(frame) {
       );
     };
     const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const classify = (text, id) => {
+    const classify = (text, id, el) => {
+      if (
+        el.matches('.rt-choice,.case-choice,[data-opt],[data-scenario],[data-quiz-choice],button.choice,button.option,button.answer') ||
+        el.closest('.rt-case-choices,.case-choices,.quiz-choices,[data-case-choices]')
+      ) return 'choice_or_other';
       if (/^(qnext|quiznext|next|nextbtn|btnnext|continue|continuebtn)$/i.test(id)) return 'next';
       if (/pr[oó]ximo|avan[cç]ar|continuar|prosseguir|next/.test(text)) return 'next';
       if (/confirmar|responder|enviar|verificar|submit/.test(text)) return 'submit';
@@ -1523,7 +1531,7 @@ async function captureVisibleControls(frame) {
           data_keys: Object.keys(el.dataset || {}).sort().slice(0, 12),
           aria_pressed: el.getAttribute('aria-pressed'),
           aria_checked: el.getAttribute('aria-checked'),
-          category: classify(text, id),
+          category: classify(text, id, el),
           disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true',
         };
       });
