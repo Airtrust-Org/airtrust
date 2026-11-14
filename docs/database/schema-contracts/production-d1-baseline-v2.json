@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-14",
-    "last_reconciled_against": "0584 AVSEC D1 Tripulantes-only reviewed; governed production apply pending",
-    "schema_v2_digest": "d074f66891f68df54312772e0ab88d93fc339258ba973470fcd078f7a7cd98e9",
+    "last_reconciled_against": "0585 DGR maintenance legacy model consolidation, data-only; reviewed production apply pending",
+    "schema_v2_digest": "399ded555f1f9a327fa54e6f130f87a79b603a7d31dd663c03c8027ad95d6d72",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1842,6 +1842,18 @@
       "reviewed_manifest": "avsec-competency-models-0584.json",
       "evidence": "worker-airtrust/schema-v2/plans/avsec-competency-models-0584.md",
       "note": "Data-only tenant 6 change. Keeps 31 AVSEC D1 tripulante histories, retires five non-tripulante/corporate requirements, detaches one notification FK and deletes the sole AVSEC corporate historical row. Requires exact SHA, eight release gates, D1 Time Travel, reviewed pre/postconditions and controlled production authorization; no remote write on merge."
+    },
+    {
+      "change_file": "0585_dgr_legacy_maintenance_consolidation.sql",
+      "change_id": "dgr-legacy-maintenance-consolidation-0585",
+      "sha256": "64e0e2e941bc6a0846730cb34b1b5eb22baf3745e713ea5b0fd2efb1ba3c927b",
+      "targets": [],
+      "domain": "Training Qualifications tenant 6: collapse DGR maintenance duplicate; preserve 2 inactive histories, segregate non-equivalent competence by profile",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "dgr-legacy-maintenance-consolidation-0585.json",
+      "evidence": "worker-airtrust/schema-v2/plans/dgr-legacy-maintenance-consolidation-0585.md",
+      "note": "Data-only tenant 6: D4 label aligned with ANAC terminology, 2 expired inactive histories linked to D4 with original snapshots, role-specific safeguard, Supervisor rule #220 retargeted, legacy model #137 soft-retired. 8 gates, SHA, D1 Time Travel, pre/post mandatory."
     }
   ]
 }
