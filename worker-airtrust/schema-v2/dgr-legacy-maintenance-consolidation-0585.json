@@ -2,7 +2,7 @@
   "changeId": "dgr-legacy-maintenance-consolidation-0585",
   "baselineId": "production-d1-baseline-v2-20260714",
   "filePath": "worker-airtrust/schema-v2/changes/0585_dgr_legacy_maintenance_consolidation.sql",
-  "fileHash": "64e0e2e941bc6a0846730cb34b1b5eb22baf3745e713ea5b0fd2efb1ba3c927b",
+  "fileHash": "07101f260b44ca9764aac4e2a95ee36c13468911e86a5dde2f263a1c32e28a40",
   "planPath": "worker-airtrust/schema-v2/plans/dgr-legacy-maintenance-consolidation-0585.md",
-  "planHash": "cc7379f841abebf3ffa29048451828647be0926210d60da017d2ee7c874dd603"
+  "planHash": "525c5d8fd00a7d280caa3173b01fad04cd4457b048a5dc4f7966d55189087b13"
 }

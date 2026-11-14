@@ -18,6 +18,8 @@ assert_count MNT-no-live-history 0 "SELECT COUNT(*) count FROM qualificacoes_his
 assert_count previously-deleted-preserved 1 "SELECT COUNT(*) count FROM qualificacoes_historico WHERE id=4649 AND empresa_id=6 AND qualificacao_id=137 AND deleted_at IS NOT NULL"
 assert_count maintenance-rule-separated 1 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE id=220 AND empresa_id=6 AND qualificacao_tipo_id=25 AND escopo='FUNCAO' AND funcao_id=36 AND perfil_competencia='PTAP_MNT_SUPRIMENTOS' AND obrigatoriedade='OBRIGATORIA' AND ativo=1 AND deleted_at IS NULL"
 assert_count MNT-no-active-rule 0 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=137 AND ativo=1 AND deleted_at IS NULL"
+assert_count D4-both-sector-links 2 "SELECT COUNT(*) count FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND deleted_at IS NULL AND ((id=27 AND tipo_id=25 AND setor_id=10) OR (id=16 AND tipo_id=25 AND setor_id=11));"
+assert_count no-legacy-sector-links 0 "SELECT COUNT(*) count FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND tipo_id=137 AND deleted_at IS NULL;"
 assert_count D4-seven-rules 7 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=25 AND id IN (220,492,493,494,495,496,497) AND ativo=1 AND deleted_at IS NULL"
 assert_count no-legacy-false-competence 0 "SELECT COUNT(*) count FROM qualificacoes_historico h JOIN treinamento_requisitos r ON r.qualificacao_tipo_id=h.qualificacao_id AND r.empresa_id=h.empresa_id AND r.id=220 WHERE h.id IN (4781,4782) AND h.perfil_competencia=r.perfil_competencia"
 assert_count fk-integrity 0 "SELECT COUNT(*) count FROM pragma_foreign_key_check"

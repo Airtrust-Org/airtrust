@@ -42,6 +42,18 @@ UPDATE treinamento_requisitos
    AND obrigatoriedade='OBRIGATORIA'
    AND ativo=1 AND deleted_at IS NULL;
 
+-- Preserve the actively managed Maintenance sector's visibility to the
+-- consolidated D4 model; the original Tripulacao sector link #27 remains.
+UPDATE qualificacoes_tipos_setores
+   SET tipo_id=25,updated_at=datetime('now')
+ WHERE id=16 AND empresa_id=6 AND tipo_id=137 AND setor_id=11
+   AND deleted_at IS NULL
+   AND NOT EXISTS (
+      SELECT 1 FROM qualificacoes_tipos_setores qts_d4
+       WHERE qts_d4.empresa_id=6 AND qts_d4.tipo_id=25 AND qts_d4.setor_id=11
+         AND qts_d4.deleted_at IS NULL
+   );
+
 -- Soft-retire duplicate model. The third, previously deleted history #4649
 -- and the audit trail continue to reference this retained model identity.
 UPDATE qualificacoes_tipos

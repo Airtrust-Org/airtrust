@@ -365,7 +365,7 @@
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-14",
     "last_reconciled_against": "0585 DGR maintenance legacy model consolidation, data-only; reviewed production apply pending",
-    "schema_v2_digest": "399ded555f1f9a327fa54e6f130f87a79b603a7d31dd663c03c8027ad95d6d72",
+    "schema_v2_digest": "66b5fadf6bda89685c68cd4c73aa99dfbfdf7c66cf9d18de4f2ecc16e38d04b1",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1846,7 +1846,7 @@
     {
       "change_file": "0585_dgr_legacy_maintenance_consolidation.sql",
       "change_id": "dgr-legacy-maintenance-consolidation-0585",
-      "sha256": "64e0e2e941bc6a0846730cb34b1b5eb22baf3745e713ea5b0fd2efb1ba3c927b",
+      "sha256": "07101f260b44ca9764aac4e2a95ee36c13468911e86a5dde2f263a1c32e28a40",
       "targets": [],
       "domain": "Training Qualifications tenant 6: collapse DGR maintenance duplicate; preserve 2 inactive histories, segregate non-equivalent competence by profile",
       "coverage": "OUT_OF_CONTRACT_SCOPE",

@@ -25,6 +25,7 @@ import {
 } from '../../services/qualificacoes-tipos-sync';
 import { invalidateMaterializedStats } from './shared';
 import { loadTipoListMetrics } from './tipos-list-metrics';
+import { appendQualificationTypeCatalogReadScope } from '../../services/qualificacoes/tipos-operational-read-scope';
 import {
   isEadCategoria,
   reconcileImportedEdappHistory,
@@ -41,7 +42,6 @@ import {
   resolveOperationalAccess,
   isValidOperationalDomain,
   resolveOperationalReadScope,
-  appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
 } from '../../middleware/operational-domain-access';
@@ -754,12 +754,13 @@ router.get(
         userId: Number((c.get as (k: string) => unknown)('userId') || 0),
         userRole: (c.get as (k: string) => unknown)('userRole'),
       });
-      appendOperationalReadFilter(conditions, bindings, readScope, {
-        domainColumn:
-          columnsSupport.hasCategoriaId && columnsSupport.hasDominioOverride
-            ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
-            : 'qc.dominio_codigo',
-      });
+      appendQualificationTypeCatalogReadScope(
+        conditions, bindings, readScope,
+        columnsSupport.hasDominioOverride
+          ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
+          : 'qc.dominio_codigo',
+        hasQualificacoesTiposSetores,
+      );
     }
 
     if (categoriaId > 0) {

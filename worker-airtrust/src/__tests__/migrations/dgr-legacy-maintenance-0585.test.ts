@@ -62,6 +62,11 @@ describe('DGR maintenance conservative consolidation 0585', () => {
           status TEXT,data_conclusao TEXT,data_vencimento TEXT,
           numero_certificado TEXT,deleted_at TEXT,updated_at TEXT
         );
+        CREATE TABLE qualificacoes_tipos_setores (
+          id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
+          tipo_id INTEGER REFERENCES qualificacoes_tipos(id),
+          setor_id INTEGER,deleted_at TEXT,updated_at TEXT
+        );
         CREATE TABLE treinamento_requisitos (
           id INTEGER PRIMARY KEY,empresa_id INTEGER NOT NULL,
           qualificacao_tipo_id INTEGER REFERENCES qualificacoes_tipos(id),
@@ -72,6 +77,10 @@ describe('DGR maintenance conservative consolidation 0585', () => {
           (25,6,'D4','DGR — Transporte de Artigos Perigosos',1,NULL,NULL),
           (137,6,'MNT_ARTIGOS_PERIGOSOS','Artigos Perigosos',1,NULL,NULL),
           (725,7,'D4','DGR — Outra Empresa',1,NULL,NULL);
+        INSERT INTO qualificacoes_tipos_setores VALUES
+          (16,6,137,11,NULL,NULL),
+          (27,6,25,10,NULL,NULL),
+          (700,7,725,10,NULL,NULL);
         INSERT INTO funcionarios VALUES
           (100,6,'ATIVO',1,NULL),
           (116,6,'INATIVO',0,NULL),
@@ -109,6 +118,8 @@ describe('DGR maintenance conservative consolidation 0585', () => {
       expect(scalar("SELECT COUNT(*) n FROM qualificacoes_tipos WHERE id=137 AND ativo=0 AND deleted_at IS NOT NULL")).toBe(1);
       expect(scalar("SELECT COUNT(*) n FROM qualificacoes_tipos WHERE id=25 AND nome='Treinamento de Artigos Perigosos para o Transporte Aéreo'")).toBe(1);
       expect(scalar("SELECT COUNT(*) n FROM qualificacoes_historico WHERE empresa_id=7 AND qualificacao_id=725 AND id=7001")).toBe(1);
+      expect(scalar('SELECT COUNT(*) n FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND tipo_id=25 AND setor_id IN (10,11) AND deleted_at IS NULL')).toBe(2);
+      expect(scalar('SELECT COUNT(*) n FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND tipo_id=137 AND deleted_at IS NULL')).toBe(0);
       expect(scalar('SELECT COUNT(*) n FROM pragma_foreign_key_check')).toBe(0);
     } finally {
       db.close();

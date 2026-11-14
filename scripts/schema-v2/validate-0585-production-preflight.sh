@@ -22,6 +22,8 @@ assert_count former-deleted-history 1 "SELECT COUNT(*) count FROM qualificacoes_
 assert_count mandatory-maintenance-rule 1 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE id=220 AND empresa_id=6 AND qualificacao_tipo_id=137 AND escopo='FUNCAO' AND funcao_id=36 AND perfil_competencia IS NULL AND obrigatoriedade='OBRIGATORIA' AND ativo=1 AND deleted_at IS NULL"
 assert_count no-other-active-old-rules 0 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=137 AND id<>220 AND ativo=1 AND deleted_at IS NULL"
 assert_count six-D4-rules 6 "SELECT COUNT(*) count FROM treinamento_requisitos WHERE empresa_id=6 AND qualificacao_tipo_id=25 AND id IN (492,493,494,495,496,497) AND ativo=1 AND deleted_at IS NULL"
+assert_count original-sector-links 2 "SELECT COUNT(*) count FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND deleted_at IS NULL AND ((id=27 AND tipo_id=25 AND setor_id=10) OR (id=16 AND tipo_id=137 AND setor_id=11));"
+assert_count no-D4-maintenance-link 0 "SELECT COUNT(*) count FROM qualificacoes_tipos_setores WHERE empresa_id=6 AND tipo_id=25 AND setor_id=11 AND deleted_at IS NULL;"
 assert_count no-LMS 0 "SELECT COUNT(*) count FROM lms_cursos WHERE empresa_id=6 AND qualificacao_tipo_id IN (25,137) AND deleted_at IS NULL"
 assert_count no-legacy-extra-profiles 0 "SELECT COUNT(*) count FROM qualificacoes_historico_perfis_competencia WHERE historico_id IN (4781,4782)"
 assert_count no-legacy-reclass-queue 0 "SELECT COUNT(*) count FROM qualificacoes_historico_reclass_queue WHERE historico_id IN (4781,4782)"
