@@ -275,6 +275,21 @@ describe('qualificacoes tipos update sync', () => {
                 nascimento_funcionario: null,
                 conflito_codigo: 0,
               },
+              {
+                id: 303,
+                funcionario_id: 3,
+                qualificacao_id: 10,
+                data_conclusao: '2025-03-15',
+                data_vencimento: '2026-03-05',
+                tipo_treinamento: 'RECORRENTE',
+                qualificacao_codigo: 'AS350-OLD',
+                tipo_atual: 'AS350 B2',
+                categoria_atual: 'MANUTENCAO',
+                validade_meses_atual: 12,
+                carga_horaria_atual: null,
+                nascimento_funcionario: null,
+                conflito_codigo: 0,
+              },
             ],
           }),
         },
@@ -319,9 +334,9 @@ describe('qualificacoes tipos update sync', () => {
         id: '10',
         validade_anterior: 12,
         validade_nova: 24,
-        historicos_recalculados: 2,
+        historicos_recalculados: 3,
         historicos_ignorados: 0,
-        warnings: [],
+        warnings: [expect.stringContaining('1 prazo(s) historico(s) preservado(s)')],
       },
     });
 
@@ -332,7 +347,7 @@ describe('qualificacoes tipos update sync', () => {
         acao: 'UPDATE',
         registro_id: '10',
         dados_novos: expect.objectContaining({
-          historicos_recalculados: 2,
+          historicos_recalculados: 3,
           historicos_ignorados: 0,
         }),
       }),
@@ -344,10 +359,12 @@ describe('qualificacoes tipos update sync', () => {
     expect(batchCall?.query).toContain('UPDATE qualificacoes_historico');
     expect(batchCall?.args).toContain(101);
     expect(batchCall?.args).toContain(202);
+    expect(batchCall?.args).toContain(303);
+    expect(batchCall?.args).toContain('2026-03-05');
+    expect(batchCall?.args).not.toContain('2027-03-15');
     expect(batchCall?.args).toContain('AS350-B2');
-    // A validade do modelo deve atualizar TODOS os históricos correspondentes,
-    // independentemente da data originalmente persistida (24 meses, no dia; a flag legada
-    // vencimento_fim_mes = 1 enviada no PUT e ignorada).
+    // A validade sincroniza históricos derivados, sem sobrescrever prazo individual
+    // divergente da regra anterior; vencimento_fim_mes legado continua ignorado.
     expect(batchCall?.args).toContain('2027-01-15');
     expect(batchCall?.args).toContain('2027-02-20');
     expect(batchCall?.args).not.toContain('2027-01-31');
