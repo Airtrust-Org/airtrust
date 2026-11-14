@@ -42,7 +42,9 @@ def audit_rows(position_rows,guide_rows,candidate):
         observed.add(key)
         session,item=expected[key]
         if any(row[a]!=b for a,b in {
-          'aeronave':session['aeronave'],'codigo':item['codigo'],
+          'aeronave':session['aeronave'],
+          'titulo_sessao':session['titulo'],
+          'codigo':item['codigo'],
           'manobra_pto':item['nome'],'perna_pf':item['perna_pf']
         }.items()):
             raise ValueError(f'posição alterada frente ao PTO {key}')
@@ -50,6 +52,7 @@ def audit_rows(position_rows,guide_rows,candidate):
             continue
         pending_positions.append({'sessao':row['sessao'],'ordem':row['ordem'],
           'codigo':row['codigo'],'status':row['resultado_revisao']})
+    sessions_by_code={s['codigo']:s for s in candidate['sessions']}
     seen=set()
     pending_guides=[]
     for row in guide_rows:
@@ -57,7 +60,9 @@ def audit_rows(position_rows,guide_rows,candidate):
         if code in seen or code not in {s['codigo'] for s in candidate['sessions']}:
             raise ValueError('guia repetido ou desconhecido')
         seen.add(code)
-        if row['fonte_pto_sha256']!=register.APPROVED_SHA or str(row['posicoes_pto'])!='18':
+        if (row.get('aeronave')!=sessions_by_code[code]['aeronave'] or
+            row['fonte_pto_sha256']!=register.APPROVED_SHA or
+            str(row['posicoes_pto'])!='18'):
             raise ValueError('identidade/cobertura de guia divergente')
         valid=(row['status']=='VALIDADO' and
           all(row.get(x)=='SIM' for x in GUIDE_REQUIREMENTS) and
