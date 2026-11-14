@@ -17,6 +17,14 @@ const functionRoutes = JSON.parse(
 };
 
 describe('Cloudflare Pages security contract', () => {
+  it('allows only the Cloudflare-injected RUM beacon script without widening API/network CSP', () => {
+    const csp = headers.split('\n').find((line) => line.trim().startsWith('Content-Security-Policy:'));
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' blob: https://static.cloudflareinsights.com;");
+    expect(csp).toContain("connect-src 'self' https://api.airtrust.online https://airtrust-api-staging.airtrust.workers.dev;");
+    expect(csp).not.toContain("default-src https:");
+    expect(csp).not.toContain("script-src 'self' https:");
+  });
+
   it('never publicly caches /api/* responses', () => {
     const apiBlock = headers.slice(headers.indexOf('/api/*'));
     expect(apiBlock).toContain('Cache-Control: private, no-store');
