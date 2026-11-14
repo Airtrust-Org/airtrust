@@ -57,20 +57,45 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
     }
   });
   const pageErrors: string[] = [];
-  page.on('pageerror', (e) => {
-    const msg = e.stack || e.message;
-    if (msg.includes('due to access control checks') && msg.includes('matriculas/minhas-ead')) return;
-    pageErrors.push(msg);
-  });
-  // On failing WebKit runs, preserve an origin-only network diagnosis while
-  // keeping the existing strict pageerror assertion and the real CORS checks.
+  let pendingApiRequests = 0;
+  let lastApiActivityAt = Date.now();
+  const trackApiStart = (url: string) => {
+    try {
+      if (new URL(url).pathname.startsWith('/api/')) {
+        pendingApiRequests += 1;
+        lastApiActivityAt = Date.now();
+      }
+    } catch { /* ignore malformed URLs */ }
+  };
+  const trackApiDone = (url: string) => {
+    try {
+      if (new URL(url).pathname.startsWith('/api/')) {
+        pendingApiRequests = Math.max(0, pendingApiRequests - 1);
+        lastApiActivityAt = Date.now();
+      }
+    } catch { /* ignore malformed URLs */ }
+  };
+  page.on('request', (request) => trackApiStart(request.url()));
+  page.on('requestfinished', (request) => trackApiDone(request.url()));
   page.on('requestfailed', (request) => {
+    trackApiDone(request.url());
     const requestUrl = new URL(request.url());
     if (requestUrl.pathname.startsWith('/api/')) {
       let frameOrigin = 'DETACHED';
       try { frameOrigin = new URL(request.frame().url()).origin; } catch { /* frame navigated */ }
       console.log(`LMS_SYNTHETIC_FAILED_REQUEST:path=${requestUrl.pathname}:frameOrigin=${frameOrigin}:cause=${request.failure() || 'UNKNOWN'}`);
     }
+  });
+  const waitForApiQuiet = async () => {
+    await page.waitForLoadState('networkidle').catch(() => null);
+    await expect
+      .poll(() => pendingApiRequests === 0 && Date.now() - lastApiActivityAt >= 150, { timeout: 10_000 })
+      .toBe(true);
+  };
+  page.on('pageerror', (e) => {
+    const msg = e.stack || e.message;
+    if (msg.includes('due to access control checks') && msg.includes('matriculas/minhas-ead')) return;
+    pageErrors.push(msg);
   });
   // Keep the synthetic Portuguese examination fixed to pt-BR on every
   // navigation. Without this, WebKit's en-US locale can start asynchronous
@@ -131,12 +156,12 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
   // Let the initial dashboard's protected API reads finish before leaving.
   // WebKit can otherwise report navigation-aborted reads as CORS pageerrors.
-  await page.waitForLoadState('networkidle');
+  await waitForApiQuiet();
   await page.goto(`/lms/player/${MATRICULA}`);
   const cta = page.getByTestId('lms-open-exam');
   await expect(cta).toBeVisible();
   await expect(cta).toHaveText('Fazer avaliação');
-  await page.waitForLoadState('networkidle');
+  await waitForApiQuiet();
   await cta.click();
   await expect(page).toHaveURL(new RegExp(`/lms/provas/${MATRICULA}$`));
 
@@ -194,7 +219,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await page.getByRole('button', { name: 'Concluir treinamento' }).click();
   await expect(page).toHaveURL(/\/lms(\/|$)/);
   await expect(page.getByRole('heading', { name: 'Meus treinamentos', exact: true })).toBeVisible();
-  await page.waitForLoadState('networkidle').catch(() => null);
+  await waitForApiQuiet();
   await expect.poll(async () => (await evidence(page)).matricula.status).toBe('CONCLUIDO');
   await expect.poll(async () => (await evidence(page)).historico[0]?.numero_certificado ?? null, { timeout: 15_000 }).toBeTruthy();
   ev = await evidence(page);
@@ -214,12 +239,12 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await page.goto(`/lms/provas/${MATRICULA}`);
   await expect(page.getByText('Treinamento já concluído.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Iniciar prova|Tentar novamente|Retomar prova/ })).toHaveCount(0);
-  await page.waitForLoadState('networkidle');
+  await waitForApiQuiet();
   await page.goto(`/lms/player/${MATRICULA}`);
   await expect(page.getByTestId('lms-open-exam')).toHaveCount(0);
-  await page.waitForLoadState('networkidle');
+  await waitForApiQuiet();
   await page.reload();
-  await page.waitForLoadState('networkidle');
+  await waitForApiQuiet();
   expect(await evidence(page)).toEqual(afterFinalize);
 
   expect(pageErrors).toEqual([]);

@@ -76,7 +76,13 @@ export function useOperationalAccess() {
         signal,
       });
       if (!response.success) {
-        throw new Error(response.error || 'Erro ao carregar acesso operacional');
+        const error = new Error(response.error || 'Erro ao carregar acesso operacional') as Error & {
+          status?: number;
+        };
+        if (typeof response.code === 'number') {
+          error.status = response.code;
+        }
+        throw error;
       }
       return (response.data as OperationalAccessResponse) ?? EMPTY_ACCESS;
     },
