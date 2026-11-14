@@ -10,6 +10,7 @@ import '@/react-app/styles/design-system-global.css';
 
 // ========== PASSO 2: IMPORTAR DESIGN SYSTEM TS ==========
 // Em qualquer componente de página:
+import { useState } from 'react';
 import { DesignSystemGlobal } from '@/react-app/styles/design-system-global';
 
 // ========== PASSO 3: EXEMPLOS DE IMPLEMENTAÇÃO ==========

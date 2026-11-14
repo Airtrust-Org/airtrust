@@ -1,7 +1,7 @@
 {
   "sourceSha": "0ff8a839f12630f25dd061a5399997b9cb5ed04a",
   "generatedAt": "2026-08-18T01:17:47.335Z",
-  "diagnosticCount": 289,
+  "diagnosticCount": 241,
   "diagnostics": [
     {
       "file": "src/lib/sw-manager.tsx",
@@ -179,20 +179,6 @@
       "message": "Property 'name' does not exist on type 'User'."
     },
     {
-      "file": "src/react-app/components/modals/index.ts",
-      "line": 5,
-      "column": 34,
-      "code": "TS2307",
-      "message": "Cannot find module './FuncionarioModal' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/components/modals/index.ts",
-      "line": 6,
-      "column": 40,
-      "code": "TS2307",
-      "message": "Cannot find module './ModalUploadCertificado' or its corresponding type declarations."
-    },
-    {
       "file": "src/react-app/components/modals/ModalCertificado.tsx",
       "line": 203,
       "column": 7,
@@ -291,81 +277,11 @@
       "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
     },
     {
-      "file": "src/react-app/components/shared/index.ts",
-      "line": 1,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './Button' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/components/shared/index.ts",
-      "line": 2,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './LoadingSpinner' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/components/shared/index.ts",
-      "line": 4,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './Badge' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/components/shared/index.ts",
-      "line": 5,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './Card' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/components/shared/index.ts",
-      "line": 6,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './DataTable' or its corresponding type declarations."
-    },
-    {
       "file": "src/react-app/components/shared/WizardModal.tsx",
       "line": 105,
       "column": 13,
       "code": "TS2769",
       "message": "No overload matches this call. The last overload gave the following error. Object literal may only specify known properties, and 'formData' does not exist in type 'Partial<unknown> & Attributes'."
-    },
-    {
-      "file": "src/react-app/components/simuladores/AvaliacaoManobras.tsx",
-      "line": 111,
-      "column": 9,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
-    },
-    {
-      "file": "src/react-app/components/simuladores/AvaliacaoManobras.tsx",
-      "line": 241,
-      "column": 9,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
-    },
-    {
-      "file": "src/react-app/components/simuladores/ParticipantsEditor.tsx",
-      "line": 3,
-      "column": 32,
-      "code": "TS2307",
-      "message": "Cannot find module '../../services/simuladoresApi' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/config/deployment.ts",
-      "line": 2,
-      "column": 10,
-      "code": "TS2304",
-      "message": "Cannot find name '__APP_BUILD_VERSION__'."
-    },
-    {
-      "file": "src/react-app/config/deployment.ts",
-      "line": 2,
-      "column": 50,
-      "code": "TS2304",
-      "message": "Cannot find name '__APP_BUILD_VERSION__'."
     },
     {
       "file": "src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts",
@@ -478,13 +394,6 @@
       "column": 45,
       "code": "TS2339",
       "message": "Property 'error' does not exist on type 'TipoQualificacaoResumo[]'."
-    },
-    {
-      "file": "src/react-app/hooks/useDataLayer.ts",
-      "line": 10,
-      "column": 61,
-      "code": "TS2307",
-      "message": "Cannot find module '../worker/services/queries' or its corresponding type declarations."
     },
     {
       "file": "src/react-app/hooks/useFormValidation.ts",
@@ -676,27 +585,6 @@
       "message": "Object literal may only specify known properties, and 'fabricante' does not exist in type 'SetStateAction<AeronaveFormData>'."
     },
     {
-      "file": "src/react-app/pages/AvaliarFicha.tsx",
-      "line": 163,
-      "column": 7,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
-    },
-    {
-      "file": "src/react-app/pages/AvaliarFicha.tsx",
-      "line": 62,
-      "column": 9,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
-    },
-    {
-      "file": "src/react-app/pages/Certificacoes.tsx",
-      "line": 165,
-      "column": 7,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
-    },
-    {
       "file": "src/react-app/pages/Configuracoes/Backup.tsx",
       "line": 1166,
       "column": 58,
@@ -709,13 +597,6 @@
       "column": 5,
       "code": "TS2322",
       "message": "Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'. Type '{ Authorization?: undefined; }' is not assignable to type 'undefined'."
-    },
-    {
-      "file": "src/react-app/pages/Configuracoes/Usuarios.tsx",
-      "line": 278,
-      "column": 13,
-      "code": "TS2345",
-      "message": "Argument of type '\"settings.users.success.inviteSent\"' is not assignable to parameter of type 'TranslationKey'."
     },
     {
       "file": "src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx",
@@ -1096,48 +977,6 @@
       "message": "Argument of type '(r: Record<string, unknown>) => JSX.Element' is not assignable to parameter of type '(value: FadigaPainelEquipeItem, index: number, array: FadigaPainelEquipeItem[]) => Element'. Types of parameters 'r' and 'value' are incompatible. Type 'FadigaPainelEquipeItem' is not assignable to type 'Record<string, unknown>'. Index signature for type 'string' is missing in type 'FadigaPainelEquipeItem'."
     },
     {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 565,
-      "column": 14,
-      "code": "TS2345",
-      "message": "Argument of type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to parameter of type 'SetStateAction<ControlFilters>'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'ControlFilters'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'FrmsOperationalSnapshotFilters'. Types of property 'status' are incompatible. Type 'string' is not assignable to type '\"\" | FrmsOperationalSnapshotStatus | undefined'."
-    },
-    {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 566,
-      "column": 23,
-      "code": "TS2345",
-      "message": "Argument of type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to parameter of type 'SetStateAction<ControlFilters>'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'ControlFilters'. Type '{ funcionario_id: string; tripulante_query: string; base: string; aeronave: string; status: string; data_inicio: string; data_fim: string; include_inconsistencies?: boolean; }' is not assignable to type 'FrmsOperationalSnapshotFilters'. Types of property 'status' are incompatible. Type 'string' is not assignable to type '\"\" | FrmsOperationalSnapshotStatus | undefined'."
-    },
-    {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 631,
-      "column": 31,
-      "code": "TS2339",
-      "message": "Property 'totalMonitored' does not exist on type 'FortnightOperationalSummaryView'."
-    },
-    {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 632,
-      "column": 37,
-      "code": "TS2339",
-      "message": "Property 'totalMonitored' does not exist on type 'FortnightOperationalSummaryView'."
-    },
-    {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 635,
-      "column": 31,
-      "code": "TS2339",
-      "message": "Property 'pendingCheckins' does not exist on type 'FortnightOperationalSummaryView'."
-    },
-    {
-      "file": "src/react-app/pages/frms/FrmsControleOperacional.tsx",
-      "line": 636,
-      "column": 40,
-      "code": "TS2339",
-      "message": "Property 'pendingCheckins' does not exist on type 'FortnightOperationalSummaryView'."
-    },
-    {
       "file": "src/react-app/pages/frms/FrmsFadigaAcumulada.tsx",
       "line": 214,
       "column": 5,
@@ -1241,13 +1080,6 @@
       "column": 21,
       "code": "TS2345",
       "message": "Argument of type '{ id: null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; email: string; ... 31 more ...; observacoes: string; }' is not assignable to parameter of type 'SetStateAction<{ id: number | null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; ... 33 more ...; quinzena: QuinzenaPreferencia; }>'. Property 'quinzena' is missing in type '{ id: null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; email: string; ... 31 more ...; observacoes: string; }' but required in type '{ id: number | null; nome: string; guerra: string; cpf: string; rg: string; nascimento: string; sexo: string; nacionalidade: string; telefone_emergencia: string; contato_emergencia_nome: string; ... 33 more ...; quinzena: QuinzenaPreferencia; }'."
-    },
-    {
-      "file": "src/react-app/pages/funcionarios/PerfilFuncionario.tsx",
-      "line": 282,
-      "column": 40,
-      "code": "TS2552",
-      "message": "Cannot find name 'navigate'. Did you mean 'navigator'?"
     },
     {
       "file": "src/react-app/pages/lms/LmsCatalogo.tsx",
@@ -1419,27 +1251,6 @@
     },
     {
       "file": "src/react-app/pages/Qualificacoes.tsx",
-      "line": 3747,
-      "column": 28,
-      "code": "TS2304",
-      "message": "Cannot find name 'formatDateLabel'."
-    },
-    {
-      "file": "src/react-app/pages/Qualificacoes.tsx",
-      "line": 4586,
-      "column": 51,
-      "code": "TS2304",
-      "message": "Cannot find name 'QualificacaoTipoDTO'."
-    },
-    {
-      "file": "src/react-app/pages/Qualificacoes.tsx",
-      "line": 485,
-      "column": 73,
-      "code": "TS2304",
-      "message": "Cannot find name 'QualificacaoTipoDTO'."
-    },
-    {
-      "file": "src/react-app/pages/Qualificacoes.tsx",
       "line": 4934,
       "column": 9,
       "code": "TS2322",
@@ -1474,111 +1285,6 @@
       "message": "Property 'prefixo' does not exist on type '{ id: number; nome: string; codigo: string; }'."
     },
     {
-      "file": "src/react-app/pages/qualificacoes/Dashboard.tsx",
-      "line": 12,
-      "column": 29,
-      "code": "TS2307",
-      "message": "Cannot find module '@/react-app/components/qualificacoes/DashboardCharts' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 159,
-      "column": 12,
-      "code": "TS2304",
-      "message": "Cannot find name 'Doughnut'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 17,
-      "column": 1,
-      "code": "TS2304",
-      "message": "Cannot find name 'ChartJS'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 175,
-      "column": 12,
-      "code": "TS2304",
-      "message": "Cannot find name 'Bar'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 18,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'CategoryScale'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 19,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'LinearScale'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 196,
-      "column": 10,
-      "code": "TS2304",
-      "message": "Cannot find name 'Line'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 20,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'BarElement'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 21,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'LineElement'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 216,
-      "column": 10,
-      "code": "TS2304",
-      "message": "Cannot find name 'Bar'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 22,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'PointElement'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 23,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'ArcElement'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 24,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'Title'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 25,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'Tooltip'."
-    },
-    {
-      "file": "src/react-app/pages/qualificacoes/DashboardGraficos.tsx",
-      "line": 26,
-      "column": 3,
-      "code": "TS2304",
-      "message": "Cannot find name 'Legend'."
-    },
-    {
       "file": "src/react-app/pages/qualificacoes/FormularioQualificacao.tsx",
       "line": 2,
       "column": 10,
@@ -1593,13 +1299,6 @@
       "message": "Duplicate identifier 'toast'."
     },
     {
-      "file": "src/react-app/pages/qualificacoes/hooks/useQualificacoesFiltros.ts",
-      "line": 8,
-      "column": 33,
-      "code": "TS2307",
-      "message": "Cannot find module '@/react-app/utils/types' or its corresponding type declarations."
-    },
-    {
       "file": "src/react-app/pages/qualificacoes/hooks/useQualificacoesMutations.ts",
       "line": 174,
       "column": 20,
@@ -1612,13 +1311,6 @@
       "column": 30,
       "code": "TS2349",
       "message": "This expression is not callable. Type 'HttpClient' has no call signatures."
-    },
-    {
-      "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
-      "line": 123,
-      "column": 9,
-      "code": "TS2304",
-      "message": "Cannot find name 'showAlertDialog'."
     },
     {
       "file": "src/react-app/pages/ReclassificacaoQualificacoes.tsx",
@@ -1867,13 +1559,6 @@
     },
     {
       "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
-      "line": 8,
-      "column": 31,
-      "code": "TS2307",
-      "message": "Cannot find module '../../components/modelos/ReordenarManobras' or its corresponding type declarations."
-    },
-    {
-      "file": "src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx",
       "line": 86,
       "column": 18,
       "code": "TS18047",
@@ -1978,25 +1663,11 @@
       "message": "Cannot find namespace 'JSX'."
     },
     {
-      "file": "src/react-app/services/index.ts",
-      "line": 3,
-      "column": 15,
-      "code": "TS2307",
-      "message": "Cannot find module './simuladores.service' or its corresponding type declarations."
-    },
-    {
       "file": "src/react-app/services/pdf-ficha-client.ts",
       "line": 865,
       "column": 12,
       "code": "TS2339",
       "message": "Property 'isNotechs' does not exist on type '{ m: { ordem: number; nome?: string | undefined; descricao: string; codigo: string; resultado: string | number | null; observacoes?: string | undefined; tripulante?: \"B\" | \"A\" | \"AB\" | undefined; }; nomeLines: string[]; obsLines: string[]; rowH: number; displayNum: number; }'."
-    },
-    {
-      "file": "src/react-app/styles/DESIGN_SYSTEM_GUIDE.tsx",
-      "line": 94,
-      "column": 37,
-      "code": "TS2304",
-      "message": "Cannot find name 'useState'."
     },
     {
       "file": "src/react-app/utils/e2e-test.ts",
@@ -2018,13 +1689,6 @@
       "column": 20,
       "code": "TS2339",
       "message": "Property 'supportedValuesOf' does not exist on type 'typeof Intl'."
-    },
-    {
-      "file": "src/shared/types.ts",
-      "line": 2,
-      "column": 48,
-      "code": "TS2307",
-      "message": "Cannot find module '../worker/types/index' or its corresponding type declarations."
     }
   ]
 }

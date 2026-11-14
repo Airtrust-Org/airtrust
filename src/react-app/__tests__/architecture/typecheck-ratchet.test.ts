@@ -32,6 +32,10 @@ import { describe, expect, it } from 'vitest';
  * 2026-08-02 (Frente 6 — build metadata boundary): normalized the absent
  * VersionBadge query timestamp from `undefined` to its existing `null`
  * contract, dropping the baseline from 310 to 309 errors.
+ *
+ * 2026-11-13 (F14-03): removed every TS2304/TS2307 (ReferenceError / missing
+ * module at runtime) except the single unrouted FuncoesManagement import.
+ * Those classes are now also enforced by scripts/guard-typescript-baseline-ratchet.mjs.
  */
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -51,23 +55,16 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/components/modals/ModalCertificado.tsx': 3,
   'src/react-app/components/modals/ModalNovaSessao.tsx': 4,
   'src/react-app/components/modals/SharedSessionForm.tsx': 2,
-  'src/react-app/components/modals/index.ts': 2,
   'src/react-app/components/qualificacoes/ModalCertificados.tsx': 3,
   'src/react-app/components/shared/WizardModal.tsx': 1,
-  'src/react-app/components/shared/index.ts': 5,
-  'src/react-app/components/simuladores/AvaliacaoManobras.tsx': 2,
-  'src/react-app/components/simuladores/ParticipantsEditor.tsx': 1,
-  'src/react-app/config/deployment.ts': 2,
   'src/react-app/hooks/qualificacoes/useFuncionariosAtivos.ts': 6,
   'src/react-app/hooks/qualificacoes/useHistoricoQualificacoes.ts': 4,
   'src/react-app/hooks/qualificacoes/useTiposQualificacao.ts': 6,
-  'src/react-app/hooks/useDataLayer.ts': 1,
   'src/react-app/hooks/useFormValidation.ts': 2,
   'src/react-app/hooks/useQualificacoesExt.ts': 1,
   'src/react-app/hooks/useSimuladores.ts': 5,
   'src/react-app/hooks/useTreinamentosPlanejados.ts': 3,
   'src/react-app/pages/Aeronaves.tsx': 16,
-  'src/react-app/pages/AvaliarFicha.tsx': 2,
   'src/react-app/pages/Certificacoes.tsx': 1,
   'src/react-app/pages/Configuracoes/Backup.tsx': 2,
   'src/react-app/pages/Configuracoes/Importacao.tsx': 1,
@@ -76,7 +73,7 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/Funcionarios.tsx': 1,
   'src/react-app/pages/LoginSimple.tsx': 2,
   'src/react-app/pages/Qualificacoes.tsx': 8,
-  'src/react-app/pages/ReclassificacaoQualificacoes.tsx': 5,
+  'src/react-app/pages/ReclassificacaoQualificacoes.tsx': 1,
   'src/react-app/pages/TreinamentosPlanejadosPage.tsx': 1,
   'src/react-app/pages/controle-voos/ControleVoosRdvDetalhe.tsx': 3,
   'src/react-app/pages/escalas/ConfiguracaoEscalaPage.tsx': 1,
@@ -114,11 +111,8 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/lms/LmsPreviewPlayer.tsx': 3,
   'src/react-app/pages/lms/LmsRelatorios.tsx': 1,
   'src/react-app/pages/mro/data/mroMockData.ts': 7,
-  'src/react-app/pages/qualificacoes/Dashboard.tsx': 1,
-  'src/react-app/pages/qualificacoes/DashboardGraficos.tsx': 14,
   'src/react-app/pages/qualificacoes/FormularioQualificacao.tsx': 2,
   'src/react-app/pages/qualificacoes/components/QualificacoesFilters.tsx': 3,
-  'src/react-app/pages/qualificacoes/hooks/useQualificacoesFiltros.ts': 1,
   'src/react-app/pages/qualificacoes/hooks/useQualificacoesMutations.ts': 1,
   'src/react-app/pages/simuladores/agenda/CalendarioAgendamentos.tsx': 2,
   'src/react-app/pages/simuladores/cadastros/categorias/index.tsx': 3,
@@ -127,19 +121,16 @@ const BASELINE_ERROR_COUNTS: Record<string, number> = {
   'src/react-app/pages/simuladores/cadastros/modelos-sessao/index.tsx': 13,
   'src/react-app/pages/simuladores/cadastros/tipos-sessao/index.tsx': 3,
   'src/react-app/pages/simuladores/relatorios/index.tsx': 3,
-  'src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx': 7,
+  'src/react-app/pages/simuladores/sessoes/[id]/editar-modelo.tsx': 5,
   'src/react-app/pages/simuladores/sessoes/[id]/executar.tsx': 1,
   'src/react-app/pages/simuladores/sessoes/components/FormularioSessao.tsx': 2,
   'src/react-app/pages/simuladores/tabs/TabGestaoWrapper.tsx': 6,
   'src/react-app/services/agendamentos.service.ts': 8,
   'src/react-app/services/funcionarios.service.ts': 6,
-  'src/react-app/services/index.ts': 1,
   'src/react-app/services/pdf-ficha-client.ts': 1,
-  'src/react-app/styles/DESIGN_SYSTEM_GUIDE.tsx': 1,
   'src/react-app/utils/api-cache.ts': 1,
   'src/react-app/utils/e2e-test.ts': 1,
   'src/react-app/utils/timezone.ts': 2,
-  'src/shared/types.ts': 1,
 };
 
 function runTypecheck(): string {

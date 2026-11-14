@@ -26,9 +26,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   assertBaselineShape,
   checkBaselineGovernance,
+  checkNonTolerableBaseline,
   compareDiagnostics,
   dedupeDiagnostics,
   formatDiagnostic,
+  NON_TOLERABLE_CODES,
   parseTscOutput,
 } from './typescript-baseline-ratchet-lib.mjs';
 
@@ -117,11 +119,13 @@ export function runRatchet({ cwd = REPO_ROOT } = {}) {
 
   const currentDeduped = dedupeDiagnostics(diagnostics);
   const comparison = compareDiagnostics(currentDeduped, baseline.diagnostics);
+  const nonTolerableBaseline = checkNonTolerableBaseline(baseline.diagnostics);
 
   return {
-    pass: comparison.pass,
+    pass: comparison.pass && nonTolerableBaseline.ok,
     crashed: false,
     comparison,
+    nonTolerableBaseline,
     baseline,
     governance,
   };
@@ -142,6 +146,15 @@ export function generateBaseline({ cwd = REPO_ROOT, sourceSha = EXPECTED_SOURCE_
     throw new Error(`tsc did not produce parseable diagnostic output while generating baseline:\n${rawOutput}`);
   }
   const deduped = dedupeDiagnostics(diagnostics);
+  // Regenerating must never be a way to grandfather new ReferenceError /
+  // ModuleNotFound-class diagnostics: refuse when they exceed the caps.
+  const nonTolerable = checkNonTolerableBaseline(deduped, { requireTight: false });
+  if (!nonTolerable.ok) {
+    throw new Error(
+      `refusing to write baseline: non-tolerable diagnostic classes (${NON_TOLERABLE_CODES.join(', ')}) ` +
+        `exceed their caps: ${JSON.stringify(nonTolerable.violations)}. Fix them instead of baselining.`,
+    );
+  }
   const sorted = [...deduped].sort((a, b) =>
     `${a.file}:${a.line}:${a.column}:${a.code}:${a.message}`.localeCompare(
       `${b.file}:${b.line}:${b.column}:${b.code}:${b.message}`,
@@ -197,7 +210,21 @@ function main() {
     return;
   }
 
-  const { comparison, baseline } = result;
+  const { comparison, baseline, nonTolerableBaseline } = result;
+
+  if (!nonTolerableBaseline.ok) {
+    console.error(
+      `RESULT: FAIL — non-tolerable diagnostic classes (${NON_TOLERABLE_CODES.join(', ')}) in the baseline ` +
+        'do not match NON_TOLERABLE_BASELINE_CAPS in scripts/typescript-baseline-ratchet-lib.mjs:',
+    );
+    for (const v of nonTolerableBaseline.violations) {
+      console.error(
+        v.kind === 'grew'
+          ? `  ${v.code}: baseline has ${v.count} entr(ies), cap is ${v.cap} — these classes may only shrink; fix the code instead of baselining.`
+          : `  ${v.code}: baseline has ${v.count} entr(ies) but cap is ${v.cap} — lower the cap to ${v.count} to lock in the fix.`,
+      );
+    }
+  }
 
   if (result.pass) {
     console.log(
@@ -212,6 +239,22 @@ function main() {
     }
     console.log('RESULT: PASS');
     process.exit(0);
+    return;
+  }
+
+  if (comparison.nonTolerableNewDiagnostics.length > 0) {
+    console.error(
+      `RESULT: FAIL — ${comparison.nonTolerableNewDiagnostics.length} NON-TOLERABLE diagnostic(s) ` +
+        `(${NON_TOLERABLE_CODES.join('/')}: ReferenceError / missing module at runtime) not in the baseline; ` +
+        'these cannot be baselined:',
+    );
+    for (const d of comparison.nonTolerableNewDiagnostics) {
+      console.error(`  ${formatDiagnostic(d)}`);
+    }
+    console.error('');
+  }
+  if (comparison.pass && !nonTolerableBaseline.ok) {
+    process.exit(1);
     return;
   }
 
