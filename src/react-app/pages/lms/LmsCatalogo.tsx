@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
+import { canDirectReplaceScormProfile, inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
 import { SCORM_COMPLETION_MODE_CHOICES, canSaveScormModeForRole, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
@@ -751,7 +751,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile !== 'PRIVATE' && scormProfile !== 'CHECKING';
+  const directReplacement = canUploadInactiveProduction && isAdmin && canDirectReplaceScormProfile(scormProfile);
   useEffect(() => {
     if (!canUploadInactiveProduction || !contentFile) {
       setScormProfile('CHECKING');
