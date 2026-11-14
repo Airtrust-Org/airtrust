@@ -43,13 +43,16 @@ export function VersionBadge() {
   // Busca versão da API (backend) - usada apenas para buildTime e confirmação de ambiente.
   const { data: apiData } = useQuery<{ success: boolean; data: VersionData }>({
     queryKey: ['version'],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/version`);
-      if (!response.ok) throw new Error('Failed to fetch version');
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`${API_BASE_URL}/version`, { signal });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch version (HTTP ${response.status})`);
+      }
       return response.json();
     },
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: (failureCount, error) =>
+      failureCount < 1 && !(error instanceof Error && /\(HTTP 4\d\d\)/.test(error.message)),
   });
 
   // Versão REAL do UI servido:

@@ -25,7 +25,7 @@ describe('renovacao automatica LMS por qualificacao EAD', () => {
     expect(sql).toContain('compliance_operational_date(hoje) AS (VALUES(?))');
     expect(sql).not.toContain("BETWEEN date('now')");
     expect(sql).toContain('AND qh.id > ?');
-    expect(sql).toContain('ORDER BY qh.id ASC');
+    expect(sql).toContain('ORDER BY cand.qualificacao_historico_id ASC');
     expect(sql).toContain('LIMIT ?');
   });
 

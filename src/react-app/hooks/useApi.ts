@@ -42,6 +42,8 @@ interface UseApiOptions {
   timeoutMs?: number;
   /** Keep success/data/total for callers that need backend pagination. */
   preserveEnvelope?: boolean;
+  /** Hide rows from the previous filter while a different URL/tenant is loading or failed. */
+  clearDataOnRequestChange?: boolean;
 }
 
 const inMemoryGetCache = new LruTtlCache<string, unknown>(100, 5 * 60 * 1000);
@@ -112,6 +114,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     timeoutMs,
     method: optionsMethod,
     preserveEnvelope = false,
+    clearDataOnRequestChange = false,
   } = options;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,6 +123,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
   const hasFetchedInitialRef = useRef(false);
   const isMountedRef = useRef(true);
   const inFlightRef = useRef(false);
+  const displayedRequestKeyRef = useRef<string | null>(null);
   // Uma resposta da consulta anterior nunca pode sobrescrever um filtro/URL mais recente.
   const requestGenerationRef = useRef(0);
   const retryTimeoutRef = useRef<number | null>(null);
@@ -167,6 +171,10 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         const tenantId = empresaAtualId ?? getCurrentTenantId();
         const scope = captureTenantDataScope();
         const cacheKey = `${tenantId ?? 'pending'}:${method}:${fullUrl}:${skipAuth ? 'public' : 'auth'}`;
+        if (clearDataOnRequestChange && displayedRequestKeyRef.current !== cacheKey) {
+          displayedRequestKeyRef.current = cacheKey;
+          setData(null);
+        }
 
         if (method === 'GET' && staleTime > 0) {
           const cached = inMemoryGetCache.get(cacheKey);
@@ -179,9 +187,8 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         if (requireAuth && !skipAuth && !authToken) return;
 
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (method === 'GET') {
-          headers['Cache-Control'] = 'no-cache';
-          if (bypassGetCache) headers['X-AirTrust-Bypass-Cache'] = '1';
+        if (method === 'GET' && bypassGetCache) {
+          headers['X-AirTrust-Bypass-Cache'] = '1';
         }
 
         let requestUrl = fullUrl;
@@ -202,6 +209,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
         const response = await (skipAuth ? apiFetch : appFetch)(requestUrl, {
           method,
           headers,
+          ...(method === 'GET' ? { cache: 'no-store' as const } : {}),
           ...(requestAbortController ? { signal: requestAbortController.signal } : {}),
         });
         if (requestGeneration !== requestGenerationRef.current) return;
@@ -273,6 +281,7 @@ export function useApi<T>(url: string, options: UseApiOptions = {}) {
     [
       authToken,
       bypassGetCache,
+      clearDataOnRequestChange,
       enabled,
       empresaAtualId,
       logout,

@@ -1,3 +1,5 @@
+import { hasSchemaTable } from '../utils/db-schema';
+
 export type TrainingDependencyQualificationRow = {
   funcionario_id: number;
   funcionario_nome: string;
@@ -12,11 +14,7 @@ export type TrainingDependencyQualificationRow = {
 };
 
 async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .bind(tableName)
-    .first<{ name: string }>();
-  return row?.name === tableName;
+  return hasSchemaTable(db, tableName);
 }
 
 /**

@@ -129,7 +129,10 @@ function buildProgramBackedDb() {
           return statement;
         },
         first: async () => {
-          if (query.includes("FROM sqlite_master WHERE type='table' AND name=?")) {
+          if (
+            query.includes('FROM sqlite_master') &&
+            (query.includes("type='table'") || query.includes("type = 'table'"))
+          ) {
             const table = String(bound[0] || '');
             if (['treinamento_programas', 'treinamento_programa_modelos'].includes(table)) {
               return { name: table };

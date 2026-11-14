@@ -27,6 +27,11 @@ export async function loadTipoListMetrics(
     db.prepare(
       `SELECT qh.qualificacao_id AS tipo_id, COUNT(*) AS total_no_historico
          FROM qualificacoes_historico qh
+         INNER JOIN funcionarios f
+           ON f.id = qh.funcionario_id
+          AND f.empresa_id = qh.empresa_id
+          AND f.deleted_at IS NULL
+          AND UPPER(TRIM(COALESCE(f.status, 'ATIVO'))) = 'ATIVO'
         WHERE qh.empresa_id = ?
           AND qh.deleted_at IS NULL
           AND qh.qualificacao_id IN (SELECT value FROM json_each(?))

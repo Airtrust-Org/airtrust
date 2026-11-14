@@ -71,10 +71,18 @@ export function useOperationalAccess() {
     queryKey: ['operational-access', empresaAtualId, user?.id],
     enabled: enabledQuery,
     staleTime: 60_000,
-    queryFn: async () => {
-      const response = await apiClient.get<OperationalAccessResponse>('/me/operational-access');
+    queryFn: async ({ signal }) => {
+      const response = await apiClient.get<OperationalAccessResponse>('/me/operational-access', {
+        signal,
+      });
       if (!response.success) {
-        throw new Error(response.error || 'Erro ao carregar acesso operacional');
+        const error = new Error(response.error || 'Erro ao carregar acesso operacional') as Error & {
+          status?: number;
+        };
+        if (typeof response.code === 'number') {
+          error.status = response.code;
+        }
+        throw error;
       }
       return (response.data as OperationalAccessResponse) ?? EMPTY_ACCESS;
     },

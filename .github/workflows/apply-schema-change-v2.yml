@@ -90,7 +90,7 @@ jobs:
         run: npm --prefix worker-airtrust ci
 
       - name: Verify eight official gates for sensitive production data corrections
-        if: ${{ inputs.change_id == 'avsec-competency-models-0584' || inputs.change_id == 'compliance-designation-ead-contract-0578' || inputs.change_id == 'lms-qa-synthetic-purge-0581' || inputs.change_id == 'lms-cycle-progress-reconcile-0582' }}
+        if: ${{ inputs.change_id == 'avsec-competency-models-0584' || inputs.change_id == 'dgr-legacy-maintenance-consolidation-0585' || inputs.change_id == 'compliance-designation-ead-contract-0578' || inputs.change_id == 'lms-qa-synthetic-purge-0581' || inputs.change_id == 'lms-cycle-progress-reconcile-0582' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -810,6 +810,27 @@ jobs:
           node scripts/ci/verify-release-gates.mjs
           bash scripts/schema-v2/validate-0584-production-preflight.sh --target=airtrust-db
 
+      - name: Preflight DGR maintenance consolidation 0585
+        if: ${{ inputs.change_id == 'dgr-legacy-maintenance-consolidation-0585' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Pinned, fully gated Worker+Pages release; later unrelated main
+          # commits must not force a different production artifact.
+          EXPECTED_WORKER_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$EXPECTED_WORKER_SHA" "$GITHUB_SHA" || {
+            echo DGR_0585_WORKER_SOURCE_NOT_MAIN_ANCESTOR >&2
+            exit 1
+          }
+          node scripts/ci/verify-release-gates.mjs
+          bash scripts/schema-v2/validate-0585-production-preflight.sh --target=airtrust-db
+
       - name: Preflight HFA 0529 production tenant schema and original data
         id: hfa0529preflight
         if: ${{ inputs.change_id == 'hfa-integration-bridge-0529' }}
@@ -1035,6 +1056,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/schema-v2/validate-0584-production-postconditions.sh --target=airtrust-db
+
+      - name: Post-validate DGR maintenance consolidation 0585
+        if: ${{ inputs.change_id == 'dgr-legacy-maintenance-consolidation-0585' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/schema-v2/validate-0585-production-postconditions.sh --target=airtrust-db
 
       - name: Post-validate AVSEC corporate historical reclassification 0544
         if: ${{ inputs.change_id == 'avsec-corporativo-historico-0544' }}

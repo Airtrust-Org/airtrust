@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { API_BASE_URL } from '@/react-app/config/api';
+import { useState, useEffect, useCallback } from 'react';
+import { fetchWithAuth } from '@/react-app/config/api';
+import { onDataChanged } from '@/react-app/utils/data-sync';
 
 interface Agendamento {
   id: number;
@@ -22,19 +23,19 @@ export function useAgendamentos() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAgendamentos = async () => {
+  const fetchAgendamentos = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch(`${API_BASE_URL}/agendamentos`);
-      
+
+      const response = await fetchWithAuth('/api/agendamentos');
+
       if (!response.ok) {
         throw new Error(`Erro HTTP: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAgendamentos(data.data || data.agendamentos || []);
       } else {
@@ -47,11 +48,17 @@ export function useAgendamentos() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAgendamentos();
-  }, []);
+    return onDataChanged(
+      () => {
+        void fetchAgendamentos();
+      },
+      ['simuladores', 'qualificacoes'],
+    );
+  }, [fetchAgendamentos]);
 
   return { agendamentos, loading, error, refetch: fetchAgendamentos };
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE_URL } from '@/react-app/config/api';
+import { fetchWithAuth } from '@/react-app/config/api';
 import { useAuth } from '@/react-app/hooks/useAuth';
+import { onDataChanged } from '@/react-app/utils/data-sync';
 
 export interface QualificacaoHistoricoItem {
   id: number;
@@ -66,11 +67,7 @@ export function useQualificacoesHistorico({
       if (funcionarioId) params.set('funcionario_id', String(funcionarioId));
       if (tipoId) params.set('tipo_id', String(tipoId));
 
-      const url = `${API_BASE_URL.replace(/\/$/, '')}/qualificacoes/historico?${params.toString()}`;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(url, { headers });
+      const res = await fetchWithAuth(`/api/qualificacoes/historico?${params.toString()}`);
       const json: Partial<HistoricoResponse & { error?: string }> = await res.json();
       if (!res.ok || !json.success) {
         const msg =
@@ -117,6 +114,12 @@ export function useQualificacoesHistorico({
 
   useEffect(() => {
     fetchData();
+    return onDataChanged(
+      () => {
+        void fetchData();
+      },
+      ['qualificacoes', 'treinamentos', 'lms'],
+    );
   }, [fetchData]);
 
   return {

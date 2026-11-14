@@ -16,6 +16,8 @@
  */
 import {
   buildHistoricoTipoSnapshot,
+  buildHistoricoTipoSyncEligibleStatusPredicate,
+  shouldPreserveHistoricoExpiryOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from './qualificacoes-tipos-sync';
 
@@ -54,6 +56,7 @@ export async function resyncTipoHistoricoValidity(
   db: D1Database,
   empresaId: number,
   tipoId: number,
+  previousValidade?: number | null,
 ): Promise<{ updated: number; unchanged: number }> {
   const tipo = await db
     .prepare(
@@ -81,11 +84,12 @@ export async function resyncTipoHistoricoValidity(
       `SELECT qh.id, qh.data_conclusao, qh.data_vencimento, qh.validade_meses,
               qh.tipo_treinamento, f.nascimento AS nascimento_funcionario
          FROM qualificacoes_historico qh
-         LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+         LEFT JOIN funcionarios f ON f.id = qh.funcionario_id
+           AND f.empresa_id = qh.empresa_id AND f.deleted_at IS NULL
         WHERE qh.empresa_id = ?
           AND qh.qualificacao_id = ?
           AND qh.deleted_at IS NULL
-          AND UPPER(COALESCE(qh.status, '')) NOT IN ('CANCELADA', 'CANCELADO', 'PLANEJADA', 'PLANEJADO')`,
+          AND ${buildHistoricoTipoSyncEligibleStatusPredicate('qh')}`,
     )
     .bind(empresaId, tipoId)
     .all<HistoricoRow>();
@@ -97,12 +101,22 @@ export async function resyncTipoHistoricoValidity(
       unchanged += 1;
       continue;
     }
-    const next = buildHistoricoTipoSnapshot(snapshot, {
+    const historyInput = {
       dataConclusao: row.data_conclusao,
       dataVencimentoAtual: row.data_vencimento,
       tipoTreinamento: row.tipo_treinamento,
       nascimentoFuncionario: row.nascimento_funcionario,
-    });
+      validadeMesesAtual: row.validade_meses,
+    };
+    const oldSnapshot: QualificacaoTipoSnapshot = {
+      ...snapshot,
+      validade: previousValidade === undefined ? row.validade_meses : previousValidade,
+    };
+    if (shouldPreserveHistoricoExpiryOnTipoUpdate(oldSnapshot, historyInput)) {
+      unchanged += 1;
+      continue;
+    }
+    const next = buildHistoricoTipoSnapshot(snapshot, historyInput);
     if (
       next.validadeMeses == null ||
       next.dataVencimento == null ||

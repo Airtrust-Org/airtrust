@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { loadTipoListMetrics } from '../../routes/qualificacoes/tipos-list-metrics';
 
 type SqlCall = { sql: string; bindings: unknown[] };
@@ -63,11 +64,43 @@ describe('qualificacoes tipos bounded listing metrics', () => {
     expect(metrics.get('500')).toEqual({ total_no_historico: 1, setores_json: '[]', setores_count: 0 });
   });
 
+  it('never counts inactive, soft-deleted or other-tenant employees even when their history remains', async () => {
+    const sqlite = new SqliteD1Database();
+    try {
+      sqlite.database.exec(`
+        ALTER TABLE funcionarios ADD COLUMN status TEXT NOT NULL DEFAULT 'ATIVO';
+        INSERT INTO funcionarios (id, empresa_id, nome, status, deleted_at)
+          VALUES (91001, 6, 'Ativo', 'ATIVO', NULL),
+                 (91002, 6, 'Desligado', 'INATIVO', NULL),
+                 (91003, 6, 'Excluido', 'ATIVO', '2026-01-01'),
+                 (91004, 7, 'Outra Empresa', 'ATIVO', NULL);
+      `);
+      sqlite.database.exec(`
+        INSERT INTO qualificacoes_historico
+          (id, empresa_id, funcionario_id, qualificacao_id, qualificacao_codigo, data_conclusao, deleted_at)
+        VALUES (94001,6,91001,25,'D4','2026-01-01',NULL),
+               (94002,6,91002,137,'MNT_ARTIGOS_PERIGOSOS','2022-06-12',NULL),
+               (94003,6,91003,137,'MNT_ARTIGOS_PERIGOSOS','2022-06-12',NULL),
+               (94004,6,91004,137,'MNT_ARTIGOS_PERIGOSOS','2022-06-12',NULL),
+               (94005,7,91004,137,'MNT_ARTIGOS_PERIGOSOS','2022-06-13',NULL);
+      `);
+      const metrics = await loadTipoListMetrics(sqlite as unknown as D1Database, 6, [25, 137], false);
+      expect(metrics.get('25')?.total_no_historico).toBe(1);
+      expect(metrics.get('137')?.total_no_historico).toBe(0);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it('skips sector lookups when the optional table is absent, preserving empty sector defaults', async () => {
     const { db, calls } = createDb();
     const metrics = await loadTipoListMetrics(db, 6, [1, 2, 1], false);
     expect(calls).toHaveLength(1);
     expect(calls[0].sql).toContain('FROM qualificacoes_historico');
+    expect(calls[0].sql).toMatch(/INNER JOIN funcionarios f/);
+    expect(calls[0].sql).toMatch(/f\.empresa_id = qh\.empresa_id/);
+    expect(calls[0].sql).toMatch(/f\.deleted_at IS NULL/);
+    expect(calls[0].sql).toMatch(/UPPER\(TRIM\(COALESCE\(f\.status, 'ATIVO'\)\)\) = 'ATIVO'/);
     expect(JSON.parse(calls[0].bindings[1] as string)).toEqual(['1', '2']);
     expect(metrics.get('2')).toEqual({ total_no_historico: 0, setores_json: '[]', setores_count: 0 });
   });

@@ -20,6 +20,7 @@ import {
   getEmployeeSectorAccess,
 } from '../middleware/employee-sector-access';
 import { resolveLmsEffectiveProgress } from '../lib/lms/lms-progress-guardrails';
+import { buildFicha360CurrentHistorySql } from '../lib/qualificacoes/ficha360-current-history-sql';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -599,45 +600,29 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
         ? 'qualificacao_id'
         : 'qualificacao_id';
 
-    // 2. Qualificações (somente vigentes, uma por código)
-    const statusExpr = histCols.has('status') ? 'UPPER(COALESCE(q.status, \"\"))' : "''";
+    // 2. Realização vigente por código, com cronologia de conclusão e renovação
+    // canônica. A Ficha 360 não deve atribuir a validade do histórico anterior
+    // ao funcionário nem selecionar PLANEJADA como competência concluída.
+    const qualificacoesTenantId = empresaId ?? funcionarioEmpresaId;
+    if (!qualificacoesTenantId || qualificacoesTenantId <= 0) {
+      throw new Error('FICHA360_TENANT_REQUIRED_FOR_QUALIFICATION_READ');
+    }
+    const hasHistoricoTenant = histCols.has('empresa_id');
+    const statusExpr = histCols.has('status') ? "UPPER(COALESCE(q.status, ''))" : "''";
     const qualificacoesRaw = await db
-      .prepare(
-        `WITH qualificacoes_ativas AS (
-           SELECT
-             q.id,
-             q.funcionario_id,
-             q.${colTipo} as tipo_id,
-             q.${colInicio} as data_realizacao,
-             q.${colFim} as data_vencimento,
-             q.observacoes,
-             q.created_at,
-             q.updated_at,
-             q.origem_tipo,
-             q.lms_matricula_id,
-             tq.categoria,
-             tq.nome,
-             tq.codigo,
-             ROW_NUMBER() OVER (
-               PARTITION BY tq.codigo
-               ORDER BY datetime(COALESCE(q.${colFim}, q.${colInicio}, q.updated_at, q.created_at)) DESC,
-                        q.id DESC
-             ) AS rn
-           FROM qualificacoes_historico q
-           JOIN qualificacoes_tipos tq ON q.${colTipo} = tq.id
-           WHERE q.funcionario_id = ?
-             AND q.deleted_at IS NULL
-             AND ${statusExpr} != 'CANCELADA'
-             AND COALESCE(q.${colFim}, q.${colInicio}) IS NOT NULL
-         )
-         SELECT id, funcionario_id, tipo_id, data_realizacao, data_vencimento, observacoes,
-                created_at, updated_at, categoria, nome, codigo, origem_tipo, lms_matricula_id
-           FROM qualificacoes_ativas
-          WHERE rn = 1
-          ORDER BY datetime(COALESCE(data_vencimento, data_realizacao, updated_at, created_at)) DESC,
-                   id DESC`,
+      .prepare(buildFicha360CurrentHistorySql({
+        tipoCol: colTipo,
+        inicioCol: colInicio,
+        fimCol: colFim,
+        hasStatus: histCols.has('status'),
+        hasEmpresaId: hasHistoricoTenant,
+        hasRenewalLink: histCols.has('renovacao_de'),
+      }))
+      .bind(
+        ...(hasHistoricoTenant
+          ? [funcionarioId, qualificacoesTenantId]
+          : [qualificacoesTenantId, funcionarioId]),
       )
-      .bind(funcionarioId)
       .all();
 
     const qualificacoesHistoricoRaw = await db
@@ -660,13 +645,19 @@ export async function getFicha360(db: D1Database, funcionarioId: number, empresa
            tq.codigo
          FROM qualificacoes_historico q
          JOIN qualificacoes_tipos tq ON q.${colTipo} = tq.id
+           ${hasHistoricoTenant ? 'AND tq.empresa_id = q.empresa_id' : 'AND tq.empresa_id = ?'}
          WHERE q.funcionario_id = ?
+           ${hasHistoricoTenant ? 'AND q.empresa_id = ?' : ''}
            AND q.deleted_at IS NULL
            AND ${statusExpr} != 'CANCELADA'
          ORDER BY datetime(COALESCE(q.${colFim}, q.${colInicio}, q.updated_at, q.created_at)) DESC,
                   q.id DESC`,
       )
-      .bind(funcionarioId)
+      .bind(
+        ...(hasHistoricoTenant
+          ? [funcionarioId, qualificacoesTenantId]
+          : [qualificacoesTenantId, funcionarioId]),
+      )
       .all();
     interface QualRaw {
       [key: string]: unknown;
