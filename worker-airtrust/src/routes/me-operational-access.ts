@@ -447,12 +447,20 @@ router.get('/frms-maintenance-team', async (c) => {
          AND f.deleted_at IS NULL
          AND COALESCE(f.ativo, 1) = 1
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-       ORDER BY f.nome ASC`,
+       ORDER BY f.nome ASC, COALESCE(ch.submitted_at, ch.created_at, '') DESC, COALESCE(ra.created_at, '') DESC`,
     )
     .bind(date, date, empresaId, ...maintenanceScope.setorIds)
     .all<Record<string, unknown>>();
 
-  const maintenanceItems = (rows.results || []).filter(
+  const seenFuncionarios = new Set<number>();
+  const dedupedRows = (rows.results || []).filter((row) => {
+    const id = Number(row.funcionario_id);
+    if (!Number.isInteger(id) || id <= 0 || seenFuncionarios.has(id)) return false;
+    seenFuncionarios.add(id);
+    return true;
+  });
+
+  const maintenanceItems = dedupedRows.filter(
     (row) => resolveFrmsWorkforceProfile(row.cargo, row.funcao) === 'maintenance',
   );
   const production = c.env.ENVIRONMENT === 'production';

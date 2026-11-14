@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/react-app/hooks/useAuth';
 import { httpClient, type ApiResponse } from '@/react-app/services/http-client';
 import type { VigilanceTrial } from '@/react-app/lib/frms/operationalReadiness';
 
@@ -114,38 +115,43 @@ async function postReadiness<T>(path: string, input: unknown): Promise<T> {
 }
 
 export function useReadinessBaseline(referenceDate?: string) {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-readiness-baseline', referenceDate || null],
+    queryKey: ['frms-readiness-baseline', referenceDate || null, empresaAtualId, user?.id],
     queryFn: () =>
       getReadiness<ReadinessBaseline>(
         referenceDate
           ? `/frms/readiness/baseline?date=${encodeURIComponent(referenceDate)}`
           : '/frms/readiness/baseline',
       ),
+    enabled: !isLoading && isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useReadinessToday(referenceDate: string) {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-readiness-today', referenceDate],
+    queryKey: ['frms-readiness-today', referenceDate, empresaAtualId, user?.id],
     queryFn: () =>
       getReadiness<ReadinessToday | null>(
         `/frms/readiness/today?date=${encodeURIComponent(referenceDate)}`,
       ),
+    enabled: !isLoading && isAuthenticated && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
     staleTime: 2 * 60 * 1000,
   });
 }
 
 export function useReadinessTeam(referenceDate: string) {
+  const { isLoading, isAuthenticated, empresaAtualId, user } = useAuth();
   return useQuery({
-    queryKey: ['frms-readiness-team', referenceDate],
+    queryKey: ['frms-readiness-team', referenceDate, empresaAtualId, user?.id],
     queryFn: () =>
       getReadiness<ReadinessTeamItem[]>(
         `/frms/readiness/team?date=${encodeURIComponent(referenceDate)}`,
       ),
     staleTime: 60 * 1000,
-    enabled: /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
+    enabled: !isLoading && isAuthenticated && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate),
   });
 }
 
@@ -162,6 +168,7 @@ export function useSubmitReadiness() {
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-baseline'] });
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-today', variables.reference_date] });
       queryClient.invalidateQueries({ queryKey: ['frms-readiness-team', variables.reference_date] });
+      queryClient.invalidateQueries({ queryKey: ['frms-maintenance-team', variables.reference_date] });
       queryClient.invalidateQueries({ queryKey: ['frms-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['fadiga-painel'] });
     },

@@ -23,9 +23,15 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function assessMaintenanceFatigue(input: MaintenanceFatigueInput): MaintenanceFatigueAssessment {
-  const sleepHours24h = clamp(Number(input.sleepHours24h), 0, 24);
-  const sleepQuality = clamp(Math.round(Number(input.sleepQuality)), 1, 5);
-  const kssScore = clamp(Math.round(Number(input.kssScore)), 1, 9);
+  const rawSleep = Number(input.sleepHours24h);
+  const rawQuality = Number(input.sleepQuality);
+  const rawKss = Number(input.kssScore);
+  if (!Number.isFinite(rawSleep) || !Number.isFinite(rawQuality) || !Number.isFinite(rawKss)) {
+    throw new Error('INVALID_MAINTENANCE_FATIGUE_INPUT');
+  }
+  const sleepHours24h = clamp(rawSleep, 0, 24);
+  const sleepQuality = clamp(Math.round(rawQuality), 1, 5);
+  const kssScore = clamp(Math.round(rawKss), 1, 9);
 
   const reasons: string[] = [];
   if (sleepHours24h < 4) reasons.push('Sono nas últimas 24 h inferior a 4 h.');

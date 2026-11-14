@@ -174,7 +174,7 @@ function normalizeQualidadeSono(qualidadeSono: number | null, policy: FadigaBusi
 
 function normalizeSintomas(sintomasJson: Record<string, number> | null): number {
   if (!sintomasJson) return 0;
-  const values = Object.values(sintomasJson).filter((v) => typeof v === 'number');
+  const values = Object.values(sintomasJson).filter((v) => typeof v === 'number' && Number.isFinite(v));
   if (values.length === 0) return 0;
   const media = values.reduce((acc, value) => acc + clamp(value, 0, 3), 0) / values.length;
   return clamp(media / 3, 0, 1);
