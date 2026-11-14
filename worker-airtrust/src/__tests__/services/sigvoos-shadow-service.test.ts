@@ -153,15 +153,20 @@ function createSqliteD1(): D1Database {
     batch: async (statements: unknown[]) => {
       const sql = statements
         .map((statement) => (statement as { testRenderBoundSql: () => string }).testRenderBoundSql())
-        .map((query) => query + ';')
+        .map((query) => query + ';\nSELECT changes();')
         .join('\n');
-      // sqlite3 -bail aborts before COMMIT on failure, rolling back the batch.
+      // sqlite3 -bail aborts before COMMIT; SELECT changes() uses the same
+      // connection and reveals a stale fingerprint CAS (0 rows).
       const result = spawnSync('sqlite3', ['-bail', databasePath], {
         input: 'BEGIN IMMEDIATE;\n' + sql + '\nCOMMIT;',
         encoding: 'utf8',
       });
       if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-      return statements.map(() => ({ meta: { changes: 1 } }));
+      const changes = result.stdout.trim().split(/\s+/).map(Number);
+      if (changes.length !== statements.length || changes.some((v) => !Number.isInteger(v))) {
+        throw new Error('SQLITE_BATCH_CHANGE_METADATA_UNAVAILABLE');
+      }
+      return changes.map((count) => ({ meta: { changes: count } }));
     },
   } as unknown as D1Database;
 }
@@ -241,6 +246,148 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
     const created = await db.prepare("SELECT * FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'CREATED'").all();
     expect(created.results?.length).toBe(1);
   });
+
+  it('2c. CREATE history failure rolls back the new leg in the same D1 batch', async () => {
+    const db = createSqliteD1();
+    await db.prepare(`
+      CREATE TRIGGER reject_shadow_created_history
+      BEFORE INSERT ON sigvoos_shadow_leg_history
+      WHEN NEW.transition = 'CREATED'
+      BEGIN SELECT RAISE(ABORT, 'CREATED_HISTORY_FAILED'); END
+    `).run();
+    const summary = await runSigvoosShadowIngestion(
+      db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+      { createClient: () => makeClient([[rawLeg()], []]) },
+    );
+    expect(summary.status).toBe('PARTIAL');
+    expect(summary.failed).toBe(1);
+    const legs = await db.prepare('SELECT id FROM sigvoos_shadow_legs WHERE empresa_id = 10').all();
+    const audit = await db.prepare('SELECT id FROM sigvoos_shadow_leg_history WHERE empresa_id = 10').all();
+    expect(legs.results).toHaveLength(0);
+    expect(audit.results).toHaveLength(0);
+  });
+
+  it('2d. SOURCE_CHANGED history failure rolls back the update and preserves prior evidence', async () => {
+    const db = createSqliteD1();
+    const first = await runSigvoosShadowIngestion(
+      db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+      { createClient: () => makeClient([[rawLeg()], []]) },
+    );
+    expect(first.status).toBe('COMPLETE');
+    const before = await db
+      .prepare('SELECT source_fingerprint, normalized_json, source_state FROM sigvoos_shadow_legs WHERE empresa_id = 10')
+      .first<{ source_fingerprint: string; normalized_json: string; source_state: string }>();
+    await db.prepare(`
+      CREATE TRIGGER reject_shadow_changed_history
+      BEFORE INSERT ON sigvoos_shadow_leg_history
+      WHEN NEW.transition = 'SOURCE_CHANGED'
+      BEGIN SELECT RAISE(ABORT, 'CHANGED_HISTORY_FAILED'); END
+    `).run();
+    const summary = await runSigvoosShadowIngestion(
+      db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+      {
+        createClient: () => makeClient([
+          [rawLeg({ flight_report_leg: { ...(rawLeg().flight_report_leg as object), landing_time_str: '11:55' } })],
+          [],
+        ]),
+      },
+    );
+    expect(summary.status).toBe('PARTIAL');
+    expect(summary.failed).toBe(1);
+    const after = await db
+      .prepare('SELECT source_fingerprint, normalized_json, source_state FROM sigvoos_shadow_legs WHERE empresa_id = 10')
+      .first<{ source_fingerprint: string; normalized_json: string; source_state: string }>();
+    expect(after).toEqual(before);
+    const history = await db
+      .prepare('SELECT transition FROM sigvoos_shadow_leg_history WHERE empresa_id = 10')
+      .all<{ transition: string }>();
+    expect(history.results?.map((row) => row.transition)).toEqual(['CREATED']);
+  });
+
+  it.each(['same', 'different'] as const)(
+    '2e. race after fingerprint read (%s target) never reports COMPLETE nor duplicates evidence',
+    async (competitorTarget) => {
+      const inner = createSqliteD1();
+      const first = await runSigvoosShadowIngestion(
+        inner, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+        { createClient: () => makeClient([[rawLeg()], []]) },
+      );
+      expect(first.status).toBe('COMPLETE');
+      let injected = false;
+      const db = {
+        prepare(sql: string) {
+          return inner.prepare(sql);
+        },
+        batch: async (statements: D1PreparedStatement[]) => {
+          const sql = (statements[1] as unknown as {
+            testRenderBoundSql: () => string;
+          }).testRenderBoundSql();
+          if (!injected && sql.includes("source_state = 'SOURCE_CHANGED'") &&
+              sql.includes('source_fingerprint =')) {
+            injected = true;
+            const match = sql.match(/SET source_fingerprint = '([^']+)'/);
+            expect(match).not.toBeNull();
+            const attemptedFingerprint = match![1];
+            const winnerFingerprint =
+              competitorTarget === 'same' ? attemptedFingerprint : 'RACE_DIFFERENT_FINGERPRINT';
+            const leg = await inner
+              .prepare('SELECT id, run_id, normalized_json FROM sigvoos_shadow_legs WHERE empresa_id = 10')
+              .first<{id: string; run_id: string; normalized_json: string}>();
+            expect(leg).not.toBeNull();
+
+            // Simulates a concurrently committed other writer between the
+            // stale read of fingerprint A and our conditional D1.batch.
+            await inner.prepare(
+              "UPDATE sigvoos_shadow_legs SET source_fingerprint = ?, source_state = 'SOURCE_CHANGED' WHERE id = ? AND empresa_id = 10",
+            ).bind(winnerFingerprint, leg!.id).run();
+            await inner.prepare(
+              `INSERT INTO sigvoos_shadow_leg_history
+                (id,empresa_id,leg_id,run_id,source_fingerprint,normalized_json,transition,
+                 field_differences_json,recorded_at)
+               VALUES (?,10,?,?,?,?,'SOURCE_CHANGED',NULL,?)`,
+            ).bind(
+              'race-winning-'+competitorTarget,leg!.id,leg!.run_id,
+              winnerFingerprint,leg!.normalized_json,'2026-08-01 10:00:00',
+            ).run();
+          }
+          return inner.batch(statements);
+        },
+      } as unknown as D1Database;
+
+      const second = await runSigvoosShadowIngestion(
+        db, 10, { from: '2026-08-01', to: '2026-08-01' }, {},
+        { createClient: () => makeClient([[
+          rawLeg({ flight_report_leg: {
+            ...(rawLeg().flight_report_leg as object), landing_time_str: '11:55',
+          } }),
+        ], []]) },
+      );
+      expect(injected).toBe(true);
+      expect(second.status).toBe('PARTIAL');
+      expect(second.failed).toBe(1);
+      expect(second.processed).toBe(0);
+      const state = await inner.prepare(
+        'SELECT source_fingerprint FROM sigvoos_shadow_legs WHERE empresa_id = 10',
+      ).first<{source_fingerprint: string}>();
+      const history = await inner.prepare(
+        "SELECT transition FROM sigvoos_shadow_leg_history WHERE empresa_id=10 ORDER BY recorded_at",
+      ).all<{transition: string}>();
+      expect(history.results?.map((row) => row.transition).sort()).toEqual([
+        'CREATED', 'SOURCE_CHANGED',
+      ]);
+      expect(state?.source_fingerprint).toBe(
+        competitorTarget === 'same'
+          ? (await inner.prepare(
+              "SELECT source_fingerprint FROM sigvoos_shadow_leg_history WHERE empresa_id = 10 AND transition = 'SOURCE_CHANGED'",
+            ).first<{source_fingerprint: string}>())?.source_fingerprint
+          : 'RACE_DIFFERENT_FINGERPRINT',
+      );
+      const run = await inner.prepare(
+        'SELECT cursor_json FROM sigvoos_shadow_runs WHERE id = ?',
+      ).bind(second.runId).first<{cursor_json: string | null}>();
+      expect(run?.cursor_json).toBeNull();
+    },
+  );
 
   it('2b. preserves two crew rows for one physical leg without overwrite or duplicate on rerun', async () => {
     const db = createSqliteD1();
@@ -486,6 +633,11 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
           bind: (...args: unknown[]) => {
             const bound = stmt.bind(...args);
             return {
+              // The production code now performs INSERT+history in one D1.batch.
+              // Keep the fault injection at the batch boundary (the old mock
+              // intercepted only .run() and therefore falsely failed both legs).
+              testRenderBoundSql: () =>
+                (bound as unknown as { testRenderBoundSql: () => string }).testRenderBoundSql(),
               first: bound.first.bind(bound),
               all: bound.all.bind(bound),
               run: async () => {
@@ -500,6 +652,15 @@ describe('sigvoos-shadow-service: identity + idempotency', () => {
           all: stmt.all.bind(stmt),
           run: stmt.run.bind(stmt),
         };
+      },
+      batch: async (statements: unknown[]) => {
+        const rendered = statements.map((stmt) =>
+          (stmt as { testRenderBoundSql: () => string }).testRenderBoundSql(),
+        );
+        if (rendered.some((sql) => sql.includes('INSERT INTO sigvoos_shadow_legs') && sql.includes('FR-FAIL'))) {
+          throw new Error('SIMULATED_PERSISTENCE_FAILURE');
+        }
+        return inner.batch(statements as D1PreparedStatement[]);
       },
     } as unknown as D1Database;
 
