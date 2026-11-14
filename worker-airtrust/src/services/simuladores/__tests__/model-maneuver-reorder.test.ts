@@ -10,7 +10,7 @@ function mockDb() {
       return entry;
     }),
   }));
-  const batch = vi.fn(async () => []);
+  const batch = vi.fn(async (_statements: unknown[]) => []);
   return { db: { prepare, batch } as unknown as D1Database, prepare, batch, writes };
 }
 
