@@ -134,12 +134,80 @@ async function buildMonthEscalaMap(
   return map;
 }
 
+function addDaysIso(isoDate: string, deltaDays: number): string {
+  const d = parseIsoDate(isoDate);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return formatIsoDate(d);
+}
+
+function subtractCoveredIntervals(
+  segment: { dataInicio: string; dataFim: string },
+  covered: Array<{ data_inicio: string; data_fim: string }>,
+): Array<{ dataInicio: string; dataFim: string }> {
+  const clipped = covered
+    .map((row) => ({
+      start: row.data_inicio > segment.dataInicio ? row.data_inicio : segment.dataInicio,
+      end: row.data_fim < segment.dataFim ? row.data_fim : segment.dataFim,
+    }))
+    .filter((r) => r.start <= r.end)
+    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.end.localeCompare(b.end)));
+
+  if (clipped.length === 0) {
+    return [segment];
+  }
+
+  const uncovered: Array<{ dataInicio: string; dataFim: string }> = [];
+  let cursor = segment.dataInicio;
+
+  for (const interval of clipped) {
+    if (interval.start > cursor) {
+      uncovered.push({
+        dataInicio: cursor,
+        dataFim: addDaysIso(interval.start, -1),
+      });
+    }
+    const nextCursor = addDaysIso(interval.end, 1);
+    if (nextCursor > cursor) {
+      cursor = nextCursor;
+    }
+    if (cursor > segment.dataFim) {
+      break;
+    }
+  }
+
+  if (cursor <= segment.dataFim) {
+    uncovered.push({
+      dataInicio: cursor,
+      dataFim: segment.dataFim,
+    });
+  }
+
+  return uncovered;
+}
+
 const INSERT_ESCALA_EVENTO_SQL = `
   INSERT INTO escala_eventos
   (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
    turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
    origem, observacoes, created_by, created_at, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+const INSERT_ESCALA_EVENTO_IF_UNCOVERED_SQL = `
+  INSERT INTO escala_eventos
+  (id, escala_id, tripulacao_id, funcionario_id, tipo_evento, data_inicio, data_fim,
+   turno, local, aeronave, simulador_id, gerado_automaticamente, motivo_automatico, status,
+   origem, observacoes, created_by, created_at, updated_at)
+  SELECT ?, ?, ?, ?, ?, ?, ?, 'dia_todo', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM escala_eventos existing
+      WHERE existing.escala_id = ?
+        AND existing.tripulacao_id = ?
+        AND existing.funcionario_id = ?
+        AND existing.deleted_at IS NULL
+        AND NOT (existing.data_fim < ? OR existing.data_inicio > ?)
+   )
 `;
 
 export async function removeManagedEscalaEvents(
@@ -503,4 +571,278 @@ function buildRangeDates(dataInicio: string, dataFim: string): string[] {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
+}
+
+export interface SyncTreinamentosPlanejadosForMonthParams {
+  db: D1Database;
+  empresaId: string | number | null | undefined;
+  ano: number;
+  mes: number;
+  escalaId?: string | null;
+}
+
+const TREINAMENTO_CHUNK_SIZE = 50;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Reconcile pre-existing PLANEJADO/CONFIRMADO trainings into a monthly schedule.
+ *
+ * Non-destructive and idempotent: never soft-deletes or overwrites existing
+ * confirmed/manually edited events, only materializes missing events inside
+ * the target tenant and month.
+ */
+export async function syncTreinamentosPlanejadosForMonth(
+  params: SyncTreinamentosPlanejadosForMonthParams,
+): Promise<number> {
+  const { db, empresaId, ano, mes, escalaId } = params;
+  if (empresaId === null || empresaId === undefined || empresaId === '') {
+    return 0;
+  }
+
+  const targetEscalaId = escalaId || (await getEscalaMensalId(db, empresaId, ano, mes));
+  if (!targetEscalaId) {
+    return 0;
+  }
+
+  const { start, end } = getMonthBounds(ano, mes);
+  const dataInicioMes = formatIsoDate(start);
+  const dataFimMes = formatIsoDate(end);
+
+  const trainingsRes = await db
+    .prepare(
+      `SELECT tp.id,
+              tp.status,
+              tp.titulo,
+              tp.codigo_turma,
+              tp.data_inicio,
+              tp.data_fim,
+              tp.data_prevista,
+              tp.instrutor_id,
+              tp.created_by
+         FROM treinamentos_planejados tp
+        WHERE tp.empresa_id = ?
+          AND tp.deleted_at IS NULL
+          AND tp.status IN ('PLANEJADO', 'CONFIRMADO')
+          AND (
+            EXISTS (
+              SELECT 1
+                FROM treinamentos_dias td
+               WHERE td.treinamento_id = tp.id
+                 AND td.empresa_id = tp.empresa_id
+                 AND td.deleted_at IS NULL
+                 AND td.status = 'ATIVO'
+                 AND td.data BETWEEN ? AND ?
+            )
+            OR (
+              NOT EXISTS (
+                SELECT 1
+                  FROM treinamentos_dias td
+                 WHERE td.treinamento_id = tp.id
+                   AND td.empresa_id = tp.empresa_id
+                   AND td.deleted_at IS NULL
+                   AND td.status = 'ATIVO'
+              )
+              AND COALESCE(tp.data_fim, tp.data_prevista) >= ?
+              AND COALESCE(tp.data_inicio, tp.data_prevista) <= ?
+            )
+          )`,
+    )
+    .bind(empresaId, dataInicioMes, dataFimMes, dataInicioMes, dataFimMes)
+    .all<{
+      id: number;
+      status: string;
+      titulo: string | null;
+      codigo_turma: string | null;
+      data_inicio: string | null;
+      data_fim: string | null;
+      data_prevista: string | null;
+      instrutor_id: number | null;
+      created_by: string | number | null;
+    }>();
+
+  const trainings = trainingsRes.results || [];
+  if (trainings.length === 0) {
+    return 0;
+  }
+
+  const peopleByTraining = new Map<number, Set<number>>();
+  const daysByTraining = new Map<number, string[]>();
+  const existingByKey = new Map<string, Array<{ data_inicio: string; data_fim: string }>>();
+
+  for (const tp of trainings) {
+    const people = new Set<number>();
+    if (tp.instrutor_id) people.add(Number(tp.instrutor_id));
+    peopleByTraining.set(tp.id, people);
+  }
+
+  for (const chunk of chunkArray(
+    trainings.map((t) => t.id),
+    TREINAMENTO_CHUNK_SIZE,
+  )) {
+    const placeholders = chunk.map(() => '?').join(', ');
+    const linkIds = chunk.map((id) => `treinamento:${id}`);
+
+    const [partRes, instRes, diasRes, existingRes] = await Promise.all([
+      db
+        .prepare(
+          `SELECT treinamento_id, funcionario_id
+             FROM treinamentos_participantes
+            WHERE treinamento_id IN (${placeholders})
+              AND COALESCE(status_participacao, 'MATRICULADO') != 'CANCELADO'`,
+        )
+        .bind(...chunk)
+        .all<{ treinamento_id: number; funcionario_id: number }>(),
+      db
+        .prepare(
+          `SELECT treinamento_id, funcionario_id
+             FROM treinamentos_instrutores
+            WHERE treinamento_id IN (${placeholders})
+              AND empresa_id = ?`,
+        )
+        .bind(...chunk, empresaId)
+        .all<{ treinamento_id: number; funcionario_id: number }>(),
+      db
+        .prepare(
+          `SELECT treinamento_id, data
+             FROM treinamentos_dias
+            WHERE treinamento_id IN (${placeholders})
+              AND empresa_id = ?
+              AND deleted_at IS NULL
+              AND status = 'ATIVO'
+              AND data BETWEEN ? AND ?
+            ORDER BY data`,
+        )
+        .bind(...chunk, empresaId, dataInicioMes, dataFimMes)
+        .all<{ treinamento_id: number; data: string }>(),
+      db
+        .prepare(
+          `SELECT tripulacao_id, funcionario_id, data_inicio, data_fim
+             FROM escala_eventos
+            WHERE escala_id = ?
+              AND deleted_at IS NULL
+              AND tripulacao_id IN (${placeholders})`,
+        )
+        .bind(targetEscalaId, ...linkIds)
+        .all<{
+          tripulacao_id: string;
+          funcionario_id: string;
+          data_inicio: string;
+          data_fim: string;
+        }>(),
+    ]);
+
+    for (const row of [...(partRes.results || []), ...(instRes.results || [])]) {
+      const idNum = Number(row.funcionario_id);
+      if (idNum) {
+        peopleByTraining.get(row.treinamento_id)?.add(idNum);
+      }
+    }
+    for (const row of diasRes.results || []) {
+      const list = daysByTraining.get(row.treinamento_id) || [];
+      list.push(row.data);
+      daysByTraining.set(row.treinamento_id, list);
+    }
+    for (const row of existingRes.results || []) {
+      const key = `${row.tripulacao_id}::${String(row.funcionario_id)}`;
+      const list = existingByKey.get(key) || [];
+      list.push({ data_inicio: row.data_inicio, data_fim: row.data_fim });
+      existingByKey.set(key, list);
+    }
+  }
+
+  const now = new Date().toISOString();
+  const motivoAutomatico =
+    'Gerado automaticamente a partir do treinamento planejado. Gerencie no módulo Treinamentos.';
+  const insertStmts: ReturnType<D1Database['prepare']>[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const tp of trainings) {
+    const people = peopleByTraining.get(tp.id);
+    if (!people || people.size === 0) continue;
+
+    const linkId = `treinamento:${tp.id}`;
+    const observacoes =
+      [tp.titulo, tp.codigo_turma ? `[${tp.codigo_turma}]` : null].filter(Boolean).join(' ') || null;
+    const statusEvento: 'confirmado' | 'pendente' =
+      tp.status === 'CONFIRMADO' ? 'confirmado' : 'pendente';
+    const createdBy = String(tp.created_by || 'system');
+
+    const dias = daysByTraining.get(tp.id);
+    const segments: Array<{ dataInicio: string; dataFim: string }> =
+      dias && dias.length > 0
+        ? dias.map((d) => ({ dataInicio: d, dataFim: d }))
+        : (() => {
+            const startDate = tp.data_inicio || tp.data_prevista;
+            const endDate = tp.data_fim || tp.data_prevista;
+            if (!startDate || !endDate) return [];
+            const seg = getSegmentBounds(startDate, endDate, ano, mes);
+            return seg ? [seg] : [];
+          })();
+
+    for (const seg of segments) {
+      for (const funcionarioId of people) {
+        const funcKey = String(funcionarioId);
+        const existing = existingByKey.get(`${linkId}::${funcKey}`) || [];
+        const uncoveredRanges = subtractCoveredIntervals(seg, existing);
+
+        for (const range of uncoveredRanges) {
+          const dedupKey = `${linkId}::${funcKey}::${range.dataInicio}::${range.dataFim}`;
+          if (seenKeys.has(dedupKey)) continue;
+          seenKeys.add(dedupKey);
+
+          insertStmts.push(
+            db
+              .prepare(INSERT_ESCALA_EVENTO_IF_UNCOVERED_SQL)
+              .bind(
+                crypto.randomUUID(),
+                targetEscalaId,
+                linkId,
+                funcKey,
+                'treinamento_solo',
+                range.dataInicio,
+                range.dataFim,
+                null,
+                null,
+                null,
+                motivoAutomatico,
+                statusEvento,
+                'treinamento',
+                observacoes,
+                createdBy,
+                now,
+                now,
+                targetEscalaId,
+                linkId,
+                funcKey,
+                range.dataInicio,
+                range.dataFim,
+              ),
+          );
+        }
+      }
+    }
+  }
+
+  let insertedCount = 0;
+  if (insertStmts.length > 0) {
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < insertStmts.length; i += BATCH_SIZE) {
+      const results = await db.batch(
+        insertStmts.slice(i, i + BATCH_SIZE) as Parameters<typeof db.batch>[0],
+      );
+      for (const res of results) {
+        const changes = (res as { meta?: { changes?: number } } | undefined)?.meta?.changes;
+        insertedCount += typeof changes === 'number' ? changes : 1;
+      }
+    }
+  }
+
+  return insertedCount;
 }

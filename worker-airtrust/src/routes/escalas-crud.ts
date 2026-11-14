@@ -8,7 +8,10 @@ import { auth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { registrarAuditoria } from '../utils/auditoria';
 import { gerarAlertasCMA } from '../utils/escala-engine';
-import { syncFuncionarioFeriasForMonth } from '../shared/syncEscalaEventosExternos';
+import {
+  syncFuncionarioFeriasForMonth,
+  syncTreinamentosPlanejadosForMonth,
+} from '../shared/syncEscalaEventosExternos';
 import {
   getEmpresaIdSafe,
   getEscalaVerificada,
@@ -314,6 +317,14 @@ crud.post('/', auth(), requirePermission('escalas', 'criar', 'admin', 'manager')
       mes: parsed.data.mes,
     });
 
+    await syncTreinamentosPlanejadosForMonth({
+      db,
+      empresaId,
+      ano: parsed.data.ano,
+      mes: parsed.data.mes,
+      escalaId: id,
+    });
+
     await registrarAuditoria({
       db,
       tabela: 'escalas_mensais',
@@ -361,7 +372,7 @@ crud.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admin', '
           `SELECT id FROM escalas_mensais WHERE mes = ? AND ano = ? AND empresa_id = ? AND deleted_at IS NULL`,
         )
         .bind(mes, ano, empresaId)
-        .first();
+        .first<{ id: string }>();
       if (!existente) {
         const id = crypto.randomUUID();
         await db
@@ -376,7 +387,22 @@ crud.post('/gerar-ano', auth(), requirePermission('escalas', 'criar', 'admin', '
           ano,
           mes,
         });
+        await syncTreinamentosPlanejadosForMonth({
+          db,
+          empresaId,
+          ano,
+          mes,
+          escalaId: id,
+        });
         criados++;
+      } else {
+        await syncTreinamentosPlanejadosForMonth({
+          db,
+          empresaId,
+          ano,
+          mes,
+          escalaId: existente.id,
+        });
       }
     }
     return c.json({ success: true, data: { criados, ano } });
