@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function ModalVerificarConflitos({ escalaId, onClose }: Props) {
-  const { data, loading } = useEscalaConflitosQuery(escalaId);
+  const { data, loading, error, isFetching, isSuccess } = useEscalaConflitosQuery(escalaId);
   const totalProblemas = data
     ? data.conflitos_eventos.length +
       (data.conflitos_tripulacoes?.length ?? 0) +
@@ -33,15 +33,18 @@ export default function ModalVerificarConflitos({ escalaId, onClose }: Props) {
         </Button>
       }
     >
-      {loading ? (
+      {loading || isFetching ? (
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
             <p className="text-slate-500 text-sm">Analisando conflitos...</p>
           </div>
         </div>
-      ) : !data ? (
-        <p className="text-center text-slate-400 py-8">Sem dados disponíveis.</p>
+      ) : !data || !!error || !isSuccess ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900" role="alert">
+          Não foi possível concluir a verificação de conflitos. Isso não significa que a escala esteja sem conflitos.
+          Recarregue a consulta antes de publicar.
+        </div>
       ) : (
         <div className="space-y-5">
           {/* Status geral */}

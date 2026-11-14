@@ -5,7 +5,7 @@ import { API_BASE_URL } from '@/react-app/config/api';
 import { useParams } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 import { SimuladoresCard} from '../../components/SimuladoresLayout';
-import ReordenarManobras from '../../components/modelos/ReordenarManobras';
+import ReordenarManobras from '../../../../components/modelos/ReordenarManobras';
 
 interface Modelo {
   id: number;

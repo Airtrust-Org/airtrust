@@ -96,11 +96,9 @@ function buildDashboardRenewalSqlPredicates() {
 }
 
 async function hasDashboardRenovacaoDeColumn(db: D1Database): Promise<boolean> {
-  try {
-    return (await getSchemaColumns(db, 'qualificacoes_historico')).has('renovacao_de');
-  } catch {
-    return false;
-  }
+  // F14-08: erro ao inspecionar schema não significa coluna ausente.
+  // Propagar degradação; false só é permitido quando a sondagem foi bem-sucedida.
+  return (await getSchemaColumns(db, 'qualificacoes_historico')).has('renovacao_de');
 }
 
 /**
@@ -116,7 +114,21 @@ app.get('/qualificacoes', async (c) => {
     const thresholdDias = await getQualificacoesAlertaDias(db, empresaId);
     const hojeSp = getTodayIsoSaoPaulo();
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
-    const hasRenovacaoDe = await hasDashboardRenovacaoDeColumn(db);
+    let hasRenovacaoDe: boolean;
+    try {
+      hasRenovacaoDe = await hasDashboardRenovacaoDeColumn(db);
+    } catch (error) {
+      createLogger(c as Context, 'Dashboard').error(
+        'Não foi possível consultar o schema de qualificações',
+        toError(error),
+      );
+      return c.json({
+        success: false,
+        code: 'QUALIFICATIONS_SCHEMA_UNAVAILABLE',
+        verificacao_indisponivel: true,
+        error: 'Não foi possível verificar o schema de qualificações; estatísticas não estão disponíveis.',
+      }, 503);
+    }
     const { legacyRenewedPredicate } = buildDashboardRenewalSqlPredicates();
     const currentOperationalPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const newerQualificationExistsPredicate = buildNewerDashboardQualificationExists('qh');

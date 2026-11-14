@@ -56,9 +56,9 @@ function createDbMock(options?: {
             async first<T>() {
             if (
               sql ===
-              'SELECT id FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
+              'SELECT id, assinatura_aluno_timestamp, assinatura_tripulante FROM fichas_sessao WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL'
             ) {
-              return { id: Number(args[0]) } as T;
+              return { id: Number(args[0]), assinatura_aluno_timestamp: null, assinatura_tripulante: 0 } as T;
             }
 
             // operational-domain-access.ts: isTenantRbacEnabled — legacy tenant.
@@ -192,7 +192,7 @@ describe('simuladores fichas simulador observacoes guard', () => {
     expect(
       runs.some((item) =>
         item.query.includes('UPDATE fichas_sessao_manobras') &&
-        item.query.includes('SET resultado=?, observacoes=?, updated_at=datetime("now")') &&
+        item.query.includes("SET resultado=?, observacoes=?, updated_at=datetime('now')") &&
         item.query.includes('assinatura_instrutor_timestamp IS NULL') &&
         item.query.includes('f.empresa_id=?'),
       ),

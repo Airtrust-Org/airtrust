@@ -15,7 +15,7 @@ import {
 import Button from '../components/Button';
 import { PageLayout, PageSection, PageGrid } from '@/react-app/components/layout/PageLayout';
 import StatCard from '@/react-app/components/StatCard';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 interface Manobra {
   id: number;

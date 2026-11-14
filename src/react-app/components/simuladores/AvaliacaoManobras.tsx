@@ -16,7 +16,7 @@ import {
 import Button from '../Button';
 import Card from '../Card';
 import { BaseModal as Modal } from '../modals/BaseModal';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 
 interface ManobraAvaliacao {
   manobra_id: number;

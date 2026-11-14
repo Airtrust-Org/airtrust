@@ -59,6 +59,8 @@ function createDbMock(options?: {
   sessionDate?: string;
   sessionTime?: string;
   signedInstructor?: boolean;
+  signedStudent?: boolean;
+  legacyStudentFlagOnly?: boolean;
   hasInstructorMeta?: boolean;
 }) {
   const runs: Array<{ query: string; args: unknown[] }> = [];
@@ -69,11 +71,15 @@ function createDbMock(options?: {
       const bind = (...args: unknown[]) => ({
         first: async () => {
           if (
-            query.includes('SELECT id FROM fichas_sessao') &&
+            query.includes('SELECT id, assinatura_aluno_timestamp, assinatura_tripulante FROM fichas_sessao') &&
             query.includes('empresa_id = ?') &&
             query.includes('deleted_at IS NULL')
           ) {
-            return { id: Number(args[0]) };
+            return {
+              id: Number(args[0]),
+              assinatura_aluno_timestamp: options?.signedStudent ? '2026-11-13T11:00:00Z' : null,
+              assinatura_tripulante: options?.legacyStudentFlagOnly ? 1 : 0,
+            };
           }
 
           if (query.includes("SELECT 1 as found FROM sqlite_master") &&
@@ -139,7 +145,8 @@ function createDbMock(options?: {
               equipamento_utilizado: null,
               dispositivo_identificacao: null,
               assento_instrucao_utilizado: null,
-              assinatura_aluno_timestamp: null,
+              assinatura_aluno_timestamp: options?.signedStudent ? '2026-11-13T11:00:00Z' : null,
+              assinatura_tripulante: options?.legacyStudentFlagOnly ? 1 : 0,
               assinatura_instrutor_timestamp: options?.signedInstructor
                 ? '2026-11-13T11:00:00Z' : null,
               assinatura_instrutor: options?.signedInstructor ? 1 : 0,
@@ -159,6 +166,8 @@ function createDbMock(options?: {
               tipo_sessao: 'PER',
               empresa_id: Number(args[1] || 6),
               deleted_at: null,
+              assinatura_aluno_timestamp: options?.signedStudent ? '2026-11-13T11:00:00Z' : null,
+              assinatura_tripulante: options?.legacyStudentFlagOnly ? 1 : 0,
             };
           }
           if (query.includes('SELECT * FROM fichas_sessao WHERE id=? AND deleted_at IS NULL')) {
@@ -571,6 +580,42 @@ describe('simuladores fichas tenant-aware writes', () => {
         item.query.includes('assinatura_aluno_ip=?,assinatura_aluno_timestamp=?'),
       ),
     ).toBe(false);
+  });
+
+  it.each([
+    { scenario: 'timestamp', options: { signedStudent: true } },
+    { scenario: 'legacy-flag', options: { legacyStudentFlagOnly: true } },
+  ])('PUT de manobra bloqueia ficha assinada pelo aluno ($scenario)', async ({ options }) => {
+    const { db, runs, batchSizes } = createDbMock(options);
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/manobras/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultado: 3, observacoes: 'Não autorizado' }),
+      }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'FICHA_STUDENT_SIGNED' });
+    expect(runs).toHaveLength(0);
+    expect(batchSizes).toHaveLength(0);
+  });
+
+  it.each([
+    { scenario: 'timestamp', options: { signedStudent: true } },
+    { scenario: 'legacy-flag', options: { legacyStudentFlagOnly: true } },
+  ])('POST popular-manobras bloqueia ficha assinada pelo aluno ($scenario)', async ({ options }) => {
+    const { db, runs, batchSizes } = createDbMock(options);
+    const response = await simuladoresFichasRoutes.fetch(
+      new Request('http://localhost/fichas-simulador/901/popular-manobras', { method: 'POST' }),
+      { DB: db, __mockEmpresaId: 6 } as unknown as Env,
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: 'FICHA_STUDENT_SIGNED' });
+    expect(runs).toHaveLength(0);
+    expect(batchSizes).toHaveLength(0);
   });
 
   it('PUT /fichas-simulador/:fichaId/manobras/:ordem bloqueia edição de sessão futura', async () => {

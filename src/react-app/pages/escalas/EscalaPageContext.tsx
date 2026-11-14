@@ -1,3 +1,4 @@
+import { deriveConflictVerification } from './utils/conflict-verification';
 // src/react-app/pages/escalas/EscalaPageContext.tsx
 //
 // Provides all page-level state, queries, mutations, derived values, and handlers
@@ -178,6 +179,7 @@ export interface EscalaPageCtxValue {
   refetchCoberturaTripulantes: () => void;
   refetchQuinzenas: () => void;
   conflitosData: ReturnType<typeof useEscalaConflitosQuery>['data'];
+  conflitosVerificados: boolean;
   snapshotComparacao:
     | {
         tripulacoes: EscalaTripulacao[];
@@ -465,7 +467,13 @@ export function EscalaPageProvider({ children }: { children: ReactNode }) {
     }, [queryClient]),
   );
 
-  const { data: conflitosData } = useEscalaConflitosQuery(escalaAtualId);
+  const {
+    data: conflitosData,
+    error: conflitosErro,
+    loading: conflitosCarregando,
+    isFetching: conflitosBuscando,
+    isSuccess: conflitosSucesso,
+  } = useEscalaConflitosQuery(escalaAtualId);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const {
@@ -706,12 +714,15 @@ export function EscalaPageProvider({ children }: { children: ReactNode }) {
     return ids.size;
   })();
   const totalEventos = dadosCalendario?.eventos.length ?? 0;
-  const totalConflitos = conflitosData
-    ? conflitosData.conflitos_eventos.length +
-      conflitosData.conflitos_tripulacoes.length +
-      conflitosData.restricoes_violadas.length +
-      conflitosData.violacoes_compliance.length
-    : 0;
+  const { total: totalConflitos, verificado: conflitosVerificados } =
+    deriveConflictVerification({
+      hasEscala: Boolean(escalaAtualId),
+      data: conflitosData,
+      error: conflitosErro,
+      loading: conflitosCarregando,
+      isFetching: conflitosBuscando,
+      isSuccess: conflitosSucesso,
+    });
   const escalaSemTripulacao =
     (dadosCalendario?.tripulacoes.length ?? 0) === 0 && alocacoesOperacionais.length === 0;
   const exibirAcoesOperacionais = modoEdicao && !loadingCalendario && !escalaSemTripulacao;
@@ -1158,6 +1169,7 @@ export function EscalaPageProvider({ children }: { children: ReactNode }) {
     refetchCoberturaTripulantes,
     refetchQuinzenas,
     conflitosData,
+    conflitosVerificados,
     snapshotComparacao,
     // Mutations
     alterarStatus,

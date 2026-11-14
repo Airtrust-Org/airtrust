@@ -77,7 +77,9 @@ describe('tenant-aware write paths', () => {
     expect(pastaVirtual).toMatch(/INSERT INTO documentos .* empresa_id/i);
     expect(pastaVirtualExtra).toMatch(/INSERT INTO documentos .* empresa_id/i);
     expect(certificados).toContain('UPDATE documentos SET deleted_at = datetime');
-    expect(certificados).toContain('WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL');
+    // O DELETE permanece tenant-scoped pelo histórico previamente autorizado e pelo funcionário.
+    expect(certificados).toContain('WHERE id = ? AND funcionario_id = ? AND deleted_at IS NULL');
+    expect(certificados).toContain('WHERE certificado_arquivo_id = ? AND empresa_id = ? AND deleted_at IS NULL');
     expect(pastaVirtual).toContain('WHERE documento_id = ? AND empresa_id = ?');
   });
 

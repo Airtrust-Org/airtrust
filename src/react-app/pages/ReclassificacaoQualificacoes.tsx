@@ -4,7 +4,7 @@ import AppLayout from '@/react-app/components/AppLayout';
 
 import { API_BASE_URL, getAccessToken } from '@/react-app/config/api';
 import { apiClient } from '@/react-app/services/apiClient';
-import { confirmDialog } from '@/react-app/utils/confirmDialog';
+import { confirmDialog, showAlertDialog } from '@/react-app/utils/confirmDialog';
 import FuncionarioLink from '@/react-app/components/funcionarios/FuncionarioLink';
 import {
   RefreshCw,

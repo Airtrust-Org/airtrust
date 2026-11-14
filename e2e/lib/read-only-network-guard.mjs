@@ -53,6 +53,7 @@ export const MUTATION_METHODS = Object.freeze(['DELETE', 'PATCH', 'PUT']);
 export const SUPPRESSED_EXTERNAL_RESOURCE_HOSTS = Object.freeze([
   'fonts.googleapis.com',
   'fonts.gstatic.com',
+  'static.cloudflareinsights.com',
 ]);
 
 export const SUPPRESSED_READ_ONLY_POST_PATHS = Object.freeze(['/api/public/translate']);

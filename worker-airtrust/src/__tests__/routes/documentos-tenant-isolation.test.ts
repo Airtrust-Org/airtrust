@@ -684,8 +684,9 @@ describe('documentos tenant isolation', () => {
 
     expect(response.status).toBe(200);
     expect(body.data).toEqual([]);
-    expect(runs).toHaveLength(1);
-    expect(runs[0].args).toEqual([701, 1, 202]);
+    expect((body as { orphan_reference?: boolean }).orphan_reference).toBe(true);
+    // F14-05: leitura cross-tenant não deve apagar referência histórica nem fazer qualquer write.
+    expect(runs).toHaveLength(0);
     expect(bucket.get).not.toHaveBeenCalled();
     expect(bucket.put).not.toHaveBeenCalled();
     expect(bucket.delete).not.toHaveBeenCalled();

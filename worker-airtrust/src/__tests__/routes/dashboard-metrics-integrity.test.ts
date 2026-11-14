@@ -74,7 +74,14 @@ function createPreparedDb(queue: Array<{ first?: unknown; all?: { results: unkno
 
   const env = {
     DB: {
-      prepare: vi.fn().mockImplementation(() => ({
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        // Real handler probes schema before aggregating metrics. The mock must
+        // model a successful PRAGMA, not silently rely on the old catch->false.
+        all: vi.fn().mockResolvedValue(
+          sql.includes("PRAGMA table_info('qualificacoes_historico')")
+            ? { results: [{ name: 'renovacao_de' }] }
+            : { results: [] },
+        ),
         bind: (...args: unknown[]) => {
           bindCalls.push(args);
           const entry = queue[index++];

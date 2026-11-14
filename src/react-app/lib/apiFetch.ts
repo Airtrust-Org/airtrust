@@ -225,18 +225,29 @@ function isTrustedApiOrigin(
   return override === defaultOrigin || (!!altOrigin && override === altOrigin);
 }
 
-function dataChangeScopeForMutation(pathname: string): DataChangeScope | null {
-  if (/\/api\/treinamentos(\/|$)/i.test(pathname)) return 'treinamentos';
-  if (/\/api\/escalas(\/|$)/i.test(pathname) || /\/api\/evd(\/|$)/i.test(pathname)) {
-    return 'escala';
+/**
+ * Emit only post-success domain invalidations. Frequent SCORM CMI/commit and
+ * progress writes must not trigger a dashboard refetch per learning step.
+ */
+export function dataChangeScopesForMutation(pathname: string): DataChangeScope[] {
+  if (/^\/api\/(?:lms(?:\/|-)|lms$)/i.test(pathname)) {
+    if (/\/(?:scorm|cmi|commit|progresso|progress|heartbeat|suspend|autosave|launch)(?:\/|$)/i.test(pathname)) {
+      return [];
+    }
+    return ['lms', 'qualificacoes', 'compliance'];
   }
-  if (/\/api\/simuladores(\/|$)/i.test(pathname)) return 'simuladores';
-  if (/\/api\/qualificacoes(\/|$)/i.test(pathname) || /\/api\/certificados(\/|$)/i.test(pathname)) {
-    return 'qualificacoes';
+  if (/^\/api\/treinamentos(?:\/|$)/i.test(pathname)) return ['treinamentos', 'compliance'];
+  if (/^\/api\/(?:funcionarios|setores|usuarios)(?:\/|$)/i.test(pathname)) {
+    return ['funcionarios', 'qualificacoes', 'compliance'];
   }
-  return null;
+  if (/^\/api\/(?:escalas|evd)(?:\/|$)/i.test(pathname)) return ['escala', 'frms'];
+  if (/^\/api\/frms(?:\/|$)/i.test(pathname)) return ['frms'];
+  if (/^\/api\/simuladores(?:\/|$)/i.test(pathname)) return ['simuladores', 'qualificacoes'];
+  if (/^\/api\/qualificacoes(?:\/|$)/i.test(pathname)) return ['qualificacoes', 'compliance'];
+  if (/^\/api\/certificados(?:\/|$)/i.test(pathname)) return ['qualificacoes', 'compliance'];
+  if (/^\/api\/compliance(?:\/|$)/i.test(pathname)) return ['compliance'];
+  return [];
 }
-
 function notifyMutationDataChange(
   method: string,
   pathname: string | null,
@@ -244,8 +255,7 @@ function notifyMutationDataChange(
 ): void {
   if (!response.ok || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
   if (!pathname) return;
-  const scope = dataChangeScopeForMutation(pathname);
-  if (scope) notifyDataChanged(scope);
+  for (const scope of dataChangeScopesForMutation(pathname)) notifyDataChanged(scope);
 }
 
 // O padrão é resolvido aqui (e não importado de config/api) porque config/api importa

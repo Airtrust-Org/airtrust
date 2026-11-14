@@ -7,7 +7,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { auth } from '../middleware/auth';
 import { getEmpresaIdSafe, getEscalaVerificada } from './escalas-shared';
-import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { findExpiredCrewQualifications } from '../lib/qualificacoes/expired-crew-qualifications';
 
 const conflitos = new Hono<{ Bindings: Env }>();
 
@@ -42,6 +43,18 @@ export function shouldIgnoreSubstitutableEventConflict(conflito: ConflitoEventoR
     Number(conflito.auto2 ?? 0) === 1 && AUTO_EVENTOS_SUBSTITUIVEIS.has(String(conflito.tipo2));
 
   return evento1AutoSubstituivel || evento2AutoSubstituivel;
+}
+
+/**
+ * Age at a Brazilian civil date, not at UTC midnight.
+ * A date-of-birth field is a calendar date and must never be parsed as an
+ * instant subject to the worker server's timezone.
+ */
+export function calcularIdadeNaDataCivil(nascimentoIso: string, hojeIso: string): number {
+  const [anoHoje, mesHoje, diaHoje] = hojeIso.split('-').map(Number);
+  const [ano, mes, dia] = nascimentoIso.slice(0, 10).split('-').map(Number);
+  if (![anoHoje, mesHoje, diaHoje, ano, mes, dia].every(Number.isInteger)) return NaN;
+  return anoHoje - ano - (mesHoje < mes || (mesHoje === mes && diaHoje < dia) ? 1 : 0);
 }
 
 // GET /:id/conflitos — verificar conflitos antes de publicar
@@ -180,14 +193,9 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
           sic_funcao: string | null;
         }>();
 
-      const hoje = new Date();
-      const calcIdade = (dn: string) => {
-        const nascimento = new Date(dn);
-        let anos = hoje.getFullYear() - nascimento.getFullYear();
-        const m = hoje.getMonth() - nascimento.getMonth();
-        if (m < 0 || (m === 0 && hoje.getDate() < nascimento.getDate())) anos--;
-        return anos;
-      };
+      // F14-07: idade e vencimento de CMA usam a mesma data civil brasileira.
+      const hojeSp = getTodayIsoSaoPaulo();
+      const calcIdade = (dn: string) => calcularIdadeNaDataCivil(dn, hojeSp);
 
       for (const trip of tripulacoes.results || []) {
         if (!trip.sic_id) continue;
@@ -220,32 +228,14 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
           [t.pic_id, t.sic_id].filter(Boolean),
         );
         if (tripIds.length > 0) {
-          const placeholders = tripIds.map(() => '?').join(',');
-          const qualsVencidas = await db
-            .prepare(
-              `SELECT DISTINCT
-                 f.id as func_id, f.nome as func_nome,
-                 qt.nome as qual_nome, qt.codigo as qual_codigo,
-                 ${getQualificacoesVencimentoExpr()} as data_vencimento_calc
-               FROM qualificacoes_historico qh
-               JOIN funcionarios f ON f.id = qh.funcionario_id
-               JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
-               WHERE qh.funcionario_id IN (${placeholders})
-                 AND qh.deleted_at IS NULL
-                 AND qh.renovada = 0
-                 AND qh.data_conclusao IS NOT NULL
-                 AND ${getQualificacoesVencimentoExpr()} < date('now')`,
-            )
-            .bind(...tripIds)
-            .all<{
-              func_id: number;
-              func_nome: string;
-              qual_nome: string;
-              qual_codigo: string;
-              data_vencimento_calc: string;
-            }>();
+          const qualsVencidas = await findExpiredCrewQualifications(
+            db,
+            empresaId,
+            tripIds.map(Number),
+            hojeSp,
+          );
 
-          for (const q of qualsVencidas.results || []) {
+          for (const q of qualsVencidas) {
             violacoesCompliance.push({
               tipo: 'qualificacao_vencida',
               mensagem: `${q.func_nome}: qualificação "${q.qual_nome}" (${q.qual_codigo}) venceu em ${q.data_vencimento_calc}`,
@@ -258,11 +248,25 @@ conflitos.get('/:id/conflitos', auth(), async (c) => {
             });
           }
         }
-      } catch {
-        /* silencioso */
+      } catch (error) {
+        // Uma falha D1/schema não equivale a tripulação regular.
+        console.error('[CONFLITOS] Verificação de qualificações indisponível:', error);
+        return c.json({
+          success: false,
+          code: 'COMPLIANCE_CHECK_UNAVAILABLE',
+          verificacao_indisponivel: true,
+          error: 'Não foi possível verificar as qualificações da tripulação. A escala não deve ser considerada livre de conflitos.',
+        }, 503);
       }
     } catch (e) {
-      console.warn('[CONFLITOS] Erro ao verificar compliance NOP-OPS-038:', e);
+      // Qualquer falha no cômputo NOP-OPS-038 impede atestar ausência de conflito.
+      console.error('[CONFLITOS] Erro ao verificar compliance NOP-OPS-038:', e);
+      return c.json({
+        success: false,
+        code: 'COMPLIANCE_CHECK_UNAVAILABLE',
+        verificacao_indisponivel: true,
+        error: 'Não foi possível verificar o compliance operacional da tripulação. A escala não deve ser considerada livre de conflitos.',
+      }, 503);
     }
 
     return c.json({
