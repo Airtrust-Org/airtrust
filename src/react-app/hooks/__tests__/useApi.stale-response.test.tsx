@@ -71,6 +71,27 @@ describe('useApi responses arriving out of order', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('clears old qualification rows when a different filter fails instead of displaying a false match', async () => {
+    const failed = deferred<Response>();
+    mocks.appFetch.mockResolvedValueOnce(response(200, [{ id: 1, nome: 'AVSEC' }]))
+      .mockReturnValueOnce(failed.promise);
+
+    const { result, rerender } = renderHook(
+      ({ search }) => useApi<{ id: number; nome: string }[]>(
+        `/api/qualificacoes/historico?search=${search}`,
+        { retry: 0, clearDataOnRequestChange: true },
+      ),
+      { initialProps: { search: 'avsec' } },
+    );
+    await waitFor(() => expect(result.current.data).toEqual([{ id: 1, nome: 'AVSEC' }]));
+    rerender({ search: 'perigoso' });
+    await waitFor(() => expect(mocks.appFetch).toHaveBeenCalledTimes(2));
+    expect(result.current.data).toBeNull();
+    await act(async () => { failed.resolve({ status: 500, ok: false, statusText: 'Internal Error', json: async () => ({ error: 'Falha de consulta' }) } as Response); });
+    await waitFor(() => expect(result.current.error).toContain('servidor'));
+    expect(result.current.data).toBeNull();
+  });
+
   it('ignores a stale 401 instead of logging out the current filter session', async () => {
     const oldRequest = deferred<Response>();
     const newRequest = deferred<Response>();

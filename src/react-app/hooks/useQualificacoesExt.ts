@@ -176,6 +176,11 @@ export function useQualificacoesHistorico(
     enabled,
     requireAuth: true,
     staleTime: 30_000,
+    clearDataOnRequestChange: true,
+    // Histórico pode executar várias agregações; nunca deixar a tabela girando
+    // indefinidamente se o Worker/D1 não concluir a consulta.
+    timeoutMs: 15_000,
+    retry: 1,
   });
 
   const carregarHistorico = useCallback(() => refetch(), [refetch]);
