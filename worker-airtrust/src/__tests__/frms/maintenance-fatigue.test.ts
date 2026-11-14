@@ -26,4 +26,23 @@ describe('assessMaintenanceFatigue', () => {
     expect(result.operationalStatus).toBe('NAO_APTO');
     expect(result.requiresOperationalReview).toBe(1);
   });
+
+  it('respeita exatamente os limiares limítrofes de sono, KSS e qualidade', () => {
+    expect(assessMaintenanceFatigue({ sleepHours24h: 6, sleepQuality: 3, kssScore: 6, fitForDuty: true }).riskLevel).toBe('normal');
+    expect(assessMaintenanceFatigue({ sleepHours24h: 5.99, sleepQuality: 3, kssScore: 6, fitForDuty: true }).riskLevel).toBe('attention');
+    expect(assessMaintenanceFatigue({ sleepHours24h: 4, sleepQuality: 3, kssScore: 6, fitForDuty: true }).riskLevel).toBe('attention');
+    expect(assessMaintenanceFatigue({ sleepHours24h: 3.99, sleepQuality: 3, kssScore: 6, fitForDuty: true }).riskLevel).toBe('critical');
+  });
+
+  it('falha fechado quando entradas numéricas não são finitas (nunca retorna normal)', () => {
+    expect(() =>
+      assessMaintenanceFatigue({ sleepHours24h: Number.NaN, sleepQuality: 4, kssScore: 3, fitForDuty: true }),
+    ).toThrow('INVALID_MAINTENANCE_FATIGUE_INPUT');
+    expect(() =>
+      assessMaintenanceFatigue({ sleepHours24h: 8, sleepQuality: Number.POSITIVE_INFINITY, kssScore: 3, fitForDuty: true }),
+    ).toThrow('INVALID_MAINTENANCE_FATIGUE_INPUT');
+    expect(() =>
+      assessMaintenanceFatigue({ sleepHours24h: 8, sleepQuality: 4, kssScore: Number.NaN, fitForDuty: true }),
+    ).toThrow('INVALID_MAINTENANCE_FATIGUE_INPUT');
+  });
 });

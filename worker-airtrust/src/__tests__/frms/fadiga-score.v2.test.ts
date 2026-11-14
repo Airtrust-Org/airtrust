@@ -358,6 +358,32 @@ describe('calcularScoreFadiga (modelo VERDE/AMARELO/LARANJA/VERMELHO)', () => {
     expect(comFatores.componentes.sintomas_norm).toBeGreaterThan(0);
     expect(comFatores.score_fadiga).toBeGreaterThan(base.score_fadiga);
   });
+
+  it('ignora valores não finitos em sintomas_json sem contaminar score_fadiga com NaN', () => {
+    const result = calcularScoreFadiga(
+      {
+        kss_score: 7,
+        horas_sono: 5,
+        qualidade_sono: 2,
+        sintomas_json: { cefaleia: Number.NaN, cansaco: 3, outro: Number.POSITIVE_INFINITY },
+        apto: 1,
+        meds_ult_12h: 0,
+        alcool_ult_12h: 0,
+      },
+      {
+        threshold_amarelo: 45,
+        threshold_vermelho: 75,
+        peso_kss: 0.4,
+        peso_sono_duracao: 0.3,
+        peso_sono_qualidade: 0.2,
+        peso_sintomas: 0.1,
+      },
+    );
+
+    expect(Number.isFinite(result.score_fadiga)).toBe(true);
+    expect(result.componentes.sintomas_norm).toBe(1);
+    expect(result.nivel_fadiga).not.toBe('VERDE');
+  });
 });
 
 describe('calcularHorasSono', () => {
