@@ -1,9 +1,56 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
+import { QueryObserver } from '@tanstack/react-query';
 import { dataChangeScopesForMutation } from '../apiFetch';
-import { canApplyCrossTabDataChange } from '@/react-app/utils/data-sync';
-import { shouldInvalidateQueryForDataChange } from '../query-client';
+import { canApplyCrossTabDataChange, notifyDataChanged } from '@/react-app/utils/data-sync';
+import { queryClient, shouldInvalidateQueryForDataChange } from '../query-client';
+import { resetTenantDataLayer } from '../tenant-data-layer';
 
 describe('tenant-aware mutation cache invalidation', () => {
+  it('refetches an observed, populated dashboard query only once for overlapping mutation scopes', async () => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    resetTenantDataLayer({ tenantId: 6, reason: 'manual', broadcast: false });
+    const key6 = ['tenant', 6, 'dashboard', 'operational-summary'] as const;
+    const key7 = ['tenant', 7, 'dashboard', 'operational-summary'] as const;
+    queryClient.setQueryData(key6, { total: 1 });
+    queryClient.setQueryData(key7, { total: 7 });
+
+    const fetch6 = vi.fn(async () => ({ total: 2 }));
+    const fetch7 = vi.fn(async () => ({ total: 8 }));
+    const observer6 = new QueryObserver(queryClient, {
+      queryKey: key6,
+      queryFn: fetch6,
+      staleTime: Infinity,
+    });
+    const observer7 = new QueryObserver(queryClient, {
+      queryKey: key7,
+      queryFn: fetch7,
+      staleTime: Infinity,
+    });
+    const unsubscribe6 = observer6.subscribe(() => {});
+    const unsubscribe7 = observer7.subscribe(() => {});
+
+    try {
+      expect(fetch6).toHaveBeenCalledTimes(0);
+      expect(fetch7).toHaveBeenCalledTimes(0);
+      // One successful employee mutation has 3 domain dependencies.
+      notifyDataChanged('funcionarios');
+      notifyDataChanged('qualificacoes');
+      notifyDataChanged('compliance');
+      await vi.waitFor(() => expect(fetch6).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(fetch6).toHaveBeenCalledTimes(1);
+      expect(fetch7).toHaveBeenCalledTimes(0);
+      expect(queryClient.getQueryData(key6)).toEqual({ total: 2 });
+      expect(queryClient.getQueryData(key7)).toEqual({ total: 7 });
+    } finally {
+      unsubscribe6();
+      unsubscribe7();
+      resetTenantDataLayer({ tenantId: null, reason: 'manual', broadcast: false });
+    }
+  });
+
   it('rejects cross-tab invalidation from a different or unresolved tenant', () => {
     expect(canApplyCrossTabDataChange(6, 6)).toBe(true);
     expect(canApplyCrossTabDataChange(6, 7)).toBe(false);
