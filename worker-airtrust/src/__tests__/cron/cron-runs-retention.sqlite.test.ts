@@ -54,7 +54,7 @@ describe('P13-08 retencao de cron_job_runs', () => {
     const plan = db.database.prepare('EXPLAIN QUERY PLAN ' + CRON_RUNS_PURGE_SQL)
       .all('-60 days', 5000) as Array<{ detail: string }>;
     const details = plan.map((step) => step.detail).join('\n');
-    expect(details).toMatch(/SEARCH n USING INDEX idx_cron_job_runs_lookup/);
+    expect(details).toMatch(/SEARCH n(?: EXISTS)? USING INDEX idx_cron_job_runs_lookup/);
     expect(details).toMatch(/started_at[>=? ]/);
     expect(details).not.toMatch(/SCAN (?:TABLE )?n\\b/);
   });
