@@ -1732,7 +1732,10 @@ async function runPhase({ browser, token, course, manifest, phase, initialValues
     let html = await response.text();
     const marker = '</body>';
     invariant(html.includes(marker), `SCORM_PREVIEW_BODY_MISSING:${course.id}`);
-    const reloadScript = `<script>(function(){var f=document.getElementById('scorm-frame');if(!f)return;var u=new URL(f.src,location.href);u.searchParams.set('airtrust_cert',Date.now().toString(36));f.src=u.toString();})();</script>`;
+    // Admin preview launches append ?preview=1 for human operators (#1882),
+    // which causes Factory V3/V4 courses to suppress SCORM writes. Strip it
+    // here so the read-only instrumented runtime tests the real learner path.
+    const reloadScript = `<script>(function(){var f=document.getElementById('scorm-frame');if(!f)return;var u=new URL(f.src,location.href);u.searchParams.delete('preview');u.searchParams.set('airtrust_cert',Date.now().toString(36));f.src=u.toString();})();</script>`;
     html = html.replace(marker, `${traceScript}${reloadScript}${marker}`);
     await route.fulfill({ response, body: html });
   });
