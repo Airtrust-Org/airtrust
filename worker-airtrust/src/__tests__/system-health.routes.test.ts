@@ -47,6 +47,45 @@ function expectNoStoreHeaders(response: Response) {
 }
 
 describe('system health routes', () => {
+  it('starts D1 and R2 probes concurrently, without reporting healthy prematurely', async () => {
+    const app = createApp();
+    let releaseDb!: (value: { test: number }) => void;
+    let releaseR2!: () => void;
+    const first = vi.fn().mockImplementation(() => new Promise<{ test: number }>((resolve) => {
+      releaseDb = resolve;
+    }));
+    const list = vi.fn().mockImplementation(() => new Promise<{ objects: unknown[] }>((resolve) => {
+      releaseR2 = () => resolve({ objects: [] });
+    }));
+    const env = {
+      DB: { prepare: vi.fn().mockReturnValue({ first }) },
+      BUCKET: { list },
+      ENVIRONMENT: 'test',
+    } as unknown as Env;
+
+    let completed = false;
+    const pending = Promise.resolve(app.request('/api/health', {}, env)).then((response) => {
+      completed = true;
+      return response;
+    });
+
+    // Both I/O probes must have started before either one is released.
+    await vi.waitFor(() => {
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(list).toHaveBeenCalledTimes(1);
+    });
+    expect(completed).toBe(false);
+    releaseDb({ test: 1 });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    releaseR2();
+    const response = await pending;
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as HealthBody;
+    expect(body.checks.database.status).toBe('ok');
+    expect(body.checks.storage.status).toBe('ok');
+  });
+
   it('returns a healthy response when D1 and R2 are available', async () => {
     const app = createApp();
     const { env, prepare, databaseFirst, storageList } = createEnv();
