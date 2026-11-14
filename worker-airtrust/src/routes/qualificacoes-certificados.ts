@@ -109,24 +109,23 @@ app.get('/historico/:id/certificados', auth(), async (c) => {
       `[LISTAR CERTIFICADOS] Encontrado ${results.length || 0} certificado(s) para historico_id=${id}`,
     );
     if (results.length === 0 && certificadoId) {
+      // GET é somente leitura: a referência órfã é sinalizada, nunca limpa aqui.
+      // Reconciliação (se necessária) deve ser ação explícita, auditada e com dry-run.
       console.warn(
-        `[LISTAR CERTIFICADOS] Referência órfã detectada em historico_id=${id} para certificado_arquivo_id=${certificadoId}; limpando vínculo.`,
+        JSON.stringify({
+          event: 'certificados.orphan_reference',
+          historico_id: id,
+          empresa_id: empresaId,
+          certificado_arquivo_id: certificadoId,
+        }),
       );
-      await db
-        .prepare(
-          `UPDATE qualificacoes_historico
-              SET certificado_arquivo_id = NULL,
-                  arquivo_url = NULL,
-                  numero_certificado = NULL,
-                  updated_at = datetime('now')
-            WHERE id = ?
-              AND empresa_id = ?
-              AND deleted_at IS NULL
-              AND certificado_arquivo_id = ?`,
-        )
-        .bind(id, empresaId, certificadoId)
-        .run();
-      return c.json({ success: true, data: [] });
+      return c.json({
+        success: true,
+        data: [],
+        orphan_reference: true,
+        warning:
+          'O vínculo de certificado deste registro não aponta para um documento ativo. Nenhum dado foi alterado.',
+      });
     }
 
     if (results.length > 0) {
