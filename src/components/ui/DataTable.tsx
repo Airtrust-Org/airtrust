@@ -1,3 +1,4 @@
+import 'material-symbols/outlined.css';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { buildUserScopedStorageKey } from '../../react-app/utils/userPreferences';
