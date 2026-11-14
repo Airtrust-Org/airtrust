@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldIgnoreSubstitutableEventConflict } from '../../routes/escalas-conflitos';
+import { calcularIdadeNaDataCivil, shouldIgnoreSubstitutableEventConflict } from '../../routes/escalas-conflitos';
 
 describe('shouldIgnoreSubstitutableEventConflict', () => {
   it('ignora conflito quando um placeholder automatico deve ser substituido', () => {
@@ -39,5 +39,13 @@ describe('shouldIgnoreSubstitutableEventConflict', () => {
         funcionario_nome: 'Ramon',
       }),
     ).toBe(false);
+  });
+});
+
+describe('F14-07 — idade da tripulação na data civil operacional brasileira', () => {
+  it('mantém a idade até a meia-noite de São Paulo, sem antecipar aniversário por UTC', () => {
+    expect(calcularIdadeNaDataCivil('1966-11-15', '2026-11-14')).toBe(59);
+    expect(calcularIdadeNaDataCivil('1966-11-15', '2026-11-15')).toBe(60);
+    expect(calcularIdadeNaDataCivil('1966-11-14', '2026-11-14')).toBe(60);
   });
 });
