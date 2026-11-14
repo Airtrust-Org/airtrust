@@ -1010,82 +1010,89 @@ export async function getDemandaTreinamento(
   try {
     const sessionScope = buildSessionScopeSql(access, 'simulador_agendamentos');
     const aliasedSessionScope = buildSessionScopeSql(access, 'sa');
+    const hojeSp = getTodayIsoSaoPaulo();
     const [periodos, porTipo, porSimulador, instrutores] = await Promise.all([
       // Por período
       db
         .prepare(
-          `SELECT
-             COUNT(CASE WHEN data BETWEEN date('now') AND date('now', '+30 days') THEN 1 END) as proximos_30,
-             COUNT(CASE WHEN data BETWEEN date('now', '+31 days') AND date('now', '+60 days') THEN 1 END) as dias_31_60,
-             COUNT(CASE WHEN data BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 END) as dias_61_90,
+          `WITH operational_today AS (SELECT date(?) AS hoje)
+           SELECT
+             COUNT(CASE WHEN data BETWEEN operational_today.hoje AND date(operational_today.hoje, '+30 days') THEN 1 END) as proximos_30,
+             COUNT(CASE WHEN data BETWEEN date(operational_today.hoje, '+31 days') AND date(operational_today.hoje, '+60 days') THEN 1 END) as dias_31_60,
+             COUNT(CASE WHEN data BETWEEN date(operational_today.hoje, '+61 days') AND date(operational_today.hoje, '+90 days') THEN 1 END) as dias_61_90,
              COUNT(*) as total
-           FROM simulador_agendamentos
+           FROM simulador_agendamentos CROSS JOIN operational_today
            WHERE deleted_at IS NULL
            AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
            AND ${sessionScope.clause}
-           AND data BETWEEN date('now') AND date('now', '+90 days')`,
+           AND data BETWEEN operational_today.hoje AND date(operational_today.hoje, '+90 days')`,
         )
-        .bind(empresaId, ...sessionScope.bindings)
+        .bind(hojeSp, empresaId, ...sessionScope.bindings)
         .first<{ proximos_30: number; dias_31_60: number; dias_61_90: number; total: number }>(),
 
       // Por tipo de sessão
       db
         .prepare(
-          `SELECT
+          `WITH operational_today AS (SELECT date(?) AS hoje)
+           SELECT
              tipo_sessao,
              COUNT(*) as quantidade
-           FROM simulador_agendamentos
+           FROM simulador_agendamentos CROSS JOIN operational_today
            WHERE deleted_at IS NULL
            AND status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND empresa_id = ?
            AND ${sessionScope.clause}
-           AND data BETWEEN date('now') AND date('now', '+90 days')
+           AND data BETWEEN operational_today.hoje AND date(operational_today.hoje, '+90 days')
            GROUP BY tipo_sessao`,
         )
-        .bind(empresaId, ...sessionScope.bindings)
+        .bind(hojeSp, empresaId, ...sessionScope.bindings)
         .all(),
 
       // Por simulador
       db
         .prepare(
-          `SELECT
+          `WITH operational_today AS (SELECT date(?) AS hoje)
+           SELECT
              s.nome as simulador_nome,
              COUNT(sa.id) as quantidade,
              SUM(sa.duracao_minutos) / 60.0 as horas_estimadas
            FROM simulador_agendamentos sa
            JOIN simuladores s ON s.id = sa.simulador_id
+           CROSS JOIN operational_today
            WHERE sa.deleted_at IS NULL
            AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
            AND ${aliasedSessionScope.clause}
-           AND sa.data BETWEEN date('now') AND date('now', '+90 days')
+           AND sa.data BETWEEN operational_today.hoje AND date(operational_today.hoje, '+90 days')
            GROUP BY s.id, s.nome
            ORDER BY quantidade DESC`,
         )
-        .bind(empresaId, ...aliasedSessionScope.bindings)
+        .bind(hojeSp, empresaId, ...aliasedSessionScope.bindings)
         .all(),
 
       // Por instrutor (agendamentos futuros por instrutor responsável)
       db
         .prepare(
-          `SELECT
+          `WITH operational_today AS (SELECT date(?) AS hoje)
+           SELECT
              COALESCE(f.nome, 'Instrutor Desconhecido') as instrutorNome,
              COUNT(sa.id) as sessoesProgramadas,
              ROUND(SUM(sa.duracao_minutos) / 60.0, 1) as horasCompromissadas
            FROM simulador_agendamentos sa
            LEFT JOIN funcionarios f ON f.id = sa.instrutor_id AND f.deleted_at IS NULL
+           CROSS JOIN operational_today
            WHERE sa.deleted_at IS NULL
            AND sa.status IN ${SCHEDULED_SESSION_STATUS_SQL}
            AND sa.empresa_id = ?
            AND ${aliasedSessionScope.clause}
-           AND sa.data BETWEEN date('now') AND date('now', '+90 days')
+           AND sa.data BETWEEN operational_today.hoje AND date(operational_today.hoje, '+90 days')
            AND sa.instrutor_id IS NOT NULL
            GROUP BY sa.instrutor_id, f.nome
            ORDER BY sessoesProgramadas DESC
            LIMIT 20`,
         )
-        .bind(empresaId, ...aliasedSessionScope.bindings)
+        .bind(hojeSp, empresaId, ...aliasedSessionScope.bindings)
         .all(),
     ]);
 

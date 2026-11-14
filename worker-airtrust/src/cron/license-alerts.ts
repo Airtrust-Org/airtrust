@@ -17,6 +17,15 @@ type LicenseRow = {
   dias: number;
 };
 
+/** Dia civil operacional, independente do UTC do runtime e do locale. */
+export function getLicenseAlertTodaySaoPaulo(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
 function dateBr(value: string): string {
   const [y, m, d] = value.slice(0, 10).split('-');
   return y && m && d ? `${d}/${m}/${y}` : value;
@@ -39,13 +48,14 @@ async function alreadySent(
   licenseId: number,
   stage: string,
   expiredLookbackDays: number | null,
+  todaySaoPaulo: string,
 ): Promise<boolean> {
   const marker = `[LICENCA:${licenseId}:${stage}]`;
   const window =
     expiredLookbackDays == null
       ? ''
       : expiredLookbackDays === 1
-        ? "AND date(enviado_em) = date('now')"
+        ? "AND date(enviado_em, '-3 hours') = date(?)"
         : `AND enviado_em >= datetime('now', '-${Math.max(1, Math.min(365, expiredLookbackDays))} day')`;
   const row = await db
     .prepare(
@@ -53,7 +63,7 @@ async function alreadySent(
         WHERE empresa_id = ? AND assunto = ? AND status = 'enviada' ${window}
         LIMIT 1`,
     )
-    .bind(empresaId, marker)
+    .bind(...(expiredLookbackDays === 1 ? [empresaId, marker, todaySaoPaulo] : [empresaId, marker]))
     .first<{ ok: number }>();
   return Boolean(row?.ok);
 }
@@ -94,6 +104,7 @@ export async function processLicenseAlerts(
   const companies = await env.DB.prepare(
     'SELECT id FROM empresas WHERE ativo = 1 AND deleted_at IS NULL ORDER BY id',
   ).all<{ id: number }>();
+  const todaySaoPaulo = getLicenseAlertTodaySaoPaulo();
   let avaliadas = 0;
   let enviadas = 0;
   let erros = 0;
@@ -106,21 +117,21 @@ export async function processLicenseAlerts(
     const licenses = await env.DB.prepare(
       `SELECT l.id, l.funcionario_id, f.cpf AS funcionario_cpf, f.nome AS funcionario_nome,
                 f.email AS funcionario_email, f.setor_id, l.tipo, l.numero, l.data_vencimento,
-                CAST(julianday(date(l.data_vencimento)) - julianday(date('now')) AS INTEGER) AS dias
+                CAST(julianday(date(l.data_vencimento)) - julianday(date(?)) AS INTEGER) AS dias
            FROM licencas l
-           JOIN funcionarios f ON f.id = l.funcionario_id AND f.empresa_id = ?
-          WHERE l.deleted_at IS NULL AND f.deleted_at IS NULL
+           JOIN funcionarios f ON f.id = l.funcionario_id AND f.empresa_id = l.empresa_id
+          WHERE l.empresa_id = ? AND l.deleted_at IS NULL AND f.deleted_at IS NULL
             AND COALESCE(f.ativo, 1) = 1
             AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-            AND date(l.data_vencimento) <= date('now', '+' || ? || ' days')
+            AND date(l.data_vencimento) <= date(?, '+' || ? || ' days')
             AND l.id IN (
               SELECT MAX(l2.id) FROM licencas l2
-               WHERE l2.deleted_at IS NULL
+               WHERE l2.deleted_at IS NULL AND l2.empresa_id = l.empresa_id
                GROUP BY l2.funcionario_id, l2.tipo, l2.numero
             )
           ORDER BY l.data_vencimento ASC`,
     )
-      .bind(empresaId, maxDays)
+      .bind(todaySaoPaulo, empresaId, todaySaoPaulo, maxDays)
       .all<LicenseRow>();
 
     for (const row of licenses.results || []) {
@@ -133,7 +144,7 @@ export async function processLicenseAlerts(
           ? 1
           : settings.expired_interval_days
         : null;
-      if (await alreadySent(env.DB, empresaId, row.id, String(stage), lookback)) continue;
+      if (await alreadySent(env.DB, empresaId, row.id, String(stage), lookback, todaySaoPaulo)) continue;
 
       const dynamicRecipients: string[] = [];
       if (row.funcionario_email) dynamicRecipients.push(row.funcionario_email);
