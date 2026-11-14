@@ -21,7 +21,7 @@ function makeDb(failAt: 'qualifications' | 'crew' | 'none') {
       return {
         bind: (..._args: unknown[]) => ({
           all: async () => {
-            if (sql.includes('FROM escala_tripulacoes et\n')) {
+            if (sql.includes('SELECT et.id, et.pic_id')) {
               if (failAt === 'crew') throw new Error('D1_ERROR: overload (synthetic)');
               return {
                 results: [{ id: '1', pic_id: 11, sic_id: 12, aeronave: 'AW139',
@@ -65,7 +65,7 @@ describe('F14-08 — indisponibilidade não é regularidade operacional', () => 
           verificacao_indisponivel: true,
         });
         expect(body).not.toHaveProperty('data.tem_conflitos', false);
-        expect(queries.some((s) => s.includes('FROM escala_tripulacoes et\n'))).toBe(true);
+        expect(queries.some((s) => s.includes('SELECT et.id, et.pic_id'))).toBe(true);
         expect(writes).toEqual([]);
       } finally {
         spy.mockRestore();

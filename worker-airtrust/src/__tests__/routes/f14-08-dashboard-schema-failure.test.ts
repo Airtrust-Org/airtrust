@@ -23,7 +23,8 @@ vi.mock('../../utils/qualificacoes-alerta-config', async (importOriginal) => {
     getTodayIsoSaoPaulo: vi.fn(() => '2026-11-14'),
   };
 });
-vi.mock('../../utils/db-schema', () => ({
+vi.mock('../../utils/db-schema', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/db-schema')>()),
   getSchemaColumns: vi.fn(async () => { throw new Error('D1_ERROR: schema read overloaded'); }),
 }));
 
