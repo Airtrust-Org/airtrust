@@ -60,7 +60,7 @@ import {
   type QualificacaoTipoDTO,
   useQualificacaoTipos,
 } from '@/react-app/hooks/useQualificacoesExt';
-import { inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
+import { canDirectReplaceScormProfile, inspectScormReplacementProfile, uploadScormF5InactiveStaging, uploadScormInactiveProductionCandidate, uploadSimpleFile, uploadStructuredLmsPackage, type ScormReplacementProfile } from './lmsContentUpload';
 import { blocksUnsafeScormTypeConversion, shouldSaveScormMetadataWithoutZip } from './lmsScormCandidateIntent';
 import { getLmsExamAction } from './lmsExamAction';
 import { SCORM_COMPLETION_MODE_CHOICES, canSaveScormModeForRole, defaultNewScormModeForRole } from './lmsCompletionModeChoice';
@@ -751,7 +751,7 @@ function CourseDrawer({
     window.location.hostname === 'staging.airtrust.pages.dev';
   const canUploadInactiveProduction = isEditing && initial?.tipo_conteudo === 'scorm' && form.tipo_conteudo === 'scorm' &&
     window.location.hostname === 'airtrust.online';
-  const directReplacement = canUploadInactiveProduction && isAdmin && scormProfile !== 'PRIVATE' && scormProfile !== 'CHECKING';
+  const directReplacement = canUploadInactiveProduction && isAdmin && canDirectReplaceScormProfile(scormProfile);
   useEffect(() => {
     if (!canUploadInactiveProduction || !contentFile) {
       setScormProfile('CHECKING');
@@ -809,7 +809,7 @@ function CourseDrawer({
     const courseId = initial?.id;
     if (!contentFile || !courseId || isSaving || candidateUploadLock.current) return;
     if (!canUploadInactiveProduction && !canUploadStagingQa) return;
-    if (canUploadInactiveProduction && (scormProfile === 'CHECKING' || scormProfile === 'PRIVATE')) return;
+    if (canUploadInactiveProduction && scormProfile === 'CHECKING') return;
     candidateUploadLock.current = true;
     setIsCandidateUploading(true);
     setQaCandidateReceipt(null);
@@ -831,7 +831,10 @@ function CourseDrawer({
         navigate(`/lms/cursos/${courseId}`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM');
+      const message = error instanceof Error ? error.message : 'Falha ao enviar nova edição do SCORM';
+      toast.error(message === 'O servidor não conseguiu concluir a operação.'
+        ? 'O servidor não confirmou o recebimento. Consulte as edições do curso antes de repetir o envio.'
+        : message);
     } finally {
       candidateUploadLock.current = false;
       setIsCandidateUploading(false);
@@ -1284,7 +1287,7 @@ function CourseDrawer({
                           <p className="mt-1">{directReplacement
                             ? 'Ao enviar o ZIP SCORM válido, o conteúdo anterior será substituído e o curso permanecerá ativo. Históricos concluídos são preservados.'
                             : scormProfile === 'PRIVATE'
-                              ? 'Este arquivo está marcado pelo autor como PRIVADO / NÃO ATIVAR. Não é permitido substituí-lo diretamente nem disfarçar essa restrição como uma edição inativa. Utilize a versão liberada para publicação.'
+                              ? 'Este ZIP está marcado como PRIVADO / NÃO CERTIFICADO. Pode ser recebido somente como candidato INATIVO para homologação, sem substituir o conteúdo publicado.'
                               : 'A substituição automática é feita por administradores. Este perfil não pode publicar o curso.'}</p>
                           {qaCandidateReceipt ? (
                             <div role="status" className="mt-3 break-all text-xs">
@@ -1529,9 +1532,9 @@ function CourseDrawer({
                     type="button"
                     onClick={() => void handleCandidateUpload()}
                     loading={isCandidateUploading}
-                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING' || scormProfile === 'PRIVATE'}
+                    disabled={isSaving || isCandidateUploading || scormProfile === 'CHECKING'}
                   >
-                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'ZIP privado — ativação bloqueada' : 'Enviar ZIP como edição inativa'}
+                    {scormProfile === 'CHECKING' ? 'Analisando perfil do ZIP...' : directReplacement ? 'Enviar ZIP e substituir conteúdo' : scormProfile === 'PRIVATE' ? 'Enviar ZIP para homologação (INATIVO)' : 'Enviar ZIP como edição inativa'}
                   </Button>
                 ) : null}
                 {!(candidateFirstScorm && contentFile) ? (

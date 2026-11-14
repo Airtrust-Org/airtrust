@@ -14,6 +14,7 @@ import {
 } from '../lib/lms/lms-content-upload-service';
 import {
   LMS_PACKAGE_LIMITS,
+  extractScormStaticGateMetadata,
   normalizeLmsArchivePath,
   type LmsStructuredContentType,
 } from '../lib/lms/lms-package-validator';
@@ -41,7 +42,7 @@ import {
 } from '../lib/lms/lms-scorm-formative-service';
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
 import { parseStoredScormValidation } from '../lib/lms/lms-scorm-package-filename';
-import type { ScormQualityGateResult } from '../lib/lms/lms-scorm-quality-gate';
+import { validateScormPackageQuality, type ScormQualityGateResult } from '../lib/lms/lms-scorm-quality-gate';
 import { preflightDirectFormativeReplacement, readAlreadyActiveExternalReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedExternalScorm, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
@@ -327,6 +328,17 @@ app.post('/:id/scorm-replace',
         'SCORM_REPLACE_PREDECESSOR_ID_INVALID');
     }
     const { bytes, arquivoNome } = await readPackageRequest(c, 'scorm');
+    // A private/review-only ZIP may be received via /scorm-upload as INACTIVE,
+    // but must never reach the direct-replacement path or write candidate R2
+    // assets as a side effect of a mistaken publication attempt.
+    const preflightQuality = validateScormPackageQuality(extractScormStaticGateMetadata(bytes));
+    if (preflightQuality.authoringReview?.privateRelease === true) {
+      throw new ApiError(
+        'Pacote marcado como privado ou pendente de revisão. Envie-o como edição inativa; a versão publicada foi preservada.',
+        409,
+        'SCORM_REPLACE_PRIVATE_REVIEW_PACKAGE',
+      );
+    }
     const candidate = await createScormPackageCandidate({
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       userId: actorId(c), bytes, arquivoNome,
