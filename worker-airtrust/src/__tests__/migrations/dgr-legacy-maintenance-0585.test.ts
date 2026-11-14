@@ -29,6 +29,10 @@ describe('DGR maintenance conservative consolidation 0585', () => {
     const workflow = read('.github/workflows/apply-schema-change-v2.yml');
     expect(workflow).toContain('Preflight DGR maintenance consolidation 0585');
     expect(workflow).toContain('Post-validate DGR maintenance consolidation 0585');
+    const pinnedGuard = workflow.split('      - name: Preflight DGR maintenance consolidation 0585')[1]?.split('      - name:')[0] || '';
+    expect(pinnedGuard).toContain('EXPECTED_WORKER_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96');
+    expect(pinnedGuard).toContain('RELEASE_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96');
+    expect(pinnedGuard).not.toContain('EXPECTED_WORKER_SHA: ${{ github.sha }}');
     expect(workflow).toContain('git merge-base --is-ancestor "$EXPECTED_WORKER_SHA" "$GITHUB_SHA"');
     expect(workflow).toContain('node scripts/ci/verify-release-gates.mjs');
     expect(read('scripts/schema-v2/validate-0585-production-preflight.sh')).toContain('DGR_0585_PREFLIGHT_PASS');
