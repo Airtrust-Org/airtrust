@@ -6,8 +6,8 @@ import type { Env, Variables } from '../types';
 
 type HealthBody = {
   success: boolean;
-  status: 'healthy' | 'unhealthy';
-  checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }>;
+  status: 'healthy' | 'unhealthy' | 'partial';
+  checks: Record<string, { status: 'ok' | 'error' | 'not_checked'; latency?: number; error?: string }>;
   stats: { version: string; environment: string };
   latency: number;
 };
@@ -84,6 +84,33 @@ describe('system health routes', () => {
     const body = (await response.json()) as HealthBody;
     expect(body.checks.database.status).toBe('ok');
     expect(body.checks.storage.status).toBe('ok');
+  });
+
+  it('returns partial status quickly without consulting R2 when explicitly requested', async () => {
+    const { env, prepare, storageList } = createEnv();
+    const response = await createApp().request('/api/health?depth=light', {}, env);
+    const body = (await response.json()) as HealthBody;
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.status).toBe('partial');
+    expect(body.checks.database.status).toBe('ok');
+    expect(body.checks.storage).toEqual({ status: 'not_checked' });
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(storageList).not.toHaveBeenCalled();
+    expectNoStoreHeaders(response);
+  });
+
+  it('light readiness fails closed on D1 failure without probing R2', async () => {
+    const { env, storageList } = createEnv({ databaseError: new Error('private details') });
+    const response = await createApp().request('/api/health?depth=light', {}, env);
+    const body = (await response.json()) as HealthBody;
+    expect(response.status).toBe(503);
+    expect(body.success).toBe(false);
+    expect(body.status).toBe('unhealthy');
+    expect(body.checks.database).toEqual({status: 'error', error: 'Erro interno do servidor'});
+    expect(body.checks.storage).toEqual({status: 'not_checked'});
+    expect(JSON.stringify(body)).not.toContain('private details');
+    expect(storageList).not.toHaveBeenCalled();
   });
 
   it('returns a healthy response when D1 and R2 are available', async () => {
