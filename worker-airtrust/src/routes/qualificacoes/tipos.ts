@@ -20,11 +20,13 @@ import { getSchemaColumns, hasSchemaTable } from '../../utils/db-schema';
 import { z } from 'zod';
 import {
   buildHistoricoTipoSnapshot,
+  buildHistoricoTipoSyncEligibleStatusPredicate,
   shouldSyncHistoricoSnapshotsOnTipoUpdate,
   type QualificacaoTipoSnapshot,
 } from '../../services/qualificacoes-tipos-sync';
 import { invalidateMaterializedStats } from './shared';
 import { loadTipoListMetrics } from './tipos-list-metrics';
+import { appendQualificationTypeCatalogReadScope } from '../../services/qualificacoes/tipos-operational-read-scope';
 import {
   isEadCategoria,
   reconcileImportedEdappHistory,
@@ -41,7 +43,6 @@ import {
   resolveOperationalAccess,
   isValidOperationalDomain,
   resolveOperationalReadScope,
-  appendOperationalReadFilter,
   assertOperationalAccess,
   normalizeTenantRole,
 } from '../../middleware/operational-domain-access';
@@ -754,12 +755,13 @@ router.get(
         userId: Number((c.get as (k: string) => unknown)('userId') || 0),
         userRole: (c.get as (k: string) => unknown)('userRole'),
       });
-      appendOperationalReadFilter(conditions, bindings, readScope, {
-        domainColumn:
-          columnsSupport.hasCategoriaId && columnsSupport.hasDominioOverride
-            ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
-            : 'qc.dominio_codigo',
-      });
+      appendQualificationTypeCatalogReadScope(
+        conditions, bindings, readScope,
+        columnsSupport.hasDominioOverride
+          ? 'COALESCE(qt.dominio_codigo, qc.dominio_codigo)'
+          : 'qc.dominio_codigo',
+        hasQualificacoesTiposSetores,
+      );
     }
 
     if (categoriaId > 0) {
@@ -1662,9 +1664,10 @@ router.put(
                     END AS conflito_codigo,
                     f.nascimento AS nascimento_funcionario
               FROM qualificacoes_historico qh
-               LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
+               LEFT JOIN funcionarios f ON f.id = qh.funcionario_id AND f.empresa_id = qh.empresa_id AND f.deleted_at IS NULL
               WHERE qh.empresa_id = ?
                 AND qh.deleted_at IS NULL
+                AND ${buildHistoricoTipoSyncEligibleStatusPredicate('qh')}
                 AND (
                   qh.qualificacao_id = ?
                   OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = ?

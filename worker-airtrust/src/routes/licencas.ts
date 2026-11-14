@@ -10,6 +10,7 @@ import { registrarAuditoria } from '../utils/auditoria';
 import { auth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 import { getEmpresaId } from '../middleware/tenant';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -71,6 +72,8 @@ app.get('/', async (c) => {
   `;
 
   const bindings: unknown[] = [empresaId, empresaId];
+  // Expiração de licença é um dia civil do Brasil, não um instante UTC.
+  const hojeSp = getTodayIsoSaoPaulo();
 
   if (funcionario_id) {
     query += ' AND l.funcionario_id = ?';
@@ -84,11 +87,14 @@ app.get('/', async (c) => {
 
   // Filtro por status (calculado)
   if (status === 'vencida') {
-    query += " AND date(l.data_vencimento) < date('now')";
+    query += " AND date(l.data_vencimento) < date(?)";
+    bindings.push(hojeSp);
   } else if (status === 'a_vencer') {
-    query += " AND date(l.data_vencimento) BETWEEN date('now') AND date('now', '+30 days')";
+    query += " AND date(l.data_vencimento) BETWEEN date(?) AND date(?, '+30 days')";
+    bindings.push(hojeSp, hojeSp);
   } else if (status === 'valida') {
-    query += " AND date(l.data_vencimento) > date('now', '+30 days')";
+    query += " AND date(l.data_vencimento) > date(?, '+30 days')";
+    bindings.push(hojeSp);
   }
 
   query += ' ORDER BY l.data_vencimento ASC';
@@ -381,6 +387,7 @@ app.delete('/:id', requireRole('admin', 'manager'), async (c) => {
 app.get('/dashboard/licencas', async (c) => {
   const db = c.env.DB;
   const empresaId = getEmpresaId(c);
+  const hojeSp = getTodayIsoSaoPaulo();
 
   try {
     // Total ativas
@@ -395,12 +402,12 @@ app.get('/dashboard/licencas', async (c) => {
         `
         SELECT COUNT(*) as total
         FROM licencas
-        WHERE date(data_vencimento) < date('now')
+        WHERE date(data_vencimento) < date(?)
         AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
-      .bind(empresaId)
+      .bind(hojeSp, empresaId)
       .first();
 
     // A vencer em 60 dias
@@ -409,12 +416,12 @@ app.get('/dashboard/licencas', async (c) => {
         `
         SELECT COUNT(*) as total
         FROM licencas
-        WHERE date(data_vencimento) BETWEEN date('now') AND date('now', '+60 days')
+        WHERE date(data_vencimento) BETWEEN date(?) AND date(?, '+60 days')
         AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
-      .bind(empresaId)
+      .bind(hojeSp, hojeSp, empresaId)
       .first();
 
     // Válidas (mais de 60 dias)
@@ -423,12 +430,12 @@ app.get('/dashboard/licencas', async (c) => {
         `
         SELECT COUNT(*) as total
         FROM licencas
-        WHERE date(data_vencimento) > date('now', '+60 days')
+        WHERE date(data_vencimento) > date(?, '+60 days')
         AND empresa_id = ?
         AND deleted_at IS NULL
       `,
       )
-      .bind(empresaId)
+      .bind(hojeSp, empresaId)
       .first();
 
     // Por tipo

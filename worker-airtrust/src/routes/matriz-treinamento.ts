@@ -6,6 +6,8 @@ import { requireRole } from '../middleware/rbac';
 import type { Env, Variables } from '../types';
 import { getEmpresaId } from '../middleware/tenant';
 import { CANCELLED_STATUS_VALUES, sqlStatusEqualsAny } from '../lib/status/status-codes';
+import { buildMatrixCurrentHistorySql } from '../lib/qualificacoes/matriz-current-qualification-sql';
+import { collectByBindChunks } from '../utils/d1-bind-chunks';
 import { classificarStatusPorVencimento, diasEntreDatas } from '../lib/status/operational-status';
 import { getSchemaColumns } from '../utils/db-schema';
 import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
@@ -623,45 +625,37 @@ matrizTreinamento.get('/requisitos/:funcionario_id', async (c) => {
       : histColSet.has('data_validade')
         ? 'data_validade'
         : 'data_vencimento';
-    const statusExpr = histColSet.has('status') ? "UPPER(COALESCE(qh.status, ''))" : "''";
-    const empresaExpr = histColSet.has('empresa_id') ? 'AND qh.empresa_id = ?' : '';
-
-    const tipoIds = requisitos.map((r) => r.qualificacao_tipo_id);
-    const placeholders = tipoIds.map(() => '?').join(',');
-    const historicoBind = histColSet.has('empresa_id')
-      ? [funcionarioId, empresaId, ...tipoIds]
-      : [funcionarioId, ...tipoIds];
-    const { results: historico } = await db
-      .prepare(
-        `WITH historico_ativo AS (
-           SELECT
-             qh.${tipoCol} AS tipo_id,
-             qh.${dataInicioCol} AS ultima_data,
-             qh.${dataFimCol} AS data_vencimento,
-             ROW_NUMBER() OVER (
-               PARTITION BY qh.${tipoCol}
-               ORDER BY datetime(COALESCE(qh.${dataFimCol}, qh.${dataInicioCol}, qh.updated_at, qh.created_at)) DESC,
-                        qh.id DESC
-             ) AS rn
-           FROM qualificacoes_historico qh
-           WHERE qh.funcionario_id = ?
-             ${empresaExpr}
-             AND qh.deleted_at IS NULL
-             AND NOT (${sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES)})
-             AND qh.${tipoCol} IN (${placeholders})
-         )
-         SELECT tipo_id, ultima_data, data_vencimento
-         FROM historico_ativo
-         WHERE rn = 1`,
-      )
-      .bind(...historicoBind)
-      .all<{ tipo_id: number; ultima_data: string | null; data_vencimento: string | null }>();
+    const tipoIds = [...new Set(requisitos.map((r) => r.qualificacao_tipo_id))];
+    if (tipoIds.some((id) => !Number.isSafeInteger(id) || id < 1)) {
+      throw new Error('INVALID_MATRIX_QUALIFICATION_TYPE_ID');
+    }
+    // This query is the data-integrity source for the matrix, not a heuristic
+    // based on the latest expiry date (which can be later for older records).
+    const hasEmpresaId = histColSet.has('empresa_id');
+    const historico = await collectByBindChunks<number, {
+      tipo_id: number; ultima_data: string | null; data_vencimento: string | null;
+    }>(tipoIds, hasEmpresaId ? 2 : 1, async (chunk) => {
+      const query = buildMatrixCurrentHistorySql({
+        tipoCol,
+        dataInicioCol,
+        dataFimCol,
+        hasStatus: histColSet.has('status'),
+        hasEmpresaId,
+        hasRenewalLink: histColSet.has('renovacao_de'),
+        typeIdCount: chunk.length,
+      });
+      const binds = hasEmpresaId ? [funcionarioId, empresaId, ...chunk] : [funcionarioId, ...chunk];
+      const { results } = await db.prepare(query).bind(...binds).all<{
+        tipo_id: number; ultima_data: string | null; data_vencimento: string | null;
+      }>();
+      return results || [];
+    });
 
     const historicoMap = new Map<
       number,
       { ultima_data: string | null; data_vencimento: string | null }
     >();
-    for (const h of historico || []) {
+    for (const h of historico) {
       if (h.tipo_id) historicoMap.set(h.tipo_id, h);
     }
 
