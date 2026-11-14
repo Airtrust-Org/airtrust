@@ -818,10 +818,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # Pinned, fully gated Worker+Pages release; later unrelated main
           # commits must not force a different production artifact.
-          EXPECTED_WORKER_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96
+          EXPECTED_WORKER_SHA: ff16b2d4e0510be73a24cdee93a5fff4e0d36d22
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_SHA: 5517c9b27b6b3c7c7f17844b0a1ceeefaff53b96
+          RELEASE_SHA: ff16b2d4e0510be73a24cdee93a5fff4e0d36d22
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "$EXPECTED_WORKER_SHA" "$GITHUB_SHA" || {
