@@ -37,7 +37,8 @@ import {
   filterRequestedSetorIdsByAccess,
   getEmployeeSectorAccess,
 } from '../middleware/employee-sector-access';
-import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
+import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { buildEmployeeQualificationStatsSql } from '../lib/qualificacoes/employee-dashboard-qualification-sql';
 import {
   resolveOperationalReadScope,
   appendOperationalReadFilter,
@@ -665,58 +666,10 @@ app.get('/stats/dashboard', auth(), async (c) => {
       .bind(empresaId, ...sectorScope.bindings)
       .all<{ status: string; total: number }>();
 
+    const hojeSpQualificacoes = getTodayIsoSaoPaulo();
     const qualificacoesStats = await db
-      .prepare(
-        `
-      WITH qualificacoes_ativas AS (
-        SELECT
-          qh.funcionario_id,
-          ${getQualificacoesVencimentoExpr()} AS data_vencimento_calculada
-        FROM qualificacoes_historico qh
-        JOIN funcionarios f ON f.id = qh.funcionario_id AND f.deleted_at IS NULL
-        LEFT JOIN qualificacoes_tipos qt
-          ON qt.deleted_at IS NULL
-         AND (
-           qt.id = qh.qualificacao_id
-           OR (
-             qh.qualificacao_id IS NULL
-             AND UPPER(TRIM(COALESCE(qh.qualificacao_codigo, ''))) = UPPER(TRIM(COALESCE(qt.codigo, '')))
-           )
-         )
-        WHERE qh.deleted_at IS NULL
-          AND COALESCE(qh.renovada, 0) = 0
-          AND ${ativoExpr}
-          AND f.empresa_id = ?
-          AND ${sectorScope.clause}
-          AND qh.id IN (
-            SELECT MAX(sub.id)
-            FROM qualificacoes_historico sub
-            WHERE sub.deleted_at IS NULL
-              AND COALESCE(sub.renovada, 0) = 0
-              AND sub.funcionario_id = qh.funcionario_id
-              AND COALESCE(NULLIF(TRIM(sub.qualificacao_codigo), ''), CAST(sub.qualificacao_id AS TEXT)) =
-                  COALESCE(NULLIF(TRIM(qh.qualificacao_codigo), ''), CAST(qh.qualificacao_id AS TEXT))
-          )
-      )
-      SELECT
-        COUNT(DISTINCT funcionario_id) as funcionarios_com_qualificacoes,
-        COUNT(*) as total_qualificacoes,
-        SUM(
-          CASE
-            WHEN data_vencimento_calculada IS NULL OR data_vencimento_calculada >= date('now') THEN 1
-            ELSE 0
-          END
-        ) as qualificacoes_validas,
-        SUM(
-          CASE
-            WHEN data_vencimento_calculada IS NOT NULL AND data_vencimento_calculada < date('now') THEN 1
-            ELSE 0
-          END
-        ) as qualificacoes_vencidas
-      FROM qualificacoes_ativas
-    `,
-      )
-      .bind(empresaId, ...sectorScope.bindings)
+      .prepare(buildEmployeeQualificationStatsSql(ativoExpr, sectorScope.clause))
+      .bind(empresaId, ...sectorScope.bindings, hojeSpQualificacoes, hojeSpQualificacoes)
       .first<{
         funcionarios_com_qualificacoes: number;
         total_qualificacoes: number;
