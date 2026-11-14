@@ -30,6 +30,9 @@ setup('real staging login', async ({ page }) => {
   const loginRequests: string[] = [];
   const authResponses: string[] = [];
   const authNetworkFailures: string[] = [];
+  const sessionProfileEvidence: { status: number; roles: string[] } = {
+    status: 0, roles: [],
+  };
   const authPath = (url: string) => {
     try {
       const path = new URL(url).pathname;
@@ -58,6 +61,27 @@ setup('real staging login', async ({ page }) => {
     }
   });
   page.on('response', (response) => {
+    // Diagnostic evidence is restricted to status and a fixed allowlist of
+    // role names; never log credentials, tokens, response bodies or PII.
+    void (async () => {
+      try {
+        const url = new URL(response.url());
+        if (
+          url.hostname !== 'airtrust-api-staging.airtrust.workers.dev' ||
+          url.pathname !== '/api/me/operational-access/session-profiles'
+        ) return;
+        sessionProfileEvidence.status = response.status();
+        const data = (await response.json().catch(() => ({}))) as {
+          data?: { roles?: unknown };
+        };
+        const allowed = new Set(['ADMINISTRADOR', 'GESTOR', 'COORDENACAO_VOO', 'INSTRUTOR', 'ALUNO', 'USUARIO']);
+        sessionProfileEvidence.roles = Array.isArray(data.data?.roles)
+          ? data.data.roles.filter((role): role is string => typeof role === 'string' && allowed.has(role))
+          : [];
+      } catch {
+        // Network/JSON failures remain handled by the original auth guard.
+      }
+    })();
     const path = authPath(response.url());
     if (path) authResponses.push(path + ':' + response.status());
     if (response.request().method() === 'GET' && isTenantEndpoint(response.url())) {
@@ -139,8 +163,24 @@ setup('real staging login', async ({ page }) => {
       })
       .first();
 
-    if ((await qaOperationalRole.count()) === 0 || !(await qaOperationalRole.isVisible())) {
-      throw new Error('QA_SCOPED_ADMIN_OPERATIONAL_PROFILE_NOT_AVAILABLE');
+    try {
+      await qaOperationalRole.waitFor({ state: 'visible', timeout: 12_000 });
+    } catch {
+      const choiceLabels = (await page.locator('button').allTextContents())
+        .filter((value) => /^Entrar como /i.test(value.trim()))
+        .map((value) => {
+          if (/^Entrar como Administrador/i.test(value.trim())) return 'ADMINISTRADOR';
+          if (/^Entrar como Gestor/i.test(value.trim())) return 'GESTOR';
+          if (/^Entrar como Aluno/i.test(value.trim())) return 'ALUNO';
+          if (/^Entrar como Coordenação/i.test(value.trim())) return 'COORDENACAO_VOO';
+          return 'OTHER';
+        }).slice(0, 6);
+      throw new Error(
+        'QA_SCOPED_ADMIN_OPERATIONAL_PROFILE_NOT_AVAILABLE' +
+        ':api_status=' + sessionProfileEvidence.status +
+        ':api_roles=' + (sessionProfileEvidence.roles.join(',') || 'NONE') +
+        ':ui_choices=' + (choiceLabels.join(',') || 'NONE'),
+      );
     }
 
     await qaOperationalRole.click();
