@@ -15,12 +15,8 @@ import type { Context } from 'hono';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
-import {
-  CANCELLED_STATUS_VALUES,
-  PLANNED_QUALIFICATION_STATUS_VALUES,
-  sqlStatusEqualsAny,
-} from '../../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../../utils/qualificacoes-alerta-config';
+import { buildCurrentOperationalQualificationPredicate } from '../../lib/qualificacoes/operational-qualification-predicates';
 import {
   appendEmployeeSectorFilter,
   getEmployeeSectorAccess,
@@ -29,33 +25,6 @@ import {
 const router = new Hono<{ Bindings: Env }>();
 
 type EstatisticasContext = Context<{ Bindings: Env }>;
-
-function buildCurrentOperationalQualificationPredicate(alias = 'qh'): string {
-  const statusExpr = `UPPER(COALESCE(${alias}.status, ''))`;
-  const cancelled = sqlStatusEqualsAny(statusExpr, CANCELLED_STATUS_VALUES);
-  const planned = sqlStatusEqualsAny(statusExpr, PLANNED_QUALIFICATION_STATUS_VALUES);
-  const successorStatusExpr = "UPPER(COALESCE(qh_next.status, ''))";
-  const successorCancelled = sqlStatusEqualsAny(successorStatusExpr, CANCELLED_STATUS_VALUES);
-  const successorPlanned = sqlStatusEqualsAny(
-    successorStatusExpr,
-    PLANNED_QUALIFICATION_STATUS_VALUES,
-  );
-
-  return `(${alias}.deleted_at IS NULL
-    AND NOT (${cancelled})
-    AND NOT (${planned})
-    AND ${alias}.data_conclusao IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM qualificacoes_historico qh_next
-      WHERE qh_next.empresa_id = ${alias}.empresa_id
-        AND qh_next.renovacao_de = ${alias}.id
-        AND qh_next.deleted_at IS NULL
-        AND qh_next.data_conclusao IS NOT NULL
-        AND NOT (${successorCancelled})
-        AND NOT (${successorPlanned})
-    ))`;
-}
 
 function parseBoundedLimit(raw: string | undefined, fallback = 100, max = 500): number {
   const parsed = Number.parseInt(raw ?? '', 10);
