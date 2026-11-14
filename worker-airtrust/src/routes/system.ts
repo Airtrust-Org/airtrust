@@ -82,8 +82,10 @@ export function registerSystemRoutes(app: SystemApp) {
   app.get('/api/health', async (c) => {
     setNoCacheHeaders(c);
 
+    // Opt-in light readiness: the official deep health still checks D1 AND R2.
+    const light = c.req.query('depth') === 'light';
     const startTime = Date.now();
-    const checks: Record<string, { status: 'ok' | 'error'; latency?: number; error?: string }> = {};
+    const checks: Record<string, { status: 'ok' | 'error' | 'not_checked'; latency?: number; error?: string }> = {};
     let overallHealthy = true;
 
     // PERF-04: independent availability probes run together, not in a serial
@@ -107,6 +109,7 @@ export function registerSystemRoutes(app: SystemApp) {
           overallHealthy = false;
         }
       })(),
+      ...(!light ? [
       (async () => {
         try {
           if (c.env.BUCKET) {
@@ -127,7 +130,10 @@ export function registerSystemRoutes(app: SystemApp) {
           overallHealthy = false;
         }
       })(),
+      ] : []),
     ]);
+
+    if (light) checks.storage = { status: 'not_checked' };
 
     const metadata = getReleaseMetadata(c.env);
     const stats = {
@@ -147,7 +153,7 @@ export function registerSystemRoutes(app: SystemApp) {
     if (overallHealthy) {
       return c.json({
         success: true,
-        status: 'healthy',
+        status: light ? 'partial' : 'healthy',
         checks,
         stats,
         latency: totalLatency,

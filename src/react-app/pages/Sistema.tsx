@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApi } from '@/react-app/hooks/useApi';
 import Badge from '@/react-app/components/Badge';
 import PageHeader from '@/react-app/components/PageHeader';
@@ -33,11 +33,28 @@ interface SystemVersionInfo {
 }
 
 export default function Sistema() {
+  const [deepRequested, setDeepRequested] = useState(false);
   const {
-    data: health,
-    loading: healthLoading,
-    error: healthError,
-  } = useApi<SystemHealthResponse>('/api/health');
+    data: quickHealth,
+    loading: quickLoading,
+    error: quickError,
+  } = useApi<SystemHealthResponse>('/api/health?depth=light', { retry: 1, bypassGetCache: true });
+  const {
+    data: deepHealth,
+    loading: deepLoading,
+    error: deepError,
+    refetch: refetchDeep,
+  } = useApi<SystemHealthResponse>('/api/health', {
+    enabled: deepRequested,
+    retry: 1,
+    bypassGetCache: true,
+  });
+
+  // The deep result, not the D1-only response, is authoritative for R2 health.
+  const health = deepRequested && !deepError && deepHealth ? deepHealth : quickHealth;
+  const healthLoading = quickLoading && !deepHealth;
+  // A successful deep probe supersedes a transient quick-probe error.
+  const healthError = deepRequested && !deepError && deepHealth ? null : quickError;
 
   const {
     data: version,
@@ -64,6 +81,7 @@ export default function Sistema() {
       case 'DEGRADED':
       case 'UNHEALTHY':
         return XCircle;
+      case 'PARTIAL':
       case 'SLOW':
       case 'WARNING':
         return AlertTriangle;
@@ -133,6 +151,30 @@ export default function Sistema() {
       </div>
 
       <ContentCard>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-neutral-900">Verificação rápida</p>
+            <p className="text-sm text-neutral-600">
+              O banco é consultado automaticamente. O armazenamento R2 exige verificação completa.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (deepRequested) void refetchDeep();
+              else setDeepRequested(true);
+            }}
+            disabled={deepRequested && deepLoading}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-50"
+          >
+            {deepRequested && deepLoading ? 'Verificando R2...' : 'Verificação completa (D1 + R2)'}
+          </button>
+        </div>
+        {deepError && (
+          <p role="alert" className="mb-3 text-sm text-red-700">
+            Verificação completa indisponível: {deepError}. O resultado abaixo pode refletir somente o banco.
+          </p>
+        )}
         {healthLoading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
@@ -163,6 +205,9 @@ export default function Sistema() {
                     <StatusIcon className="w-5 h-5 text-neutral-700" />
                     <div>
                       <p className="font-medium text-neutral-900 capitalize">{check.name}</p>
+                      {check.status === 'not_checked' && (
+                        <p className="text-sm text-amber-700">Não verificado; execute a verificação completa.</p>
+                      )}
                       {typeof check.latency === 'number' && (
                         <p className="text-sm text-neutral-600">Latência: {check.latency}ms</p>
                       )}
