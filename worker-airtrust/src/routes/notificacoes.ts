@@ -5,6 +5,7 @@ import { getEmpresaId, isPlatformAdminContext } from '../middleware/tenant';
 import { processarNotificacoes } from '../cron/notificacoes';
 import { createLogger, toError } from '../utils/logger';
 import type { Env } from '../types';
+import { upsertSgsoSlaBatch } from '../services/sgso-sla-upsert-batch';
 import { getModuleAlertSettings, saveModuleAlertSettings } from '../services/module-alert-settings';
 import {
   getTrainingAlertStage,
@@ -517,20 +518,9 @@ app.put('/configuracoes-sgso-sla', auth(), requireRole('admin'), async (c) => {
       return { fase, horasPrazo, horasAlerta, ativo: row.ativo === false ? 0 : 1 };
     });
 
-    for (const row of normalized) {
-      await c.env.DB.prepare(
-        `INSERT INTO sgso_sla_config
-             (empresa_id, fase, horas_prazo, horas_alerta_previa, ativo, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-           ON CONFLICT(empresa_id, fase) DO UPDATE SET
-             horas_prazo = excluded.horas_prazo,
-             horas_alerta_previa = excluded.horas_alerta_previa,
-             ativo = excluded.ativo,
-             updated_at = datetime('now')`,
-      )
-        .bind(empresaId, row.fase, row.horasPrazo, row.horasAlerta, row.ativo)
-        .run();
-    }
+    // PERF-05: at most three distinct phases, persisted atomically in one D1
+    // batch after all entries have passed validation. Last duplicate wins.
+    await upsertSgsoSlaBatch(c.env.DB, empresaId, normalized);
 
     const { results } = await c.env.DB.prepare(
       `SELECT fase, horas_prazo, horas_alerta_previa, ativo
