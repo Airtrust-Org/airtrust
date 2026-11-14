@@ -130,7 +130,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /structuralGroups/);
   assert.match(source, /structuralCards/);
   assert.match(source, /children\.length !== requiredTotal/);
-  assert.match(source, /manifest\.requiredInteractions \|\| 0\) \* 50_000/);
+  assert.match(source, /requiredInteractions: Number\(manifest\.requiredInteractions \|\| 0\)/);
   assert.match(source, /intera\[cç\]\[aã\]o\\s\+obrigat/);
   assert.match(source, /resetAssessmentRetryState/);
   assert.match(source, /adaptive-exhausted/);
@@ -141,7 +141,7 @@ test('production active-course certifier is preview/read-only and exact-package 
   assert.match(source, /revisar\\s\+/);
   assert.match(source, /COURSE_IDS\.size > 0 \? 3_600 : 0/);
   assert.match(source, /focusedCompletionBudgetMs/);
-  assert.match(source, /slideCount \* 4_000/);
+  assert.match(source, /computeFocusedCourseBudgetMs\(\{/);
   assert.match(source, /content_buttons/);
   assert.match(source, /rect\.bottom > 0/);
   assert.match(source, /action\?\.type === 'none'/);
