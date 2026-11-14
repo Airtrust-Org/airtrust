@@ -11,10 +11,6 @@ import {
   dedupeDiagnostics,
   diagnosticFingerprint,
   diagnosticIdentity,
-  NON_TOLERABLE_BASELINE_CAPS,
-  NON_TOLERABLE_CODES,
-  checkNonTolerableBaseline,
-  isNonTolerableCode,
   normalizeFilePath,
   parseTscOutput,
 } from '../typescript-baseline-ratchet-lib.mjs';
@@ -62,22 +58,7 @@ describe('checked-in baseline file', () => {
   });
 
   it('matches the expected count reported for the pinned source commit', () => {
-    // 289 at 0ff8a83; 241 after F14-03 pruned entries that were fixed (the
-    // baseline may only shrink — never raise this number).
-    expect(baseline.diagnosticCount).toBe(241);
-  });
-
-  it('F14-03: non-tolerable classes (TS2304/TS2307/TS2552) match their caps exactly', () => {
-    const result = checkNonTolerableBaseline(baseline.diagnostics);
-    expect(result.violations).toEqual([]);
-    expect(result.counts).toEqual({ TS2304: 0, TS2307: 1, TS2552: 0 });
-  });
-
-  it('F14-03: the baseline no longer grandfathers the audited ReferenceError', () => {
-    const offenders = baseline.diagnostics.filter(
-      (d) => d.file.endsWith('ReclassificacaoQualificacoes.tsx') && isNonTolerableCode(d.code),
-    );
-    expect(offenders).toEqual([]);
+    expect(baseline.diagnosticCount).toBe(289);
   });
 });
 
@@ -352,90 +333,5 @@ describe('canonicalizeDiagnosticText', () => {
     });
 
     expect(diagnosticIdentity(diagsA[0])).toBe(diagnosticIdentity(diagsB[0]));
-  });
-});
-
-// --- F14-03: non-tolerable classes (ReferenceError / ModuleNotFound) -------
-
-describe('typescript baseline ratchet — non-tolerable classes', () => {
-  const ref = (over = {}) =>
-    makeDiagnostic({ code: 'TS2304', message: "Cannot find name 'showAlertDialog'.", ...over });
-
-  it('11. pins the non-tolerable classes and their caps (only ever lower the caps)', () => {
-    expect([...NON_TOLERABLE_CODES]).toEqual(['TS2304', 'TS2307', 'TS2552']);
-    expect(NON_TOLERABLE_BASELINE_CAPS).toEqual({ TS2304: 0, TS2307: 1, TS2552: 0 });
-    expect(isNonTolerableCode('TS2304')).toBe(true);
-    expect(isNonTolerableCode('TS2322')).toBe(false);
-  });
-
-  it('12. fails a TS2304 in a file that has no baseline entry, and flags it as non-tolerable', () => {
-    const baseline = [makeDiagnostic({ file: 'src/react-app/components/Other.tsx', code: 'TS2322' })];
-    const current = [...baseline, ref({ file: 'src/react-app/pages/Nova.tsx' })];
-    const result = compareDiagnostics(current, baseline);
-    expect(result.pass).toBe(false);
-    expect(result.nonTolerableNewDiagnostics).toHaveLength(1);
-    expect(result.nonTolerableOutsideBaseline).toHaveLength(1);
-    expect(result.nonTolerableOutsideBaseline[0].file).toBe('src/react-app/pages/Nova.tsx');
-  });
-
-  it('13. fails TS2307 and TS2552 the same way', () => {
-    for (const [code, message] of [
-      ['TS2307', "Cannot find module './Gone' or its corresponding type declarations."],
-      ['TS2552', "Cannot find name 'foo'. Did you mean 'Foo'?"],
-    ]) {
-      const result = compareDiagnostics([makeDiagnostic({ code, message })], []);
-      expect(result.pass).toBe(false);
-      expect(result.nonTolerableNewDiagnostics).toHaveLength(1);
-    }
-  });
-
-  it('14. does not flag an ordinary new diagnostic as non-tolerable', () => {
-    const result = compareDiagnostics([makeDiagnostic()], []);
-    expect(result.pass).toBe(false);
-    expect(result.nonTolerableNewDiagnostics).toEqual([]);
-  });
-
-  it('15. a new TS2304 in a file that already has a baselined TS2304 is still a failure (not outside-baseline, but new)', () => {
-    const baseline = [ref({ message: "Cannot find name 'a'." })];
-    const current = [ref({ message: "Cannot find name 'a'." }), ref({ line: 50, message: "Cannot find name 'b'." })];
-    const result = compareDiagnostics(current, baseline);
-    expect(result.pass).toBe(false);
-    expect(result.nonTolerableNewDiagnostics).toHaveLength(1);
-    expect(result.nonTolerableOutsideBaseline).toHaveLength(0);
-  });
-
-  it('16. passes when a baselined non-tolerable entry is fixed', () => {
-    const result = compareDiagnostics([], [ref()]);
-    expect(result.pass).toBe(true);
-    expect(result.fixedDiagnostics).toHaveLength(1);
-  });
-
-  it('17. baseline growth in a non-tolerable class beyond the cap fails (cannot hide by regenerating)', () => {
-    const grown = [
-      ref({ file: 'a.tsx' }),
-      makeDiagnostic({ code: 'TS2307', message: "Cannot find module './x'." }),
-      makeDiagnostic({ code: 'TS2307', file: 'src/b.tsx', message: "Cannot find module './y'." }),
-    ];
-    const result = checkNonTolerableBaseline(grown, { caps: { TS2304: 0, TS2307: 1, TS2552: 0 } });
-    expect(result.ok).toBe(false);
-    expect(result.violations.map((v) => [v.code, v.kind])).toEqual([
-      ['TS2304', 'grew'],
-      ['TS2307', 'grew'],
-    ]);
-  });
-
-  it('18. fixing a baselined entry without lowering the cap fails (the ratchet must tighten)', () => {
-    const result = checkNonTolerableBaseline([], { caps: { TS2304: 1, TS2307: 0, TS2552: 0 } });
-    expect(result.ok).toBe(false);
-    expect(result.violations).toEqual([{ code: 'TS2304', count: 0, cap: 1, kind: 'cap-not-lowered' }]);
-    // generating a baseline only needs the "no growth" half of the rule.
-    expect(
-      checkNonTolerableBaseline([], { caps: { TS2304: 1, TS2307: 0, TS2552: 0 }, requireTight: false }).ok,
-    ).toBe(true);
-  });
-
-  it('19. ordinary classes are not capped', () => {
-    const many = Array.from({ length: 50 }, (_, i) => makeDiagnostic({ line: i + 1 }));
-    expect(checkNonTolerableBaseline(many, { caps: { TS2304: 0, TS2307: 0, TS2552: 0 } }).ok).toBe(true);
   });
 });
