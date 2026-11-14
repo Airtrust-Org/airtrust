@@ -551,31 +551,37 @@ export async function runSigvoosShadowIngestion(
             const afterVal = afterFields[key] ?? null;
             if (beforeVal !== afterVal) diffs[key] = { before: beforeVal, after: afterVal };
           }
-          // F14-09: alteração de conteúdo e evidência são uma unidade de
-          // auditoria. Um INSERT de histórico rejeitado desfaz o UPDATE inteiro.
-          await db.batch([
+          // Under D1.batch transaction, a stale fingerprint CAS must not
+          // create audit evidence or advance the success checkpoint.
+          // INSERT-SELECT is gated by the old fingerprint, followed by UPDATE
+          // under the identical predicate. Both operations are serialized.
+          const casResults = await db.batch([
+            db.prepare(
+              `INSERT INTO sigvoos_shadow_leg_history
+                (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
+                 field_differences_json, recorded_at)
+               SELECT ?, empresa_id, id, ?, ?, ?, 'SOURCE_CHANGED', ?, ?
+                 FROM sigvoos_shadow_legs
+                WHERE id = ? AND empresa_id = ? AND active = 1 AND source_fingerprint = ?`,
+            ).bind(
+              generateId(), runId, fingerprint, normalizedJson,
+              JSON.stringify(diffs), seenAt, existing.id, tenantId, existing.source_fingerprint,
+            ),
             db.prepare(
               `UPDATE sigvoos_shadow_legs
                   SET source_fingerprint = ?, normalized_json = ?, source_state = 'SOURCE_CHANGED',
                       crew_resolution_method = ?, crew_funcionario_id = ?, timezone_status = ?,
                       last_seen_at = ?, run_id = ?, updated_at = ?
-                WHERE id = ? AND empresa_id = ? AND source_fingerprint = ?`,
+                WHERE id = ? AND empresa_id = ? AND active = 1 AND source_fingerprint = ?`,
             ).bind(
               fingerprint, normalizedJson, crew.method, crew.funcionarioId,
               timezoneStatus, seenAt, runId, seenAt, existing.id, tenantId, existing.source_fingerprint,
             ),
-            db.prepare(
-              `INSERT INTO sigvoos_shadow_leg_history
-                (id, empresa_id, leg_id, run_id, source_fingerprint, normalized_json, transition,
-                 field_differences_json, recorded_at)
-               SELECT ?, ?, id, ?, ?, ?, 'SOURCE_CHANGED', ?, ?
-                 FROM sigvoos_shadow_legs
-                WHERE id = ? AND empresa_id = ? AND source_fingerprint = ?`,
-            ).bind(
-              generateId(), tenantId, runId, fingerprint, normalizedJson,
-              JSON.stringify(diffs), seenAt, existing.id, tenantId, fingerprint,
-            ),
           ]);
+          if (Number(casResults[0]?.meta?.changes ?? 0) !== 1 ||
+              Number(casResults[1]?.meta?.changes ?? 0) !== 1) {
+            throw new Error('SIGVOOS_SHADOW_SOURCE_FINGERPRINT_CAS_MISS');
+          }
 
         }
 
