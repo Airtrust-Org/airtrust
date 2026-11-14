@@ -480,8 +480,13 @@ export function validateScormPackageQuality(pkg: ValidatedLmsPackage): ScormQual
   const declaredReviewed = release?.reviewed === true;
   const releaseStatus = typeof release?.status === 'string'
     ? release.status.trim().toUpperCase() : '';
-  const privateRelease = releaseStatus.startsWith('PRIVATE_') ||
-    releaseStatus.includes('DO_NOT_ACTIVATE');
+  // Release metadata cannot certify a ZIP. Explicit private/review markers
+  // may ONLY veto publication, including prefixed RC7_PRIVATE_* candidate labels.
+  const privateMarker = /(?:^|[_.\s-])(?:PRIVATE|DRAFT|NOT_CERTIFIED|NOT_APPROVED|UNAPPROVED|DO_NOT_ACTIVATE|REVIEW_REQUIRED|PENDING_REVIEW)(?=$|[_.\s-])/;
+  const privateRelease = privateMarker.test(releaseStatus) ||
+    release?.humanEditorialReviewRequired === true ||
+    release?.regulatoryReviewRequired === true ||
+    release?.productionUnchanged === true;
   // Only the assessment/completion contract decides eligibility. The ZIP's own
   // release.* marker (status, reviewed, functionalCertified) is self-declared
   // metadata and is deliberately never read here.
