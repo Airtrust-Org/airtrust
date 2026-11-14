@@ -30,6 +30,35 @@ async function payload(response: Response) {
   return json;
 }
 
+// Tab navigation is an ordinary DOM button, not a separate API privilege.
+// Use an exact text locator against <main> rather than an accessibility-name
+// lookup that can exclude buttons while the SPA re-renders. If missing,
+// fail closed and report only sanitized navigation state, never page content.
+async function requireComplianceTab(page: Page, label: string) {
+  const target = page.locator('main button').filter({
+    hasText: new RegExp(`^\\s*${label}\\s*$`),
+  }).first();
+  try {
+    await target.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    const pathname = new URL(page.url()).pathname;
+    const route = pathname === '/treinamentos/compliance'
+      ? 'COMPLIANCE'
+      : pathname === '/login' ? 'LOGIN' : 'OTHER';
+    const safeLabels = new Set([
+      'Pendências', 'Treinamentos', 'Pessoas', 'Setores',
+      'Relatórios', 'Comunicações', 'Administração',
+    ]);
+    const tabs = (await page.locator('main button').allTextContents())
+      .map((value) => value.trim())
+      .filter((value) => safeLabels.has(value));
+    throw new Error(
+      `QA_COMPLIANCE_NAVIGATION_MISSING:target=${label}:route=${route}:visible_tabs=${tabs.join(',') || 'NONE'}`,
+    );
+  }
+  return target;
+}
+
 test('training compliance intelligent staging flow is live and read-only', async ({ page }) => {
   expect(QA_CODE).toMatch(/^QA-COMP-/);
   const guard = installReadOnlyGuard(page);
@@ -118,8 +147,9 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(pendingRow.getByText('Nunca realizou', { exact: true })).toBeVisible();
   await expect(pendingRow.getByRole('button', { name: /Enviar aviso|Reenviar aviso/ })).toBeVisible();
 
+  const trainingsTab = await requireComplianceTab(page, 'Treinamentos');
   const trainingsP = waitApi(page, '/api/compliance-treinamentos/treinamentos');
-  await page.getByRole('main').getByRole('button', { name: 'Treinamentos', exact: true }).click();
+  await trainingsTab.click();
   const trainings = await trainingsP.then(payload);
   const qaTraining = trainings.data.find((row: { qualificacao_tipo_codigo: string }) => row.qualificacao_tipo_codigo === QA_CODE);
   expect(qaTraining, 'synthetic never-realized training must be visible').toBeTruthy();
@@ -151,8 +181,9 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Requisitos' })).toBeVisible();
 
+  const sectorsTab = await requireComplianceTab(page, 'Setores');
   const sectorsP = waitApi(page, '/api/compliance-treinamentos/setores');
-  await page.getByRole('button', { name: 'Setores', exact: true }).click();
+  await sectorsTab.click();
   const sectors = await sectorsP.then(payload);
   expect(Array.isArray(sectors.data)).toBe(true);
   if (sectors.data.length > 0) {
@@ -160,8 +191,9 @@ test('training compliance intelligent staging flow is live and read-only', async
     await expect(page.getByRole('columnheader', { name: 'Setor / função' })).toBeVisible();
   }
 
+  const trendTab = await requireComplianceTab(page, 'Relatórios');
   const trendP = waitApi(page, '/api/compliance-treinamentos/tendencias');
-  await page.getByRole('button', { name: 'Relatórios', exact: true }).click();
+  await trendTab.click();
   const trend = await trendP.then(payload);
   expect(Array.isArray(trend.data)).toBe(true);
   expect(trend.data.length).toBeGreaterThan(0);
@@ -170,13 +202,14 @@ test('training compliance intelligent staging flow is live and read-only', async
   await expect(page.getByRole('heading', { name: 'Gerador de relatórios' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Gerar PDF (de requisitos|do histórico)/ })).toBeVisible();
 
+  const communicationsTab = await requireComplianceTab(page, 'Comunicações');
   const communicationsP = waitApi(page, '/api/compliance-treinamentos/comunicacoes');
-  await page.getByRole('button', { name: 'Comunicações', exact: true }).click();
+  await communicationsTab.click();
   const communications = await communicationsP.then(payload);
   expect(Array.isArray(communications.data)).toBe(true);
   await expect(page.getByRole('heading', { name: 'Histórico de comunicações' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Administração', exact: true }).click();
+  await (await requireComplianceTab(page, 'Administração')).click();
   await expect(page.getByRole('button', { name: 'Por organização', exact: true })).toBeVisible();
   await expect(page.getByText('Matriz por organização', { exact: true })).toBeVisible();
 
