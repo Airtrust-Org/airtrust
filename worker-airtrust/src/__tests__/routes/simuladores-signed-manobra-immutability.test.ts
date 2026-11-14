@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Node built-in SQLite: CI must actually execute these behavioral cases, not skip when sqlite3 CLI is absent.
+const DatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as new (path: string) => {
+  exec(sql: string): void;
+  prepare(sql: string): { all(): unknown[] };
+  close(): void;
+};
 
 // Source contract: test the exact SQL that the live PUT route uses, not a
 // parallel reimplementation that might drift from production.
@@ -26,8 +32,6 @@ const populateRoute = source.slice(
 const populateInsert = [...populateRoute.matchAll(/`(INSERT INTO fichas_sessao_manobras\([\s\S]*?\))`/g)]
   .map((m) => m[1]);
 
-const sqliteAvailable = spawnSync('sqlite3', ['-version']).status === 0;
-
 function sqlLiteral(input: string | number | null) {
   if (input === null) return 'NULL';
   if (typeof input === 'number') return String(input);
@@ -41,8 +45,7 @@ function bind(sql: string, values: Array<string | number | null>) {
 }
 
 function query(caseSql: string): Array<{ ficha_id: number; ordem: number; resultado: string | null }> {
-  const dir = mkdtempSync(join(tmpdir(), 'pto-signed-ficha-'));
-  const db = join(dir, 'test.db');
+  const db = new DatabaseSync(':memory:');
   try {
     const setup = `
       CREATE TABLE fichas_sessao (
@@ -74,19 +77,12 @@ function query(caseSql: string): Array<{ ficha_id: number; ordem: number; result
         (6,1,'T01','Item 1','TECNICA','6','original'),
         (7,1,'T01','Item 1','TECNICA','6','original');
     `;
-    const run = spawnSync('sqlite3', ['-bail', db], {
-      input: setup + caseSql,
-      encoding: 'utf8',
-    });
-    expect(run.status, run.stderr).toBe(0);
-    const result = spawnSync('sqlite3', ['-json', db], {
-      input: 'SELECT ficha_id,ordem,resultado FROM fichas_sessao_manobras ORDER BY ficha_id,ordem;',
-      encoding: 'utf8',
-    });
-    expect(result.status, result.stderr).toBe(0);
-    return JSON.parse(result.stdout);
+    db.exec(setup + caseSql);
+    return db.prepare(
+      'SELECT ficha_id,ordem,resultado FROM fichas_sessao_manobras ORDER BY ficha_id,ordem',
+    ).all() as Array<{ ficha_id: number; ordem: number; resultado: string | null }>;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    db.close();
   }
 }
 
@@ -106,7 +102,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     }
   });
 
-  it.skipIf(!sqliteAvailable)('prevents updates after signature, tenant mismatch or deletion', () => {
+  it('prevents updates after signature, tenant mismatch or deletion', () => {
     const update = updates[0];
     const sql = [
       bind(update, ['5','edited-signed',2,1,2,6]),
@@ -125,7 +121,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     }
   });
 
-  it.skipIf(!sqliteAvailable)('prevents new rows after signature, foreign tenant, deleted parent', () => {
+  it('prevents new rows after signature, foreign tenant, deleted parent', () => {
     const values = (id: number, ord = 2): Array<string | number | null> => [
       id,'T02','Item 2','TECNICA',ord,'5','new',id,6,
     ];
@@ -157,7 +153,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     expect(populateInsert[0]).toMatch(/COALESCE\(f\.assinatura_tripulante,\s*0\)\s*=\s*0/);
   });
 
-  it.skipIf(!sqliteAvailable)('batch population does not insert after signature or across tenants', () => {
+  it('batch population does not insert after signature or across tenants', () => {
     const values = (id: number): Array<string | number | null> => [
       id, 'T03', 'Technical', 'Item 3', 'TECNICA', 3, 'AB', id, 6,
     ];
@@ -175,7 +171,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     ]);
   });
 
-  it.skipIf(!sqliteAvailable)('rejects an instructor signature inserted between read and guarded DML', () => {
+  it('rejects an instructor signature inserted between read and guarded DML', () => {
     const sql = [
       "UPDATE fichas_sessao SET assinatura_instrutor_timestamp='2026-11-13T12:00:00Z', assinatura_instrutor=1 WHERE id=1;",
       bind(updates[0], ['5','late-edit',1,1,1,6]),
@@ -186,7 +182,7 @@ describe('signed simulator maneuver immutability — exact D1 SQL', () => {
     expect(rows.some((row) => row.ficha_id === 1 && row.ordem === 3)).toBe(false);
   });
 
-  it.skipIf(!sqliteAvailable)('rejects a student signature inserted between read and guarded DML', () => {
+  it('rejects a student signature inserted between read and guarded DML', () => {
     const sql = [
       "UPDATE fichas_sessao SET assinatura_aluno_timestamp='2026-11-13T12:00:00Z', assinatura_tripulante=1 WHERE id=1;",
       bind(updates[0], ['5','late-student-edit',1,1,1,6]),
