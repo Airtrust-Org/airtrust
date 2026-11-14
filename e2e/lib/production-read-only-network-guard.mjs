@@ -13,6 +13,7 @@ export const SAFE_METHODS = Object.freeze(['GET', 'HEAD', 'OPTIONS']);
 export const SUPPRESSED_EXTERNAL_RESOURCE_HOSTS = Object.freeze([
   'fonts.googleapis.com',
   'fonts.gstatic.com',
+  'static.cloudflareinsights.com',
 ]);
 export const SUPPRESSED_READ_ONLY_POST_PATHS = Object.freeze(['/api/public/translate']);
 export const PRODUCTION_HOST_ALLOWLIST = Object.freeze([

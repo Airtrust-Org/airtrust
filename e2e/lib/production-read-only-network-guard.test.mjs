@@ -62,6 +62,20 @@ test('production guard suppresses optional fonts and translation fallback', () =
   );
   assert.equal(
     classifyProductionReadOnlyRequest({
+      method: 'GET',
+      url: 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092',
+    }).decision,
+    'suppress',
+  );
+  assert.equal(
+    classifyProductionReadOnlyRequest({
+      method: 'POST',
+      url: 'https://static.cloudflareinsights.com/cdn-cgi/rum',
+    }).decision,
+    'block',
+  );
+  assert.equal(
+    classifyProductionReadOnlyRequest({
       method: 'POST',
       url: 'https://api.airtrust.online/api/public/translate',
     }).decision,

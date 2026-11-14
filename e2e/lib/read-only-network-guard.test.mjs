@@ -31,11 +31,13 @@ test('GET / HEAD / OPTIONS to staging are allowed', () => {
   }
 });
 
-test('Google Fonts GET/HEAD requests are suppressed locally, never allowed outbound', () => {
+test('Google Fonts and Cloudflare Insights GET/HEAD requests are suppressed locally, never allowed outbound', () => {
   for (const [method, url] of [
     ['GET', 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap'],
     ['GET', 'https://fonts.gstatic.com/s/inter/v1/example.woff2'],
     ['HEAD', 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap'],
+    ['GET', 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092'],
+    ['HEAD', 'https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092'],
   ]) {
     const r = classifyRequest({ method, url });
     assert.equal(r.decision, 'suppress');
@@ -43,10 +45,15 @@ test('Google Fonts GET/HEAD requests are suppressed locally, never allowed outbo
   }
 });
 
-test('POST to Google Fonts remains blocked, not suppressed', () => {
-  const r = classifyRequest({ method: 'POST', url: 'https://fonts.googleapis.com/api/auth/login' });
-  assert.equal(r.decision, 'block');
-  assert.match(r.reason, /NETWORK_HOST_NOT_ALLOWLISTED/);
+test('POST to Google Fonts or Cloudflare Insights remains blocked, not suppressed', () => {
+  for (const url of [
+    'https://fonts.googleapis.com/api/auth/login',
+    'https://static.cloudflareinsights.com/cdn-cgi/rum',
+  ]) {
+    const r = classifyRequest({ method: 'POST', url });
+    assert.equal(r.decision, 'block');
+    assert.match(r.reason, /NETWORK_HOST_NOT_ALLOWLISTED/);
+  }
 });
 
 test('public translate POST on staging is suppressed locally, never sent to the Worker', () => {
