@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { ApiError } from '../middleware/error-handler';
 import type { Env } from '../types';
+import { readPetrobrasStagesByFlight } from '../services/controle-voos/petrobras-rve-stage-reader';
 import { getEmpresaIdSafe, maybeRecordSystemAudit } from '../middleware/controle-voos-rdv-context';
 import {
   buildDailyPetrobrasRveXml,
@@ -35,20 +36,18 @@ export async function exportDailyPetrobrasRveXmlHandler(c: Context<{ Bindings: E
     `,
   ).bind(empresaId, data).all<PetrobrasRveFlightRow>();
 
-  const rows: Array<{ flight: PetrobrasRveFlightRow; stages: PetrobrasRveStageRow[] }> = [];
-  for (const flight of flights || []) {
-    const { results: stages } = await c.env.DB.prepare(
-      `
-        SELECT numero_etapa, origem_icao, destino_icao,
-               horario_motor_ligado, horario_decolagem,
-               horario_pouso, horario_motor_desligado
-        FROM cv_voo_etapas
-        WHERE empresa_id = ? AND voo_id = ? AND deleted_at IS NULL
-        ORDER BY numero_etapa ASC
-      `,
-    ).bind(empresaId, flight.voo_id).all<PetrobrasRveStageRow>();
-    rows.push({ flight, stages: stages || [] });
-  }
+  // PERF-05: one scoped read for a normal operational day instead of
+  // one D1 round trip per flight. Chunks stay below D1 bind limits.
+  const stagesByFlight = await readPetrobrasStagesByFlight(
+    c.env.DB,
+    empresaId,
+    (flights || []).map((flight) => flight.voo_id),
+  );
+  const rows: Array<{ flight: PetrobrasRveFlightRow; stages: PetrobrasRveStageRow[] }> =
+    (flights || []).map((flight) => ({
+      flight,
+      stages: stagesByFlight.get(flight.voo_id) || [],
+    }));
 
   const built = buildDailyPetrobrasRveXml(rows);
   const filename = `AE_${data}_AIRTRUST.xml`;
