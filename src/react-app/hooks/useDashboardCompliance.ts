@@ -5,10 +5,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { ComplianceScore } from '../types/dashboard.types';
-import { fetchWithAuth } from '@/react-app/config/api';
+import { fetchWithAuth, getAccessToken } from '@/react-app/config/api';
 import {
   assertTenantDataScope,
   captureTenantDataScope,
+  getCurrentTenantId,
   registerTenantCacheReset,
   StaleTenantResponseError,
 } from '@/react-app/lib/tenant-data-layer';
@@ -21,6 +22,12 @@ export function useDashboardCompliance(autoRefreshInterval = 15 * 60 * 1000) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchCompliance = useCallback(async () => {
+    if (!getAccessToken()) {
+      setCompliance(null);
+      setIsLoading(false);
+      return;
+    }
+
     const scope = captureTenantDataScope();
     try {
       setIsLoading(true);
@@ -55,6 +62,10 @@ export function useDashboardCompliance(autoRefreshInterval = 15 * 60 * 1000) {
     const unregisterReset = registerTenantCacheReset('dashboard-compliance', () => {
       setCompliance(null);
       setError(null);
+      if (getCurrentTenantId() === null || !getAccessToken()) {
+        setIsLoading(false);
+        return;
+      }
       queueMicrotask(() => {
         void fetchCompliance();
       });
