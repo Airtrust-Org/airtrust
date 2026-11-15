@@ -48,6 +48,7 @@ import { enviarEmailFichaSessao } from '../lib/fichaEmails';
 import type { FichaPdfNota } from '../services/pdf-ficha.service';
 import fichasSimuladorRoutes from './simuladores-fichas-simulador';
 import fichasAcoesRoutes from './simuladores-fichas-acoes';
+import fichasRetificacoesRoutes from './simuladores-fichas-retificacoes';
 import { getFichaAvailabilityFromDb } from '../utils/ficha-availability';
 import {
   requireOperationalAccess,
@@ -1007,6 +1008,7 @@ app.post('/fichas', requireOperacoesFicha('create'), async (c) => {
 // Routes mounted here via sub-router (before /fichas/:id to avoid shadowing)
 // ==========================================================================
 app.route('/', fichasAcoesRoutes);
+app.route('/', fichasRetificacoesRoutes);
 app.route('/', fichasSimuladorRoutes);
 
 // ==========================================================================
@@ -1767,7 +1769,7 @@ app.put('/fichas/:id', requireOperacoesFicha('update'), async (c) => {
     // after instructor final signature, including legacy rows with stale status.
     if (a.assinatura_instrutor_timestamp || Number(a.assinatura_instrutor) === 1) {
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
-        error: 'Ficha assinada: somente retificação formal pode alterá-la.' }, 409);
+        error: 'Ficha assinada: somente retificação formal (POST /fichas/:id/retificacoes) pode alterá-la.' }, 409);
     }
     // F14-04: the student signature attests to the scores the student saw, but it
     // carries no content hash. Any later edit of scores, observations or instructor
