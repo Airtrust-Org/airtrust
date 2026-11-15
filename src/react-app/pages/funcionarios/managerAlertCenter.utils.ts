@@ -227,6 +227,7 @@ export function buildManagerAlerts({
     const escalaRisco = countByAlertCode(snapshotItems, [
       'ESCALADO_SEM_JORNADA_FRMS',
       'JORNADA_FRMS_SEM_ESCALA',
+      'ESCALA_DIVERGENTE',
       'JORNADA_SEM_FATORIZACAO',
       'DADO_INCONSISTENTE',
     ]);

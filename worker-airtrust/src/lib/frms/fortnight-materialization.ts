@@ -214,6 +214,8 @@ async function loadMaterializationScopeRows(
                OR ea.quinzena_id IS NOT NULL
                OR (ea.situacao_tipo IS NOT NULL AND UPPER(ea.situacao_tipo) != 'FOLGA')
              )
+             -- Folga, férias e afastamentos não são período embarcado.
+             AND UPPER(COALESCE(ea.situacao_tipo, '')) NOT IN ('FOLGA', 'FERIAS', 'MED', 'AFT')
         )
         THEN 1 ELSE 0
       END AS has_escala_alocacoes,
@@ -227,7 +229,7 @@ async function loadMaterializationScopeRows(
              AND eab.data_fim >= j.data
              AND eab.deleted_at IS NULL
              AND eab.status != 'cancelado'
-             AND UPPER(COALESCE(eab.situacao_tipo, '')) IN ('FOLGA', 'FERIAS', 'AFT')
+             AND UPPER(COALESCE(eab.situacao_tipo, '')) IN ('FOLGA', 'FERIAS', 'MED', 'AFT')
         )
         THEN 1 ELSE 0
       END AS has_ausencia_bloqueante,

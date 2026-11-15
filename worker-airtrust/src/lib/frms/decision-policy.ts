@@ -77,7 +77,7 @@ export interface FrmsDecisaoPolicy {
 }
 
 export const CAUSA_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
-  CHECKIN_PENDENTE: 'Check-in pendente para voo escalado',
+  CHECKIN_PENDENTE: 'Check-in pendente para atividade aplicavel do dia',
   CHECKIN_CRITICO: 'Check-in indica fadiga critica',
   READINESS_REVISAO: 'Triagem de atenção/readiness requer revisão operacional',
   SONO_ESTIMADO: 'Dado de sono estimado sem check-in real',
@@ -87,6 +87,7 @@ export const CAUSA_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> 
   JORNADA_SEM_FATORIZACAO: 'Jornada sem calculo de fatorizacao FRMS',
   ESCALADO_SEM_JORNADA_FRMS: 'Tripulante escalado sem registro de jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem vinculo de escala operacional',
+  ESCALA_DIVERGENTE: 'Atividade ou voo em dia de folga/afastamento, ou escala conflitante',
   DADO_INCONSISTENTE: 'Inconsistencia nos dados de jornada',
 };
 
@@ -101,6 +102,7 @@ const ALERT_PRIORITY: FrmsOperationalSnapshotAlertCode[] = [
   'JORNADA_SEM_FATORIZACAO',
   'ESCALADO_SEM_JORNADA_FRMS',
   'JORNADA_FRMS_SEM_ESCALA',
+  'ESCALA_DIVERGENTE',
   'SONO_ESTIMADO',
 ];
 

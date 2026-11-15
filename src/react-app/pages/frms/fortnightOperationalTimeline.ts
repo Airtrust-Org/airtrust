@@ -67,6 +67,7 @@ const ALERT_LABELS: Record<string, string> = {
   JORNADA_SEM_FATORIZACAO: 'Sem fatorização',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada sem escala',
+  ESCALA_DIVERGENTE: 'Escala divergente',
   DADO_INCONSISTENTE: 'Dado inconsistente',
 };
 

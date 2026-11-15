@@ -39,6 +39,11 @@ export function resolveOperationalDataMoment(
 
 export function hasIncompleteOperationalData(item: FrmsOperationalSnapshotItem): boolean {
   if (!requiresOperationalDecision(item)) {
+    if (item.checkin_obrigacao) {
+      // Dispensa pela escala não é dado faltante; escala a confirmar é.
+      return item.checkin_status !== 'RECEBIDO' &&
+        (item.checkin_obrigacao.exigivel || item.checkin_obrigacao.status === 'INDETERMINADO');
+    }
     return hasResolvedFortnightMembership(item) && item.checkin_status !== 'RECEBIDO';
   }
   return (
@@ -172,6 +177,9 @@ export function isOperationallyRelevant(item: FrmsOperationalSnapshotItem): bool
  * in a legacy decision flag as an exemption from recorded activity.
  */
 export function requiresDailyFrmsCheckin(item: FrmsOperationalSnapshotItem): boolean {
+  // O backend é a autoridade da regra (atividade, voo programado, dia de serviço
+  // real; nunca a quinzena-base presumida, folga ou férias).
+  if (item.checkin_obrigacao) return item.checkin_obrigacao.exigivel;
   return hasResolvedFortnightMembership(item) || Boolean(
     item.escalado || item.operacao_requer_decisao || item.teve_jornada ||
     item.teve_atividade_frms || item.hora_apresentacao,
@@ -181,6 +189,11 @@ export function requiresDailyFrmsCheckin(item: FrmsOperationalSnapshotItem): boo
 /** Absence of a period indicator is NOT evidence of a check-in exemption. */
 export function hasVerifiedFrmsCheckinExemption(item: FrmsOperationalSnapshotItem): boolean {
   if (requiresDailyFrmsCheckin(item)) return false;
+  if (item.checkin_obrigacao) {
+    // Escala a confirmar/conflitante não comprova dispensa.
+    return item.checkin_obrigacao.status === 'DISPENSADO' ||
+      item.checkin_obrigacao.status === 'NAO_APLICAVEL';
+  }
   if (item.na_quinzena_ativa === false) return true;
   const period = item.fortnight_indicator;
   return Boolean(period?.periodo_inicio && period?.periodo_fim &&
@@ -205,7 +218,12 @@ export function resolveFrmsCoordinationGuidance(
   const requiresCheckin = requiresDailyFrmsCheckin(item);
   const verifiedExemption = hasVerifiedFrmsCheckinExemption(item);
   const checkinComplete = item.checkin_status === 'RECEBIDO';
+  const obrigacao = item.checkin_obrigacao ?? null;
   const checkinLabel = checkinComplete ? 'Recebido'
+    : obrigacao?.status === 'PENDENTE' ? 'Pendente'
+    : obrigacao?.status === 'DISPENSADO' ? 'Dispensado pela escala'
+    : obrigacao?.status === 'INDETERMINADO' ? 'Escala a confirmar'
+    : obrigacao?.status === 'NAO_APLICAVEL' ? 'Não exigido'
     : verifiedExemption && item.checkin_status === 'NAO_APLICAVEL' ? 'Não exigido'
       : item.checkin_status === 'PENDENTE' ||
           (pertenceQuinzenaAtiva && item.checkin_status === 'NAO_APLICAVEL') ? 'Pendente'
@@ -243,6 +261,24 @@ export function resolveFrmsCoordinationGuidance(
       ...base,
       reason: primaryReason || 'Medidas de mitigação necessárias antes da atividade.',
       action: 'Manter a decisão pendente. Avaliar repouso, redução da demanda ou substituição; registrar a mitigação.',
+    };
+  }
+  if (obrigacao && obrigacao.divergencias.some((code) => code !== 'ATIVIDADE_FORA_DA_ESCALA')) {
+    return {
+      ...base,
+      reason: obrigacao.divergencias.includes('ESCALA_CONFLITANTE')
+        ? 'A escala registra serviço e ausência no mesmo dia.'
+        : 'Há atividade ou voo registrado em dia de folga/afastamento.',
+      action: checkinComplete
+        ? 'Reconciliar a escala com a operação real (Escalas) e registrar a justificativa da atividade extraordinária.'
+        : 'Confirmar se a atividade ocorreu; se sim, solicitar o check-in do dia e regularizar a escala. Não estender a obrigação aos dias de folga.',
+    };
+  }
+  if (!checkinComplete && obrigacao?.status === 'INDETERMINADO') {
+    return {
+      ...base,
+      reason: `${obrigacao.rotulo}. O check-in não é cobrado por presunção.`,
+      action: 'Responsável pela escala: confirmar se o tripulante está em serviço neste dia (alocação, folga ou afastamento). Se houver atividade, solicitar o check-in.',
     };
   }
   if (requiresCheckin && !checkinComplete) {
@@ -294,7 +330,9 @@ export function resolveFrmsCoordinationGuidance(
   if (item.checkin_status === 'NAO_APLICAVEL' && !requiresCheckin) {
     return verifiedExemption ? {
       ...base,
-      reason: 'Sem vínculo com a quinzena vigente e sem atividade operacional registrada nesta data.',
+      reason: obrigacao
+        ? `${obrigacao.rotulo}; sem atividade operacional registrada nesta data.`
+        : 'Sem vínculo com a quinzena vigente e sem atividade operacional registrada nesta data.',
       action: 'Check-in não exigido neste recorte; reavaliar se houver nova escala ou atividade. Isso não equivale a aptidão.',
     } : {
       ...base,
