@@ -30,8 +30,8 @@ describe('DGR maintenance conservative consolidation 0585', () => {
     expect(workflow).toContain('Preflight DGR maintenance consolidation 0585');
     expect(workflow).toContain('Post-validate DGR maintenance consolidation 0585');
     const pinnedGuard = workflow.split('      - name: Preflight DGR maintenance consolidation 0585')[1]?.split('      - name:')[0] || '';
-    expect(pinnedGuard).toContain('EXPECTED_WORKER_SHA: ff16b2d4e0510be73a24cdee93a5fff4e0d36d22');
-    expect(pinnedGuard).toContain('RELEASE_SHA: ff16b2d4e0510be73a24cdee93a5fff4e0d36d22');
+    expect(pinnedGuard).toContain('EXPECTED_WORKER_SHA: 74cb04531c2acb8cd605a4bfac37ce14ee158cef');
+    expect(pinnedGuard).toContain('RELEASE_SHA: 74cb04531c2acb8cd605a4bfac37ce14ee158cef');
     expect(pinnedGuard).not.toContain('EXPECTED_WORKER_SHA: ${{ github.sha }}');
     expect(workflow).toContain('git merge-base --is-ancestor "$EXPECTED_WORKER_SHA" "$GITHUB_SHA"');
     expect(workflow).toContain('node scripts/ci/verify-release-gates.mjs');
