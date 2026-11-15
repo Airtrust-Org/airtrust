@@ -37,6 +37,8 @@ describe('DGR maintenance conservative consolidation 0585', () => {
     expect(workflow).toContain('node scripts/ci/verify-release-gates.mjs');
     expect(read('scripts/schema-v2/validate-0585-production-preflight.sh')).toContain('DGR_0585_PREFLIGHT_PASS');
     expect(read('scripts/schema-v2/validate-0585-production-postconditions.sh')).toContain('DGR_0585_POSTCONDITIONS_PASS');
+    // Production D1 relabels the type snapshot from the qualification catalog trigger.
+    expect(read('scripts/schema-v2/validate-0585-production-postconditions.sh')).toContain("tipo='Treinamento de Artigos Perigosos para o Transporte Aéreo'");
     const sql = read(sqlPath);
     expect(sql).not.toMatch(/DELETE FROM qualificacoes_historico|DROP TABLE|DELETE FROM treinamento_requisitos/i);
     const contract = JSON.parse(read('docs/database/schema-contracts/production-d1-baseline-v2.json'));
