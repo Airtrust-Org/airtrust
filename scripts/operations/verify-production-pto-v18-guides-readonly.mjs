@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { EXPECTED, SUFIXO, evaluateListing } from './pto-v18-guide-validation-lib.mjs';
 import {
   assert,
   assertAllowedProductionBaseUrl,
@@ -29,8 +30,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(
   readFileSync(join(here, 'pto-v18-guide-release-manifest.json'), 'utf8'),
 );
-const SUFIXO = '@PTO-REV10-V18';
-const EXPECTED = { AW139: 37, S76: 45, FUNCIONAL: 6 };
 
 const baseUrl = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || 'https://api.airtrust.online');
 const email = process.env.E2E_EMAIL || '';
@@ -74,24 +73,12 @@ check('1 guia V18 por modelo de sessão (88 distintos)',
   new Set(v18.map((g) => g.modelo_sessao_id)).size === 88 && v18.every((g) => g.modelo_sessao_id), '');
 check('versão do guia = manifesto', v18.every((g) => g.versao === manifest.versao_guia), manifest.versao_guia);
 
-const porAeronave = { AW139: 0, S76: 0, FUNCIONAL: 0 };
+const ev = evaluateListing(guias, manifest);
+const { porAeronave, cruzados } = ev;
 const porCodigo = new Map(manifest.guias.map((g) => [g.codigo, g]));
-let cruzados = 0;
-for (const g of v18) {
-  const m = porCodigo.get(g.codigo);
-  if (!m) { cruzados += 1; continue; }
-  porAeronave[m.aeronave] += 1;
-  const prefixoOk = m.aeronave === 'AW139' ? g.codigo.startsWith('A139-')
-    : m.aeronave === 'S76' ? g.codigo.startsWith('S76-') : /^(INST|EXA)-/.test(g.codigo);
-  const idOk = m.modelo_aeronave_id == null
-    ? g.modelo_aeronave_id == null
-    : g.modelo_aeronave_id === m.modelo_aeronave_id;
-  if (!prefixoOk || !idOk || g.programa !== m.programa) cruzados += 1;
-}
 check('contagem por aeronave 37/45/6', JSON.stringify(porAeronave) === JSON.stringify(EXPECTED), JSON.stringify(porAeronave));
-check('0 associações cruzadas AW139/S76 ou programa divergente', cruzados === 0, `cruzados=${cruzados}`);
-check('os 88 códigos do manifesto estão presentes',
-  manifest.guias.length === 88 && manifest.guias.every((m) => v18.some((g) => g.codigo === m.codigo)), '');
+check('0 vínculos guia→modelo de sessão, aeronave ou programa divergentes do plano', cruzados === 0, `cruzados=${cruzados}`);
+check('os 88 códigos do manifesto estão presentes', ev.codigosPresentes, '');
 
 const semToken = await get('/api/simuladores/guias-instrutor', null);
 check('listagem sem credencial é negada', semToken.status === 401 || semToken.status === 403, `status=${semToken.status}`);

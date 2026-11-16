@@ -68,6 +68,7 @@ jobs:
           node --test scripts/__tests__/deploy-release-gates-wiring.test.mjs
           node --test scripts/ci/check-github-workflow-contexts.test.mjs
           node --test scripts/ci/check-frontend-entry-chunks.test.mjs
+          node --test scripts/__tests__/pto-v18-guide-validation.test.mjs
       - name: validate Native Player 3 F5 QA approval gate
         run: node --test scripts/__tests__/player3-native-qa-approval-gate.test.mjs
       - name: validate Player3 independent synthetic learner workflow
