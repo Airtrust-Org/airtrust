@@ -46,6 +46,36 @@ export interface TenantContext {
   permissions: string[];
 }
 
+// Reusar exclusivamente dentro da MESMA requisição já validada. O WeakMap usa a
+// identidade interna do Context (não headers/JWT nem cache entre requests), portanto
+// um novo request sempre consulta novamente vínculo/estado do tenant no D1.
+const validatedTenantByRequest = new WeakMap<object, {
+  userId: unknown;
+  empresaId: unknown;
+  userRole: unknown;
+  db: D1Database;
+  context: TenantContext;
+  snapshot: string;
+  platformState: unknown;
+  platformStateSnapshot: string;
+}>();
+
+function rememberTenantValidation(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  context: TenantContext,
+): void {
+  validatedTenantByRequest.set(c, {
+    userId: c.get('userId'),
+    empresaId: c.get('empresaId'),
+    userRole: c.get('userRole'),
+    db: c.env.DB,
+    context,
+    snapshot: JSON.stringify(context),
+    platformState: c.get('platformAccessState'),
+    platformStateSnapshot: JSON.stringify(c.get('platformAccessState') ?? null),
+  });
+}
+
 export function normalizeContextUserId(userId: unknown): number {
   const normalized = typeof userId === 'string' ? Number(userId) : Number(userId || 0);
   return Number.isFinite(normalized) ? normalized : 0;
@@ -137,6 +167,20 @@ export function normalizeTenantRole(role: unknown): TenantContext['role'] {
  */
 export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   const handler: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
+    const validated = validatedTenantByRequest.get(c);
+    if (
+      validated &&
+      validated.db === c.env.DB &&
+      validated.userId === c.get('userId') &&
+      validated.empresaId === c.get('empresaId') &&
+      validated.userRole === c.get('userRole') &&
+      validated.context === c.get('tenantContext') &&
+      validated.snapshot === JSON.stringify(validated.context) &&
+      validated.platformState === c.get('platformAccessState') &&
+      validated.platformStateSnapshot === JSON.stringify(c.get('platformAccessState') ?? null)
+    ) {
+      return next();
+    }
     const db = c.env.DB;
     const useUsuariosEmpresas = await hasUsuariosEmpresasTable(db);
     assertTenantMembershipSchemaReady(c.env.ENVIRONMENT, useUsuariosEmpresas);
@@ -216,14 +260,16 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
         `[TENANT] 🔓 BYPASS: empresa_id=${fallbackTenant.empresa_id} (${fallbackTenant.codigo})`,
       );
 
-      c.set('tenantContext', {
+      const devTenantContext: TenantContext = {
         empresaId: fallbackTenant.empresa_id,
         empresaCodigo: fallbackTenant.codigo,
         empresaNome: fallbackTenant.nome,
         role: normalizeTenantRole(fallbackTenant.role),
         plano: fallbackTenant.plano,
         permissions: buildPermissions(normalizeTenantRole(fallbackTenant.role)),
-      } as TenantContext);
+      };
+      c.set('tenantContext', devTenantContext);
+      rememberTenantValidation(c, devTenantContext);
 
       return next();
     }
@@ -317,6 +363,7 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     };
 
     c.set('tenantContext', tenantContext);
+    rememberTenantValidation(c, tenantContext);
 
     // Log para auditoria (resumido)
     console.log(`[TENANT] empresa=${result.codigo} user=${userId} role=${result.role}`);

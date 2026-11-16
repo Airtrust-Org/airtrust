@@ -50,6 +50,7 @@ export function createCheckinObligationFixture(): Sqlite {
       recovery_day_id INTEGER, activity_type TEXT, start_time TEXT, end_time TEXT);
     CREATE TABLE frms_escala_quinzenal (id TEXT PRIMARY KEY, tripulante_id INTEGER, data_inicio_embarque TEXT,
       data_fim_embarque TEXT, data_inicio_folga TEXT, data_fim_folga TEXT, status_ciclo TEXT, deleted_at TEXT);
+    CREATE TABLE usuarios (id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
     CREATE TABLE cv_voos (id INTEGER PRIMARY KEY, empresa_id INTEGER, data_programacao TEXT, status TEXT,
       horario_real_partida TEXT, deleted_at TEXT);
     CREATE TABLE cv_voo_tripulantes (id INTEGER PRIMARY KEY, empresa_id INTEGER, voo_id INTEGER, funcionario_id INTEGER,
@@ -57,7 +58,8 @@ export function createCheckinObligationFixture(): Sqlite {
     CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT,
       jornada_inicio_prevista TEXT, hora_checkin TEXT, kss_score INTEGER, kss_provenance TEXT, horas_sono REAL,
       horas_sono_48h REAL, wake_time TEXT, fit_for_duty INTEGER, score_fadiga REAL, nivel_fadiga TEXT,
-      status_operacional TEXT, computed_risk_level TEXT, requires_operational_review INTEGER, deleted_at TEXT);
+      status_operacional TEXT, computed_risk_level TEXT, requires_operational_review INTEGER, deleted_at TEXT,
+      qualidade_sono TEXT, subjective_fatigue_level INTEGER, sleepiness_level INTEGER, observacoes TEXT, submitted_at TEXT);
   `);
   const crew = (id: number, empresa: number, quinzena: string | null, extra = "1, 'ATIVO'") =>
     `(${id}, ${empresa}, 'T${id}', 'PILOTO', 'PILOTO', ${quinzena ? `'${quinzena}'` : 'NULL'}, ${extra}, NULL)`;

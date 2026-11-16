@@ -178,6 +178,14 @@ routes = [
   { pattern = "api.airtrust.online/*", zone_name = "airtrust.online" }
 ]
 
+# PERF-03 (#2227): colocar o Worker perto do primario D1 (ENAM/IAD). Evidencia (telemetria por rota,
+# d1_round_trips/d1_ms, 16/11/2026): rotas autenticadas fazem 9-15 idas sequenciais ao D1 e cada ida
+# custa ~130-190 ms com o Worker no edge do Brasil; em staging (mesma regiao abaixo) ~30-60 ms por ida.
+# O A/B anterior usou rotas leves (0-1 ida). ROLLBACK: remover este bloco e republicar se, apos o deploy,
+# o p50 ponta a ponta de rotas com >= 2 idas nao cair ou o de /api/version subir acima de ~250 ms.
+[env.production.placement]
+region = "aws:us-east-1"
+
 [env.production.observability]
 enabled = true
 head_sampling_rate = 1

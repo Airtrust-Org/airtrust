@@ -187,6 +187,49 @@ describe('perfil no JWT assinado — sem cookie SameSite', () => {
   });
 });
 
+describe('perfil independente por aba, sempre validado pelo D1', () => {
+  it('header da aba Gestor prevalece sobre cookie INSTRUTOR deixado por outra aba', async () => {
+    const db = createDb({
+      userId: 43, empresaId: 6, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+    });
+    const { token } = await makeToken(43, 6, 'GESTOR');
+    const res = await buildApp(db, 'auth')({ headers: {
+      Authorization: `Bearer ${token}`, ...withCookie('INSTRUTOR'),
+      'X-AirTrust-Session-Role': 'GESTOR',
+    }});
+    expect(res.status).toBe(200);
+    expect((await res.json()) as {userRole:string}).toMatchObject({userRole:'GESTOR'});
+  });
+
+  it('header da aba Instrutor prevalece sobre cookie GESTOR compartilhado', async () => {
+    const db = createDb({
+      userId: 43, empresaId: 6, perfil: 'GESTOR', membershipRole: 'manager',
+      explicitProfiles: [{ perfil: 'GESTOR', ativo: 1 }, { perfil: 'INSTRUTOR', ativo: 1 }],
+    });
+    const {token} = await makeToken(43, 6, 'GESTOR');
+    const res = await buildApp(db,'auth')({headers: {
+      Authorization: `Bearer ${token}`, ...withCookie('GESTOR'),
+      'X-AirTrust-Session-Role': 'INSTRUTOR',
+    }});
+    expect(res.status).toBe(200);
+    expect((await res.json()) as {userRole:string}).toMatchObject({userRole:'INSTRUTOR'});
+  });
+
+  it('header forjado pedindo administrador sem grant é rejeitado, mesmo com cookie GESTOR', async () => {
+    const db = createDb({
+      userId:43, empresaId:6, perfil:'GESTOR', membershipRole:'manager',
+      explicitProfiles:[{perfil:'GESTOR',ativo:1}],
+    });
+    const {token}=await makeToken(43,6,'GESTOR');
+    const res=await buildApp(db,'auth')({headers: {
+      Authorization:`Bearer ${token}`, ...withCookie('GESTOR'),
+      'X-AirTrust-Session-Role':'ADMINISTRADOR',
+    }});
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('resolveAvailableSessionRoles — backend é a fonte de verdade', () => {
   it('platform_admin persistido é exclusivo mesmo que os perfis do tenant sejam Aluno e Instrutor', async () => {
     const db = createDb({

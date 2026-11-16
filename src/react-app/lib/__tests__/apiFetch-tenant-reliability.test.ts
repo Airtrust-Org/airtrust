@@ -71,6 +71,25 @@ describe('apiFetch tenant-safe bounded caches', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the per-tab verified-role preference for authenticated API requests', async () => {
+    // Another tab may have chosen INSTRUTOR and changed the shared domain cookie.
+    document.cookie = 'airtrust_session_role=INSTRUTOR; Path=/';
+    sessionStorage.setItem('airtrust_selected_role_tab', 'GESTOR');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({success:true}), {status:200}));
+    vi.stubGlobal('fetch', fetchMock);
+    Object.defineProperty(window, 'fetch', {configurable:true,writable:true,value:fetchMock});
+    const {apiFetch} = await loadApiFetch();
+    await apiFetch('/api/lms/cursos/stats', {headers: {Authorization:'Bearer signed-token'}});
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get('X-AirTrust-Session-Role')).toBe('GESTOR');
+    expect(headers.get('Authorization')).toBe('Bearer signed-token');
+    sessionStorage.setItem('airtrust_selected_role_tab','INSTRUTOR');
+    await apiFetch('/api/lms/matriculas/minhas-ead', {headers:{Authorization:'Bearer signed-token'}});
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('X-AirTrust-Session-Role')).toBe('INSTRUTOR');
+    await apiFetch('/api/version');
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).has('X-AirTrust-Session-Role')).toBe(false);
+  });
+
   it('never replays or locally suppresses authenticated mutations', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: 'temporarily unavailable' }), {

@@ -12,6 +12,13 @@ export async function loadDailyFatigueTeamRoster(params: {
   sectorScope: DailyFatigueTeamSectorScope;
   limit: number;
   offset: number;
+  /**
+   * Tripulantes com obrigação canônica de check-in no dia (PENDENTE ou RECEBIDO) por QUALQUER fonte de
+   * atividade (Controle de Voos, simulador, treinamento, atividade informada). Entram na lista mesmo sem
+   * alocação, EVD, jornada ou quinzena-base; do contrário uma pendência real ficaria invisível ao gestor.
+   * Vai como um único JSON para não esbarrar no limite de variáveis do D1.
+   */
+  obligatedIds?: readonly number[];
 }): Promise<Record<string, unknown>[]> {
   const rows = await params.db
     .prepare(
@@ -74,6 +81,7 @@ export async function loadDailyFatigueTeamRoster(params: {
          AND ${params.sectorScope.clause}
          AND (
            cf.numero IS NOT NULL OR fj.id IS NOT NULL OR ch.id IS NOT NULL
+           OR f.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
            -- Alocação real do dia (inclusive fora da quinzena-base) e voo
            -- programado na EVD também colocam o tripulante na lista; a regra
            -- canônica decide depois se o check-in é exigível.
@@ -111,6 +119,7 @@ export async function loadDailyFatigueTeamRoster(params: {
       params.date,
       params.empresaId,
       ...params.sectorScope.bindings,
+      JSON.stringify([...new Set((params.obligatedIds ?? []).filter((id) => Number.isInteger(id) && id > 0))]),
       params.date,
       params.date,
       params.date,
