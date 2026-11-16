@@ -66,6 +66,7 @@ export interface Env {
   CF_DEPLOYMENT_ID?: string;
   // Dev helpers
   ENABLE_DEV_AUTH_BYPASS?: string; // 'true' apenas em development via .dev.vars
+  D1_METRICS_DISABLED?: string; // 'true' desliga a contagem de round-trips D1 por requisição (#2227)
   // Executor controlado da importação da matriz de simuladores AW139/S-76
   // (tenant-scoped, empresa_id=6). Disabled by default; never set 'true' in
   // production without explicit, reviewed authorization for that specific run.
@@ -97,7 +98,6 @@ export interface Env {
   // Explicit, single approved historical cohort. Absent = no data access.
   FRMS_V3_COHORT_APPROVED_WINDOW_DAYS?: string;
   FRMS_V3_COHORT_APPROVED_END_DATE?: string;
-
 
   // CORS Origins (pode ser string separada por vírgula)
   CORS_ORIGINS?: string;

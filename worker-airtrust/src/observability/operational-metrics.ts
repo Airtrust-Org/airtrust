@@ -108,6 +108,7 @@ export function emitHttpMetric(input: {
   method: string;
   status: number;
   latencyMs: number;
+  d1?: { roundTrips: number; statements: number; dbMs: number };
 }): void {
   emitOperationalMetric({
     event: 'operational_metric',
@@ -118,5 +119,12 @@ export function emitHttpMetric(input: {
     latency_ms: Math.max(0, Math.round(input.latencyMs)),
     tenant_scope: null,
     error_category: classifyHttpError(input.status),
+    ...(input.d1
+      ? {
+          d1_round_trips: input.d1.roundTrips,
+          d1_statements: input.d1.statements,
+          d1_ms: Math.max(0, Math.round(input.d1.dbMs)),
+        }
+      : {}),
   });
 }
