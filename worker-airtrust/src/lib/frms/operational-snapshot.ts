@@ -43,6 +43,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
+import { buildScheduleDayIndex, journeyHasOperationalData, loadCheckinScheduleEvidence, resolveCheckinObligation, type CheckinObligation, type CheckinScheduleEvidence } from './checkin-obligation';
 import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
 import { clockToMinutes } from './operational-clock';
 import { calculateMorningEffectivenessProjection, type EffectivenessSnapshotRow } from './morning-effectiveness-projection';
@@ -64,6 +65,7 @@ export type FrmsOperationalSnapshotAlertCode =
   | 'JORNADA_SEM_FATORIZACAO'
   | 'ESCALADO_SEM_JORNADA_FRMS'
   | 'JORNADA_FRMS_SEM_ESCALA'
+  | 'ESCALA_DIVERGENTE'
   | 'DADO_INCONSISTENTE';
 
 export type FrmsOperationalSnapshotStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
@@ -101,6 +103,8 @@ export interface FrmsOperationalSnapshotItem {
   teve_atividade_frms?: boolean;
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
+  /** Regra canônica: por que o check-in é (ou não) exigido neste dia. */
+  checkin_obrigacao?: CheckinObligation;
   checkin_horario: string | null;
   /** Instante UTC de envio, para exibição no fuso operacional. */
   checkin_submitted_at?: string | null;
@@ -204,6 +208,11 @@ export interface BuildOperationalSnapshotInput {
     activities?: FrmsActivitySnapshotRow[];
     /** Presença diária na quinzena/período operacional, mesmo sem atividade no dia. */
     roster?: Array<{ data_operacional: string; funcionario_id: number }>;
+    /**
+     * Evidência de escala (alocações reais, ausências, quinzena-base). Quando
+     * ausente (chamadores legados), o roster é tratado como alocação operacional.
+     */
+    schedule?: CheckinScheduleEvidence;
     funcionarios: FuncionarioSnapshotRow[];
   };
   filters?: FrmsOperationalSnapshotFilters;
@@ -626,6 +635,7 @@ export function buildFrmsOperationalSnapshot(
   const rosterKeys = new Set(
     (input.rows.roster ?? []).map((row) => `${row.data_operacional}::${asNumber(row.funcionario_id)}`),
   );
+  const scheduleFor = input.rows.schedule ? buildScheduleDayIndex(input.rows.schedule) : null;
   const keys = new Set<string>([
     ...escalaMap.keys(),
     ...jornadaMap.keys(),
@@ -691,10 +701,17 @@ export function buildFrmsOperationalSnapshot(
 
     const { source: jornadaDataSource, origem: jornadaOrigem } = resolveJornadaSource(jornada);
 
-    const checkinStatus: FrmsOperationalSnapshotItem['checkin_status'] = checkin
-      ? 'RECEBIDO'
-      : pertenceQuinzenaAtiva || escalado || teveAtividadeFrms
-        ? 'PENDENTE'
+    const checkinObrigacao = resolveCheckinObligation({
+      hasCheckin: Boolean(checkin),
+      registeredActivity: teveAtividadeFrms,
+      programmedFlight: escalado,
+      schedule: scheduleFor
+        ? scheduleFor(funcionario_id, data_operacional)
+        : { operationalAllocation: pertenceQuinzenaAtiva, nonFlightAllocation: false, absence: null, allocationConflict: false, baseFortnightPresumption: false },
+    });
+    const checkinStatus: FrmsOperationalSnapshotItem['checkin_status'] =
+      checkinObrigacao.status === 'RECEBIDO' || checkinObrigacao.status === 'PENDENTE'
+        ? checkinObrigacao.status
         : 'NAO_APLICAVEL';
 
     const rawKss = checkin?.kss_score == null ? null : Number(checkin.kss_score);
@@ -747,8 +764,11 @@ export function buildFrmsOperationalSnapshot(
 
     const alertas: FrmsOperationalSnapshotAlertCode[] = [];
 
-    if ((pertenceQuinzenaAtiva || escalado || teveAtividadeFrms) && !checkin) {
+    if (checkinObrigacao.status === 'PENDENTE') {
       alertas.push('CHECKIN_PENDENTE');
+    }
+    if (checkinObrigacao.divergencias.some((code) => code !== 'ATIVIDADE_FORA_DA_ESCALA')) {
+      alertas.push('ESCALA_DIVERGENTE');
     }
 
     if (isCriticalCheckin(checkin)) {
@@ -854,6 +874,7 @@ export function buildFrmsOperationalSnapshot(
       teve_atividade_frms: teveAtividadeFrms,
 
       checkin_status: checkinStatus,
+      checkin_obrigacao: checkinObrigacao,
       checkin_horario: normalizeText(checkin?.hora_checkin),
       checkin_submitted_at: normalizeText(checkin?.submitted_at),
       kss_score: kss,
@@ -1009,6 +1030,7 @@ interface OperationalSnapshotRows {
   readiness: ReadinessSnapshotRow[];
   regulatoryRolling: RollingRegulatoryEvidence[];
   missionPeriods: MissionPeriodRow[];
+  schedule: CheckinScheduleEvidence;
 }
 
 /**
@@ -1040,7 +1062,7 @@ async function loadOperationalSnapshotRows(
   janelaFim: string,
 ): Promise<OperationalSnapshotRows> {
   const missionHistoryStart = addDaysIso(janelaInicio, -ACT_CDS_MAX_POST_MISSION_REST_DAYS);
-  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult, readinessResult] = await Promise.all([
+  const [escalasResult, preferredJourneys, checkinsResult, effectivenessResult, activities, regulatoryRollingResult, missionPeriodsResult, readinessResult, scheduleEvidence] = await Promise.all([
     db
       .prepare(
         `WITH escala_crew AS (
@@ -1053,6 +1075,7 @@ async function loadOperationalSnapshotRows(
              e.aeronave_modelo
            FROM escala_voo_diaria e
            WHERE e.deleted_at IS NULL
+             AND UPPER(COALESCE(e.status, '')) <> 'CANCELADA'
              AND e.empresa_id = ?
              AND e.data >= ?
              AND e.data <= ?
@@ -1069,6 +1092,7 @@ async function loadOperationalSnapshotRows(
              e.aeronave_modelo
            FROM escala_voo_diaria e
            WHERE e.deleted_at IS NULL
+             AND UPPER(COALESCE(e.status, '')) <> 'CANCELADA'
              AND e.empresa_id = ?
              AND e.data >= ?
              AND e.data <= ?
@@ -1174,8 +1198,10 @@ async function loadOperationalSnapshotRows(
       .prepare(
         `WITH mission_periods AS (
            SELECT CAST(ea.funcionario_id AS INTEGER) AS funcionario_id,
-                  COALESCE(eq.data_inicio, ea.data_inicio) AS data_inicio_embarque,
-                  COALESCE(eq.data_fim, ea.data_fim) AS data_fim_embarque,
+                  -- Datas reais da alocação: uma quinzena quebrada (1–5, 10–15)
+                  -- não pode ser esticada para a quinzena inteira.
+                  ea.data_inicio AS data_inicio_embarque,
+                  ea.data_fim AS data_fim_embarque,
                   1 AS source_priority,
                   'ALLOCATION' AS source_kind
              FROM escala_alocacoes ea
@@ -1189,12 +1215,13 @@ async function loadOperationalSnapshotRows(
                 UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
                 OR UPPER(COALESCE(f.cargo, '')) IN ('PILOTO','COPILOTO','COMANDANTE','PIC','SIC','TRIPULANTE')
               )
-             LEFT JOIN escalas_quinzenas eq ON eq.id = ea.quinzena_id AND eq.empresa_id = f.empresa_id AND eq.deleted_at IS NULL
             WHERE ea.deleted_at IS NULL
               AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
-              AND (ea.aeronave_id IS NOT NULL OR ea.quinzena_id IS NOT NULL OR (ea.situacao_tipo IS NOT NULL AND UPPER(ea.situacao_tipo) <> 'FOLGA'))
-              AND COALESCE(eq.data_inicio, ea.data_inicio) <= ?
-              AND COALESCE(eq.data_fim, ea.data_fim) >= ?
+              -- Folga, férias e afastamentos não são período de missão.
+              AND UPPER(COALESCE(ea.situacao_tipo, '')) NOT IN ('FOLGA','FERIAS','MED','AFT')
+              AND (ea.aeronave_id IS NOT NULL OR ea.quinzena_id IS NOT NULL OR ea.situacao_tipo IS NOT NULL)
+              AND ea.data_inicio <= ?
+              AND ea.data_fim >= ?
            UNION ALL
            SELECT CAST(f.id AS INTEGER), eq.data_inicio, eq.data_fim, 2, 'BASE_FORTNIGHT'
              FROM funcionarios f
@@ -1244,6 +1271,7 @@ async function loadOperationalSnapshotRows(
       )
       .all<MissionPeriodRow>(),
     loadReadinessSnapshotRows(db, empresaId, janelaInicio, janelaFim),
+    loadCheckinScheduleEvidence(db, empresaId, janelaInicio, janelaFim),
   ]);
 
   return {
@@ -1256,8 +1284,7 @@ async function loadOperationalSnapshotRows(
       horas_voo_minutos: row.horas_voo_minutos,
       duracao_jornada_minutos: row.duracao_jornada_minutos,
       origem: row.operational_data_source === 'SIGVOOS' ? 'SIGVOOS' : null,
-      has_operational_data:
-        row.horas_voo_minutos > 0 || row.duracao_jornada_minutos > 0 || Boolean(row.hora_apresentacao || row.hora_termino) ? 1 : 0,
+      has_operational_data: journeyHasOperationalData(row) ? 1 : 0,
       is_manual_empty: 0,
       operational_data_source: row.operational_data_source,
     })),
@@ -1277,6 +1304,7 @@ async function loadOperationalSnapshotRows(
     activities,
     regulatoryRolling: regulatoryRollingResult.results || [],
     missionPeriods: normalizeMissionPeriods(missionPeriodsResult.results || []),
+    schedule: scheduleEvidence,
   };
 }
 
@@ -1813,6 +1841,7 @@ export async function listFrmsOperationalSnapshot(
       effectiveness: contextRows.effectiveness,
       activities: contextRows.activities,
       roster: buildActiveFortnightRosterRows(contextRows.missionPeriods, requestedStart, requestedEnd),
+      schedule: contextRows.schedule,
       funcionarios,
     },
     filters: scopedFuncionarioId != null ? { funcionario_id: scopedFuncionarioId } : undefined,

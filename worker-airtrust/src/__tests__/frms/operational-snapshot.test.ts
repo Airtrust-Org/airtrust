@@ -143,6 +143,9 @@ interface SnapshotDbData {
   effectiveness?: Array<Record<string, unknown>>;
   funcionarios?: Array<Record<string, unknown>>;
   missionPeriods?: Array<Record<string, unknown>>;
+  scheduleAllocations?: Array<Record<string, unknown>>;
+  scheduleAbsenceEvents?: Array<Record<string, unknown>>;
+  baseFortnights?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -166,6 +169,14 @@ function makeSnapshotDb(data: SnapshotDbData) {
       bind: vi.fn((...args: unknown[]) => {
         if (args.length > 100) throw new Error('D1_ERROR: too many SQL variables: SQLITE_ERROR');
         return { all: async () => {
+          // Evidência canônica de escala para a obrigação de check-in.
+          if (sql.includes('FROM escala_alocacoes ea') && !sql.includes('source_kind')) {
+            return { results: data.scheduleAllocations ?? [] };
+          }
+          if (sql.includes('FROM escala_eventos ee')) return { results: data.scheduleAbsenceEvents ?? [] };
+          if (sql.includes('JOIN escalas_quinzenas eq') && !sql.includes('source_kind')) {
+            return { results: data.baseFortnights ?? [] };
+          }
           const rows = rowsFor(sql);
           if (sql.includes('BASE_FORTNIGHT') && sql.includes('source_kind')) {
             return { results: rows };
@@ -268,7 +279,7 @@ describe('D1 bind budget do snapshot operacional', () => {
 });
 
 describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
-  it('gera a linha diária a partir da quinzena mesmo sem evento operacional', async () => {
+  it('quinzena-base sem escala publicada aparece, mas não vira check-in pendente', async () => {
     mockFrmsOperationalContext();
     vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue({ dia: 3, total: 15 } as never);
     const db = makeSnapshotDb({
@@ -280,6 +291,7 @@ describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
         source_priority: 2,
         source_kind: 'BASE_FORTNIGHT',
       }],
+      baseFortnights: [{ funcionario_id: 10, data_inicio: '2026-09-16', data_fim: '2026-09-30' }],
     });
 
     const result = await listFrmsOperationalSnapshot(db, {
@@ -292,10 +304,98 @@ describe('active fortnight roster in listFrmsOperationalSnapshot', () => {
     expect(item?.teve_jornada).toBe(false);
     expect(item?.jornada_data_source).toBe('AUSENTE');
     expect(item?.operacao_requer_decisao).toBe(false);
+    expect(item?.checkin_status).toBe('NAO_APLICAVEL');
+    expect(item?.checkin_obrigacao).toMatchObject({ status: 'INDETERMINADO', base: 'QUINZENA_BASE_SEM_ESCALA' });
+    expect(item?.alertas).not.toContain('CHECKIN_PENDENTE');
+    expect(result.summary.checkins_pendentes).toBe(0);
+  });
+
+  it('alocação operacional real do dia exige o check-in diário', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue({ dia: 3, total: 15 } as never);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10],
+      missionPeriods: [{
+        funcionario_id: 10, data_inicio_embarque: '2026-09-16', data_fim_embarque: '2026-09-30',
+        source_priority: 1, source_kind: 'ALLOCATION',
+      }],
+      scheduleAllocations: [{ funcionario_id: 10, data_inicio: '2026-09-16', data_fim: '2026-09-30', situacao_tipo: null }],
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-28', dataFim: '2026-09-28',
+    });
+
+    const item = getByKey(result.items, '2026-09-28', 10);
     expect(item?.checkin_status).toBe('PENDENTE');
+    expect(item?.checkin_obrigacao?.base).toBe('ALOCACAO_OPERACIONAL');
     expect(item?.alertas).toContain('CHECKIN_PENDENTE');
-    expect(item?.estado_operacional).toBe('NAO_AVALIADO');
     expect(result.summary.checkins_pendentes).toBe(1);
+  });
+
+  it('quinzena quebrada e férias não geram pendência nos dias fora de serviço', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10, { ...FUNCIONARIO_10, id: 11, nome_guerra: 'ONZE' }],
+      missionPeriods: [
+        { funcionario_id: 10, data_inicio_embarque: '2026-09-16', data_fim_embarque: '2026-09-20', source_priority: 1, source_kind: 'ALLOCATION' },
+        { funcionario_id: 10, data_inicio_embarque: '2026-09-16', data_fim_embarque: '2026-09-30', source_priority: 2, source_kind: 'BASE_FORTNIGHT' },
+        { funcionario_id: 11, data_inicio_embarque: '2026-09-16', data_fim_embarque: '2026-09-30', source_priority: 2, source_kind: 'BASE_FORTNIGHT' },
+      ],
+      scheduleAllocations: [
+        { funcionario_id: 10, data_inicio: '2026-09-16', data_fim: '2026-09-20', situacao_tipo: null },
+        { funcionario_id: 11, data_inicio: '2026-09-16', data_fim: '2026-09-30', situacao_tipo: 'FERIAS' },
+      ],
+      baseFortnights: [10, 11].map((id) => ({ funcionario_id: id, data_inicio: '2026-09-16', data_fim: '2026-09-30' })),
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-18', dataFim: '2026-09-25',
+    });
+
+    expect(getByKey(result.items, '2026-09-18', 10)?.checkin_status).toBe('PENDENTE');
+    expect(getByKey(result.items, '2026-09-25', 10)?.checkin_obrigacao).toMatchObject({ status: 'NAO_APLICAVEL', base: 'SEM_PROGRAMACAO' });
+    expect(getByKey(result.items, '2026-09-22', 11)?.checkin_obrigacao).toMatchObject({ status: 'DISPENSADO', base: 'AUSENCIA_PROGRAMADA' });
+    const pendentes = result.items.filter((item) => item.alertas.includes('CHECKIN_PENDENTE'));
+    expect(pendentes.every((item) => item.funcionario_id === 10 && item.data_operacional <= '2026-09-20')).toBe(true);
+    expect(pendentes).toHaveLength(3);
+  });
+
+  it('voo confirmado em dia de folga mantém as horas e sinaliza divergência de escala', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+    const db = makeSnapshotDb({
+      funcionarios: [FUNCIONARIO_10],
+      jornadas: [jornadaRow('2026-09-22', 10, { horas_voo_minutos: 95, duracao_jornada_minutos: 300, origem: 'SIGVOOS' })],
+      scheduleAllocations: [{ funcionario_id: 10, data_inicio: '2026-09-16', data_fim: '2026-09-30', situacao_tipo: 'FOLGA' }],
+    });
+
+    const result = await listFrmsOperationalSnapshot(db, {
+      empresaId: 77, dataInicio: '2026-09-21', dataFim: '2026-09-23',
+    });
+
+    const item = getByKey(result.items, '2026-09-22', 10);
+    expect(item?.horas_voo_minutos).toBe(95);
+    expect(item?.checkin_status).toBe('PENDENTE');
+    expect(item?.checkin_obrigacao?.divergencias).toContain('ATIVIDADE_EM_AUSENCIA');
+    expect(item?.alertas).toEqual(expect.arrayContaining(['CHECKIN_PENDENTE', 'ESCALA_DIVERGENTE']));
+    expect(getByKey(result.items, '2026-09-21', 10)).toBeUndefined();
+    expect(getByKey(result.items, '2026-09-23', 10)).toBeUndefined();
+  });
+
+  it('EVD cancelada e alocações de ausência ficam fora das consultas de escala/missão', async () => {
+    mockFrmsOperationalContext();
+    vi.spyOn(jornadasModule, 'calcularDiaDoCiclo').mockResolvedValue(null);
+    const db = makeSnapshotDb({ funcionarios: [FUNCIONARIO_10] });
+    await listFrmsOperationalSnapshot(db, { empresaId: 77, dataInicio: '2026-09-21', dataFim: '2026-09-21' });
+    const sqls = (db as unknown as { prepare: { mock: { calls: Array<[string]> } } }).prepare.mock.calls.map(([sql]) => sql);
+    const evd = sqls.find((sql) => sql.includes('FROM escala_voo_diaria e'));
+    expect(evd).toContain("<> 'CANCELADA'");
+    const mission = sqls.find((sql) => sql.includes('source_kind'));
+    expect(mission).toContain("NOT IN ('FOLGA','FERIAS','MED','AFT')");
+    expect(mission).toContain('ea.data_inicio AS data_inicio_embarque');
+    expect(mission).not.toContain('COALESCE(eq.data_inicio, ea.data_inicio)');
   });
 
   it('aceita alocação vigente como pertencimento explícito à quinzena', async () => {

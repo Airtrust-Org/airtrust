@@ -1,5 +1,7 @@
 import type { Env } from '../types';
 import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
+import { loadDailyCheckinObligations } from '../lib/frms/checkin-obligation';
+import { getSaoPauloOperationalDate } from './frms-daily-check';
 
 export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: number }> {
   const db = env.DB;
@@ -13,7 +15,8 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
     .all<{ empresa_id: number }>();
 
   let notificacoes = 0;
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Data civil operacional (America/Sao_Paulo), não a data UTC.
+  const hoje = getSaoPauloOperationalDate();
 
   for (const row of empresas.results || []) {
     const empresaId = Number(row.empresa_id);
@@ -26,11 +29,11 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
            FROM notificacoes_sistema
           WHERE tipo = 'FRMS_CHECKIN_REMINDER'
             AND grupo = 'frms'
-            AND date(created_at) = date('now')
+            AND json_extract(dados, '$.data_checkin') = ?
             AND json_extract(dados, '$.empresa_id') = ?
           LIMIT 1`,
       )
-      .bind(empresaId)
+      .bind(hoje, empresaId)
       .first<{ id: number }>();
 
     if (jaExiste?.id) continue;
@@ -41,6 +44,7 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
            FROM funcionarios f
           WHERE f.deleted_at IS NULL
             AND COALESCE(f.ativo, 1) = 1
+            AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
             AND f.empresa_id = ?
             AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO', 'COPILOTO', 'COMANDANTE')
             AND NOT EXISTS (
@@ -56,14 +60,23 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
       .bind(empresaId, empresaId, hoje)
       .all<{ id: number; nome: string }>();
 
-    if (!semCheckin.results?.length) continue;
+    // Só entra no lembrete quem tem obrigação canônica no dia (atividade, voo
+    // programado ou dia de serviço da escala). Quinzena-base presumida, folga,
+    // férias e afastamento não geram pendência.
+    const obrigacoes = semCheckin.results?.length
+      ? await loadDailyCheckinObligations(db, empresaId, hoje)
+      : new Map();
+    const pendentes = (semCheckin.results || []).filter(
+      (f) => obrigacoes.get(Number(f.id))?.status === 'PENDENTE',
+    );
+    if (!pendentes.length) continue;
 
-    const preview = semCheckin.results
+    const preview = pendentes
       .slice(0, 12)
       .map((f) => `${f.nome} (#${f.id})`)
       .join('; ');
 
-    const vars = { total: semCheckin.results.length, data: hoje, resumo: preview };
+    const vars = { total: pendentes.length, data: hoje, resumo: preview };
     await db
       .prepare(
         `INSERT INTO notificacoes_sistema
@@ -76,7 +89,7 @@ export async function frmsFadigaReminder(env: Env): Promise<{ notificacoes: numb
         JSON.stringify({
           empresa_id: empresaId,
           data_checkin: hoje,
-          pendentes: semCheckin.results,
+          pendentes,
         }),
         empresaId,
       )

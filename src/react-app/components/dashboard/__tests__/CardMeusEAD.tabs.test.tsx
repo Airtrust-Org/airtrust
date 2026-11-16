@@ -135,8 +135,23 @@ describe('CardMeusEAD — organização por situação', () => {
     } as unknown as ReturnType<typeof useMinhasEAD>);
     renderCard();
     expect(screen.getByRole('alert')).toHaveTextContent('Isso não significa que seu histórico está vazio.');
+    expect(screen.getByText('Não foi possível consultar suas matrículas. Quantidades indisponíveis.')).toBeInTheDocument();
+    expect(screen.queryByText(/^0 treinamentos/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver cursos realizados' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cursos realizados \(0\)/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('informa leitura simplificada sem inventar vencimento ou certificado', () => {
+    const rows = [{ ...matricula(71, 'NAO_INICIADO'), consulta_simplificada: true }];
+    setMatriculas(rows);
+    renderCard();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Seus cursos foram carregados pela listagem básica',
+    );
+    expect(screen.getByText('Treinamento 71')).toBeInTheDocument();
+    expect(screen.queryByText(/Válida até/)).not.toBeInTheDocument();
   });
 
   it('prioriza não iniciados quando não há nenhum curso em andamento', () => {
