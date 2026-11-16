@@ -96,7 +96,7 @@ async function funcionarioDoUsuario(db: D1Database, userId: string, empresaId: s
 
 async function loadRet(db: D1Database, id: string, empresaId: string): Promise<RetRow | null> {
   return db
-    .prepare(`SELECT * FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
+    .prepare(`SELECT id, empresa_id, ficha_id, status, motivo, fundamento_normativo, evidencia_nova, snapshot_original_sha256, snapshot_original_json, solicitante_usuario_id, decisao_usuario_id, decisao_em, decisao_observacao, assinatura_instrutor_usuario_id, assinatura_instrutor_em, assinatura_instrutor_ip, assinatura_aluno_usuario_id, assinatura_aluno_em, assinatura_aluno_ip, resultado_final_retificado, concluida_em, created_at, updated_at FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
     .bind(id, empresaId)
     .first<RetRow>();
 }
@@ -209,11 +209,11 @@ app.get('/fichas/:id/retificacoes', guard, async (c) => {
 app.get('/retificacoes/:id', guard, async (c) => {
   const { empresaId } = who(c);
   const ret = await c.env.DB
-    .prepare(`SELECT * FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
+    .prepare(`SELECT id, empresa_id, ficha_id, status, motivo, fundamento_normativo, evidencia_nova, snapshot_original_sha256, snapshot_original_json, solicitante_usuario_id, decisao_usuario_id, decisao_em, decisao_observacao, assinatura_instrutor_usuario_id, assinatura_instrutor_em, assinatura_instrutor_ip, assinatura_aluno_usuario_id, assinatura_aluno_em, assinatura_aluno_ip, resultado_final_retificado, concluida_em, created_at, updated_at FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
     .bind(c.req.param('id'), empresaId).first();
   if (!ret) return c.json({ success: false, error: 'Não encontrada' }, 404);
   const itens = await c.env.DB
-    .prepare(`SELECT * FROM fichas_sessao_retificacoes_itens WHERE retificacao_id = ? AND empresa_id = ? ORDER BY id`)
+    .prepare(`SELECT id, retificacao_id, empresa_id, ficha_manobra_id, codigo, categoria, resultado_original, resultado_retificado, observacao, created_at FROM fichas_sessao_retificacoes_itens WHERE retificacao_id = ? AND empresa_id = ? ORDER BY id`)
     .bind(c.req.param('id'), empresaId).all();
   return c.json({ success: true, data: { ...ret, itens: itens.results || [] } });
 });
