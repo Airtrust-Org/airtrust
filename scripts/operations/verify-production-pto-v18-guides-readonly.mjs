@@ -44,13 +44,27 @@ function check(name, ok, detail = '') {
 }
 
 async function get(path, token) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: 'GET',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    redirect: 'manual',
-  });
-  const body = Buffer.from(await res.arrayBuffer());
-  return { status: res.status, headers: res.headers, body };
+  // Somente GET. Repetições limitadas para falhas transitórias de rede/429/5xx (idempotente).
+  let last;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'manual',
+      });
+      const body = Buffer.from(await res.arrayBuffer());
+      if ((res.status === 429 || res.status >= 500) && attempt < 4) {
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+        continue;
+      }
+      return { status: res.status, headers: res.headers, body };
+    } catch (error) {
+      last = error;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw last;
 }
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
