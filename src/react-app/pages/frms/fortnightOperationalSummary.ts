@@ -20,6 +20,7 @@ const ALERT_REASON_LABELS: Record<string, string> = {
   JORNADA_SEM_FATORIZACAO: 'Jornada sem fatorizacao',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala',
+  ESCALA_DIVERGENTE: 'Escala divergente (atividade em folga/afastamento)',
   DADO_INCONSISTENTE: 'Dado inconsistente',
 };
 

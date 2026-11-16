@@ -25,7 +25,8 @@ export function isFrmsRoutineDutyClosurePending(item: FrmsOperationalSnapshotIte
     !item.alertas.some((code) =>
       code === 'DADO_INCONSISTENTE' ||
       code === 'JORNADA_SEM_FATORIZACAO' ||
-      code === 'JORNADA_FRMS_SEM_ESCALA'
+      code === 'JORNADA_FRMS_SEM_ESCALA' ||
+      code === 'ESCALA_DIVERGENTE'
     );
 }
 

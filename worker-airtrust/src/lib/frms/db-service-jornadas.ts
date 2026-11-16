@@ -827,6 +827,8 @@ export async function calcularDiaDoCiclo(
              OR ea.quinzena_id IS NOT NULL
              OR (ea.situacao_tipo IS NOT NULL AND UPPER(ea.situacao_tipo) != 'FOLGA')
            )
+           -- Folga, férias e afastamentos não são período embarcado.
+           AND UPPER(COALESCE(ea.situacao_tipo, '')) NOT IN ('FOLGA', 'FERIAS', 'MED', 'AFT')
          ORDER BY
            CASE WHEN ea.quinzena_id IS NOT NULL THEN 0 ELSE 1 END,
            CASE WHEN ea.aeronave_id IS NOT NULL THEN 0 ELSE 1 END,

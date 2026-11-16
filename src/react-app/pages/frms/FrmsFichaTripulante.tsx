@@ -196,6 +196,7 @@ const DAILY_BALANCE_ALERT_LABELS: Record<string, string> = {
   JORNADA_SEM_FATORIZACAO: 'Jornada sem fatorização',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem escala vinculada',
+  ESCALA_DIVERGENTE: 'Atividade em folga/afastamento ou escala conflitante',
   DADO_INCONSISTENTE: 'Dado inconsistente',
 };
 

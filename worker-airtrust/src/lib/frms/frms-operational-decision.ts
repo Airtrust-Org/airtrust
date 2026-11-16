@@ -107,6 +107,7 @@ const ALERT_PRIORIDADE: FrmsOperationalSnapshotAlertCode[] = [
   'JORNADA_SEM_FATORIZACAO', // jornada sem cálculo FRMS
   'ESCALADO_SEM_JORNADA_FRMS', // escalado sem registro
   'JORNADA_FRMS_SEM_ESCALA',   // jornada sem escala vinculada
+  'ESCALA_DIVERGENTE',         // atividade em ausência ou escala conflitante
   'SONO_ESTIMADO',         // dado estimado, menor confiança
 ];
 
@@ -173,6 +174,7 @@ const MOTIVO_POR_ALERTA: Record<FrmsOperationalSnapshotAlertCode, string> = {
   JORNADA_SEM_FATORIZACAO: 'Jornada sem cálculo de fatorização FRMS',
   ESCALADO_SEM_JORNADA_FRMS: 'Escalado sem registro de jornada FRMS',
   JORNADA_FRMS_SEM_ESCALA: 'Jornada FRMS sem vínculo de escala',
+  ESCALA_DIVERGENTE: 'Atividade em dia de folga/afastamento ou escala conflitante — reconciliar',
   SONO_ESTIMADO: 'Dado de sono estimado — check-in real ausente',
 };
 
