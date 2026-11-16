@@ -344,7 +344,9 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
           <p className="mt-1 text-xs text-slate-500 sm:text-sm dark:text-slate-400">
             {isLoading
               ? 'Consultando suas matrículas e cursos concluídos…'
-              : `${total} treinamento${total !== 1 ? 's' : ''} · ${grupos.finalizados.length} concluído${grupos.finalizados.length !== 1 ? 's' : ''} · Acesse seus certificados.`}
+              : error
+                ? 'Não foi possível consultar suas matrículas. Quantidades indisponíveis.'
+                : `${total} treinamento${total !== 1 ? 's' : ''} · ${grupos.finalizados.length} concluído${grupos.finalizados.length !== 1 ? 's' : ''} · Acesse seus certificados.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -356,7 +358,7 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
             className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-slate-800"
           >
             <Award className="h-4 w-4" />
-            {isLoading ? 'Ver cursos realizados' : `Cursos realizados (${grupos.finalizados.length})`}
+            {isLoading || error ? 'Ver cursos realizados' : `Cursos realizados (${grupos.finalizados.length})`}
           </button>
         {showOpenPageLink && (
           <button
