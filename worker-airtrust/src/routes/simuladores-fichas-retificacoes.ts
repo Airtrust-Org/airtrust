@@ -31,13 +31,14 @@ const guard = requireOperationalAccess({ domain: 'OPERACOES', action: 'update', 
 // no tenant do token antes do guard. Retificação inexistente/de outro tenant → 404.
 const RET_FICHA_KEY = 'retificacaoFichaId';
 const resolveRetificacaoFicha: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
-  const ctx = c as unknown as Ctx & { set: (k: string, v: unknown) => void };
+  const get = c.get as (k: string) => unknown;
+  const set = c.set as (k: string, v: unknown) => void;
   const row = await c.env.DB
     .prepare(`SELECT ficha_id FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
-    .bind(c.req.param('id'), String(ctx.get('empresaId') || ''))
+    .bind(c.req.param('id'), String(get('empresaId') || ''))
     .first<{ ficha_id: number }>();
   if (!row) return c.json({ success: false, error: 'Não encontrada' }, 404);
-  ctx.set(RET_FICHA_KEY, Number(row.ficha_id));
+  set(RET_FICHA_KEY, Number(row.ficha_id));
   await next();
 };
 const guardRetificacao = [
