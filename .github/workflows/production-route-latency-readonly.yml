@@ -10,7 +10,7 @@ on:
       hours:
         description: 'Janela em horas (1-48)'
         required: true
-        default: '24'
+        default: '6'
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WORKER_SERVICE: airtrust-api-production
-      HOURS: ${{ inputs.hours || '24' }}
+      HOURS: ${{ inputs.hours || '6' }}
     steps:
       - name: Main only
         run: '[[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY >&2; exit 1; }'

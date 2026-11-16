@@ -144,7 +144,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
 
   async function grouped(extraFilters, calculations, label) {
     const r = await call('query', {
-      queryId: `route-${label}`, timeframe, granularity: 1, view: 'calculations', limit: 200,
+      queryId: `route-${label}`, timeframe, view: 'calculations', limit: 200,
       parameters: {
         filters: [svcFilter, ...extraFilters],
         calculations,
