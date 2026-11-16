@@ -29,6 +29,7 @@ import { validateCheckinPayloadCompleteness } from './frms-fadiga-checkin-valida
 import { normalizeFitForDutyPayload, normalizeOptionalBinary } from './frms-fadiga-checkin-normalization';
 import { getFadigaConfig as getConfig, updateFadigaDutyConfig } from './frms-fadiga-config';
 import { loadDailyFatigueTeamRoster } from '../lib/frms/daily-fatigue-team-roster';
+import { describeMissingCheckin, loadDailyCheckinObligations, noDutyLabel } from '../lib/frms/checkin-obligation';
 import { frmsOperationalTodayIso } from '../lib/frms/operational-date';
 import { resolveCheckinKssProvenance, kssProvenanceEventFields } from '../lib/frms/kss-checkin-provenance';
 import { prepareReadinessAssessmentWrites } from '../lib/frms/readiness-persistence';
@@ -459,25 +460,30 @@ async function buildDailyFatigueStatus(params: {
       .prepare(
         `SELECT id
          FROM frms_jornada
-         WHERE tripulante_id = ?
+         WHERE empresa_id = ?
+           AND tripulante_id = ?
            AND data = ?
            AND deleted_at IS NULL
            AND status IN ('ES','TS','TV','EX','RE','SA')
          LIMIT 1`,
       )
-      .bind(params.funcionarioId, params.date)
+      .bind(params.empresaId, params.funcionarioId, params.date)
       .first<{ id: string }>(),
   ]);
 
   if (!checkin) {
+    // Sem check-in só é pendência com obrigação canônica (atividade, voo ou serviço).
+    const obrigacao = (await loadDailyCheckinObligations(params.db, params.empresaId, params.date,
+      { funcionarioId: params.funcionarioId })).get(params.funcionarioId) ?? null;
+    const pendente = obrigacao?.status === 'PENDENTE';
     return {
-      status: 'not_submitted',
+      status: pendente ? 'not_submitted' : 'no_duty',
       submitted: false,
-      data_source: 'missing_checkin',
+      data_source: pendente ? 'missing_checkin' : 'not_applicable',
       confidence: 'unavailable',
-      message:
-        'Fadiga diária não preenchida pelo tripulante. O cálculo permanece indisponível até o envio do check-in.',
-      requires_operational_review: true,
+      checkin_obrigacao: obrigacao,
+      message: describeMissingCheckin(obrigacao),
+      requires_operational_review: pendente,
       calculation_available: false,
       presentation_time: null,
       sleep_hours_24h: null,
@@ -661,14 +667,10 @@ router.get('/daily-fatigue', async (c) => {
     const sectorAccess = await getEmployeeSectorAccess(c, empresaId);
     const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
 
-    const rows = await loadDailyFatigueTeamRoster({
-      db: c.env.DB,
-      empresaId,
-      date,
-      sectorScope,
-      limit,
-      offset,
-    });
+    const [rows, obrigacoes] = await Promise.all([
+      loadDailyFatigueTeamRoster({ db: c.env.DB, empresaId, date, sectorScope, limit, offset }),
+      loadDailyCheckinObligations(c.env.DB, empresaId, date),
+    ]);
 
     const itens = rows.map((row) => {
       const hasCheckin = Boolean(row.checkin_id);
@@ -682,8 +684,9 @@ router.get('/daily-fatigue', async (c) => {
       });
       const checkinComplete = evidence.complete;
 
+      const obrigacao = obrigacoes.get(Number(row.funcionario_id)) ?? null;
       const status = !hasCheckin
-        ? row.jornada_id
+        ? obrigacao?.status === 'PENDENTE' || (!obrigacao && row.jornada_id)
           ? 'not_submitted'
           : 'no_duty'
         : !checkinComplete
@@ -710,6 +713,7 @@ router.get('/daily-fatigue', async (c) => {
         ...row,
         date,
         status,
+        checkin_obrigacao: obrigacao,
         data_source: source,
         calculation_available: checkinComplete,
         risk_reconciled_from_evidence: evidence.riskReconciledFromEvidence,
@@ -739,7 +743,7 @@ router.get('/daily-fatigue', async (c) => {
                   ? 'Crítica'
                   : status === 'normal'
                     ? 'Preenchida'
-                    : 'Sem jornada',
+                    : noDutyLabel(obrigacao),
       };
     });
 

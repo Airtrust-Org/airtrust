@@ -417,3 +417,48 @@ describe('frmsOperationalDecision', () => {
     expect(classifyOperationalItem(openDay)).toBe('CONFIRMAR');
   });
 });
+
+describe('obrigação canônica de check-in vinda do backend', () => {
+  const offDay = (obrigacao: NonNullable<FrmsOperationalSnapshotItem['checkin_obrigacao']>) => item({
+    escalado: false, operacao_requer_decisao: false, teve_jornada: false, teve_atividade_frms: false,
+    hora_apresentacao: null, hora_termino: null, horas_voo_minutos: 0, duracao_jornada_minutos: 0,
+    checkin_status: 'NAO_APLICAVEL', checkin_horario: null, kss_score: null, horas_sono: null,
+    jornada_data_source: 'AUSENTE', effectiveness_pct: null, fatorizacao_status: 'AUSENTE',
+    estado_operacional: 'NAO_AVALIADO', na_quinzena_ativa: true, checkin_obrigacao: obrigacao,
+  });
+
+  it('quinzena-base presumida não vira "Pendente" no frontend', () => {
+    const guidance = resolveFrmsCoordinationGuidance(offDay({
+      status: 'INDETERMINADO', exigivel: false, base: 'QUINZENA_BASE_SEM_ESCALA',
+      rotulo: 'Quinzena-base sem escala publicada para o dia', divergencias: [],
+    }), '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(false);
+    expect(guidance.checkinLabel).toBe('Escala a confirmar');
+    expect(guidance.action).toMatch(/confirmar se o tripulante está em serviço/);
+  });
+
+  it('férias/folga na escala aparecem como dispensa, não pendência', () => {
+    const guidance = resolveFrmsCoordinationGuidance(offDay({
+      status: 'DISPENSADO', exigivel: false, base: 'AUSENCIA_PROGRAMADA',
+      rotulo: 'Folga, férias ou afastamento na escala', divergencias: [],
+    }), '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(false);
+    expect(guidance.checkinLabel).toBe('Dispensado pela escala');
+    expect(guidance.action).toMatch(/não equivale a aptidão/);
+  });
+
+  it('atividade em dia de folga orienta reconciliação sem estender a obrigação', () => {
+    const guidance = resolveFrmsCoordinationGuidance(item({
+      checkin_status: 'PENDENTE', checkin_horario: null, estado_operacional: 'ATENCAO',
+      alertas: ['CHECKIN_PENDENTE', 'ESCALA_DIVERGENTE'],
+      checkin_obrigacao: {
+        status: 'PENDENTE', exigivel: true, base: 'ATIVIDADE_REGISTRADA',
+        rotulo: 'Atividade operacional registrada no dia', divergencias: ['ATIVIDADE_EM_AUSENCIA'],
+      },
+    }), '2026-08-27');
+    expect(guidance.requiresCheckin).toBe(true);
+    expect(guidance.checkinLabel).toBe('Pendente');
+    expect(guidance.reason).toMatch(/folga\/afastamento/);
+    expect(guidance.action).toMatch(/Não estender a obrigação/);
+  });
+});

@@ -144,7 +144,7 @@ function eventTypesForItem(item: FrmsOperationalSnapshotItem): FrmsReadAckEventT
   }
   if (hasAlert(item, 'JORNADA_SEM_FATORIZACAO')) types.push('JORNADA_SEM_FATORIZACAO');
   if (hasAlert(item, 'EFETIVIDADE_BAIXA')) types.push('EFETIVIDADE_BAIXA');
-  if (hasAlert(item, 'ESCALADO_SEM_JORNADA_FRMS') || hasAlert(item, 'JORNADA_FRMS_SEM_ESCALA')) {
+  if (hasAlert(item, 'ESCALADO_SEM_JORNADA_FRMS') || hasAlert(item, 'JORNADA_FRMS_SEM_ESCALA') || hasAlert(item, 'ESCALA_DIVERGENTE')) {
     types.push('OUTRO_CONTEXTUAL');
   }
 
