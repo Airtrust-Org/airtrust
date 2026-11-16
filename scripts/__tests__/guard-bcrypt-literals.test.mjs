@@ -22,12 +22,12 @@ function sandbox(files) {
 const fakeHash = ['$2b', '10', 'a'.repeat(53)].join('$');
 
 test('guard reprova hash bcrypt completo versionado sem imprimir o valor', () => {
-  const dir = sandbox({ 'scripts/seed.sql': `UPDATE usuarios SET password_hash='${fakeHash}';\n` });
+  const dir = sandbox({ 'scripts/seed.env': `LOCAL_ADMIN_HASH='${fakeHash}'\n` });
   try {
     const res = spawnSync('node', [guard], { cwd: dir, encoding: 'utf8' });
     assert.notEqual(res.status, 0);
     const output = `${res.stdout}${res.stderr}`;
-    assert.match(output, /scripts\/seed\.sql:1: full bcrypt hash literal is forbidden/);
+    assert.match(output, /scripts\/seed\.env:1: full bcrypt hash literal is forbidden/);
     assert.ok(!output.includes(fakeHash));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -36,7 +36,7 @@ test('guard reprova hash bcrypt completo versionado sem imprimir o valor', () =>
 
 test('placeholder e hash truncado nao reprovam o scan de bcrypt', () => {
   const dir = sandbox({
-    'scripts/seed.sql': "UPDATE usuarios SET password_hash='__AIRTRUST_LOCAL_BCRYPT_HASH__';\n-- formato $2b$10$...\n",
+    'scripts/seed.env': "LOCAL_ADMIN_HASH='__AIRTRUST_LOCAL_BCRYPT_HASH__'\n# formato $2b$10$...\n",
   });
   try {
     const res = spawnSync('node', [guard], { cwd: dir, encoding: 'utf8' });
