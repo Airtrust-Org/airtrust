@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, Eye, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/react-app/components/AppLayout';
 import { EmptyState } from '@/react-app/components/UI/EmptyState';
@@ -140,6 +140,9 @@ export default function FrmsAlertasPainel() {
   const [resolveTarget, setResolveTarget] = useState<FrmsAlertaRow | null>(null);
   const [resolutionForm, setResolutionForm] = useState<FrmsCaseResolutionForm>(EMPTY_RESOLUTION_FORM);
   const [resolving, setResolving] = useState(false);
+  const [reopenTarget, setReopenTarget] = useState<FrmsAlertaRow | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
+  const [reopening, setReopening] = useState(false);
   const { mutate } = useFrmsMutation();
 
   useEffect(() => {
@@ -272,6 +275,30 @@ export default function FrmsAlertasPainel() {
       setResolving(false);
     }
   }, [mutate, refetch, resolutionForm, resolveTarget]);
+
+  const reopenCase = useCallback(async () => {
+    if (!reopenTarget) return;
+    const justificativa = reopenReason.trim();
+    if (justificativa.length < 10) {
+      toast.error('Documente o motivo da reabertura (mínimo de 10 caracteres).');
+      return;
+    }
+    setReopening(true);
+    try {
+      await mutate(`/api/frms/alertas/${reopenTarget.id}/reabrir`, {
+        method: 'PUT',
+        body: JSON.stringify({ justificativa }),
+      });
+      toast.success('Caso reaberto. Registre um novo tratamento antes de encerrar novamente.');
+      setReopenTarget(null);
+      setReopenReason('');
+      await refetch();
+    } catch {
+      toast.error('Não foi possível reabrir o caso.');
+    } finally {
+      setReopening(false);
+    }
+  }, [mutate, refetch, reopenReason, reopenTarget]);
 
   const isFinalResolution = Boolean(resolveTarget && parseTreatmentRecord(resolveTarget.notas_resolucao));
 
@@ -496,6 +523,16 @@ export default function FrmsAlertasPainel() {
                             <Eye className="h-3.5 w-3.5" /> Marcar visto
                           </button>
                         ) : null}
+                        {item.resolvido ? (
+                          <button
+                            type="button"
+                            onClick={() => { setReopenTarget(item); setReopenReason(''); }}
+                            title="Reabrir o caso com justificativa; o encerramento anterior fica preservado"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Reabrir caso
+                          </button>
+                        ) : null}
                         {!item.resolvido ? (
                           <button
                             type="button"
@@ -641,6 +678,49 @@ export default function FrmsAlertasPainel() {
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
                 {resolving ? 'Registrando…' : isFinalResolution ? 'Confirmar e resolver' : 'Registrar sem encerrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {reopenTarget ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="reopen-case-title">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Reabrir caso</p>
+            <h2 id="reopen-case-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
+              Reabrir o caso encerrado
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              {reopenTarget.nome_tripulante || `Tripulante #${reopenTarget.tripulante_id}`} · {nivelLabel(reopenTarget.nivel)}. O encerramento
+              anterior continua registrado. Um novo responsável, prazo e medida serão exigidos antes de encerrar de novo.
+            </p>
+            <label className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200" htmlFor="reopen-reason">
+              Motivo da reabertura
+              <textarea
+                id="reopen-reason"
+                value={reopenReason}
+                onChange={(event) => setReopenReason(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm font-normal dark:border-slate-700 dark:bg-slate-900"
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { if (!reopening) { setReopenTarget(null); setReopenReason(''); } }}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void reopenCase()}
+                disabled={reopening || reopenReason.trim().length < 10}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              >
+                {reopening ? 'Reabrindo…' : 'Confirmar reabertura'}
               </button>
             </div>
           </div>
