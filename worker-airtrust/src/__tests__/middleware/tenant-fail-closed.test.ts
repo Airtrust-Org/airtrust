@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../../middleware/error-handler';
 import { tenantMiddleware } from '../../middleware/tenant';
 import type { Env, Variables } from '../../types';
@@ -15,6 +15,7 @@ type Link = {
 function createDb(options: {
   links?: Link[];
   platformRoleUserIds?: number[];
+  onMembershipLookup?: () => void;
 } = {}) {
   const links = options.links || [];
   const platformRoleUserIds = new Set(options.platformRoleUserIds || []);
@@ -33,6 +34,7 @@ function createDb(options: {
           if (sql.includes("name = 'support_access_grants'")) return { found: 1 } as T;
 
           if (sql.includes('JOIN usuarios_empresas ue')) {
+            options.onMembershipLookup?.();
             const empresaId = Number(statement.params[0]);
             const userId = Number(statement.params[1]);
             const link = links.find((item) => item.empresaId === empresaId && item.usuarioId === userId);
@@ -115,5 +117,155 @@ describe('tenant middleware fail-closed behavior', () => {
 
     expect(response.status).toBe(403);
     expect(payload.code).toBe('TENANT_ACCESS_DENIED');
+  });
+});
+
+
+describe('tenant middleware — reuso somente na mesma requisição', () => {
+  function createNestedApp(db: D1Database, options: { mutateEmpresaId?: number } = {}) {
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('userId', 44);
+      c.set('empresaId', 7);
+      c.set('userRole', 'manager');
+      await next();
+    });
+    app.use('*', tenantMiddleware());
+    if (options.mutateEmpresaId) {
+      app.use('*', async (c, next) => {
+        c.set('empresaId', options.mutateEmpresaId!);
+        await next();
+      });
+    }
+    const nested = new Hono<{ Bindings: Env; Variables: Variables }>();
+    nested.use('*', tenantMiddleware());
+    nested.get('/probe', (c) => c.json({ empresaId: c.get('tenantContext').empresaId }));
+    app.route('/nested', nested);
+    const env = { DB: db, ENVIRONMENT: 'production' } as unknown as Env;
+    return () => app.request('/nested/probe', {}, env);
+  }
+
+  it('consulta a associação de tenant só uma vez por request com guard global e router aninhado', async () => {
+    const lookup = vi.fn();
+    const request = createNestedApp(createDb({
+      links: [{ usuarioId: 44, empresaId: 7, role: 'manager' }],
+      onMembershipLookup: lookup,
+    }));
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ empresaId: 7 });
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconsulta associação em cada nova requisição e bloqueia revogação', async () => {
+    const lookup = vi.fn();
+    const links: Link[] = [{ usuarioId: 44, empresaId: 7, role: 'manager' }];
+    const request = createNestedApp(createDb({ links, onMembershipLookup: lookup }));
+    expect((await request()).status).toBe(200);
+    links.length = 0;
+    const revoked = await request();
+    expect(revoked.status).toBe(403);
+    expect((await revoked.json()) as { code: string }).toMatchObject({ code: 'TENANT_ACCESS_DENIED' });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('não reutiliza contexto caso o tenant do request seja alterado entre os guards', async () => {
+    const lookup = vi.fn();
+    const request = createNestedApp(createDb({
+      links: [{ usuarioId: 44, empresaId: 7, role: 'manager' }],
+      onMembershipLookup: lookup,
+    }), { mutateEmpresaId: 8 });
+    const response = await request();
+    expect(response.status).toBe(403);
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalida quando permissões do tenantContext são alteradas dentro do request', async () => {
+    const lookup = vi.fn();
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('userId', 44);
+      c.set('empresaId', 7);
+      c.set('userRole', 'manager');
+      await next();
+    });
+    app.use('*', tenantMiddleware());
+    app.use('*', async (c, next) => {
+      c.get('tenantContext').role = 'admin';
+      c.get('tenantContext').permissions.push('admin');
+      await next();
+    });
+    const nested = new Hono<{ Bindings: Env; Variables: Variables }>();
+    nested.use('*', tenantMiddleware());
+    nested.get('/', (c) => c.json({
+      role: c.get('tenantContext').role,
+      permissions: c.get('tenantContext').permissions,
+    }));
+    app.route('/nested', nested);
+    const response = await app.request('/nested', {}, {
+      DB: createDb({
+        links: [{ usuarioId: 44, empresaId: 7, role: 'manager' }],
+        onMembershipLookup: lookup,
+      }), ENVIRONMENT: 'production',
+    } as unknown as Env);
+    expect(response.status).toBe(200);
+    const body = await response.json() as { role: string; permissions: string[] };
+    expect(body.role).toBe('manager');
+    expect(body.permissions).not.toContain('admin');
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalida quando o estado da autoridade de plataforma muda dentro do request', async () => {
+    const lookup = vi.fn();
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('userId', 44);
+      c.set('empresaId', 7);
+      c.set('userRole', 'manager');
+      await next();
+    });
+    app.use('*', tenantMiddleware());
+    app.use('*', async (c, next) => {
+      const state = c.get('platformAccessState');
+      if (state) c.set('platformAccessState', { ...state });
+      await next();
+    });
+    const nested = new Hono<{ Bindings: Env; Variables: Variables }>();
+    nested.use('*', tenantMiddleware());
+    nested.get('/', (c) => c.json({ role: c.get('tenantContext').role }));
+    app.route('/nested', nested);
+    const response = await app.request('/nested', {}, {
+      DB: createDb({
+        links: [{ usuarioId: 44, empresaId: 7, role: 'manager' }],
+        onMembershipLookup: lookup,
+      }), ENVIRONMENT: 'production',
+    } as unknown as Env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ role: 'manager' });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('não aceita tenantContext pré-injetado sem validação DB na mesma requisição', async () => {
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('userId', 44);
+      c.set('empresaId', 7);
+      c.set('userRole', 'manager');
+      c.set('tenantContext', {
+        empresaId: 7, empresaCodigo: 'fake', empresaNome: 'Fake',
+        role: 'manager', plano: 'pro', permissions: [],
+      });
+      await next();
+    });
+    app.use('*', tenantMiddleware());
+    app.get('/', (c) => c.json({ empresaId: c.get('tenantContext').empresaId }));
+    const response = await app.request('/', {}, {
+      DB: createDb(), ENVIRONMENT: 'production',
+    } as unknown as Env);
+    expect(response.status).toBe(403);
   });
 });
