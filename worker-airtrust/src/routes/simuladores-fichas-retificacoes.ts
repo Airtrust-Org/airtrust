@@ -14,14 +14,41 @@
  * resultado retificado é recalculado com as mesmas regras de aprovação da ficha (nota
  * mínima 6 por item técnico e por NOTECHS, 15 NOTECHS completos).
  */
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { audit } from '../services/simuladores/shared';
 import { requireOperationalAccess } from '../middleware/operational-domain-access';
 import { evaluateNotechsApproval } from '../constants/notechs-approval';
 import { assessRecordedTechnicalScores } from '../constants/recorded-technical-scores';
 
+type Ctx = { get: (k: string) => unknown };
+
+// Rotas /fichas/:id/...: o :id já é a ficha.
 const guard = requireOperationalAccess({ domain: 'OPERACOES', action: 'update', resourceType: 'simulador_ficha' });
+
+// Rotas /retificacoes/:id/...: o :id é a RETIFICAÇÃO, não a ficha. A autorização operacional
+// (bypass pedagógico e setor) precisa ser aplicada sobre a ficha referenciada, resolvida
+// no tenant do token antes do guard. Retificação inexistente/de outro tenant → 404.
+const RET_FICHA_KEY = 'retificacaoFichaId';
+const resolveRetificacaoFicha: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  const ctx = c as unknown as Ctx & { set: (k: string, v: unknown) => void };
+  const row = await c.env.DB
+    .prepare(`SELECT ficha_id FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
+    .bind(c.req.param('id'), String(ctx.get('empresaId') || ''))
+    .first<{ ficha_id: number }>();
+  if (!row) return c.json({ success: false, error: 'Não encontrada' }, 404);
+  ctx.set(RET_FICHA_KEY, Number(row.ficha_id));
+  await next();
+};
+const guardRetificacao = [
+  resolveRetificacaoFicha,
+  requireOperationalAccess({
+    domain: 'OPERACOES',
+    action: 'update',
+    resourceType: 'simulador_ficha',
+    resolveResourceId: (c) => Number((c.get as (k: string) => unknown)(RET_FICHA_KEY)) || null,
+  }),
+] as const;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,7 +57,6 @@ const REQUESTER_ROLES = ['ADMIN', 'ADMINISTRADOR', 'COMPLIANCE', 'GESTOR'];
 const SCORE_RE = /^(?:10|[1-9])$/;
 const MIN_TEXT = { motivo: 20, fundamento_normativo: 10, evidencia_nova: 10 } as const;
 
-type Ctx = { get: (k: string) => unknown };
 const who = (c: unknown) => {
   const ctx = c as Ctx;
   return {
@@ -206,7 +232,7 @@ app.get('/fichas/:id/retificacoes', guard, async (c) => {
   return c.json({ success: true, data: r.results || [] });
 });
 
-app.get('/retificacoes/:id', guard, async (c) => {
+app.get('/retificacoes/:id', ...guardRetificacao, async (c) => {
   const { empresaId } = who(c);
   const ret = await c.env.DB
     .prepare(`SELECT id, empresa_id, ficha_id, status, motivo, fundamento_normativo, evidencia_nova, snapshot_original_sha256, snapshot_original_json, solicitante_usuario_id, decisao_usuario_id, decisao_em, decisao_observacao, assinatura_instrutor_usuario_id, assinatura_instrutor_em, assinatura_instrutor_ip, assinatura_aluno_usuario_id, assinatura_aluno_em, assinatura_aluno_ip, resultado_final_retificado, concluida_em, created_at, updated_at FROM fichas_sessao_retificacoes WHERE id = ? AND empresa_id = ?`)
@@ -219,7 +245,7 @@ app.get('/retificacoes/:id', guard, async (c) => {
 });
 
 // ── POST /retificacoes/:id/decisao ──────────────────────────────────────────
-app.post('/retificacoes/:id/decisao', guard, async (c) => {
+app.post('/retificacoes/:id/decisao', ...guardRetificacao, async (c) => {
   const { userId, role, empresaId } = who(c);
   if (!DECIDER_ROLES.includes(role)) {
     return c.json({ success: false, code: 'RETIFICACAO_DECISOR_NAO_AUTORIZADO', error: 'Apenas ADMIN/COMPLIANCE decidem retificações' }, 403);
@@ -249,7 +275,7 @@ app.post('/retificacoes/:id/decisao', guard, async (c) => {
 });
 
 // ── POST /retificacoes/:id/assinar ──────────────────────────────────────────
-app.post('/retificacoes/:id/assinar', guard, async (c) => {
+app.post('/retificacoes/:id/assinar', ...guardRetificacao, async (c) => {
   const { userId, empresaId } = who(c);
   const b = await c.req.json().catch(() => ({})) as { tipo?: string };
   if (b.tipo !== 'INSTRUTOR' && b.tipo !== 'ALUNO') return c.json({ success: false, error: 'tipo: INSTRUTOR ou ALUNO' }, 400);
@@ -273,36 +299,39 @@ app.post('/retificacoes/:id/assinar', guard, async (c) => {
         WHERE id = ? AND empresa_id = ? AND status = 'APROVADA' AND assinatura_instrutor_usuario_id IS NULL`
     : `UPDATE fichas_sessao_retificacoes SET assinatura_aluno_usuario_id = ?, assinatura_aluno_em = ?, assinatura_aluno_ip = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND empresa_id = ? AND status = 'APROVADA' AND assinatura_aluno_usuario_id IS NULL`;
-  const w = await c.env.DB.prepare(sql).bind(userId, ts, ip, ret.id, empresaId).run();
-  if (Number(w.meta?.changes ?? 0) !== 1) return c.json({ success: false, code: 'RETIFICACAO_JA_ASSINADA', error: 'Assinatura já registrada' }, 409);
 
-  const after = await loadRet(c.env.DB, String(ret.id), empresaId);
-  let concluida = false;
-  let resultado: string | null = null;
-  if (after?.assinatura_instrutor_usuario_id && after.assinatura_aluno_usuario_id) {
-    const originais = await loadManobras(c.env.DB, ret.ficha_id);
-    const ov = await c.env.DB
-      .prepare(`SELECT ficha_manobra_id, resultado_retificado FROM fichas_sessao_retificacoes_itens WHERE retificacao_id = ?`)
-      .bind(ret.id).all<{ ficha_manobra_id: number; resultado_retificado: string }>();
-    const map = new Map((ov.results || []).map((r) => [String(r.ficha_manobra_id), r.resultado_retificado]));
-    const efetivas = originais.map((m) => ({ ...m, resultado: map.get(String(m.id)) ?? m.resultado }));
-    const tecnico = assessRecordedTechnicalScores(efetivas);
-    const notechs = evaluateNotechsApproval(efetivas);
-    resultado = tecnico.eligible && notechs.eligible ? 'APROVADO' : 'REPROVADO';
-    const fin = await c.env.DB
+  // O resultado depende só das manobras originais e dos itens retificados (imutáveis), não das
+  // assinaturas: calcula antes e persiste assinatura + conclusão num único batch (transação D1).
+  // Assim nunca fica uma retificação APROVADA com as duas assinaturas e sem conclusão, e duas
+  // assinaturas concorrentes convergem (o UPDATE de conclusão só casa com as duas presentes).
+  const originais = await loadManobras(c.env.DB, ret.ficha_id);
+  const ov = await c.env.DB
+    .prepare(`SELECT ficha_manobra_id, resultado_retificado FROM fichas_sessao_retificacoes_itens WHERE retificacao_id = ? AND empresa_id = ?`)
+    .bind(ret.id, empresaId).all<{ ficha_manobra_id: number; resultado_retificado: string }>();
+  const map = new Map((ov.results || []).map((r) => [String(r.ficha_manobra_id), r.resultado_retificado]));
+  const efetivas = originais.map((m) => ({ ...m, resultado: map.get(String(m.id)) ?? m.resultado }));
+  const calculado = assessRecordedTechnicalScores(efetivas).eligible && evaluateNotechsApproval(efetivas).eligible
+    ? 'APROVADO' : 'REPROVADO';
+
+  const [sig, fin] = await c.env.DB.batch([
+    c.env.DB.prepare(sql).bind(userId, ts, ip, ret.id, empresaId),
+    c.env.DB
       .prepare(
         `UPDATE fichas_sessao_retificacoes SET status = 'CONCLUIDA', resultado_final_retificado = ?, concluida_em = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND empresa_id = ? AND status = 'APROVADA'`,
+          WHERE id = ? AND empresa_id = ? AND status = 'APROVADA'
+            AND assinatura_instrutor_usuario_id IS NOT NULL AND assinatura_aluno_usuario_id IS NOT NULL`,
       )
-      .bind(resultado, ts, ret.id, empresaId).run();
-    concluida = Number(fin.meta?.changes ?? 0) === 1;
-  }
+      .bind(calculado, ts, ret.id, empresaId),
+  ]);
+  if (Number(sig.meta?.changes ?? 0) !== 1) return c.json({ success: false, code: 'RETIFICACAO_JA_ASSINADA', error: 'Assinatura já registrada' }, 409);
+  const concluida = Number(fin.meta?.changes ?? 0) === 1;
+  const resultado = concluida ? calculado : null;
   await audit(c.env.DB, { tabela: 'fichas_sessao_retificacoes', acao: `RETIFICACAO_ASSINADA_${b.tipo}`, registro_id: ret.id, dados_novos: { usuario_id: userId, concluida, resultado } });
   return c.json({ success: true, data: { id: ret.id, status: concluida ? 'CONCLUIDA' : 'APROVADA', resultado_final_retificado: resultado } });
 });
 
 // ── POST /retificacoes/:id/cancelar ─────────────────────────────────────────
-app.post('/retificacoes/:id/cancelar', guard, async (c) => {
+app.post('/retificacoes/:id/cancelar', ...guardRetificacao, async (c) => {
   const { userId, role, empresaId } = who(c);
   const ret = await loadRet(c.env.DB, c.req.param('id'), empresaId);
   if (!ret) return c.json({ success: false, error: 'Não encontrada' }, 404);

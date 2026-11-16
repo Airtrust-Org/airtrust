@@ -14,8 +14,14 @@ import { NOTECHS_CANONICAL_ITEMS } from '../../../../src/shared/simuladores/note
 const DatabaseSync = createRequire(import.meta.url)('node:sqlite').DatabaseSync as { new (path: string): DatabaseSyncType };
 const sql0587 = readFileSync(join(process.cwd(), '..', 'worker-airtrust/schema-v2/changes/0587_simuladores_fichas_retificacoes.sql'), 'utf8');
 
+// O guard real depende do esquema RBAC; aqui ele só registra QUAL ficha foi submetida à autorização.
+const authorizedFichaIds: Array<number | null | undefined> = [];
 vi.mock('../../middleware/operational-domain-access', () => ({
-  requireOperationalAccess: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  requireOperationalAccess: (opts: { resolveResourceId?: (c: unknown) => number | null | undefined }) =>
+    async (c: { req: { param: (k: string) => string } }, next: () => Promise<void>) => {
+      authorizedFichaIds.push(opts.resolveResourceId ? opts.resolveResourceId(c) : Number(c.req.param('id')) || null);
+      await next();
+    },
 }));
 vi.mock('../../services/simuladores/shared', () => ({ audit: vi.fn(async () => undefined) }));
 
@@ -89,6 +95,7 @@ describe('0587 fichas_sessao_retificacoes', () => {
   let app: Hono;
   beforeEach(() => {
     d1 = makeDb();
+    authorizedFichaIds.length = 0;
     bootstrap(d1.database);
     app = new Hono();
     app.use('*', async (c, next) => {
@@ -185,5 +192,55 @@ describe('0587 fichas_sessao_retificacoes', () => {
     expect((await call(`/retificacoes/${id}/cancelar`, {})).status).toBe(200);
     expect((await call(`/retificacoes/${id}/cancelar`, {})).status).toBe(409);
     expect((await call('/fichas/1/retificacoes', base)).status).toBe(201);
+  });
+
+  it('rotas /retificacoes/:id autorizam sobre a ficha referenciada, nunca sobre o id da retificação', async () => {
+    // retificação #1 cancelada; a #2 é da ficha 1 → id da retificação (2) ≠ id da ficha (1)
+    const id1 = (await (await call('/fichas/1/retificacoes', base)).json() as { data: { id: number } }).data.id;
+    await call(`/retificacoes/${id1}/cancelar`, {});
+    const id2 = (await (await call('/fichas/1/retificacoes', base)).json() as { data: { id: number } }).data.id;
+    expect(id2).not.toBe(1);
+    authorizedFichaIds.length = 0;
+
+    expect((await call(`/retificacoes/${id2}`, null, {}, 'GET')).status).toBe(200);
+    await call(`/retificacoes/${id2}/decisao`, { decisao: 'APROVAR', observacao: 'Parecer favorável do RT' }, { 'x-user': '901' });
+    await call(`/retificacoes/${id2}/assinar`, { tipo: 'INSTRUTOR' }, { 'x-user': '100', 'x-role': 'INSTRUTOR' });
+    expect(authorizedFichaIds.length).toBe(3);
+    expect(authorizedFichaIds.every((f) => f === 1)).toBe(true);
+    // rota por ficha continua usando o :id da ficha
+    authorizedFichaIds.length = 0;
+    await call('/fichas/1/retificacoes', null, {}, 'GET');
+    expect(authorizedFichaIds).toEqual([1]);
+  });
+
+  it('retificação inexistente ou de outro tenant → 404 antes da autorização', async () => {
+    const id = (await (await call('/fichas/1/retificacoes', base)).json() as { data: { id: number } }).data.id;
+    authorizedFichaIds.length = 0;
+    expect((await call(`/retificacoes/${id}`, null, { 'x-empresa': '7' }, 'GET')).status).toBe(404);
+    expect((await call('/retificacoes/9999/decisao', { decisao: 'APROVAR', observacao: 'Parecer favorável do RT' })).status).toBe(404);
+    expect(authorizedFichaIds).toEqual([]);
+  });
+
+  it('falha ao persistir a 2ª assinatura é atômica: nada é gravado pela metade e o retry conclui', async () => {
+    const id = (await (await call('/fichas/1/retificacoes', base)).json() as { data: { id: number } }).data.id;
+    await call(`/retificacoes/${id}/decisao`, { decisao: 'APROVAR', observacao: 'Parecer favorável do RT' }, { 'x-user': '901' });
+    await call(`/retificacoes/${id}/assinar`, { tipo: 'INSTRUTOR' }, { 'x-user': '100', 'x-role': 'INSTRUTOR' });
+
+    const realBatch = d1.batch.bind(d1);
+    let falhou = false;
+    d1.batch = async (stmts: Stmt[]) => {
+      if (!falhou) { falhou = true; throw new Error('simulated D1 failure'); }
+      return realBatch(stmts);
+    };
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r1 = await call(`/retificacoes/${id}/assinar`, { tipo: 'ALUNO' }, { 'x-user': '101', 'x-role': 'ALUNO' });
+    errSpy.mockRestore();
+    expect(r1.status).toBe(500);
+    const meio = d1.database.prepare(`SELECT status, assinatura_aluno_usuario_id a FROM fichas_sessao_retificacoes WHERE id=${id}`).get() as { status: string; a: string | null };
+    expect(meio).toEqual({ status: 'APROVADA', a: null });
+
+    const r2 = await call(`/retificacoes/${id}/assinar`, { tipo: 'ALUNO' }, { 'x-user': '101', 'x-role': 'ALUNO' });
+    expect(r2.status).toBe(200);
+    expect((await r2.json() as { data: { status: string } }).data.status).toBe('CONCLUIDA');
   });
 });
