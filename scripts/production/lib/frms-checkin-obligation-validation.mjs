@@ -117,6 +117,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
   const day = {
     date, crew: crew.size, status: {}, base: {}, divergences: {}, violations: [], advisories: [],
     received_oracle: 0, received_obligation: 0, gap_crew_days: 0, allocation_expected_pending: 0,
+    status_by_base: {}, pending_unseen_by_oracle: 0,
     absence_crew_days: {}, base_only: { crew_days: 0, cycle: {}, jornada_status: {}, allocation_context: {}, crew_ids: new Set() },
     legacy_pending_no_checkin: 0, legacy_not_pending_now: {},
   };
@@ -133,6 +134,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
     if (!obligation) { violate('OBRIGACAO_AUSENTE', id); continue; }
     bump(day.status, obligation.status);
     bump(day.base, obligation.base);
+    bump(day.status_by_base, `${obligation.status}/${obligation.base}`);
     for (const divergence of obligation.divergencias ?? []) bump(day.divergences, divergence);
 
     const hasCheckin = oracle.checkins.has(id);
@@ -158,6 +160,11 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
       bump(b.cycle, embark ? 'CICLO_EMBARQUE' : off ? 'CICLO_FOLGA' : cycles.length ? 'CICLO_FORA_DO_DIA' : 'SEM_CICLO');
       bump(b.jornada_status, oracle.jornadaStatus?.get(id) ?? 'SEM_LINHA');
       bump(b.allocation_context, own.length ? 'TEM_ALOCACAO_PROXIMA' : 'SEM_ALOCACAO_PROXIMA');
+    }
+    // PENDENTE que o oráculo não explica por nenhuma fonte que ele carrega (ex.: treinamento planejado por
+    // período, jornada de origem que só a regra lê). Não é violação; serve para conciliar contagens.
+    if (obligation.status === 'PENDENTE' && !hardActivity && !cvActivity && !kinds.has('OPERATIONAL')) {
+      day.pending_unseen_by_oracle += 1;
     }
     // Ausências programadas por tipo (alocação), para dimensionar folgas, férias e afastamentos reais.
     for (const kind of new Set(covering.filter((row) => classify(row.situacao_tipo) === 'ABSENCE')
@@ -206,7 +213,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
 
 export function summarize(days, { sampleLimit = 10 } = {}) {
   const totals = { crew_days: 0, status: {}, base: {}, divergences: {}, gap_crew_days: 0,
-    allocation_expected_pending: 0, absence_crew_days: {}, legacy_pending_no_checkin: 0, legacy_not_pending_now: {} };
+    allocation_expected_pending: 0, absence_crew_days: {}, status_by_base: {}, pending_unseen_by_oracle: 0, legacy_pending_no_checkin: 0, legacy_not_pending_now: {} };
   const invariants = {};
   const advisories = {};
   const samples = [];
@@ -216,8 +223,9 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
     totals.crew_days += day.crew;
     totals.gap_crew_days += day.gap_crew_days;
     totals.allocation_expected_pending += day.allocation_expected_pending;
+    totals.pending_unseen_by_oracle += day.pending_unseen_by_oracle;
     totals.legacy_pending_no_checkin += day.legacy_pending_no_checkin;
-    for (const key of ['status', 'base', 'divergences', 'absence_crew_days', 'legacy_not_pending_now']) {
+    for (const key of ['status', 'base', 'status_by_base', 'divergences', 'absence_crew_days', 'legacy_not_pending_now']) {
       for (const [name, count] of Object.entries(day[key])) bump(totals[key], name, count);
     }
     for (const violation of day.violations) {

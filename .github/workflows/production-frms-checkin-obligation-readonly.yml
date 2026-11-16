@@ -155,6 +155,8 @@ jobs:
             p("days / crew in scope / crew-days", `${r.days} / ${r.crew_in_scope} / ${r.totals.crew_days}`);
             p("obligation status (crew-days)", r.totals.status);
             p("obligation base (crew-days)", r.totals.base);
+            p("status by base (crew-days)", r.totals.status_by_base);
+            p("PENDENTE not explained by any oracle source (planned training ranges etc.)", r.totals.pending_unseen_by_oracle);
             p("divergences (crew-days)", r.totals.divergences);
             p("broken-fortnight gap crew-days", r.totals.gap_crew_days);
             p("scheduled absence crew-days by type (allocation or manual event)", r.totals.absence_crew_days);

@@ -43,6 +43,11 @@ describe('validador de produção da obrigação de check-in', () => {
     // Regra antiga contaria pendência por quinzena-base/EVD/atividade; hoje parte virou dispensa ou dúvida.
     expect(result.summary.totals.legacy_pending_no_checkin).toBeGreaterThan(status.PENDENTE ?? 0);
     expect(result.crewSize).toBe(14);
+    // Conciliação: a soma do cruzamento status/base fecha com o total de cada status.
+    const byStatus: Record<string, number> = {};
+    for (const [key, n] of Object.entries(result.summary.totals.status_by_base)) byStatus[key.split('/')[0]] = (byStatus[key.split('/')[0]] ?? 0) + n;
+    expect(byStatus).toEqual(result.summary.totals.status);
+    expect(result.summary.totals.pending_unseen_by_oracle).toBe(0);
     // Folgas, férias e afastamentos do fixture aparecem por tipo, vindos do oráculo.
     expect(result.summary.totals.absence_crew_days).toMatchObject({ FERIAS: 15, AFT: 1, EVENTO_MANUAL: expect.any(Number) });
     expect(result.summary.totals.absence_crew_days.FOLGA).toBeGreaterThan(0);
