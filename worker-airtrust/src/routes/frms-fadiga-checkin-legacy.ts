@@ -667,10 +667,13 @@ router.get('/daily-fatigue', async (c) => {
     const sectorAccess = await getEmployeeSectorAccess(c, empresaId);
     const sectorScope = buildFuncionarioScopeWhere(sectorAccess, 'f');
 
-    const [rows, obrigacoes] = await Promise.all([
-      loadDailyFatigueTeamRoster({ db: c.env.DB, empresaId, date, sectorScope, limit, offset }),
-      loadDailyCheckinObligations(c.env.DB, empresaId, date),
-    ]);
+    const obrigacoes = await loadDailyCheckinObligations(c.env.DB, empresaId, date);
+    const obligatedIds = [...obrigacoes]
+      .filter(([, obrigacao]) => obrigacao.status === 'PENDENTE' || obrigacao.status === 'RECEBIDO')
+      .map(([id]) => id);
+    const rows = await loadDailyFatigueTeamRoster({
+      db: c.env.DB, empresaId, date, sectorScope, limit, offset, obligatedIds,
+    });
 
     const itens = rows.map((row) => {
       const hasCheckin = Boolean(row.checkin_id);
