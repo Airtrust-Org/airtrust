@@ -98,6 +98,17 @@ export function evaluateChain(facts, ctx) {
     }
   }
 
+  // Ciclo de tratamento de casos: prazo vencido tem que deixar registro de escalonamento.
+  const cases = facts.cases;
+  if (cases && !cases.unavailable) {
+    add(SEVERITY.INFO, 'CASE_LIFECYCLE', { ...cases });
+    if (Number(cases.overdue_open) > 0 && Number(cases.overdue_notifications_7d) === 0) {
+      // Esperado até o escalonamento ser publicado e rodar o primeiro cron diário; depois disso é falha.
+      add(SEVERITY.ADVISORY, 'OVERDUE_CASES_WITHOUT_ESCALATION_RECORD', {
+        overdue_open: Number(cases.overdue_open) });
+    }
+  }
+
   // D. Integridade: duplicação, órfãos e isolamento.
   const integrity = facts.integrity;
   if (integrity && !integrity.unavailable) {
