@@ -6,8 +6,17 @@ import type { FrmsAlerta, NivelAlerta } from './types';
 import { now, logAuditoria } from './db-service-shared';
 import { carryFrmsCaseHistory } from './case-resolution';
 import { FRMS_CANONICAL_OPERATIONAL_SOURCE } from './frms-source-policy';
+import { getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+
+export type FrmsCaseStage = 'sem_tratamento' | 'em_tratamento' | 'vencidos';
+export interface FrmsCaseGlobalSummary {
+  sem_tratamento: number;
+  em_tratamento: number;
+  vencidos: number;
+}
 
 export interface BuscarAlertasFiltro {
+  etapa?: FrmsCaseStage;
   tripulante_id?: string;
   nivel?: NivelAlerta;
   resolvido?: boolean;
@@ -22,7 +31,7 @@ export async function buscarAlertas(
   filtro: BuscarAlertasFiltro,
   empresaId?: number,
   sectorScope?: { clause: string; bindings: number[] },
-): Promise<{ alertas: FrmsAlerta[]; total: number }> {
+): Promise<{ alertas: FrmsAlerta[]; total: number; summary?: FrmsCaseGlobalSummary }> {
   const conditions: string[] = ['a.deleted_at IS NULL'];
   const binds: (string | number)[] = [];
 
@@ -71,18 +80,42 @@ export async function buscarAlertas(
   const page = filtro.page ?? 1;
   const limit = filtro.limit ?? 50;
   const offset = (page - 1) * limit;
+  const today = getTodayIsoSaoPaulo();
 
+  // Stage classification is server-side BEFORE pagination, in the same tenant scope.
+  // Legacy/invalid notes are untreated; invalid JSON must never abort a list query.
+  const schemaExpr = `CASE WHEN json_valid(a.notas_resolucao)
+    THEN json_extract(a.notas_resolucao, '$.schema') ELSE NULL END`;
+  const treated = `COALESCE(a.resolvido, 0) = 0 AND (${schemaExpr}) = 'FRMS_CASE_TREATMENT_V1'`;
+  const untreated = `COALESCE(a.resolvido, 0) = 0 AND
+    ((${schemaExpr}) IS NULL OR (${schemaExpr}) <> 'FRMS_CASE_TREATMENT_V1')`;
+  const dueExpr = `CASE WHEN json_valid(a.notas_resolucao)
+    THEN json_extract(a.notas_resolucao, '$.prazo') ELSE NULL END`;
+  const overdue = `(${treated}) AND (${dueExpr}) < ?`;
+  const stages: Record<FrmsCaseStage, string> = {
+    sem_tratamento: `(${untreated})`,
+    em_tratamento: `(${treated})`,
+    vencidos: `(${overdue})`,
+  };
+  const stage = filtro.etapa ? stages[filtro.etapa] : null;
+  const stageDateBinds = filtro.etapa === 'vencidos' ? [today] : [];
+
+  // Each total is computed on the full eligible population, never a page.
   const countResult = await db
     .prepare(
-      `SELECT COUNT(*) as total
+      `SELECT
+          SUM(CASE WHEN ${stage ?? '1 = 1'} THEN 1 ELSE 0 END) AS total,
+          SUM(CASE WHEN ${untreated} THEN 1 ELSE 0 END) AS sem_tratamento,
+          SUM(CASE WHEN ${treated} THEN 1 ELSE 0 END) AS em_tratamento,
+          SUM(CASE WHEN ${overdue} THEN 1 ELSE 0 END) AS vencidos
        FROM frms_alerta a
        LEFT JOIN frms_jornada j ON j.id = a.jornada_id
         AND CAST(j.tripulante_id AS INTEGER) = CAST(a.tripulante_id AS INTEGER)
        LEFT JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
        WHERE ${where}`,
     )
-    .bind(...binds)
-    .first<{ total: number }>();
+    .bind(...stageDateBinds, today, ...binds)
+    .first<{ total: number | null; sem_tratamento?: number | null; em_tratamento?: number | null; vencidos?: number | null }>();
 
   const rows = await db
     .prepare(
@@ -90,20 +123,37 @@ export async function buscarAlertas(
           COUNT(*) OVER (PARTITION BY a.tripulante_id) AS recorrencias_no_filtro,
           j.data as data_jornada,
           j.data as data_fato,
-              COALESCE(f.nome, 'Tripulante #' || a.tripulante_id) as nome_tripulante
+          COALESCE(f.nome, 'Tripulante #' || a.tripulante_id) as nome_tripulante
        FROM frms_alerta a
-        LEFT JOIN frms_jornada j ON j.id = a.jornada_id
-         AND CAST(j.tripulante_id AS INTEGER) = CAST(a.tripulante_id AS INTEGER)
+       LEFT JOIN frms_jornada j ON j.id = a.jornada_id
+        AND CAST(j.tripulante_id AS INTEGER) = CAST(a.tripulante_id AS INTEGER)
        LEFT JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
-       WHERE ${where}
-        ORDER BY date(j.data) DESC, a.created_at DESC LIMIT ? OFFSET ?`,
+       WHERE ${where}${stage ? ` AND ${stage}` : ''}
+       ORDER BY
+         CASE WHEN ${overdue} THEN 0
+              WHEN ${untreated} THEN 1
+              WHEN ${treated} THEN 2
+              ELSE 3 END,
+         CASE a.nivel WHEN 'VIOLACAO' THEN 0 WHEN 'CRITICO' THEN 1
+           WHEN 'ATENCAO' THEN 2 WHEN 'AVISO' THEN 3 ELSE 4 END,
+         date(j.data) ASC, a.created_at ASC, a.id ASC
+       LIMIT ? OFFSET ?`,
     )
-    .bind(...binds, limit, offset)
+    .bind(...binds, ...stageDateBinds, today, limit, offset)
     .all<FrmsAlerta & { nome_tripulante?: string }>();
 
+  const summaryAvailable = countResult !== null
+    && Object.prototype.hasOwnProperty.call(countResult, 'sem_tratamento')
+    && Object.prototype.hasOwnProperty.call(countResult, 'em_tratamento')
+    && Object.prototype.hasOwnProperty.call(countResult, 'vencidos');
   return {
     alertas: rows.results || [],
-    total: countResult?.total ?? 0,
+    total: Number(countResult?.total ?? 0),
+    ...(summaryAvailable ? { summary: {
+      sem_tratamento: Number(countResult.sem_tratamento ?? 0),
+      em_tratamento: Number(countResult.em_tratamento ?? 0),
+      vencidos: Number(countResult.vencidos ?? 0),
+    } } : {}),
   };
 }
 

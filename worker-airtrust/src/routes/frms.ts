@@ -2830,7 +2830,11 @@ frmsRoutes.get(
       data_fim: c.req.query('data_fim') ?? undefined,
       page: c.req.query('page') ? parseInt(c.req.query('page')!) : undefined,
       limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+      etapa: c.req.query('etapa') as 'sem_tratamento' | 'em_tratamento' | 'vencidos' | undefined,
     };
+    if (filtro.etapa && !(['sem_tratamento', 'em_tratamento', 'vencidos'] as string[]).includes(filtro.etapa)) {
+      return c.json({ success: false, code: 'FRMS_CASE_STAGE_INVALID' }, 400);
+    }
 
     if (filtro.tripulante_id) {
       const denied = await assertTripulanteEmpresa(c, filtro.tripulante_id);
@@ -2838,7 +2842,7 @@ frmsRoutes.get(
     }
 
     const result = await buscarAlertas(c.env.DB, filtro, empresaId);
-    return c.json({ success: true, data: result.alertas, total: result.total });
+    return c.json({ success: true, data: result.alertas, total: result.total, summary: result.summary });
   }),
 );
 
