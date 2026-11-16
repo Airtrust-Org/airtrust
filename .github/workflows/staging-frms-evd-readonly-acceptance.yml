@@ -31,7 +31,7 @@ env:
 jobs:
   guard:
     name: Verify current main gates and exact staging provenance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -86,7 +86,7 @@ jobs:
     name: Read EVD as the scoped synthetic tenant administrator
     needs: guard
     environment: staging
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       BASE_URL: https://staging.airtrust.pages.dev

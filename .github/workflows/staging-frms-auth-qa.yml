@@ -29,7 +29,7 @@ env:
 jobs:
   guard:
     name: Staging QA Guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate staging-only dispatch
         shell: bash
@@ -80,7 +80,7 @@ jobs:
   d1-provision-maintenance-fixture:
     name: Staging D1 Provision Synthetic Maintenance Identity
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     env:
       QA_MAINTENANCE_PASSWORD: ${{ secrets.STAGING_SMOKE_PASSWORD }}
@@ -114,7 +114,7 @@ jobs:
   login-latency:
     name: Real Login Latency QA
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     env:
       STAGING_SMOKE_EMAIL: ${{ secrets.STAGING_SMOKE_EMAIL }}
@@ -142,7 +142,7 @@ jobs:
   frms-ui:
     name: Real Mechanic Home and FRMS Maintenance QA
     needs: [guard, d1-provision-maintenance-fixture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     env:
       BASE_URL: https://staging.airtrust.pages.dev
@@ -194,7 +194,7 @@ jobs:
     name: Staging FRMS and Auth QA Passed
     needs: [guard, d1-provision-maintenance-fixture, login-latency, frms-ui]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require every sanctioned QA job
         shell: bash
