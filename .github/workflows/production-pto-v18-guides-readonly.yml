@@ -1,0 +1,69 @@
+name: Production PTO V18 Guides Readonly Validation
+
+# Validação funcional SOMENTE LEITURA dos 88 guias curriculares PTO Rev.10 V18 em produção.
+# Sem staging, deploy, escrita em D1/R2, mutação de API, sessão/ficha/nota de teste ou PII na saída.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_worker_sha:
+        description: SHA do Worker de produção em /api/version (40 hex)
+        required: true
+        type: string
+      confirmation:
+        description: Type AIRTRUST_PTO_V18_GUIDES_PRODUCTION_READONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-pto-v18-guides-readonly
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Authenticated read-only validation of the 88 guides
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 20
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD || secrets.QA_EXAMINER_ADMIN_PASSWORD }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+      EXPECTED_WORKER_SHA: ${{ inputs.expected_worker_sha }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      EVIDENCE_OUT: ${{ runner.temp }}/pto-v18-guides-readonly-evidence.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate immutable read-only request
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY; exit 1; }
+          [[ "$CONFIRMATION" == AIRTRUST_PTO_V18_GUIDES_PRODUCTION_READONLY ]] || { echo CONFIRMATION_MISMATCH; exit 1; }
+          [[ "$EXPECTED_WORKER_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo BAD_SHA; exit 1; }
+          [[ -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || { echo PRODUCTION_QA_CREDENTIALS_MISSING; exit 1; }
+          [[ "$E2E_EMAIL" != *staging.airtrust.invalid* ]] || { echo STAGING_IDENTITY_BLOCKED; exit 1; }
+      - name: Require expected production Worker SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          live="$(curl -fsS "$PROD_API_BASE_URL/api/version" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).data.sourceSha))')"
+          echo "live=$live expected=$EXPECTED_WORKER_SHA"
+          [[ "$live" == "$EXPECTED_WORKER_SHA" ]] || { echo WORKER_SHA_DRIFT; exit 1; }
+      - name: Run authenticated read-only validation
+        run: node scripts/operations/verify-production-pto-v18-guides-readonly.mjs
+      - name: Upload evidence (no tokens, no PII)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pto-v18-guides-readonly-evidence
+          path: ${{ runner.temp }}/pto-v18-guides-readonly-evidence.json
+          if-no-files-found: ignore
+          retention-days: 30
