@@ -97,26 +97,71 @@ async function loadWindowFacts(db, tenantId, from, to) {
   return { employees, allocations, manualAbsence, baseFortnights };
 }
 
+/** Atividade comprovada do dia por fonte de origem, lida direto das tabelas (sem reutilizar a regra). */
 async function loadDayFacts(db, tenantId, date) {
-  const all = async (sql, ...binds) => (await db.prepare(sql).bind(...binds).all()).results;
-  const checkins = await all(
+  const ids = async (sql, ...binds) => new Set(
+    (await db.prepare(sql).bind(...binds).all()).results
+      .map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+  const checkins = await ids(
     `SELECT DISTINCT CAST(funcionario_id AS INTEGER) AS id FROM frms_fadiga_checkin
       WHERE empresa_id = ? AND data_checkin = ? AND deleted_at IS NULL`, tenantId, date);
-  const evd = await all(
+  const evdRows = (await db.prepare(
     `SELECT CAST(pic_id AS INTEGER) AS pic, CAST(sic_id AS INTEGER) AS sic FROM escala_voo_diaria
-      WHERE empresa_id = ? AND data = ? AND deleted_at IS NULL AND UPPER(COALESCE(status, '')) <> 'CANCELADA'`, tenantId, date);
-  const jornada = await all(
+      WHERE empresa_id = ? AND data = ? AND deleted_at IS NULL AND UPPER(COALESCE(status, '')) <> 'CANCELADA'`,
+  ).bind(tenantId, date).all()).results;
+  const evd = new Set(evdRows.flatMap((row) => [Number(row.pic), Number(row.sic)])
+    .filter((id) => Number.isInteger(id) && id > 0));
+  const jornada = await ids(
     `SELECT DISTINCT CAST(j.tripulante_id AS INTEGER) AS id FROM frms_jornada j
        JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.empresa_id = ? AND f.deleted_at IS NULL
       WHERE j.empresa_id = f.empresa_id AND j.data = ? AND j.deleted_at IS NULL
         AND UPPER(COALESCE(j.origem, '')) = 'SIGVOOS'
         AND (COALESCE(j.horas_voo_minutos, 0) > 0 OR COALESCE(j.duracao_jornada_minutos, 0) > 0
              OR j.hora_apresentacao IS NOT NULL OR j.hora_termino IS NOT NULL)`, tenantId, date);
-  return {
-    checkins: new Set(checkins.map((row) => Number(row.id))),
-    evd: new Set(evd.flatMap((row) => [Number(row.pic), Number(row.sic)]).filter((id) => Number.isInteger(id) && id > 0)),
-    jornada: new Set(jornada.map((row) => Number(row.id))),
-  };
+  const simulator = await ids(
+    `SELECT DISTINCT CAST(p.funcionario_id AS INTEGER) AS id FROM (
+        SELECT id AS sessao_id, funcionario_id FROM simulador_agendamentos WHERE funcionario_id IS NOT NULL
+        UNION SELECT id, instrutor_id FROM simulador_agendamentos WHERE instrutor_id IS NOT NULL
+        UNION SELECT id, checador_id FROM simulador_agendamentos WHERE checador_id IS NOT NULL
+        UNION SELECT id, examinador_id FROM simulador_agendamentos WHERE examinador_id IS NOT NULL
+        UNION SELECT sessao_id, funcionario_id FROM sessoes_participantes WHERE deleted_at IS NULL
+      ) p
+      JOIN simulador_agendamentos sa ON sa.id = p.sessao_id
+      JOIN funcionarios f ON f.id = p.funcionario_id AND f.empresa_id = sa.empresa_id AND f.deleted_at IS NULL
+     WHERE sa.empresa_id = ? AND sa.deleted_at IS NULL AND date(sa.data) = date(?)
+       AND UPPER(COALESCE(sa.status, 'AGENDADO')) <> 'CANCELADO'`, tenantId, date);
+  const training = await ids(
+    `SELECT DISTINCT CAST(p.funcionario_id AS INTEGER) AS id FROM treinamentos_dias td
+       JOIN treinamentos_planejados t ON t.id = td.treinamento_id AND t.empresa_id = td.empresa_id AND t.deleted_at IS NULL
+       JOIN (SELECT treinamento_id, funcionario_id FROM treinamentos_participantes
+             UNION SELECT treinamento_id, funcionario_id FROM treinamentos_instrutores) p
+         ON p.treinamento_id = td.treinamento_id
+       JOIN funcionarios f ON f.id = p.funcionario_id AND f.empresa_id = td.empresa_id AND f.deleted_at IS NULL
+      WHERE td.empresa_id = ? AND td.deleted_at IS NULL AND date(td.data) = date(?)
+        AND UPPER(COALESCE(td.status, 'ATIVO')) <> 'CANCELADO'
+        AND UPPER(COALESCE(t.status, 'PLANEJADO')) <> 'CANCELADO'`, tenantId, date);
+  const recovery = await ids(
+    `SELECT DISTINCT CAST(rd.funcionario_id AS INTEGER) AS id FROM frms_recovery_activity_day rd
+       JOIN funcionarios f ON f.id = rd.funcionario_id AND f.empresa_id = rd.empresa_id AND f.deleted_at IS NULL
+      WHERE rd.empresa_id = ? AND rd.deleted_at IS NULL AND date(rd.reference_date) = date(?)
+        AND rd.activity_type IN ('STANDBY_HOME_HOTEL', 'STANDBY_ONSITE', 'ADMIN_TRAINING', 'DUTY_TRAVEL', 'OTHER')
+     UNION
+     SELECT DISTINCT CAST(rs.funcionario_id AS INTEGER) AS id FROM frms_recovery_activity_segment rs
+       JOIN frms_recovery_activity_day rd ON rd.id = rs.recovery_day_id AND rd.empresa_id = rs.empresa_id
+        AND rd.funcionario_id = rs.funcionario_id AND rd.deleted_at IS NULL
+       JOIN funcionarios f ON f.id = rs.funcionario_id AND f.empresa_id = rs.empresa_id AND f.deleted_at IS NULL
+      WHERE rs.empresa_id = ? AND date(rd.reference_date) = date(?) AND rs.activity_type <> 'OFF_DUTY'`,
+    tenantId, date, tenantId, date);
+  // Controle de Voos: só voo efetivamente realizado. Consultivo, pois a data de programação pode
+  // diferir da data da jornada quando o voo cruza a meia-noite.
+  const cv = await ids(
+    `SELECT DISTINCT CAST(t.funcionario_id AS INTEGER) AS id FROM cv_voo_tripulantes t
+       JOIN cv_voos v ON v.id = t.voo_id AND v.empresa_id = t.empresa_id
+       JOIN funcionarios f ON f.id = t.funcionario_id AND f.empresa_id = t.empresa_id AND f.deleted_at IS NULL
+      WHERE t.empresa_id = ? AND t.deleted_at IS NULL AND v.deleted_at IS NULL AND v.data_programacao = ?
+        AND v.status IN ('pousado', 'concluido_operacionalmente', 'em_andamento', 'alternado_divergido')
+        AND v.horario_real_partida IS NOT NULL`, tenantId, date);
+  return { checkins, activity: { evd, jornada, simulator, training, recovery, cv } };
 }
 
 export async function runValidation({ db, loadDailyCheckinObligations, from, to, tenantId = TENANT_ID, onProgress = () => {} }) {
@@ -181,8 +226,8 @@ export async function main() {
   if (!file.startsWith('/') || !file.endsWith('.json')) throw new Error('REPORT_PATH_INVALID');
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  console.log(`FRMS_CHECKIN_OBLIGATION_READONLY_DONE days=${result.summary.days} violations=${result.summary.violation_count} queries=${stats.queries} writes=0`);
-  if (result.summary.violation_count > 0) process.exitCode = 3;
+  console.log(`FRMS_CHECKIN_OBLIGATION_READONLY_DONE days=${result.summary.days} violations=${result.summary.violation_count} advisories=${result.summary.advisory_count} queries=${stats.queries} writes=0`);
+  if (result.summary.violation_count > 0) process.exitCode = 3; // consultivos (CV) não reprovam
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
