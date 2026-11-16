@@ -144,9 +144,7 @@ describe('CardMeusEAD — organização por situação', () => {
   });
 
   it('informa leitura simplificada sem inventar vencimento ou certificado', () => {
-    const rows = Object.assign([matricula(71, 'NAO_INICIADO')], {
-      consulta_simplificada: true,
-    });
+    const rows = [{ ...matricula(71, 'NAO_INICIADO'), consulta_simplificada: true }];
     setMatriculas(rows);
     renderCard();
     expect(screen.getByRole('status')).toHaveTextContent(
