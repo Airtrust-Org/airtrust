@@ -166,6 +166,7 @@ self_protected_files=(
   "scripts/maintenance/recover-lms-emergencias-gerais.mjs"
   "scripts/seed-staging-smoke-user.mjs"
   "scripts/staging/reconcile-approved-migration-ledger-lib.mjs"
+  "scripts/operations/apply-pto-v18-guide-import.py"
 )
 
 # Scripts legados já bloqueados com banner + exit 1 (verificação relaxada)
@@ -445,6 +446,16 @@ assertAllowedStagingTarget
 AIRTRUST_STAGING_LEDGER_RECONCILIATION
 EOF
       ;;
+    "scripts/operations/apply-pto-v18-guide-import.py")
+      cat <<'EOF'
+apply_production_tenant_6
+expected_sql_sha256
+PRODUCTION_PREFLIGHT_DRIFT_ABORT
+PRODUCTION_POSTCONDITIONS_FAIL
+airtrust-db
+airtrust-storage
+EOF
+      ;;
     *)
       return 1
       ;;
@@ -564,6 +575,9 @@ self_protected_pin() {
       ;;
     "scripts/staging/reconcile-approved-migration-ledger-lib.mjs")
       echo "dbf7b1c8a4a7e30bf46bf13fb92262e08ff7587aa625b394ba294c5221964966"
+      ;;
+    "scripts/operations/apply-pto-v18-guide-import.py")
+      echo "241ca8113adef8bb196b8e667735c2525e613b0f186dbe1c769644adf2bc0af0"
       ;;
     *)
       return 1
