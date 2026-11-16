@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import type { Env } from '../types';
 import { runResilientScheduledJobs } from '../cron/resilient/scheduled-router';
+import { createD1RequestStats, instrumentD1 } from '../observability/d1-instrumentation';
 import { emitHttpMetric } from '../observability/operational-metrics';
 import { runCorrelatedJob, type JobExecutionContext } from './job-correlation';
 
@@ -34,18 +35,26 @@ export function createWorkerEntrypoint(
       assertSafeRuntimeConfig(env);
       const startedAt = performance.now();
       const pathname = new URL(request.url).pathname;
+      // Observabilidade de round-trips D1 por requisição; D1_METRICS_DISABLED=true desliga.
+      const d1Stats = createD1RequestStats();
+      const flags = env as unknown as Record<string, unknown>;
+      const requestEnv: Env =
+        flags.D1_METRICS_DISABLED !== 'true' && env.DB && typeof env.DB === 'object'
+          ? { ...env, DB: instrumentD1(env.DB, d1Stats) }
+          : env;
 
       try {
         if (options.onApiRequestBootstrap && request.url.includes('/api/')) {
-          await options.onApiRequestBootstrap(env);
+          await options.onApiRequestBootstrap(requestEnv);
         }
 
-        const response = await app.fetch(request, env, ctx);
+        const response = await app.fetch(request, requestEnv, ctx);
         emitHttpMetric({
           pathname,
           method: request.method,
           status: response.status,
           latencyMs: performance.now() - startedAt,
+          d1: d1Stats,
         });
         return response;
       } catch (error) {
@@ -54,6 +63,7 @@ export function createWorkerEntrypoint(
           method: request.method,
           status: 500,
           latencyMs: performance.now() - startedAt,
+          d1: d1Stats,
         });
         throw error;
       }
