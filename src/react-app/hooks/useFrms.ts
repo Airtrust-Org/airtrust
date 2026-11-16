@@ -297,6 +297,8 @@ export interface FrmsAlertasPage {
   success: boolean;
   data: FrmsAlertaRow[];
   total: number;
+  /** Counts on the full eligible population within current tenant and filters. */
+  summary?: { sem_tratamento: number; em_tratamento: number; vencidos: number };
 }
 
 export function useFrmsAlertasPage(filtros?: Record<string, string>) {

@@ -159,11 +159,12 @@ export default function FrmsAlertasPainel() {
     if (status === 'ativos') next.resolvido = 'false';
     if (status === 'resolvidos') next.resolvido = 'true';
     if (tripulanteParam) next.tripulante_id = tripulanteParam;
+    if (etapa !== 'todos') next.etapa = etapa;
     return next;
-  }, [nivel, status, tripulanteParam, pagina]);
+  }, [nivel, status, tripulanteParam, etapa, pagina]);
 
   const { data, loading, error, refetch } = useFrmsAlertasPage(filtros);
-  const cases: FrmsAlertaRow[] = Array.isArray(data?.data) ? data.data : [];
+  const cases: FrmsAlertaRow[] = useMemo(() => Array.isArray(data?.data) ? data.data : [], [data?.data]);
   const filteredTotal = typeof data?.total === 'number' && Number.isFinite(data.total) && data.total >= 0
     ? data.total : null;
   const hasNextPage = filteredTotal === null ? cases.length === 100 : pagina * 100 < filteredTotal;
@@ -172,24 +173,17 @@ export default function FrmsAlertasPainel() {
   // queue ordering are explicitly page-scoped; never claim global overdue totals.
   const counts = useMemo(() => ({
     total: cases.length,
-    semTratamento: cases.filter((item) => situacaoCaso(item, hoje) === 'SEM_TRATAMENTO').length,
-    emTratamento: cases.filter((item) => ['EM_TRATAMENTO', 'VENCIDO'].includes(situacaoCaso(item, hoje))).length,
-    vencidos: cases.filter((item) => situacaoCaso(item, hoje) === 'VENCIDO').length,
-  }), [cases, hoje]);
+    semTratamento: data?.summary?.sem_tratamento ?? cases.filter((item) => situacaoCaso(item, hoje) === 'SEM_TRATAMENTO').length,
+    emTratamento: data?.summary?.em_tratamento ?? cases.filter((item) => ['EM_TRATAMENTO', 'VENCIDO'].includes(situacaoCaso(item, hoje))).length,
+    vencidos: data?.summary?.vencidos ?? cases.filter((item) => situacaoCaso(item, hoje) === 'VENCIDO').length,
+  }), [cases, data?.summary, hoje]);
 
   const recorrenciasNaPagina = useMemo(() => cases.reduce((acc, item) => {
     if (item.tripulante_id) acc.set(String(item.tripulante_id), (acc.get(String(item.tripulante_id)) ?? 0) + 1);
     return acc;
   }, new Map<string, number>()), [cases]);
 
-  const fila = useMemo(() => cases
-    .filter((item) => {
-      const situacao = situacaoCaso(item, hoje);
-      if (etapa === 'sem_tratamento') return situacao === 'SEM_TRATAMENTO';
-      if (etapa === 'em_tratamento') return situacao === 'EM_TRATAMENTO' || situacao === 'VENCIDO';
-      if (etapa === 'vencidos') return situacao === 'VENCIDO';
-      return true;
-    })
+  const fila = useMemo(() => [...cases]
     .sort((a, b) => {
       if (agruparPorPessoa) {
         const byName = (a.nome_tripulante || String(a.tripulante_id)).localeCompare(b.nome_tripulante || String(b.tripulante_id), 'pt-BR');
@@ -201,7 +195,7 @@ export default function FrmsAlertasPainel() {
       return ORDEM_SITUACAO[situacaoA] - ORDEM_SITUACAO[situacaoB] ||
         (ORDEM_NIVEL[a.nivel] ?? 4) - (ORDEM_NIVEL[b.nivel] ?? 4) ||
         String(a.data_fato || a.created_at).localeCompare(String(b.data_fato || b.created_at));
-    }), [cases, etapa, hoje, agruparPorPessoa]);
+    }), [cases, hoje, agruparPorPessoa]);
 
 
   const markViewed = useCallback(
@@ -340,18 +334,21 @@ export default function FrmsAlertasPainel() {
             <button
               key={card.key}
               type="button"
-              onClick={() => { setStatus('ativos'); setEtapa(etapa === card.key ? 'todos' : card.key); }}
+              onClick={() => { setStatus('ativos'); setEtapa(etapa === card.key ? 'todos' : card.key); setPagina(1); }}
               aria-pressed={etapa === card.key}
               className={`rounded-xl border p-4 text-left transition-shadow hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${card.style} ${etapa === card.key ? 'ring-2 ring-primary' : ''}`}
             >
               <p className="text-xs font-semibold uppercase tracking-wide">{card.label}</p>
               <p className="mt-2 text-3xl font-bold tabular-nums">{loading && !data ? '—' : card.value}</p>
-              <p className="mt-1 text-xs">Filtrar casos desta página</p>
+              <p className="mt-1 text-xs">Filtrar em todas as páginas</p>
             </button>
           ))}
         </section>
         <p className="text-xs text-slate-500">
-          Os cartões de situação consideram somente esta página. A recorrência indicada em cada caso considera todos os registros correspondentes aos filtros atuais, incluindo outras páginas, quando informada pela API. O total filtrado do servidor também abrange todas as páginas. A ordenação prioriza casos vencidos, pendentes e gravidade.
+          {data?.summary
+            ? 'Os cartões mostram contagens globais por etapa nos filtros atuais.'
+            : 'As contagens por etapa estão limitadas à página até receber o resumo global do servidor.'}
+          {' '}A lista é filtrada no banco antes da paginação. A recorrência respeita os filtros atuais, incluindo outras páginas, quando informada pela API.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
@@ -389,10 +386,10 @@ export default function FrmsAlertasPainel() {
             Etapa
             <select
               value={etapa}
-              onChange={(event) => { const next = event.target.value as EtapaCaso; setEtapa(next); if (next !== 'todos') setStatus('ativos'); }}
+              onChange={(event) => { const next = event.target.value as EtapaCaso; setEtapa(next); setPagina(1); if (next !== 'todos') setStatus('ativos'); }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
-              <option value="todos">Todas nesta página</option>
+              <option value="todos">Todas as etapas</option>
               <option value="sem_tratamento">Sem tratamento</option>
               <option value="em_tratamento">Aguardando eficácia</option>
               <option value="vencidos">Prazo vencido</option>
@@ -558,7 +555,7 @@ export default function FrmsAlertasPainel() {
           <div className="flex gap-2">
             <button type="button" disabled={pagina === 1 || loading} onClick={() => setPagina((p) => Math.max(1, p - 1))}
               className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
-            <button type="button" disabled={loading || !hasNextPage} onClick={() => { setPagina((p) => p + 1); setEtapa('todos'); }}
+            <button type="button" disabled={loading || !hasNextPage} onClick={() => { setPagina((p) => p + 1); }}
               className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima página</button>
           </div>
         </nav>
