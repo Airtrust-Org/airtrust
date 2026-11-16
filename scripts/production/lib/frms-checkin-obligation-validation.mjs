@@ -117,6 +117,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
   const day = {
     date, crew: crew.size, status: {}, base: {}, divergences: {}, violations: [], advisories: [],
     received_oracle: 0, received_obligation: 0, gap_crew_days: 0, allocation_expected_pending: 0,
+    absence_crew_days: {},
     legacy_pending_no_checkin: 0, legacy_not_pending_now: {},
   };
   const violate = (code, id) => day.violations.push({ code, date, crew_ref: crewRef(empresaId, id) });
@@ -144,6 +145,10 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
       (row) => row.funcionario_id === id && covers(row, date),
     );
     const obligated = ['PENDENTE', 'RECEBIDO'].includes(obligation.status);
+    // Ausências programadas por tipo (alocação), para dimensionar folgas, férias e afastamentos reais.
+    for (const kind of new Set(covering.filter((row) => classify(row.situacao_tipo) === 'ABSENCE')
+      .map((row) => upper(row.situacao_tipo)))) bump(day.absence_crew_days, kind);
+    if (manualAbsence) bump(day.absence_crew_days, 'EVENTO_MANUAL');
 
     if (hasCheckin) day.received_oracle += 1;
     if (obligation.status === 'RECEBIDO') day.received_obligation += 1;
@@ -187,7 +192,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
 
 export function summarize(days, { sampleLimit = 10 } = {}) {
   const totals = { crew_days: 0, status: {}, base: {}, divergences: {}, gap_crew_days: 0,
-    allocation_expected_pending: 0, legacy_pending_no_checkin: 0, legacy_not_pending_now: {} };
+    allocation_expected_pending: 0, absence_crew_days: {}, legacy_pending_no_checkin: 0, legacy_not_pending_now: {} };
   const invariants = {};
   const advisories = {};
   const samples = [];
@@ -196,7 +201,7 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
     totals.gap_crew_days += day.gap_crew_days;
     totals.allocation_expected_pending += day.allocation_expected_pending;
     totals.legacy_pending_no_checkin += day.legacy_pending_no_checkin;
-    for (const key of ['status', 'base', 'divergences', 'legacy_not_pending_now']) {
+    for (const key of ['status', 'base', 'divergences', 'absence_crew_days', 'legacy_not_pending_now']) {
       for (const [name, count] of Object.entries(day[key])) bump(totals[key], name, count);
     }
     for (const violation of day.violations) {

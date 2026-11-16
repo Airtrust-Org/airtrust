@@ -43,6 +43,9 @@ describe('validador de produção da obrigação de check-in', () => {
     // Regra antiga contaria pendência por quinzena-base/EVD/atividade; hoje parte virou dispensa ou dúvida.
     expect(result.summary.totals.legacy_pending_no_checkin).toBeGreaterThan(status.PENDENTE ?? 0);
     expect(result.crewSize).toBe(14);
+    // Folgas, férias e afastamentos do fixture aparecem por tipo, vindos do oráculo.
+    expect(result.summary.totals.absence_crew_days).toMatchObject({ FERIAS: 15, AFT: 1, EVENTO_MANUAL: expect.any(Number) });
+    expect(result.summary.totals.absence_crew_days.FOLGA).toBeGreaterThan(0);
   });
 
   it('detecta a regra antiga: pendência para todos (folga, férias e quinzena quebrada)', async () => {

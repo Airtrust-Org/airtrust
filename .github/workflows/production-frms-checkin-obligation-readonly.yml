@@ -157,6 +157,7 @@ jobs:
             p("obligation base (crew-days)", r.totals.base);
             p("divergences (crew-days)", r.totals.divergences);
             p("broken-fortnight gap crew-days", r.totals.gap_crew_days);
+            p("scheduled absence crew-days by type (allocation or manual event)", r.totals.absence_crew_days);
             p("crew-days with an unambiguous operational allocation", r.totals.allocation_expected_pending);
             p("old rule: pending without check-in", r.totals.legacy_pending_no_checkin);
             p("old-rule pending that are NOT pending now, by status", r.totals.legacy_not_pending_now);

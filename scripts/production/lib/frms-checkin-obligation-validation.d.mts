@@ -29,6 +29,7 @@ export interface DayEvaluation {
   violations: Array<{ code: string; date: string; crew_ref: string | null }>;
   advisories: Array<{ code: string; date: string; crew_ref: string | null }>;
   allocation_expected_pending: number;
+  absence_crew_days: Record<string, number>;
 }
 export function evaluateDay(input: {
   empresaId: number; date: string; crew: Set<number>; allEmployees: Set<number>;
@@ -46,6 +47,7 @@ export function summarize(days: DayEvaluation[], options?: { sampleLimit?: numbe
   totals: {
     crew_days: number; status: Record<string, number>; base: Record<string, number>;
     divergences: Record<string, number>; gap_crew_days: number; allocation_expected_pending: number;
+    absence_crew_days: Record<string, number>;
     legacy_pending_no_checkin: number;
     legacy_not_pending_now: Record<string, number>;
   };
