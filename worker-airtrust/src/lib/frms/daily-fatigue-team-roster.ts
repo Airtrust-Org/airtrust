@@ -72,7 +72,27 @@ export async function loadDailyFatigueTeamRoster(params: {
          AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
          AND UPPER(COALESCE(f.funcao, '')) IN ('PILOTO','COPILOTO','COMANDANTE')
          AND ${params.sectorScope.clause}
-         AND (cf.numero IS NOT NULL OR fj.id IS NOT NULL OR ch.id IS NOT NULL)
+         AND (
+           cf.numero IS NOT NULL OR fj.id IS NOT NULL OR ch.id IS NOT NULL
+           -- Alocação real do dia (inclusive fora da quinzena-base) e voo
+           -- programado na EVD também colocam o tripulante na lista; a regra
+           -- canônica decide depois se o check-in é exigível.
+           OR EXISTS (
+             SELECT 1 FROM escala_alocacoes ea
+              WHERE ea.funcionario_id = f.id
+                AND ea.deleted_at IS NULL
+                AND LOWER(COALESCE(ea.status, '')) <> 'cancelado'
+                AND ea.data_inicio <= ? AND ea.data_fim >= ?
+           )
+           OR EXISTS (
+             SELECT 1 FROM escala_voo_diaria e
+              WHERE e.empresa_id = f.empresa_id
+                AND e.data = ?
+                AND e.deleted_at IS NULL
+                AND UPPER(COALESCE(e.status, '')) <> 'CANCELADA'
+                AND (CAST(e.pic_id AS INTEGER) = f.id OR CAST(e.sic_id AS INTEGER) = f.id)
+           )
+         )
        ORDER BY
          CASE
            WHEN ch.id IS NULL AND fj.id IS NOT NULL THEN 1
@@ -91,6 +111,9 @@ export async function loadDailyFatigueTeamRoster(params: {
       params.date,
       params.empresaId,
       ...params.sectorScope.bindings,
+      params.date,
+      params.date,
+      params.date,
       params.limit,
       params.offset,
     )

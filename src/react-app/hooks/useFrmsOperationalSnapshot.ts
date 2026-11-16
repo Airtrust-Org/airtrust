@@ -12,6 +12,7 @@ export type FrmsOperationalSnapshotAlertCode =
   | 'JORNADA_SEM_FATORIZACAO'
   | 'ESCALADO_SEM_JORNADA_FRMS'
   | 'JORNADA_FRMS_SEM_ESCALA'
+  | 'ESCALA_DIVERGENTE'
   | 'DADO_INCONSISTENTE';
 
 export type FrmsOperationalSnapshotStatus = 'OK' | 'ATENCAO' | 'CRITICO' | 'INCOMPLETO';
@@ -89,6 +90,14 @@ export interface FrmsFortnightIndicator {
   limitation_notes: string[];
 }
 
+export interface FrmsCheckinObrigacao {
+  status: 'RECEBIDO' | 'PENDENTE' | 'DISPENSADO' | 'INDETERMINADO' | 'NAO_APLICAVEL';
+  exigivel: boolean;
+  base: string;
+  rotulo: string;
+  divergencias: string[];
+}
+
 export interface FrmsOperationalSnapshotItem {
   empresa_id: number;
   data_operacional: string;
@@ -122,6 +131,8 @@ export interface FrmsOperationalSnapshotItem {
   teve_atividade_frms?: boolean;
 
   checkin_status: 'RECEBIDO' | 'PENDENTE' | 'AUSENTE' | 'NAO_APLICAVEL';
+  /** Regra canônica do backend: por que o check-in é (ou não) exigido no dia. */
+  checkin_obrigacao?: FrmsCheckinObrigacao | null;
   checkin_horario: string | null;
   /** Instante UTC de envio; hora_checkin legada permanece para compatibilidade. */
   checkin_submitted_at?: string | null;
