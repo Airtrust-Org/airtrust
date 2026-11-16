@@ -46,7 +46,7 @@ jobs:
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             case "$file" in
-              scripts/staging/*|scripts/__tests__/*|worker-airtrust/src/__tests__/*|src/__tests__/*|e2e/*|docs/*|.github/workflows/staging-frms-case-lifecycle.yml) ;;
+              scripts/staging/*|scripts/production/frms-*-readonly.*|scripts/production/lib/frms-*|scripts/ops/*-readonly.*|scripts/__tests__/*|worker-airtrust/src/__tests__/*|src/__tests__/*|e2e/*|docs/*|.github/workflows/staging-frms-case-lifecycle.yml|.github/workflows/production-*-readonly.yml) ;;
               *) echo "FRMS_F0C_UNDEPLOYED_RUNTIME_DELTA: $file" >&2; exit 1 ;;
             esac
           done < "$RUNNER_TEMP/f0c-delta"
