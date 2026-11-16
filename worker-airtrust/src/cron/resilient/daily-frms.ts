@@ -1,6 +1,7 @@
 import type { Env } from '../../types';
 import { frmsDailyCheck } from '../frms-daily-check';
 import { runFrmsIntegrityAudit } from '../../lib/frms/integrity-audit';
+import { frmsCaseOverdueEscalation } from '../frms-case-overdue';
 import { frmsFadigaReminder } from '../frms-fadiga-reminder';
 import type { CronJobLogger } from './job-runner';
 
@@ -61,5 +62,22 @@ export async function runDailyFrmsOperations(
     });
   } catch (error) {
     logger.error('[CRON] Erro no reminder de check-in de fadiga', error);
+  }
+
+  try {
+    const result = await frmsCaseOverdueEscalation(env);
+    logger.log('[CRON] Escalonamento de casos FRMS vencidos concluído', {
+      empresas: result.empresas,
+      casos_vencidos: result.casosVencidos,
+      notificacoes: result.notificacoes,
+      registros: result.registros,
+      falhas: result.falhas,
+      truncadas: result.truncadas,
+    });
+    if (result.falhas > 0) {
+      logger.warn('[CRON] Escalonamento de casos FRMS falhou para alguma empresa', { falhas: result.falhas });
+    }
+  } catch (error) {
+    logger.error('[CRON] Erro no escalonamento de casos FRMS vencidos', error);
   }
 }
