@@ -94,7 +94,7 @@ describe('FrmsAlertasPainel', () => {
     ]);
     renderPage();
     expect(screen.getAllByText(/2 casos desta pessoa nesta página/i)).toHaveLength(2);
-    expect(screen.getByText(/O total filtrado do servidor também abrange todas as páginas/i)).toBeInTheDocument();
+    expect(screen.getByText(/A recorrência respeita os filtros atuais/i)).toBeInTheDocument();
     const groupButton = screen.getByRole('button', { name: 'Agrupar por pessoa nesta página' });
     fireEvent.click(groupButton);
     expect(screen.getByRole('button', { name: 'Agrupado por pessoa nesta página' })).toHaveAttribute('aria-pressed', 'true');
@@ -262,8 +262,8 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.getByRole('button', { name: /Prazo vencido.*1/i })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('filtra casos pela etapa e alterna o filtro por cartão', () => {
-    mockCases([
+  it('envia o filtro ao servidor antes da paginação e mostra a resposta global', () => {
+    const rows = [
       caseRow({ id: 'pendente', nome_tripulante: 'Sem plano' }),
       caseRow({
         id: 'tratado', nome_tripulante: 'Com plano',
@@ -272,11 +272,22 @@ describe('FrmsAlertasPainel', () => {
           acao_mitigacao: 'Ajustar a escala operacional', justificativa: 'Reavaliar repouso',
         }),
       }),
-    ]);
+    ];
+    useFrmsAlertasPageMock.mockImplementation((params: Record<string, string>) => ({
+      data: {
+        success: true, data: params.etapa === 'vencidos' ? [rows[1]] : rows,
+        total: params.etapa === 'vencidos' ? 1 : 2,
+        summary: { sem_tratamento: 1, em_tratamento: 1, vencidos: 1 },
+      },
+      loading: false, error: null, refetch: refetchMock,
+    }));
     renderPage();
     const card = screen.getByRole('button', { name: /Prazo vencido.*1/i });
     fireEvent.click(card);
     expect(card).toHaveAttribute('aria-pressed', 'true');
+    expect(useFrmsAlertasPageMock).toHaveBeenCalledWith(expect.objectContaining({
+      etapa: 'vencidos', page: '1',
+    }));
     expect(screen.getAllByRole('article')).toHaveLength(1);
     expect(screen.getByText('Com plano')).toBeInTheDocument();
     fireEvent.click(card);

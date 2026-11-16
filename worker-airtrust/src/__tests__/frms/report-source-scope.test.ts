@@ -109,7 +109,9 @@ describe('FRMS report SQL aliases and runtime-scoped reads', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0].sql).toContain('f.setor_id IN (?)');
     expect(calls[1].sql).toContain('f.setor_id IN (?)');
-    expect(calls[0].args).toEqual(calls[1].args.slice(0, -2));
+    expect(calls[0].args.slice(-3)).toEqual(['SIGVOOS', 6, 10]);
+    expect(calls[1].args.slice(0, 3)).toEqual(['SIGVOOS', 6, 10]);
+    expect(calls[0].args[0]).toEqual(calls[1].args.at(-3));
     expect(calls[0].args).toContain(6);
     expect(calls[0].args).toContain(10);
   });
@@ -128,7 +130,7 @@ describe('FRMS report SQL aliases and runtime-scoped reads', () => {
       CREATE TABLE frms_alerta (
         id TEXT PRIMARY KEY, tripulante_id INTEGER, jornada_id TEXT,
         tipo_limite TEXT, valor_atual_min INTEGER, nivel TEXT, resolvido INTEGER,
-        created_at TEXT, deleted_at TEXT
+        notas_resolucao TEXT, created_at TEXT, deleted_at TEXT
       );
       INSERT INTO funcionarios (id, empresa_id, setor_id, nome)
       VALUES (41, 6, 10, 'Crew A'), (99, 7, 20, 'Crew B');
@@ -150,7 +152,7 @@ describe('FRMS report SQL aliases and runtime-scoped reads', () => {
         buildFuncionarioScopeWhere(restricted, 'f'),
       );
 
-      expect(result).toEqual({ alertas: [], total: 0 });
+      expect(result).toMatchObject({ alertas: [], total: 0 });
     } finally {
       db.database.close();
     }
@@ -172,7 +174,7 @@ describe('FRMS report SQL aliases and runtime-scoped reads', () => {
       CREATE TABLE frms_alerta (
         id TEXT PRIMARY KEY, tripulante_id INTEGER, jornada_id TEXT,
         tipo_limite TEXT, valor_atual_min INTEGER, nivel TEXT, resolvido INTEGER,
-        created_at TEXT, deleted_at TEXT
+        notas_resolucao TEXT, created_at TEXT, deleted_at TEXT
       );
     `);
 
@@ -249,4 +251,69 @@ describe('FRMS report SQL aliases and runtime-scoped reads', () => {
       db.database.close();
     }
   });
+
+  it('triages more than 100 cases globally before pagination and isolates tenant/severity', async () => {
+    const db = new SqliteD1Database();
+    db.database.exec(`
+      CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER, setor_id INTEGER,
+        deleted_at TEXT, nome TEXT);
+      CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, tripulante_id INTEGER,
+        deleted_at TEXT, origem TEXT, duracao_jornada_minutos INTEGER, data TEXT);
+      CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, jornada_id TEXT,
+        tipo_limite TEXT, valor_atual_min INTEGER, nivel TEXT, resolvido INTEGER,
+        notas_resolucao TEXT, created_at TEXT, deleted_at TEXT);
+      INSERT INTO funcionarios (id, empresa_id, setor_id, nome)
+        VALUES (41, 6, 10, 'Crew A'), (99, 7, 20, 'Crew B');
+      INSERT INTO frms_jornada (id, tripulante_id, origem, duracao_jornada_minutos, data)
+        VALUES ('j-a', 41, 'SIGVOOS', 300, '2026-11-01'),
+               ('j-b', 99, 'SIGVOOS', 300, '2026-11-01');
+    `);
+    const insert = db.database.prepare(`INSERT INTO frms_alerta
+      (id, tripulante_id, jornada_id, tipo_limite, valor_atual_min, nivel,
+       resolvido, notas_resolucao, created_at)
+      VALUES (?, ?, ?, 'HV_DIARIA', 300, ?, ?, ?, '2026-11-01T10:00:00Z')`);
+    for (let i = 0; i < 120; i++) {
+      insert.run(`sem-tratamento-${i}`, 41, 'j-a', i === 119 ? 'VIOLACAO' : 'ATENCAO', 0,
+        i === 0 ? '{broken-legacy-json' : null);
+    }
+    const treatment = JSON.stringify({
+      schema: 'FRMS_CASE_TREATMENT_V1', responsavel: 'Coordenação', prazo: '2000-01-01',
+      acao_mitigacao: 'Corrigir jornada', justificativa: 'Investigar fadiga',
+    });
+    for (let i = 0; i < 12; i++) {
+      insert.run(`tratado-${i}`, 41, 'j-a', 'CRITICO', 0, treatment);
+    }
+    insert.run('resolvido', 41, 'j-a', 'ATENCAO', 1, null);
+    insert.run('tenant-intruso', 99, 'j-b', 'VIOLACAO', 0, null);
+
+    try {
+      const base = { resolvido: false, limit: 100, etapa: 'sem_tratamento' as const };
+      const page1 = await buscarAlertas(db.asD1(), { ...base, page: 1 }, 6);
+      const page2 = await buscarAlertas(db.asD1(), { ...base, page: 2 }, 6);
+      expect(page1).toMatchObject({
+        total: 120, summary: { sem_tratamento: 120, em_tratamento: 12, vencidos: 12 },
+      });
+      expect(page1.alertas).toHaveLength(100);
+      expect(page2.alertas).toHaveLength(20);
+      const ids = [...page1.alertas, ...page2.alertas].map(x => x.id);
+      expect(new Set(ids).size).toBe(120);
+      expect(ids).not.toContain('tenant-intruso');
+      expect(ids).not.toContain('resolvido');
+      expect(ids[0]).toBe('sem-tratamento-119'); // higher severity across whole dataset
+      const overdue = await buscarAlertas(db.asD1(),
+        { resolvido: false, etapa: 'vencidos', page: 1, limit: 100 }, 6);
+      expect(overdue.total).toBe(12);
+      expect(overdue.alertas).toHaveLength(12);
+      expect(overdue.alertas.every(row => row.id.startsWith('tratado-'))).toBe(true);
+      expect((await buscarAlertas(db.asD1(), {
+        resolvido: false, etapa: 'sem_tratamento', nivel: 'VIOLACAO', limit: 50,
+      }, 6)).total).toBe(1);
+      expect((await buscarAlertas(db.asD1(), {
+        resolvido: false, etapa: 'sem_tratamento', limit: 50,
+      }, 7)).total).toBe(1);
+    } finally {
+      db.database.close();
+    }
+  });
+
 });
