@@ -614,6 +614,8 @@ export function useMinhasMatriculas(enabled = true, strictEmployeeLink = false) 
 }
 
 export interface LmsMatriculaEAD extends LmsMatricula {
+  /** A consulta enriquecida falhou; a linha veio da leitura canônica simplificada. */
+  consulta_simplificada?: boolean;
   data_vencimento_qualificacao: string | null;
   tem_certificado: 0 | 1;
   /** LINKED = Histórico atual vinculado; LINK_PENDING = sem vínculo (nunca exibir Vencido). */
@@ -634,7 +636,7 @@ export interface LmsMatriculaEAD extends LmsMatricula {
  * preservando todos os ciclos e estados reais, sem inferir vencimento ou certificado.
  * Nunca contorna erros de autorização ou vínculo funcional.
  */
-export type LmsEadRows = LmsMatriculaEAD[] & { consulta_simplificada?: boolean };
+export type LmsEadRows = LmsMatriculaEAD[];
 
 async function fallbackMinhasEad(signal: AbortSignal): Promise<LmsEadRows> {
   const limit = 200;
@@ -658,11 +660,12 @@ async function fallbackMinhasEad(signal: AbortSignal): Promise<LmsEadRows> {
         qualification_link_state: 'LINK_PENDING',
         // Nenhuma evidência de certificado é inferida a partir de uma matrícula.
         certificate_state: undefined,
+        consulta_simplificada: true,
       });
     }
     if (all.length >= total) {
       if (all.length !== total) throw new Error('Consulta simplificada incompleta. Tente novamente.');
-      return Object.assign(all, { consulta_simplificada: true as const });
+      return all;
     }
     if (result.data.length === 0) break;
   }
