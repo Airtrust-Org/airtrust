@@ -69,7 +69,9 @@ jobs:
     name: Real tenant-6 FRMS browser snapshot, no writes
     needs: provenance
     environment: production
-    runs-on: ubuntu-latest
+    # ubuntu-latest migrou para Ubuntu 26.04, onde o Playwright não instala
+    # Chromium no host. Os gates de CI usam o contêiner Playwright noble (24.04).
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL || secrets.QA_EXAMINER_ADMIN_EMAIL }}
