@@ -24,7 +24,7 @@ concurrency:
 jobs:
   guard:
     name: Check exact release and staging provenance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,7 +57,7 @@ jobs:
   browser:
     name: Authenticated Coordenação CV/FRMS (strictly read-only)
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 15
     env:

@@ -120,10 +120,13 @@ rastreabilidade é o próprio `checkin_obrigacao.base` em cada resposta).
 ## Pendências herdadas (não alteradas)
 
 - AUD-001 art. 42: implementado, ativação depende de parecer jurídico (`law_art42_enforced`).
-- AUD-021: prazo vencido já visível (`VENCIDO` no painel de casos); escalonamento automático
-  e reabertura ainda não existem.
-- AUD-025: ingestão SIGVOOS retroativa (D−3…D−1) ainda não implementada; lançamentos
-  retroativos aparecem quando chegam e a regra de obrigação os trata dia a dia.
+- AUD-021: **atualizado em 2026-11-16.** Escalonamento de prazo vencido e reabertura rastreável publicados
+  (#2382). O prazo é o registrado no tratamento; sem política da empresa para o primeiro tratamento, os 152
+  casos abertos sem tratamento não disparam escalonamento (ver `FRMS_FECHAMENTO_20261116.md`).
+- AUD-025: **corrigido em 2026-11-16.** A reingestão retroativa (D−3…D−1) existe desde `f293ad21b` (2026-11-03),
+  tem testes e está rodando em produção (rechecagem diária comprovada). Este item estava errado nesta versão: foi
+  repetido do relatório antigo sem conferir o código. O que realmente falta, e é opt-in desligado em produção, é a
+  cadeia pelo Controle de Voos e o ledger de cobertura (ver `FRMS_FECHAMENTO_20261116.md`).
 - AUD-011/012/013: interpretação regulatória pendente de parecer.
 
 ## H. Parecer
@@ -139,7 +142,7 @@ rastreabilidade é o próprio `checkin_obrigacao.base` em cada resposta).
 com dados reais de escala, e a pendência AUD-001 (art. 42) segue sem parecer jurídico.
 Depois de staging + produção + pós-validação dos cenários A, B e E com tripulantes reais, a
 frente de check-in pode ser reclassificada como **APROVADO COM RESTRIÇÕES** (restrições:
-AUD-001, AUD-021 escalonamento, AUD-025).
+AUD-001, AUD-021 escalonamento; o item AUD-025 foi corrigido, ver acima).
 
 Esta auditoria não constitui aprovação ou aceitação da ANAC. A operação sob GRF/SGRF e
 qualquer limite diferenciado exigem as aprovações regulatórias próprias.
