@@ -53,3 +53,11 @@ test('parseAggregates le dados em series[].data (formato real)', () => {
   ] };
   assert.deepEqual(parseAggregates(result).get('/api/y/:id'), { count: 5, p50: 300 });
 });
+
+test('aggregates e series populados nao duplicam contagem (prefere aggregates)', () => {
+  const g = [{ key: 'p', value: '/api/z' }];
+  const result = { calculations: [
+    { alias: 'count', aggregates: [{ groups: g, value: 7 }], series: [{ time: 't', data: [{ groups: g, value: 7 }] }] },
+  ] };
+  assert.equal(parseAggregates(result).get('/api/z').count, 7);
+});

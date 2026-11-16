@@ -26,6 +26,7 @@ function rowsOf(calc) {
     if (groupValue !== undefined && Number.isFinite(value)) rows.push({ route: normalizeRoute(groupValue), value });
   };
   for (const agg of calc.aggregates ?? []) push(agg);
+  if (rows.length > 0) return rows; // aggregates e series representam os mesmos eventos: nao somar ambos
   for (const s of calc.series ?? []) for (const d of s.data ?? []) push(d);
   return rows;
 }
