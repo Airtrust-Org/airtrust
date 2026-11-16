@@ -43,7 +43,7 @@ describe('useMinhasEAD: recuperação de leitura sem fabricar evidências', () =
     });
     const { result } = renderHook(() => useMinhasEAD(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.consulta_simplificada).toBe(true);
+    expect(result.current.data?.[0]?.consulta_simplificada).toBe(true);
     expect(result.current.data?.[0]).toMatchObject({
       id: 10, titulo: 'Curso real', progresso_pct: 38,
       data_vencimento_qualificacao: null, tem_certificado: 0,
