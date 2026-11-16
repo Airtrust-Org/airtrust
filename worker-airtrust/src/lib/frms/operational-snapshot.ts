@@ -43,7 +43,7 @@ import { deriveFrmsOperationalDecision, type FrmsDecisaoOperacionalEstado } from
 import { loadPreferredOperationalJourneys, type FrmsOperationalDataSource } from './preferred-operational-source';
 import { buildActiveFortnightRosterRows, buildMissionRosterRows, normalizeMissionPeriods, type MissionPeriodRow } from './mission-periods';
 import { addDaysIso, maxIso, minIso } from './iso-date';
-import { buildScheduleDayIndex, loadCheckinScheduleEvidence, resolveCheckinObligation, type CheckinObligation, type CheckinScheduleEvidence } from './checkin-obligation';
+import { buildScheduleDayIndex, journeyHasOperationalData, loadCheckinScheduleEvidence, resolveCheckinObligation, type CheckinObligation, type CheckinScheduleEvidence } from './checkin-obligation';
 import { buildRollingFlightCoverage, isApprovedCoverageTenant, loadConfirmedFlightDays } from './flight-coverage-ledger';
 import { clockToMinutes } from './operational-clock';
 import { calculateMorningEffectivenessProjection, type EffectivenessSnapshotRow } from './morning-effectiveness-projection';
@@ -1284,8 +1284,7 @@ async function loadOperationalSnapshotRows(
       horas_voo_minutos: row.horas_voo_minutos,
       duracao_jornada_minutos: row.duracao_jornada_minutos,
       origem: row.operational_data_source === 'SIGVOOS' ? 'SIGVOOS' : null,
-      has_operational_data:
-        row.horas_voo_minutos > 0 || row.duracao_jornada_minutos > 0 || Boolean(row.hora_apresentacao || row.hora_termino) ? 1 : 0,
+      has_operational_data: journeyHasOperationalData(row) ? 1 : 0,
       is_manual_empty: 0,
       operational_data_source: row.operational_data_source,
     })),

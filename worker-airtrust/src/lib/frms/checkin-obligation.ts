@@ -1,5 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { loadFrmsActivityRows } from './activity-context';
 import { addDaysIso } from './iso-date';
+import { loadPreferredOperationalJourneys, type PreferredOperationalJourney } from './preferred-operational-source';
 
 /**
  * Regra canônica da obrigação diária de check-in de fadiga.
@@ -341,6 +343,21 @@ export async function loadCheckinScheduleEvidence(
  * individual, roster da equipe, lembretes). A atividade registrada vem de
  * `frms_jornada` (status de serviço) e o voo programado da EVD não cancelada.
  */
+/**
+ * Jornada operacional (Controle de Voos ou fallback SIGVOOS canônico) com dado
+ * real do dia. Mesma definição usada pelo snapshot operacional: os dois
+ * consumidores precisam concordar sobre o que é "atividade registrada".
+ */
+export function journeyHasOperationalData(
+  row: Pick<PreferredOperationalJourney, 'horas_voo_minutos' | 'duracao_jornada_minutos' | 'hora_apresentacao' | 'hora_termino'>,
+): boolean {
+  return (
+    Number(row.horas_voo_minutos) > 0 ||
+    Number(row.duracao_jornada_minutos) > 0 ||
+    Boolean(row.hora_apresentacao || row.hora_termino)
+  );
+}
+
 export async function loadDailyCheckinObligations(
   db: D1Database,
   empresaId: number,
@@ -349,7 +366,11 @@ export async function loadDailyCheckinObligations(
 ): Promise<Map<number, CheckinObligation>> {
   const funcionarioFilter = options.funcionarioId != null ? 'AND f.id = ?' : '';
   const funcionarioBind = options.funcionarioId != null ? [options.funcionarioId] : [];
-  const [schedule, crew] = await Promise.all([
+  // Atividade registrada vem das mesmas fontes do snapshot operacional
+  // (jornada preferida CV/SIGVOOS + atividades FRMS: simulador, treinamento,
+  // atividade informada), para que status individual, lembrete e painéis
+  // nunca divirjam sobre o mesmo tripulante no mesmo dia.
+  const [schedule, crew, journeys, activities] = await Promise.all([
     loadCheckinScheduleEvidence(db, empresaId, date, date),
     db
       .prepare(
@@ -359,12 +380,6 @@ export async function loadDailyCheckinObligations(
                    WHERE ch.empresa_id = f.empresa_id AND ch.funcionario_id = f.id
                      AND ch.data_checkin = ? AND ch.deleted_at IS NULL
                 ) AS has_checkin,
-                EXISTS (
-                  SELECT 1 FROM frms_jornada fj
-                   WHERE fj.empresa_id = f.empresa_id AND fj.tripulante_id = f.id
-                     AND fj.data = ? AND fj.deleted_at IS NULL
-                     AND fj.status IN ('ES','TS','TV','EX','RE','SA')
-                ) AS has_activity,
                 EXISTS (
                   SELECT 1 FROM escala_voo_diaria e
                    WHERE e.empresa_id = f.empresa_id AND e.data = ?
@@ -379,16 +394,24 @@ export async function loadDailyCheckinObligations(
             AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
             ${funcionarioFilter}`,
       )
-      .bind(date, date, date, empresaId, ...funcionarioBind)
+      .bind(date, date, empresaId, ...funcionarioBind)
       .all<{
         funcionario_id: number;
         has_checkin: number;
-        has_activity: number;
         has_programmed_flight: number;
       }>(),
+    loadPreferredOperationalJourneys(db, empresaId, date, date),
+    loadFrmsActivityRows(db, empresaId, date, date),
   ]);
-  if (!crew || !Array.isArray(crew.results)) {
+  if (!crew || !Array.isArray(crew.results) || !Array.isArray(journeys) || !Array.isArray(activities)) {
     throw new Error('FRMS_CHECKIN_OBLIGATION_QUERY_INCOMPLETE');
+  }
+  const withActivity = new Set<number>();
+  for (const journey of journeys) {
+    if (journey.data === date && journeyHasOperationalData(journey)) withActivity.add(Number(journey.tripulante_id));
+  }
+  for (const activity of activities) {
+    if (activity.data_operacional === date) withActivity.add(Number(activity.funcionario_id));
   }
   const scheduleFor = buildScheduleDayIndex(schedule);
   const result = new Map<number, CheckinObligation>();
@@ -398,7 +421,7 @@ export async function loadDailyCheckinObligations(
       funcionarioId,
       resolveCheckinObligation({
         hasCheckin: Number(row.has_checkin) === 1,
-        registeredActivity: Number(row.has_activity) === 1,
+        registeredActivity: withActivity.has(funcionarioId),
         programmedFlight: Number(row.has_programmed_flight) === 1,
         schedule: scheduleFor(funcionarioId, date),
       }),

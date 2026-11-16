@@ -59,8 +59,11 @@ Avaliada por tripulante × data operacional (data civil de São Paulo), em ordem
 1. **Check-in registrado** → `RECEBIDO`. A evidência nunca é apagada; `exigivel` informa se
    havia obrigação (ex.: check-in feito e escala depois corrigida para folga → recebido,
    não exigível).
-2. **Atividade registrada no dia** (`frms_jornada` em status de serviço com dado operacional,
-   ou atividade FRMS como simulador) → `PENDENTE`, base `ATIVIDADE_REGISTRADA`. Se o dia é de
+2. **Atividade registrada no dia** — mesma evidência do snapshot operacional em todos os
+   consumidores: jornada preferida (Controle de Voos nativo, fallback SIGVOOS canônico) com dado
+   operacional (`journeyHasOperationalData`), ou atividade FRMS (simulador, treinamento,
+   atividade informada no check-in) → `PENDENTE`, base `ATIVIDADE_REGISTRADA`. Jornada de origem
+   não canônica não cria obrigação (política de fonte vigente). Se o dia é de
    ausência → divergência `ATIVIDADE_EM_AUSENCIA` + alerta `ESCALA_DIVERGENTE`; se não há
    nenhuma escala → `ATIVIDADE_FORA_DA_ESCALA` (alerta já existente `JORNADA_FRMS_SEM_ESCALA`).
    As horas permanecem nos acumulados; a obrigação **não** se estende aos dias vizinhos.
@@ -90,7 +93,9 @@ risco de fadiga nem autorização de voo.
 | Suíte | Resultado |
 |---|---|
 | `checkin-obligation.test.ts` — oráculo escrito à mão (11 casos) + 2 propriedades + índice de escala | 19/19 |
-| `checkin-obligation-sqlite.test.ts` — matriz do enunciado em SQLite real, tenant 7 × tenant 8 | 16/16 |
+| `checkin-obligation-sqlite.test.ts` — matriz do enunciado em SQLite real, tenant 7 × tenant 8; inclui simulador concluído sem jornada, voo do Controle de Voos sem `frms_jornada` e jornada não canônica (achado P1 da revisão automática) | 19/19 |
+| `scripts/__tests__/frms-daily-team-roster-sqlite.test.mjs` (gate build-content-gates) — alocação real, alocação cancelada, EVD cancelada/publicada/de outra empresa | 2/2 |
+| FRMS + cron + rotas + arquitetura (worker) após a correção do achado | 3984/3984 |
 | `operational-snapshot.test.ts` — quinzena-base, alocação real, quinzena quebrada + férias, voo em folga com horas preservadas, contrato SQL (EVD cancelada, ausências, datas reais) | 44/44 |
 | `frms-fadiga-reminder-obligation.test.ts` — lembrete só com obrigação, data SP | 1/1 |
 | `frmsOperationalDecision.test.ts` (frontend) — rótulos/ação por obrigação | 27/27 |

@@ -1,5 +1,13 @@
 import { createRequire } from 'node:module';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// Controle de Voos tem leitura própria (services/controle-voos); aqui o teste
+// controla apenas os registros que ela devolve. As demais fontes são SQL real.
+const cvRecords: unknown[] = [];
+vi.mock('../../lib/frms/controle-voos-source', () => ({
+  fetchControleVoosOperationalRecords: vi.fn(async (_db: unknown, empresaId: number) =>
+    cvRecords.filter((record) => (record as { empresaId: number }).empresaId === empresaId)),
+}));
 import { loadDailyCheckinObligations } from '../../lib/frms/checkin-obligation';
 import { loadDailyFatigueTeamRoster } from '../../lib/frms/daily-fatigue-team-roster';
 
@@ -51,7 +59,24 @@ beforeAll(() => {
       data_inicio TEXT, data_fim TEXT, status TEXT DEFAULT 'confirmado', gerado_automaticamente INTEGER DEFAULT 0, deleted_at TEXT);
     CREATE TABLE escala_voo_diaria (id TEXT PRIMARY KEY, empresa_id INTEGER, data TEXT, pic_id INTEGER, sic_id INTEGER,
       status TEXT DEFAULT 'RASCUNHO', deleted_at TEXT);
-    CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, empresa_id INTEGER, tripulante_id INTEGER, data TEXT, status TEXT, deleted_at TEXT);
+    CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, empresa_id INTEGER, tripulante_id INTEGER, data TEXT, status TEXT,
+      origem TEXT, hora_apresentacao TEXT, hora_termino TEXT, horas_voo_minutos INTEGER, duracao_jornada_minutos INTEGER,
+      hora_primeiro_acionamento TEXT, hora_primeira_decolagem TEXT, hora_ultimo_pouso TEXT, hora_corte_motor TEXT, deleted_at TEXT);
+    CREATE TABLE treinamentos_planejados (id INTEGER PRIMARY KEY, empresa_id INTEGER, titulo TEXT, codigo_turma TEXT, status TEXT,
+      sessao_id INTEGER, simulador_id INTEGER, instrutor_id INTEGER, data_prevista TEXT, data_inicio TEXT, data_fim TEXT,
+      hora_inicio TEXT, hora_fim TEXT, deleted_at TEXT);
+    CREATE TABLE treinamentos_dias (id INTEGER PRIMARY KEY, empresa_id INTEGER, treinamento_id INTEGER, data TEXT, status TEXT,
+      sessao_id INTEGER, simulador_id INTEGER, hora_inicio TEXT, hora_fim TEXT, deleted_at TEXT);
+    CREATE TABLE treinamentos_participantes (treinamento_id INTEGER, funcionario_id INTEGER);
+    CREATE TABLE treinamentos_instrutores (treinamento_id INTEGER, funcionario_id INTEGER);
+    CREATE TABLE simulador_agendamentos (id INTEGER PRIMARY KEY, empresa_id INTEGER, data TEXT, status TEXT, nome TEXT,
+      tipo_sessao TEXT, hora_inicio TEXT, hora_fim TEXT, funcionario_id INTEGER, instrutor_id INTEGER, checador_id INTEGER,
+      examinador_id INTEGER, deleted_at TEXT);
+    CREATE TABLE sessoes_participantes (sessao_id INTEGER, funcionario_id INTEGER, deleted_at TEXT);
+    CREATE TABLE frms_recovery_activity_day (id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
+      reference_date TEXT, activity_type TEXT, notes TEXT, duty_start_time TEXT, duty_end_time TEXT, deleted_at TEXT);
+    CREATE TABLE frms_recovery_activity_segment (id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
+      recovery_day_id INTEGER, activity_type TEXT, start_time TEXT, end_time TEXT);
     CREATE TABLE frms_fadiga_checkin (id TEXT PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER, data_checkin TEXT,
       jornada_inicio_prevista TEXT, hora_checkin TEXT, kss_score INTEGER, kss_provenance TEXT, horas_sono REAL,
       horas_sono_48h REAL, wake_time TEXT, fit_for_duty INTEGER, score_fadiga REAL, nivel_fadiga TEXT,
@@ -65,7 +90,8 @@ beforeAll(() => {
       ${crew(104, 7, 'primeira')}, ${crew(105, 7, 'segunda')}, ${crew(106, 7, null)},
       ${crew(107, 7, 'primeira')}, ${crew(108, 7, 'primeira')}, ${crew(109, 7, 'primeira')},
       ${crew(110, 7, null)}, ${crew(111, 7, null)}, ${crew(112, 7, 'primeira')},
-      ${crew(114, 7, 'primeira', "0, 'INATIVO'")}, ${crew(801, 8, 'primeira')};
+      ${crew(114, 7, 'primeira', "0, 'INATIVO'")}, ${crew(801, 8, 'primeira')},
+      ${crew(115, 7, null)}, ${crew(116, 7, null)};
     INSERT INTO escalas_mensais VALUES ('E7', 7, NULL), ('E8', 8, NULL);
     INSERT INTO escalas_quinzenas VALUES
       (1, 7, 1, '2026-11-01', '2026-11-15', NULL), (2, 7, 2, '2026-11-16', '2026-11-30', NULL),
@@ -92,12 +118,17 @@ beforeAll(() => {
       ('v-pub', 7, '2026-11-06', 106, NULL, 'PUBLICADA'),
       ('v-sub', 7, '2026-11-05', 111, NULL, 'PUBLICADA'),
       ('v-foreign', 8, '2026-11-05', 109, NULL, 'PUBLICADA');
-    INSERT INTO frms_jornada VALUES
-      ('j105', 7, 105, '2026-11-20', 'ES', NULL),
-      ('j102', 7, 102, '2026-11-20', 'ES', NULL),
-      ('j102dup', 7, 102, '2026-11-20', 'ES', NULL),
-      ('j102folga', 7, 102, '2026-11-22', 'FR', NULL),
-      ('j-foreign', 8, 109, '2026-11-05', 'ES', NULL);
+    INSERT INTO frms_jornada (id, empresa_id, tripulante_id, data, status, origem, hora_apresentacao, hora_termino, horas_voo_minutos) VALUES
+      ('j105', 7, 105, '2026-11-20', 'ES', 'SIGVOOS', '07:00', '12:00', 95),
+      ('j102', 7, 102, '2026-11-20', 'ES', 'SIGVOOS', '08:00', '11:00', 60),
+      ('j102dup', 7, 102, '2026-11-20', 'ES', 'SIGVOOS', '08:00', '11:00', 60),
+      ('j102folga', 7, 102, '2026-11-22', 'FR', 'SIGVOOS', NULL, NULL, 0),
+      ('j102manual', 7, 102, '2026-11-23', 'ES', 'MANUAL', '08:00', '11:00', 60),
+      ('j-foreign', 8, 109, '2026-11-05', 'ES', 'SIGVOOS', '07:00', '12:00', 95);
+    INSERT INTO simulador_agendamentos (id, empresa_id, data, status, nome, hora_inicio, hora_fim, funcionario_id) VALUES
+      (501, 7, '2026-11-25', 'CONCLUIDO', 'Sessão AW139', '09:00', '13:00', 115),
+      (502, 7, '2026-11-26', 'CANCELADO', 'Sessão cancelada', '09:00', '13:00', 115),
+      (503, 8, '2026-11-25', 'CONCLUIDO', 'Sessão outro tenant', '09:00', '13:00', 101);
     INSERT INTO frms_fadiga_checkin (id, empresa_id, funcionario_id, data_checkin) VALUES
       ('c107', 7, 107, '2026-11-05');
   `);
@@ -139,8 +170,40 @@ describe('obrigação de check-in — matriz de quinzenas (SQLite)', () => {
     const day20 = (await obligationsOn('2026-11-20')).get(102);
     expect(day20).toMatchObject({ status: 'PENDENTE', divergencias: ['ATIVIDADE_FORA_DA_ESCALA'] });
     expect((await obligationsOn('2026-11-21')).get(102)?.status).toBe('NAO_APLICAVEL');
-    // Status de folga em frms_jornada não é atividade.
+    // Linha de folga em frms_jornada, sem dado operacional, não é atividade.
     expect((await obligationsOn('2026-11-22')).get(102)?.status).toBe('NAO_APLICAVEL');
+  });
+
+  it('simulador concluído sem jornada: exige check-in (mesma evidência do snapshot)', async () => {
+    expect((await obligationsOn('2026-11-25')).get(115)).toMatchObject({
+      status: 'PENDENTE', base: 'ATIVIDADE_REGISTRADA', divergencias: ['ATIVIDADE_FORA_DA_ESCALA'],
+    });
+    expect((await obligationsOn('2026-11-26')).get(115)?.status).toBe('NAO_APLICAVEL');
+  });
+
+  it('voo do Controle de Voos sem frms_jornada: exige check-in; registro de outra empresa não vaza', async () => {
+    const base = {
+      identificadorInterno: 'cv-1', identificadorExterno: null, identificadorExternoTripulante: null,
+      origem: 'CONTROLE_VOOS', origemDados: 'manual_interno', tripulanteId: 116, funcao: 'PIC',
+      horaApresentacao: '06:30', horaDispensa: '12:00', horaMotorLigado: '07:00', horaDecolagem: '07:10',
+      horaPouso: '11:00', horaMotorDesligado: '11:10', timezone: null, timezoneFonte: 'INDISPONIVEL',
+      vooId: 1, etapaId: 1, aeronaveIdentificador: null, origemIcao: null, destinoIcao: null,
+      minutosVoo: 230, minutosTotal: 240, cancelado: false, statusOperacional: 'CONFIRMADO', qualidadeDado: 'ok',
+    };
+    cvRecords.push(
+      { ...base, empresaId: 7, dataOperacional: '2026-11-27' },
+      { ...base, empresaId: 8, identificadorInterno: 'cv-foreign', dataOperacional: '2026-11-28' },
+    );
+    try {
+      expect((await obligationsOn('2026-11-27')).get(116)).toMatchObject({ status: 'PENDENTE', base: 'ATIVIDADE_REGISTRADA' });
+      expect((await obligationsOn('2026-11-28')).get(116)?.status).toBe('NAO_APLICAVEL');
+    } finally {
+      cvRecords.length = 0;
+    }
+  });
+
+  it('jornada fora da fonte canônica não cria obrigação (mesma política do snapshot)', async () => {
+    expect((await obligationsOn('2026-11-23')).get(102)?.status).toBe('NAO_APLICAVEL');
   });
 
   it('voo cancelado não gera obrigação; voo publicado gera', async () => {
