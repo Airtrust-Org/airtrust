@@ -13,19 +13,46 @@ export function normalizeRoute(raw) {
     .slice(0, 120) || '(vazio)';
 }
 
-// Le result.calculations[i].aggregates[]: {value, groups:[{key,value}]}; associa por alias.
+// Extrai linhas {route, value} de aggregates[] e de series[].data[] (dados reais costumam vir em series).
+function rowsOf(calc) {
+  const rows = [];
+  const push = (item) => {
+    if (!item || typeof item !== 'object') return;
+    const groups = item.groups ?? item.group ?? [];
+    const first = Array.isArray(groups) ? groups[0] : groups;
+    const groupValue = first && typeof first === 'object' ? first.value ?? first.key : first ?? item.key;
+    const inner = Array.isArray(item.aggregates) ? item.aggregates[0] : undefined;
+    const value = Number(item.value ?? item.count ?? inner?.value ?? inner?.count);
+    if (groupValue !== undefined && Number.isFinite(value)) rows.push({ route: normalizeRoute(groupValue), value });
+  };
+  for (const agg of calc.aggregates ?? []) push(agg);
+  if (rows.length > 0) return rows; // aggregates e series representam os mesmos eventos: nao somar ambos
+  for (const s of calc.series ?? []) for (const d of s.data ?? []) push(d);
+  return rows;
+}
+
+// Associa por alias. count soma; p50 = media entre intervalos (aprox. se >1 intervalo); p95/p99 = maximo.
 export function parseAggregates(result) {
+  const byAlias = new Map();
+  for (const calc of result?.calculations ?? []) byAlias.set(calc.alias || calc.calculation, rowsOf(calc));
   const routes = new Map();
-  for (const calc of result?.calculations ?? []) {
-    const alias = calc.alias || calc.calculation;
-    for (const agg of calc.aggregates ?? []) {
-      const groupValue = (agg.groups ?? [])[0]?.value;
-      const route = normalizeRoute(groupValue);
-      const entry = routes.get(route) ?? {};
-      const num = Number(agg.value ?? agg.count);
-      entry[alias] = (entry[alias] ?? 0) + (alias === 'count' ? (Number.isFinite(num) ? num : 0) : 0);
-      if (alias !== 'count') entry[alias] = Number.isFinite(num) ? Math.max(entry[alias] ?? 0, num) : entry[alias];
-      routes.set(route, entry);
+  for (const { route, value } of byAlias.get('count') ?? []) {
+    const e = routes.get(route) ?? { count: 0 };
+    e.count += value;
+    routes.set(route, e);
+  }
+  for (const [alias, rows] of byAlias) {
+    if (alias === 'count') continue;
+    const acc = new Map();
+    for (const { route, value } of rows) {
+      const a = acc.get(route) ?? { max: 0, sum: 0, n: 0 };
+      a.max = Math.max(a.max, value); a.sum += value; a.n += 1;
+      acc.set(route, a);
+    }
+    for (const [route, a] of acc) {
+      const e = routes.get(route) ?? { count: 0 };
+      e[alias] = alias === 'p50' ? a.sum / a.n : a.max;
+      routes.set(route, e);
     }
   }
   return routes;
@@ -35,10 +62,10 @@ export function describeShape(result) {
   const names = (o) => (o && typeof o === 'object' ? Object.keys(o).sort().join(',') : typeof o);
   const lines = [`result keys: ${names(result)}`];
   for (const [i, calc] of (result?.calculations ?? []).entries()) {
-    const firstSeries = calc.series?.[0];
-    lines.push(`calc[${i}] keys: ${names(calc)}; aggregates=${calc.aggregates?.length ?? 'n/a'}; series=${calc.series?.length ?? 'n/a'}`);
-    if (calc.aggregates?.[0]) lines.push(`  aggregate[0] keys: ${names(calc.aggregates[0])}; groups=${calc.aggregates[0].groups?.length ?? 'n/a'}; group[0] keys: ${names(calc.aggregates[0].groups?.[0])}`);
-    if (firstSeries) lines.push(`  series[0] keys: ${names(firstSeries)}; data=${firstSeries.data?.length ?? 'n/a'}; data[0] keys: ${names(firstSeries.data?.[0])}`);
+    const series = calc.series ?? [];
+    const nonEmpty = series.find((s) => (s.data ?? []).length > 0);
+    lines.push(`calc[${i}] alias=${calc.alias}; aggregates=${calc.aggregates?.length ?? 'n/a'}; series=${series.length}; nonEmptyBuckets=${series.filter((s) => (s.data ?? []).length > 0).length}`);
+    if (nonEmpty) lines.push(`  data[0] keys: ${names(nonEmpty.data[0])}; groups[0] keys: ${names((nonEmpty.data[0].groups ?? [])[0])}; aggregates[0] keys: ${names((nonEmpty.data[0].aggregates ?? [])[0])}`);
   }
   return lines.join('\n');
 }
