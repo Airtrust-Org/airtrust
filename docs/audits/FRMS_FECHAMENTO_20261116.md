@@ -17,10 +17,14 @@ qualquer caminho sem token, então o teste de rota sem login não distingue vers
 | #2383 auditoria de integridade com férias e afastamento | Sim | Só altera a contagem da notificação diária global |
 | #2384 lista da equipe inclui quem tem obrigação por qualquer fonte | Sim | Teste HTTP ponta a ponta na `main` |
 | #2381, #2385, #2391, #2392 sondas somente leitura e telemetria | Não se aplica | Workflows e scripts; nenhuma mudança de runtime |
+| #2396 triagem global de casos antes da paginação | **Não** | Altera Worker e Pages, integrada à `main` no SHA `490c21be...`; precisa de release e pós-validação |
+| #2397 fixture sintética F0C em staging | Não se aplica | Correção de teste; aguardando gates e execução governada |
 
-Não há mudança de runtime FRMS na `main` ainda não publicada. Portanto **este fechamento não exige novo deploy
-de produção**. A produção também recebeu, no mesmo ciclo, mudanças de outras frentes (auth/LMS #2370, perf #2389,
-PTO #2390), fora desta auditoria.
+**Atualização de proveniência (16/11):** a conclusão anterior de ausência de mudanças de runtime
+pendentes era válida somente antes da PR #2396. Após sua integração, **há delta FRMS Worker + Pages ainda
+não publicado em produção**. O encerramento exige staging, autorização de produção para o SHA exato,
+deploy governado e pós-validação. Produção `5823090` também recebeu mudanças de outras frentes
+(auth/LMS #2370, perf #2389, PTO #2390).
 
 ## 2. Check-in com dados reais de produção
 
@@ -151,7 +155,7 @@ com várias contas de papéis diferentes em staging; os papéis foram provados p
 | Reabertura perdia o histórico ao registrar novo tratamento | Histórico carregado adiante | Teste de ciclo duplo |
 | Auditoria diária contava férias e afastamento como "dentro da escala" (mesma classe do #2356) | Módulo único com ausência fora da escala | Mutação: 3 contra 7 |
 | Lista da equipe omitia quem só tinha atividade por Controle de Voos, simulador ou treinamento | Ids com obrigação entram via `json_each` | Teste HTTP |
-| `ubuntu-latest` (Ubuntu 26.04) não instala o Chromium do Playwright | Runner fixado em `ubuntu-24.04` | Validação autenticada passou |
+| `ubuntu-latest` (Ubuntu 26.04) não instala o Chromium do Playwright | Runner proposto em `ubuntu-24.04` | **Pendente:** reexecutar aceite staging autenticado depois do merge, sem alegar sucesso prévio |
 
 ## 7. Auditoria consolidada
 
@@ -207,4 +211,5 @@ SIGVOOS → Controle de Voos → FRMS (desligada e sem equivalência provada) ne
 (backlog sem tratamento e política indefinida). Isto não constitui aprovação nem aceitação da ANAC.
 
 O aceite da escala de voo diária em staging **não** foi comprovado nesta rodada (seção 5); a classificação acima
-depende apenas de evidências que foram executadas.
+depende apenas de evidências que foram executadas. A PR #2396 foi integrada depois da base deste relatório,
+e requer validação de Worker + Pages e release específico para não deixar a produção com a fila incompleta.
