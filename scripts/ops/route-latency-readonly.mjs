@@ -142,33 +142,47 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
   await probe('C-servico-por-rota', [svcFilter], [{ type: 'string', value: pathKey }]);
   await probe('D-por-rota-sem-servico', [], [{ type: 'string', value: pathKey }]);
 
-  async function grouped(extraFilters, calculations, label) {
+  let failures = 0;
+  async function grouped(extraFilters, calculations, label, groupKey = pathKey) {
     const r = await call('query', {
       queryId: `route-${label}`, timeframe, view: 'calculations', limit: 200,
       parameters: {
         filters: [svcFilter, ...extraFilters],
         calculations,
-        groupBys: [{ type: 'string', value: pathKey }],
-        orderBy: { value: 'count', order: 'desc' },
+        groupBys: [{ type: 'string', value: groupKey }],
+        orderBy: { value: calculations[0].alias, order: 'desc' },
       },
     });
     log(`query ${label} HTTP ${r.status}`);
     if (!r.ok) throw new Error(`QUERY_FAILED_${label}_HTTP_${r.status}`);
-    log(describeShape(r.json.result));
     return parseAggregates(r.json.result);
   }
 
   try {
-    const calcs = [{ operator: 'count', alias: 'count' }];
-    if (wallKey) {
-      calcs.push({ operator: 'median', key: wallKey, keyType: 'number', alias: 'p50' });
-      calcs.push({ operator: 'p95', key: wallKey, keyType: 'number', alias: 'p95' });
-      calcs.push({ operator: 'p99', key: wallKey, keyType: 'number', alias: 'p99' });
-    }
-    const all = await grouped([], calcs, 'all');
+    const counts = await grouped([], [{ operator: 'count', alias: 'count' }], 'count');
     log(`\n## Rotas por volume (${hours}h)`);
-    log(renderTable(all, wallKey ? ['count', 'p50', 'p95', 'p99'] : ['count']));
+    log(renderTable(counts, ['count']));
+
+    // Cada metrica candidata e consultada isoladamente (uma calculation por query), pois combinar
+    // calculations sobre chaves ausentes zera o resultado.
+    const metricKeys = names.filter((n) => /wallTime|cpuTime|duration|latency/i.test(n)).slice(0, 6);
+    log(`\nmetricas candidatas: ${metricKeys.join(', ')}`);
+    for (const key of metricKeys) {
+      const merged = new Map();
+      for (const [op, alias] of [['median', 'p50'], ['p95', 'p95'], ['p99', 'p99']]) {
+        try {
+          const part = await grouped([], [{ operator: op, key, keyType: 'number', alias }], `${alias}-${key.slice(-24)}`);
+          for (const [route, e] of part) merged.set(route, { ...(merged.get(route) ?? { count: counts.get(route)?.count ?? 0 }), ...e, count: counts.get(route)?.count ?? e.count ?? 0 });
+        } catch (error) { failures += 1; log(`FAILED ${key} ${alias}: ${String(error.message).replace(/[^A-Za-z0-9_=.-]/g, '')}`); }
+      }
+      log(`\n## ${key} (ms ou unidade da chave) por rota — p50 aprox. se varios buckets; p95/p99 = maximo dos buckets`);
+      log(merged.size ? renderTable(merged, ['count', 'p50', 'p95', 'p99']) : '(sem linhas)');
+    }
+
     if (outcomeKey) {
+      const outcomes = await grouped([], [{ operator: 'count', alias: 'count' }], 'outcomes', outcomeKey);
+      log('\n## Distribuicao de outcome (valores enumerados)');
+      log(renderTable(outcomes, ['count']));
       const canceled = await grouped([{ key: outcomeKey, operation: 'eq', type: 'string', value: 'canceled' }], [{ operator: 'count', alias: 'count' }], 'canceled');
       log('\n## Desconexoes (outcome=canceled) por rota');
       log(renderTable(canceled, ['count']));
@@ -177,6 +191,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
     log(`RESULT=${String(error.message).replace(/[^A-Za-z0-9_=.-]/g, '')}`);
     return 1;
   }
+  if (failures > 0) { log(`RESULT=PARTIAL_FAILURES_${failures}`); return 1; }
   log('\nRESULT=OK');
   return 0;
 }
