@@ -297,7 +297,7 @@ export function installGlobalApiFetch(apiBaseUrl: string = resolveApiBase()): vo
     // Never trust this header as an authorization grant: auth() revalidates it.
     const tabRole = authenticated ? getTabSessionRole() : null;
     if (tabRole) requestHeaders.set(SESSION_ROLE_HEADER, tabRole);
-    const effectiveInit: RequestInit = tabRole ? { ...init, headers: requestHeaders } : (init ?? {});
+    const effectiveInit: RequestInit | undefined = tabRole ? { ...init, headers: requestHeaders } : init;
     const canFallback =
       localFallbackEnabled &&
       !authenticated &&
