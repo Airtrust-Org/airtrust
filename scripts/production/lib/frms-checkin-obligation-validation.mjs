@@ -117,7 +117,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
   const day = {
     date, crew: crew.size, status: {}, base: {}, divergences: {}, violations: [], advisories: [],
     received_oracle: 0, received_obligation: 0, gap_crew_days: 0, allocation_expected_pending: 0,
-    status_by_base: {}, pending_unseen_by_oracle: 0,
+    status_by_base: {}, pending_unseen_by_oracle: 0, flags: new Map(),
     absence_crew_days: {}, base_only: { crew_days: 0, cycle: {}, jornada_status: {}, allocation_context: {}, crew_ids: new Set() },
     legacy_pending_no_checkin: 0, legacy_not_pending_now: {},
   };
@@ -147,6 +147,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
       (row) => row.funcionario_id === id && covers(row, date),
     );
     const obligated = ['PENDENTE', 'RECEBIDO'].includes(obligation.status);
+    day.flags.set(id, { activity: hardActivity || cvActivity, checkin: hasCheckin });
     // Quinzena-base sem nenhuma escala publicada: dimensiona o que existe de evidência de escala por pessoa
     // (ciclo FRMS legado, jornada de qualquer origem e alocações próximas) para decidir se é dúvida real.
     if (obligation.base === 'QUINZENA_BASE_SEM_ESCALA') {
@@ -217,7 +218,7 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
   const invariants = {};
   const advisories = {};
   const samples = [];
-  const baseOnly = { crew_days: 0, distinct_crew: 0, cycle: {}, jornada_status: {}, allocation_context: {} };
+  const baseOnly = { crew_days: 0, distinct_crew: 0, cycle: {}, jornada_status: {}, allocation_context: {}, fortnight_evidence: {} };
   const baseOnlyIds = new Set();
   for (const day of days) {
     totals.crew_days += day.crew;
@@ -243,4 +244,35 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
   const advisoryCount = Object.values(advisories).reduce((sum, value) => sum + value, 0);
   baseOnly.distinct_crew = baseOnlyIds.size;
   return { days: days.length, totals, invariants, violation_count: violationCount, advisories, advisory_count: advisoryCount, base_only: baseOnly, samples };
+}
+
+/**
+ * Para cada tripulante-dia só com quinzena-base, procura evidência objetiva de trabalho na MESMA quinzena:
+ * atividade registrada ou, na falta dela, check-in. Quinzena que sai da janela analisada é marcada como
+ * parcial, nunca como "sem evidência". Não decide obrigação: dimensiona a dúvida.
+ */
+export function classifyBaseOnlyByFortnight(days, baseFortnights, window) {
+  const counts = {};
+  const flagsOf = new Map(days.map((day) => [day.date, day.flags]));
+  for (const day of days) {
+    for (const id of day.base_only.crew_ids) {
+      const period = baseFortnights.find((row) => Number(row.funcionario_id) === id
+        && row.data_inicio <= day.date && day.date <= row.data_fim);
+      let bucket;
+      if (!period) bucket = 'SEM_PERIODO';
+      else if (period.data_inicio < window.from || period.data_fim > window.to) bucket = 'PERIODO_PARCIAL_NA_JANELA';
+      else {
+        let activity = false; let checkin = false;
+        for (const [date, flags] of flagsOf) {
+          if (date < period.data_inicio || date > period.data_fim) continue;
+          const f = flags.get(id);
+          if (f?.activity) activity = true;
+          if (f?.checkin) checkin = true;
+        }
+        bucket = activity ? 'PERIODO_COM_ATIVIDADE' : checkin ? 'PERIODO_SO_CHECKIN' : 'PERIODO_SEM_EVIDENCIA';
+      }
+      bump(counts, bucket);
+    }
+  }
+  return counts;
 }

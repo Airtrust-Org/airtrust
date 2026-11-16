@@ -9,7 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  CREW_FUNCTIONS, MANUAL_ABSENCE_EVENTS, createReadOnlyD1, evaluateDay, summarize,
+  CREW_FUNCTIONS, MANUAL_ABSENCE_EVENTS, classifyBaseOnlyByFortnight, createReadOnlyD1, evaluateDay, summarize,
 } from './lib/frms-checkin-obligation-validation.mjs';
 
 export const TENANT_ID = 6; // Costa do Sol, confirmado por nome antes de qualquer leitura
@@ -200,7 +200,9 @@ export async function runValidation({ db, loadDailyCheckinObligations, from, to,
     }));
     onProgress(date);
   }
-  return { summary: summarize(days), days, crewSize: crew.size };
+  const summary = summarize(days);
+  summary.base_only.fortnight_evidence = classifyBaseOnlyByFortnight(days, facts.baseFortnights, { from, to });
+  return { summary, days, crewSize: crew.size };
 }
 
 export async function main() {

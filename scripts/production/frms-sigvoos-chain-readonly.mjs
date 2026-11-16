@@ -98,6 +98,17 @@ export async function collectFacts(db, { tenantId, from, to, today }) {
           WHERE a.deleted_at IS NULL AND COALESCE(a.resolvido, 0) = 0
             AND (a.notas_resolucao IS NULL OR NOT json_valid(a.notas_resolucao)
                  OR COALESCE(json_extract(a.notas_resolucao, '$.schema'), '') <> 'FRMS_CASE_TREATMENT_V1')`, tenantId)).n ?? 0),
+      untreated_age_days: (await all(
+        `SELECT CASE WHEN julianday(?) - julianday(substr(a.created_at, 1, 10)) <= 7 THEN 'ATE_7'
+                     WHEN julianday(?) - julianday(substr(a.created_at, 1, 10)) <= 30 THEN 'DE_8_A_30'
+                     WHEN julianday(?) - julianday(substr(a.created_at, 1, 10)) <= 90 THEN 'DE_31_A_90'
+                     ELSE 'MAIS_DE_90' END AS faixa, COUNT(*) AS n
+           FROM frms_alerta a JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+            AND f.empresa_id = ? AND f.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND COALESCE(a.resolvido, 0) = 0
+            AND (a.notas_resolucao IS NULL OR NOT json_valid(a.notas_resolucao)
+                 OR COALESCE(json_extract(a.notas_resolucao, '$.schema'), '') <> 'FRMS_CASE_TREATMENT_V1')
+          GROUP BY 1`, today, today, today, tenantId)).reduce((acc, row) => ({ ...acc, [row.faixa]: Number(row.n) }), {}),
       overdue_open: Number((await first(
         `SELECT COUNT(*) AS n FROM frms_alerta a JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
           AND f.empresa_id = ? AND f.deleted_at IS NULL
