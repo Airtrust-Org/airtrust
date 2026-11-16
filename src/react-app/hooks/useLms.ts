@@ -720,7 +720,9 @@ export function useMinhasEAD() {
         signal.removeEventListener('abort', abort);
       }
     },
-    retry: 1,
+    // A leitura alternativa já é a recuperação; repetir ambas após erro duplica
+    // a espera do aluno e a carga nos endpoints sem benefício garantido.
+    retry: 0,
     staleTime: 30_000,
   });
 }
