@@ -156,7 +156,7 @@ describe('auth session storage', () => {
     expect(module.readAuthStorageValue('airtrust_token')).toBe(accessToken);
     expect(module.readAuthStorageValue('airtrust_refresh_token')).toBe('refresh-transiente');
   });
-  it('releases a hung refresh and allows a later safe retry without discarding the session', async () => {
+  it('fails closed if single-use rotation succeeds but its response never arrives', async () => {
     vi.useFakeTimers();
     try {
       const module = await import('../api');
@@ -169,19 +169,15 @@ describe('auth session storage', () => {
         return new Promise<Response>(() => {}); // simulates transport ignoring abort
       });
       const rejection = expect(module.refreshAccessToken()).rejects.toMatchObject({
-        name: 'AuthRefreshError', terminal: false, code: 'AUTH_REFRESH_TIMEOUT',
+        name: 'AuthRefreshError', terminal: true, code: 'AUTH_REFRESH_OUTCOME_UNKNOWN',
       });
       await vi.advanceTimersByTimeAsync(7_000);
       await rejection;
       expect(transportSignal?.aborted).toBe(true);
-      expect(module.getRefreshToken()).toBe('refresh-stalled');
-      expect(module.getAccessToken()).toBe(existing);
-      apiFetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
-        data: { accessToken: makeJwt(3600), refreshToken: 'refresh-recovered' },
-      }), {status: 200}));
-      await module.refreshAccessToken();
-      expect(module.getRefreshToken()).toBe('refresh-recovered');
-      expect(apiFetchMock).toHaveBeenCalledTimes(2);
+      // A remote server may have consumed refresh-stalled: never retry it.
+      expect(module.getRefreshToken()).toBeNull();
+      expect(module.getAccessToken()).toBeNull();
+      expect(apiFetchMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
