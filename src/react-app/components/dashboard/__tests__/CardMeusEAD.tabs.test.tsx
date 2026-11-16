@@ -135,6 +135,10 @@ describe('CardMeusEAD — organização por situação', () => {
     } as unknown as ReturnType<typeof useMinhasEAD>);
     renderCard();
     expect(screen.getByRole('alert')).toHaveTextContent('Isso não significa que seu histórico está vazio.');
+    expect(screen.getByText('Não foi possível consultar suas matrículas. Quantidades indisponíveis.')).toBeInTheDocument();
+    expect(screen.queryByText(/^0 treinamentos/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver cursos realizados' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cursos realizados \(0\)/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
