@@ -90,7 +90,7 @@ function legacyHash(){
   return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
 function inspectNew(){
-  const rows=d1('SELECT a.id,a.visualizado,a.resolvido,a.resolvido_por,a.notas_resolucao,j.id AS journey,j.empresa_id,j.data,j.origem,j.observacao,f.matricula '+
+  const rows=d1('SELECT a.id,a.tripulante_id,a.visualizado,a.resolvido,a.resolvido_por,a.notas_resolucao,j.id AS journey,j.empresa_id,j.data,j.origem,j.observacao,f.matricula '+
     'FROM frms_alerta a JOIN frms_jornada j ON j.id=a.jornada_id AND j.tripulante_id=a.tripulante_id '+
     'JOIN funcionarios f ON f.id=a.tripulante_id AND f.empresa_id=j.empresa_id '+
     'WHERE a.id='+q(TARGET.alert));
@@ -141,9 +141,20 @@ export function validTreatment(){
     evidencia_referencia:'QA-FRMS-F0C-SYNTHETIC'};
 }
 export const efficacy='Conferência controlada da medida sintética com evidências arquivadas para QA.';
-async function lifecycle(token){
+// The operational case list now sorts the global queue before pagination.
+ // Never assert visibility of this synthetic case in an arbitrary first page.
+export function scopedF0CCaseQuery(resolvido,tripulanteId){
+  const crewId=Number(tripulanteId);
+  if(!Number.isSafeInteger(crewId)||crewId<=0)throw Error('FRMS_F0C_CREW_ID_INVALID');
+  const params=new URLSearchParams({
+    resolvido:resolvido?'true':'false',tripulante_id:String(crewId),
+    data_inicio:TARGET.day,data_fim:TARGET.day,limit:'50',
+  });
+  return '/api/frms/alertas?'+params.toString();
+}
+async function lifecycle(token,tripulanteId){
   const id=TARGET.alert;
-  const listed=await get(token,'/api/frms/alertas?resolvido=false&limit=50');
+  const listed=await get(token,scopedF0CCaseQuery(false,tripulanteId));
   if(!listed.data?.some(x=>x.id===id))throw Error('FRMS_F0C_NEW_CASE_NOT_VISIBLE');
   const premature=await put(token,'/api/frms/alertas/'+id+'/resolver',{avaliacao_eficacia:efficacy});
   if(premature.status!==409||premature.code!=='FRMS_CASE_TREATMENT_REQUIRED')
@@ -165,7 +176,7 @@ async function lifecycle(token){
     throw Error('FRMS_F0C_MISSING_EFFECTIVENESS_NOT_REJECTED');
   const closed=await put(token,'/api/frms/alertas/'+id+'/resolver',{avaliacao_eficacia:efficacy});
   if(closed.status!==200||closed.success!==true)throw Error('FRMS_F0C_CLOSURE_COMMIT_UNCONFIRMED');
-  const resolved=await get(token,'/api/frms/alertas?resolvido=true&limit=100');
+  const resolved=await get(token,scopedF0CCaseQuery(true,tripulanteId));
   if(!resolved.data?.some(x=>x.id===id))throw Error('FRMS_F0C_RESOLVED_READBACK_NOT_VISIBLE');
   const reopen=await put(token,'/api/frms/alertas/'+id+'/resolver',{avaliacao_eficacia:efficacy});
   if(reopen.status!==409||reopen.code!=='FRMS_CASE_TREATMENT_REQUIRED')
@@ -206,7 +217,7 @@ async function main(){
     throw Error('FRMS_F0C_SEED_POSTCONDITION_FAILED_STOP_NO_RETRY');
   if(legacyHash()!==before)throw Error('FRMS_F0C_LEGACY_CHANGED_STOP_NO_RETRY');
   // Each PUT is committed at most once; never retry an ambiguous response.
-  await lifecycle(token);
+  await lifecycle(token,seeded.rows[0].tripulante_id);
   afterState();
   if(legacyHash()!==before)throw Error('FRMS_F0C_LEGACY_CHANGED_AFTER_LIFECYCLE');
   console.log('FRMS_F0C_REAL_API_LIFECYCLE_PASS tenant=999013 view=1 treatment=1 efficacy=1 closed=1 audit=3 baseline_unchanged=true production_writes=0');

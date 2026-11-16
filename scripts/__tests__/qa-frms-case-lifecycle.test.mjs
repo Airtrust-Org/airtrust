@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {TARGET,CONFIRM,seedSql,validTreatment,efficacy} from '../staging/qa-frms-case-lifecycle.mjs';
+import {TARGET,CONFIRM,seedSql,validTreatment,efficacy,scopedF0CCaseQuery} from '../staging/qa-frms-case-lifecycle.mjs';
 
 // source_reference: #1426; validate staging F0C DML against disposal SQLite.
 // operational_decision: dedicated tenant and independent F0C IDs, preserve F0B cases.
@@ -61,4 +61,17 @@ test('fixed workflow and API payload cannot silently target another tenant or pr
   assert.equal(CONFIRM,'AIRTRUST_STAGING_FRMS_F0C_LIFECYCLE');
   assert(!Object.hasOwn(validTreatment(),'empresa_id'));
   assert(efficacy.length>=10);
+});
+
+test('F0C listing is narrowly scoped before global case pagination',()=>{
+  const pending=new URL(scopedF0CCaseQuery(false,101),'https://staging.airtrust.invalid');
+  assert.equal(pending.pathname,'/api/frms/alertas');
+  assert.equal(pending.searchParams.get('tripulante_id'),'101');
+  assert.equal(pending.searchParams.get('data_inicio'),TARGET.day);
+  assert.equal(pending.searchParams.get('data_fim'),TARGET.day);
+  assert.equal(pending.searchParams.get('resolvido'),'false');
+  assert.equal(new URL(scopedF0CCaseQuery(true,101),'https://staging.airtrust.invalid')
+    .searchParams.get('resolvido'),'true');
+  assert.throws(()=>scopedF0CCaseQuery(false,-1),/FRMS_F0C_CREW_ID_INVALID/);
+  assert.throws(()=>scopedF0CCaseQuery(false,'a'),/FRMS_F0C_CREW_ID_INVALID/);
 });
