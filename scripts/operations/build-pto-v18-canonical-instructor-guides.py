@@ -91,6 +91,14 @@ def render_guide(session, notechs, functional=False):
         "</section>",
         "<h2>Condução curricular da sessão</h2>",
         legs,
+        "<p>Conforme as Seções 2.2.6 e 4 do PTO, registrar a identificação do "
+        "tripulante e instrutor, o dispositivo e sua configuração, as atividades "
+        "executadas, condições simuladas, avaliação por item, NOTECHS, "
+        "debriefing, resultado e assinaturas aplicáveis.</p>",
+        "<p>LOFT e Check são eventos de verificação distintos da instrução. "
+        "Durante o Check não há instrução nem coaching; se for necessário "
+        "treinamento corretivo, a avaliação deverá ser interrompida "
+        "(PTO Seção 4).</p>",
         "<table><thead><tr><th>Ordem</th><th>Perna prevista no PTO</th><th>Código</th>"
         "<th>Manobra / atividade prevista no PTO</th></tr></thead><tbody>",
         *cells,

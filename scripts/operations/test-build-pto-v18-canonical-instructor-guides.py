@@ -54,6 +54,8 @@ class CanonicalGuidesTests(unittest.TestCase):
                 )
             self.assertIn("1–9: perna 1", output)
             self.assertIn("10–18: perna 2", output)
+            self.assertIn("Durante o Check não há instrução nem coaching", output)
+            self.assertIn("a avaliação deverá ser interrompida", output)
 
     def test_functional_does_not_fabricate_pf_assignment(self):
         for session in self.functional:
