@@ -61,3 +61,19 @@ test('aggregates e series populados nao duplicam contagem (prefere aggregates)',
   ] };
   assert.equal(parseAggregates(result).get('/api/z').count, 7);
 });
+
+test('orderBy sempre referencia alias presente em calculations (contrato da API)', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    const isKeys = String(url).endsWith('/keys');
+    if (!isKeys) bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify(isKeys ? keysBody : queryBody('x')), { status: 200 });
+  };
+  await run({ env, fetchImpl, log: () => {} });
+  const queries = bodies.filter((b) => b.parameters?.calculations);
+  assert.ok(queries.length >= 4);
+  for (const b of queries) {
+    const aliases = b.parameters.calculations.map((c) => c.alias);
+    assert.ok(aliases.includes(b.parameters.orderBy.value), `orderBy ${b.parameters.orderBy.value} fora de ${aliases}`);
+  }
+});
