@@ -31,6 +31,18 @@ export function parseAggregates(result) {
   return routes;
 }
 
+export function describeShape(result) {
+  const names = (o) => (o && typeof o === 'object' ? Object.keys(o).sort().join(',') : typeof o);
+  const lines = [`result keys: ${names(result)}`];
+  for (const [i, calc] of (result?.calculations ?? []).entries()) {
+    const firstSeries = calc.series?.[0];
+    lines.push(`calc[${i}] keys: ${names(calc)}; aggregates=${calc.aggregates?.length ?? 'n/a'}; series=${calc.series?.length ?? 'n/a'}`);
+    if (calc.aggregates?.[0]) lines.push(`  aggregate[0] keys: ${names(calc.aggregates[0])}; groups=${calc.aggregates[0].groups?.length ?? 'n/a'}; group[0] keys: ${names(calc.aggregates[0].groups?.[0])}`);
+    if (firstSeries) lines.push(`  series[0] keys: ${names(firstSeries)}; data=${firstSeries.data?.length ?? 'n/a'}; data[0] keys: ${names(firstSeries.data?.[0])}`);
+  }
+  return lines.join('\n');
+}
+
 export function renderTable(routes, columns, limit = 40) {
   const rows = [...routes.entries()].sort((a, b) => (b[1].count ?? 0) - (a[1].count ?? 0)).slice(0, limit);
   const fmt = (v) => (v === undefined ? '' : String(Math.round(v)));
@@ -86,6 +98,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
     });
     log(`query ${label} HTTP ${r.status}`);
     if (!r.ok) throw new Error(`QUERY_FAILED_${label}_HTTP_${r.status}`);
+    log(describeShape(r.json.result));
     return parseAggregates(r.json.result);
   }
 
