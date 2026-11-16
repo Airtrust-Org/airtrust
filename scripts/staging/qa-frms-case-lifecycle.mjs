@@ -17,7 +17,8 @@ export const TARGET=Object.freeze({
   uuid:'bf9963f4-eb12-439b-a830-20bbf577ac22',
   tenant:999013,
   crew:'QA-FRMS-UX-01',
-  day:'2026-11-05',
+  // Dedicated F0C date verified empty in staging D1 read-only on 2026-11-16.
+  day:'2026-12-05',
   journey:'qa-frms-f0c-j-1',
   alert:'qa-frms-f0c-case-1',
   origin:'SIGVOOS',
@@ -134,7 +135,7 @@ async function get(token,endpoint){
   return r.json;
 }
 export function validTreatment(){
-  return {responsavel:'Coordenação de QA FRMS',prazo:'2026-11-20',
+  return {responsavel:'Coordenação de QA FRMS',prazo:'2026-12-20',
     acao_mitigacao:'Reposicionar jornada sintética e confirmar repouso antes do retorno.',
     justificativa:'Ensaio autorizado para comprovar rastreabilidade do ciclo de mitigação.',
     evidencia_referencia:'QA-FRMS-F0C-SYNTHETIC'};

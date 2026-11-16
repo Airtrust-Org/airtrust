@@ -55,6 +55,9 @@ test('fixed workflow and API payload cannot silently target another tenant or pr
   assert.equal(TARGET.tenant,999013);
   assert.equal(TARGET.uuid,'bf9963f4-eb12-439b-a830-20bbf577ac22');
   assert.equal(TARGET.origin,'SIGVOOS');
+  assert.equal(TARGET.day,'2026-12-05');
+  assert.equal(validTreatment().prazo,'2026-12-20');
+  assert(TARGET.day < validTreatment().prazo);
   assert.equal(CONFIRM,'AIRTRUST_STAGING_FRMS_F0C_LIFECYCLE');
   assert(!Object.hasOwn(validTreatment(),'empresa_id'));
   assert(efficacy.length>=10);
