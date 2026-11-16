@@ -37,9 +37,8 @@ export function createWorkerEntrypoint(
       const pathname = new URL(request.url).pathname;
       // Observabilidade de round-trips D1 por requisição; D1_METRICS_DISABLED=true desliga.
       const d1Stats = createD1RequestStats();
-      const flags = env as unknown as Record<string, unknown>;
       const requestEnv: Env =
-        flags.D1_METRICS_DISABLED !== 'true' && env.DB && typeof env.DB === 'object'
+        env.D1_METRICS_DISABLED !== 'true' && env.DB && typeof env.DB === 'object'
           ? { ...env, DB: instrumentD1(env.DB, d1Stats) }
           : env;
 
