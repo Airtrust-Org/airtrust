@@ -129,6 +129,36 @@ describe('dimensionamento dos tripulantes-dia só com quinzena-base', () => {
   });
 });
 
+describe('evidência de trabalho na mesma quinzena para dias só com quinzena-base', () => {
+  it('separa quinzena com atividade, sem evidência e parcial na janela', async () => {
+    // Quinzena 1 = 01 a 15/11. 102 e 109 são só quinzena-base; 102 voou em 03/11, 109 não fez nada.
+    sqlite.exec(`INSERT INTO frms_jornada (id, empresa_id, tripulante_id, data, status, origem, hora_apresentacao, horas_voo_minutos)
+      VALUES ('e102', 7, 102, '2026-11-03', 'ES', 'SIGVOOS', '07:00', 60)`);
+    try {
+      const full = await runValidation({
+        db: readOnlyDb(), loadDailyCheckinObligations: loadDailyCheckinObligations as unknown as Loader,
+        from: '2026-11-01', to: '2026-11-15', tenantId: 7,
+      });
+      const evidence = full.summary.base_only.fortnight_evidence;
+      expect(evidence.PERIODO_COM_ATIVIDADE).toBeGreaterThan(0);
+      expect(evidence.PERIODO_SEM_EVIDENCIA).toBeGreaterThan(0);
+      expect(evidence.PERIODO_PARCIAL_NA_JANELA).toBeUndefined();
+      expect(Object.values(evidence).reduce((a, b) => a + b, 0)).toBe(full.summary.base_only.crew_days);
+
+      // Janela que corta a quinzena: nunca declara "sem evidência" sobre dias que não viu.
+      const partial = await runValidation({
+        db: readOnlyDb(), loadDailyCheckinObligations: loadDailyCheckinObligations as unknown as Loader,
+        from: '2026-11-05', to: '2026-11-10', tenantId: 7,
+      });
+      const cut = partial.summary.base_only.fortnight_evidence;
+      expect(cut.PERIODO_PARCIAL_NA_JANELA).toBe(partial.summary.base_only.crew_days);
+      expect(cut.PERIODO_SEM_EVIDENCIA).toBeUndefined();
+    } finally {
+      sqlite.exec("DELETE FROM frms_jornada WHERE id = 'e102'");
+    }
+  });
+});
+
 describe('oráculo cobre todas as fontes de atividade e a obrigação reciproca', () => {
   it('simulador concluído sem jornada: ignorá-lo é violação; contá-lo passa', async () => {
     const one = { from: '2026-11-25', to: '2026-11-25', tenantId: 7 };

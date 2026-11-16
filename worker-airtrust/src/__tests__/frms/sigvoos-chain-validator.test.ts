@@ -37,7 +37,8 @@ beforeEach(() => {
       active INTEGER, deleted_at TEXT);
     CREATE TABLE frms_profile_assignments (id TEXT PRIMARY KEY, empresa_id INTEGER, regulatory_profile_id TEXT,
       profile_code TEXT, status TEXT, effective_from TEXT, effective_to TEXT);
-    CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, resolvido INTEGER DEFAULT 0, notas_resolucao TEXT, deleted_at TEXT);
+    CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, resolvido INTEGER DEFAULT 0, notas_resolucao TEXT, deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')));
     CREATE TABLE notificacoes_sistema (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT, empresa_id INTEGER, deleted_at TEXT,
       created_at TEXT DEFAULT (datetime('now')));
     CREATE TABLE auditoria_avancada_v2 (tabela TEXT, acao TEXT, registro_id TEXT, created_at TEXT DEFAULT (datetime('now')));
@@ -168,6 +169,8 @@ describe('cadeia SIGVOOS -> Controle de Voos -> FRMS (DDL real das migrations)',
     let result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
     expect(result.findings.find((f) => f.code === 'CASE_LIFECYCLE')).toMatchObject({
       open_total: 4, open_without_treatment: 2, overdue_open: 1, overdue_notifications_7d: 0 });
+    expect((result.findings.find((f) => f.code === 'CASE_LIFECYCLE') as unknown as { untreated_age_days: Record<string, number> }).untreated_age_days)
+      .toEqual({ ATE_7: 2 });
     expect(codes(result, 'ADVISORY')).toContain('OVERDUE_CASES_WITHOUT_ESCALATION_RECORD');
 
     sqlite.exec(`INSERT INTO notificacoes_sistema (tipo, empresa_id) VALUES ('FRMS_CASE_OVERDUE', 6), ('FRMS_CASE_OVERDUE', 9);

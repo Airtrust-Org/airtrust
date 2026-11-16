@@ -58,6 +58,11 @@ export function summarize(days: DayEvaluation[], options?: { sampleLimit?: numbe
   };
   invariants: Record<string, number>; violation_count: number;
   advisories: Record<string, number>; advisory_count: number;
-  base_only: { crew_days: number; distinct_crew: number; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number> };
+  base_only: { crew_days: number; distinct_crew: number; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number>; fortnight_evidence: Record<string, number> };
   samples: Array<{ code: string; date: string; crew_ref: string | null }>;
 };
+export function classifyBaseOnlyByFortnight(
+  days: DayEvaluation[],
+  baseFortnights: Array<{ funcionario_id: number; data_inicio: string; data_fim: string }>,
+  window: { from: string; to: string },
+): Record<string, number>;

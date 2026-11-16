@@ -167,6 +167,7 @@ jobs:
             p("base-fortnight-only by per-person FRMS cycle", r.base_only.cycle);
             p("base-fortnight-only by FRMS journey status that day", r.base_only.jornada_status);
             p("base-fortnight-only by nearby allocations", r.base_only.allocation_context);
+            p("base-fortnight-only by evidence of work in the same fortnight", r.base_only.fortnight_evidence);
             p("invariant violations", r.violation_count);
             p("violations by code", r.invariants);
             p("advisories (Controle de Voos flight on a day without obligation)", r.advisories);
