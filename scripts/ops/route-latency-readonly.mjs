@@ -43,6 +43,22 @@ export function describeShape(result) {
   return lines.join('\n');
 }
 
+// Soma numerica de uma calculation (aggregates + series[].data[]); nunca expõe valores brutos.
+export function totalCount(result) {
+  let total = 0;
+  for (const calc of result?.calculations ?? []) {
+    if ((calc.alias || calc.calculation) !== 'count') continue;
+    for (const agg of calc.aggregates ?? []) total += Number(agg.value ?? agg.count) || 0;
+    for (const s of calc.series ?? []) for (const d of s.data ?? []) total += Number(d.count ?? d.value) || 0;
+  }
+  return total;
+}
+
+export function numericStats(result) {
+  const s = result?.statistics ?? {};
+  return Object.entries(s).filter(([, v]) => typeof v === 'number').map(([k, v]) => `${k}=${v}`).join(' ');
+}
+
 export function renderTable(routes, columns, limit = 40) {
   const rows = [...routes.entries()].sort((a, b) => (b[1].count ?? 0) - (a[1].count ?? 0)).slice(0, limit);
   const fmt = (v) => (v === undefined ? '' : String(Math.round(v)));
@@ -85,6 +101,19 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
   const outcomeKey = pick(/outcome/i);
   log(`pathKey=${pathKey ?? 'NONE'} wallKey=${wallKey ?? 'NONE'} outcomeKey=${outcomeKey ?? 'NONE'}`);
   if (!pathKey) { log('RESULT=NO_PATH_KEY'); return 1; }
+
+  async function probe(label, filters, groupBys) {
+    const r = await call('query', {
+      queryId: `probe-${label}`, timeframe, view: 'calculations', limit: 50,
+      parameters: { filters, calculations: [{ operator: 'count', alias: 'count' }], groupBys, orderBy: { value: 'count', order: 'desc' } },
+    });
+    log(`probe ${label}: HTTP ${r.status} ok=${r.ok} total=${r.ok ? totalCount(r.json.result) : 'n/a'} ${r.ok ? numericStats(r.json.result) : ''}`);
+  }
+  log(`service-like keys: ${names.filter((n) => /metadata|service|script/i.test(n)).slice(0, 25).join(',')}`);
+  await probe('A-sem-filtro', [], []);
+  await probe('B-servico', [svcFilter], []);
+  await probe('C-servico-por-rota', [svcFilter], [{ type: 'string', value: pathKey }]);
+  await probe('D-por-rota-sem-servico', [], [{ type: 'string', value: pathKey }]);
 
   async function grouped(extraFilters, calculations, label) {
     const r = await call('query', {
