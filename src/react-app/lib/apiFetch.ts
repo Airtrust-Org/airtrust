@@ -2,6 +2,7 @@ import { resolveApiBase } from '@/react-app/config/api-environment';
 import { notifyDataChanged, type DataChangeScope } from '@/react-app/utils/data-sync';
 import { LruTtlCache } from '@/react-app/lib/lru-ttl-cache';
 import { getCurrentTenantId, registerTenantCacheReset } from '@/react-app/lib/tenant-data-layer';
+import { getTabSessionRole, SESSION_ROLE_HEADER } from '@/react-app/lib/session-role-preference';
 
 type ApiFetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -292,6 +293,11 @@ export function installGlobalApiFetch(apiBaseUrl: string = resolveApiBase()): vo
     }
     const bypassGetCache = requestHeaders.get('X-AirTrust-Bypass-Cache') === '1';
     const authenticated = isAuthenticatedRequest(requestHeaders, input, init);
+    // A tab can have a different verified active profile from another tab.
+    // Never trust this header as an authorization grant: auth() revalidates it.
+    const tabRole = authenticated ? getTabSessionRole() : null;
+    if (tabRole) requestHeaders.set(SESSION_ROLE_HEADER, tabRole);
+    const effectiveInit: RequestInit | undefined = tabRole ? { ...init, headers: requestHeaders } : init;
     const canFallback =
       localFallbackEnabled &&
       !authenticated &&
@@ -315,16 +321,16 @@ export function installGlobalApiFetch(apiBaseUrl: string = resolveApiBase()): vo
         try {
           candidate = new URL(rawInput, window.location.origin);
         } catch {
-          return originalFetch(input, init);
+          return originalFetch(input, effectiveInit);
         }
 
         if (candidate.origin === window.location.origin && candidate.pathname.startsWith('/api/')) {
-          return originalFetch(originToUse + candidate.pathname + candidate.search, init);
+          return originalFetch(originToUse + candidate.pathname + candidate.search, effectiveInit);
         }
         if (isRelativeApiInput(rawInput)) {
-          return originalFetch(originToUse + rawInput, init);
+          return originalFetch(originToUse + rawInput, effectiveInit);
         }
-        return originalFetch(input, init);
+        return originalFetch(input, effectiveInit);
       };
 
       const response = await tryOnce(apiOrigin);
@@ -361,7 +367,7 @@ export function installGlobalApiFetch(apiBaseUrl: string = resolveApiBase()): vo
 
     const now = Date.now();
     const tenantScope = getCurrentTenantId() ?? 'public';
-    const endpointKey = `${tenantScope}:${resolved.origin}${resolved.pathname}`;
+    const endpointKey = `${tenantScope}:${tabRole ?? 'default'}:${resolved.origin}${resolved.pathname}`;
     const activeBackoff = endpointBackoff.get(endpointKey, now);
     if (activeBackoff && activeBackoff.until > now) {
       // Preserve the actual server status/body that initiated backoff. The local

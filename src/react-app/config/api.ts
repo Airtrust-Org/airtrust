@@ -424,12 +424,39 @@ async function performRefreshAccessToken(): Promise<void> {
     throw new AuthRefreshError('No refresh token available', { terminal: true });
   }
 
+  let refreshDeadlineExceeded = false;
   try {
-    const response = await apiFetch(API_ENDPOINTS.REFRESH_TOKEN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+    // A single stalled refresh previously blocked every authenticated GET,
+    // including BOTH LMS read strategies, even after their abort deadlines.
+    // Keep a transport abort and an independent deadline: a mocked/noncompliant
+    // fetch implementation must not hold the shared refreshPromise indefinitely.
+    const controller = new AbortController();
+    let deadlineId: ReturnType<typeof setTimeout> | undefined;
+    let response: Response;
+    try {
+      response = await Promise.race([
+        apiFetch(API_ENDPOINTS.REFRESH_TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+          signal: controller.signal,
+        }),
+        new Promise<never>((_resolve, reject) => {
+          deadlineId = setTimeout(() => {
+            // The server may already have rotated and revoked this single-use token.
+            // Outcome UNKNOWN: never retry the consumed credential automatically.
+            refreshDeadlineExceeded = true;
+            controller.abort();
+            reject(new AuthRefreshError('Renovação de sessão inconclusiva. Faça login novamente.', {
+              terminal: true,
+              code: 'AUTH_REFRESH_OUTCOME_UNKNOWN',
+            }));
+          }, 7_000);
+        }),
+      ]);
+    } finally {
+      if (deadlineId !== undefined) clearTimeout(deadlineId);
+    }
 
     if (!response.ok) {
       const responseJson = (await response.json().catch(() => ({}))) as {
@@ -497,6 +524,21 @@ async function performRefreshAccessToken(): Promise<void> {
 
     setTokens(newAccessToken, newRefreshToken);
   } catch (error) {
+    if (refreshDeadlineExceeded) {
+      // Another tab may have finished rotation while this request timed out.
+      // Reuse only that newer, persisted pair; otherwise force explicit login.
+      const currentRefreshToken = readAuthStorageValue('airtrust_refresh_token');
+      if (currentRefreshToken && currentRefreshToken !== refreshToken) {
+        cachedRefreshToken = currentRefreshToken;
+        cachedToken = readAuthStorageValue('airtrust_token');
+        return;
+      }
+      clearTokens();
+      throw new AuthRefreshError('Renovação de sessão inconclusiva. Faça login novamente.', {
+        terminal: true,
+        code: 'AUTH_REFRESH_OUTCOME_UNKNOWN',
+      });
+    }
     if (error instanceof AuthRefreshError) throw error;
     throw new AuthRefreshError(error instanceof Error ? error.message : 'Refresh token failed', {
       terminal: false,
