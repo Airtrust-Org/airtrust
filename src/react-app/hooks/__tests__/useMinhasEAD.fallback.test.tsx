@@ -53,7 +53,7 @@ describe('useMinhasEAD: recuperação de leitura sem fabricar evidências', () =
   });
 
   it('não faz fallback se o backend negar vínculo ou acesso', async () => {
-    fetchWithAuthMock.mockResolvedValue(error(409));
+    fetchWithAuthMock.mockImplementation(async () => error(409));
     const { result } = renderHook(() => useMinhasEAD(), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(fetchWithAuthMock.mock.calls.every(([url]) =>
