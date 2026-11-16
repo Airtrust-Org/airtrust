@@ -364,8 +364,8 @@
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
     "last_reconciled_at": "2026-11-14",
-    "last_reconciled_against": "0586 instructor guides _v2 schema for PTO Rev.10 V18 (10 programs + nullable modelo_aeronave_id); reviewed production apply pending",
-    "schema_v2_digest": "356c03d25c8fae2b36f8dee29faf0c3a8791063ce87b7b3e03bd23c4a1b078bd",
+    "last_reconciled_against": "0587 formal append-only rectification of signed simulator fichas; reviewed production apply pending",
+    "schema_v2_digest": "d74fd19fb604a588992dbb0ded905c58c82fe991831f8ae301af3ffbd4092c68",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1873,6 +1873,21 @@
       "reviewed_manifest": "simuladores-guias-instrutor-v18-0586.json",
       "evidence": "worker-airtrust/schema-v2/plans/simuladores-guias-instrutor-v18-0586.md",
       "note": "Additive _v2 DDL + idempotent ID-preserving backfill from legacy guide tables; zero DROP/RENAME, legacy tables preserved intact. Apply 0586 before deploying _v2 Worker routes. Does not publish unreviewed V18 guides."
+    },
+    {
+      "change_file": "0587_simuladores_fichas_retificacoes.sql",
+      "change_id": "simuladores-fichas-retificacoes-0587",
+      "sha256": "0454d6b153a48adc542d8066c2615b1890f22c4fa6b1a368d60f159a45de4e95",
+      "targets": [
+        "fichas_sessao_retificacoes",
+        "fichas_sessao_retificacoes_itens"
+      ],
+      "domain": "Simulators: append-only formal rectification of signed session records (snapshot, decision by distinct approver, personal instructor/student signatures)",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simuladores-fichas-retificacoes-0587.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simuladores-fichas-retificacoes-0587.md",
+      "note": "Additive tables + triggers only; fichas_sessao and fichas_sessao_manobras are never modified. Apply 0587 before deploying the Worker routes."
     }
   ]
 }

@@ -1,0 +1,8 @@
+{
+  "changeId": "simuladores-fichas-retificacoes-0587",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0587_simuladores_fichas_retificacoes.sql",
+  "fileHash": "0454d6b153a48adc542d8066c2615b1890f22c4fa6b1a368d60f159a45de4e95",
+  "planPath": "worker-airtrust/schema-v2/plans/simuladores-fichas-retificacoes-0587.md",
+  "planHash": "72370963c42a07e95f627109651409cd3e32c7dcebf999909cb56b45cb6ce69d"
+}
