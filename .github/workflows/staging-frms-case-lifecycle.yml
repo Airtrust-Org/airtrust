@@ -137,7 +137,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "FRMS F0C: fixed synthetic tenant 999013, case qa-frms-f0c-case-1."
+            echo "FRMS F0C: fixed synthetic tenant 999013, case qa-frms-f0c-case-2."
             echo "No production writes. Do not retry an ambiguous mutation; inspect D1 before any follow-up."
             echo "Four existing F0B cases and legacy QA records must retain their preimage hash."
           } >> "$GITHUB_STEP_SUMMARY"
