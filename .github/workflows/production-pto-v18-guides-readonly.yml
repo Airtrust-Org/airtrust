@@ -33,7 +33,6 @@ jobs:
       PROD_API_BASE_URL: https://api.airtrust.online
       EXPECTED_WORKER_SHA: ${{ inputs.expected_worker_sha }}
       CONFIRMATION: ${{ inputs.confirmation }}
-      EVIDENCE_OUT: ${{ runner.temp }}/pto-v18-guides-readonly-evidence.json
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,7 +57,11 @@ jobs:
           echo "live=$live expected=$EXPECTED_WORKER_SHA"
           [[ "$live" == "$EXPECTED_WORKER_SHA" ]] || { echo WORKER_SHA_DRIFT; exit 1; }
       - name: Run authenticated read-only validation
-        run: node scripts/operations/verify-production-pto-v18-guides-readonly.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export EVIDENCE_OUT="$RUNNER_TEMP/pto-v18-guides-readonly-evidence.json"
+          node scripts/operations/verify-production-pto-v18-guides-readonly.mjs
       - name: Upload evidence (no tokens, no PII)
         if: always()
         uses: actions/upload-artifact@v7
