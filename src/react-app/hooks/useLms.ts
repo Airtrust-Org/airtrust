@@ -628,13 +628,51 @@ export interface LmsMatriculaEAD extends LmsMatricula {
   completion_reason_code?: string;
 }
 
+/**
+ * Modo degradado de leitura: só é acionado quando a projeção enriquecida
+ * falha por timeout/erro de servidor. Consulta a lista canônica paginada,
+ * preservando todos os ciclos e estados reais, sem inferir vencimento ou certificado.
+ * Nunca contorna erros de autorização ou vínculo funcional.
+ */
+export type LmsEadRows = LmsMatriculaEAD[] & { consulta_simplificada?: boolean };
+
+async function fallbackMinhasEad(signal: AbortSignal): Promise<LmsEadRows> {
+  const limit = 200;
+  const maxPages = 30;
+  const all: LmsMatriculaEAD[] = [];
+  let total: number | null = null;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await lmsRequestPaginated<LmsMatricula>(
+      `/matriculas/minhas?strict_link=1&page=${page}&limit=${limit}`,
+      { signal },
+    );
+    if (total === null) total = result.total;
+    if (total !== result.total || result.data.length > limit) {
+      throw new Error('Consulta simplificada inconsistente. Tente novamente.');
+    }
+    for (const item of result.data) {
+      all.push({
+        ...item,
+        data_vencimento_qualificacao: null,
+        tem_certificado: 0,
+        qualification_link_state: 'LINK_PENDING',
+        // Nenhuma evidência de certificado é inferida a partir de uma matrícula.
+        certificate_state: undefined,
+      });
+    }
+    if (all.length >= total) {
+      if (all.length !== total) throw new Error('Consulta simplificada incompleta. Tente novamente.');
+      return Object.assign(all, { consulta_simplificada: true as const });
+    }
+    if (result.data.length === 0) break;
+  }
+  throw new Error('Consulta simplificada incompleta. Tente novamente.');
+}
+
 export function useMinhasEAD() {
   return useQuery({
     queryKey: lmsKeys.minhasEAD(),
-    // A stalled auth refresh or EAD endpoint must not leave the learner
-    // dashboard permanently showing skeleton rows and a misleading "0".
-    // Abort the request and surface a retryable error after a bounded wait.
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }): Promise<LmsEadRows> => {
       const controller = new AbortController();
       const abort = () => controller.abort();
       if (signal.aborted) controller.abort();
@@ -644,13 +682,36 @@ export function useMinhasEAD() {
         timeoutId = setTimeout(() => {
           controller.abort();
           reject(new Error('Tempo limite ao consultar seus treinamentos. Tente novamente.'));
-        }, 20_000);
+        }, 8_000);
       });
       try {
         return await Promise.race([
-          lmsRequest<LmsMatriculaEAD[]>('/matriculas/minhas-ead', { signal: controller.signal }),
+          lmsRequest<LmsEadRows>('/matriculas/minhas-ead', { signal: controller.signal }),
           deadline,
         ]);
+      } catch (err) {
+        // Auth, tenant, vínculo e permissionamento permanecem fail-closed.
+        if (signal.aborted || (err instanceof LmsRequestError && err.status < 500)) throw err;
+        const fallbackController = new AbortController();
+        const abortFallback = () => fallbackController.abort();
+        if (signal.aborted) fallbackController.abort();
+        else signal.addEventListener('abort', abortFallback, { once: true });
+        let fallbackTimeout: ReturnType<typeof setTimeout> | undefined;
+        const fallbackDeadline = new Promise<never>((_resolve, reject) => {
+          fallbackTimeout = setTimeout(() => {
+            fallbackController.abort();
+            reject(new Error('Tempo limite ao consultar seus treinamentos. Tente novamente.'));
+          }, 12_000);
+        });
+        try {
+          return await Promise.race([
+            fallbackMinhasEad(fallbackController.signal),
+            fallbackDeadline,
+          ]);
+        } finally {
+          if (fallbackTimeout !== undefined) clearTimeout(fallbackTimeout);
+          signal.removeEventListener('abort', abortFallback);
+        }
       } finally {
         if (timeoutId !== undefined) clearTimeout(timeoutId);
         signal.removeEventListener('abort', abort);
