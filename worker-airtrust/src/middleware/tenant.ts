@@ -56,6 +56,8 @@ const validatedTenantByRequest = new WeakMap<object, {
   db: D1Database;
   context: TenantContext;
   snapshot: string;
+  platformState: unknown;
+  platformStateSnapshot: string;
 }>();
 
 function rememberTenantValidation(
@@ -69,6 +71,8 @@ function rememberTenantValidation(
     db: c.env.DB,
     context,
     snapshot: JSON.stringify(context),
+    platformState: c.get('platformAccessState'),
+    platformStateSnapshot: JSON.stringify(c.get('platformAccessState') ?? null),
   });
 }
 
@@ -171,7 +175,9 @@ export function tenantMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
       validated.empresaId === c.get('empresaId') &&
       validated.userRole === c.get('userRole') &&
       validated.context === c.get('tenantContext') &&
-      validated.snapshot === JSON.stringify(validated.context)
+      validated.snapshot === JSON.stringify(validated.context) &&
+      validated.platformState === c.get('platformAccessState') &&
+      validated.platformStateSnapshot === JSON.stringify(c.get('platformAccessState') ?? null)
     ) {
       return next();
     }

@@ -217,6 +217,37 @@ describe('tenant middleware — reuso somente na mesma requisição', () => {
     expect(lookup).toHaveBeenCalledTimes(2);
   });
 
+  it('revalida quando o estado da autoridade de plataforma muda dentro do request', async () => {
+    const lookup = vi.fn();
+    const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+    app.onError(errorHandler);
+    app.use('*', async (c, next) => {
+      c.set('userId', 44);
+      c.set('empresaId', 7);
+      c.set('userRole', 'manager');
+      await next();
+    });
+    app.use('*', tenantMiddleware());
+    app.use('*', async (c, next) => {
+      const state = c.get('platformAccessState');
+      if (state) c.set('platformAccessState', { ...state });
+      await next();
+    });
+    const nested = new Hono<{ Bindings: Env; Variables: Variables }>();
+    nested.use('*', tenantMiddleware());
+    nested.get('/', (c) => c.json({ role: c.get('tenantContext').role }));
+    app.route('/nested', nested);
+    const response = await app.request('/nested', {}, {
+      DB: createDb({
+        links: [{ usuarioId: 44, empresaId: 7, role: 'manager' }],
+        onMembershipLookup: lookup,
+      }), ENVIRONMENT: 'production',
+    } as unknown as Env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ role: 'manager' });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
   it('não aceita tenantContext pré-injetado sem validação DB na mesma requisição', async () => {
     const app = new Hono<{ Bindings: Env; Variables: Variables }>();
     app.onError(errorHandler);
