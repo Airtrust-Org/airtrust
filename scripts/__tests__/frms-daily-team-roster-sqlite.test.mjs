@@ -54,7 +54,7 @@ test('synthetic SQLite returns reported, allocated and EVD-programmed crew; not 
     "INSERT INTO frms_jornada VALUES('j4',999006,4,'2026-10-27','ES',NULL);",
     '""")',
     "day='2026-10-27'",
-    'A=lambda limit,offset:(999006,day,day,day,999006,day,day,day,limit,offset)',
+    'A=lambda limit,offset,ids="[]":(999006,day,day,day,999006,ids,day,day,day,limit,offset)',
     'rows=db.execute(q,A(100,0)).fetchall()',
     "ids={int(row['funcionario_id']) for row in rows}",
     "assert ids=={1,2,4,7,8,10},'unexpected synthetic scope: '+repr(ids)",
@@ -64,6 +64,8 @@ test('synthetic SQLite returns reported, allocated and EVD-programmed crew; not 
     'assert len(db.execute(q,A(2,0)).fetchall())==2',
     "assert db.execute(q,A(1,2)).fetchone()['funcionario_id']==1,'tie-break page 3 must be crew 1'",
     "assert db.execute(q,A(1,3)).fetchone()['funcionario_id']==7,'tie-break page 4 must be crew 7'",
+    "extra={int(r['funcionario_id']) for r in db.execute(q,A(100,0,'[5, 5, 6]')).fetchall()}",
+    "assert extra=={1,2,4,5,7,8,10},'obligated ids must add crew 5 once and never a foreign-tenant crew: '+repr(extra)",
     "print('FRMS_DAILY_ROSTER_SQLITE_PASS')",
   ].join('\n');
   const result = spawnSync('python3', ['-c', py], { input: JSON.stringify({sql}), encoding: 'utf8', timeout: 15000 });
