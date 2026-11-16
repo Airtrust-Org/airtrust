@@ -37,6 +37,10 @@ beforeEach(() => {
       active INTEGER, deleted_at TEXT);
     CREATE TABLE frms_profile_assignments (id TEXT PRIMARY KEY, empresa_id INTEGER, regulatory_profile_id TEXT,
       profile_code TEXT, status TEXT, effective_from TEXT, effective_to TEXT);
+    CREATE TABLE frms_alerta (id TEXT PRIMARY KEY, tripulante_id INTEGER, resolvido INTEGER DEFAULT 0, notas_resolucao TEXT, deleted_at TEXT);
+    CREATE TABLE notificacoes_sistema (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT, empresa_id INTEGER, deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')));
+    CREATE TABLE auditoria_avancada_v2 (tabela TEXT, acao TEXT, registro_id TEXT, created_at TEXT DEFAULT (datetime('now')));
     INSERT INTO frms_regulatory_profiles VALUES ('p6', 6, 'RBAC117', '{"law_art42_enforced":false}', 1, NULL);
     INSERT INTO frms_profile_assignments VALUES ('a6', 6, 'p6', 'RBAC117', 'ACTIVE', '2026-01-01', NULL);
   `);
@@ -151,6 +155,28 @@ describe('cadeia SIGVOOS -> Controle de Voos -> FRMS (DDL real das migrations)',
     await collectFacts(watching, { tenantId: 6, from: FROM, to: TO, today: TODAY });
     expect(writes.length).toBeGreaterThan(8);
     expect(writes.every((sql) => /^\s*(SELECT|WITH)\b/i.test(sql))).toBe(true);
+  });
+
+  it('ciclo de casos: vencido sem registro de escalonamento é aviso; com notificação e auditoria, só informação', async () => {
+    seedHealthy();
+    const treat = (prazo: string) => JSON.stringify({ schema: 'FRMS_CASE_TREATMENT_V1', prazo });
+    sqlite.prepare('INSERT INTO frms_alerta (id, tripulante_id, notas_resolucao) VALUES (?, ?, ?)').run('c-vencido', 101, treat('2026-11-10'));
+    sqlite.prepare('INSERT INTO frms_alerta (id, tripulante_id, notas_resolucao) VALUES (?, ?, ?)').run('c-no-prazo', 102, treat('2026-12-30'));
+    sqlite.prepare('INSERT INTO frms_alerta (id, tripulante_id, notas_resolucao) VALUES (?, ?, NULL)').run('c-sem', 101);
+    sqlite.prepare('INSERT INTO frms_alerta (id, tripulante_id, notas_resolucao) VALUES (?, ?, ?)').run('c-texto', 102, 'texto livre');
+    sqlite.prepare('INSERT INTO frms_alerta (id, tripulante_id, notas_resolucao) VALUES (?, ?, ?)').run('c-outra-empresa', 901, treat('2026-11-01'));
+    let result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
+    expect(result.findings.find((f) => f.code === 'CASE_LIFECYCLE')).toMatchObject({
+      open_total: 4, open_without_treatment: 2, overdue_open: 1, overdue_notifications_7d: 0 });
+    expect(codes(result, 'ADVISORY')).toContain('OVERDUE_CASES_WITHOUT_ESCALATION_RECORD');
+
+    sqlite.exec(`INSERT INTO notificacoes_sistema (tipo, empresa_id) VALUES ('FRMS_CASE_OVERDUE', 6), ('FRMS_CASE_OVERDUE', 9);
+      INSERT INTO auditoria_avancada_v2 (tabela, acao, registro_id) VALUES ('frms_alerta', 'PRAZO_VENCIDO', 'c-vencido'),
+        ('frms_alerta', 'PRAZO_VENCIDO', 'c-outra-empresa')`);
+    result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
+    expect(result.findings.find((f) => f.code === 'CASE_LIFECYCLE')).toMatchObject({
+      overdue_notifications_7d: 1, overdue_audit_rows_14d: 1 });
+    expect(codes(result, 'ADVISORY')).not.toContain('OVERDUE_CASES_WITHOUT_ESCALATION_RECORD');
   });
 
   it('art. 42: inativo é informação; ativo exige verificação da base jurídica; perfil ambíguo é aviso', async () => {

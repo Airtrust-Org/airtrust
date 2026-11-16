@@ -86,6 +86,39 @@ export async function collectFacts(db, { tenantId, from, to, today }) {
             AND p.empresa_id = ? AND p.active = 1 AND p.deleted_at IS NULL
             AND p.profile_code = a.profile_code`, tenantId, today, today, tenantId),
     })),
+    // Ciclo de tratamento: casos abertos, vencidos e se o escalonamento deixou registro (notificação e auditoria).
+    cases: await probe(async () => ({
+      open_total: Number((await first(
+        `SELECT COUNT(*) AS n FROM frms_alerta a JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+          AND f.empresa_id = ? AND f.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND COALESCE(a.resolvido, 0) = 0`, tenantId)).n ?? 0),
+      open_without_treatment: Number((await first(
+        `SELECT COUNT(*) AS n FROM frms_alerta a JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+          AND f.empresa_id = ? AND f.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND COALESCE(a.resolvido, 0) = 0
+            AND (a.notas_resolucao IS NULL OR NOT json_valid(a.notas_resolucao)
+                 OR COALESCE(json_extract(a.notas_resolucao, '$.schema'), '') <> 'FRMS_CASE_TREATMENT_V1')`, tenantId)).n ?? 0),
+      overdue_open: Number((await first(
+        `SELECT COUNT(*) AS n FROM frms_alerta a JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+          AND f.empresa_id = ? AND f.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND COALESCE(a.resolvido, 0) = 0 AND a.notas_resolucao IS NOT NULL
+            AND CASE WHEN json_valid(a.notas_resolucao) THEN json_extract(a.notas_resolucao, '$.prazo') END < ?`,
+        tenantId, today)).n ?? 0),
+      overdue_notifications_7d: Number((await first(
+        `SELECT COUNT(*) AS n FROM notificacoes_sistema WHERE tipo = 'FRMS_CASE_OVERDUE' AND empresa_id = ?
+            AND deleted_at IS NULL AND created_at >= datetime('now', '-7 days')`, tenantId)).n ?? 0),
+      overdue_audit_rows_14d: Number((await first(
+        `SELECT COUNT(*) AS n FROM auditoria_avancada_v2 au
+          JOIN frms_alerta a ON a.id = au.registro_id
+          JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER) AND f.empresa_id = ?
+          WHERE au.tabela = 'frms_alerta' AND au.acao = 'PRAZO_VENCIDO'
+            AND au.created_at >= datetime('now', '-14 days')`, tenantId)).n ?? 0),
+      reopened_14d: Number((await first(
+        `SELECT COUNT(*) AS n FROM auditoria_avancada_v2 au
+          JOIN frms_alerta a ON a.id = au.registro_id
+          JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER) AND f.empresa_id = ?
+          WHERE au.tabela = 'frms_alerta' AND au.acao = 'REABERTO' AND au.created_at >= datetime('now', '-14 days')`, tenantId)).n ?? 0),
+    })),
     integrity: await probe(async () => ({
       duplicate_etapa_groups: Number((await first(
         `SELECT COUNT(*) AS n FROM (SELECT voo_id, numero_etapa FROM cv_voo_etapas

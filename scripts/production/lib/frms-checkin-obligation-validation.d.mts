@@ -30,6 +30,8 @@ export interface DayEvaluation {
   advisories: Array<{ code: string; date: string; crew_ref: string | null }>;
   allocation_expected_pending: number;
   absence_crew_days: Record<string, number>;
+  status_by_base: Record<string, number>; pending_unseen_by_oracle: number;
+  base_only: { crew_days: number; crew_ids: Set<number>; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number> };
 }
 export function evaluateDay(input: {
   empresaId: number; date: string; crew: Set<number>; allEmployees: Set<number>;
@@ -40,6 +42,8 @@ export function evaluateDay(input: {
     allocations: Array<{ funcionario_id: number; data_inicio: string; data_fim: string; situacao_tipo: string }>;
     manualAbsence: Array<{ funcionario_id: number; data_inicio: string; data_fim: string }>;
     legacyRoster: Set<number>;
+    legacyCycle?: Array<{ funcionario_id: number; data_inicio_embarque: string; data_fim_embarque: string; data_inicio_folga?: string | null; data_fim_folga?: string | null; status_ciclo: string }>;
+    jornadaStatus?: Map<number, string>;
   };
 }): DayEvaluation;
 export function summarize(days: DayEvaluation[], options?: { sampleLimit?: number }): {
@@ -48,10 +52,12 @@ export function summarize(days: DayEvaluation[], options?: { sampleLimit?: numbe
     crew_days: number; status: Record<string, number>; base: Record<string, number>;
     divergences: Record<string, number>; gap_crew_days: number; allocation_expected_pending: number;
     absence_crew_days: Record<string, number>;
+    status_by_base: Record<string, number>; pending_unseen_by_oracle: number;
     legacy_pending_no_checkin: number;
     legacy_not_pending_now: Record<string, number>;
   };
   invariants: Record<string, number>; violation_count: number;
   advisories: Record<string, number>; advisory_count: number;
+  base_only: { crew_days: number; distinct_crew: number; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number> };
   samples: Array<{ code: string; date: string; crew_ref: string | null }>;
 };

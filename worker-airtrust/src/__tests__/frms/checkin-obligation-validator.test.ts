@@ -43,6 +43,11 @@ describe('validador de produção da obrigação de check-in', () => {
     // Regra antiga contaria pendência por quinzena-base/EVD/atividade; hoje parte virou dispensa ou dúvida.
     expect(result.summary.totals.legacy_pending_no_checkin).toBeGreaterThan(status.PENDENTE ?? 0);
     expect(result.crewSize).toBe(14);
+    // Conciliação: a soma do cruzamento status/base fecha com o total de cada status.
+    const byStatus: Record<string, number> = {};
+    for (const [key, n] of Object.entries(result.summary.totals.status_by_base)) byStatus[key.split('/')[0]] = (byStatus[key.split('/')[0]] ?? 0) + n;
+    expect(byStatus).toEqual(result.summary.totals.status);
+    expect(result.summary.totals.pending_unseen_by_oracle).toBe(0);
     // Folgas, férias e afastamentos do fixture aparecem por tipo, vindos do oráculo.
     expect(result.summary.totals.absence_crew_days).toMatchObject({ FERIAS: 15, AFT: 1, EVENTO_MANUAL: expect.any(Number) });
     expect(result.summary.totals.absence_crew_days.FOLGA).toBeGreaterThan(0);
@@ -98,6 +103,29 @@ describe('validador de produção da obrigação de check-in', () => {
     }
     expect(crewRef(7, 101)).toBe(crewRef(7, 101));
     expect(crewRef(7, 101)).not.toBe(crewRef(8, 101));
+  });
+});
+
+describe('dimensionamento dos tripulantes-dia só com quinzena-base', () => {
+  it('separa por ciclo FRMS por pessoa, situação da jornada do dia e alocações próximas', async () => {
+    // 109 e 102 são "só quinzena-base" em 05/11. 109 tem ciclo legado de embarque; 102 não tem nada.
+    sqlite.exec(`INSERT INTO frms_escala_quinzenal VALUES ('q109', 109, '2026-11-01', '2026-11-15', '2026-11-16', '2026-11-30', 'ATIVO', NULL);
+      INSERT INTO frms_jornada (id, empresa_id, tripulante_id, data, status, origem) VALUES ('s102', 7, 102, '2026-11-05', 'FE', 'MANUAL')`);
+    try {
+      const one = { from: '2026-11-05', to: '2026-11-05', tenantId: 7 };
+      const result = await runValidation({
+        db: readOnlyDb(), loadDailyCheckinObligations: loadDailyCheckinObligations as unknown as Loader, ...one,
+      });
+      const base = result.summary.base_only;
+      expect(base.crew_days).toBe(base.distinct_crew); // um único dia na janela
+      expect(base.cycle.CICLO_EMBARQUE).toBe(1);
+      expect(base.cycle.SEM_CICLO).toBeGreaterThanOrEqual(1);
+      expect(base.jornada_status.FE).toBe(1);
+      expect(base.jornada_status.SEM_LINHA).toBeGreaterThanOrEqual(1);
+      expect(result.summary.violation_count).toBe(0);
+    } finally {
+      sqlite.exec("DELETE FROM frms_escala_quinzenal; DELETE FROM frms_jornada WHERE id = 's102'");
+    }
   });
 });
 

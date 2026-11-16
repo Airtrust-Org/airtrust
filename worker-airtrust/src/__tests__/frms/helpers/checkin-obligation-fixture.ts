@@ -48,6 +48,8 @@ export function createCheckinObligationFixture(): Sqlite {
       reference_date TEXT, activity_type TEXT, notes TEXT, duty_start_time TEXT, duty_end_time TEXT, deleted_at TEXT);
     CREATE TABLE frms_recovery_activity_segment (id INTEGER PRIMARY KEY, empresa_id INTEGER, funcionario_id INTEGER,
       recovery_day_id INTEGER, activity_type TEXT, start_time TEXT, end_time TEXT);
+    CREATE TABLE frms_escala_quinzenal (id TEXT PRIMARY KEY, tripulante_id INTEGER, data_inicio_embarque TEXT,
+      data_fim_embarque TEXT, data_inicio_folga TEXT, data_fim_folga TEXT, status_ciclo TEXT, deleted_at TEXT);
     CREATE TABLE usuarios (id INTEGER PRIMARY KEY, funcionario_id INTEGER, deleted_at TEXT);
     CREATE TABLE cv_voos (id INTEGER PRIMARY KEY, empresa_id INTEGER, data_programacao TEXT, status TEXT,
       horario_real_partida TEXT, deleted_at TEXT);
