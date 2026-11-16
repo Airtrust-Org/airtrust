@@ -103,7 +103,9 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
 
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/workers/observability/telemetry`;
   const to = Date.now();
-  const timeframe = { from: to - hours * 3_600_000, to };
+  const sinceMs = env.SINCE ? Date.parse(env.SINCE) : NaN;
+  const from = Number.isFinite(sinceMs) && sinceMs < to ? Math.max(sinceMs, to - 48 * 3_600_000) : to - hours * 3_600_000;
+  const timeframe = { from, to };
   const svcFilter = { key: '$metadata.service', operation: 'eq', type: 'string', value: service };
 
   async function call(path, body) {

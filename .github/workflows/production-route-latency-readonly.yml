@@ -11,6 +11,10 @@ on:
         description: 'Janela em horas (1-48)'
         required: true
         default: '6'
+      since:
+        description: 'Opcional: inicio UTC (ISO 8601, ex. 2026-11-16T20:25:00Z); sobrepoe hours'
+        required: false
+        default: ''
       service:
         description: 'Worker a consultar (somente leitura)'
         required: true
@@ -37,6 +41,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WORKER_SERVICE: ${{ inputs.service || 'airtrust-api-production' }}
       HOURS: ${{ inputs.hours || '6' }}
+      SINCE: ${{ inputs.since }}
     steps:
       - name: Main only
         run: '[[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY >&2; exit 1; }'
