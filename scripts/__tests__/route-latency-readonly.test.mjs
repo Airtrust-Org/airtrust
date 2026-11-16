@@ -44,3 +44,12 @@ test('falha de query apos keys ok retorna exit != 0', async () => {
   assert.equal(code, 1);
   assert.ok(!lines.join('\n').includes('RESULT=OK'));
 });
+
+test('parseAggregates le dados em series[].data (formato real)', () => {
+  const g = [{ key: 'p', value: '/api/y/9?secret=private-test' }];
+  const result = { calculations: [
+    { alias: 'count', aggregates: [], series: [{ time: 't', data: [{ groups: g, value: 5 }] }] },
+    { alias: 'p50', aggregates: [], series: [{ time: 't', data: [{ groups: g, aggregates: [{ value: 300 }] }] }] },
+  ] };
+  assert.deepEqual(parseAggregates(result).get('/api/y/:id'), { count: 5, p50: 300 });
+});
