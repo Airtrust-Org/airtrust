@@ -55,8 +55,8 @@ test('fixed workflow and API payload cannot silently target another tenant or pr
   assert.equal(TARGET.tenant,999013);
   assert.equal(TARGET.uuid,'bf9963f4-eb12-439b-a830-20bbf577ac22');
   assert.equal(TARGET.origin,'SIGVOOS');
-  assert.equal(TARGET.day,'2026-12-05');
-  assert.equal(validTreatment().prazo,'2026-12-20');
+  assert.equal(TARGET.day,'2026-12-15');
+  assert.equal(validTreatment().prazo,'2026-12-30');
   assert(TARGET.day < validTreatment().prazo);
   assert.equal(CONFIRM,'AIRTRUST_STAGING_FRMS_F0C_LIFECYCLE');
   assert(!Object.hasOwn(validTreatment(),'empresa_id'));
@@ -74,4 +74,14 @@ test('F0C listing is narrowly scoped before global case pagination',()=>{
     .searchParams.get('resolvido'),'true');
   assert.throws(()=>scopedF0CCaseQuery(false,-1),/FRMS_F0C_CREW_ID_INVALID/);
   assert.throws(()=>scopedF0CCaseQuery(false,'a'),/FRMS_F0C_CREW_ID_INVALID/);
+});
+
+test('new F0C2 IDs cannot overwrite the previously closed F0C1 case or journey',()=>{
+  const sql=seedSql();
+  assert.equal(TARGET.alert,'qa-frms-f0c-case-2');
+  assert.equal(TARGET.journey,'qa-frms-f0c-j-2');
+  assert.doesNotMatch(sql,/qa-frms-f0c-(?:case|j)-1/);
+  assert.match(sql,/qa-frms-f0c-case-2/);
+  assert.match(sql,/qa-frms-f0c-j-2/);
+  assert.doesNotMatch(sql,/\bUPDATE\b|\bDELETE\b/);
 });
