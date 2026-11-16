@@ -142,6 +142,7 @@ export async function runDailyFrmsOperations(
       notificacoes: result.notificacoes,
       registros: result.registros,
       falhas: result.falhas,
+      truncadas: result.truncadas,
     });
     if (result.falhas > 0) {
       logger.warn('[CRON] Escalonamento de casos FRMS falhou para alguma empresa', { falhas: result.falhas });

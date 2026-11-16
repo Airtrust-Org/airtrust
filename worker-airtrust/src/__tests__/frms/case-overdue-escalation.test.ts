@@ -145,6 +145,50 @@ describe('escalonamento por empresa (SQLite)', () => {
     expect(rows<{ empresa_id: number }>('SELECT empresa_id FROM notificacoes_sistema ORDER BY empresa_id').map((row) => row.empresa_id)).toEqual([7, 8]);
   });
 
+  it('varre todas as páginas: 501 casos no prazo seguidos de um vencido não escondem o vencido', async () => {
+    const { d1, sqlite, rows } = fixture();
+    const insert = sqlite.prepare('INSERT INTO frms_alerta(id, tripulante_id, nivel, tipo_limite, notas_resolucao, created_at) VALUES (?,?,?,?,?,?)');
+    const future = treatmentNotes('2026-12-31');
+    sqlite.exec('BEGIN');
+    for (let i = 0; i < 501; i += 1) insert.run(`futuro-${String(i).padStart(4, '0')}`, 101, 'AVISO', 'HV_7D', future, `2026-10-01 00:${String(i % 60).padStart(2, '0')}:00`);
+    insert.run('vencido-novo', 102, 'AVISO', 'HV_7D', treatmentNotes('2026-11-01'), '2026-11-10 08:00:00');
+    sqlite.exec('COMMIT');
+    const result = await escalate(d1);
+    expect(result).toMatchObject({ vencidos: 1, notificado: true, truncado: false });
+    expect(rows<{ registro_id: string }>('SELECT registro_id FROM auditoria_avancada_v2').map((r) => r.registro_id)).toEqual(['vencido-novo']);
+  });
+
+  it('pagina por cursor quando há mais de uma página de casos vencidos', async () => {
+    const { d1, sqlite, rows } = fixture();
+    const insert = sqlite.prepare('INSERT INTO frms_alerta(id, tripulante_id, nivel, tipo_limite, notas_resolucao, created_at) VALUES (?,?,?,?,?,?)');
+    const overdue = treatmentNotes('2026-11-01');
+    sqlite.exec('BEGIN');
+    for (let i = 0; i < 1100; i += 1) {
+      // Vários casos com o mesmo created_at: o cursor (created_at, id) não pode pular nem repetir.
+      insert.run(`v-${String(i).padStart(4, '0')}`, 101, 'AVISO', 'HV_7D', overdue, `2026-10-0${1 + (i % 3)} 00:00:00`);
+    }
+    sqlite.exec('COMMIT');
+    const result = await escalate(d1);
+    expect(result).toMatchObject({ vencidos: 1100, registrados: 1100, truncado: false });
+    expect(rows('SELECT DISTINCT registro_id FROM auditoria_avancada_v2')).toHaveLength(1100);
+  });
+
+  it('limite de páginas atingido é sinalizado como parcial e a empresa conta como falha', async () => {
+    const { d1, sqlite, addCase } = fixture();
+    addCase('um', 101, treatmentNotes('2026-11-01'));
+    const { OPEN_CASE_MAX_PAGES, OPEN_CASE_PAGE_SIZE } = await import('../../lib/frms/case-overdue');
+    expect(OPEN_CASE_MAX_PAGES * OPEN_CASE_PAGE_SIZE).toBeGreaterThanOrEqual(20_000);
+    // Força o limite lendo só 1 página de 1 linha por meio de uma instância com limites reduzidos.
+    const tiny = vi.fn(async () => ({ results: Array.from({ length: OPEN_CASE_PAGE_SIZE }, (_, i) => ({
+      id: `x${i}`, nivel: 'AVISO', tipo_limite: 'HV_7D', notas_resolucao: treatmentNotes('2026-11-01'), created_at: '2026-10-01 00:00:00' })) }));
+    const endless = { prepare: () => ({ bind: () => ({ all: tiny }) }) } as unknown as D1Database;
+    const { loadOpenTreatedCases } = await import('../../lib/frms/case-overdue');
+    const page = await loadOpenTreatedCases(endless, 7, HOJE);
+    expect(page.complete).toBe(false);
+    expect(tiny).toHaveBeenCalledTimes(OPEN_CASE_MAX_PAGES);
+    sqlite.exec('SELECT 1');
+  });
+
   it('cron por empresa respeita a configuração e não depende de config de check-in', async () => {
     const { d1, sqlite, addCase, rows } = fixture();
     addCase('t7', 101, treatmentNotes('2026-11-01'));

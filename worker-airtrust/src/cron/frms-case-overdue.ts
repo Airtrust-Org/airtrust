@@ -9,6 +9,8 @@ export interface FrmsCaseOverdueResult {
   notificacoes: number;
   registros: number;
   falhas: number;
+  /** Empresas cuja varredura foi parcial (limite de páginas): contam também como falha. */
+  truncadas: number;
 }
 
 /**
@@ -31,7 +33,7 @@ export async function frmsCaseOverdueEscalation(env: Env): Promise<FrmsCaseOverd
     )
     .all<{ empresa_id: number }>();
 
-  const result: FrmsCaseOverdueResult = { empresas: 0, casosVencidos: 0, notificacoes: 0, registros: 0, falhas: 0 };
+  const result: FrmsCaseOverdueResult = { empresas: 0, casosVencidos: 0, notificacoes: 0, registros: 0, falhas: 0, truncadas: 0 };
   for (const row of tenants.results || []) {
     const empresaId = Number(row.empresa_id);
     if (!Number.isInteger(empresaId) || empresaId <= 0) continue;
@@ -45,6 +47,11 @@ export async function frmsCaseOverdueEscalation(env: Env): Promise<FrmsCaseOverd
       result.casosVencidos += outcome.vencidos;
       result.notificacoes += outcome.notificado ? 1 : 0;
       result.registros += outcome.registrados;
+      if (outcome.truncado) {
+        // Resultado parcial nunca é apresentado como "nenhum caso vencido".
+        result.truncadas += 1;
+        result.falhas += 1;
+      }
     } catch {
       // Sem expor SQL ou dados do tenant: a contagem de falhas é o sinal operacional.
       result.falhas += 1;
