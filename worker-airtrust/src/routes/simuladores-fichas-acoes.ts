@@ -311,7 +311,7 @@ app.post('/fichas/:id/assinar', async (c) => {
     // segunda chamada de assinatura; usar fluxo auditável de retificação.
     if (f.assinatura_instrutor_timestamp || Number(f.assinatura_instrutor) === 1) {
       return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
-        error: 'Ficha já assinada pelo instrutor. Utilize o fluxo formal de retificação.' }, 409);
+        error: 'Ficha já assinada pelo instrutor. Utilize o fluxo formal de retificação (POST /fichas/:id/retificacoes).' }, 409);
     }
 
     const availability = await getFichaAvailabilityFromDb(c.env.DB, id);
@@ -394,7 +394,7 @@ app.post('/fichas/:id/assinar', async (c) => {
       // repeats the guard to prevent a second signature racing this read.
       if (f.assinatura_aluno_timestamp || Number(f.assinatura_tripulante) === 1) {
         return c.json({ success: false, code: 'FICHA_ALREADY_SIGNED',
-          error: 'Aluno já assinou esta ficha. Utilize retificação formal.' }, 409);
+          error: 'Aluno já assinou esta ficha. Utilize retificação formal (POST /fichas/:id/retificacoes).' }, 409);
       }
       const escritaAluno = await c.env.DB.prepare(
         `UPDATE fichas_sessao SET assinatura_aluno_ip=?, assinatura_aluno_timestamp=?,
