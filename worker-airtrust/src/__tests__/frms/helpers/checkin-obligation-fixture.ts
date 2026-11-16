@@ -5,6 +5,7 @@ export type Sqlite = {
   prepare(sql: string): {
     all(...args: unknown[]): unknown[];
     get(...args: unknown[]): unknown;
+    run(...args: unknown[]): unknown;
   };
   close(): void;
 };
