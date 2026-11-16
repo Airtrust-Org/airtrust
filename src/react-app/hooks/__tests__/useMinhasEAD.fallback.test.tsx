@@ -29,7 +29,7 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-beforeEach(() => fetchWithAuthMock.mockReset());
+beforeEach(() => { fetchWithAuthMock.mockReset(); });
 
 describe('useMinhasEAD: recuperação de leitura sem fabricar evidências', () => {
   it('usa lista paginada sob HTTP 503 e marca visualização simplificada', async () => {
