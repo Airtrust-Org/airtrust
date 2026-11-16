@@ -374,6 +374,12 @@ export function CardMeusEAD({ showOpenPageLink = true }: { showOpenPageLink?: bo
       </div>
 
       <div className="p-4 sm:p-5">
+        {matriculas?.some((m) => m.consulta_simplificada) && !error && (
+          <div role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            A consulta completa está temporariamente indisponível. Seus cursos foram carregados pela listagem básica.
+            Vencimentos e certificados não foram consultados; tente atualizar mais tarde para ver esses dados.
+          </div>
+        )}
         {isLoading ? (
           <div className="space-y-2" aria-label="Carregando treinamentos">
             {[1, 2, 3].map((i) => (
