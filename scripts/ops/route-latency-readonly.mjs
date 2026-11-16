@@ -150,7 +150,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
         filters: [svcFilter, ...extraFilters],
         calculations,
         groupBys: [{ type: 'string', value: groupKey }],
-        orderBy: { value: 'count', order: 'desc' },
+        orderBy: { value: calculations[0].alias, order: 'desc' },
       },
     });
     log(`query ${label} HTTP ${r.status}`);
