@@ -1,7 +1,11 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { Hono } from 'hono';
 import type { Env } from '../../types';
-import { createD1RequestStats, instrumentD1 } from '../../observability/d1-instrumentation';
+import {
+  createD1RequestStats,
+  instrumentD1,
+  runWithD1Stats,
+} from '../../observability/d1-instrumentation';
 import { createWorkerEntrypoint } from '../../runtime/worker-entrypoint';
 
 interface FakeStatement {
@@ -46,14 +50,16 @@ describe('instrumentD1', () => {
   it('conta round-trips e delega sem alterar resultados', async () => {
     const { db, stmt } = fakeDb();
     const stats = createD1RequestStats();
-    const wrapped = instrumentD1(db, stats);
+    const wrapped = instrumentD1(db);
 
-    const row = await wrapped.prepare('SELECT 1').bind(1).first();
-    const all = await wrapped.prepare('SELECT 2').all();
-    await wrapped.prepare('UPDATE x SET a = 1').run();
+    await runWithD1Stats(stats, async () => {
+      const row = await wrapped.prepare('SELECT 1').bind(1).first();
+      const all = await wrapped.prepare('SELECT 2').all();
+      await wrapped.prepare('UPDATE x SET a = 1').run();
+      expect(row).toEqual({ id: 1 });
+      expect(all).toEqual({ results: [{ id: 1 }], success: true });
+    });
 
-    expect(row).toEqual({ id: 1 });
-    expect(all).toEqual({ results: [{ id: 1 }], success: true });
     expect(stats.roundTrips).toBe(3);
     expect(stats.statements).toBe(3);
     expect(stmt.bind).toHaveBeenCalledWith(1);
@@ -63,13 +69,15 @@ describe('instrumentD1', () => {
   it('batch conta 1 round-trip e N statements; exec conta 1', async () => {
     const { db } = fakeDb();
     const stats = createD1RequestStats();
-    const wrapped = instrumentD1(db, stats);
-    await wrapped.batch([
-      wrapped.prepare('A'),
-      wrapped.prepare('B'),
-      wrapped.prepare('C'),
-    ] as never);
-    await wrapped.exec('PRAGMA x');
+    const wrapped = instrumentD1(db);
+    await runWithD1Stats(stats, async () => {
+      await wrapped.batch([
+        wrapped.prepare('A'),
+        wrapped.prepare('B'),
+        wrapped.prepare('C'),
+      ] as never);
+      await wrapped.exec('PRAGMA x');
+    });
     expect(stats.roundTrips).toBe(2);
     expect(stats.statements).toBe(4);
   });
@@ -77,10 +85,12 @@ describe('instrumentD1', () => {
   it('withSession mantém a contagem e passa getBookmark', async () => {
     const { db } = fakeDb();
     const stats = createD1RequestStats();
-    const wrapped = instrumentD1(db, stats);
-    const session = wrapped.withSession('first-primary');
-    await session.prepare('SELECT 1').first();
-    expect(session.getBookmark()).toBe('bm');
+    const wrapped = instrumentD1(db);
+    await runWithD1Stats(stats, async () => {
+      const session = wrapped.withSession('first-primary');
+      await session.prepare('SELECT 1').first();
+      expect(session.getBookmark()).toBe('bm');
+    });
     expect(stats.roundTrips).toBe(1);
   });
 
@@ -88,13 +98,27 @@ describe('instrumentD1', () => {
     const { db, stmt } = fakeDb();
     stmt.first.mockRejectedValueOnce(new Error('D1_ERROR'));
     const stats = createD1RequestStats();
-    await expect(instrumentD1(db, stats).prepare('X').first()).rejects.toThrow('D1_ERROR');
+    await runWithD1Stats(stats, async () => {
+      await expect(instrumentD1(db).prepare('X').first()).rejects.toThrow('D1_ERROR');
+    });
     expect(stats.roundTrips).toBe(1);
   });
 
+  it('fora de uma requisição não conta nem altera o comportamento', async () => {
+    const { db } = fakeDb();
+    await expect(instrumentD1(db).prepare('SELECT 1').first()).resolves.toEqual({ id: 1 });
+  });
+
+  it('retorna o MESMO proxy para o mesmo binding (identidade estável para WeakMap/coalescers)', () => {
+    const { db } = fakeDb();
+    expect(instrumentD1(db)).toBe(instrumentD1(db));
+    const cache = new WeakMap<object, number>();
+    cache.set(instrumentD1(db), 1);
+    expect(cache.get(instrumentD1(db))).toBe(1);
+  });
+
   it('tolera binding vazio como nos testes legados', () => {
-    const stats = createD1RequestStats();
-    expect(() => instrumentD1({}, stats)).not.toThrow();
+    expect(() => instrumentD1({})).not.toThrow();
   });
 });
 
@@ -139,6 +163,36 @@ describe('worker entrypoint D1 metrics', () => {
     expect(await res.text()).toBe('ok');
     expect(payload).toMatchObject({ route: '/api/x/:id', d1_round_trips: 2, d1_statements: 2 });
     expect(typeof payload.d1_ms).toBe('number');
+  });
+
+  it('mantém a identidade de c.env.DB entre requisições e isola contagens concorrentes', async () => {
+    const { db } = fakeDb();
+    const env = envWith(db);
+    const seen: unknown[] = [];
+    const app = new Hono<{ Bindings: Env }>();
+    app.get('/api/a', async (c) => {
+      seen.push(c.env.DB);
+      await c.env.DB.prepare('SELECT 1').first();
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      await c.env.DB.prepare('SELECT 2').first();
+      return c.text('a');
+    });
+    app.get('/api/b', async (c) => {
+      seen.push(c.env.DB);
+      await c.env.DB.prepare('SELECT 3').first();
+      return c.text('b');
+    });
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const entrypoint = createWorkerEntrypoint(app, { onScheduled: async () => undefined });
+    await Promise.all([
+      entrypoint.fetch(new Request('https://airtrust.test/api/a'), env, {} as ExecutionContext),
+      entrypoint.fetch(new Request('https://airtrust.test/api/b'), env, {} as ExecutionContext),
+    ]);
+    const metrics = spy.mock.calls.map((call) => JSON.parse(String(call[0])));
+    spy.mockRestore();
+    expect(seen[0]).toBe(seen[1]);
+    expect(metrics.find((m) => m.route === '/api/a').d1_round_trips).toBe(2);
+    expect(metrics.find((m) => m.route === '/api/b').d1_round_trips).toBe(1);
   });
 
   it('D1_METRICS_DISABLED=true não instrumenta e mantém o binding original', async () => {
