@@ -143,6 +143,19 @@ describe('CardMeusEAD — organização por situação', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('informa leitura simplificada sem inventar vencimento ou certificado', () => {
+    const rows = Object.assign([matricula(71, 'NAO_INICIADO')], {
+      consulta_simplificada: true,
+    });
+    setMatriculas(rows);
+    renderCard();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Seus cursos foram carregados pela listagem básica',
+    );
+    expect(screen.getByText('Treinamento 71')).toBeInTheDocument();
+    expect(screen.queryByText(/Válida até/)).not.toBeInTheDocument();
+  });
+
   it('prioriza não iniciados quando não há nenhum curso em andamento', () => {
     setMatriculas([matricula(2, 'CONCLUIDO'), matricula(3, 'NAO_INICIADO')]);
     renderCard();
