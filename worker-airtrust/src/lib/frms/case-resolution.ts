@@ -51,3 +51,71 @@ export function buildFrmsCaseResolutionNotes(body: unknown, userId: string): str
     fechado_em: new Date().toISOString(),
   });
 }
+
+const FrmsCaseReopenSchema = z.object({
+  justificativa: z.string().trim().min(10).max(1000),
+});
+
+const MAX_REOPEN_HISTORY = 20;
+
+/**
+ * Reabertura de caso encerrado: exige justificativa, preserva a resolução anterior (e as
+ * anteriores a ela) e deixa o caso SEM tratamento vigente, de modo que um novo responsável,
+ * prazo e medida precisem ser registrados antes de novo encerramento.
+ */
+export function buildFrmsCaseReopenNotes(
+  body: unknown,
+  userId: string,
+  previousNotes: unknown,
+): string | null {
+  const parsed = FrmsCaseReopenSchema.safeParse(body);
+  if (!parsed.success) return null;
+  let previous: Record<string, unknown> | null = null;
+  if (typeof previousNotes === 'string') {
+    try {
+      const raw: unknown = JSON.parse(previousNotes);
+      if (raw && typeof raw === 'object') previous = raw as Record<string, unknown>;
+    } catch {
+      previous = { schema: 'LEGACY_TEXT', texto: previousNotes.slice(0, 1000) };
+    }
+  }
+  const history: unknown[] = readFrmsCaseHistory(previousNotes);
+  if (previous && previous.schema !== 'FRMS_CASE_REOPENED_V1') {
+    const { historico: _carried, ...core } = previous;
+    history.push(core);
+  }
+  return JSON.stringify({
+    schema: 'FRMS_CASE_REOPENED_V1',
+    justificativa: parsed.data.justificativa,
+    reaberto_por: userId,
+    reaberto_em: new Date().toISOString(),
+    historico: history.slice(-MAX_REOPEN_HISTORY),
+  });
+}
+
+/** Histórico de encerramentos anteriores carregado nas notas do caso (reaberturas). */
+export function readFrmsCaseHistory(notes: unknown): unknown[] {
+  if (typeof notes !== 'string') return [];
+  try {
+    const raw: unknown = JSON.parse(notes);
+    const history = raw && typeof raw === 'object' ? (raw as { historico?: unknown }).historico : null;
+    return Array.isArray(history) ? [...history] : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Novas notas de tratamento/encerramento não podem apagar o histórico de reaberturas:
+ * o histórico das notas anteriores é carregado para as novas.
+ */
+export function carryFrmsCaseHistory(previousNotes: unknown, nextNotes: string): string {
+  const history = readFrmsCaseHistory(previousNotes);
+  if (history.length === 0) return nextNotes;
+  try {
+    const next = JSON.parse(nextNotes) as Record<string, unknown>;
+    return JSON.stringify({ ...next, historico: history.slice(-MAX_REOPEN_HISTORY) });
+  } catch {
+    return nextNotes;
+  }
+}

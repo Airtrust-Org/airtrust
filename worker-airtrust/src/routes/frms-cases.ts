@@ -6,8 +6,10 @@ import {
   marcarAlertaVisualizado,
   registrarTratamentoAlerta,
   marcarAlertaResolvido,
+  reabrirAlertaResolvido,
 } from '../lib/frms/db-service';
 import {
+  buildFrmsCaseReopenNotes,
   buildFrmsCaseResolutionNotes,
   buildFrmsCaseTreatmentNotes,
   readFrmsPendingTreatment,
@@ -129,5 +131,44 @@ frmsCaseRoutes.put(
   }),
 );
 
+/**
+ * PUT /api/frms/alertas/:id/reabrir
+ * Reabre caso encerrado (eficácia insuficiente, reincidência, dado novo). Exige justificativa;
+ * a resolução anterior fica preservada e um novo tratamento é exigido antes de novo encerramento.
+ */
+frmsCaseRoutes.put(
+  '/alertas/:id/reabrir',
+  requirePermission('frms', 'editar', 'admin', 'manager'),
+  safe(async (c) => {
+    const id = c.req.param('id') ?? '';
+    const denied = await assertAlertaEmpresa(c, id);
+    if (denied) return denied;
+    const empresaId = getEmpresaIdSafe(c);
+    if (!empresaId) return c.json({ success: false, code: 'FRMS_TENANT_CONTEXT_REQUIRED' }, 403);
+
+    const userId = String(c.get('userId') || 'system');
+    const payload: unknown = await c.req.json().catch(() => null);
+    const outcome = await reabrirAlertaResolvido(
+      c.env.DB, id, userId,
+      (previous) => buildFrmsCaseReopenNotes(payload, userId, previous),
+      empresaId,
+    );
+    if (outcome === 'INVALID') {
+      return c.json({
+        success: false,
+        error: 'A reabertura exige justificativa documentada.',
+        code: 'FRMS_CASE_REOPEN_JUSTIFICATION_REQUIRED',
+      }, 400);
+    }
+    if (outcome === 'NOT_CLOSED') {
+      return c.json({
+        success: false,
+        error: 'Caso não está encerrado ou está fora do escopo da empresa.',
+        code: 'FRMS_CASE_NOT_CLOSED',
+      }, 409);
+    }
+    return c.json({ success: true, status: 'REABERTO' });
+  }),
+);
 
 export default frmsCaseRoutes;

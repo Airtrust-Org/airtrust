@@ -26,6 +26,16 @@ export type ModuleAlertSettings = {
     title_template: string;
     message_template: string;
   };
+  /**
+   * Casos de fadiga cujo prazo de tratamento (definido pela própria empresa em cada caso)
+   * venceu sem encerramento. O sistema não impõe prazo: só reage ao prazo registrado.
+   */
+  frms_case_overdue: {
+    enabled: boolean;
+    repeat_hours: number;
+    title_template: string;
+    message_template: string;
+  };
   sgso_barriers: {
     enabled: boolean;
     stale_hours: number;
@@ -82,6 +92,13 @@ export const DEFAULT_MODULE_ALERT_SETTINGS: ModuleAlertSettings = {
     enabled: true,
     title_template: 'Check-in de fadiga pendente',
     message_template: '{{total}} tripulante(s) sem check-in de fadiga em {{data}}. {{resumo}}',
+  },
+  frms_case_overdue: {
+    enabled: true,
+    repeat_hours: 24,
+    title_template: 'Casos de fadiga com prazo vencido',
+    message_template:
+      '{{total}} caso(s) FRMS com prazo de tratamento vencido; o mais antigo venceu há {{max_dias}} dia(s). Verifique as providências e a eficácia antes de encerrar.',
   },
   sgso_barriers: {
     enabled: true,
@@ -152,6 +169,7 @@ export function normalizeModuleAlertSettings(value: unknown): ModuleAlertSetting
   const simulatorUpcoming = objectValue(root.simulator_upcoming);
   const simulatorEmail = objectValue(root.simulator_session_email);
   const frms = objectValue(root.frms_checkin_reminder);
+  const frmsCaseOverdue = objectValue(root.frms_case_overdue);
   const sgso = objectValue(root.sgso_barriers);
   const weekly = objectValue(root.weekly_qualifications);
   const licenses = objectValue(root.licenses);
@@ -210,6 +228,12 @@ export function normalizeModuleAlertSettings(value: unknown): ModuleAlertSetting
       enabled: boolValue(frms.enabled, d.frms_checkin_reminder.enabled),
       title_template: textValue(frms.title_template, d.frms_checkin_reminder.title_template, 300),
       message_template: textValue(frms.message_template, d.frms_checkin_reminder.message_template),
+    },
+    frms_case_overdue: {
+      enabled: boolValue(frmsCaseOverdue.enabled, d.frms_case_overdue.enabled),
+      repeat_hours: intValue(frmsCaseOverdue.repeat_hours, d.frms_case_overdue.repeat_hours, 1, 720),
+      title_template: textValue(frmsCaseOverdue.title_template, d.frms_case_overdue.title_template, 300),
+      message_template: textValue(frmsCaseOverdue.message_template, d.frms_case_overdue.message_template),
     },
     sgso_barriers: {
       enabled: boolValue(sgso.enabled, d.sgso_barriers.enabled),

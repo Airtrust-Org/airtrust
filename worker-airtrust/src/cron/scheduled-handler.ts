@@ -5,6 +5,7 @@ import { processTrainingComplianceReportAutomation } from './training-compliance
 import { enviarEmailAlert } from './notificacoes';
 import { alertasDiariosHandler } from './alertasDiarios';
 import { frmsDailyCheck } from './frms-daily-check';
+import { frmsCaseOverdueEscalation } from './frms-case-overdue';
 import { frmsFadigaReminder } from './frms-fadiga-reminder';
 import { processLicenseAlerts } from './license-alerts';
 import { processarNotificacoesSgso, enqueueSlaAlerts } from './sgso-notificacoes';
@@ -679,6 +680,15 @@ export async function runScheduledJobs(
         );
       } catch (reminderErr) {
         console.error('[CRON] ❌ Erro no reminder de check-in de fadiga:', reminderErr);
+      }
+
+      try {
+        const overdue = await frmsCaseOverdueEscalation(env);
+        console.log(
+          `[CRON] ✅ Casos FRMS vencidos: ${overdue.casosVencidos} em ${overdue.empresas} empresa(s), ${overdue.notificacoes} notificação(ões)`,
+        );
+      } catch (overdueErr) {
+        console.error('[CRON] ❌ Erro no escalonamento de casos FRMS vencidos:', overdueErr);
       }
     }
 

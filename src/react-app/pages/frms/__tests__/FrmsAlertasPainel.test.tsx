@@ -199,6 +199,41 @@ describe('FrmsAlertasPainel', () => {
     expect(screen.getByText(/Registro: Jornada corrigida após validação com a escala/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Registrar tratamento' })).not.toBeInTheDocument();
   });
+  it('reabre caso encerrado exigindo justificativa e preserva a decisão de confirmar', async () => {
+    mockCases([
+      caseRow({
+        resolvido: 1,
+        resolvido_por: 'coordenacao@airtrust.online',
+        resolvido_em: '2026-08-27 13:15:00',
+        notas_resolucao: 'Jornada corrigida após validação com a escala.',
+      }),
+    ]);
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Reabrir caso/i }));
+    const confirm = screen.getByRole('button', { name: 'Confirmar reabertura' });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Motivo da reabertura/i), { target: { value: 'curto' } });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Motivo da reabertura/i), {
+      target: { value: 'Reincidência após a mitigação registrada.' },
+    });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    expect(mutateMock).toHaveBeenCalledWith('/api/frms/alertas/case-1/reabrir', {
+      method: 'PUT',
+      body: JSON.stringify({ justificativa: 'Reincidência após a mitigação registrada.' }),
+    });
+    await waitFor(() => expect(refetchMock).toHaveBeenCalled());
+  });
+
+  it('não oferece reabertura para caso aberto', () => {
+    renderPage();
+    expect(screen.queryByRole('button', { name: /Reabrir caso/i })).not.toBeInTheDocument();
+  });
+
   it('destaca prazo vencido e separa casos sem medida dos tratamentos em andamento', () => {
     mockCases([
       caseRow({ id: 'sem-plano', tripulante_id: '11', nome_tripulante: 'Sem plano', nivel: 'VIOLACAO', notas_resolucao: null }),

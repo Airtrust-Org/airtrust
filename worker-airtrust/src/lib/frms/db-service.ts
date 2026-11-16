@@ -59,6 +59,7 @@ export {
   buscarAlertas,
   marcarAlertaVisualizado,
   marcarAlertaResolvido,
+  reabrirAlertaResolvido,
   registrarTratamentoAlerta,
 } from './db-service-alertas';
 export type { SalvarEscalaInput } from './db-service-escalas';
