@@ -11,10 +11,6 @@ on:
         description: 'Janela em horas (1-48)'
         required: true
         default: '24'
-  pull_request:
-    paths:
-      - .github/workflows/production-route-latency-readonly.yml
-      - scripts/ops/route-latency-readonly.mjs
 
 permissions:
   contents: read
@@ -27,15 +23,19 @@ jobs:
   measure:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKER_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WORKER_SERVICE: airtrust-api-production
       HOURS: ${{ inputs.hours || '24' }}
     steps:
+      - name: Main only
+        run: '[[ "$GITHUB_REF" == refs/heads/main ]] || { echo MAIN_ONLY >&2; exit 1; }'
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Query route latency (read-only)
-        run: node scripts/ops/route-latency-readonly.mjs | tee "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: set -o pipefail; node scripts/ops/route-latency-readonly.mjs | tee "$GITHUB_STEP_SUMMARY"
