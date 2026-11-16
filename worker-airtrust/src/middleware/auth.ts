@@ -740,6 +740,7 @@ export function auth(): MiddlewareHandler<{ Bindings: Env }> {
       ? payload.role
       : null;
     const selectedSessionRole =
+      c.req.header('X-AirTrust-Session-Role') ||
       parseSessionRoleFromCookieHeader(c.req.header('Cookie')) || tokenSessionRole;
     if (selectedSessionRole) {
       let activeRole: string | null;
@@ -864,6 +865,7 @@ export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
               ? payload.role
               : null;
             const optSessionRole =
+              c.req.header('X-AirTrust-Session-Role') ||
               parseSessionRoleFromCookieHeader(c.req.header('Cookie')) || tokenSessionRole;
             if (optSessionRole) {
               try {

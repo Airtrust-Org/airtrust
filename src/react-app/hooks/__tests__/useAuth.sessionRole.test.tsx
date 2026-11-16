@@ -8,6 +8,7 @@ import {
   useAuth,
 } from '../useAuth';
 import { AuthContext } from '../../context/auth-context';
+import { getTabSessionRole, setTabSessionRole } from '../../lib/session-role-preference';
 
 function setCookie(value: string) {
   document.cookie = `${SESSION_ROLE_COOKIE}=${encodeURIComponent(value)}; Path=/`;
@@ -24,10 +25,18 @@ describe('perfil ativo de sessão no cliente', () => {
     expect(readActiveSessionRole()).toBe('INSTRUTOR');
   });
 
-  it('clearActiveSessionRole remove a seleção', () => {
+  it('clearActiveSessionRole remove o cookie e a preferência isolada da aba', () => {
     setCookie('ALUNO');
+    setTabSessionRole('GESTOR');
+    expect(getTabSessionRole()).toBe('GESTOR');
     clearActiveSessionRole();
     expect(readActiveSessionRole()).toBeNull();
+    expect(getTabSessionRole()).toBeNull();
+  });
+
+  it('não aceita preferências locais de perfil inválido', () => {
+    expect(() => setTabSessionRole('ADMIN_ROOT')).toThrow('Perfil de sessão inválido');
+    expect(getTabSessionRole()).toBeNull();
   });
 
   it('useAuth não confia em cookie alterável para mudar user.role', () => {
