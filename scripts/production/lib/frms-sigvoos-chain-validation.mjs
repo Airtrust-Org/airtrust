@@ -85,6 +85,19 @@ export function evaluateChain(facts, ctx) {
     else if (missing > 0) add(SEVERITY.ADVISORY, 'COVERAGE_DAYS_NOT_ATTESTED', { missing });
   }
 
+  // Governança do art. 42 (Lei 13.475): ativação depende de parecer jurídico, então o estado esperado é inativo.
+  const art42 = facts.art42;
+  if (art42 && !art42.unavailable) {
+    if (art42.rows.length !== 1) {
+      add(SEVERITY.ADVISORY, 'ART42_PROFILE_UNRESOLVED', { effective_profiles: art42.rows.length });
+    } else {
+      const flag = art42.rows[0].enforced === 1 || art42.rows[0].enforced === true
+        || art42.rows[0].enforced_camel === 1 || art42.rows[0].enforced_camel === true;
+      add(SEVERITY.INFO, 'ART42_ENFORCEMENT_STATE', { state: flag ? 'ACTIVE' : 'INACTIVE' });
+      if (flag) add(SEVERITY.ADVISORY, 'ART42_ACTIVE_VERIFY_LEGAL_BASIS');
+    }
+  }
+
   // D. Integridade: duplicação, órfãos e isolamento.
   const integrity = facts.integrity;
   if (integrity && !integrity.unavailable) {

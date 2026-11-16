@@ -74,6 +74,18 @@ export async function collectFacts(db, { tenantId, from, to, today }) {
           WHERE empresa_id = ? AND tipo_evento = 'FRMS_COVERAGE_DAY' AND deleted_at IS NULL
           GROUP BY 1, status`, tenantId),
     })),
+    // Governança: art. 42 da Lei 13.475 só bloqueia quando o perfil vigente declara o aceite jurídico.
+    art42: await probe(async () => ({
+      rows: await all(
+        `SELECT CASE WHEN json_valid(p.limits_json) THEN json_extract(p.limits_json, '$.law_art42_enforced') END AS enforced,
+                CASE WHEN json_valid(p.limits_json) THEN json_extract(p.limits_json, '$.lawArt42Enforced') END AS enforced_camel
+           FROM frms_profile_assignments a
+           JOIN frms_regulatory_profiles p ON p.id = a.regulatory_profile_id
+          WHERE a.empresa_id = ? AND a.status = 'ACTIVE'
+            AND a.effective_from <= ? AND (a.effective_to IS NULL OR a.effective_to >= ?)
+            AND p.empresa_id = ? AND p.active = 1 AND p.deleted_at IS NULL
+            AND p.profile_code = a.profile_code`, tenantId, today, today, tenantId),
+    })),
     integrity: await probe(async () => ({
       duplicate_etapa_groups: Number((await first(
         `SELECT COUNT(*) AS n FROM (SELECT voo_id, numero_etapa FROM cv_voo_etapas

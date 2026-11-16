@@ -33,6 +33,12 @@ beforeEach(() => {
     CREATE TABLE frms_jornada (id TEXT PRIMARY KEY, tripulante_id INTEGER, data TEXT, origem TEXT,
       hora_apresentacao TEXT, hora_termino TEXT, horas_voo_minutos INTEGER, duracao_jornada_minutos INTEGER, deleted_at TEXT);
     INSERT INTO funcionarios (id, empresa_id) VALUES (101, 6), (102, 6), (901, 9);
+    CREATE TABLE frms_regulatory_profiles (id TEXT PRIMARY KEY, empresa_id INTEGER, profile_code TEXT, limits_json TEXT,
+      active INTEGER, deleted_at TEXT);
+    CREATE TABLE frms_profile_assignments (id TEXT PRIMARY KEY, empresa_id INTEGER, regulatory_profile_id TEXT,
+      profile_code TEXT, status TEXT, effective_from TEXT, effective_to TEXT);
+    INSERT INTO frms_regulatory_profiles VALUES ('p6', 6, 'RBAC117', '{"law_art42_enforced":false}', 1, NULL);
+    INSERT INTO frms_profile_assignments VALUES ('a6', 6, 'p6', 'RBAC117', 'ACTIVE', '2026-01-01', NULL);
   `);
 });
 afterEach(() => sqlite.close());
@@ -145,6 +151,23 @@ describe('cadeia SIGVOOS -> Controle de Voos -> FRMS (DDL real das migrations)',
     await collectFacts(watching, { tenantId: 6, from: FROM, to: TO, today: TODAY });
     expect(writes.length).toBeGreaterThan(8);
     expect(writes.every((sql) => /^\s*(SELECT|WITH)\b/i.test(sql))).toBe(true);
+  });
+
+  it('art. 42: inativo é informação; ativo exige verificação da base jurídica; perfil ambíguo é aviso', async () => {
+    seedHealthy();
+    let result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
+    expect(result.findings.find((f) => f.code === 'ART42_ENFORCEMENT_STATE')).toMatchObject({ state: 'INACTIVE' });
+    expect(codes(result, 'ADVISORY')).not.toContain('ART42_ACTIVE_VERIFY_LEGAL_BASIS');
+
+    sqlite.exec(`UPDATE frms_regulatory_profiles SET limits_json = '{"lawArt42Enforced":true}'`);
+    result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
+    expect(result.findings.find((f) => f.code === 'ART42_ENFORCEMENT_STATE')).toMatchObject({ state: 'ACTIVE' });
+    expect(codes(result, 'ADVISORY')).toContain('ART42_ACTIVE_VERIFY_LEGAL_BASIS');
+
+    sqlite.exec(`UPDATE frms_regulatory_profiles SET limits_json = 'texto livre';
+      INSERT INTO frms_profile_assignments VALUES ('a6b', 6, 'p6', 'RBAC117', 'ACTIVE', '2026-01-01', NULL)`);
+    result = evaluateChain(await facts(), { today: TODAY, from: FROM, to: TO });
+    expect(codes(result, 'ADVISORY')).toContain('ART42_PROFILE_UNRESOLVED');
   });
 
   it('janela inválida ou excessiva é recusada', () => {
