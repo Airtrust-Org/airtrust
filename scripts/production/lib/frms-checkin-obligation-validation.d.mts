@@ -30,6 +30,7 @@ export interface DayEvaluation {
   advisories: Array<{ code: string; date: string; crew_ref: string | null }>;
   allocation_expected_pending: number;
   absence_crew_days: Record<string, number>;
+  base_only: { crew_days: number; crew_ids: Set<number>; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number> };
 }
 export function evaluateDay(input: {
   empresaId: number; date: string; crew: Set<number>; allEmployees: Set<number>;
@@ -40,6 +41,8 @@ export function evaluateDay(input: {
     allocations: Array<{ funcionario_id: number; data_inicio: string; data_fim: string; situacao_tipo: string }>;
     manualAbsence: Array<{ funcionario_id: number; data_inicio: string; data_fim: string }>;
     legacyRoster: Set<number>;
+    legacyCycle?: Array<{ funcionario_id: number; data_inicio_embarque: string; data_fim_embarque: string; data_inicio_folga?: string | null; data_fim_folga?: string | null; status_ciclo: string }>;
+    jornadaStatus?: Map<number, string>;
   };
 }): DayEvaluation;
 export function summarize(days: DayEvaluation[], options?: { sampleLimit?: number }): {
@@ -53,5 +56,6 @@ export function summarize(days: DayEvaluation[], options?: { sampleLimit?: numbe
   };
   invariants: Record<string, number>; violation_count: number;
   advisories: Record<string, number>; advisory_count: number;
+  base_only: { crew_days: number; distinct_crew: number; cycle: Record<string, number>; jornada_status: Record<string, number>; allocation_context: Record<string, number> };
   samples: Array<{ code: string; date: string; crew_ref: string | null }>;
 };

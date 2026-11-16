@@ -161,6 +161,10 @@ jobs:
             p("crew-days with an unambiguous operational allocation", r.totals.allocation_expected_pending);
             p("old rule: pending without check-in", r.totals.legacy_pending_no_checkin);
             p("old-rule pending that are NOT pending now, by status", r.totals.legacy_not_pending_now);
+            p("base-fortnight-only crew-days: total / distinct crew", `${r.base_only.crew_days} / ${r.base_only.distinct_crew}`);
+            p("base-fortnight-only by per-person FRMS cycle", r.base_only.cycle);
+            p("base-fortnight-only by FRMS journey status that day", r.base_only.jornada_status);
+            p("base-fortnight-only by nearby allocations", r.base_only.allocation_context);
             p("invariant violations", r.violation_count);
             p("violations by code", r.invariants);
             p("advisories (Controle de Voos flight on a day without obligation)", r.advisories);

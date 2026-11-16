@@ -117,7 +117,7 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
   const day = {
     date, crew: crew.size, status: {}, base: {}, divergences: {}, violations: [], advisories: [],
     received_oracle: 0, received_obligation: 0, gap_crew_days: 0, allocation_expected_pending: 0,
-    absence_crew_days: {},
+    absence_crew_days: {}, base_only: { crew_days: 0, cycle: {}, jornada_status: {}, allocation_context: {}, crew_ids: new Set() },
     legacy_pending_no_checkin: 0, legacy_not_pending_now: {},
   };
   const violate = (code, id) => day.violations.push({ code, date, crew_ref: crewRef(empresaId, id) });
@@ -145,6 +145,20 @@ export function evaluateDay({ empresaId, date, crew, allEmployees, obligations, 
       (row) => row.funcionario_id === id && covers(row, date),
     );
     const obligated = ['PENDENTE', 'RECEBIDO'].includes(obligation.status);
+    // Quinzena-base sem nenhuma escala publicada: dimensiona o que existe de evidência de escala por pessoa
+    // (ciclo FRMS legado, jornada de qualquer origem e alocações próximas) para decidir se é dúvida real.
+    if (obligation.base === 'QUINZENA_BASE_SEM_ESCALA') {
+      const b = day.base_only;
+      b.crew_days += 1;
+      b.crew_ids.add(id);
+      const cycles = (oracle.legacyCycle ?? []).filter((row) => row.funcionario_id === id
+        && ['ATIVO', 'ENCERRADO'].includes(upper(row.status_ciclo)));
+      const embark = cycles.some((row) => row.data_inicio_embarque <= date && date <= row.data_fim_embarque);
+      const off = cycles.some((row) => row.data_inicio_folga && row.data_inicio_folga <= date && date <= row.data_fim_folga);
+      bump(b.cycle, embark ? 'CICLO_EMBARQUE' : off ? 'CICLO_FOLGA' : cycles.length ? 'CICLO_FORA_DO_DIA' : 'SEM_CICLO');
+      bump(b.jornada_status, oracle.jornadaStatus?.get(id) ?? 'SEM_LINHA');
+      bump(b.allocation_context, own.length ? 'TEM_ALOCACAO_PROXIMA' : 'SEM_ALOCACAO_PROXIMA');
+    }
     // Ausências programadas por tipo (alocação), para dimensionar folgas, férias e afastamentos reais.
     for (const kind of new Set(covering.filter((row) => classify(row.situacao_tipo) === 'ABSENCE')
       .map((row) => upper(row.situacao_tipo)))) bump(day.absence_crew_days, kind);
@@ -196,6 +210,8 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
   const invariants = {};
   const advisories = {};
   const samples = [];
+  const baseOnly = { crew_days: 0, distinct_crew: 0, cycle: {}, jornada_status: {}, allocation_context: {} };
+  const baseOnlyIds = new Set();
   for (const day of days) {
     totals.crew_days += day.crew;
     totals.gap_crew_days += day.gap_crew_days;
@@ -209,8 +225,14 @@ export function summarize(days, { sampleLimit = 10 } = {}) {
       if (samples.length < sampleLimit) samples.push(violation);
     }
     for (const advisory of day.advisories) bump(advisories, advisory.code);
+    baseOnly.crew_days += day.base_only.crew_days;
+    for (const id of day.base_only.crew_ids) baseOnlyIds.add(id);
+    for (const key of ['cycle', 'jornada_status', 'allocation_context']) {
+      for (const [name, count] of Object.entries(day.base_only[key])) bump(baseOnly[key], name, count);
+    }
   }
   const violationCount = Object.values(invariants).reduce((sum, value) => sum + value, 0);
   const advisoryCount = Object.values(advisories).reduce((sum, value) => sum + value, 0);
-  return { days: days.length, totals, invariants, violation_count: violationCount, advisories, advisory_count: advisoryCount, samples };
+  baseOnly.distinct_crew = baseOnlyIds.size;
+  return { days: days.length, totals, invariants, violation_count: violationCount, advisories, advisory_count: advisoryCount, base_only: baseOnly, samples };
 }

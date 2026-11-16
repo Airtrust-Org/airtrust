@@ -94,7 +94,15 @@ async function loadWindowFacts(db, tenantId, from, to) {
         AND eq.numero = ${QUINZENA_NUMERO}
       WHERE f.empresa_id = ? AND f.deleted_at IS NULL AND COALESCE(f.ativo, 1) = 1
         AND eq.data_inicio <= ? AND eq.data_fim >= ?`, tenantId, to, from);
-  return { employees, allocations, manualAbsence, baseFortnights };
+  // Ciclo de embarque cadastrado por pessoa no FRMS (legado): evidência de escala só para dimensionar.
+  const legacyCycle = await all(
+    `SELECT CAST(fq.tripulante_id AS INTEGER) AS funcionario_id, fq.data_inicio_embarque, fq.data_fim_embarque,
+            fq.data_inicio_folga, fq.data_fim_folga, fq.status_ciclo
+       FROM frms_escala_quinzenal fq
+       JOIN funcionarios f ON f.id = CAST(fq.tripulante_id AS INTEGER) AND f.empresa_id = ? AND f.deleted_at IS NULL
+      WHERE fq.deleted_at IS NULL AND fq.data_inicio_embarque <= ? AND fq.data_fim_embarque >= ?`,
+    tenantId, to, from);
+  return { employees, allocations, manualAbsence, baseFortnights, legacyCycle };
 }
 
 /** Atividade comprovada do dia por fonte de origem, lida direto das tabelas (sem reutilizar a regra). */
@@ -161,7 +169,15 @@ async function loadDayFacts(db, tenantId, date) {
       WHERE t.empresa_id = ? AND t.deleted_at IS NULL AND v.deleted_at IS NULL AND v.data_programacao = ?
         AND v.status IN ('pousado', 'concluido_operacionalmente', 'em_andamento', 'alternado_divergido')
         AND v.horario_real_partida IS NOT NULL`, tenantId, date);
-  return { checkins, activity: { evd, jornada, simulator, training, recovery, cv } };
+  // Situação da jornada FRMS do dia, de qualquer origem (inclui folga e descanso), só para dimensionamento.
+  const statusRows = (await db.prepare(
+    `SELECT CAST(j.tripulante_id AS INTEGER) AS id, MIN(UPPER(COALESCE(j.status, 'SEM_STATUS'))) AS status
+       FROM frms_jornada j
+       JOIN funcionarios f ON f.id = CAST(j.tripulante_id AS INTEGER) AND f.empresa_id = ? AND f.deleted_at IS NULL
+      WHERE j.empresa_id = f.empresa_id AND j.data = ? AND j.deleted_at IS NULL
+      GROUP BY CAST(j.tripulante_id AS INTEGER)`).bind(tenantId, date).all()).results;
+  const jornadaStatus = new Map(statusRows.map((row) => [Number(row.id), /^[A-Z_]{1,12}$/.test(String(row.status)) ? String(row.status) : 'OUTRO']));
+  return { checkins, jornadaStatus, activity: { evd, jornada, simulator, training, recovery, cv } };
 }
 
 export async function runValidation({ db, loadDailyCheckinObligations, from, to, tenantId = TENANT_ID, onProgress = () => {} }) {
@@ -180,7 +196,7 @@ export async function runValidation({ db, loadDailyCheckinObligations, from, to,
     );
     days.push(evaluateDay({
       empresaId: tenantId, date, crew, allEmployees, obligations,
-      oracle: { ...dayFacts, allocations: facts.allocations, manualAbsence: facts.manualAbsence, legacyRoster },
+      oracle: { ...dayFacts, allocations: facts.allocations, manualAbsence: facts.manualAbsence, legacyRoster, legacyCycle: facts.legacyCycle },
     }));
     onProgress(date);
   }
