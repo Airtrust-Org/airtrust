@@ -34,5 +34,6 @@ describe('CORS preflight — catch-all de OPTIONS em index.ts', () => {
     expect(res.status).toBe(204);
     const allowHeaders = (res.headers.get('Access-Control-Allow-Headers') || '').toLowerCase();
     expect(allowHeaders).toContain('idempotency-key');
+    expect(allowHeaders).toContain('x-airtrust-session-role');
   });
 });

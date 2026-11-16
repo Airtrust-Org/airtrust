@@ -1,3 +1,4 @@
+import { setTabSessionRole } from '@/react-app/lib/session-role-preference';
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
@@ -171,6 +172,7 @@ export default function LoginPage() {
 
       // Troca somente o access token. O refresh token da autenticação original
       // permanece preservado e o backend revalida o perfil ativo em cada request.
+      setTabSessionRole(payload.data.activeRole || role);
       setTokens(payload.data.accessToken);
       // Recria o AuthContext com o perfil confirmado pelo backend. Navegar
       // apenas via React manteria o usuário em memória com a role do login

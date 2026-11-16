@@ -156,6 +156,33 @@ describe('auth session storage', () => {
     expect(module.readAuthStorageValue('airtrust_token')).toBe(accessToken);
     expect(module.readAuthStorageValue('airtrust_refresh_token')).toBe('refresh-transiente');
   });
+  it('fails closed if single-use rotation succeeds but its response never arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const module = await import('../api');
+      const existing = makeJwt(3600);
+      module.setPersistLogin(true);
+      module.setTokens(existing, 'refresh-stalled');
+      let transportSignal: AbortSignal | undefined;
+      apiFetchMock.mockImplementationOnce((_url: string, init?: RequestInit) => {
+        transportSignal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {}); // simulates transport ignoring abort
+      });
+      const rejection = expect(module.refreshAccessToken()).rejects.toMatchObject({
+        name: 'AuthRefreshError', terminal: true, code: 'AUTH_REFRESH_OUTCOME_UNKNOWN',
+      });
+      await vi.advanceTimersByTimeAsync(7_000);
+      await rejection;
+      expect(transportSignal?.aborted).toBe(true);
+      // A remote server may have consumed refresh-stalled: never retry it.
+      expect(module.getRefreshToken()).toBeNull();
+      expect(module.getAccessToken()).toBeNull();
+      expect(apiFetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('coalesces concurrent refreshes into a single request', async () => {
     const module = await import('../api');
     module.setPersistLogin(true);

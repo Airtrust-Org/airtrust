@@ -1,5 +1,6 @@
 import { useContext, useMemo } from 'react';
 import { AuthContext } from '../context/auth-context';
+import { clearTabSessionRole } from '../lib/session-role-preference';
 
 export const SESSION_ROLE_COOKIE = 'airtrust_session_role';
 
@@ -15,6 +16,7 @@ export function readActiveSessionRole(): string | null {
 }
 
 export function clearActiveSessionRole(): void {
+  clearTabSessionRole();
   if (typeof document === 'undefined') return;
   document.cookie = `${SESSION_ROLE_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
   document.cookie = `${SESSION_ROLE_COOKIE}=; Max-Age=0; Path=/; Domain=.airtrust.online; SameSite=Lax`;
