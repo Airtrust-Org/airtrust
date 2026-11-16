@@ -425,11 +425,34 @@ async function performRefreshAccessToken(): Promise<void> {
   }
 
   try {
-    const response = await apiFetch(API_ENDPOINTS.REFRESH_TOKEN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+    // A single stalled refresh previously blocked every authenticated GET,
+    // including BOTH LMS read strategies, even after their abort deadlines.
+    // Keep a transport abort and an independent deadline: a mocked/noncompliant
+    // fetch implementation must not hold the shared refreshPromise indefinitely.
+    const controller = new AbortController();
+    let deadlineId: ReturnType<typeof setTimeout> | undefined;
+    let response: Response;
+    try {
+      response = await Promise.race([
+        apiFetch(API_ENDPOINTS.REFRESH_TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+          signal: controller.signal,
+        }),
+        new Promise<never>((_resolve, reject) => {
+          deadlineId = setTimeout(() => {
+            controller.abort();
+            reject(new AuthRefreshError('Tempo limite para renovar a sessão. Tente novamente.', {
+              terminal: false,
+              code: 'AUTH_REFRESH_TIMEOUT',
+            }));
+          }, 7_000);
+        }),
+      ]);
+    } finally {
+      if (deadlineId !== undefined) clearTimeout(deadlineId);
+    }
 
     if (!response.ok) {
       const responseJson = (await response.json().catch(() => ({}))) as {
