@@ -4,6 +4,7 @@
 
 import type { FrmsAlerta, NivelAlerta } from './types';
 import { now, logAuditoria } from './db-service-shared';
+import { carryFrmsCaseHistory } from './case-resolution';
 import { FRMS_CANONICAL_OPERATIONAL_SOURCE } from './frms-source-policy';
 
 export interface BuscarAlertasFiltro {
@@ -179,16 +180,18 @@ export async function registrarTratamentoAlerta(
   const anterior = await currentOpenCase(db, id, empresaId);
   if (!anterior) return false;
   const timestamp = now();
+  // Um caso reaberto carrega o histórico de encerramentos; novo tratamento não o apaga.
+  const notas = carryFrmsCaseHistory(anterior.notas_resolucao, notasTratamento);
   const result = await db.prepare(`
     UPDATE frms_alerta
     SET notas_resolucao = ?, updated_at = ?
     WHERE ${CASE_WRITE_SCOPE}
-  `).bind(notasTratamento, timestamp, id, empresaId).run();
+  `).bind(notas, timestamp, id, empresaId).run();
   if ((result.meta?.changes ?? 0) !== 1) return false;
   await logAuditoria(db, 'frms_alerta', id, 'TRATAMENTO_REGISTRADO', anterior, {
     registrado_por: userId,
     registrado_em: timestamp,
-    notas_resolucao: notasTratamento,
+    notas_resolucao: notas,
     resolvido: 0,
   });
   return true;
@@ -204,17 +207,62 @@ export async function marcarAlertaResolvido(
   const anterior = await currentOpenCase(db, id, empresaId);
   if (!anterior) return false;
   const timestamp = now();
+  const notas = carryFrmsCaseHistory(anterior.notas_resolucao, notasResolucao);
   const result = await db.prepare(`
     UPDATE frms_alerta
     SET resolvido = 1, resolvido_em = ?, resolvido_por = ?,
         notas_resolucao = ?, updated_at = ?
     WHERE ${CASE_WRITE_SCOPE}
-  `).bind(timestamp, userId, notasResolucao, timestamp, id, empresaId).run();
+  `).bind(timestamp, userId, notas, timestamp, id, empresaId).run();
   if ((result.meta?.changes ?? 0) !== 1) return false;
   await logAuditoria(db, 'frms_alerta', id, 'RESOLVIDO', anterior, {
     resolvido_por: userId,
     resolvido_em: timestamp,
-    notas_resolucao: notasResolucao,
+    notas_resolucao: notas,
   });
   return true;
+}
+
+/**
+ * Reabre um caso ENCERRADO do próprio tenant. O encerramento anterior fica preservado em
+ * `notas_resolucao.historico`; a trilha fica em `auditoria_avancada_v2` (acao REABERTO).
+ */
+export async function reabrirAlertaResolvido(
+  db: D1Database,
+  id: string,
+  userId: string,
+  buildNotes: (previousNotes: unknown) => string | null,
+  empresaId: number,
+): Promise<'REOPENED' | 'NOT_CLOSED' | 'INVALID'> {
+  const anterior = await db.prepare(`
+    SELECT a.* FROM frms_alerta a
+    JOIN funcionarios f ON f.id = CAST(a.tripulante_id AS INTEGER)
+    WHERE a.id = ? AND a.deleted_at IS NULL
+      AND f.empresa_id = ? AND f.deleted_at IS NULL
+      AND COALESCE(a.resolvido, 0) = 1
+    LIMIT 1
+  `).bind(id, empresaId).first<Record<string, unknown>>();
+  if (!anterior) return 'NOT_CLOSED';
+  const notes = buildNotes(anterior.notas_resolucao);
+  if (!notes) return 'INVALID';
+  const timestamp = now();
+  const result = await db.prepare(`
+    UPDATE frms_alerta
+    SET resolvido = 0, resolvido_em = NULL, resolvido_por = NULL,
+        notas_resolucao = ?, updated_at = ?
+    WHERE id = ? AND deleted_at IS NULL AND COALESCE(resolvido, 0) = 1
+      AND EXISTS (
+        SELECT 1 FROM funcionarios f
+        WHERE f.id = CAST(frms_alerta.tripulante_id AS INTEGER)
+          AND f.empresa_id = ? AND f.deleted_at IS NULL
+      )
+  `).bind(notes, timestamp, id, empresaId).run();
+  if ((result.meta?.changes ?? 0) !== 1) return 'NOT_CLOSED';
+  await logAuditoria(db, 'frms_alerta', id, 'REABERTO', anterior, {
+    reaberto_por: userId,
+    reaberto_em: timestamp,
+    notas_resolucao: notes,
+    resolvido: 0,
+  });
+  return 'REOPENED';
 }
