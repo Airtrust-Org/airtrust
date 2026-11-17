@@ -363,9 +363,9 @@
   "staleness_guard": {
     "schema_v2_changes_dir": "worker-airtrust/schema-v2/changes",
     "reviewed_manifests_dir": "worker-airtrust/schema-v2",
-    "last_reconciled_at": "2026-11-14",
-    "last_reconciled_against": "0587 formal append-only rectification of signed simulator fichas; reviewed production apply pending",
-    "schema_v2_digest": "d74fd19fb604a588992dbb0ded905c58c82fe991831f8ae301af3ffbd4092c68",
+    "last_reconciled_at": "2026-11-16",
+    "last_reconciled_against": "0588 simulator six display-label updates, tenant 6, reviewed production apply pending",
+    "schema_v2_digest": "06af3d648bc3b62fd796232ca8f14f07f553f600c8d0349d8e2d87671c7968e1",
     "policy": "Every *.sql under schema_v2_changes_dir MUST have exactly one classified entry in schema_v2_since_baseline whose sha256 and targets match the file on disk. Adding, renaming or editing a Schema V2 change without reconciling this contract (entry + schema_v2_digest) fails CI via scripts/schema-contract/check-contract-staleness.mjs. A change whose DDL touches a scoped_tables table must additionally update tables{} / relevant_indexes / schema_hash and be classified REFLECTED_IN_CONTRACT."
   },
   "runtime_critical_uncovered": [
@@ -1888,6 +1888,20 @@
       "reviewed_manifest": "simuladores-fichas-retificacoes-0587.json",
       "evidence": "worker-airtrust/schema-v2/plans/simuladores-fichas-retificacoes-0587.md",
       "note": "Additive tables + triggers only; fichas_sessao and fichas_sessao_manobras are never modified. Apply 0587 before deploying the Worker routes."
+    },
+    {
+      "change_file": "0588_simuladores_tipos_nomes_sem_pto.sql",
+      "change_id": "simuladores-tipos-nomes-sem-pto-0588",
+      "sha256": "28f04e958f05e37cec21bfaa281d406518c1bc68d0554ce70f31158b2b82824b",
+      "targets": [
+        "tipos_sessao"
+      ],
+      "domain": "Simulators tenant 6: cosmetic names for six simulator session types, keeping IDs/codes/manobras/fichas unchanged",
+      "coverage": "OUT_OF_CONTRACT_SCOPE",
+      "governance_state": "REMOTE_APPLY_PENDING",
+      "reviewed_manifest": "simuladores-tipos-nomes-sem-pto-0588.json",
+      "evidence": "worker-airtrust/schema-v2/plans/simuladores-tipos-nomes-sem-pto-0588.md",
+      "note": "Data-only six exact tenant-6 label updates; no structural DDL or unrelated writes. Reviewed Schema V2 plus production D1 Time Travel and readback are mandatory."
     }
   ]
 }
