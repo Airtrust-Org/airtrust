@@ -55,7 +55,7 @@ function fixture(opts: { formativeActive?: boolean } = {}) {
     CREATE TABLE lms_matriculas (id INTEGER PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER, deleted_at TEXT);
     CREATE TABLE lms_matricula_ciclos (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER, matricula_id INTEGER,
-      ciclo_atual INTEGER, status TEXT, deleted_at TEXT);
+      ciclo_atual INTEGER, status TEXT, deleted_at TEXT, data_conclusao TEXT);
     CREATE TABLE lms_completion_diagnostics_snapshots (
       id INTEGER PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER, matricula_id INTEGER);
   `);
