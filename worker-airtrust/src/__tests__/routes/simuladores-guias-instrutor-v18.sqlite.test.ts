@@ -107,6 +107,10 @@ function createSqliteEnv() {
     CREATE TABLE funcionarios (id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, usuario_id INTEGER, deleted_at TEXT);
     CREATE TABLE modelos_aeronave (id INTEGER PRIMARY KEY, nome TEXT NOT NULL, codigo TEXT NOT NULL, deleted_at TEXT);
     CREATE TABLE modelos_sessao (id INTEGER PRIMARY KEY, codigo TEXT NOT NULL, nome TEXT NOT NULL, descricao TEXT, deleted_at TEXT);
+    CREATE TABLE modelos_sessao_versionamento (
+      modelo_id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL,
+      is_current INTEGER NOT NULL, versao_matriz TEXT NOT NULL
+    );
     CREATE TABLE simuladores (id INTEGER PRIMARY KEY, nome TEXT NOT NULL);
     CREATE TABLE simulador_agendamentos (
       id INTEGER PRIMARY KEY, empresa_id INTEGER NOT NULL, template_id INTEGER, simulador_id INTEGER,
@@ -147,6 +151,8 @@ function createSqliteEnv() {
     INSERT INTO modelos_sessao VALUES
       (301, 'V18-A139-T1', 'AW139 - TRANSICAO - 01/04', 'Transicao V18', NULL),
       (302, 'V18-INST-E01', 'INSTRUTOR - E01/E02', 'Modulo E01 instrutor', NULL);
+    INSERT INTO modelos_sessao_versionamento VALUES
+      (301, 6, 1, 'PTO-REV10-V18'), (302, 6, 1, 'PTO-REV10-V18');
     INSERT INTO simuladores VALUES (10, 'FFS AW139');
     INSERT INTO simulador_agendamentos (id, empresa_id, template_id, simulador_id, data, hora_inicio, hora_fim, nome, deleted_at)
     VALUES (901, 6, 302, 10, '2026-12-01', '08:00', '10:00', 'Formacao Instrutor E01', NULL);
@@ -241,6 +247,37 @@ describe('simuladores-guias-instrutor — PTO Rev.10 V18 (SQLite integration)', 
     Authorization: 'Bearer test',
     'x-test-empresa-id': String(empresaId),
     'x-test-guia-role': 'INSTRUTOR',
+  });
+
+  it('biblioteca do instrutor prioriza somente modelos correntes, mas o acervo administrativo preserva os legados', async () => {
+    ctx.db.exec(`
+      INSERT INTO modelos_sessao VALUES (303, 'LEGACY-A139-P', 'AW139 legado', 'Histórico', NULL);
+      INSERT INTO modelos_sessao_versionamento VALUES (303, 6, 0, 'LEGACY');
+      INSERT INTO simuladores_guias_instrutor_v2
+        (id, empresa_id, modelo_aeronave_id, programa, codigo, titulo, versao, status, created_by)
+      VALUES
+        (501, 6, 5, 'PERIODICO', 'A139-P-LEGACY', 'Guia histórico', '1.0', 'ATIVO', 1),
+        (502, 6, 5, 'PERIODICO', 'A139-P-V18', 'Guia atual', '1.0', 'ATIVO', 1);
+      INSERT INTO simuladores_modelos_sessao_guias_v2
+        (empresa_id, modelo_sessao_id, guia_id, principal)
+      VALUES (6,303,501,1), (6,301,502,1);
+    `);
+
+    const instructor = await ctx.app.request(
+      '/api/simuladores/guias-instrutor?aeronave=AW139',
+      { headers: instrutorHeaders(6) }, ctx.env,
+    );
+    expect(instructor.status).toBe(200);
+    const visible = (await instructor.json()) as { data: Array<{ id: number }> };
+    expect(visible.data.map((guide) => guide.id)).toEqual([502]);
+
+    const admin = await ctx.app.request(
+      '/api/simuladores/guias-instrutor?admin=1&aeronave=AW139',
+      { headers: gestorHeaders(6) }, ctx.env,
+    );
+    expect(admin.status).toBe(200);
+    const archive = (await admin.json()) as { data: Array<{ id: number }> };
+    expect(archive.data.map((guide) => guide.id).sort()).toEqual([501, 502]);
   });
 
   it('cria guias para novos programas de aeronave V18 e rejeita modelo_aeronave_id nulo fora de funcional', async () => {
