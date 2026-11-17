@@ -182,10 +182,17 @@ async function sealExpiredAttempt(db: D1Database, a: AttemptRow): Promise<boolea
   const plan=await loadPlan(db,a);
   const minutes=attemptPolicy(plan).timeLimitMinutes;
   if (minutes===null || Date.now()<utcMillis(a.started_at)+minutes*60000) return false;
-  const total=plan.sections.reduce((n,sec)=>n+sec.questions.length,0);
+  // Preserve actual submitted work in the sealed audit evidence: expiration
+  // overrides approval, but must not fabricate zero answers or a zero score.
+  const questions=await loadPublishedQuestions(db,
+    {empresaId:a.empresa_id,cursoId:a.curso_id},
+    plan.sections.flatMap(sec=>sec.questions));
+  const saved=await loadAnswers(db,a);
+  const graded=await gradeExternalExam(plan,questions,
+    Object.entries(saved).map(([questionId,choiceId])=>({questionId,choiceId})));
   const result=JSON.stringify({
-    passed:false,answered:0,unanswered:total,expired:true,
-    sections:plan.sections.map(sec=>({moduleId:sec.moduleId,scorePct:0,passed:false})),
+    passed:false,answered:graded.answered,unanswered:graded.unanswered,expired:true,
+    sections:graded.sections.map(sec=>({moduleId:sec.moduleId,scorePct:sec.scorePct,passed:false})),
   });
   await db.prepare(
     "UPDATE lms_exam_attempts SET state='SUBMITTED',submitted_at=datetime('now'),passed=0,result_json=? " +

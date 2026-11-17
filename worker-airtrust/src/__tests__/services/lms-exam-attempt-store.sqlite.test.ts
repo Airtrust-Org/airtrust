@@ -236,7 +236,7 @@ describe('política imutável de tentativas e prazo',()=>{
       await expect(saveExamResponse(db.asD1(),learner,a.attemptId,'q2','o1'))
         .rejects.toThrow('EXAM_TIME_EXPIRED');
       const expired=await submitExamAttempt(db.asD1(),learner,a.attemptId);
-      expect(expired.result).toMatchObject({passed:false,expired:true});
+      expect(expired.result).toMatchObject({passed:false,expired:true,answered:1,unanswered:9});
       expect(expired.state).toBe('SUBMITTED');
       expect(await evidence()).toBeNull();
       const b=await startExamAttempt(db.asD1(),learner,scope,'idem-time-002');
