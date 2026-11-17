@@ -222,7 +222,7 @@ describe('conclusão SCORM preserva a política efetiva apesar de pin legado imu
 
     const result = await completeSpy({
       db: db.asD1(), empresaId: 1, matriculaId: 384, funcionarioId: 1000,
-      cursoId: 34, cursoTitulo: 'Curso formativo sintético',
+      cursoId: 34, tipoConteudo: 'scorm', cursoTitulo: 'Curso formativo sintético',
       gerarQualificacaoAoConcluir: false, qualificacaoTipoId: null,
       qualificacaoCodigo: null, qualificacaoNome: null,
       qualificacaoCategoria: null, validade: null,
