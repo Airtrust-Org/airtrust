@@ -8,7 +8,12 @@
  * reclassified by a later edition.
  */
 export const EFFECTIVE_ASSESSMENT_POLICY_SQL = `COALESCE(
-  (SELECT cy.assessment_policy FROM lms_matricula_ciclos cy
+  (SELECT CASE
+    -- An open cycle follows the active edition, even if an older migration
+    -- incorrectly left a pinned policy. Only terminal cycles keep their pin.
+    WHEN cy.status IN ('NAO_INICIADO', 'EM_ANDAMENTO') THEN NULL
+    ELSE cy.assessment_policy
+  END FROM lms_matricula_ciclos cy
     WHERE cy.matricula_id = m.id AND cy.empresa_id = m.empresa_id
       AND cy.ciclo_atual = 1 AND cy.deleted_at IS NULL LIMIT 1),
   c.scorm_assessment_policy) AS scorm_assessment_policy`;
