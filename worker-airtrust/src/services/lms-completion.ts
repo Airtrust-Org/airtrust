@@ -39,6 +39,8 @@ export interface CompleteLmsMatriculaParams {
   matriculaId: number;
   funcionarioId: number;
   cursoId?: number | null;
+  /** DB-owned course type: only SCORM closures require an edition-policy receipt. */
+  tipoConteudo?: string | null;
   cursoTitulo: string;
   gerarQualificacaoAoConcluir: boolean;
   qualificacaoTipoId: number | null;
@@ -607,7 +609,7 @@ export function buildCompletionBatchStatements(
     ],
   });
 
-  statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
+  if (params.tipoConteudo === 'scorm') statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
   return statements;
 }
 
@@ -765,7 +767,7 @@ function buildNotRequiredBatchStatements(
     ],
   });
 
-  statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
+  if (params.tipoConteudo === 'scorm') statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
   return statements;
 }
 
