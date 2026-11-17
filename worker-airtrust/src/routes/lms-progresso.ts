@@ -211,7 +211,7 @@ app.post('/xapi/statements', async (c) => {
       SELECT m.id, m.funcionario_id, m.status, m.empresa_id, m.progresso_pct, m.score_final,
         m.qualificacao_historico_id,
         c.id AS curso_id, c.gerar_qualificacao_ao_concluir, c.qualificacao_tipo_id,
-        c.titulo AS curso_titulo,
+        c.titulo AS curso_titulo, c.tipo_conteudo,
         c.scorm_mastery_score,
         qt.codigo AS qualificacao_codigo,
         qt.nome AS qualificacao_nome,
@@ -237,6 +237,7 @@ app.post('/xapi/statements', async (c) => {
       gerar_qualificacao_ao_concluir: number;
       qualificacao_tipo_id: number | null;
       curso_titulo: string;
+      tipo_conteudo: string | null;
       scorm_mastery_score: number | null;
       qualificacao_codigo: string | null;
       qualificacao_nome: string | null;
@@ -352,6 +353,7 @@ app.post('/xapi/statements', async (c) => {
         matriculaId: stmt.matricula_id,
         funcionarioId: matricula.funcionario_id,
         cursoId: matricula.curso_id,
+        tipoConteudo: matricula.tipo_conteudo,
         cursoTitulo: matricula.curso_titulo,
         gerarQualificacaoAoConcluir: matricula.gerar_qualificacao_ao_concluir === 1,
         qualificacaoTipoId: matricula.qualificacao_tipo_id,
