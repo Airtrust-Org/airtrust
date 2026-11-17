@@ -32,6 +32,27 @@ function fixture() {
       (200,7,20,1,'EM_ANDAMENTO','FORMATIVE',NULL),
       (201,7,21,1,'CONCLUIDO','FORMATIVE',NULL);
   `);
+  db.database.exec(`
+    ALTER TABLE lms_matricula_ciclos ADD COLUMN data_conclusao TEXT;
+    CREATE TABLE lms_scorm_package_versions (
+      id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
+      assessment_policy TEXT);
+    CREATE TABLE lms_scorm_package_audit_log (
+      id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
+      package_id TEXT, action TEXT, created_at TEXT);
+    INSERT INTO lms_scorm_package_versions VALUES
+      ('old-6',6,26,'SCORED'), ('form-6',6,26,'FORMATIVE'),
+      ('old-7',7,26,'FORMATIVE'), ('scored-7',7,26,'SCORED');
+    INSERT INTO lms_scorm_package_audit_log VALUES
+      ('a-old-6',6,26,'old-6','ACTIVATED','2026-10-01 00:00:00'),
+      ('b-form-6',6,26,'form-6','ACTIVATED','2026-11-01 00:00:00'),
+      ('a-old-7',7,26,'old-7','ACTIVATED','2026-10-01 00:00:00'),
+      ('b-scored-7',7,26,'scored-7','ACTIVATED','2026-11-01 00:00:00');
+    UPDATE lms_matricula_ciclos SET data_conclusao='2026-10-15 12:00:00'
+      WHERE id=100;
+    UPDATE lms_matricula_ciclos SET data_conclusao='2026-10-15 12:00:00'
+      WHERE id=201;
+  `);
   return db;
 }
 function effective(db: SqliteD1Database, enrollmentId: number, tenantId: number): string | undefined {
@@ -61,6 +82,49 @@ describe('effective SCORM assessment policy for pre-existing cycles', () => {
     expect(effective(db, 13, 6)).toBe('SCORED');
     expect(effective(db, 15, 6)).toBe('SCORED');
     expect(effective(db, 21, 7)).toBe('FORMATIVE');
+  });
+
+  it('does not revert to a stale pin after a genuine open-to-completed transition', () => {
+    const db = fixture();
+    expect(effective(db, 11, 6)).toBe('FORMATIVE');
+    db.database.prepare(`UPDATE lms_matricula_ciclos
+      SET status='CONCLUIDO',data_conclusao='2026-11-17 12:00:00'
+      WHERE id=101`).run();
+    expect(db.database.prepare('SELECT assessment_policy AS p FROM lms_matricula_ciclos WHERE id=101')
+      .get()).toMatchObject({ p: 'SCORED' });
+    expect(effective(db, 11, 6)).toBe('FORMATIVE');
+    // A later active SCORED edition must not reclassify this completed cycle.
+    db.database.exec(`
+      INSERT INTO lms_scorm_package_versions VALUES ('scored-new-6',6,26,'SCORED');
+      INSERT INTO lms_scorm_package_audit_log VALUES
+        ('c-scored-new-6',6,26,'scored-new-6','ACTIVATED','2026-12-01 00:00:00');
+      UPDATE lms_cursos SET scorm_assessment_policy='SCORED' WHERE id=26 AND empresa_id=6;
+    `);
+    expect(effective(db, 11, 6)).toBe('FORMATIVE');
+    expect(effective(db, 12, 6)).toBe('SCORED');
+    expect(effective(db, 10, 6)).toBe('SCORED');
+  });
+
+  it('also preserves SCORED when it was active at completion despite stale FORMATIVE pin', () => {
+    const db = fixture();
+    expect(effective(db, 20, 7)).toBe('SCORED');
+    db.database.prepare(`UPDATE lms_matricula_ciclos
+      SET status='CONCLUIDO',data_conclusao='2026-11-17 12:00:00'
+      WHERE id=200`).run();
+    expect(db.database.prepare('SELECT assessment_policy AS p FROM lms_matricula_ciclos WHERE id=200')
+      .get()).toMatchObject({ p: 'FORMATIVE' });
+    expect(effective(db, 20, 7)).toBe('SCORED');
+    expect(effective(db, 21, 7)).toBe('FORMATIVE');
+  });
+
+  it('falls back to immutable terminal pin when activation history is absent', () => {
+    const db = fixture();
+    db.database.exec(`
+      DELETE FROM lms_scorm_package_audit_log WHERE empresa_id=6;
+      UPDATE lms_matricula_ciclos
+        SET status='CONCLUIDO',data_conclusao='2026-11-17 12:00:00' WHERE id=101;
+    `);
+    expect(effective(db, 11, 6)).toBe('SCORED');
   });
 
   it('ignores deleted cycles and never crosses the tenant boundary', () => {
