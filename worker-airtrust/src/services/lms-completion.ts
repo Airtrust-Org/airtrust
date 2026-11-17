@@ -607,6 +607,7 @@ export function buildCompletionBatchStatements(
     ],
   });
 
+  statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
   return statements;
 }
 
@@ -641,6 +642,50 @@ async function logRejectionAudit(
       }),
     );
   }
+}
+
+/**
+ * Freeze the verified edition policy at the instant a SCORM cycle is
+ * legitimately finalized. This is an append-only, tenant+cycle-scoped audit
+ * receipt, not a fabricated grade, qualification or administrative override.
+ *
+ * It runs BEFORE status changes inside the existing D1 transaction: a stale
+ * replay of a previously terminal cycle cannot create a retrospective receipt.
+ * The immutable cycle assessment_policy column remains untouched (Schema 0569).
+ */
+function buildScormCompletionPolicySnapshotStatement(
+  params: CompleteLmsMatriculaParams,
+): { sql: string; args: unknown[] } {
+  return {
+    sql: `INSERT INTO audit_logs
+      (user_id,action,entity_type,entity_id,old_values,new_values,
+       ip_address,user_agent,empresa_id,created_at)
+      SELECT ?,'LMS_SCORM_COMPLETION_POLICY_SNAPSHOT',
+             'lms_matricula_ciclos',cy.id,NULL,
+             json_object('policy',c.scorm_assessment_policy,'course_id',c.id),
+             ?,?,m.empresa_id,datetime('now')
+      FROM lms_matriculas m
+      JOIN lms_cursos c ON c.id=m.curso_id AND c.empresa_id=m.empresa_id
+      JOIN lms_matricula_ciclos cy ON cy.matricula_id=m.id
+        AND cy.empresa_id=m.empresa_id AND cy.ciclo_atual=1 AND cy.deleted_at IS NULL
+      WHERE m.id=? AND m.empresa_id=? AND m.funcionario_id=?
+        AND m.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+        AND cy.status IN ('NAO_INICIADO','EM_ANDAMENTO')
+        AND c.tipo_conteudo='scorm'
+        AND c.scorm_assessment_policy IN ('SCORED','FORMATIVE')
+        AND NOT EXISTS (SELECT 1 FROM audit_logs a
+          WHERE a.empresa_id=m.empresa_id
+            AND a.action='LMS_SCORM_COMPLETION_POLICY_SNAPSHOT'
+            AND a.entity_type='lms_matricula_ciclos' AND a.entity_id=cy.id)`,
+    args: [
+      params.actorUserId ?? null,
+      params.ipAddress ?? null,
+      params.userAgent ?? null,
+      params.matriculaId,
+      params.empresaId,
+      params.funcionarioId,
+    ],
+  };
 }
 
 function buildNotRequiredBatchStatements(
@@ -720,6 +765,7 @@ function buildNotRequiredBatchStatements(
     ],
   });
 
+  statements.unshift(buildScormCompletionPolicySnapshotStatement(params));
   return statements;
 }
 
