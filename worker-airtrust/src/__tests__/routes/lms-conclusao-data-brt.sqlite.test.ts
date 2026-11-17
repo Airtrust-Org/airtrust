@@ -210,6 +210,47 @@ describe('POST /xapi/statements entrega o dia de São Paulo ao serviço canônic
   });
 });
 
+describe('conclusão SCORM preserva a política efetiva apesar de pin legado imutável', () => {
+  it('grava snapshot tenant/ciclo antes da conclusão sem alterar o pin, nota ou histórico', async () => {
+    const db = fixture();
+    db.database.exec(`
+      UPDATE lms_cursos SET tipo_conteudo='scorm',
+        scorm_assessment_policy='FORMATIVE',
+        scorm_package_r2_prefix='lms/scorm/1/34/v1' WHERE id=34;
+      UPDATE lms_matricula_ciclos SET assessment_policy='SCORED' WHERE matricula_id=384;
+    `);
+
+    const result = await completeSpy({
+      db: db.asD1(), empresaId: 1, matriculaId: 384, funcionarioId: 1000,
+      cursoId: 34, tipoConteudo: 'scorm', cursoTitulo: 'Curso formativo sintético',
+      gerarQualificacaoAoConcluir: false, qualificacaoTipoId: null,
+      qualificacaoCodigo: null, qualificacaoNome: null,
+      qualificacaoCategoria: null, validade: null,
+      dataConclusao: '2026-11-17', action: 'LMS_MATRICULA_FINALIZADA_MANUAL',
+    });
+    expect(result.outcome).toBe('qualification_not_required');
+    expect(cycle(db,384).status).toBe('CONCLUIDO');
+    const raw = db.database.prepare(`SELECT assessment_policy
+      FROM lms_matricula_ciclos WHERE matricula_id=384`).get() as { assessment_policy: string };
+    expect(raw.assessment_policy).toBe('SCORED');
+
+    const receipt = db.database.prepare(`SELECT entity_id,new_values
+      FROM audit_logs WHERE empresa_id=1 AND
+        action='LMS_SCORM_COMPLETION_POLICY_SNAPSHOT'`).get() as {
+      entity_id: number; new_values: string;
+    };
+    expect(receipt.entity_id).toBeGreaterThan(0);
+    expect(JSON.parse(receipt.new_values)).toMatchObject({
+      policy: 'FORMATIVE', course_id: 34,
+    });
+    expect(db.database.prepare(`SELECT COUNT(*) AS n FROM audit_logs WHERE empresa_id=1
+      AND action='LMS_SCORM_COMPLETION_POLICY_SNAPSHOT'`).get()).toMatchObject({ n: 1 });
+
+    const other = db.database.prepare(`SELECT status FROM lms_matriculas WHERE id=385`).get();
+    expect(other).toMatchObject({ status: 'EM_ANDAMENTO' });
+  });
+});
+
 describe('escritores de data de conclusão do LMS não usam o dia UTC', () => {
   // Cobre também POST /scorm/commit e POST /:id/finalizar, cujo setup completo
   // (SCORM, mastery, manifesto) não cabe neste arquivo.

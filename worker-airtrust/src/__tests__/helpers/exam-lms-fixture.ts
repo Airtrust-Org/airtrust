@@ -47,6 +47,18 @@ export function lmsExamDb(opts: { viewed?: number[]; bind?: boolean } = {}) {
     INSERT INTO lms_matricula_ciclos VALUES(1,6,26,10,1,'EM_ANDAMENTO',NULL,NULL);
     INSERT INTO lms_scorm_package_versions VALUES('p1',6,26,'${PKG}','VALIDATED','${PREFIX}');
   `);
+  // Model the deployed schema for the canonical assessment-policy resolver.
+  // This fixture has no activation history: the resolver must fall back safely.
+  db.exec(`
+    ALTER TABLE lms_matricula_ciclos ADD COLUMN data_conclusao TEXT;
+    ALTER TABLE lms_scorm_package_versions ADD COLUMN assessment_policy TEXT;
+    CREATE TABLE lms_scorm_package_audit_log (
+      id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
+      package_id TEXT, action TEXT, created_at TEXT);
+    CREATE TABLE audit_logs (
+      id INTEGER PRIMARY KEY, empresa_id INTEGER, action TEXT, entity_type TEXT,
+      entity_id INTEGER, new_values TEXT);
+  `);
   db.database.prepare(
     "INSERT INTO lms_progresso_scorm VALUES(10,6,'completed','completed',NULL,?,NULL,NULL,NULL,NULL,NULL)"
   ).run(ledger(opts.viewed ?? [1, 2, 3, 4]));
