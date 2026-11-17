@@ -222,7 +222,7 @@ jobs:
   browser:
     name: Authenticated Read-Only Compliance UI/API QA
     needs: [guard, d1_fixture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 30
     env:

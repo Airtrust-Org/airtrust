@@ -114,7 +114,7 @@ jobs:
     name: Authenticated learner E2E
     needs: [guard, provision]
     if: always() && needs.guard.result == 'success' && (needs.guard.outputs.action == 'all' || needs.guard.outputs.action == 'certify') && (needs.provision.result == 'success' || needs.provision.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 120
     strategy:

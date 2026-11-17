@@ -163,7 +163,7 @@ jobs:
   ui-qa:
     name: Authenticated Read-Only Frontend QA (${{ inputs.audit_profile }})
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 45
     env:
