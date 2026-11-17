@@ -283,6 +283,25 @@ app.get('/guias-instrutor', requireGuiaInstrutorRead(), async (c) => {
     sql += " AND g.status = 'ATIVO'";
   }
 
+  // Costa do Sol: instructor-facing library displays only the guide linked
+  // to the CURRENT curricular version. The 51 historical guides remain
+  // active and accessible through the administrative archive and direct
+  // authorized links; no R2/D1 mutation is performed by this filter.
+  // Other tenants retain their existing catalog contract.
+  if (!admin && empresaId === 6) {
+    sql += ` AND EXISTS (
+      SELECT 1 FROM simuladores_modelos_sessao_guias_v2 current_link
+      JOIN modelos_sessao_versionamento current_version
+        ON current_version.modelo_id = current_link.modelo_sessao_id
+       AND current_version.empresa_id = g.empresa_id
+       AND current_version.is_current = 1
+      WHERE current_link.guia_id = g.id
+        AND current_link.empresa_id = g.empresa_id
+        AND current_link.deleted_at IS NULL
+        AND current_link.principal = 1
+    )`;
+  }
+
   if (aeronave === FUNCIONAL_AERONAVE_CODIGO) {
     sql += " AND (g.modelo_aeronave_id IS NULL OR g.programa IN ('INSTRUTOR', 'EXAMINADOR'))";
   } else if (aeronave) {
