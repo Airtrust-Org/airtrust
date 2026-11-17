@@ -55,6 +55,9 @@ export function lmsExamDb(opts: { viewed?: number[]; bind?: boolean } = {}) {
     CREATE TABLE lms_scorm_package_audit_log (
       id TEXT PRIMARY KEY, empresa_id INTEGER, curso_id INTEGER,
       package_id TEXT, action TEXT, created_at TEXT);
+    CREATE TABLE audit_logs (
+      id INTEGER PRIMARY KEY, empresa_id INTEGER, action TEXT, entity_type TEXT,
+      entity_id INTEGER, new_values TEXT);
   `);
   db.database.prepare(
     "INSERT INTO lms_progresso_scorm VALUES(10,6,'completed','completed',NULL,?,NULL,NULL,NULL,NULL,NULL)"
