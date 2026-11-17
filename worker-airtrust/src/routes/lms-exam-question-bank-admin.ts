@@ -178,7 +178,11 @@ routes.post('/cursos/:cursoId/provas/:examId/versoes/:version/vinculo',async c=>
     "WHERE empresa_id=? AND curso_id=? AND package_sha256=? LIMIT 1"
   ).bind(getEmpresaId(c),cursoId,body.packageSha256)
     .first<{r2_prefix:string;status:string}>();
-  if(!edition || !['ACTIVE','VALIDATED'].includes(edition.status)){
+  if(!edition) {
+    // Do not reveal cross-tenant edition existence via a conflict response.
+    return c.json({success:false,code:'EXAM_EDITION_NOT_FOUND'},404);
+  }
+  if(!['ACTIVE','VALIDATED'].includes(edition.status)){
     return c.json({success:false,code:'EXAM_EDITION_UNAVAILABLE'},409);
   }
   const manifest=await readActiveCompletionManifest({
