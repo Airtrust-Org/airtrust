@@ -1,0 +1,8 @@
+{
+  "changeId": "simuladores-tipos-nomes-sem-pto-0588",
+  "baselineId": "production-d1-baseline-v2-20260714",
+  "filePath": "worker-airtrust/schema-v2/changes/0588_simuladores_tipos_nomes_sem_pto.sql",
+  "fileHash": "28f04e958f05e37cec21bfaa281d406518c1bc68d0554ce70f31158b2b82824b",
+  "planPath": "worker-airtrust/schema-v2/plans/simuladores-tipos-nomes-sem-pto-0588.md",
+  "planHash": "e5d53bb329b0be30d6fbc50427b2fdab4350f5346aa9dcc923fe92bd4fcca376"
+}
