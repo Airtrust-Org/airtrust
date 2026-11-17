@@ -1,17 +1,31 @@
 /**
  * Effective assessment policy of one enrollment.
  *
- * The course column is only the policy of the CURRENT edition. A cycle that was
- * frozen at an edition switch (`lms_matricula_ciclos.assessment_policy`) keeps
- * the rules under which it ended; a NULL cycle policy means the cycle has not
- * ended yet and follows the active edition. Historical completions are never
- * reclassified by a later edition.
+ * Open cycles must follow the active edition even when an older import left
+ * a stale write-once assessment_policy value on the cycle. Completed cycles
+ * retain the edition active when they were completed, not the edition in use
+ * when they are reopened later.
+ *
+ * Schema 0569 forbids updating a non-null cycle policy. For legacy cycles with
+ * a stale pin, the immutable ACTIVATED edition audit history provides the
+ * completion-time policy without mutating that pin or any learner evidence.
+ * If the activation timeline is absent, preserve the original terminal pin.
  */
 export const EFFECTIVE_ASSESSMENT_POLICY_SQL = `COALESCE(
   (SELECT CASE
-    -- An open cycle follows the active edition, even if an older migration
-    -- incorrectly left a pinned policy. Only terminal cycles keep their pin.
     WHEN cy.status IN ('NAO_INICIADO', 'EM_ANDAMENTO') THEN NULL
+    WHEN cy.status = 'CONCLUIDO' AND cy.data_conclusao IS NOT NULL THEN
+      COALESCE(
+        (SELECT p.assessment_policy
+          FROM lms_scorm_package_audit_log a
+          JOIN lms_scorm_package_versions p ON p.id=a.package_id
+            AND p.empresa_id=a.empresa_id AND p.curso_id=a.curso_id
+          WHERE a.empresa_id=m.empresa_id AND a.curso_id=m.curso_id
+            AND a.action='ACTIVATED'
+            AND datetime(a.created_at)<=datetime(cy.data_conclusao)
+          ORDER BY datetime(a.created_at) DESC, a.id DESC LIMIT 1),
+        cy.assessment_policy
+      )
     ELSE cy.assessment_policy
   END FROM lms_matricula_ciclos cy
     WHERE cy.matricula_id = m.id AND cy.empresa_id = m.empresa_id
