@@ -62,6 +62,8 @@ jobs:
           "$RG_BIN" --version
       - name: verify R2 credential guard with synthetic format and redaction cases
         run: node --test scripts/__tests__/r2-literal-guard.test.mjs
+      - name: verify bcrypt literal guard (#2075)
+        run: node --test scripts/__tests__/guard-bcrypt-literals.test.mjs
       - name: validate release-gate verifier and deploy wiring
         run: |
           node --test scripts/ci/verify-release-gates.test.mjs
