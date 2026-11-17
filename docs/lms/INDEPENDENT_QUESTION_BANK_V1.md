@@ -34,3 +34,31 @@ Vitest focado em `worker-airtrust/src/__tests__/lib/lms-independent-question-ban
 - **Rotas admin** (mesmo prefixo `/exams/admin`, mesma flag de staging): `POST /cursos/:id/provas` publica o plano (imutável) e `POST /cursos/:id/provas/:examId/versoes/:v/vinculo` o vincula à edição, com a classificação regulatória obrigatória.
 - **Tela** `LmsProva` em `/lms/provas/:matriculaId` (radios agrupados por questão, salvamento a cada resposta, confirmação de envio com aviso de questões em branco, resultado sem gabarito) e botão "Ir para a prova final" no player quando a prova é a única pendência.
 - Continua fora: consulta ao conteúdo durante a prova, tela de admin para montar a prova, limite/intervalo de retentativas (hoje sem limite), tempo, acomodações e a ligação de `decideScoreF5Finalization`.
+
+
+## Checkpoint de prontidão para produção — 17/11/2026
+
+Atualiza os checkpoints anteriores, que são históricos e não representam a versão atual.
+
+- D1 produção: seis tabelas do módulo existentes, sem linhas nas seis tabelas.
+  Ledger oficial: 0571 aplicada em 07/11/2026 01:39:34 UTC e 0572 em 01:43:29 UTC.
+  Nunca reaplicar as migrations 0571/0572.
+- Política dos cursos SCORM ativos/publicados em produção: 49 FORMATIVE, 3 SCORED.
+  A premissa de que todos são formativos não é verdadeira.
+- Ativação protegida por flags separados para admin/aluno e allowlist estrita
+  por empresa: inicialmente apenas empresa_id 6. Outras empresas negadas.
+- Controle antes de permitir atendimento em produção: as seis tabelas precisam
+  estar presentes; ausência retorna 503 sem escrita em D1.
+- Publicação de plano exige política imutável: máximo de 1 a 10 tentativas,
+  intervalo entre 0 e 10080 minutos, duração sem limite explícita ou entre
+  5 e 240 minutos. A reabertura preserva o histórico e reprovação.
+- A vinculação ao curso exige edição ativa/validada e manifesto real no R2
+  com assessment.mode EXTERNAL e workerApprovalRequired verdadeiro.
+  Pacotes SCORM/NONE/formativos não serão vinculados a provas externas.
+- Provas aprovadas são apenas evidência: conclusão, qualificação e certificado
+  continuam exclusivamente sob o escritor transacional canônico do LMS.
+- Com zero planos/vínculos/tentativas na produção, a ativação das rotas
+  não exige provas automaticamente aos alunos dos cursos existentes.
+- Critério de release: testes focados, E2E sintético Chromium/WebKit, oito
+  gates oficiais, merge protegido, ativação por SHA governada e smoke real
+  de produção sem nova exigência para cursos formativos.

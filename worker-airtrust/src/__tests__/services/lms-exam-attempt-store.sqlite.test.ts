@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExamSqliteD1 } from '../helpers/exam-sqlite-d1';
 import {
   EXAM_PLAN_SCHEMA, type ExamPlan,
@@ -35,12 +35,13 @@ async function publishedQuestion(n: number) {
   const stored = await publishAdminQuestion(db.asD1(), { ...admin(3), cursoId: 26 }, id, 1, 1);
   return stored.revision;
 }
-async function ready(bind = true) {
+async function ready(bind = true, overridePolicy: Partial<ExamPlan['attemptPolicy']> = {}) {
   const questions = await Promise.all(Array.from({ length: 10 }, (_, i) => publishedQuestion(i + 1)));
   plan = {
     schema: EXAM_PLAN_SCHEMA, tenantId: 6, courseId: 26, examId: 'exam1', version: 1,
     trainingSourceSha256: PKG, trainingEditionSha256: 'b'.repeat(64),
     acceptedQuestionSourceSha256: [PKG], consultationAllowed: true,
+    attemptPolicy: {maxAttempts:3,retryDelayMinutes:0,timeLimitMinutes:null,...overridePolicy},
     sections: [{ moduleId: 'm1', minScorePct: 70, questions: questions.map(q => ({
       questionId: q.questionId, revision: q.revision, contentSha256: q.contentSha256!,
     })) }],
@@ -194,5 +195,52 @@ describe('correção e evidência para a conclusão', () => {
   it('sem o schema 0572 a busca falha fechada (sem evidência) em vez de lançar', async () => {
     const bare = new ExamSqliteD1();
     expect(await findApprovedExamEvidence(bare.asD1(), { empresaId: 6, matriculaId: 10, activePackagePrefix: PREFIX })).toBeNull();
+  });
+});
+
+describe('política imutável de tentativas e prazo',()=>{
+  it('rejeita plano sem política explícita',async()=>{
+    await ready(false);
+    await expect(publishExamPlan(db.asD1(),admin(),{...plan,version:2,attemptPolicy:undefined} as unknown as ExamPlan))
+      .rejects.toThrow('INVALID_EXAM_PLAN');
+  });
+  it('nega nova tentativa após atingir o limite sem fabricar aprovação',async()=>{
+    await ready(true,{maxAttempts:1});
+    const a=await startExamAttempt(db.asD1(),learner,scope,'idem-max-00001');
+    await answerAll(a.attemptId,6);
+    expect((await submitExamAttempt(db.asD1(),learner,a.attemptId)).result?.passed).toBe(false);
+    await expect(startExamAttempt(db.asD1(),learner,scope,'idem-max-00002'))
+      .rejects.toThrow('EXAM_ATTEMPTS_EXHAUSTED');
+    expect(await evidence()).toBeNull();
+  });
+  it('respeita intervalo para repetição após reprovação',async()=>{
+    await ready(true,{retryDelayMinutes:60});
+    const a=await startExamAttempt(db.asD1(),learner,scope,'idem-delay-001');
+    await answerAll(a.attemptId,6);
+    await submitExamAttempt(db.asD1(),learner,a.attemptId);
+    await expect(startExamAttempt(db.asD1(),learner,scope,'idem-delay-002'))
+      .rejects.toThrow('EXAM_RETRY_COOLDOWN');
+    const now=Date.now();
+    const clock=vi.spyOn(Date,'now').mockReturnValue(now+61*60000);
+    try{
+      const b=await startExamAttempt(db.asD1(),learner,scope,'idem-delay-002');
+      expect(b.attemptNo).toBe(2);
+    }finally{clock.mockRestore();}
+  });
+  it('sela prova vencida como reprovada, sem reabrir a tentativa nem aprovar',async()=>{
+    await ready(true,{timeLimitMinutes:5});
+    const a=await startExamAttempt(db.asD1(),learner,scope,'idem-time-001');
+    await saveExamResponse(db.asD1(),learner,a.attemptId,'q1','o1');
+    const clock=vi.spyOn(Date,'now').mockReturnValue(Date.now()+6*60000);
+    try{
+      await expect(saveExamResponse(db.asD1(),learner,a.attemptId,'q2','o1'))
+        .rejects.toThrow('EXAM_TIME_EXPIRED');
+      const expired=await submitExamAttempt(db.asD1(),learner,a.attemptId);
+      expect(expired.result).toMatchObject({passed:false,expired:true});
+      expect(expired.state).toBe('SUBMITTED');
+      expect(await evidence()).toBeNull();
+      const b=await startExamAttempt(db.asD1(),learner,scope,'idem-time-002');
+      expect(b.attemptNo).toBe(2);
+    }finally{clock.mockRestore();}
   });
 });

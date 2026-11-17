@@ -8,8 +8,8 @@
  * enrollment, creates a qualification or a certificate.
  */
 import {
-  type ExamAnswer, type ExamPlan, type QuestionRevision,
-  EXAM_PLAN_SCHEMA, gradeExternalExam, learnerQuestion, validateExamPlan,
+  type ExamAnswer, type ExamPlan, type QuestionRevision, type ExamAttemptPolicy,
+  EXAM_PLAN_SCHEMA, gradeExternalExam, learnerQuestion, validateExamPlan, validExamAttemptPolicy,
 } from '../../lib/lms-exams/question-bank-domain';
 import { loadPublishedQuestions } from './question-bank-store';
 
@@ -28,7 +28,7 @@ export type ExamCycleScope = Readonly<{
 export type ApprovedExamEvidence = Readonly<{ attemptId: string; planSha256: string }>;
 export type LearnerAttemptView = Readonly<{
   attemptId: string; attemptNo: number; state: 'IN_PROGRESS' | 'SUBMITTED';
-  examId: string; examVersion: number;
+  examId: string; examVersion: number; expiresAt:string|null;
   sections: readonly Readonly<{
     moduleId: string;
     questions: readonly Readonly<{
@@ -38,7 +38,7 @@ export type LearnerAttemptView = Readonly<{
   }>[];
   answers: Readonly<Record<string, string>>;
   result: Readonly<{
-    passed: boolean; answered: number; unanswered: number;
+    passed: boolean; answered: number; unanswered: number; expired?: boolean;
     sections: readonly Readonly<{ moduleId: string; scorePct: number; passed: boolean }>[];
   }> | null;
 }>;
@@ -47,10 +47,10 @@ type AttemptRow = {
   id: string; empresa_id: number; curso_id: number; matricula_id: number; ciclo_id: number;
   attempt_no: number; package_sha256: string; exam_id: string; exam_version: number;
   plan_sha256: string; state: 'IN_PROGRESS' | 'SUBMITTED'; started_by: number;
-  passed: number | null; result_json: string | null;
+  passed: number | null; result_json: string | null; started_at: string; submitted_at: string | null;
 };
 const ATTEMPT_COLUMNS = 'id,empresa_id,curso_id,matricula_id,ciclo_id,attempt_no,package_sha256,' +
-  'exam_id,exam_version,plan_sha256,state,started_by,passed,result_json';
+  'exam_id,exam_version,plan_sha256,state,started_by,passed,result_json,started_at,submitted_at';
 const SHA = /^[a-f0-9]{64}$/;
 const IDEM = /^[A-Za-z0-9._:-]{8,80}$/;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
@@ -162,6 +162,38 @@ async function loadPlan(db: D1Database, a: AttemptRow): Promise<ExamPlan> {
   if (!row) deny('EXAM_PLAN_NOT_FOUND');
   return parseStoredPlan(row, a.empresa_id, a.curso_id);
 }
+function attemptPolicy(plan: ExamPlan): ExamAttemptPolicy {
+  if (!validExamAttemptPolicy(plan.attemptPolicy)) deny('EXAM_ATTEMPT_POLICY_REQUIRED');
+  return plan.attemptPolicy;
+}
+
+function utcMillis(sqliteTime: string): number {
+  const normalized=/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(sqliteTime)
+    ? sqliteTime.replace(' ','T')+'Z' : sqliteTime;
+  const ms=Date.parse(normalized);
+  if (!Number.isFinite(ms)) deny('EXAM_ATTEMPT_CLOCK_INVALID');
+  return ms;
+}
+
+/** Seal an expired attempt as failed, preserving its audit trail and freeing the
+ * partial unique index for the next allowed attempt. No certificate is written. */
+async function sealExpiredAttempt(db: D1Database, a: AttemptRow): Promise<boolean> {
+  if (a.state !== 'IN_PROGRESS') return false;
+  const plan=await loadPlan(db,a);
+  const minutes=attemptPolicy(plan).timeLimitMinutes;
+  if (minutes===null || Date.now()<utcMillis(a.started_at)+minutes*60000) return false;
+  const total=plan.sections.reduce((n,sec)=>n+sec.questions.length,0);
+  const result=JSON.stringify({
+    passed:false,answered:0,unanswered:total,expired:true,
+    sections:plan.sections.map(sec=>({moduleId:sec.moduleId,scorePct:0,passed:false})),
+  });
+  await db.prepare(
+    "UPDATE lms_exam_attempts SET state='SUBMITTED',submitted_at=datetime('now'),passed=0,result_json=? " +
+    "WHERE id=? AND empresa_id=? AND state='IN_PROGRESS'"
+  ).bind(result,a.id,a.empresa_id).run();
+  return true;
+}
+
 async function loadAttempt(db: D1Database, learner: ExamLearner, attemptId: string): Promise<AttemptRow> {
   if (typeof attemptId !== 'string' || attemptId.length < 16 || attemptId.length > 64) {
     deny('EXAM_ATTEMPT_NOT_FOUND');
@@ -216,13 +248,16 @@ async function buildView(db: D1Database, a: AttemptRow): Promise<LearnerAttemptV
     const r = JSON.parse(a.result_json) as NonNullable<LearnerAttemptView['result']>;
     // Score percentages only: the answer key and the picked choices are not echoed.
     result = {
-      passed: r.passed, answered: r.answered, unanswered: r.unanswered,
+      passed: r.passed, answered: r.answered, unanswered: r.unanswered, expired: r.expired === true,
       sections: r.sections.map(x => ({ moduleId: x.moduleId, scorePct: x.scorePct, passed: x.passed })),
     };
   }
+  const duration=attemptPolicy(plan).timeLimitMinutes;
+  const expiresAt=duration===null?null:
+    new Date(utcMillis(a.started_at)+duration*60000).toISOString();
   return {
     attemptId: a.id, attemptNo: a.attempt_no, state: a.state,
-    examId: a.exam_id, examVersion: a.exam_version,
+    examId: a.exam_id, examVersion: a.exam_version,expiresAt,
     sections, answers: await loadAnswers(db, a), result,
   };
 }
@@ -231,7 +266,7 @@ export async function startExamAttempt(db: D1Database, learner: ExamLearner,
   scope: ExamCycleScope, idempotencyKey: string): Promise<LearnerAttemptView> {
   requireLearner(learner); requireScope(scope);
   if (typeof idempotencyKey !== 'string' || !IDEM.test(idempotencyKey)) deny('EXAM_IDEMPOTENCY_KEY_INVALID');
-  const checkedReplay = (r: AttemptRow): Promise<LearnerAttemptView> => {
+  const checkedReplay = async (r: AttemptRow): Promise<LearnerAttemptView> => {
     // A content replacement must never turn into a misleading access-denied
     // or silently reopen the attempt for a different package in the same cycle.
     if (r.started_by !== learner.userId || r.curso_id !== scope.cursoId) {
@@ -240,7 +275,8 @@ export async function startExamAttempt(db: D1Database, learner: ExamLearner,
     if (r.package_sha256 !== scope.packageSha256) {
       deny('EXAM_ATTEMPT_EDITION_CHANGED');
     }
-    return buildView(db, r);
+    if (r.state==='IN_PROGRESS') await sealExpiredAttempt(db,r);
+    return buildView(db,await loadAttempt(db,learner,r.id));
   };
   const reuse = async (): Promise<LearnerAttemptView | null> => {
     const replay = await db.prepare(
@@ -263,6 +299,22 @@ export async function startExamAttempt(db: D1Database, learner: ExamLearner,
   ).bind(learner.empresaId, scope.cursoId, scope.packageSha256)
     .first<{ exam_id: string; exam_version: number; plan_sha256: string }>();
   if (!binding) deny('EXAM_NOT_BOUND_TO_EDITION');
+  const planRow=await db.prepare(
+    'SELECT plan_json,plan_sha256 FROM lms_exam_plans WHERE empresa_id=? AND curso_id=? ' +
+    'AND exam_id=? AND version=? AND plan_sha256=? LIMIT 1'
+  ).bind(learner.empresaId,scope.cursoId,binding.exam_id,binding.exam_version,binding.plan_sha256)
+    .first<{plan_json:string;plan_sha256:string}>();
+  if(!planRow)deny('EXAM_PLAN_NOT_FOUND');
+  const policy=attemptPolicy(await parseStoredPlan(planRow,learner.empresaId,scope.cursoId));
+  const usage=await db.prepare(
+    "SELECT COUNT(*) AS used,MAX(submitted_at) AS last_submitted FROM lms_exam_attempts " +
+    "WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? AND state='SUBMITTED'"
+  ).bind(learner.empresaId,scope.matriculaId,scope.cicloId)
+    .first<{used:number;last_submitted:string|null}>();
+  if(Number(usage?.used??0)>=policy.maxAttempts)deny('EXAM_ATTEMPTS_EXHAUSTED');
+  if(usage?.last_submitted && Date.now()<utcMillis(usage.last_submitted)+policy.retryDelayMinutes*60000){
+    deny('EXAM_RETRY_COOLDOWN');
+  }
   const attemptId = crypto.randomUUID();
   try {
     await db.prepare(
@@ -291,6 +343,7 @@ export async function saveExamResponse(db: D1Database, learner: ExamLearner,
       typeof choiceId !== 'string' || !ID.test(choiceId)) deny('EXAM_ANSWER_INVALID');
   const attempt = await loadAttempt(db, learner, attemptId);
   if (attempt.state !== 'IN_PROGRESS') deny('EXAM_ATTEMPT_SEALED');
+  if(await sealExpiredAttempt(db,attempt))deny('EXAM_TIME_EXPIRED');
   const plan = await loadPlan(db, attempt);
   const ref = plan.sections.flatMap(s => s.questions).find(q => q.questionId === questionKey);
   if (!ref) deny('EXAM_ANSWER_INVALID');
@@ -312,6 +365,9 @@ export async function submitExamAttempt(db: D1Database, learner: ExamLearner,
   requireLearner(learner);
   const attempt = await loadAttempt(db, learner, attemptId);
   if (attempt.state === 'SUBMITTED') return buildView(db, attempt); // replay: same verdict
+  if(await sealExpiredAttempt(db,attempt)){
+    return buildView(db,await loadAttempt(db,learner,attemptId));
+  }
   const plan = await loadPlan(db, attempt);
   const questions = await loadPublishedQuestions(db,
     { empresaId: attempt.empresa_id, cursoId: attempt.curso_id },

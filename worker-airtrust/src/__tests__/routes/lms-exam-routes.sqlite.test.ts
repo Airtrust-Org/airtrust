@@ -53,6 +53,23 @@ describe('rotas do aluno — prova externa', () => {
     expect((await call(db, '/api/lms/exams/matriculas/10/prova', {}, { ENVIRONMENT: 'production' })).status).toBe(503);
     expect((await call(db, '/api/lms/exams/matriculas/10/prova', {}, { LMS_EXAM_LEARNER_STAGING: undefined })).status).toBe(503);
   });
+  it('produção libera somente empresa explicitamente aprovada após o schema',async()=>{
+    const db=lmsExamDb(); await publishExam(db);
+    const approved={
+      ENVIRONMENT:'production',LMS_EXAM_PRODUCTION_TENANTS:'6',
+      LMS_EXAM_LEARNER_PRODUCTION:'REVIEWED_SCHEMA_V2_0571_0572',
+      LMS_EXAM_QUESTION_ADMIN_PRODUCTION:'REVIEWED_SCHEMA_V2_0571_0572',
+    };
+    const path='/api/lms/exams/matriculas/10/prova';
+    expect((await call(db,path,{},approved)).status).toBe(200);
+    const noBinding=lmsExamDb();
+    const current=await (await call(noBinding,path,{},approved)).json() as any;
+    expect(current.data).toMatchObject({state:'NOT_AVAILABLE',attemptsUsed:0});
+    expect((await call(db,path,{}, {...approved,__mockEmpresaId:7})).status).toBe(503);
+    expect((await call(db,path,{}, {...approved,LMS_EXAM_PRODUCTION_TENANTS:'all'})).status).toBe(503);
+    expect((await call(db,'/api/lms/exams/admin/cursos/26/questoes',{},
+      {...approved,__mockRole:'admin',__mockUserId:1})).status).toBe(200);
+  });
   it('fluxo completo: estado → iniciar (idempotente) → responder → enviar → aprovado → finalizar', async () => {
     const db = lmsExamDb(); await publishExam(db);
     const state = await (await call(db, '/api/lms/exams/matriculas/10/prova')).json() as any;
@@ -158,6 +175,19 @@ describe('rotas admin — publicar prova e vincular à edição', () => {
     expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', { ...bindBody, statutoryAssessmentRequired: null }), asAdmin)).status).toBe(422);
     expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', bindBody), asAdmin)).status).toBe(201);
     expect((await call(db, '/api/lms/exams/admin/cursos/26/provas/exam1/versoes/2/vinculo', json('POST', bindBody), asAdmin)).status).toBe(409);
+  });
+  it('não vincula prova a pacote formativo ou manifesto sem aprovação do Worker', async () => {
+    const db=lmsExamDb(); const plan=await publishExam(db,false);
+    const binding={packageSha256:PKG,statutoryAssessmentRequired:false,
+      approvalNote:'Política editorial revisada'};
+    const url='/api/lms/exams/admin/cursos/26/provas/exam1/versoes/1/vinculo';
+    const denied=await call(db,url,json('POST',binding),{
+      ...asAdmin,BUCKET:externalBucket('NONE'),
+    });
+    expect(denied.status).toBe(409);
+    expect(await denied.json()).toMatchObject({code:'EXAM_EDITION_NOT_EXTERNAL'});
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM lms_exam_edition_bindings').get()).toMatchObject({n:0});
+    expect(plan.examId).toBe('exam1');
   });
   it('aluno não administra provas', async () => {
     const db = lmsExamDb(); const plan = await publishExam(db, false);

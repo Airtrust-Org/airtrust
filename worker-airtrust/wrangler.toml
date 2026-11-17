@@ -198,6 +198,11 @@ binding = "CF_VERSION_METADATA"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+# LMS Banco de Questoes/Provas — tenant 6 only, after 0571/0572 official Schema V2.
+# No course, package, enrollment, or historical assessment policy is changed.
+LMS_EXAM_PRODUCTION_TENANTS = "6"
+LMS_EXAM_QUESTION_ADMIN_PRODUCTION = "REVIEWED_SCHEMA_V2_0571_0572"
+LMS_EXAM_LEARNER_PRODUCTION = "REVIEWED_SCHEMA_V2_0571_0572"
 CORS_ORIGINS = "https://airtrust.online,https://www.airtrust.online,https://airtrust.pages.dev,https://production.airtrust.pages.dev,https://api.airtrust.online"
 # Placeholder tracked in git. The real APP_VERSION is injected by scripts/deploy-worker-only.sh
 APP_VERSION = "managed-by-script"

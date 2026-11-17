@@ -624,7 +624,7 @@ export default function LmsAdminCursos() {
                                       label={`Mais ações para o curso ${curso.titulo}`}
                                       actions={[
                                         ...(curso.tipo_conteudo === 'scorm' ? [{
-                                          label: 'Banco de questões e provas (homologação)',
+                                          label: 'Banco de questões e provas',
                                           icon: BookOpen,
                                           onSelect: () => navigate(`/lms/admin/provas/${curso.id}`),
                                         }] : []),

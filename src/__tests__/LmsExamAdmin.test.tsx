@@ -47,6 +47,9 @@ describe('Administração de provas por edição',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Publicar plano imutável'}));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent',expect.stringContaining('NOTA_MÍNIMA'));
     fireEvent.change(screen.getByLabelText('Nota mínima de m1'),{target:{value:'70'}});
+    fireEvent.change(screen.getByLabelText('Número máximo de tentativas'),{target:{value:'3'}});
+    fireEvent.change(screen.getByLabelText('Intervalo entre tentativas'),{target:{value:'0'}});
+    fireEvent.change(screen.getByLabelText('Limite de tempo da prova'),{target:{value:'30'}});
     fireEvent.click(screen.getByText(/Confirmo a cobertura do conteúdo/));
     mocked.mockImplementation(async (url,init)=>{
       if(String(url).endsWith('/provas')&&init?.method==='POST')return ok({planSha256:'e'.repeat(64)});
@@ -62,6 +65,7 @@ describe('Administração de provas por edição',()=>{
     expect(plan).toMatchObject({
       courseId:26,tenantId:6,trainingSourceSha256:pkg,trainingEditionSha256:edition,
       acceptedQuestionSourceSha256:[pkg,source],
+      attemptPolicy:{maxAttempts:3,retryDelayMinutes:0,timeLimitMinutes:30},
       sections:[{moduleId:'m1',minScorePct:70,questions:[{questionId:'q1',revision:1}]}],
     });
     expect(mocked.mock.calls.filter(([url])=>String(url).includes('/vinculo'))).toHaveLength(0);
