@@ -1,7 +1,8 @@
 /**
  * AirTrust LMS — learner exam runtime (default-off).
  *
- * Answers 503 unless ENVIRONMENT is staging and LMS_EXAM_LEARNER_STAGING is set.
+ * Answers 503 unless staging or an explicitly allowlisted production tenant
+ * is enabled with the reviewed Schema V2 0571/0572 flag.
  * Authorization: JWT + tenant, then the exam gate recomputes ownership and study
  * readiness on the server. Passing here is EVIDENCE only: the learner then calls
  * the existing POST /api/lms/matriculas/:id/finalizar, the single completion writer.
@@ -10,6 +11,7 @@ import {Hono} from 'hono';
 import {auth} from '../middleware/auth';
 import {getEmpresaId} from '../middleware/tenant';
 import type {Env} from '../types';
+import {hasLmsExamSchema,isLmsExamSurfaceEnabled} from '../lib/lms-exams/lms-exam-activation';
 import {loadExamGate} from '../services/lms-exams/exam-gate';
 import {
   ExamAttemptError,getExamAttemptScope,saveExamResponse,startExamAttempt,submitExamAttempt,
@@ -18,14 +20,16 @@ import {exact,examErrorCode,examHttpStatus,parseBoundedJson,positive} from './lm
 
 const routes=new Hono<{Bindings:Env}>();
 
+routes.use('*',auth());
 routes.use('*',async(c,next)=>{
-  const flag=Reflect.get(c.env,'LMS_EXAM_LEARNER_STAGING');
-  if(c.env.ENVIRONMENT!=='staging'||flag!=='REVIEWED_SCHEMA_ONLY'){
+  if(!isLmsExamSurfaceEnabled(c.env,'learner',getEmpresaId(c))){
     return c.json({success:false,code:'EXAM_RUNTIME_NOT_ACTIVATED'},503);
+  }
+  if(c.env.ENVIRONMENT==='production' && !(await hasLmsExamSchema(c.env.DB))){
+    return c.json({success:false,code:'EXAM_SCHEMA_NOT_READY'},503);
   }
   await next();
 });
-routes.use('*',auth());
 routes.use('*',async(c,next)=>{
   await next();
   c.header('Cache-Control','no-store, private');
@@ -86,6 +90,7 @@ routes.get('/matriculas/:matriculaId/prova',async c=>{
   }
   return c.json({success:true,data:{
     state:gate.state,missing:gate.missing,attemptsUsed:gate.attemptsUsed,
+    attemptPolicy:gate.attemptPolicy,nextAttemptAt:gate.nextAttemptAt,
     hasOpenAttempt:gate.hasOpenAttempt,...(certificate?{certificate}:{}),
     // After a pass the learner finalizes through the canonical endpoint.
     finalizeRequired:gate.state==='PASSED',

@@ -24,7 +24,7 @@ function plan(rows: readonly QuestionRevision[], pct=70): ExamPlan {
     schema:EXAM_PLAN_SCHEMA,tenantId:999006,courseId:327,
     examId:'exam1',version:1,trainingSourceSha256:sha,
     trainingEditionSha256:'b'.repeat(64),acceptedQuestionSourceSha256:[sha],
-    consultationAllowed:true,
+    consultationAllowed:true,attemptPolicy:{maxAttempts:3,retryDelayMinutes:0,timeLimitMinutes:null},
     sections:[{moduleId:'m1',minScorePct:pct,questions:rows.map(q=>({
       questionId:q.questionId,revision:q.revision,contentSha256:q.contentSha256!,
     }))}],

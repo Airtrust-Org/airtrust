@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LmsProva from '../react-app/pages/lms/exams/LmsProva';
@@ -35,7 +35,7 @@ const calls = () => mocked.mock.calls.map(([url, init]) => `${(init as RequestIn
 
 describe('Prova final do aluno', () => {
   beforeEach(() => { mocked.mockReset(); });
-  afterEach(() => cleanup());
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
 
   it.each([
     ['NOT_AVAILABLE', /não tem avaliação disponível/],
@@ -239,4 +239,59 @@ describe('Prova final do aluno', () => {
     fireEvent.click(send);
     expect(screen.getByRole('alertdialog')).toBeTruthy();
   });
+
+  it('reativa automaticamente a tentativa READY no vencimento do intervalo', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+    const deadline=new Date(Date.now()+2000).toISOString();
+    const policy={maxAttempts:3,retryDelayMinutes:1,timeLimitMinutes:null};
+    mocked.mockResolvedValueOnce(ok(state('READY',{
+      attemptsUsed:1,attemptPolicy:policy,nextAttemptAt:deadline,
+    })));
+    renderPage();
+    await act(async()=>{await Promise.resolve();});
+    const btn=screen.getByRole('button',{name:'Tentar novamente'}) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    mocked.mockResolvedValueOnce(ok(state('READY',{
+      attemptsUsed:1,attemptPolicy:policy,nextAttemptAt:null,
+    })));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2200);});
+    expect(btn.disabled).toBe(false);
+    expect(calls().filter(x=>x==='GET /api/lms/exams/matriculas/10/prova')).toHaveLength(2);
+  });
+
+  it('após reprovação restaura a ação sem recarregar a página quando a pausa termina', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-17T12:00:00Z'));
+    const policy={maxAttempts:3,retryDelayMinutes:1,timeLimitMinutes:null};
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    await act(async()=>{await Promise.resolve();});
+    mocked.mockResolvedValueOnce(ok(attempt(),201));
+    await act(async()=>{
+      fireEvent.click(screen.getByRole('button',{name:'Iniciar prova'}));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button',{name:'Enviar prova'}));
+    const deadline=new Date(Date.now()+2000).toISOString();
+    mocked.mockResolvedValueOnce(ok(attempt({state:'SUBMITTED',result:{
+      passed:false,answered:0,unanswered:2,
+      sections:[{moduleId:'m1',scorePct:0,passed:false}],
+    }})));
+    mocked.mockResolvedValueOnce(ok(state('READY',{
+      attemptsUsed:1,attemptPolicy:policy,nextAttemptAt:deadline,
+    })));
+    await act(async()=>{
+      fireEvent.click(screen.getByRole('button',{name:'Confirmar envio'}));
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Aguarde o intervalo obrigatório/)).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Tentar novamente'})).toBeNull();
+    mocked.mockResolvedValueOnce(ok(state('READY',{
+      attemptsUsed:1,attemptPolicy:policy,nextAttemptAt:null,
+    })));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2200);});
+    expect(screen.getByRole('button',{name:'Tentar novamente'})).toBeTruthy();
+  });
+
 });

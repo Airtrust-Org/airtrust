@@ -28,6 +28,24 @@ export type ExamQuestionRef = Readonly<{
 export type ExamSection = Readonly<{
   moduleId: string; minScorePct: number; questions: readonly ExamQuestionRef[];
 }>;
+/** Immutable per-edition exam policy. null explicitly means an untimed exam. */
+export type ExamAttemptPolicy = Readonly<{
+  maxAttempts: number;
+  retryDelayMinutes: number;
+  timeLimitMinutes: number | null;
+}>;
+
+export function validExamAttemptPolicy(p: unknown): p is ExamAttemptPolicy {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+  const v=p as Record<string,unknown>;
+  return Object.keys(v).sort().join('|') === 'maxAttempts|retryDelayMinutes|timeLimitMinutes' &&
+    Number.isInteger(v.maxAttempts) && Number(v.maxAttempts)>=1 && Number(v.maxAttempts)<=10 &&
+    Number.isInteger(v.retryDelayMinutes) && Number(v.retryDelayMinutes)>=0 &&
+      Number(v.retryDelayMinutes)<=10080 &&
+    (v.timeLimitMinutes===null || (Number.isInteger(v.timeLimitMinutes) &&
+      Number(v.timeLimitMinutes)>=5 && Number(v.timeLimitMinutes)<=240));
+}
+
 export type ExamPlan = Readonly<{
   schema: typeof EXAM_PLAN_SCHEMA;
   tenantId: number; courseId: number; examId: string; version: number;
@@ -35,7 +53,7 @@ export type ExamPlan = Readonly<{
   // Explicit editorial attestation: question revisions authored against these
   // source SHAs are accepted by this exam. Must include trainingSourceSha256.
   acceptedQuestionSourceSha256: readonly string[];
-  consultationAllowed: true; sections: readonly ExamSection[];
+  consultationAllowed: true; attemptPolicy: ExamAttemptPolicy; sections: readonly ExamSection[];
 }>;
 export type ExamAnswer = Readonly<{ questionId: string; choiceId: string }>;
 export type ExamResult = Readonly<{
@@ -187,6 +205,7 @@ export async function validateExamPlan(plan: ExamPlan,
       !SHA.test(plan.trainingSourceSha256) ||
       !SHA.test(plan.trainingEditionSha256) ||
       plan.consultationAllowed !== true ||
+      !validExamAttemptPolicy(plan.attemptPolicy) ||
       !Array.isArray(plan.acceptedQuestionSourceSha256) ||
       plan.acceptedQuestionSourceSha256.length < 1 ||
       plan.acceptedQuestionSourceSha256.length > 20 ||

@@ -1,7 +1,7 @@
 /**
  * Administrative exam composer. Only metadata and published question references
  * are loaded; answer keys stay in the private Worker. All writes are governed
- * by the existing staging-only endpoints, never from the player.
+ * by the activated tenant-scoped backend endpoints, never from the player.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -54,6 +54,9 @@ export default function LmsExamAdmin():React.ReactElement {
   const [editionSha,setEditionSha]=useState('');
   const [legal,setLegal]=useState<''|'yes'|'no'>('');
   const [note,setNote]=useState('');
+  const [maxAttempts,setMaxAttempts]=useState('');
+  const [retryDelayMinutes,setRetryDelayMinutes]=useState('0');
+  const [timeLimitMinutes,setTimeLimitMinutes]=useState('');
   const [confirmed,setConfirmed]=useState(false);
   const [published,setPublished]=useState<Published|null>(null);
   const [loading,setLoading]=useState(true);
@@ -109,11 +112,20 @@ export default function LmsExamAdmin():React.ReactElement {
         questionId:q.questionId,revision:q.revision,contentSha256:q.contentSha256,
       }))};
     });
+    if(!/^(10|[1-9])$/.test(maxAttempts))throw Error('LIMITE_DE_TENTATIVAS_OBRIGATÓRIO_1_A_10');
+    if(!/^(0|[1-9][0-9]{0,4})$/.test(retryDelayMinutes)||
+      Number(retryDelayMinutes)>10080)throw Error('INTERVALO_DE_REPETIÇÃO_INVÁLIDO');
+    if(timeLimitMinutes && (!/^[1-9][0-9]{0,2}$/.test(timeLimitMinutes)||
+      Number(timeLimitMinutes)<5||Number(timeLimitMinutes)>240)) {
+      throw Error('DURAÇÃO_DE_PROVA_INVÁLIDA_5_A_240');
+    }
     if(!confirmed)throw Error('REVISÃO_EDITORIAL_NÃO_CONFIRMADA');
     return {schema:'AIRTRUST_EXTERNAL_EXAM_PLAN_V1',tenantId:course?.empresa_id,
       courseId:id,examId,version:Number(version),
       trainingSourceSha256:packageSha,trainingEditionSha256:editionSha,
-      acceptedQuestionSourceSha256:origins,consultationAllowed:true,sections};
+      acceptedQuestionSourceSha256:origins,consultationAllowed:true,
+       attemptPolicy:{maxAttempts:Number(maxAttempts),retryDelayMinutes:Number(retryDelayMinutes),
+         timeLimitMinutes:timeLimitMinutes?Number(timeLimitMinutes):null},sections};
   }
   async function publish(){
     setWorking(true);setError('');setMessage('');
@@ -161,7 +173,7 @@ export default function LmsExamAdmin():React.ReactElement {
     <Link className="text-sm underline" to="/lms/admin/cursos">Voltar às configurações LMS</Link>
     <header><h1 className="text-2xl font-semibold">Banco de questões e montagem de provas</h1>
       <p className="text-sm text-slate-600 dark:text-slate-300">{course?.titulo||`Curso #${id}`} — edição e política verificadas pelo Worker</p>
-      <p className="mt-2 text-sm">Homologação: publicar um plano não conclui matrícula nem emite certificado.</p>
+      <p className="mt-2 text-sm">Publicar um plano não altera matrículas. Vincular uma prova exige uma edição autorizada para avaliação externa.</p>
     </header>
     {!validId?<p role="alert">Curso inválido.</p>:null}
     {error?<p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-900">{error}</p>:null}
@@ -235,6 +247,25 @@ export default function LmsExamAdmin():React.ReactElement {
             disabled={!!published||working} onChange={e=>setMinimums(old=>({...old,[moduleId]:e.target.value}))}/>
         </label>
       </div>)}
+      <h3 className="mt-5 font-semibold">Política de tentativas da prova (imutável após publicação)</h3>
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className="text-sm">Número máximo de tentativas (1 a 10)
+          <input className={input+' mt-1'} type="number" min="1" max="10"
+            aria-label="Número máximo de tentativas" value={maxAttempts}
+            disabled={!!published||working} onChange={e=>setMaxAttempts(e.target.value)}/>
+        </label>
+        <label className="text-sm">Intervalo entre tentativas (minutos)
+          <input className={input+' mt-1'} type="number" min="0" max="10080"
+            aria-label="Intervalo entre tentativas" value={retryDelayMinutes}
+            disabled={!!published||working} onChange={e=>setRetryDelayMinutes(e.target.value)}/>
+        </label>
+        <label className="text-sm">Limite de tempo (5 a 240 min; vazio = sem limite)
+          <input className={input+' mt-1'} type="number" min="5" max="240"
+            aria-label="Limite de tempo da prova" value={timeLimitMinutes}
+            disabled={!!published||working} onChange={e=>setTimeLimitMinutes(e.target.value)}/>
+        </label>
+      </div>
+      <p className="mt-2 text-xs">Cada tentativa, intervalo e duração fica fixado no plano versionado. A avaliação não modifica retroativamente os cursos formativos.</p>
       <label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox"
         checked={confirmed} disabled={!!published||working}
         onChange={e=>setConfirmed(e.target.checked)}/>

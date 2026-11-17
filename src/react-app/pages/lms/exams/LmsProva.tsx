@@ -14,22 +14,28 @@ type Choice = { id: string; text: string };
 type ExamQuestion = { questionId: string; prompt: string; choices: Choice[] };
 type Section = { moduleId: string; questions: ExamQuestion[] };
 type Result = {
-  passed: boolean; answered: number; unanswered: number;
+  passed: boolean; answered: number; unanswered: number; expired?: boolean;
   sections: { moduleId: string; scorePct: number; passed: boolean }[];
 };
 type Attempt = {
   attemptId: string; attemptNo: number; state: 'IN_PROGRESS' | 'SUBMITTED';
-  sections: Section[]; answers: Record<string, string>; result: Result | null;
+  sections: Section[]; answers: Record<string, string>; result: Result | null; expiresAt?:string|null;
 };
 type ExamState = {
   state: 'NOT_AVAILABLE' | 'STUDY_PENDING' | 'READY' | 'PASSED' | 'COMPLETED';
   certificate?: 'ISSUED' | 'MISSING' | 'NOT_APPLICABLE';
   missing: string[]; attemptsUsed: number; hasOpenAttempt?: boolean; finalizeRequired: boolean;
+  attemptPolicy?:{maxAttempts:number;retryDelayMinutes:number;timeLimitMinutes:number|null}|null;
+  nextAttemptAt?:string|null;
 };
 type Envelope<T> = { success: boolean; data?: T; code?: string };
 
 const MESSAGES: Record<string, string> = {
   EXAM_RUNTIME_NOT_ACTIVATED: 'A prova final ainda não está disponível neste ambiente.',
+  EXAM_SCHEMA_NOT_READY: 'O sistema de provas ainda não está preparado para este ambiente.',
+  EXAM_ATTEMPTS_EXHAUSTED: 'O limite de tentativas desta prova foi atingido. Consulte a gestão de treinamento.',
+  EXAM_RETRY_COOLDOWN: 'O intervalo obrigatório entre tentativas ainda não terminou.',
+  EXAM_TIME_EXPIRED: 'O prazo da tentativa terminou. A prova foi encerrada sem aprovação.',
   EXAM_STUDY_NOT_COMPLETE: 'Conclua todo o conteúdo antes de iniciar a prova.',
   EXAM_ALREADY_PASSED: 'Você já foi aprovado nesta prova.',
   EXAM_ATTEMPT_SEALED: 'Esta tentativa já foi enviada.',
@@ -54,6 +60,8 @@ export default function LmsProva(): React.ReactElement {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [exam, setExam] = useState<ExamState | null>(null);
+  // Re-render exactly when the Worker-defined retry deadline expires.
+  const [, setDeadlineTick] = useState(0);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState('');
@@ -73,6 +81,19 @@ export default function LmsProva(): React.ReactElement {
     catch (e) { setError(explain((e as { code?: string }).code)); }
   }, [base]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const deadline = exam?.nextAttemptAt;
+    if (!deadline) return;
+    const remaining = Date.parse(deadline) - Date.now();
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+    // The timeout does not grant eligibility. It refreshes the visible
+    // controls and checks the authoritative state again in the Worker.
+    const timer = window.setTimeout(() => {
+      setDeadlineTick(tick => tick + 1);
+      void load();
+    }, remaining + 50);
+    return () => window.clearTimeout(timer);
+  }, [exam?.nextAttemptAt, load]);
 
   async function start() {
     setBusy(true); setError(''); setConfirming(false);
@@ -196,7 +217,21 @@ export default function LmsProva(): React.ReactElement {
             <>
               <p className="mb-3">Estudo concluído. A prova avalia o conteúdo do treinamento e as respostas são corrigidas pelo sistema.
                 {exam.attemptsUsed > 0 ? ` Tentativas anteriores: ${exam.attemptsUsed}.` : ''}</p>
-              <button type="button" className={primary} disabled={busy} onClick={() => void start()}>
+              {exam.attemptPolicy ? <p className="mb-3 text-sm">
+                Limite: {exam.attemptPolicy.maxAttempts} tentativa(s).
+                {exam.attemptPolicy.timeLimitMinutes===null
+                  ? ' Sem limite de tempo por tentativa.'
+                  : ` Tempo máximo: ${exam.attemptPolicy.timeLimitMinutes} minutos por tentativa.`}
+              </p> : null}
+              {!exam.hasOpenAttempt&&exam.attemptPolicy&&exam.attemptsUsed>=exam.attemptPolicy.maxAttempts
+                ? <p role="alert" className="mb-3 text-sm">Limite de tentativas atingido. Procure a gestão de treinamento.</p> : null}
+              {!exam.hasOpenAttempt&&exam.nextAttemptAt&&Date.parse(exam.nextAttemptAt)>Date.now()
+                ? <p role="alert" className="mb-3 text-sm">Uma nova tentativa estará disponível após o intervalo obrigatório da prova.</p> : null}
+              <button type="button" className={primary}
+                disabled={busy||(!exam.hasOpenAttempt&&(
+                  (exam.attemptPolicy!==null&&exam.attemptPolicy!==undefined&&exam.attemptsUsed>=exam.attemptPolicy.maxAttempts)||
+                  (!!exam.nextAttemptAt&&Date.parse(exam.nextAttemptAt)>Date.now())))}
+                onClick={() => void start()}>
                 {exam.hasOpenAttempt ? 'Retomar prova' : exam.attemptsUsed > 0 ? 'Tentar novamente' : 'Iniciar prova'}
               </button>
             </>
@@ -213,6 +248,10 @@ export default function LmsProva(): React.ReactElement {
 
       {attempt && attempt.state === 'IN_PROGRESS' ? (
         <form onSubmit={e => { e.preventDefault(); if (!busy && !saveInFlight.current) setConfirming(true); }} aria-label={`Tentativa ${attempt.attemptNo}`}>
+          {attempt.expiresAt ? <p className="mb-3 text-sm" aria-live="polite">
+            Esta tentativa termina em {new Date(attempt.expiresAt).toLocaleString('pt-BR')}.
+            O tempo continua correndo durante a consulta ao treinamento.
+          </p> : null}
           {attempt.sections.map((section, si) => (
             <div key={section.moduleId} className="mb-6">
               <h2 className="mb-2 text-base font-semibold text-slate-900 dark:text-white">Parte {si + 1}</h2>
@@ -252,14 +291,19 @@ export default function LmsProva(): React.ReactElement {
       {attempt && attempt.state === 'SUBMITTED' && attempt.result ? (
         <section className={card} aria-label="Resultado da prova">
           <p className="mb-2 font-semibold">{attempt.result.passed ? 'Aprovado' : 'Não aprovado'}</p>
+          {attempt.result.expired ? <p role="alert" className="mb-2 text-sm">Tempo esgotado: esta tentativa foi encerrada sem aprovação.</p> : null}
           <ul className="mb-3 list-disc pl-5 text-sm">
             {attempt.result.sections.map((s, i) => (
-              <li key={s.moduleId}>Parte {i + 1}: {s.scorePct}% — {s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
+              <li key={s.moduleId}>Parte {i + 1}: {s.scorePct}% — {attempt.result?.expired ? 'tentativa encerrada por tempo' : s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
             ))}
           </ul>
           {attempt.result.unanswered > 0 ? <p className="mb-3 text-sm">Questões sem resposta: {attempt.result.unanswered}.</p> : null}
           {attempt.result.passed ? (
             <button type="button" className={primary} disabled={busy} onClick={() => void finalize()}>Concluir treinamento</button>
+          ) : exam?.attemptPolicy&&exam.attemptsUsed>=exam.attemptPolicy.maxAttempts ? (
+            <p className="text-sm" role="alert">Limite de tentativas atingido. Contate a gestão de treinamento.</p>
+          ) : exam?.nextAttemptAt&&Date.parse(exam.nextAttemptAt)>Date.now() ? (
+            <p className="text-sm" role="alert">Aguarde o intervalo obrigatório antes de uma nova tentativa.</p>
           ) : (
             <button type="button" className={primary} disabled={busy} onClick={() => { setAttempt(null); void start(); }}>Tentar novamente</button>
           )}

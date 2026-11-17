@@ -1,9 +1,9 @@
 /**
  * AirTrust LMS — independent bank editor API (default-off).
  *
- * Mounted at /api/lms/exams/admin but default-off: every request answers 503
- * unless ENVIRONMENT is staging and the review flag is set. Production stays
- * closed until the Schema V2 change is applied and the gate is revisited.
+ * Mounted at /api/lms/exams/admin but default-off: every request answers 503 unless the environment
+ * is authorized, the production tenant is explicitly allowlisted, and
+ * the Schema V2 0571/0572 tables are present.
  * Authorization: JWT, tenant middleware and ADMIN role, then private store.
  * No student endpoint here, no exams runtime, no completion/certificate write.
  */
@@ -12,6 +12,8 @@ import {auth} from '../middleware/auth';
 import {requireRole} from '../middleware/rbac';
 import {getEmpresaId,getTenantContext} from '../middleware/tenant';
 import type {Env} from '../types';
+import {hasLmsExamSchema,isLmsExamSurfaceEnabled} from '../lib/lms-exams/lms-exam-activation';
+import {readActiveCompletionManifest} from '../services/lms-completion-manifest-evidence';
 import {type ExamPlan, type QuestionContent} from '../lib/lms-exams/question-bank-domain';
 import {
   QuestionStoreError,createAdminQuestionDraft,editAdminQuestionDraft,
@@ -23,14 +25,16 @@ import {exact,examErrorCode,examHttpStatus,parseBoundedJson,positive} from './lm
 
 const routes=new Hono<{Bindings:Env}>();
 
+routes.use('*',auth());
 routes.use('*',async(c,next)=>{
-  const flag=Reflect.get(c.env, 'LMS_EXAM_QUESTION_ADMIN_STAGING');
-  if(c.env.ENVIRONMENT!=='staging' || flag!=='REVIEWED_SCHEMA_ONLY'){
+  if(!isLmsExamSurfaceEnabled(c.env,'admin',getEmpresaId(c))){
     return c.json({success:false,code:'QUESTION_BANK_NOT_ACTIVATED'},503);
+  }
+  if(c.env.ENVIRONMENT==='production' && !(await hasLmsExamSchema(c.env.DB))){
+    return c.json({success:false,code:'EXAM_SCHEMA_NOT_READY'},503);
   }
   await next();
 });
-routes.use('*',auth());
 routes.use('*',requireRole('admin'));
 routes.use('*',async(c,next)=>{
   await next();
@@ -164,6 +168,30 @@ routes.post('/cursos/:cursoId/provas',async c=>{
 routes.post('/cursos/:cursoId/provas/:examId/versoes/:version/vinculo',async c=>{
   const body=await parseBoundedJson(c);
   exact(body,['packageSha256','statutoryAssessmentRequired','approvalNote']);
+  // A binding to a FORMATIVE/NONE/SCORM edition would be misleading and could
+  // interfere with its existing completion policy. Accept only a physically
+  // present, tenant-scoped, Worker-controlled EXTERNAL manifest. Never trust
+  // a client-supplied assessment mode or a generic SCORM policy label.
+  const cursoId=positive(c.req.param('cursoId'));
+  const edition=await c.env.DB.prepare(
+    "SELECT r2_prefix,status FROM lms_scorm_package_versions " +
+    "WHERE empresa_id=? AND curso_id=? AND package_sha256=? LIMIT 1"
+  ).bind(getEmpresaId(c),cursoId,body.packageSha256)
+    .first<{r2_prefix:string;status:string}>();
+  if(!edition) {
+    // Do not reveal cross-tenant edition existence via a conflict response.
+    return c.json({success:false,code:'EXAM_EDITION_NOT_FOUND'},404);
+  }
+  if(!['ACTIVE','VALIDATED'].includes(edition.status)){
+    return c.json({success:false,code:'EXAM_EDITION_UNAVAILABLE'},409);
+  }
+  const manifest=await readActiveCompletionManifest({
+    bucket:c.env.BUCKET,empresaId:getEmpresaId(c),cursoId,
+    activePrefix:edition.r2_prefix,
+  });
+  if(!manifest || manifest.assessmentMode!=='EXTERNAL' || !manifest.workerApprovalRequired){
+    return c.json({success:false,code:'EXAM_EDITION_NOT_EXTERNAL'},409);
+  }
   const data=await bindExamToEdition(c.env.DB,examActor(c),{
     cursoId:positive(c.req.param('cursoId')),examId:c.req.param('examId'),
     version:positive(c.req.param('version')),

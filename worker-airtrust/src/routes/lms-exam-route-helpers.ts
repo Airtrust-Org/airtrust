@@ -71,6 +71,7 @@ export function examHttpStatus(code:string):404|403|409|422{
       code.includes('REQUIRED')||code.includes('CONFLICT')||code.includes('SEALED')||
       code.includes('ALREADY')||code.includes('NOT_BOUND')||code.includes('NOT_COMPLETE')||
       code.includes('NOT_PUBLISHED')||code.includes('NOT_CURRENT')||
-      code.includes('EDITION_CHANGED'))return 409;
+      code.includes('EDITION_CHANGED')||code.includes('EXHAUSTED')||
+      code.includes('COOLDOWN')||code.includes('EXPIRED'))return 409;
   return 422;
 }

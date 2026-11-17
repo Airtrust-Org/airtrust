@@ -18,7 +18,7 @@ const change = (name: string) => readFileSync(resolve(process.cwd(), 'schema-v2/
 const admin = (id: number) => ({ empresaId: 6, userId: id, tenantRole: 'admin', cursoId: 26 });
 
 export function externalBucket(mode = 'EXTERNAL'): R2Bucket {
-  const manifest = { packageVersion: 'PKG-V2', content: { requiredSlides: ['s1', 's2', 's3', 's4'] }, assessment: { mode } };
+  const manifest = { packageVersion: 'PKG-V2', content: { requiredSlides: ['s1', 's2', 's3', 's4'] }, assessment: { mode }, completion:{workerApprovalRequired:true} };
   return { get: async () => ({ size: 500, text: async () => JSON.stringify(manifest) }) } as unknown as R2Bucket;
 }
 
@@ -109,6 +109,7 @@ export async function publishExam(db: ExamSqliteD1, bind = true): Promise<ExamPl
     schema: EXAM_PLAN_SCHEMA, tenantId: 6, courseId: 26, examId: 'exam1', version: 1,
     trainingSourceSha256: PKG, trainingEditionSha256: 'b'.repeat(64),
     acceptedQuestionSourceSha256: [PKG], consultationAllowed: true,
+    attemptPolicy: {maxAttempts:3,retryDelayMinutes:0,timeLimitMinutes:null},
     sections: [{ moduleId: 'm1', minScorePct: 70, questions: refs }],
   };
   await publishExamPlan(db.asD1(), admin(1), plan);
