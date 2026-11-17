@@ -1893,9 +1893,7 @@
       "change_file": "0588_simuladores_tipos_nomes_sem_pto.sql",
       "change_id": "simuladores-tipos-nomes-sem-pto-0588",
       "sha256": "28f04e958f05e37cec21bfaa281d406518c1bc68d0554ce70f31158b2b82824b",
-      "targets": [
-        "tipos_sessao"
-      ],
+      "targets": [],
       "domain": "Simulators tenant 6: cosmetic names for six simulator session types, keeping IDs/codes/manobras/fichas unchanged",
       "coverage": "OUT_OF_CONTRACT_SCOPE",
       "governance_state": "REMOTE_APPLY_PENDING",
