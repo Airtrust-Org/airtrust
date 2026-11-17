@@ -376,7 +376,7 @@ describe('E2E sintetico - aprovacao como evidencia de conclusao e reabertura', (
     await answerWith(db, id, 10); await submit(db, id);
     expect((await state(db)).state).toBe('PASSED');
     db.exec('UPDATE lms_matricula_ciclos SET ciclo_atual=0 WHERE id=1');
-    db.exec("INSERT INTO lms_matricula_ciclos VALUES(2,6,26,10,1,'EM_ANDAMENTO',NULL,NULL)");
+    db.exec("INSERT INTO lms_matricula_ciclos (id,empresa_id,curso_id,matricula_id,ciclo_atual,status,deleted_at,assessment_policy) VALUES(2,6,26,10,1,'EM_ANDAMENTO',NULL,NULL)");
     expect(await state(db)).toMatchObject({ state: 'READY', attemptsUsed: 0, finalizeRequired: false });
     expect((await readiness(db)).code).toBe('EXTERNAL_ASSESSMENT_PENDING');
     expect(db.database.prepare('SELECT ciclo_id,state,passed FROM lms_exam_attempts WHERE id=?').get(id))
