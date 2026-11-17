@@ -97,7 +97,7 @@ jobs:
   ui-audit:
     name: Authenticated Cross-Module Browser Audit
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 75
     env:

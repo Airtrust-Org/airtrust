@@ -128,7 +128,7 @@ jobs:
   certify:
     name: Certify active courses (${{ matrix.browser }})
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 80
     environment: production
     strategy:

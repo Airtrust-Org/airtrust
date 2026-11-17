@@ -136,7 +136,7 @@ jobs:
   browser:
     name: Authenticated Compliance Lifecycle E2E
     needs: [guard, d1_fixture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: staging
     env:
@@ -194,7 +194,7 @@ jobs:
     name: Authenticated renewal and certificate PDF E2E
     needs: [guard, d1_renewal_fixture]
     if: needs.d1_renewal_fixture.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: staging
     env:

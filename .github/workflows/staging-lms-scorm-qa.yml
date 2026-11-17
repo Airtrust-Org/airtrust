@@ -141,7 +141,7 @@ jobs:
   qa:
     name: Candidate-first SCORM UI Guard (not functional certification)
     needs: guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 15
     env:

@@ -138,7 +138,7 @@ jobs:
   browser:
     name: Authenticated Simulator Individual Check E2E (A/B/C)
     needs: [guard, d1_fixture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     environment: staging
     env:

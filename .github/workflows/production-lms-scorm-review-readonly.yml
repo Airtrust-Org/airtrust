@@ -14,7 +14,7 @@ concurrency: {group: production-lms-scorm-review-readonly, cancel-in-progress: f
 env: {NODE_VERSION: '24', PROD_API_BASE_URL: 'https://api.airtrust.online'}
 jobs:
   review:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: production
     steps:

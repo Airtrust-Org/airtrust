@@ -158,7 +158,7 @@ jobs:
   qa:
     name: Persistent CAE Planning Runtime QA
     needs: [guard, d1-provision-simulator-planning-fixture]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: staging
     timeout-minutes: 30
     env:
