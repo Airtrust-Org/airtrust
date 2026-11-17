@@ -12,7 +12,8 @@
 //  - o HTML contém o código canônico do PTO, a fonte normativa, PF A/PF B nos
 //    guias de aeronave e os 15 elementos NOTECHS (nota mínima 6, sem média);
 //  - cabeçalhos de segurança do HTML (CSP) e PDF com assinatura %PDF;
-//  - 51 guias legados continuam listados e inalterados em quantidade.
+//  - 51 guias legados permanecem acessíveis na listagem administrativa;
+//    a biblioteca do instrutor exibe somente os 88 guias vigentes.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -80,9 +81,22 @@ const lista = await get('/api/simuladores/guias-instrutor', token);
 check('listagem autenticada 200', lista.status === 200, `status=${lista.status}`);
 const guias = lista.status === 200 ? json(lista).data : [];
 const v18 = guias.filter((g) => String(g.codigo).endsWith(SUFIXO));
-const legados = guias.filter((g) => !String(g.codigo).endsWith(SUFIXO));
+const legadosNaBiblioteca = guias.filter((g) => !String(g.codigo).endsWith(SUFIXO));
 check('88 guias V18 ativos visíveis', v18.length === 88 && v18.every((g) => g.status === 'ATIVO'), `n=${v18.length}`);
-check('51 guias legados preservados na biblioteca', legados.length === 51, `n=${legados.length}`);
+check('biblioteca do instrutor não mistura guias legados', legadosNaBiblioteca.length === 0, `n=${legadosNaBiblioteca.length}`);
+
+// Contrato do PR #2406: somente a listagem administrativa inclui o acervo
+// histórico. Este acesso é de leitura e nunca desativa/reesve um guia.
+const listaAdmin = await get('/api/simuladores/guias-instrutor?admin=1', token);
+check('listagem administrativa autenticada 200', listaAdmin.status === 200, `status=${listaAdmin.status}`);
+const guiasAdmin = listaAdmin.status === 200 ? json(listaAdmin).data : [];
+const legadosAdmin = guiasAdmin.filter((g) => !String(g.codigo).endsWith(SUFIXO));
+check('51 guias legados preservados no acervo administrativo',
+  legadosAdmin.length === 51 && legadosAdmin.every((g) => g.status === 'ATIVO'),
+  `legados=${legadosAdmin.length}`);
+check('88 guias V18 também acessíveis na administração',
+  guiasAdmin.filter((g) => String(g.codigo).endsWith(SUFIXO)).length === 88,
+  `v18=${guiasAdmin.filter((g) => String(g.codigo).endsWith(SUFIXO)).length}`);
 check('1 guia V18 por modelo de sessão (88 distintos)',
   new Set(v18.map((g) => g.modelo_sessao_id)).size === 88 && v18.every((g) => g.modelo_sessao_id), '');
 check('versão do guia = manifesto', v18.every((g) => g.versao === manifest.versao_guia), manifest.versao_guia);
