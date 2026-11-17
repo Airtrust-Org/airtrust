@@ -75,7 +75,7 @@ async function main() {
   const course = await call(token, '/api/lms/cursos/64');
   required(course.status === 200, 'TARGET_COURSE_NOT_READABLE');
   const detail = course.body?.data || {};
-  required(/LOSA/i.test(String(detail.titulo || detail.nome || 'LOSA')), 'TARGET_COURSE_MISMATCH');
+  required(/LOSA/i.test(String(detail.titulo || detail.nome || detail.curso?.titulo || '')), 'TARGET_COURSE_MISMATCH');
   const activeSha = String(active.package_sha256 || active.packageSha256 || '').toLowerCase();
   required(activeIdOrNull(active) !== null, 'ACTIVE_PACKAGE_ID_INVALID');
   const activeId = String(active.packageId || active.id || '');
