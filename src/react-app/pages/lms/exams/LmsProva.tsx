@@ -60,6 +60,8 @@ export default function LmsProva(): React.ReactElement {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [exam, setExam] = useState<ExamState | null>(null);
+  // Re-render exactly when the Worker-defined retry deadline expires.
+  const [, setDeadlineTick] = useState(0);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState('');
@@ -79,6 +81,19 @@ export default function LmsProva(): React.ReactElement {
     catch (e) { setError(explain((e as { code?: string }).code)); }
   }, [base]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const deadline = exam?.nextAttemptAt;
+    if (!deadline) return;
+    const remaining = Date.parse(deadline) - Date.now();
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+    // The timeout does not grant eligibility. It refreshes the visible
+    // controls and checks the authoritative state again in the Worker.
+    const timer = window.setTimeout(() => {
+      setDeadlineTick(tick => tick + 1);
+      void load();
+    }, remaining + 50);
+    return () => window.clearTimeout(timer);
+  }, [exam?.nextAttemptAt, load]);
 
   async function start() {
     setBusy(true); setError(''); setConfirming(false);

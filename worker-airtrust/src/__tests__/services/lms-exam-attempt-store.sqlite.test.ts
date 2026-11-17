@@ -244,3 +244,59 @@ describe('política imutável de tentativas e prazo',()=>{
     }finally{clock.mockRestore();}
   });
 });
+
+
+describe('corrida entre consulta de política e INSERT atômico',()=>{
+  it.each([
+    {maxAttempts:1,retryDelayMinutes:0,blocked:'EXAM_ATTEMPTS_EXHAUSTED'},
+    {maxAttempts:3,retryDelayMinutes:60,blocked:'EXAM_RETRY_COOLDOWN'},
+  ])('rejeita tentativa tardia quando outra concluiu durante a consulta: $blocked',
+  async ({maxAttempts,retryDelayMinutes,blocked})=>{
+    await ready(true,{maxAttempts,retryDelayMinutes});
+    // A reads an old snapshot (no submissions), then pauses before its
+    // INSERT. B creates, fails and seals its attempt. A's INSERT must recheck
+    // the real SQLite state atomically, not trust the stale first read.
+    const d1=db.asD1();
+    const originalPrepare=d1.prepare.bind(d1);
+    let intercepted=false;
+    let notify!:()=>void;
+    let release!:()=>void;
+    const snapshotted=new Promise<void>(resolve=>{notify=resolve;});
+    const proceed=new Promise<void>(resolve=>{release=resolve;});
+    const prepareSpy=vi.spyOn(db,'prepare').mockImplementation(((sql:string)=>{
+      const statement=originalPrepare(sql);
+      if(intercepted||!sql.includes('SELECT COUNT(*) AS used,MAX(submitted_at) AS last_submitted')){
+        return statement;
+      }
+      intercepted=true;
+      return {
+        bind:(...values:unknown[])=>{
+          const bound=statement.bind(...values);
+          return {
+            first:async()=>{
+              const old=await bound.first();
+              notify();
+              await proceed;
+              return old;
+            },
+          };
+        },
+      } as ReturnType<typeof db.prepare>;
+    }) as typeof db.prepare);
+    try{
+      const late=startExamAttempt(d1,learner,scope,'race-late-start-01');
+      await snapshotted;
+      const winner=await startExamAttempt(d1,learner,scope,'race-winner-start-01');
+      await answerAll(winner.attemptId,6);
+      expect((await submitExamAttempt(d1,learner,winner.attemptId)).result?.passed).toBe(false);
+      release();
+      await expect(late).rejects.toThrow(blocked);
+      expect(db.database.prepare(
+        'SELECT COUNT(*) AS used FROM lms_exam_attempts'
+      ).get()).toMatchObject({used:1});
+    }finally{
+      release();
+      prepareSpy.mockRestore();
+    }
+  });
+});

@@ -324,16 +324,42 @@ export async function startExamAttempt(db: D1Database, learner: ExamLearner,
   }
   const attemptId = crypto.randomUUID();
   try {
-    await db.prepare(
+    const insert=await db.prepare(
       'INSERT INTO lms_exam_attempts (id,empresa_id,curso_id,matricula_id,ciclo_id,attempt_no,' +
       'package_sha256,exam_id,exam_version,plan_sha256,idempotency_key,started_by) ' +
       'SELECT ?,?,?,?,?,COALESCE(MAX(attempt_no),0)+1,?,?,?,?,?,? FROM lms_exam_attempts ' +
-      'WHERE empresa_id=? AND matricula_id=? AND ciclo_id=?'
+      'WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? ' +
+      // Compare limits and cooldown inside the SAME atomic SQLite INSERT ...
+      // SELECT, not just in the optimistic reads above: a concurrent request
+      // can submit a failed attempt after our first check but before INSERT.
+      "HAVING COUNT(CASE WHEN state='SUBMITTED' THEN 1 END) < ? " +
+      "AND COUNT(CASE WHEN state='SUBMITTED' AND (" +
+      "submitted_at IS NULL OR strftime('%s',submitted_at) IS NULL OR " +
+      "CAST(strftime('%s',submitted_at) AS INTEGER)*1000 > " +
+      "?-?*60000) THEN 1 END)=0"
     ).bind(attemptId, learner.empresaId, scope.cursoId, scope.matriculaId, scope.cicloId,
       scope.packageSha256, binding.exam_id, binding.exam_version, binding.plan_sha256,
       idempotencyKey, learner.userId,
-      learner.empresaId, scope.matriculaId, scope.cicloId).run();
+      learner.empresaId, scope.matriculaId, scope.cicloId,
+      policy.maxAttempts, Date.now(), policy.retryDelayMinutes).run();
+    if (!Number.isSafeInteger(Number(insert.meta?.changes)) ||
+        Number(insert.meta?.changes) !== 1) {
+      // An atomic policy rejection inserts zero rows. Recheck only to provide
+      // the correct, non-sensitive business code to the learner.
+      const latest=await db.prepare(
+        'SELECT COUNT(*) AS used,MAX(submitted_at) AS last_submitted FROM lms_exam_attempts ' +
+        "WHERE empresa_id=? AND matricula_id=? AND ciclo_id=? AND state='SUBMITTED'"
+      ).bind(learner.empresaId,scope.matriculaId,scope.cicloId)
+        .first<{used:number;last_submitted:string|null}>();
+      if(Number(latest?.used??0)>=policy.maxAttempts)deny('EXAM_ATTEMPTS_EXHAUSTED');
+      if(latest?.last_submitted &&
+        Date.now()<utcMillis(latest.last_submitted)+policy.retryDelayMinutes*60000) {
+        deny('EXAM_RETRY_COOLDOWN');
+      }
+      deny('EXAM_ATTEMPT_CONFLICT');
+    }
   } catch (error) {
+    if (error instanceof ExamAttemptError) throw error;
     // A concurrent start by the same learner resolves to the winner's attempt.
     const winner = await reuse().catch(() => null);
     if (winner) return winner;
