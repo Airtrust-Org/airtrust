@@ -121,7 +121,7 @@ describe('rotas do aluno — prova externa', () => {
       json('POST', undefined, { 'Idempotency-Key': 'idem-cycle-0001' }));
     const a = (await started.json() as any).data;
     db.exec("UPDATE lms_matricula_ciclos SET ciclo_atual=0 WHERE id=1");
-    db.exec("INSERT INTO lms_matricula_ciclos VALUES(2,6,26,10,1,'EM_ANDAMENTO',NULL,NULL)");
+    db.exec("INSERT INTO lms_matricula_ciclos (id,empresa_id,curso_id,matricula_id,ciclo_atual,status,deleted_at,assessment_policy) VALUES(2,6,26,10,1,'EM_ANDAMENTO',NULL,NULL)");
     const denied = await call(db, `/api/lms/exams/tentativas/${a.attemptId}/enviar`, json('POST'));
     expect(denied.status).toBe(409);
     expect((await denied.json() as any).code).toBe('EXAM_ATTEMPT_NOT_CURRENT');
