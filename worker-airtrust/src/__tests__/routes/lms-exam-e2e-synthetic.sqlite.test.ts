@@ -53,9 +53,9 @@ const mint = (sub: number, empresa: number, role: string) => generateJWT({
   sub: String(sub), empresa_id: empresa, role, email: `u${sub}@sintetico.test`, token_type: 'access',
 } as never, SYNTHETIC_JWT_SECRET);
 
-function call(db: Db, path: string, init: RequestInit = {}) {
+function call(db: Db, path: string, init: RequestInit = {},bucket: R2Bucket = externalBucket()) {
   const env = {
-    DB: db.asD1(), BUCKET: externalBucket(), ENVIRONMENT: 'staging', JWT_SECRET: SYNTHETIC_JWT_SECRET,
+    DB: db.asD1(), BUCKET: bucket, ENVIRONMENT: 'staging', JWT_SECRET: SYNTHETIC_JWT_SECRET,
     LMS_EXAM_LEARNER_STAGING: 'REVIEWED_SCHEMA_ONLY', LMS_EXAM_QUESTION_ADMIN_STAGING: 'REVIEWED_SCHEMA_ONLY',
     __realAuth: true,
   };
@@ -430,6 +430,65 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
     expect(payload.data.plans).toHaveLength(0);
     expect(payload.data.bindings).toHaveLength(0);
     expect(payload.data.attempts).toHaveLength(0);
+  });
+  it('edição e catálogo de provas exigem auth, tenant e manifesto EXTERNAL real',async()=>{
+    const db=overviewDb();
+    await publishExam(db,false);
+    const catalog=await admin(db,base+'/admin/cursos/26/provas');
+    expect(catalog.status).toBe(200);
+    const items=(await catalog.json() as any).data.items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      examId:'exam1',version:1,sourceSha:PKG,boundPackageSha256:null,
+    });
+    expect(JSON.stringify(items)).not.toMatch(LEAK);
+    const good=await (await admin(db,base+'/admin/cursos/26/aptidao?packageSha256='+PKG)).json() as any;
+    expect(good.data).toMatchObject({status:'VALIDATED',assessmentMode:'EXTERNAL',canBind:true});
+    const token=(await mint(ADMIN_USER,6,'ADMIN')).token;
+    const negative=await call(db,base+'/admin/cursos/26/aptidao?packageSha256='+PKG,
+      {headers:{Authorization:'Bearer '+token}},externalBucket('NONE'));
+    expect(negative.status).toBe(200);
+    expect((await negative.json() as any).data).toMatchObject({
+      assessmentMode:'NONE',canBind:false,reason:'EDITION_NOT_EXTERNAL',
+    });
+    expect((await admin(db,base+'/admin/cursos/26/aptidao?packageSha256=x')).status).toBeGreaterThanOrEqual(400);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/aptidao?packageSha256='+PKG);
+    expect(other.status).toBe(404);
+    expect((await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/provas')).status).toBe(200);
+    const otherCatalog=await (await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/provas')).json() as any;
+    expect(otherCatalog.data.items).toHaveLength(0);
+    expect([401,403]).toContain((await learner(db,base+'/admin/cursos/26/provas')).status);
+  });
+  it('relatório paginado inclui nota exata, nome, filtros, sem gabarito e não vaza tenants',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const opened=await start(db,'report-tests-1');
+    expect(opened.status).toBe(201);
+    await answerWith(db,opened.body.data.attemptId,7);
+    expect((await submit(db,opened.body.data.attemptId)).status).toBe(200);
+    const url=base+'/admin/resultados?cursoId=26&resultado=aprovado&page=1&limit=1&busca=Aluno';
+    const r=await admin(db,url);
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data).toMatchObject({page:1,limit:1,total:1,pages:1});
+    expect(payload.data.items[0]).toMatchObject({
+      cursoId:26,cursoTitulo:'Treinamento sintético de teste',matriculaId:10,
+      alunoNome:'Aluno sintético',scorePct:70,passed:true,attemptNo:1,
+    });
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+    const failed=await (await admin(db,base+'/admin/resultados?resultado=reprovado')).json() as any;
+    expect(failed.data.items).toHaveLength(0);
+    expect(failed.data.total).toBe(0);
+    const missing=await (await admin(db,base+'/admin/resultados?busca=INEXISTENTE')).json() as any;
+    expect(missing.data.items).toHaveLength(0);
+    const second=await (await admin(db,base+'/admin/resultados?page=2&limit=1')).json() as any;
+    expect(second.data.items).toHaveLength(0);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/resultados');
+    expect(other.status).toBe(200);
+    expect((await other.json() as any).data.items).toHaveLength(0);
+    expect([401,403]).toContain((await learner(db,base+'/admin/resultados')).status);
+    expect((await admin(db,base+'/admin/resultados?page=-1')).status).toBeGreaterThanOrEqual(400);
+    expect((await admin(db,base+'/admin/resultados?limit=1000')).status).toBeGreaterThanOrEqual(400);
   });
   it('mantém nota e nome do aluno mesmo quando o plano da tentativa está fora do catálogo limitado a 250',async()=>{
     const db=overviewDb();

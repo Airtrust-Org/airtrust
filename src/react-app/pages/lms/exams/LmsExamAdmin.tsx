@@ -20,6 +20,13 @@ type Question = {
   difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 };
 type Published = { examId:string;version:number;packageSha256:string;planSha256:string };
+type Eligibility={
+  packageSha256:string;status:string;assessmentMode:string|null;
+  workerApprovalRequired:boolean;canBind:boolean;
+  boundExamId:string|null;boundExamVersion:number|null;reason:string|null;
+};
+type ListedExam={examId:string;version:number;publishedAt:string;
+  boundPackageSha256:string|null;sourceSha:string|null};
 type Envelope<T> = {success:boolean;data?:T;code?:string};
 const sha = /^[a-f0-9]{64}$/;
 const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
@@ -44,6 +51,9 @@ export default function LmsExamAdmin():React.ReactElement {
   const {data:course}=useLmsCurso(validId?id:0);
   const base=`/api/lms/exams/admin/cursos/${id}`;
   const [editions,setEditions]=useState<Edition[]>([]);
+  const [plans,setPlans]=useState<ListedExam[]>([]);
+  const [eligibility,setEligibility]=useState<Eligibility|null>(null);
+  const [eligibilityLoading,setEligibilityLoading]=useState(false);
   const [questions,setQuestions]=useState<Question[]>([]);
   const [nextOffset,setNextOffset]=useState<number|null>(null);
   const [packageSha,setPackageSha]=useState('');
@@ -84,19 +94,38 @@ export default function LmsExamAdmin():React.ReactElement {
     if(!validId)return;
     setLoading(true);setError('');
     try{
-      const [e]=await Promise.all([
+      const [e,p]=await Promise.all([
         api<{editions:Edition[]}>(base+'/edicoes'),
+        api<{items:ListedExam[]}>(base+'/provas'),
         loadQuestions(0),
       ]);
       setEditions(e.editions);
+      setPlans(p.items);
+      const preferred=e.editions.find(e=>e.status==='ACTIVE')||
+        e.editions.find(e=>e.status==='VALIDATED');
+      if(preferred)setPackageSha(old=>old||preferred.packageSha256);
     }catch(err){setError('Banco de provas indisponível: '+(err as Error).message);}
     finally{setLoading(false);}
   },[validId,base,loadQuestions]);
   useEffect(()=>{void refresh();},[refresh]);
+  useEffect(()=>{
+    if(sha.test(packageSha)&&!editionSha)setEditionSha(packageSha);
+  },[packageSha,editionSha]);
+  useEffect(()=>{
+    if(!validId||!sha.test(packageSha)){setEligibility(null);return;}
+    let active=true;
+    setEligibility(null);setEligibilityLoading(true);
+    void api<Eligibility>(base+'/aptidao?packageSha256='+packageSha)
+      .then(value=>{if(active)setEligibility(value);})
+      .catch(()=>{if(active)setError('Não foi possível verificar a modalidade física da edição.');})
+      .finally(()=>{if(active)setEligibilityLoading(false);});
+    return()=>{active=false;};
+  },[base,validId,packageSha]);
 
   function changePackage(value:string){
     setPackageSha(value);setPublished(null);setConfirmed(false);setMessage('');setError('');
-    setEditionSha('');
+    setEditionSha(value);
+    setEligibility(null);
   }
   function composeByDifficulty(){
     setError('');setMessage('');
@@ -180,15 +209,21 @@ export default function LmsExamAdmin():React.ReactElement {
     }catch(err){setError('Publicação não concluída: '+(err as Error).message);}
     finally{setWorking(false);}
   }
-  async function recover(){
+  async function recover(selected?:ListedExam){
     setWorking(true);setError('');setMessage('');
     try {
-      if(!identifier.test(examId)||!Number.isSafeInteger(Number(version))||Number(version)<1||!sha.test(packageSha))
+      const selectedExamId=selected?.examId??examId;
+      const selectedVersion=selected?.version??Number(version);
+      const selectedSha=selected?.sourceSha??packageSha;
+      if(!identifier.test(selectedExamId)||!Number.isSafeInteger(selectedVersion)||selectedVersion<1||!sha.test(selectedSha))
         throw Error('SELECIONE_A_EDIÇÃO_E_INFORME_A_PROVA');
       const result=await api<{planSha256:string;plan:{trainingSourceSha256:string;trainingEditionSha256:string}}>(
-        `${base}/provas/${encodeURIComponent(examId)}/versoes/${version}`);
-      if(result.plan.trainingSourceSha256!==packageSha)throw Error('PROVA_PUBLICADA_PARA_OUTRA_EDIÇÃO');
-      setPublished({examId,version:Number(version),packageSha256:packageSha,planSha256:result.planSha256});
+        base+'/provas/'+encodeURIComponent(selectedExamId)+'/versoes/'+selectedVersion);
+      if(result.plan.trainingSourceSha256!==selectedSha)throw Error('PROVA_PUBLICADA_PARA_OUTRA_EDIÇÃO');
+      setExamId(selectedExamId);
+      setVersion(String(selectedVersion));
+      setPackageSha(selectedSha);
+      setPublished({examId:selectedExamId,version:selectedVersion,packageSha256:selectedSha,planSha256:result.planSha256});
       setEditionSha(result.plan.trainingEditionSha256);
       setMessage('Plano publicado recuperado. Confira a classificação normativa e vincule-o à edição.');
     }catch(err){setError('Não foi possível recuperar: '+(err as Error).message);}
@@ -206,6 +241,8 @@ export default function LmsExamAdmin():React.ReactElement {
       );
       setMessage('Prova vinculada à edição. O curso não foi publicado nem matrículas foram modificadas.');
       setPublished(null);
+      setPackageSha('');
+      setEligibility(null);
       await refresh();
     }catch(err){setError('Vínculo não concluído: '+(err as Error).message);}
     finally{setWorking(false);}
@@ -236,6 +273,36 @@ export default function LmsExamAdmin():React.ReactElement {
       {editions.length===0?<p className="mt-2 text-sm">Nenhum pacote validado encontrado. Não é permitido inventar uma edição.</p>:null}
       {edition?.boundExamId?<p className="mt-2 text-sm">Esta edição já está vinculada a uma prova imutável.</p>:null}
       {edition?.status==='SUPERSEDED'?<p className="mt-2 text-sm">Edição substituída: indisponível para novos vínculos.</p>:null}
+      {eligibilityLoading?<p role="status" className="mt-3 text-sm">Verificando contrato da edição no armazenamento...</p>:null}
+      {eligibility&&<div className="mt-3 rounded-lg border p-3 text-sm" role="status">
+        {eligibility.canBind?
+          <p className="font-medium text-emerald-700">Edição apta para vincular prova externa. Manifesto EXTERNAL e aprovação pelo Worker confirmados.</p>:
+          <p className="font-medium text-amber-700">
+            {eligibility.boundExamId?
+              'Prova '+eligibility.boundExamId+' v'+eligibility.boundExamVersion+' já vinculada a esta edição.':
+              eligibility.reason==='EDITION_INACTIVE'?'Edição inativa: escolha uma edição validada ou atual.':
+              'Esta edição não está homologada para prova externa.'}
+            {' '}Modo declarado: {eligibility.assessmentMode??'Manifesto indisponível'}.
+          </p>}
+        {!eligibility.canBind&&!eligibility.boundExamId?<p className="mt-2">
+          Para disponibilizar uma prova final do AirTrust, envie em
+          <Link to="/lms/admin/cursos" className="mx-1 underline">Cursos EAD</Link>
+          uma edição SCORM homologada em modo EXTERNAL, sem nota interna do pacote,
+          com aprovação pelo Worker. Não é permitido converter o curso só alterando um campo.
+        </p>:null}
+      </div>}
+      {plans.length>0&&<div className="mt-4 rounded-xl border p-3 text-sm">
+        <h3 className="font-semibold">Provas já publicadas neste treinamento</h3>
+        <div className="mt-2 flex flex-col gap-2">
+        {plans.map(p=><div key={p.examId+':'+p.version} className="flex flex-wrap items-center justify-between gap-3">
+          <span>{p.examId} · versão {p.version}
+            {p.boundPackageSha256?' · vinculada a edição '+p.boundPackageSha256.slice(0,10):' · vínculo pendente'}</span>
+          {!p.boundPackageSha256&&p.sourceSha?
+            <button type="button" className="rounded border px-3 py-1" disabled={working}
+              onClick={()=>void recover(p)}>Recuperar e vincular</button>:null}
+        </div>)}
+        </div>
+      </div>}
       <div className="mt-4 flex gap-2">
         <button type="button" aria-pressed={tab==='compose'} className="rounded border px-3 py-2" onClick={()=>setTab('compose')}>Montagem da prova</button>
         <button type="button" aria-pressed={tab==='bank'} className="rounded border px-3 py-2" onClick={()=>setTab('bank')}>Banco de questões</button>
@@ -246,6 +313,7 @@ export default function LmsExamAdmin():React.ReactElement {
       <QuestionBankAdmin courseId={id} trainingSourceSha256={packageSha}/>:null}
     {!loading&&validId&&tab==='compose'?<section className={panel}>
       <h2 className="mb-3 text-lg font-semibold">Composição e critérios de aprovação</h2>
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">Selecione a edição EXTERNAL, publique as questões no banco, monte a prova e aprove o vínculo. Nenhuma matrícula será alterada por esta tela.</p>
       <div className="grid gap-3 md:grid-cols-3">
         <label className="text-sm">Identificador da prova
           <input className={input+' mt-1'} aria-label="Identificador da prova" value={examId}
@@ -261,7 +329,7 @@ export default function LmsExamAdmin():React.ReactElement {
             placeholder="64 caracteres hexadecimais"/>
         </label>
       </div>
-      <p className="mt-2 text-xs">Use o SHA da edição aprovada na governança de conteúdo, não um valor arbitrário. A API valida o formato; a homologação deve atestar a proveniência.</p>
+      <p className="mt-2 text-xs">Preenchido a partir do SHA-256 do pacote selecionado no armazenamento, sem valor fictício. Quando a edição editorial usa outro digest controlado, substitua-o pelo SHA validado da edição.</p>
       <div className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
         <h3 className="font-semibold">Montar prova por quantidade e dificuldade</h3>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
@@ -337,7 +405,7 @@ export default function LmsExamAdmin():React.ReactElement {
         Confirmo a cobertura do conteúdo, os critérios de aprovação por módulo, a edição e a autorização editorial.</label>
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
-          disabled={working||!edition||!!edition.boundExamId||edition.status==='SUPERSEDED'||!!published}
+          disabled={working||!eligibility?.canBind||!edition||!!published}
           onClick={()=>void publish()}>Publicar plano imutável</button>
         <button type="button" className="rounded border px-3 py-2 disabled:opacity-50"
           disabled={working||!edition||!!published}
@@ -358,7 +426,7 @@ export default function LmsExamAdmin():React.ReactElement {
             aria-label="Justificativa de aprovação" onChange={e=>setNote(e.target.value)}/>
         </label>
         <button type="button" className="mt-3 rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
-          disabled={working||!!edition?.boundExamId} onClick={()=>void bind()}>
+          disabled={working||!eligibility?.canBind||!!edition?.boundExamId} onClick={()=>void bind()}>
           Vincular prova à edição</button>
       </section>:null}
     </section>:null}
