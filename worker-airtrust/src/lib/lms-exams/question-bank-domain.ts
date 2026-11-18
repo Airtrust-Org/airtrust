@@ -11,6 +11,7 @@ export type QuestionContent = Readonly<{
   moduleId: string; topicId: string; sourceUnitId: string;
   sourceSha256: string; prompt: string; choices: readonly Choice[];
   correctChoiceId: string; explanation: string;
+  difficulty?: 'BASICA' | 'INTERMEDIARIA' | 'AVANCADA';
 }>;
 export type QuestionRevision = Readonly<QuestionContent & {
   schema: typeof QUESTION_BANK_SCHEMA;
@@ -81,10 +82,11 @@ const safeText = (x: unknown, max: number) =>
   !/[\u0000-\u001f\u007f]/.test(x);
 const contentKeys: readonly (keyof QuestionContent)[] = [
   'moduleId', 'topicId', 'sourceUnitId', 'sourceSha256',
-  'prompt', 'choices', 'correctChoiceId', 'explanation',
+  'prompt', 'choices', 'correctChoiceId', 'explanation', 'difficulty',
 ];
 function validContent(c: QuestionContent): void {
-  if (!c || !safeId(c.moduleId) || !safeId(c.topicId) ||
+  if (!c || (c.difficulty !== undefined && !['BASICA','INTERMEDIARIA','AVANCADA'].includes(c.difficulty)) ||
+      !safeId(c.moduleId) || !safeId(c.topicId) ||
       !safeId(c.sourceUnitId) || !SHA.test(c.sourceSha256) ||
       !safeText(c.prompt, 3000) || !safeText(c.explanation, 3000) ||
       !Array.isArray(c.choices) || c.choices.length < 2 || c.choices.length > 8 ||
@@ -117,6 +119,7 @@ function cloneContent(c: QuestionContent): QuestionContent {
     sourceSha256: c.sourceSha256, prompt: c.prompt,
     choices: c.choices.map(o => ({ id: o.id, text: o.text })),
     correctChoiceId: c.correctChoiceId, explanation: c.explanation,
+    ...(c.difficulty === undefined ? {} : {difficulty:c.difficulty}),
   };
 }
 export function createQuestionDraft(scope: QuestionScope, content: QuestionContent, author: string): QuestionRevision {

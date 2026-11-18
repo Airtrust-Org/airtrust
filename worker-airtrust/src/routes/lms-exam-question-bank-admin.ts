@@ -56,6 +56,102 @@ routes.onError((error,c)=>{
   if(code)return c.json({success:false,code},examHttpStatus(code));
   throw error;
 });
+/** One tenant-scoped read model for the independent assessment management hub.
+ * No question answer, personal identifier or mutation is exposed here.
+ * Same ADMIN + schema and feature guards as the editor. */
+routes.get('/overview',async c=>{
+  const tenant=getEmpresaId(c);
+  const [courseRows,questionRows,planRows,bindingRows,totalsRow,attemptRows]=await Promise.all([
+    c.env.DB.prepare(
+      'SELECT id,titulo,tipo_conteudo,scorm_assessment_policy,publicado '+
+      'FROM lms_cursos WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL '+
+      'ORDER BY titulo COLLATE NOCASE LIMIT 250'
+    ).bind(tenant).all<{id:number;titulo:string;tipo_conteudo:string;
+      scorm_assessment_policy:string|null;publicado:number}>(),
+    c.env.DB.prepare(
+      'SELECT curso_id,status,COUNT(DISTINCT question_key) AS total FROM lms_exam_question_revisions '+
+      'WHERE empresa_id=? GROUP BY curso_id,status'
+    ).bind(tenant).all<{curso_id:number;status:string;total:number}>(),
+    c.env.DB.prepare(
+      'SELECT curso_id,exam_id,version,plan_json,published_at FROM lms_exam_plans '+
+      'WHERE empresa_id=? ORDER BY published_at DESC LIMIT 250'
+    ).bind(tenant).all<{curso_id:number;exam_id:string;version:number;plan_json:string;published_at:string}>(),
+    c.env.DB.prepare(
+      'SELECT curso_id,package_sha256,exam_id,exam_version,created_at '+
+      'FROM lms_exam_edition_bindings WHERE empresa_id=? ORDER BY created_at DESC LIMIT 250'
+    ).bind(tenant).all<{curso_id:number;package_sha256:string;exam_id:string;
+      exam_version:number;created_at:string}>(),
+    c.env.DB.prepare(
+      "SELECT COUNT(*) AS total,SUM(CASE WHEN state='SUBMITTED' AND passed=1 THEN 1 ELSE 0 END) AS passed,"+
+      "SUM(CASE WHEN state='SUBMITTED' AND passed=0 THEN 1 ELSE 0 END) AS failed,"+
+      "SUM(CASE WHEN state='IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress "+
+      'FROM lms_exam_attempts WHERE empresa_id=?'
+    ).bind(tenant).first<{total:number;passed:number|null;failed:number|null;in_progress:number|null}>(),
+    c.env.DB.prepare(
+      'SELECT a.curso_id,a.matricula_id,a.exam_id,a.exam_version,a.attempt_no,a.state,a.passed,'+
+      'a.started_at,a.submitted_at,a.result_json,f.nome AS aluno_nome FROM lms_exam_attempts a '+
+      'LEFT JOIN lms_matriculas m ON m.id=a.matricula_id AND m.empresa_id=a.empresa_id '+
+      'LEFT JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=a.empresa_id '+
+      'WHERE a.empresa_id=? ORDER BY a.started_at DESC LIMIT 100'
+    ).bind(tenant).all<{curso_id:number;matricula_id:number;exam_id:string;
+      exam_version:number;attempt_no:number;state:string;passed:number|null;
+      started_at:string;submitted_at:string|null;result_json:string|null;aluno_nome:string|null}>(),
+  ]);
+  const plans=(planRows.results||[]).map(row=>{
+    let questionCount:number|null=null;
+    try{
+      const plan=JSON.parse(row.plan_json) as {sections?:{questions?:unknown[]}[]};
+      if(Array.isArray(plan.sections)){
+        questionCount=plan.sections.reduce((n,sec)=>n+
+          (Array.isArray(sec.questions)?sec.questions.length:0),0);
+      }
+    }catch{ /* corrupted plans are not silently accepted */ }
+    return {cursoId:row.curso_id,examId:row.exam_id,version:row.version,
+      questionCount,publishedAt:row.published_at};
+  });
+  const attempts=(attemptRows.results||[]).map(row=>{
+    let scorePct:number|null=null;
+    // Weight actual section scores by exact immutable published question count.
+    const record=(planRows.results||[]).find(p=>p.curso_id===row.curso_id &&
+      p.exam_id===row.exam_id&&p.version===row.exam_version);
+    if(row.state==='SUBMITTED'&&record&&row.result_json){
+      try{
+        const plan=JSON.parse(record.plan_json) as {sections:{moduleId:string;questions:unknown[]}[]};
+        const grade=JSON.parse(row.result_json) as {sections:{moduleId:string;scorePct:number}[]};
+        if(Array.isArray(plan.sections)&&Array.isArray(grade.sections)){
+          let sum=0,total=0,valid=true;
+          for(const section of plan.sections){
+            const matched=grade.sections.find(a=>a.moduleId===section.moduleId);
+            if(!Array.isArray(section.questions)||!Number.isFinite(matched?.scorePct)||
+                (matched?.scorePct??-1)<0||(matched?.scorePct??101)>100){
+              valid=false;break;
+            }
+            total+=section.questions.length;
+            sum+=section.questions.length*matched!.scorePct;
+          }
+          if(valid&&total>0)scorePct=Math.round(sum/total*100)/100;
+        }
+      }catch{ /* missing/inconsistent evidence -> no score */ }
+    }
+    return {cursoId:row.curso_id,matriculaId:row.matricula_id,
+      examId:row.exam_id,version:row.exam_version,attemptNo:row.attempt_no,
+      state:row.state,passed:row.passed===null?null:row.passed===1,
+      scorePct,alunoNome:row.aluno_nome||null,startedAt:row.started_at,submittedAt:row.submitted_at};
+  });
+  return c.json({success:true,data:{
+    courses:courseRows.results||[],questionCounts:questionRows.results||[],
+    plans,bindings:(bindingRows.results||[]).map(row=>({
+      cursoId:row.curso_id,packageSha256:row.package_sha256,
+      examId:row.exam_id,version:row.exam_version,createdAt:row.created_at,
+    })),
+    totals:{attempts:totalsRow?.total||0,passed:totalsRow?.passed||0,
+      failed:totalsRow?.failed||0,inProgress:totalsRow?.in_progress||0},
+    attempts,attemptsTruncated:(totalsRow?.total||0)>100,
+    coursesTruncated:(courseRows.results||[]).length===250,
+    plansTruncated:(planRows.results||[]).length===250,
+  }});
+});
+
 // Staging-only metadata: package versions and any immutable existing binding.
 routes.get('/cursos/:cursoId/edicoes',async c=>{
   const a=actor(c,c.req.param('cursoId'));

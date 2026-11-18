@@ -17,6 +17,7 @@ type Edition = {
 type Question = {
   questionId:string;revision:number;moduleId:string;topicId:string;prompt:string;
   sourceSha256:string;contentSha256:string;
+  difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 };
 type Published = { examId:string;version:number;packageSha256:string;planSha256:string };
 type Envelope<T> = {success:boolean;data?:T;code?:string};
@@ -48,6 +49,9 @@ export default function LmsExamAdmin():React.ReactElement {
   const [packageSha,setPackageSha]=useState('');
   const [tab,setTab]=useState<'compose'|'bank'>('compose');
   const [selected,setSelected]=useState<Record<string,number>>({});
+  const [quantity,setQuantity]=useState<Record<'BASICA'|'INTERMEDIARIA'|'AVANCADA',string>>({
+    BASICA:'0',INTERMEDIARIA:'0',AVANCADA:'0',
+  });
   const [minimums,setMinimums]=useState<Record<string,string>>({});
   const [examId,setExamId]=useState('');
   const [version,setVersion]=useState('1');
@@ -93,6 +97,45 @@ export default function LmsExamAdmin():React.ReactElement {
   function changePackage(value:string){
     setPackageSha(value);setPublished(null);setConfirmed(false);setMessage('');setError('');
     setEditionSha('');
+  }
+  function composeByDifficulty(){
+    setError('');setMessage('');
+    const levels=['BASICA','INTERMEDIARIA','AVANCADA'] as const;
+    const requested=levels.map(level=>({level,count:Number(quantity[level])}));
+    const total=requested.reduce((n,r)=>n+r.count,0);
+    if(!total||total>200||requested.some(r=>!Number.isInteger(r.count)||r.count<0)){
+      setError('Informe de 1 a 200 questões, distribuídas entre os três níveis.');
+      return;
+    }
+    const selectedRows:Question[]=[];
+    const used=new Set<string>();
+    for(const {level,count} of requested){
+      // The browser composes a reviewed draft. Final plan remains fixed, signed
+      // by the Worker; no claim of per-learner randomization is made.
+      const available=questions.filter(q=>q.difficulty===level);
+      const seen=new Set<string>();
+      const unique=available.filter(q=>{if(seen.has(q.questionId))return false;seen.add(q.questionId);return true;});
+      if(unique.length<count){
+        setError('Banco insuficiente para '+level+': '+unique.length+' disponíveis, '+count+' solicitadas.');return;
+      }
+      for(let i=unique.length-1;i>0;i--){
+        const rand=crypto.getRandomValues(new Uint32Array(1))[0];
+        const j=rand%(i+1);
+        [unique[i],unique[j]]=[unique[j],unique[i]];
+      }
+      for(const q of unique.slice(0,count)){
+        if(used.has(q.questionId))continue;
+        used.add(q.questionId);selectedRows.push(q);
+      }
+    }
+    if(selectedRows.length!==total){setError('As questões selecionadas não são únicas.');return;}
+    setSelected(Object.fromEntries(selectedRows.map(q=>[q.questionId,q.revision])));
+    setMinimums(old=>{
+      const next={...old};
+      for(const q of selectedRows)next[q.moduleId]=next[q.moduleId]||'80';
+      return next;
+    });
+    setMessage(total+' questões selecionadas. Confira módulos e critérios antes de publicar.');
   }
   function buildPlan(){
     if(!edition||edition.boundExamId||edition.status==='SUPERSEDED'||!sha.test(packageSha))throw Error('EDIÇÃO_INDISPONÍVEL');
@@ -170,7 +213,7 @@ export default function LmsExamAdmin():React.ReactElement {
   const panel='rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900';
   const input='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white';
   return <AppLayout><main className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
-    <Link className="text-sm underline" to="/lms/admin/cursos">Voltar às configurações LMS</Link>
+    <Link className="text-sm underline" to="/treinamentos/avaliacoes">Voltar à Gestão de Avaliações</Link>
     <header><h1 className="text-2xl font-semibold">Banco de questões e montagem de provas</h1>
       <p className="text-sm text-slate-600 dark:text-slate-300">{course?.titulo||`Curso #${id}`} — edição e política verificadas pelo Worker</p>
       <p className="mt-2 text-sm">Publicar um plano não altera matrículas. Vincular uma prova exige uma edição autorizada para avaliação externa.</p>
@@ -219,6 +262,28 @@ export default function LmsExamAdmin():React.ReactElement {
         </label>
       </div>
       <p className="mt-2 text-xs">Use o SHA da edição aprovada na governança de conteúdo, não um valor arbitrário. A API valida o formato; a homologação deve atestar a proveniência.</p>
+      <div className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+        <h3 className="font-semibold">Montar prova por quantidade e dificuldade</h3>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Defina quantas questões deseja de cada nível. O sistema escolhe versões publicadas;
+          revise a seleção antes de publicar o plano fixo.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {(['BASICA','INTERMEDIARIA','AVANCADA'] as const).map(level=>
+            <label key={level} className="text-sm">{level==='BASICA'?'Básicas':level==='INTERMEDIARIA'?'Intermediárias':'Avançadas'}
+              <input className={input+' mt-1'} type="number" min="0" max="200"
+                aria-label={'Quantidade '+level} value={quantity[level]}
+                disabled={working||!!published}
+                onChange={e=>setQuantity(old=>({...old,[level]:e.target.value}))}/>
+              <small className="block text-slate-500">
+                {new Set(questions.filter(q=>q.difficulty===level).map(q=>q.questionId)).size} disponíveis
+              </small>
+            </label>)}
+        </div>
+        <button type="button" className="mt-3 rounded bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
+          disabled={working||!!published} onClick={composeByDifficulty}>Selecionar questões</button>
+        <p className="mt-2 text-xs text-slate-500">As questões antigas sem classificação podem ser incluídas manualmente.</p>
+      </div>
       <h3 className="mt-5 font-semibold">Questões publicadas ({questions.length})</h3>
       {questions.length===0?<p className="text-sm">O banco ainda não contém questões publicadas para este curso.</p>:null}
       <div className="mt-2 max-h-80 space-y-2 overflow-y-auto" aria-label="Questões disponíveis">
@@ -231,7 +296,7 @@ export default function LmsExamAdmin():React.ReactElement {
               else delete next[q.questionId];
               return next;
             })}/>
-          <span><strong>{q.moduleId}</strong> · {q.topicId} · {q.questionId} v{q.revision}: {q.prompt}</span>
+          <span><strong>{q.moduleId}</strong> · {q.topicId} · {q.difficulty||'Sem nível'} · {q.questionId} v{q.revision}: {q.prompt}</span>
         </label>)}
       </div>
       {nextOffset!==null?<button type="button" className="mt-3 rounded border px-3 py-2"

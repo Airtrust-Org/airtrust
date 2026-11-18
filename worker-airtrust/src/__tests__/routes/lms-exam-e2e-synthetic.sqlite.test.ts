@@ -389,3 +389,46 @@ describe('E2E sintetico - aprovacao como evidencia de conclusao e reabertura', (
     expect(count(db, 'SELECT COUNT(*) n FROM lms_exam_attempts')).toBe(2);
   });
 });
+
+describe('Gestão de Avaliações — visão central administrativa',()=>{
+  function overviewDb(){
+    const db=freshDb();
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN titulo TEXT");
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1");
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1");
+    db.exec("ALTER TABLE funcionarios ADD COLUMN nome TEXT");
+    db.exec("UPDATE lms_cursos SET titulo='Treinamento sintético de teste' WHERE empresa_id=6");
+    db.exec("UPDATE funcionarios SET nome='Aluno sintético' WHERE empresa_id=6");
+    return db;
+  }
+  it('expõe somente metadados de provas e questões ao administrador no tenant correto',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const r=await admin(db,base+'/admin/overview');
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data.courses).toHaveLength(1);
+    expect(payload.data.courses[0]).toMatchObject({id:26,titulo:'Treinamento sintético de teste'});
+    expect(payload.data.questionCounts).toEqual([{curso_id:26,status:'PUBLISHED',total:10}]);
+    expect(payload.data.plans[0]).toMatchObject({cursoId:26,examId:'exam1',version:1,questionCount:10});
+    expect(payload.data.bindings).toHaveLength(1);
+    expect(payload.data.totals.attempts).toBe(0);
+    expect(payload.data.attempts).toHaveLength(0);
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+    expect(count(db,'SELECT COUNT(*) n FROM lms_exam_question_revisions')).toBe(10);
+  });
+  it('nega acesso do aluno e não expõe dados de outra empresa',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const learnerResponse=await learner(db,base+'/admin/overview');
+    expect([401,403]).toContain(learnerResponse.status);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/overview');
+    expect(other.status).toBe(200);
+    const payload=await other.json() as any;
+    expect(payload.data.courses).toHaveLength(0);
+    expect(payload.data.questionCounts).toHaveLength(0);
+    expect(payload.data.plans).toHaveLength(0);
+    expect(payload.data.bindings).toHaveLength(0);
+    expect(payload.data.attempts).toHaveLength(0);
+  });
+});
