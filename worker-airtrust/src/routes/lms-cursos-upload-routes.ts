@@ -324,6 +324,10 @@ app.post('/:id/scorm-replace',
     const empresaId = getEmpresaIdSafe(c), cursoId = courseIdParam(c);
     const expectedActivePackageId = c.req.header('X-Airtrust-Expected-Active-Package-Id');
     const externalContentPolicy = c.req.header('X-Airtrust-External-Content-Policy');
+    const strictEnrollmentGuard = c.req.header('X-Airtrust-Require-No-Enrollments');
+    if (strictEnrollmentGuard !== undefined && strictEnrollmentGuard !== 'true') {
+      throw new ApiError('Guarda de matrículas inválida', 400, 'SCORM_REPLACE_ENROLLMENT_GUARD_INVALID');
+    }
     if (externalContentPolicy !== undefined && externalContentPolicy !== 'FORMATIVE') {
       throw new ApiError('Política externa solicitada inválida', 400, 'SCORM_EXTERNAL_CONTENT_POLICY_INVALID');
     }
@@ -394,6 +398,7 @@ app.post('/:id/scorm-replace',
         acknowledgeInProgress: preflight.impact.inProgress,
         ...(expectedActivePackageId ? { expectedActivePackageId } : {}),
         ...(externalContentPolicy === 'FORMATIVE' ? { incomingExternalPolicy: 'FORMATIVE' } : {}),
+        ...(strictEnrollmentGuard === 'true' ? { requireNoEnrollments: true } : {}),
       },
     };
     const data = resolvedFormative
