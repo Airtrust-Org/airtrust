@@ -11,6 +11,7 @@ export type QuestionContent = Readonly<{
   moduleId: string; topicId: string; sourceUnitId: string;
   sourceSha256: string; prompt: string; choices: readonly Choice[];
   correctChoiceId: string; explanation: string;
+  difficulty?: 'BASICA' | 'INTERMEDIARIA' | 'AVANCADA';
 }>;
 export type QuestionRevision = Readonly<QuestionContent & {
   schema: typeof QUESTION_BANK_SCHEMA;
@@ -49,6 +50,8 @@ export function validExamAttemptPolicy(p: unknown): p is ExamAttemptPolicy {
 export type ExamPlan = Readonly<{
   schema: typeof EXAM_PLAN_SCHEMA;
   tenantId: number; courseId: number; examId: string; version: number;
+  /** Human-readable caption; absent for immutable legacy plans. */
+  title?: string;
   trainingSourceSha256: string; trainingEditionSha256: string;
   // Explicit editorial attestation: question revisions authored against these
   // source SHAs are accepted by this exam. Must include trainingSourceSha256.
@@ -81,10 +84,11 @@ const safeText = (x: unknown, max: number) =>
   !/[\u0000-\u001f\u007f]/.test(x);
 const contentKeys: readonly (keyof QuestionContent)[] = [
   'moduleId', 'topicId', 'sourceUnitId', 'sourceSha256',
-  'prompt', 'choices', 'correctChoiceId', 'explanation',
+  'prompt', 'choices', 'correctChoiceId', 'explanation', 'difficulty',
 ];
 function validContent(c: QuestionContent): void {
-  if (!c || !safeId(c.moduleId) || !safeId(c.topicId) ||
+  if (!c || (c.difficulty !== undefined && !['BASICA','INTERMEDIARIA','AVANCADA'].includes(c.difficulty)) ||
+      !safeId(c.moduleId) || !safeId(c.topicId) ||
       !safeId(c.sourceUnitId) || !SHA.test(c.sourceSha256) ||
       !safeText(c.prompt, 3000) || !safeText(c.explanation, 3000) ||
       !Array.isArray(c.choices) || c.choices.length < 2 || c.choices.length > 8 ||
@@ -117,6 +121,7 @@ function cloneContent(c: QuestionContent): QuestionContent {
     sourceSha256: c.sourceSha256, prompt: c.prompt,
     choices: c.choices.map(o => ({ id: o.id, text: o.text })),
     correctChoiceId: c.correctChoiceId, explanation: c.explanation,
+    ...(c.difficulty === undefined ? {} : {difficulty:c.difficulty}),
   };
 }
 export function createQuestionDraft(scope: QuestionScope, content: QuestionContent, author: string): QuestionRevision {
@@ -139,10 +144,17 @@ export function editQuestionDraft(current: QuestionRevision,
       Object.keys(changes).some(k => !contentKeys.includes(k as keyof QuestionContent))) {
     deny('INVALID_EDIT_REQUEST');
   }
-  const updated: QuestionContent = { ...cloneContent(current), ...changes };
+  // Wire PATCH may explicitly clear legacy optional difficulty with null;
+  // absence means keep current value. Never allow null to be persisted.
+  const clearingDifficulty = Object.prototype.hasOwnProperty.call(changes,'difficulty') &&
+    (changes as {difficulty?:unknown}).difficulty === null;
+  const updated: QuestionContent = { ...cloneContent(current), ...changes,
+    ...(clearingDifficulty ? {difficulty:undefined} : {}) };
   validContent(updated);
+  // Spreading current last would resurrect a difficulty removed by this PATCH.
+  const {difficulty: _oldDifficulty, ...base} = current;
   return validateQuestionRevision({
-    ...current, ...cloneContent(updated), lastEditedBy: editor,
+    ...base, ...cloneContent(updated), lastEditedBy: editor,
   });
 }
 export function reviewQuestionDraft(current: QuestionRevision, reviewer: string): QuestionRevision {
@@ -202,6 +214,7 @@ export async function validateExamPlan(plan: ExamPlan,
   if (!plan || plan.schema !== EXAM_PLAN_SCHEMA ||
       !safeInt(plan.tenantId) || !safeInt(plan.courseId) ||
       !safeId(plan.examId) || !safeInt(plan.version) ||
+      (plan.title!==undefined && (!safeText(plan.title,100) || plan.title.trim().length<3)) ||
       !SHA.test(plan.trainingSourceSha256) ||
       !SHA.test(plan.trainingEditionSha256) ||
       plan.consultationAllowed !== true ||

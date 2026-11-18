@@ -9,3 +9,15 @@ export function getLmsExamAction(state: unknown): 'Fazer avaliação' | 'Confirm
   if (state === 'PASSED') return 'Confirmar conclusão';
   return null;
 }
+
+/** Navigation only, never exam eligibility. The Worker must confirm the
+ * external assessment is the sole remaining completion requirement. */
+export function shouldAutoOpenExternalExam(input:{
+  savedStudyEvent:boolean;isScorm:boolean;reviewMode:boolean;newEditionRequired:boolean;
+  completed:boolean;code:string|null|undefined;missing:readonly string[]|null|undefined;
+}):boolean{
+  return input.savedStudyEvent&&input.isScorm&&!input.reviewMode&&
+    !input.newEditionRequired&&!input.completed&&
+    input.code==='EXTERNAL_ASSESSMENT_PENDING'&&
+    input.missing?.length===1&&input.missing[0]==='verified_external_assessment';
+}

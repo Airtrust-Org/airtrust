@@ -50,8 +50,11 @@ function deserialize(row: DbRow): StoredQuestion {
     const raw=JSON.parse(row.content_json) as Record<string,unknown>;
     const allowed=['moduleId','topicId','sourceUnitId','sourceSha256','prompt',
       'choices','correctChoiceId','explanation'];
+    const keys=Object.keys(raw).sort().join('|');
+    const original=[...allowed].sort().join('|');
+    const withDifficulty=[...allowed,'difficulty'].sort().join('|');
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-      Object.keys(raw).sort().join('|')!==[...allowed].sort().join('|')) {
+      (keys!==original && keys!==withDifficulty)) {
       return deny('EXAM_STORED_CONTENT_INVALID');
     }
     content={
@@ -59,6 +62,7 @@ function deserialize(row: DbRow): StoredQuestion {
       sourceUnitId:raw.sourceUnitId as string,sourceSha256:raw.sourceSha256 as string,
       prompt:raw.prompt as string,choices:raw.choices as QuestionContent['choices'],
       correctChoiceId:raw.correctChoiceId as string,explanation:raw.explanation as string,
+      ...(keys===withDifficulty ? {difficulty:raw.difficulty as QuestionContent['difficulty']} : {}),
     };
   } catch { return deny('EXAM_STORED_CONTENT_INVALID'); }
   const q=validateQuestionRevision({
@@ -81,7 +85,8 @@ function serializedContent(q: QuestionRevision): string {
   const {moduleId,topicId,sourceUnitId,sourceSha256,prompt,choices,
          correctChoiceId,explanation}=q;
   return JSON.stringify({moduleId,topicId,sourceUnitId,sourceSha256,prompt,
-    choices:choices.map(x=>({id:x.id,text:x.text})),correctChoiceId,explanation});
+    choices:choices.map(x=>({id:x.id,text:x.text})),correctChoiceId,explanation,
+    ...(q.difficulty===undefined?{}:{difficulty:q.difficulty})});
 }
 const SELECT = 'SELECT empresa_id,curso_id,question_key,revision,status,content_json,'+
   'edit_version,created_by,last_edited_by,reviewed_by,published_by,content_sha256 '+
@@ -156,6 +161,7 @@ export async function listPublishedExamQuestions(db:D1Database,actor:QuestionAdm
 Promise<Readonly<{items:readonly {
  questionId:string;revision:number;moduleId:string;topicId:string;prompt:string;
  sourceSha256:string;contentSha256:string;
+ difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 }[];nextOffset:number|null}>> {
   const {scope}=actorScope(actor);
   if(!Number.isSafeInteger(offset)||offset<0||offset>100000)deny('EXAM_PAGINATION_INVALID');
@@ -174,7 +180,7 @@ Promise<Readonly<{items:readonly {
     }
     return {questionId:q.questionId,revision:q.revision,moduleId:q.moduleId,
       topicId:q.topicId,prompt:q.prompt,sourceSha256:q.sourceSha256,
-      contentSha256:q.contentSha256 as string};
+      contentSha256:q.contentSha256 as string,...(q.difficulty?{difficulty:q.difficulty}:{})};
   }));
   return {items,nextOffset:all.length>100?offset+100:null};
 }

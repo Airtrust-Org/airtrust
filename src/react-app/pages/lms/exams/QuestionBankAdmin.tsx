@@ -1,15 +1,17 @@
 /**
- * Standalone LMS question bank administration. Not yet registered in App.tsx:
+ * Standalone LMS question bank administration. Registered via exam management:
  * F4 owns that file until its Player 3 integration has been coordinated.
  * Requires a staged, approved read/write API and an authenticated admin route.
  */
 import React,{useCallback,useEffect,useState} from 'react';
 import {API_BASE_URL,fetchWithAuth} from '../../../config/api';
+import {normalizeQuestionDifficulty,difficultyForPatch} from './examDifficulty';
 
 type Choice={id:string;text:string};
 type Content={
   moduleId:string;topicId:string;sourceUnitId:string;sourceSha256:string;
   prompt:string;choices:Choice[];correctChoiceId:string;explanation:string;
+  difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 };
 type Revision=Content&{
   questionId:string;revision:number;status:'DRAFT'|'REVIEWED'|'PUBLISHED';
@@ -25,7 +27,7 @@ const defaultOptions=():Choice[]=>[
 ];
 function draft(sourceSha256:string):Content{
   return {moduleId:'',topicId:'',sourceUnitId:'',sourceSha256,
-    prompt:'',choices:defaultOptions(),correctChoiceId:'o1',explanation:''};
+    prompt:'',choices:defaultOptions(),correctChoiceId:'o1',explanation:'',difficulty:'INTERMEDIARIA'};
 }
 async function req<T>(path:string,method='GET',body?:unknown):Promise<T>{
   const response=await fetchWithAuth(path,{method,cache:'no-store',
@@ -45,7 +47,7 @@ export default function QuestionBankAdmin({
 }){
   const [items,setItems]=useState<Summary[]>([]);
   const [current,setCurrent]=useState<Stored|null>(null);
-  const [questionId,setQuestionId]=useState('');
+  const [questionId,setQuestionId]=useState(()=> 'questao-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));
   const [form,setForm]=useState<Content>(()=>draft(trainingSourceSha256));
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
@@ -71,7 +73,7 @@ export default function QuestionBankAdmin({
     setForm(prev=>({...prev,[key]:value}));
   }
   function startNew(){
-    setCurrent(null);setQuestionId('');setForm(draft(trainingSourceSha256));
+    setCurrent(null);setQuestionId('questao-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));setForm(draft(trainingSourceSha256));
     setError('');setMessage('');
   }
   async function open(item:Summary){
@@ -85,7 +87,8 @@ export default function QuestionBankAdmin({
       setForm({moduleId:r.moduleId,topicId:r.topicId,
         sourceUnitId:r.sourceUnitId,sourceSha256:r.sourceSha256,
         prompt:r.prompt,choices:r.choices.map(o=>({...o})),
-        correctChoiceId:r.correctChoiceId,explanation:r.explanation});
+        correctChoiceId:r.correctChoiceId,explanation:r.explanation,
+        ...(r.difficulty?{difficulty:r.difficulty}:{})});
       if(r.sourceSha256!==trainingSourceSha256){
         setMessage('Questão criada para outra edição do conteúdo: confira antes de incluí-la numa prova desta edição.');
       }
@@ -107,7 +110,7 @@ export default function QuestionBankAdmin({
         if(action==='save'){
           if(current.revision.status!=='DRAFT')throw Error('VERSION_FROZEN');
           result=await req<Stored>(path,'PATCH',{
-            expectedEditVersion:current.editVersion,changes:form,
+            expectedEditVersion:current.editVersion,changes:{...form,difficulty:difficultyForPatch(form.difficulty)},
           });
         }else if(action==='fork'){
           if(current.revision.status!=='PUBLISHED')throw Error('VERSION_NOT_PUBLISHED');
@@ -122,7 +125,8 @@ export default function QuestionBankAdmin({
       setForm({moduleId:result.revision.moduleId,topicId:result.revision.topicId,
         sourceUnitId:result.revision.sourceUnitId,sourceSha256:result.revision.sourceSha256,
         prompt:result.revision.prompt,choices:result.revision.choices.map(o=>({...o})),
-        correctChoiceId:result.revision.correctChoiceId,explanation:result.revision.explanation});
+        correctChoiceId:result.revision.correctChoiceId,explanation:result.revision.explanation,
+        ...(result.revision.difficulty?{difficulty:result.revision.difficulty}:{})});
       await reload();
       setMessage(action==='save'?'Rascunho salvo.':
         action==='review'?'Enviada à revisão.':
@@ -166,10 +170,12 @@ export default function QuestionBankAdmin({
           {error&&<p role="alert" className="rounded border border-red-300 p-2 text-sm text-red-700">{error}</p>}
           {message&&<p role="status" className="text-sm text-green-700">{message}</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm">Identificador da questão
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium">Código interno da questão</summary>
               <input className="mt-1 w-full rounded border p-2" value={questionId}
-                disabled={!createMode||busy} onChange={e=>setQuestionId(e.target.value)}/>
-            </label>
+                aria-label="Identificador da questão" disabled={!createMode||busy}
+                onChange={e=>setQuestionId(e.target.value)}/>
+            </details>
             <label className="text-sm">Módulo
               <input className="mt-1 w-full rounded border p-2" value={form.moduleId}
                 disabled={frozen||busy} onChange={e=>update('moduleId',e.target.value)}/>
@@ -177,6 +183,16 @@ export default function QuestionBankAdmin({
             <label className="text-sm">Assunto
               <input className="mt-1 w-full rounded border p-2" value={form.topicId}
                 disabled={frozen||busy} onChange={e=>update('topicId',e.target.value)}/>
+            </label>
+            <label className="text-sm">Nível de dificuldade
+              <select className="mt-1 w-full rounded border p-2" value={form.difficulty||''}
+                aria-label="Nível de dificuldade da questão" disabled={frozen||busy}
+                onChange={e=>update('difficulty',normalizeQuestionDifficulty(e.target.value))}>
+                <option value="">Não classificada (legado)</option>
+                <option value="BASICA">Básica</option>
+                <option value="INTERMEDIARIA">Intermediária</option>
+                <option value="AVANCADA">Avançada</option>
+              </select>
             </label>
             <label className="text-sm">Unidade do material de origem
               <input className="mt-1 w-full rounded border p-2" value={form.sourceUnitId}

@@ -27,6 +27,7 @@ import { lmsKeys, useLmsCurso, useMatriculaDetalhe } from '@/react-app/hooks/use
 import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/compliance-source-invalidation';
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
+import {shouldAutoOpenExternalExam} from './lmsExamAction';
 import { authorizeScormAssetSession } from './scormAssetSessionDeadline';
 import {
   parseGranularDiagnostic,
@@ -251,6 +252,7 @@ export default function LmsPlayer() {
   const [liveSlideCoverage, setLiveSlideCoverage] = useState<{ count: number; total: number } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
+  const [savedExternalStudyEvent,setSavedExternalStudyEvent]=useState(false);
   // One automatic server reconciliation per mounted enrollment session; a
   // manual retry remains possible after a failed authenticated validation.
   const autoCompletionAttemptRef = useRef<number | null>(null);
@@ -425,6 +427,20 @@ export default function LmsPlayer() {
   // only if reconciliation fails.
   const showScormRegistrationRetry =
     isScormContent && !effectiveReviewMode && completionState === 'error';
+
+  // Actual saved study event plus authenticated Worker readiness are both
+  // required. Returning from the exam never causes an immediate redirect loop.
+  useEffect(()=>{
+    if(!shouldAutoOpenExternalExam({
+      savedStudyEvent:savedExternalStudyEvent,isScorm:isScormContent,
+      reviewMode:effectiveReviewMode,newEditionRequired,
+      completed:isCompletedState,code:closureReadiness?.code,
+      missing:closureReadiness?.missing,
+    }))return;
+    setSavedExternalStudyEvent(false);
+    navigate('/lms/provas/'+id);
+  },[savedExternalStudyEvent,isScormContent,effectiveReviewMode,newEditionRequired,
+    isCompletedState,closureReadiness?.code,closureReadiness?.missing,navigate,id]);
 
   const remainingProgress = Math.max(0, 100 - displayProgress);
   const canGoPrev = (currentSlideIndex ?? 1) > 1;
@@ -978,6 +994,7 @@ export default function LmsPlayer() {
         event.data.matriculaId === id
       ) {
         const code = sanitizeDiagnosticCode(event.data.code);
+        if(code==='EXTERNAL_ASSESSMENT_PENDING')setSavedExternalStudyEvent(true);
         const reason = sanitizeDiagnosticCode(event.data.reason);
         const baseMessage =
           typeof event.data.message === 'string' && event.data.message.trim()
@@ -1027,6 +1044,16 @@ export default function LmsPlayer() {
         }
         // Only refresh server-authoritative missing slides after an acknowledged
         // commit. A local counter/probe alone is not proof that D1 saved it.
+        if(event.data.server_saved===true &&
+            typeof event.data.viewed_slide_count==='number' &&
+            typeof event.data.viewed_slide_total==='number' &&
+            event.data.viewed_slide_total>0 &&
+            event.data.viewed_slide_count>=event.data.viewed_slide_total){
+          setSavedExternalStudyEvent(true);
+          // A saved slide count only triggers a fresh, authenticated Worker
+          // readiness read. It cannot start or approve an exam by itself.
+          void refetchMatricula();
+        }
         if (shouldRefetchAfterScormSave({
           serverSaved: event.data.server_saved === true,
           reviewMode: effectiveReviewMode,
