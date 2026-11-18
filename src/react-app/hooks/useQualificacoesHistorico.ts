@@ -66,6 +66,8 @@ export function useQualificacoesHistorico({
       if (search) params.set('search', search);
       if (funcionarioId) params.set('funcionario_id', String(funcionarioId));
       if (tipoId) params.set('tipo_id', String(tipoId));
+      // A lista só consome data/meta; os totais por status não são usados aqui.
+      params.set('stats', 'false');
 
       const res = await fetchWithAuth(`/api/qualificacoes/historico?${params.toString()}`);
       const json: Partial<HistoricoResponse & { error?: string }> = await res.json();

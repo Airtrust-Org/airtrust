@@ -119,6 +119,7 @@ function createMockDb() {
               results: [
                 {
                   id: 703,
+                  ...(query.includes('__total_count') ? { __total_count: 3 } : {}),
                   funcionario_id: 13,
                   funcionario_nome: 'Tripulante Planejado 3',
                   tipo_id: 99,
@@ -219,9 +220,7 @@ describe('qualificacoes historico status sort contract', () => {
     const totalQuery =
       calls.find(
         (call) =>
-          call.method === 'first' &&
-          call.query.includes('COUNT(*) as total') &&
-          !call.query.includes('SUM(CASE'),
+          call.method === 'all' && call.query.includes('COUNT(*) OVER () AS __total_count'),
       )?.query || '';
     expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'PLANEJADA'");
 
@@ -275,6 +274,7 @@ describe('qualificacoes historico status sort contract', () => {
               results: [
                 {
                   id: 701,
+                  ...(query.includes('__total_count') ? { __total_count: 1 } : {}),
                   funcionario_id: 101,
                   funcionario_nome: 'Treinando 101',
                   tipo_id: 2001,
@@ -325,9 +325,7 @@ describe('qualificacoes historico status sort contract', () => {
     const totalQuery =
       calls.find(
         (call) =>
-          call.method === 'first' &&
-          call.query.includes('COUNT(*) as total') &&
-          !call.query.includes('SUM(CASE'),
+          call.method === 'all' && call.query.includes('COUNT(*) OVER () AS __total_count'),
       )?.query || '';
     expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'PLANEJADA'");
     expect(totalQuery).toContain("UPPER(COALESCE(qh.status, '')) = 'CANCELADA'");

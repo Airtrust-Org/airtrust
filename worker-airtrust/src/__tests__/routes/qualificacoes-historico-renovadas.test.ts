@@ -185,6 +185,7 @@ function createMockDb(options: {
               results: [
                 {
                   id: 501,
+                  ...(query.includes('__total_count') ? { __total_count: 590 } : {}),
                   funcionario_id: 10,
                   funcionario_nome: 'Tripulante Teste',
                   tipo_id: 20,
@@ -200,6 +201,7 @@ function createMockDb(options: {
                 },
                 {
                   id: 502,
+                  ...(query.includes('__total_count') ? { __total_count: 590 } : {}),
                   funcionario_id: 10,
                   funcionario_nome: 'Tripulante Teste',
                   tipo_id: 20,
@@ -422,7 +424,14 @@ describe('qualificacoes historico renovadas contract', () => {
 
     expect(fullStatsQueries).toHaveLength(0);
     expect(globalCountsQueries).toHaveLength(0);
-    expect(totalOnlyQueries).toHaveLength(1);
+    // O total sai da própria consulta paginada (janela), sem reavaliar a CTE do tenant.
+    expect(totalOnlyQueries).toHaveLength(0);
+    expect(
+      calls.filter(
+        (call) =>
+          call.method === 'all' && call.query.includes('COUNT(*) OVER () AS __total_count'),
+      ),
+    ).toHaveLength(1);
   });
 
   it('mantem stats populado no comportamento padrao', async () => {

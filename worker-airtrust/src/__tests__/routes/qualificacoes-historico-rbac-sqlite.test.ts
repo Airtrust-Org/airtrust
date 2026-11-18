@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, test, vi, beforeEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi, beforeEach } from 'vitest';
 import app from '../../index';
 
 function sqlString(value: unknown): string {
@@ -309,6 +309,101 @@ describe('GET /qualificacoes/historico RBAC (SQLite Real)', () => {
     } finally {
       runSql(databasePath, `DELETE FROM qualificacoes_historico WHERE id = ${legacyId}`);
     }
+  });
+
+  describe('total sem stats (COUNT(*) OVER ())', () => {
+    const extraIds = [4461, 4462, 4463];
+
+    beforeEach(() => {
+      runSql(
+        databasePath,
+        `INSERT INTO qualificacoes_historico
+           (id, funcionario_id, qualificacao_id, categoria_id, status, data_conclusao, data_vencimento)
+         VALUES
+           (4461, 8883, 5551, 6661, 'CONCLUIDA', '2026-01-10', '2027-01-10'),
+           (4462, 8883, 5551, 6661, 'CONCLUIDA', '2025-01-10', '2026-01-10'),
+           (4463, 8881, 5551, 6661, 'CONCLUIDA', '2026-02-10', '2027-02-10');`,
+      );
+    });
+
+    afterEach(() => {
+      runSql(
+        databasePath,
+        `DELETE FROM qualificacoes_historico WHERE id IN (${extraIds.join(',')})`,
+      );
+    });
+
+    function asGestorOperacoes() {
+      mockUserId = 7771;
+      mockUserRole = 'GESTOR';
+      mockFuncionarioId = 8881;
+    }
+
+    async function list(query: string, env = mockEnv) {
+      const res = await app.fetch(
+        new Request(`http://localhost/api/qualificacoes/historico?${query}`),
+        env,
+        {} as any,
+      );
+      expect(res.status).toBe(200);
+      return (await res.json()) as any;
+    }
+
+    test('total com stats=false é o mesmo de stats=true e independe do limit', async () => {
+      asGestorOperacoes();
+      const comStats = await list('limit=2&stats=true');
+      const semStats = await list('limit=2&stats=false');
+      expect(comStats.stats.total).toBeGreaterThan(2);
+      expect(semStats.pagination.total).toBe(comStats.stats.total);
+      expect(semStats.meta.total).toBe(comStats.stats.total);
+      expect(semStats.data).toHaveLength(2);
+      expect(semStats.stats).toBeUndefined();
+      expect(semStats.pagination.pages).toBe(Math.ceil(comStats.stats.total / 2));
+    });
+
+    test('não vaza a coluna auxiliar __total_count e preserva os campos da linha', async () => {
+      asGestorOperacoes();
+      const comStats = await list('limit=50&stats=true');
+      const semStats = await list('limit=50&stats=false');
+      expect(JSON.stringify(semStats)).not.toContain('__total_count');
+      expect(semStats.data.map((r: any) => r.id)).toEqual(comStats.data.map((r: any) => r.id));
+      expect(Object.keys(semStats.data[0]).sort()).toEqual(Object.keys(comStats.data[0]).sort());
+    });
+
+    test('página fora do intervalo mantém o total real', async () => {
+      asGestorOperacoes();
+      const comStats = await list('limit=2&stats=true');
+      const foraDoIntervalo = await list('limit=2&page=99&stats=false');
+      expect(foraDoIntervalo.data).toEqual([]);
+      expect(foraDoIntervalo.pagination.total).toBe(comStats.stats.total);
+    });
+
+    test('filtro sem resultados devolve total 0', async () => {
+      asGestorOperacoes();
+      const body = await list('search=__nenhum_registro__&stats=false');
+      expect(body.data).toEqual([]);
+      expect(body.pagination.total).toBe(0);
+    });
+
+    test('stats=false avalia a CTE do tenant uma única vez; stats=true avalia duas', async () => {
+      asGestorOperacoes();
+      let cteEvaluations = 0;
+      const spyEnv = {
+        ...mockEnv,
+        DB: {
+          prepare: (query: string) => {
+            if (query.includes('qh_tenant_active AS MATERIALIZED')) cteEvaluations += 1;
+            return mockEnv.DB.prepare(query);
+          },
+        },
+      };
+      await list('limit=5&stats=false', spyEnv);
+      expect(cteEvaluations).toBe(1);
+
+      cteEvaluations = 0;
+      await list('limit=5&stats=true', spyEnv);
+      expect(cteEvaluations).toBe(2);
+    });
   });
 
   test('Admin /historico com busca Nery sem erros', async () => {

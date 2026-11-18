@@ -111,6 +111,8 @@ export function useHabilitacoes() {
         const params = new URLSearchParams();
         params.append('page', String(page));
         params.append('limit', String(limit));
+        // A lista só consome data/pagination; totais por status vêm de /historico/stats.
+        params.append('stats', 'false');
         if (filters?.status) params.append('status', filters.status);
         if (filters?.funcionario_id)
           params.append('funcionario_id', String(filters.funcionario_id));
