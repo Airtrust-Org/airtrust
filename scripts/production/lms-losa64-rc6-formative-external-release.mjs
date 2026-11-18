@@ -105,6 +105,7 @@ async function main() {
     headers: {
       'X-Airtrust-Expected-Active-Package-Id': activeId,
       'X-Airtrust-External-Content-Policy': 'FORMATIVE',
+      'X-Airtrust-Require-No-Enrollments': 'true',
     },
   });
   if (result.status !== 200 || result.body?.success !== true) {
