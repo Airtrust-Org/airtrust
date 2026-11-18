@@ -810,10 +810,10 @@ export const getHistoricoListHandler = safe(async (c) => {
           .prepare(totalOnlyQuery)
           .bind(tenantCtx.empresaId, ...params)
           .first();
-        statsPayload.total = Number((totalOnlyResult as any)?.total || 0);
+        statsPayload.total = Number((totalOnlyResult as { total?: unknown } | null)?.total || 0);
       }
-      results = (rawResults || []).map((row: any) => {
-        const { __total_count: _ignored, ...rest } = row;
+      results = (rawResults || []).map((row) => {
+        const { __total_count: _ignored, ...rest } = row as Record<string, unknown>;
         return rest;
       });
     }
