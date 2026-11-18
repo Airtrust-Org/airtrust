@@ -22,6 +22,8 @@ export type DirectReplacementConfirmation = {
   acknowledgeInProgress?: unknown;
   expectedActivePackageId?: unknown;
   incomingExternalPolicy?: unknown;
+  /** Release-specific strict guard; checked before and within transactional CAS. */
+  requireNoEnrollments?: unknown;
 };
 
 /** Resolve a legacy candidate's profile BEFORE the upload route counts active
@@ -200,7 +202,12 @@ export async function replaceValidatedExternalScorm(params: {
   }
   const changingToFormative = incomingPolicy === 'FORMATIVE' &&
     preflight.course.currentPolicy !== 'FORMATIVE';
-  if (changingToFormative) {
+  if (params.confirm?.requireNoEnrollments !== undefined &&
+      typeof params.confirm.requireNoEnrollments !== 'boolean') {
+    throw new ApiError('Guarda de matrículas inválida', 400, 'SCORM_EXTERNAL_ENROLLMENT_GUARD_INVALID');
+  }
+  const requireNoEnrollments = changingToFormative || params.confirm?.requireNoEnrollments === true;
+  if (requireNoEnrollments) {
     const enrollments = await params.db.prepare(
       'SELECT COUNT(*) AS n FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND deleted_at IS NULL'
     ).bind(params.empresaId, params.cursoId).first<{ n: number }>();
@@ -237,7 +244,7 @@ export async function replaceValidatedExternalScorm(params: {
       coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE',
     },
     policy: { incoming: incomingPolicy,
-      ...(changingToFormative ? { requireNoEnrollments: true } : {}) },
+      ...(requireNoEnrollments ? { requireNoEnrollments: true } : {}) },
     publishCourse: true,
   });
   if (!activated) {
