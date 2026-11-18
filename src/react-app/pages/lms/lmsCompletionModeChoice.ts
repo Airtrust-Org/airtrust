@@ -29,7 +29,7 @@ export function canSaveScormModeForRole(
 }
 
 export const SCORM_COMPLETION_MODE_CHOICES = [
-  { value: 'FORMATIVE', label: 'Formativo — sem avaliação final' },
+  { value: 'FORMATIVE', label: 'Formativo — sem prova no SCORM' },
   { value: 'SCORED', label: 'Com avaliação' },
 ] as const;
 

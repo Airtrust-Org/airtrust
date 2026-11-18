@@ -101,7 +101,8 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
   const awaitingEvidence = pending.has('JOURNEY_EVIDENCE') || pending.has('PROFILE_ELIGIBLE');
   const awaitingApproval = pending.has('ADMIN_APPROVAL');
   const activationReady = Boolean(data?.canActivate && (formative || pkg.publishable));
-  const directExternalReady = !externalContent || Boolean(data?.canActivate && Number(data.course.masteryScore) > 0);
+  const directExternalReady = !externalContent || Boolean(data?.canActivate &&
+    (data.course.currentPolicy === 'FORMATIVE' || Number(data.course.masteryScore) > 0));
 
   async function onEvidenceFile(file: File | undefined) {
     setEvidenceError(null);
@@ -147,7 +148,7 @@ function EditionCard({ cursoId, pkg, versions, isAdmin }: {
         <div className="mt-3 space-y-2 rounded border border-emerald-300 bg-emerald-50 p-3 text-emerald-950">
           <p className="font-semibold">Edição validada — substituição direta disponível</p>
           <p className="text-xs">O servidor verifica o ZIP, SHA e arquivos antes da ativação. Uma falha mantém a edição anterior.</p>
-          {externalContent ? <p className="text-xs">Este pacote contém somente o conteúdo. A prova externa e sua nota continuam obrigatórias para a qualificação do aluno.</p> : null}
+          {externalContent ? <p className="text-xs">Este pacote contém estudo formativo, sem prova ou nota SCORM. A avaliação externa continua obrigatória e separada para a qualificação do aluno.</p> : null}
           {externalContent && !directExternalReady ? <p className="text-xs" role="alert">A substituição ainda não é permitida: confira os requisitos do curso e a nota mínima configurada.</p> : null}
           {data.incomingPolicy === 'FORMATIVE' ? (
             <p className="text-xs">O curso passará a ser formativo, sem prova final. Conclusões anteriores são preservadas. Matrículas em andamento: {inProgress}.</p>

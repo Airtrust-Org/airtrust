@@ -25,7 +25,7 @@ export type CertifiedScormActivation = Readonly<{
    * pointer. Freezing with the policy currently in force is always truthful, so
    * the pre-statements are safe even if the activation itself is then refused.
    */
-  policy?: Readonly<{ incoming: 'SCORED' | 'FORMATIVE' }>;
+  policy?: Readonly<{ incoming: 'SCORED' | 'FORMATIVE'; requireNoEnrollments?: boolean }>;
   /** Only explicit administrator direct replacement publishes a draft course. */
   publishCourse?: boolean;
 }>;
@@ -42,6 +42,9 @@ export async function commitCertifiedScormActivation(input: CertifiedScormActiva
     AND EXISTS(SELECT 1 FROM lms_cursos c
       WHERE c.id=? AND c.empresa_id=? AND c.deleted_at IS NULL
         AND c.scorm_assessment_policy=?
+        ${policy?.requireNoEnrollments ? `AND NOT EXISTS (
+          SELECT 1 FROM lms_matriculas m WHERE m.empresa_id=c.empresa_id
+            AND m.curso_id=c.id AND m.deleted_at IS NULL)` : ''}
         -- Only a scored transition needs the threshold column; older
         -- legacy activation fixtures do not model it.
         ${policy?.incoming === 'SCORED' ? 'AND COALESCE(c.scorm_mastery_score,0)>0' : ''}

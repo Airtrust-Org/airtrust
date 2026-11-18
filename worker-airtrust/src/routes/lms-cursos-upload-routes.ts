@@ -323,6 +323,10 @@ app.post('/:id/scorm-replace',
     if (!c.env.BUCKET) throw new ApiError('Storage não configurado', 500, 'UPLOAD_STORAGE_UNAVAILABLE');
     const empresaId = getEmpresaIdSafe(c), cursoId = courseIdParam(c);
     const expectedActivePackageId = c.req.header('X-Airtrust-Expected-Active-Package-Id');
+    const externalContentPolicy = c.req.header('X-Airtrust-External-Content-Policy');
+    if (externalContentPolicy !== undefined && externalContentPolicy !== 'FORMATIVE') {
+      throw new ApiError('Política externa solicitada inválida', 400, 'SCORM_EXTERNAL_CONTENT_POLICY_INVALID');
+    }
     if (expectedActivePackageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expectedActivePackageId)) {
       throw new ApiError('Identificador da edição anterior inválido', 400,
         'SCORM_REPLACE_PREDECESSOR_ID_INVALID');
@@ -354,7 +358,9 @@ app.post('/:id/scorm-replace',
       const receipt = formative
         ? await readAlreadyActiveFormativeReplacement(readArgs)
         : await readAlreadyActiveExternalReplacement(readArgs, externalExam ? 'EXTERNAL' : 'SCORM');
-      if (receipt) return c.json({ success: true, data: receipt });
+      if (receipt && (externalContentPolicy !== 'FORMATIVE' || receipt.assessmentPolicy === 'FORMATIVE')) {
+        return c.json({ success: true, data: receipt });
+      }
     }
     if (candidate.status !== 'VALIDATED') {
       const sections = [candidate.structural, candidate.completionManifest, candidate.diagnostics];
@@ -387,6 +393,7 @@ app.post('/:id/scorm-replace',
         cursoId, packageSha256: candidate.packageSha256,
         acknowledgeInProgress: preflight.impact.inProgress,
         ...(expectedActivePackageId ? { expectedActivePackageId } : {}),
+        ...(externalContentPolicy === 'FORMATIVE' ? { incomingExternalPolicy: 'FORMATIVE' } : {}),
       },
     };
     const data = resolvedFormative

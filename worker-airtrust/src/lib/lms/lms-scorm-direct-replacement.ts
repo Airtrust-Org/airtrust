@@ -21,6 +21,7 @@ export type DirectReplacementConfirmation = {
   packageSha256?: unknown;
   acknowledgeInProgress?: unknown;
   expectedActivePackageId?: unknown;
+  incomingExternalPolicy?: unknown;
 };
 
 /** Resolve a legacy candidate's profile BEFORE the upload route counts active
@@ -111,20 +112,24 @@ export async function readAlreadyActiveExternalReplacement(params: {
   packageId: string; packageSha256: string;
 }, mode: 'EXTERNAL' | 'SCORM' = 'EXTERNAL') {
   const row = await params.db.prepare(`SELECT v.id, v.package_sha256, v.r2_prefix,
-      v.launch_file, v.validation_result_json
+      v.launch_file, v.assessment_policy, v.validation_result_json
     FROM lms_scorm_package_versions v
     JOIN lms_cursos c ON c.id=v.curso_id AND c.empresa_id=v.empresa_id
     WHERE v.id=? AND v.empresa_id=? AND v.curso_id=? AND v.package_sha256=?
       AND v.status='ACTIVE' AND c.deleted_at IS NULL
-      AND c.tipo_conteudo='scorm' AND c.scorm_assessment_policy='SCORED'
+      AND c.tipo_conteudo='scorm'
+      AND v.assessment_policy=c.scorm_assessment_policy
+      AND (c.scorm_assessment_policy='SCORED' OR
+        (?='EXTERNAL' AND c.scorm_assessment_policy='FORMATIVE'))
       AND c.scorm_package_r2_prefix=v.r2_prefix AND c.scorm_launch_file=v.launch_file
       AND EXISTS(SELECT 1 FROM lms_scorm_package_audit_log a
         WHERE a.empresa_id=v.empresa_id AND a.curso_id=v.curso_id
           AND a.package_id=v.id AND a.action='ACTIVATED')
     LIMIT 1`)
-    .bind(params.packageId, params.empresaId, params.cursoId, params.packageSha256)
+    .bind(params.packageId, params.empresaId, params.cursoId, params.packageSha256, mode)
     .first<{ id: string; package_sha256: string; r2_prefix: string;
-      launch_file: string; validation_result_json: string | null }>();
+      launch_file: string; assessment_policy: 'SCORED' | 'FORMATIVE' | null;
+      validation_result_json: string | null }>();
   if (!row) return null;
   const quality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
   if (quality?.authoringReview?.externalExam !== (mode === 'EXTERNAL') ||
@@ -136,7 +141,9 @@ export async function readAlreadyActiveExternalReplacement(params: {
   return {
     packageId: row.id, packageSha256: row.package_sha256,
     status: 'ACTIVE' as const, cursoId: params.cursoId,
-    assessmentPolicy: 'SCORED' as const, examMode: mode,
+    assessmentPolicy: mode === 'EXTERNAL' && row.assessment_policy === 'FORMATIVE'
+      ? 'FORMATIVE' as const : 'SCORED' as const,
+    examMode: mode,
     validationMode: 'SERVER_STATIC_GATE' as const, alreadyActive: true as const,
   };
 }
@@ -154,6 +161,17 @@ export async function replaceValidatedExternalScorm(params: {
     cursoId: params.cursoId, packageId: params.packageId,
   });
   const row = preflight.row;
+  const requested = params.confirm?.incomingExternalPolicy;
+  if (requested !== undefined && requested !== 'FORMATIVE' && requested !== 'SCORED') {
+    throw new ApiError('Política externa solicitada inválida', 400, 'SCORM_EXTERNAL_POLICY_REQUEST_INVALID');
+  }
+  const incomingPolicy = requested === 'FORMATIVE' ? 'FORMATIVE' :
+    mode === 'EXTERNAL' && preflight.course.currentPolicy === 'FORMATIVE'
+      ? 'FORMATIVE' : 'SCORED';
+  if (incomingPolicy === 'FORMATIVE' && mode !== 'EXTERNAL') {
+    throw new ApiError('Somente conteúdo com avaliação externa pode ser formativo nesta rota', 409,
+      'SCORM_EXTERNAL_POLICY_REQUEST_INVALID');
+  }
   // The client's approved predecessor is an immutable package ID. Verify it
   // against the fresh preflight; commitCertifiedScormActivation reuses that
   // preflight ID inside the same D1 CAS, closing the listing-to-POST race.
@@ -171,16 +189,29 @@ export async function replaceValidatedExternalScorm(params: {
       quality.diagnostics?.status !== 'PASS') {
     throw new ApiError('Pacote SCORM não passou na validação do conteúdo', 409, 'SCORM_EXTERNAL_STATIC_GATE_FAILED');
   }
-  // EXTERNAL remains a scored course-level qualification policy. The SCO only
-  // records content coverage; it cannot self-issue a score or exam approval.
+  // EXTERNAL describes the qualification gate, not a scored SCO.
   if (preflight.course.tipoConteudo !== 'scorm' ||
       !['SCORED', 'FORMATIVE'].includes(preflight.course.currentPolicy) ||
-      !Number.isFinite(Number(preflight.course.masteryScore)) ||
-      Number(preflight.course.masteryScore) <= 0) {
-    throw new ApiError('O curso exige uma nota mínima positiva configurada para sua avaliação', 409, 'SCORM_EXTERNAL_POLICY_INVALID');
+      (incomingPolicy === 'SCORED' &&
+        (!Number.isFinite(Number(preflight.course.masteryScore)) ||
+          Number(preflight.course.masteryScore) <= 0))) {
+    throw new ApiError('O curso exige uma nota mínima positiva configurada para sua avaliação', 409,
+      'SCORM_EXTERNAL_POLICY_INVALID');
+  }
+  const changingToFormative = incomingPolicy === 'FORMATIVE' &&
+    preflight.course.currentPolicy !== 'FORMATIVE';
+  if (changingToFormative) {
+    const enrollments = await params.db.prepare(
+      'SELECT COUNT(*) AS n FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND deleted_at IS NULL'
+    ).bind(params.empresaId, params.cursoId).first<{ n: number }>();
+    if (!enrollments || Number(enrollments.n) !== 0) {
+      throw new ApiError('A mudança formativa exige zero matrículas existentes', 409,
+        'SCORM_EXTERNAL_FORMATIVE_EXISTING_ENROLLMENTS');
+    }
   }
   const failed = preflight.checks.filter(check =>
-    !check.ok && check.id !== 'NOT_ALREADY_ACTIVE');
+    !check.ok && check.id !== 'NOT_ALREADY_ACTIVE' &&
+    !(incomingPolicy === 'FORMATIVE' && check.id === 'SCORED_THRESHOLD_PRESENT'));
   if (failed.length || preflight.checks.find(c => c.id === 'NOT_ALREADY_ACTIVE')?.ok !== true) {
     throw new ApiError('Curso ou versão incompatível com substituição direta', 409, 'SCORM_EXTERNAL_PREFLIGHT_FAILED');
   }
@@ -205,7 +236,8 @@ export async function replaceValidatedExternalScorm(params: {
       activePackageId: preflight.active?.packageId ?? null,
       coursePolicy: preflight.course.currentPolicy as 'SCORED' | 'FORMATIVE',
     },
-    policy: { incoming: 'SCORED' },
+    policy: { incoming: incomingPolicy,
+      ...(changingToFormative ? { requireNoEnrollments: true } : {}) },
     publishCourse: true,
   });
   if (!activated) {
@@ -213,13 +245,13 @@ export async function replaceValidatedExternalScorm(params: {
       db: params.db, bucket: params.bucket, empresaId: params.empresaId,
       cursoId: params.cursoId, packageId: row.id, packageSha256: row.package_sha256,
     }, mode);
-    if (alreadyActive) return alreadyActive;
+    if (alreadyActive?.assessmentPolicy === incomingPolicy) return alreadyActive;
     throw new ApiError('O curso mudou durante a substituição; recarregue antes de tentar novamente', 409, 'SCORM_REPLACE_RACE');
   }
   return {
     packageId: row.id, packageSha256: row.package_sha256,
     status: 'ACTIVE' as const, cursoId: params.cursoId,
-    assessmentPolicy: 'SCORED' as const, examMode: mode,
+    assessmentPolicy: incomingPolicy, examMode: mode,
     validationMode: 'SERVER_STATIC_GATE' as const,
     impactedInProgress: preflight.impact.inProgress,
   };

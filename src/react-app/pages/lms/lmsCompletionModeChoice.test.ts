@@ -17,7 +17,7 @@ describe('modalidade de conclusão para novas edições SCORM', () => {
   });
   it('oferece somente as duas modalidades decididas pelo proprietário', () => {
     expect(SCORM_COMPLETION_MODE_CHOICES).toEqual([
-      { value: 'FORMATIVE', label: 'Formativo — sem avaliação final' },
+      { value: 'FORMATIVE', label: 'Formativo — sem prova no SCORM' },
       { value: 'SCORED', label: 'Com avaliação' },
     ]);
   });
