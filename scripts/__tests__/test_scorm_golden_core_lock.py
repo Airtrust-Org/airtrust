@@ -89,6 +89,27 @@ class FactoryCoreLockTests(unittest.TestCase):
                 module.PINNED_FORMATIVE_V3[name],
             )
 
+    def test_rc6_candidate_is_pinned_reproducible_and_leaves_rc4_rc5_untouched(self):
+        cores = SRC.parent / "cores"
+        candidate = cores / "AIRTRUST_FORMATIVE_V3_RC6_CANDIDATE.app.js.txt"
+        self.assertEqual(
+            hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            module.PINNED_FORMATIVE_V3_RC6["app.js"],
+        )
+        for older in (module.PINNED_FORMATIVE_V3, module.PINNED_FORMATIVE_V3_RECOVERY):
+            self.assertNotEqual(module.PINNED_FORMATIVE_V3_RC6["app.js"], older["app.js"])
+        self.assertEqual(
+            hashlib.sha256((cores / "AIRTRUST_FORMATIVE_V3_RECOVERY_CANDIDATE.app.js.txt").read_bytes()).hexdigest(),
+            "abf5b151561ca6f362f98b6c12faf98ec9893de56455be8c112a064c5e8a995f",
+        )
+        for name in ("styles.css", "scorm_api.js"):
+            self.assertEqual(module.PINNED_FORMATIVE_V3_RC6[name], module.PINNED_CORE[name])
+        # the committed RC6 file is exactly the anchored delta over the pinned RC5 bytes
+        builder = importlib.util.spec_from_file_location("build_rc6", SRC.parent / "build_factory_v3_rc6_core.py")
+        build = importlib.util.module_from_spec(builder)
+        builder.loader.exec_module(build)
+        self.assertEqual(build.build(), candidate.read_bytes())
+
     def test_registered_v3_hash_is_distinct_and_v2_is_unchanged(self):
         self.assertEqual(
             module.REGISTERED_VERSIONS[module.GOLDEN_MASTER_VERSION],
