@@ -147,6 +147,36 @@ describe('atomic activation with edition-pinned assessment policy', () => {
     policy: { incoming: 'FORMATIVE' as const },
   });
 
+
+  it('atomically refuses activation when an enrollment appears after a zero-enrollment preflight', async () => {
+    const db = fixture({ formativeActive: true });
+    db.database.prepare('DELETE FROM lms_matriculas WHERE empresa_id=6 AND curso_id=26').run();
+    expect(row<{ n: number }>(db, 'SELECT COUNT(*) n FROM lms_matriculas WHERE empresa_id=6 AND curso_id=26').n).toBe(0);
+    // Release preflight observed zero; a learner enrolls before the D1 activation transaction.
+    db.database.prepare('INSERT INTO lms_matriculas VALUES (88,6,26,NULL)').run();
+    const activated = await commitCertifiedScormActivation({
+      ...activation(db, JSON.stringify(formativeQuality)),
+      observed: { activePackageId: SCORED_ID, coursePolicy: 'FORMATIVE' as const },
+      policy: { incoming: 'FORMATIVE' as const, requireNoEnrollments: true },
+    });
+    expect(activated).toBe(false);
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', SCORED_ID).s).toBe('ACTIVE');
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', FORM_ID).s).toBe('VALIDATED');
+    expect(row<{ p: string }>(db, 'SELECT scorm_assessment_policy p FROM lms_cursos WHERE empresa_id=6 AND id=26').p).toBe('FORMATIVE');
+  });
+
+  it('permits guarded same-policy activation with zero enrollments', async () => {
+    const db = fixture({ formativeActive: true });
+    db.database.prepare('DELETE FROM lms_matriculas WHERE empresa_id=6 AND curso_id=26').run();
+    const activated = await commitCertifiedScormActivation({
+      ...activation(db, JSON.stringify(formativeQuality)),
+      observed: { activePackageId: SCORED_ID, coursePolicy: 'FORMATIVE' as const },
+      policy: { incoming: 'FORMATIVE' as const, requireNoEnrollments: true },
+    });
+    expect(activated).toBe(true);
+    expect(row<{ s: string }>(db, 'SELECT status s FROM lms_scorm_package_versions WHERE id=?', FORM_ID).s).toBe('ACTIVE');
+  });
+
   it('freezes ended cycles with the outgoing policy and moves course policy with the pointer', async () => {
     const db = fixture();
     const json = JSON.stringify(formativeQuality);
