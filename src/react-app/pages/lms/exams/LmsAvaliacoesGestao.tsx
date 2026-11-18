@@ -7,7 +7,7 @@ import {fetchWithAuth} from '../../../config/api';
 import {buildExamResultsCsv} from './examReportCsv';
 
 type Course={id:number;titulo:string;tipo_conteudo:string;scorm_assessment_policy:string|null;publicado:number};
-type Plan={cursoId:number;examId:string;version:number;questionCount:number|null;publishedAt:string};
+type Plan={cursoId:number;examId:string;version:number;title:string|null;questionCount:number|null;publishedAt:string};
 type Binding={cursoId:number;examId:string;version:number;packageSha256:string;createdAt:string};
 type QuestionCount={curso_id:number;status:string;total:number};
 type Attempt={cursoId:number;matriculaId:number;examId:string;version:number;attemptNo:number;
@@ -150,7 +150,7 @@ export default function LmsAvaliacoesGestao(){
       <td className="py-3 pr-3"><strong className="block">{c.titulo}</strong>
        <small className="text-slate-500">Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</small></td>
       <td>{published} publicada(s)<small className="block text-slate-500">{draft} em preparação</small></td>
-      <td>{plans.length} plano(s)</td>
+      <td>{plans.length} plano(s){plans[0]&&<small className="block text-slate-500">{plans[0].title||plans[0].examId}</small>}</td>
       <td>{binds.length?'Prova externa vinculada':plans.length?'Publicada — vínculo pendente':'Sem prova externa'}
        <small className="block text-slate-500">SCORM: {c.scorm_assessment_policy||'Não definido'}</small></td>
       <td className="text-right"><Link to={'/lms/admin/provas/'+c.id}

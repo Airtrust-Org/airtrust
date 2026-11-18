@@ -47,7 +47,7 @@ export default function QuestionBankAdmin({
 }){
   const [items,setItems]=useState<Summary[]>([]);
   const [current,setCurrent]=useState<Stored|null>(null);
-  const [questionId,setQuestionId]=useState('');
+  const [questionId,setQuestionId]=useState(()=> 'questao-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));
   const [form,setForm]=useState<Content>(()=>draft(trainingSourceSha256));
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
@@ -73,7 +73,7 @@ export default function QuestionBankAdmin({
     setForm(prev=>({...prev,[key]:value}));
   }
   function startNew(){
-    setCurrent(null);setQuestionId('');setForm(draft(trainingSourceSha256));
+    setCurrent(null);setQuestionId('questao-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));setForm(draft(trainingSourceSha256));
     setError('');setMessage('');
   }
   async function open(item:Summary){
@@ -170,10 +170,12 @@ export default function QuestionBankAdmin({
           {error&&<p role="alert" className="rounded border border-red-300 p-2 text-sm text-red-700">{error}</p>}
           {message&&<p role="status" className="text-sm text-green-700">{message}</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm">Identificador da questão
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium">Código interno da questão</summary>
               <input className="mt-1 w-full rounded border p-2" value={questionId}
-                disabled={!createMode||busy} onChange={e=>setQuestionId(e.target.value)}/>
-            </label>
+                aria-label="Identificador da questão" disabled={!createMode||busy}
+                onChange={e=>setQuestionId(e.target.value)}/>
+            </details>
             <label className="text-sm">Módulo
               <input className="mt-1 w-full rounded border p-2" value={form.moduleId}
                 disabled={frozen||busy} onChange={e=>update('moduleId',e.target.value)}/>

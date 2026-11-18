@@ -82,6 +82,9 @@ describe('Independent authorable bank and immutable published revisions',()=>{
     const q=await published();
     const approved=plan([q]);
     await expect(validateExamPlan(approved,[q])).resolves.toBeUndefined();
+    await expect(validateExamPlan({...approved,title:'Avaliação Final de CRM'},[q])).resolves.toBeUndefined();
+    await expect(validateExamPlan({...approved,title:'x'},[q])).rejects.toThrow('INVALID_EXAM_PLAN');
+    await expect(validateExamPlan({...approved,title:'a'.repeat(101)},[q])).rejects.toThrow('INVALID_EXAM_PLAN');
     await expect(validateExamPlan({...approved,tenantId:5},[q]))
       .rejects.toThrow('UNTRUSTED_EXAM_QUESTION_VERSION');
     // A question from another ZIP edition is rejected unless the plan attests it.

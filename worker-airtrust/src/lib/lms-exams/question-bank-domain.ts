@@ -50,6 +50,8 @@ export function validExamAttemptPolicy(p: unknown): p is ExamAttemptPolicy {
 export type ExamPlan = Readonly<{
   schema: typeof EXAM_PLAN_SCHEMA;
   tenantId: number; courseId: number; examId: string; version: number;
+  /** Human-readable caption; absent for immutable legacy plans. */
+  title?: string;
   trainingSourceSha256: string; trainingEditionSha256: string;
   // Explicit editorial attestation: question revisions authored against these
   // source SHAs are accepted by this exam. Must include trainingSourceSha256.
@@ -212,6 +214,7 @@ export async function validateExamPlan(plan: ExamPlan,
   if (!plan || plan.schema !== EXAM_PLAN_SCHEMA ||
       !safeInt(plan.tenantId) || !safeInt(plan.courseId) ||
       !safeId(plan.examId) || !safeInt(plan.version) ||
+      (plan.title!==undefined && (!safeText(plan.title,100) || plan.title.trim().length<3)) ||
       !SHA.test(plan.trainingSourceSha256) ||
       !SHA.test(plan.trainingEditionSha256) ||
       plan.consultationAllowed !== true ||

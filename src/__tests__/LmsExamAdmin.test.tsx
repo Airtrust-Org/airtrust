@@ -25,6 +25,11 @@ describe('Administração de provas por edição',()=>{
   beforeEach(()=>{mocked.mockReset();
     mocked.mockImplementation(async url=>{
       if(String(url).endsWith('/edicoes'))return ok({editions:versions});
+      if(String(url).endsWith('/cursos/26/provas'))return ok({items:[],hasMore:false});
+      if(String(url).includes('/aptidao?packageSha256='))return ok({
+        packageSha256:pkg,status:'ACTIVE',assessmentMode:'EXTERNAL',
+        workerApprovalRequired:true,canBind:true,boundExamId:null,boundExamVersion:null,reason:null,
+      });
       if(String(url).includes('/questoes-publicadas?'))return ok({items:publishedQuestions,nextOffset:null});
       return new Response(JSON.stringify({success:false,code:'UNEXPECTED'}),{status:422});
     });
@@ -40,7 +45,10 @@ describe('Administração de provas por edição',()=>{
   it('exige nota mínima e confirmação editorial antes de publicar plano; não vincula automaticamente',async()=>{
     renderPage();
     await screen.findByText('Questão de segurança?',{exact:false});
-    fireEvent.change(screen.getByLabelText('Edição do pacote SCORM'),{target:{value:pkg}});
+    await screen.findByText(/Edição apta para vincular prova externa/);
+    expect((screen.getByLabelText('Edição do pacote SCORM') as HTMLSelectElement).value).toBe(pkg);
+    fireEvent.change(screen.getByLabelText('Nome da prova'),{target:{value:'Avaliação Final de CRM'}});
+    fireEvent.click(screen.getByText('Configurações avançadas e rastreabilidade'));
     fireEvent.change(screen.getByLabelText('Identificador da prova'),{target:{value:'prova-crm-v1'}});
     fireEvent.change(screen.getByLabelText('SHA-256 da edição aprovada'),{target:{value:edition}});
     fireEvent.click(screen.getByLabelText('Incluir q1 v1'));
@@ -54,6 +62,11 @@ describe('Administração de provas por edição',()=>{
     mocked.mockImplementation(async (url,init)=>{
       if(String(url).endsWith('/provas')&&init?.method==='POST')return ok({planSha256:'e'.repeat(64)});
       if(String(url).endsWith('/edicoes'))return ok({editions:versions});
+      if(String(url).endsWith('/cursos/26/provas'))return ok({items:[],hasMore:false});
+      if(String(url).includes('/aptidao?packageSha256='))return ok({
+        packageSha256:pkg,status:'ACTIVE',assessmentMode:'EXTERNAL',
+        workerApprovalRequired:true,canBind:true,boundExamId:null,boundExamVersion:null,reason:null,
+      });
       if(String(url).includes('/questoes-publicadas?'))return ok({items:publishedQuestions,nextOffset:null});
       return new Response(JSON.stringify({success:false,code:'UNEXPECTED'}),{status:422});
     });
@@ -63,7 +76,7 @@ describe('Administração de provas por edição',()=>{
     expect(published).toBeTruthy();
     const plan=JSON.parse((published![1]!.body as string)).plan;
     expect(plan).toMatchObject({
-      courseId:26,tenantId:6,trainingSourceSha256:pkg,trainingEditionSha256:edition,
+      courseId:26,tenantId:6,title:'Avaliação Final de CRM',trainingSourceSha256:pkg,trainingEditionSha256:edition,
       acceptedQuestionSourceSha256:[pkg,source],
       attemptPolicy:{maxAttempts:3,retryDelayMinutes:0,timeLimitMinutes:30},
       sections:[{moduleId:'m1',minScorePct:70,questions:[{questionId:'q1',revision:1}]}],

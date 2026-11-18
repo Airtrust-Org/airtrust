@@ -25,7 +25,7 @@ type Eligibility={
   workerApprovalRequired:boolean;canBind:boolean;
   boundExamId:string|null;boundExamVersion:number|null;reason:string|null;
 };
-type ListedExam={examId:string;version:number;publishedAt:string;
+type ListedExam={examId:string;version:number;title:string|null;publishedAt:string;
   boundPackageSha256:string|null;sourceSha:string|null};
 type Envelope<T> = {success:boolean;data?:T;code?:string};
 const sha = /^[a-f0-9]{64}$/;
@@ -63,7 +63,8 @@ export default function LmsExamAdmin():React.ReactElement {
     BASICA:'0',INTERMEDIARIA:'0',AVANCADA:'0',
   });
   const [minimums,setMinimums]=useState<Record<string,string>>({});
-  const [examId,setExamId]=useState('');
+  const [examTitle,setExamTitle]=useState('Avaliação final do treinamento');
+  const [examId,setExamId]=useState(()=> 'prova-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,'').slice(0,14));
   const [version,setVersion]=useState('1');
   const [editionSha,setEditionSha]=useState('');
   const [legal,setLegal]=useState<''|'yes'|'no'>('');
@@ -168,6 +169,7 @@ export default function LmsExamAdmin():React.ReactElement {
   }
   function buildPlan(){
     if(!edition||edition.boundExamId||edition.status==='SUPERSEDED'||!sha.test(packageSha))throw Error('EDIÇÃO_INDISPONÍVEL');
+    if(examTitle.trim().length<3||examTitle.trim().length>100)throw Error('NOME_DA_PROVA_OBRIGATÓRIO');
     if(!identifier.test(examId)||!Number.isSafeInteger(Number(version))||Number(version)<1||Number(version)>2147483647)
       throw Error('IDENTIFICADOR_OU_VERSÃO_INVÁLIDOS');
     if(!sha.test(editionSha))throw Error('SHA_DA_EDIÇÃO_INVÁLIDO');
@@ -193,7 +195,7 @@ export default function LmsExamAdmin():React.ReactElement {
     }
     if(!confirmed)throw Error('REVISÃO_EDITORIAL_NÃO_CONFIRMADA');
     return {schema:'AIRTRUST_EXTERNAL_EXAM_PLAN_V1',tenantId:course?.empresa_id,
-      courseId:id,examId,version:Number(version),
+      courseId:id,examId,title:examTitle.trim(),version:Number(version),
       trainingSourceSha256:packageSha,trainingEditionSha256:editionSha,
       acceptedQuestionSourceSha256:origins,consultationAllowed:true,
        attemptPolicy:{maxAttempts:Number(maxAttempts),retryDelayMinutes:Number(retryDelayMinutes),
@@ -217,10 +219,11 @@ export default function LmsExamAdmin():React.ReactElement {
       const selectedSha=selected?.sourceSha??packageSha;
       if(!identifier.test(selectedExamId)||!Number.isSafeInteger(selectedVersion)||selectedVersion<1||!sha.test(selectedSha))
         throw Error('SELECIONE_A_EDIÇÃO_E_INFORME_A_PROVA');
-      const result=await api<{planSha256:string;plan:{trainingSourceSha256:string;trainingEditionSha256:string}}>(
+      const result=await api<{planSha256:string;plan:{title?:string;trainingSourceSha256:string;trainingEditionSha256:string}}>(
         base+'/provas/'+encodeURIComponent(selectedExamId)+'/versoes/'+selectedVersion);
       if(result.plan.trainingSourceSha256!==selectedSha)throw Error('PROVA_PUBLICADA_PARA_OUTRA_EDIÇÃO');
       setExamId(selectedExamId);
+      setExamTitle(result.plan.title||selected?.title||selectedExamId);
       setVersion(String(selectedVersion));
       setPackageSha(selectedSha);
       setPublished({examId:selectedExamId,version:selectedVersion,packageSha256:selectedSha,planSha256:result.planSha256});
@@ -295,7 +298,7 @@ export default function LmsExamAdmin():React.ReactElement {
         <h3 className="font-semibold">Provas já publicadas neste treinamento</h3>
         <div className="mt-2 flex flex-col gap-2">
         {plans.map(p=><div key={p.examId+':'+p.version} className="flex flex-wrap items-center justify-between gap-3">
-          <span>{p.examId} · versão {p.version}
+          <span>{p.title||p.examId} · versão {p.version}
             {p.boundPackageSha256?' · vinculada a edição '+p.boundPackageSha256.slice(0,10):' · vínculo pendente'}</span>
           {!p.boundPackageSha256&&p.sourceSha?
             <button type="button" className="rounded border px-3 py-1" disabled={working}
@@ -314,22 +317,31 @@ export default function LmsExamAdmin():React.ReactElement {
     {!loading&&validId&&tab==='compose'?<section className={panel}>
       <h2 className="mb-3 text-lg font-semibold">Composição e critérios de aprovação</h2>
       <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">Selecione a edição EXTERNAL, publique as questões no banco, monte a prova e aprove o vínculo. Nenhuma matrícula será alterada por esta tela.</p>
-      <div className="grid gap-3 md:grid-cols-3">
-        <label className="text-sm">Identificador da prova
-          <input className={input+' mt-1'} aria-label="Identificador da prova" value={examId}
-            disabled={!!published||working} onChange={e=>setExamId(e.target.value)} placeholder="prova-crm-v1"/>
-        </label>
-        <label className="text-sm">Versão da prova
-          <input className={input+' mt-1'} aria-label="Versão da prova" type="number" min="1" max="2147483647"
-            disabled={!!published||working} value={version} onChange={e=>setVersion(e.target.value)}/>
-        </label>
-        <label className="text-sm">SHA-256 da edição aprovada
+      <label className="block text-sm font-medium">Nome da prova
+        <input className={input+' mt-1'} value={examTitle} maxLength={100}
+          aria-label="Nome da prova" disabled={!!published||working}
+          onChange={e=>setExamTitle(e.target.value)}
+          placeholder="Ex.: Avaliação Final — CRM"/>
+      </label>
+      <details className="mt-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+        <summary className="cursor-pointer font-medium">Configurações avançadas e rastreabilidade</summary>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label>Identificador interno da prova
+            <input className={input+' mt-1'} aria-label="Identificador da prova" value={examId}
+              disabled={!!published||working} onChange={e=>setExamId(e.target.value)}/>
+          </label>
+          <label>Versão da prova
+            <input className={input+' mt-1'} aria-label="Versão da prova" type="number" min="1" max="2147483647"
+              disabled={!!published||working} value={version} onChange={e=>setVersion(e.target.value)}/>
+          </label>
+        </div>
+        <label className="mt-3 block">SHA-256 da edição aprovada
           <input className={input+' mt-1'} aria-label="SHA-256 da edição aprovada"
             value={editionSha} disabled={!!published||working} onChange={e=>setEditionSha(e.target.value)}
             placeholder="64 caracteres hexadecimais"/>
         </label>
-      </div>
-      <p className="mt-2 text-xs">Preenchido a partir do SHA-256 do pacote selecionado no armazenamento, sem valor fictício. Quando a edição editorial usa outro digest controlado, substitua-o pelo SHA validado da edição.</p>
+        <p className="mt-2 text-xs">O identificador interno é gerado automaticamente; o SHA inicial vem do pacote selecionado. Só altere o SHA quando houver outra edição editorial com proveniência controlada.</p>
+      </details>
       <div className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
         <h3 className="font-semibold">Montar prova por quantidade e dificuldade</h3>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">

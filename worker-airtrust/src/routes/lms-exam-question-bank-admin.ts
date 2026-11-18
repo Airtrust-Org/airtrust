@@ -193,16 +193,17 @@ routes.get('/overview',async c=>{
       started_at:string;submitted_at:string|null;result_json:string|null;aluno_nome:string|null;attempt_plan_json:string|null}>(),
   ]);
   const plans=(planRows.results||[]).map(row=>{
-    let questionCount:number|null=null;
+    let questionCount:number|null=null,title:string|null=null;
     try{
-      const plan=JSON.parse(row.plan_json) as {sections?:{questions?:unknown[]}[]};
+      const plan=JSON.parse(row.plan_json) as {title?:unknown;sections?:{questions?:unknown[]}[]};
+      if(typeof plan.title==='string')title=plan.title;
       if(Array.isArray(plan.sections)){
         questionCount=plan.sections.reduce((n,sec)=>n+
           (Array.isArray(sec.questions)?sec.questions.length:0),0);
       }
     }catch{ /* corrupted plans are not silently accepted */ }
     return {cursoId:row.curso_id,examId:row.exam_id,version:row.version,
-      questionCount,publishedAt:row.published_at};
+      questionCount,title,publishedAt:row.published_at};
   });
   const attempts=(attemptRows.results||[]).map(row=>{
     const scorePct=row.state==='SUBMITTED'?scoreForReport(row.attempt_plan_json,row.result_json):null;
@@ -274,16 +275,17 @@ routes.get('/cursos/:cursoId/provas',async c=>{
   const all=rows.results||[];
   return c.json({success:true,data:{
     items:all.slice(0,100).map(row=>{
-      let sourceSha:string|null=null;
+      let sourceSha:string|null=null,title:string|null=null;
       try{
-        const plan=JSON.parse(row.plan_json) as {trainingSourceSha256?:unknown};
+        const plan=JSON.parse(row.plan_json) as {trainingSourceSha256?:unknown;title?:unknown};
+        if(typeof plan.title==='string')title=plan.title;
         if(typeof plan.trainingSourceSha256==='string'&&
             /^[a-f0-9]{64}$/.test(plan.trainingSourceSha256)){
           sourceSha=plan.trainingSourceSha256;
         }
       }catch{ /* malformed plan cannot be attached to an edition */ }
       return {examId:row.exam_id,version:row.version,
-        publishedAt:row.published_at,boundPackageSha256:row.package_sha256,sourceSha};
+        publishedAt:row.published_at,boundPackageSha256:row.package_sha256,sourceSha,title};
     }),
     hasMore:all.length>100,
   }});
