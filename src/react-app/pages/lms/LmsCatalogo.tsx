@@ -1063,6 +1063,22 @@ function CourseDrawer({
                           </p>
                         )}
                         <FieldError message={errors.scorm_assessment_policy} />
+                        {isAdmin && isEditing && initial?.id && form.tipo_conteudo==='scorm' && (
+                          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+                            <strong className="block">Prova final independente do conteúdo EAD</strong>
+                            <p className="mt-1">
+                              Para exigir uma prova do AirTrust, prepare uma edição SCORM
+                              homologada para avaliação externa, crie a prova no banco e
+                              vincule-a à edição correspondente. Não altere somente
+                              a modalidade acima: ela também representa avaliações dentro do próprio SCORM.
+                            </p>
+                            <button type="button"
+                              onClick={()=>{onClose();navigate('/lms/admin/provas/'+initial.id);}}
+                              className="mt-2 rounded-lg bg-blue-700 px-3 py-2 font-medium text-white hover:bg-blue-800">
+                              Configurar prova deste treinamento
+                            </button>
+                          </div>
+                        )}
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-500">Versão SCORM</label>
                           <select
