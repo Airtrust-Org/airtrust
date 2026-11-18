@@ -39,7 +39,7 @@ async function call(token, path, options = {}) {
 async function main() {
   required(SHA.test(expectedZip) && SHA.test(previous), 'PACKAGE_SHA_INPUT_INVALID');
   required(/^[a-f0-9]{40}$/.test(expectedWorker), 'EXPECTED_WORKER_SHA_INVALID');
-  required(process.env.CONFIRMATION === 'AIRTRUST_TENANT6_COURSE64_LOSA_EXTERNAL_FORMATIVE_EXTERNAL_RC5_DIRECT', 'EXACT_CONFIRMATION_REQUIRED');
+  required(process.env.CONFIRMATION === 'AIRTRUST_TENANT6_COURSE64_LOSA_FORMATIVE_EXTERNAL_RC5_DIRECT', 'EXACT_CONFIRMATION_REQUIRED');
   const prod = await fetchJson(api + '/api/version');
   required(prod.status === 200, 'PRODUCTION_VERSION_NOT_AVAILABLE');
   const live = String(prod.json?.data?.sourceSha || prod.json?.sourceSha || '').toLowerCase();
