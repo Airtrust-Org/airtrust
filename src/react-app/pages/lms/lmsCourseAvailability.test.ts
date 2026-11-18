@@ -29,4 +29,12 @@ describe('course details — truthful SCORM availability and formative criteria'
     expect(getCourseAvailability({ ...base, scorm_mastery_score: null }, true).criterion)
       .toBe('Sem nota mínima definida');
   });
+  it('separates formative study from the external qualification exam', () => {
+    const info = getCourseAvailability({ ...base, scorm_assessment_policy: 'FORMATIVE', scorm_mastery_score: null }, true, {
+      assessmentPolicy: 'FORMATIVE', certificationProfile: null,
+      authoringReview: { externalExam: true, reviewed: false, privateRelease: false },
+    });
+    expect(info.criterion).toBe('Estudo formativo · avaliação externa');
+    expect(info.objective).toContain('aprovação externa');
+  });
 });

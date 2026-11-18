@@ -146,6 +146,29 @@ describe('política de avaliação do servidor: NONE não equivale a EXTERNAL', 
     expect(r).toMatchObject({ eligible_for_server_verification: true,
       code: 'SCORM_READY_FOR_SERVER_VERIFICATION', missing: [] });
   });
+  it('FORMATIVE com avaliação EXTERNAL exige prova independente antes da qualificação', () => {
+    const full = ledger([1, 2, 3, 4]);
+    const ev = evidenceFor(manifest({ assessmentMode: 'EXTERNAL' }), full);
+    const base = {
+      mode: 'reconcile' as const, commit: { lesson_status: 'completed' },
+      wasCompleted: false, cmiJson: full, location: { current: 4, total: 4 },
+      policy: 'FORMATIVE' as const, masteryScore: null, scorePct: null,
+    };
+    const pending = evaluateScormClosureReadiness({ ...base, manifest: ev });
+    expect(pending).toMatchObject({
+      code: 'EXTERNAL_ASSESSMENT_PENDING', eligible_for_server_verification: false,
+      every_slide_verified: true,
+    });
+    expect(pending.missing).toEqual(['verified_external_assessment']);
+    const passed = evaluateScormClosureReadiness({ ...base, manifest: {
+      ...ev, externalExam: { attemptId: 'att-0123456789abcdef', planSha256: 'd'.repeat(64) },
+    } });
+    expect(passed).toMatchObject({
+      code: 'SCORM_READY_FOR_SERVER_VERIFICATION',
+      eligible_for_server_verification: true, missing: [],
+    });
+  });
+
   it('SCORED + conteúdo EXTERNAL permite iniciar a prova sem nota SCORM após o estudo completo', () => {
     // Regression: a content-only SCO records completed but intentionally never
     // writes score_raw/passed; approval is issued only by the separate exam.

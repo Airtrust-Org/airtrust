@@ -857,7 +857,7 @@ function CourseDrawer({
     const errs = validateForm(form);
     if (form.tipo_conteudo === 'scorm' &&
         !canSaveScormModeForRole(form.scorm_assessment_policy, initial?.scorm_assessment_policy, isAdmin, isEditing)) {
-      errs.scorm_assessment_policy = 'A modalidade de uma edição SCORM publicada não pode ser trocada somente no cadastro. Ative uma nova edição compatível e homologada; cursos com avaliação obrigatória não podem perder essa exigência sem nova edição.';
+      errs.scorm_assessment_policy = 'A modalidade de uma edição SCORM publicada só muda com uma nova edição aprovada. A avaliação externa, quando exigida, permanece separada do estudo e não pode ser dispensada no cadastro.';
     }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -1098,7 +1098,7 @@ function CourseDrawer({
                         </div>
                         <p className="text-xs text-slate-600">
                           {form.scorm_assessment_policy === 'FORMATIVE'
-                            ? 'Sem prova final: o AirTrust conclui após confirmar todas as unidades e interações obrigatórias, e gera a qualificação quando configurada.'
+                            ? 'O estudo não possui prova ou nota no SCORM. Se houver avaliação externa exigida pela edição, a qualificação continua dependendo da aprovação externa.'
                             : 'Nas edições com prova do AirTrust, o aluno deverá fazer a avaliação após o estudo. A prova precisa estar publicada e vinculada à edição; cursos legados com avaliação dentro do SCORM conservam sua regra até migração.'}
                           {' '}A troca exige uma edição SCORM compatível e não reclassifica matrículas anteriores.
                         </p>

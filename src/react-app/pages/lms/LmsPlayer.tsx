@@ -1177,9 +1177,19 @@ export default function LmsPlayer() {
       await queryClient.invalidateQueries({ queryKey: ['lms'] });
       window.location.reload();
     } catch (error) {
+      // The SCO was unloaded before the recovery request to avoid stale commits.
+      // A 409 is a legitimate response for non-V4 packages (e.g. legacy SOP).
+      // Never leave the learner on about:blank when the server declines recovery.
+      if (iframeRef.current && launchUrl) {
+        setIframeLoaded(false);
+        iframeRef.current.src = launchUrl;
+      }
+      void refetchMatricula();
       toast.error(error instanceof Error && error.name === 'AbortError'
-        ? 'A recuperação não respondeu. Atualize a matrícula antes de tentar novamente.'
-        : error instanceof Error ? error.message : 'Falha ao recuperar as interações.');
+        ? 'Não foi possível confirmar a recuperação. O curso foi reaberto sem alterar sua conclusão; confira o progresso registrado.'
+        : error instanceof Error && /Não há interações incompletas recuperáveis/i.test(error.message)
+          ? 'Este pacote não admite recuperação automática de cenários. O conteúdo foi reaberto: revise as telas sem registro no painel.'
+          : error instanceof Error ? error.message : 'Falha ao recuperar as interações. O curso foi reaberto.');
     } finally {
       window.clearTimeout(timeout);
       setRecoveringInteractions(false);
@@ -1775,16 +1785,18 @@ export default function LmsPlayer() {
                         >
                           {recoveringInteractions
                             ? 'Verificando as respostas preservadas...'
-                            : 'Recuperar cenários obrigatórios sem resposta'}
+                            : 'Verificar se há cenários recuperáveis'}
                         </button>
                       ) : null}
-                    {!isCompletedState && closureReadiness?.missing?.includes('distinct_slide_coverage') &&
+                    {!isCompletedState && (closureReadiness?.missing?.includes('distinct_slide_coverage') ||
+                      closureReadiness?.missing?.includes('manifest_required_units')) &&
                       closureReadiness.slide_coverage?.missing_numbers?.length ? (
                       <p className="text-xs text-amber-200/90" data-testid="lms-missing-slide-numbers">
                         Telas sem registro: {closureReadiness.slide_coverage.missing_numbers.slice(0, 12).join(', ')}
                         {closureReadiness.slide_coverage.missing_numbers.length > 12
                           ? ` e mais ${closureReadiness.slide_coverage.missing_numbers.length - 12}` : ''}.
-                        Volte a essas telas no conteúdo para registrar a visita antes de solicitar a conclusão.
+                        Confira essas telas no conteúdo e suas interações obrigatórias antes de solicitar a conclusão.
+                        A posição final não comprova todas as visitas.
                       </p>
                     ) : null}
                   </>
