@@ -4,7 +4,7 @@ import type { LmsCurso, ScormPackageVersionRow } from '@/react-app/hooks/useLms'
 export function getCourseAvailability(
   curso: Pick<LmsCurso, 'tipo_conteudo' | 'scorm_assessment_policy' | 'scorm_mastery_score'>,
   hasExecutableContent: boolean,
-  activePackage?: Pick<ScormPackageVersionRow, 'assessmentPolicy' | 'certificationProfile'> | null,
+  activePackage?: Pick<ScormPackageVersionRow, 'assessmentPolicy' | 'certificationProfile' | 'authoringReview'> | null,
 ) {
   if (curso.tipo_conteudo === 'scorm' && !hasExecutableContent) {
     return {
@@ -16,6 +16,13 @@ export function getCourseAvailability(
     ? 'FORMATIVE'
     : activePackage?.assessmentPolicy;
   const policy = activePolicy ?? curso.scorm_assessment_policy;
+  if (curso.tipo_conteudo === 'scorm' && policy === 'FORMATIVE' &&
+      activePackage?.authoringReview?.externalExam === true) {
+    return {
+      criterion: 'Estudo formativo · avaliação externa',
+      objective: 'Concluir o estudo e apresentar aprovação externa independente para obter a qualificação.',
+    };
+  }
   if (curso.tipo_conteudo === 'scorm' && policy === 'FORMATIVE') {
     return {
       criterion: 'Formativo — sem prova final',

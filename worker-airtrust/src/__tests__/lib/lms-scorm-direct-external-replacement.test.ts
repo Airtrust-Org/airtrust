@@ -202,4 +202,52 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
     await expect(replaceValidatedExternalScorm(params())).rejects.toThrow(/validação do conteúdo/);
     expect(mocks.commit).not.toHaveBeenCalled();
   });
+  it('allows explicitly-formative EXTERNAL study only with zero enrollments', async () => {
+    const db = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ n: 0 }) }),
+      }),
+    } as unknown as D1Database;
+    const result = await replaceValidatedExternalScorm(params({
+      db, confirm: { cursoId: 84, packageSha256: SHA, incomingExternalPolicy: 'FORMATIVE' },
+    }));
+    expect(result).toMatchObject({
+      status: 'ACTIVE', assessmentPolicy: 'FORMATIVE', examMode: 'EXTERNAL',
+    });
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      policy: { incoming: 'FORMATIVE', requireNoEnrollments: true },
+      observed: { coursePolicy: 'SCORED', activePackageId: 'old' },
+    }));
+  });
+
+  it('refuses an external-to-formative policy change with existing enrollments', async () => {
+    const db = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({ first: vi.fn().mockResolvedValue({ n: 1 }) }),
+      }),
+    } as unknown as D1Database;
+    await expect(replaceValidatedExternalScorm(params({
+      db, confirm: { cursoId: 84, packageSha256: SHA, incomingExternalPolicy: 'FORMATIVE' },
+    }))).rejects.toThrow(/zero matrículas/);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('keeps a future EXTERNAL replacement formative when course policy is formative', async () => {
+    mocks.evaluate.mockResolvedValue(plan({ course: {
+      id: 84, titulo: 'LOSA', tipoConteudo: 'scorm', currentPolicy: 'FORMATIVE', masteryScore: null,
+    } }));
+    const result = await replaceValidatedExternalScorm(params());
+    expect(result).toMatchObject({ assessmentPolicy: 'FORMATIVE', examMode: 'EXTERNAL' });
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      policy: { incoming: 'FORMATIVE' },
+    }));
+  });
+
+  it('never allows a scored-in-SCO package to claim formative external semantics', async () => {
+    await expect(replaceValidatedExternalScorm(params({
+      confirm: { cursoId: 84, packageSha256: SHA, incomingExternalPolicy: 'FORMATIVE' },
+    }), 'SCORM')).rejects.toThrow(/Somente conteúdo/);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
 });

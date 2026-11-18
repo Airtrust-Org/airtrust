@@ -316,12 +316,21 @@ export async function evaluateFormativeActivation(params: {
     add('ADMIN_APPROVAL', approvalOk, approvalOk ? 'Aprovação administrativa vinculada a este SHA' : 'Aprovação administrativa pendente');
     void attestationOk;
   } else if (course.scorm_assessment_policy === 'FORMATIVE') {
+    const storedQuality = parseStoredScormValidation<ScormQualityGateResult>(row.validation_result_json);
+    const externalStudy = storedQuality?.authoringReview?.externalExam === true &&
+      storedQuality.authoringReview.privateRelease === false;
+    if (externalStudy) {
+      // Never turn a formative EXTERNAL study edition into scored merely because
+      // its SCORM has no built-in exam. External evidence stays mandatory.
+      incomingPolicy = null;
+    } else {
     // The course's effective policy is authoritative. Legacy ACTIVE editions may
     // have no pinned policy, but a scored successor must still restore SCORED.
     // A regular edition replacing a formative one must restore a real threshold.
     incomingPolicy = 'SCORED';
     add('SCORED_THRESHOLD_PRESENT', (course.scorm_mastery_score ?? 0) > 0,
       'A edição regular exige nota mínima positiva no curso');
+    }
   }
   // Impact is only meaningful (and only queried) when the activation moves the policy.
   const impact = incomingPolicy ? await cycleImpact(params.db, params.empresaId, params.cursoId)

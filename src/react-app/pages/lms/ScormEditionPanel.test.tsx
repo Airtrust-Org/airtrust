@@ -153,7 +153,7 @@ describe('ScormEditionPanel — formative edition workflow', () => {
     };
     render(<ScormEditionPanel cursoId={78} versions={[external]} isAdmin />);
     expect(screen.getByText('Conteúdo · prova externa')).toBeTruthy();
-    expect(screen.getByText(/A prova externa e sua nota continuam obrigatórias/)).toBeTruthy();
+    expect(screen.getByText(/A avaliação externa continua obrigatória e separada/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Executar conformance' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Substituir esta edição já enviada' }));
     await waitFor(() => expect(m.directReplace).toHaveBeenCalledWith({
