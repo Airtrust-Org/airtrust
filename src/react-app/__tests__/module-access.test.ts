@@ -45,6 +45,12 @@ describe('module access helper', () => {
 
   it('mapeia rotas diretas para chaves canonicas', () => {
     expect(getModuleKeyForPath('/lms/cursos/123')).toBe('lms');
+    expect(getModuleKeyForPath('/treinamentos/avaliacoes')).toBe('lms');
+    expect(getModuleKeyForPath('/treinamentos/avaliacoes/')).toBe('lms');
+    expect(getModuleKeyForPath('/treinamentos/avaliacoes/26')).toBe('lms');
+    expect(getModuleKeyForPath('/treinamentos/avaliacoes-indevidas')).toBeNull();
+    expect(canAccessModule(getModuleKeyForPath('/treinamentos/avaliacoes')!,['dashboard'])).toBe(false);
+    expect(canAccessModule(getModuleKeyForPath('/treinamentos/avaliacoes')!,['lms'])).toBe(true);
     expect(getModuleKeyForPath('/sgso/relatos/1')).toBe('sgso');
     expect(getModuleKeyForPath('/configuracoes/integracoes/sigvoos')).toBe('sigvoos');
     expect(getModuleKeyForPath('/hospedagem/quartos/7')).toBe('hospedagem');

@@ -53,9 +53,9 @@ const mint = (sub: number, empresa: number, role: string) => generateJWT({
   sub: String(sub), empresa_id: empresa, role, email: `u${sub}@sintetico.test`, token_type: 'access',
 } as never, SYNTHETIC_JWT_SECRET);
 
-function call(db: Db, path: string, init: RequestInit = {}) {
+function call(db: Db, path: string, init: RequestInit = {},bucket: R2Bucket = externalBucket()) {
   const env = {
-    DB: db.asD1(), BUCKET: externalBucket(), ENVIRONMENT: 'staging', JWT_SECRET: SYNTHETIC_JWT_SECRET,
+    DB: db.asD1(), BUCKET: bucket, ENVIRONMENT: 'staging', JWT_SECRET: SYNTHETIC_JWT_SECRET,
     LMS_EXAM_LEARNER_STAGING: 'REVIEWED_SCHEMA_ONLY', LMS_EXAM_QUESTION_ADMIN_STAGING: 'REVIEWED_SCHEMA_ONLY',
     __realAuth: true,
   };
@@ -388,4 +388,134 @@ describe('E2E sintetico - aprovacao como evidencia de conclusao e reabertura', (
       .toMatchObject({ attempt_no: 1 });
     expect(count(db, 'SELECT COUNT(*) n FROM lms_exam_attempts')).toBe(2);
   });
+});
+
+describe('Gestão de Avaliações — visão central administrativa',()=>{
+  function overviewDb(){
+    const db=freshDb();
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN titulo TEXT");
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN ativo INTEGER DEFAULT 1");
+    db.exec("ALTER TABLE lms_cursos ADD COLUMN publicado INTEGER DEFAULT 1");
+    db.exec("ALTER TABLE funcionarios ADD COLUMN nome TEXT");
+    db.exec("UPDATE lms_cursos SET titulo='Treinamento sintético de teste' WHERE empresa_id=6");
+    db.exec("UPDATE funcionarios SET nome='Aluno sintético' WHERE empresa_id=6");
+    return db;
+  }
+  it('expõe somente metadados de provas e questões ao administrador no tenant correto',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const r=await admin(db,base+'/admin/overview');
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data.courses).toHaveLength(1);
+    expect(payload.data.courses[0]).toMatchObject({id:26,titulo:'Treinamento sintético de teste'});
+    expect(payload.data.questionCounts).toEqual([{curso_id:26,status:'PUBLISHED',total:10}]);
+    expect(payload.data.plans[0]).toMatchObject({cursoId:26,examId:'exam1',version:1,questionCount:10});
+    expect(payload.data.bindings).toHaveLength(1);
+    expect(payload.data.totals.attempts).toBe(0);
+    expect(payload.data.attempts).toHaveLength(0);
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+    expect(count(db,'SELECT COUNT(*) n FROM lms_exam_question_revisions')).toBe(10);
+  });
+  it('nega acesso do aluno e não expõe dados de outra empresa',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const learnerResponse=await learner(db,base+'/admin/overview');
+    expect([401,403]).toContain(learnerResponse.status);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/overview');
+    expect(other.status).toBe(200);
+    const payload=await other.json() as any;
+    expect(payload.data.courses).toHaveLength(0);
+    expect(payload.data.questionCounts).toHaveLength(0);
+    expect(payload.data.plans).toHaveLength(0);
+    expect(payload.data.bindings).toHaveLength(0);
+    expect(payload.data.attempts).toHaveLength(0);
+  });
+  it('edição e catálogo de provas exigem auth, tenant e manifesto EXTERNAL real',async()=>{
+    const db=overviewDb();
+    await publishExam(db,false);
+    const catalog=await admin(db,base+'/admin/cursos/26/provas');
+    expect(catalog.status).toBe(200);
+    const items=(await catalog.json() as any).data.items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      examId:'exam1',version:1,sourceSha:PKG,boundPackageSha256:null,
+    });
+    expect(JSON.stringify(items)).not.toMatch(LEAK);
+    const good=await (await admin(db,base+'/admin/cursos/26/aptidao?packageSha256='+PKG)).json() as any;
+    expect(good.data).toMatchObject({status:'VALIDATED',assessmentMode:'EXTERNAL',canBind:true});
+    const token=(await mint(ADMIN_USER,6,'ADMIN')).token;
+    const negative=await call(db,base+'/admin/cursos/26/aptidao?packageSha256='+PKG,
+      {headers:{Authorization:'Bearer '+token}},externalBucket('NONE'));
+    expect(negative.status).toBe(200);
+    expect((await negative.json() as any).data).toMatchObject({
+      assessmentMode:'NONE',canBind:false,reason:'EDITION_NOT_EXTERNAL',
+    });
+    expect((await admin(db,base+'/admin/cursos/26/aptidao?packageSha256=x')).status).toBeGreaterThanOrEqual(400);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/aptidao?packageSha256='+PKG);
+    expect(other.status).toBe(404);
+    expect((await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/provas')).status).toBe(200);
+    const otherCatalog=await (await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/cursos/26/provas')).json() as any;
+    expect(otherCatalog.data.items).toHaveLength(0);
+    expect([401,403]).toContain((await learner(db,base+'/admin/cursos/26/provas')).status);
+  });
+  it('relatório paginado inclui nota exata, nome, filtros, sem gabarito e não vaza tenants',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const opened=await start(db,'report-tests-1');
+    expect(opened.status).toBe(201);
+    await answerWith(db,opened.body.data.attemptId,7);
+    expect((await submit(db,opened.body.data.attemptId)).status).toBe(200);
+    const url=base+'/admin/resultados?cursoId=26&resultado=aprovado&page=1&limit=1&busca=Aluno';
+    const r=await admin(db,url);
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data).toMatchObject({page:1,limit:1,total:1,pages:1});
+    expect(payload.data.items[0]).toMatchObject({
+      cursoId:26,cursoTitulo:'Treinamento sintético de teste',matriculaId:10,
+      alunoNome:'Aluno sintético',scorePct:70,passed:true,attemptNo:1,
+    });
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+    const failed=await (await admin(db,base+'/admin/resultados?resultado=reprovado')).json() as any;
+    expect(failed.data.items).toHaveLength(0);
+    expect(failed.data.total).toBe(0);
+    const missing=await (await admin(db,base+'/admin/resultados?busca=INEXISTENTE')).json() as any;
+    expect(missing.data.items).toHaveLength(0);
+    const second=await (await admin(db,base+'/admin/resultados?page=2&limit=1')).json() as any;
+    expect(second.data.items).toHaveLength(0);
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/resultados');
+    expect(other.status).toBe(200);
+    expect((await other.json() as any).data.items).toHaveLength(0);
+    expect([401,403]).toContain((await learner(db,base+'/admin/resultados')).status);
+    expect((await admin(db,base+'/admin/resultados?page=-1')).status).toBeGreaterThanOrEqual(400);
+    expect((await admin(db,base+'/admin/resultados?limit=1000')).status).toBeGreaterThanOrEqual(400);
+  });
+  it('mantém nota e nome do aluno mesmo quando o plano da tentativa está fora do catálogo limitado a 250',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const started=await start(db,'idem-old-plan-251');
+    expect(started.status).toBe(201);
+    await answerWith(db,started.body.data.attemptId,10);
+    expect((await submit(db,started.body.data.attemptId)).status).toBe(200);
+    const statement=db.database.prepare(
+      'INSERT INTO lms_exam_plans (empresa_id,curso_id,exam_id,version,plan_json,'+
+      'plan_sha256,published_by,published_at) VALUES(?,?,?,?,?,?,?,?)'
+    );
+    for(let i=0;i<251;i++){
+      statement.run(6,26,'newer-plan-'+i,1,'{}','c'.repeat(64),'u1','2099-01-01 00:00:00');
+    }
+    const r=await admin(db,base+'/admin/overview');
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data.plansTruncated).toBe(true);
+    expect(payload.data.plans).toHaveLength(250);
+    expect(payload.data.plans.some((p:any)=>p.examId==='exam1')).toBe(false);
+    expect(payload.data.attempts).toHaveLength(1);
+    expect(payload.data.attempts[0]).toMatchObject({
+      cursoId:26,matriculaId:10,examId:'exam1',scorePct:100,passed:true,
+      alunoNome:'Aluno sintético',
+    });
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+  });
+
 });

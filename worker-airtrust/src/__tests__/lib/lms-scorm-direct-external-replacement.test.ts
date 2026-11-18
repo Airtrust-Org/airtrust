@@ -250,4 +250,60 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
+  it('enforces the zero-enrollment guard for a same-policy FORMATIVE -> FORMATIVE release', async () => {
+    mocks.evaluate.mockResolvedValue(plan({ course: {
+      id: 84, titulo: 'LOSA', tipoConteudo: 'scorm', currentPolicy: 'FORMATIVE', masteryScore: null,
+    } }));
+    const db = {
+      prepare: vi.fn().mockReturnValue({ bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue({ n: 0 }),
+      }) }),
+    } as unknown as D1Database;
+    const res = await replaceValidatedExternalScorm(params({
+      db, confirm: { cursoId: 84, packageSha256: SHA,
+        incomingExternalPolicy: 'FORMATIVE', requireNoEnrollments: true },
+    }));
+    expect(res).toMatchObject({ status: 'ACTIVE', assessmentPolicy: 'FORMATIVE', examMode: 'EXTERNAL' });
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      policy: { incoming: 'FORMATIVE', requireNoEnrollments: true },
+      observed: { activePackageId: 'old', coursePolicy: 'FORMATIVE' },
+    }));
+  });
+
+  it('refuses same-policy guarded release when any enrollment already exists', async () => {
+    mocks.evaluate.mockResolvedValue(plan({ course: {
+      id: 84, titulo: 'LOSA', tipoConteudo: 'scorm', currentPolicy: 'FORMATIVE', masteryScore: null,
+    } }));
+    const db = {
+      prepare: vi.fn().mockReturnValue({ bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue({ n: 1 }),
+      }) }),
+    } as unknown as D1Database;
+    await expect(replaceValidatedExternalScorm(params({
+      db, confirm: { cursoId: 84, packageSha256: SHA,
+        incomingExternalPolicy: 'FORMATIVE', requireNoEnrollments: true },
+    }))).rejects.toThrow(/zero matrículas/);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a guarded replacement rejected by transactional CAS after enrollment appears', async () => {
+    mocks.evaluate.mockResolvedValue(plan({ course: {
+      id: 84, titulo: 'LOSA', tipoConteudo: 'scorm', currentPolicy: 'FORMATIVE', masteryScore: null,
+    } }));
+    const db = {
+      prepare: vi.fn().mockReturnValue({ bind: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue({ n: 0 }),
+      }) }),
+    } as unknown as D1Database;
+    mocks.commit.mockResolvedValue(false);
+    await expect(replaceValidatedExternalScorm(params({
+      db, confirm: { cursoId: 84, packageSha256: SHA,
+        incomingExternalPolicy: 'FORMATIVE', requireNoEnrollments: true },
+    }))).rejects.toThrow(/mudou durante/);
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      policy: { incoming: 'FORMATIVE', requireNoEnrollments: true },
+    }));
+  });
+
 });

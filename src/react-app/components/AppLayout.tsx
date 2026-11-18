@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   BarChart2,
   FileText,
+  ClipboardList,
   RefreshCcw,
   Wrench,
   Plane,
@@ -408,6 +409,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           LMS / Cursos EAD
                         </Link>
                       )}
+                      {showLms && isAdmin && (
+                        <Link to="/treinamentos/avaliacoes"
+                          onClick={() => setTreinamentosOpen(false)}
+                          className={'flex items-center gap-2.5 rounded-md px-3.5 py-2 text-sm '+(isActivePath('/treinamentos/avaliacoes') ? NAV_ACTIVE : NAV_INACTIVE)}
+                        ><ClipboardList className="mr-2 inline h-4 w-4" /> Gestão de Avaliações</Link>
+                      )}
                       {showConhecimentoAtivoAdmin && (
                         <Link
                           to="/conhecimento-ativo/admin"
@@ -715,6 +722,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         >
                           <BookOpen className="h-3.5 w-3.5 shrink-0" /> LMS / Cursos EAD
                         </Link>
+                      )}
+                      {showLms && isAdmin && (
+                        <Link to="/treinamentos/avaliacoes"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={'flex items-center gap-2.5 rounded-md px-3.5 py-2 text-sm '+(isActivePath('/treinamentos/avaliacoes') ? NAV_ACTIVE : NAV_INACTIVE)}
+                        ><ClipboardList className="mr-2 inline h-4 w-4" /> Gestão de Avaliações</Link>
                       )}
                       {showConhecimentoAtivoAdmin && (
                         <Link

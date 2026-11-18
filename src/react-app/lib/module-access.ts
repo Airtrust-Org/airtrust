@@ -120,6 +120,9 @@ export const MODULE_ROUTE_MATCHES: ModuleRouteMatch[] = [
   { pathPrefix: '/configuracoes/integracoes/sigvoos', moduleKey: 'sigvoos' },
   { pathPrefix: '/configuracoes/integracoes/edapp', moduleKey: 'sigvoos' },
   { pathPrefix: '/lms', moduleKey: 'lms' },
+  // The independent assessment hub lives under Treinamentos, but obeys the
+  // exact same tenant module entitlement as /lms. Hiding the menu is not enough.
+  { pathPrefix: '/treinamentos/avaliacoes', moduleKey: 'lms' },
   { pathPrefix: '/sgso', moduleKey: 'sgso' },
   { pathPrefix: '/hospedagem', moduleKey: 'hospedagem' },
   { pathPrefix: '/treinamentos/planejados', moduleKey: 'treinamentos_planejados' },
