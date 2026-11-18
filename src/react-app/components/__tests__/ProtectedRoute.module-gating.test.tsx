@@ -124,6 +124,32 @@ describe('ProtectedRoute module gating', () => {
     expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
   });
 
+  it('nega a rota direta do painel de avaliações ao ADMIN de empresa com LMS inativo', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Admin sem LMS', role: 'ADMINISTRADOR' },
+      empresas: [{ id: 1, nome: 'Empresa sem LMS', modulos_ativos: ['dashboard', 'funcionarios'] }],
+      empresaAtualId: 1,
+    });
+    renderAt('/treinamentos/avaliacoes', ['ADMIN']);
+    expect(screen.getByText('Módulo indisponível')).toBeInTheDocument();
+    expect(screen.queryByText('conteudo liberado')).toBeNull();
+  });
+
+  it('permite a rota direta somente ao ADMIN com LMS explicitamente habilitado', () => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { name: 'Admin com LMS', role: 'ADMINISTRADOR' },
+      empresas: [{ id: 1, nome: 'Empresa com LMS', modulos_ativos: ['dashboard', 'lms'] }],
+      empresaAtualId: 1,
+    });
+    renderAt('/treinamentos/avaliacoes', ['ADMIN']);
+    expect(screen.queryByText('Módulo indisponível')).toBeNull();
+    expect(screen.getByText('conteudo liberado')).toBeInTheDocument();
+  });
+
   it('mantem MRO bloqueado para gestor mesmo com modulo ativo', () => {
     authMock.mockReturnValue({
       isAuthenticated: true,
