@@ -9,6 +9,7 @@ test('LOSA RC6 exact package and protected activation contract', () => {
   assert.ok(script.includes("process.env.CONFIRMATION === '" + confirmation + "'"));
   assert.ok(workflow.includes('[[ "$CONFIRMATION" == ' + confirmation + ' ]]'));
   assert.ok(script.includes("'X-Airtrust-External-Content-Policy': 'FORMATIVE'"));
+  assert.ok(script.includes("'X-Airtrust-Require-No-Enrollments': 'true'"));
   assert.ok(script.includes("detail.scorm_assessment_policy === 'FORMATIVE'"));
   assert.match(script, /assessmentPolicy\) === 'FORMATIVE'/);
   assert.ok(script.includes("data.examMode === 'EXTERNAL'"));
