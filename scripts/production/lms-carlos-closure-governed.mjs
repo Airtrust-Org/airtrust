@@ -24,6 +24,7 @@ export function validateTarget(data, target) {
   const scorm = summarizeEnrollment(data).scorm;
   const readiness = data.closure_readiness ?? {};
   const missing = Array.isArray(readiness.missing) ? readiness.missing : [];
+  requireProof(Number(data.empresa_id) === TENANT, 'ENROLLMENT_TENANT_MISMATCH');
   requireProof(Number(data.id) === target.id && Number(data.curso_id) === target.course, 'ENROLLMENT_COURSE_MISMATCH');
   requireProof(Number.isSafeInteger(Number(data.funcionario_id)) && Number(data.funcionario_id) > 0, 'EMPLOYEE_MISSING');
   if (status === 'CONCLUIDO') {
