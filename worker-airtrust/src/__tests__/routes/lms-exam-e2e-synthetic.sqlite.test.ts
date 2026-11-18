@@ -431,4 +431,32 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
     expect(payload.data.bindings).toHaveLength(0);
     expect(payload.data.attempts).toHaveLength(0);
   });
+  it('mantém nota e nome do aluno mesmo quando o plano da tentativa está fora do catálogo limitado a 250',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    const started=await start(db,'idem-old-plan-251');
+    expect(started.status).toBe(201);
+    await answerWith(db,started.body.data.attemptId,10);
+    expect((await submit(db,started.body.data.attemptId)).status).toBe(200);
+    const statement=db.database.prepare(
+      'INSERT INTO lms_exam_plans (empresa_id,curso_id,exam_id,version,plan_json,'+
+      'plan_sha256,published_by,published_at) VALUES(?,?,?,?,?,?,?,?)'
+    );
+    for(let i=0;i<251;i++){
+      statement.run(6,26,'newer-plan-'+i,1,'{}','c'.repeat(64),'u1','2099-01-01 00:00:00');
+    }
+    const r=await admin(db,base+'/admin/overview');
+    expect(r.status).toBe(200);
+    const payload=await r.json() as any;
+    expect(payload.data.plansTruncated).toBe(true);
+    expect(payload.data.plans).toHaveLength(250);
+    expect(payload.data.plans.some((p:any)=>p.examId==='exam1')).toBe(false);
+    expect(payload.data.attempts).toHaveLength(1);
+    expect(payload.data.attempts[0]).toMatchObject({
+      cursoId:26,matriculaId:10,examId:'exam1',scorePct:100,passed:true,
+      alunoNome:'Aluno sintético',
+    });
+    expect(JSON.stringify(payload)).not.toMatch(LEAK);
+  });
+
 });

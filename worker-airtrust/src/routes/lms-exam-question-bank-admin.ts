@@ -89,13 +89,16 @@ routes.get('/overview',async c=>{
     ).bind(tenant).first<{total:number;passed:number|null;failed:number|null;in_progress:number|null}>(),
     c.env.DB.prepare(
       'SELECT a.curso_id,a.matricula_id,a.exam_id,a.exam_version,a.attempt_no,a.state,a.passed,'+
-      'a.started_at,a.submitted_at,a.result_json,f.nome AS aluno_nome FROM lms_exam_attempts a '+
+      'a.started_at,a.submitted_at,a.result_json,f.nome AS aluno_nome,'+
+      'p.plan_json AS attempt_plan_json FROM lms_exam_attempts a '+
+      'LEFT JOIN lms_exam_plans p ON p.empresa_id=a.empresa_id AND p.curso_id=a.curso_id '+
+      'AND p.exam_id=a.exam_id AND p.version=a.exam_version AND p.plan_sha256=a.plan_sha256 '+
       'LEFT JOIN lms_matriculas m ON m.id=a.matricula_id AND m.empresa_id=a.empresa_id '+
       'LEFT JOIN funcionarios f ON f.id=m.funcionario_id AND f.empresa_id=a.empresa_id '+
       'WHERE a.empresa_id=? ORDER BY a.started_at DESC LIMIT 100'
     ).bind(tenant).all<{curso_id:number;matricula_id:number;exam_id:string;
       exam_version:number;attempt_no:number;state:string;passed:number|null;
-      started_at:string;submitted_at:string|null;result_json:string|null;aluno_nome:string|null}>(),
+      started_at:string;submitted_at:string|null;result_json:string|null;aluno_nome:string|null;attempt_plan_json:string|null}>(),
   ]);
   const plans=(planRows.results||[]).map(row=>{
     let questionCount:number|null=null;
@@ -112,11 +115,9 @@ routes.get('/overview',async c=>{
   const attempts=(attemptRows.results||[]).map(row=>{
     let scorePct:number|null=null;
     // Weight actual section scores by exact immutable published question count.
-    const record=(planRows.results||[]).find(p=>p.curso_id===row.curso_id &&
-      p.exam_id===row.exam_id&&p.version===row.exam_version);
-    if(row.state==='SUBMITTED'&&record&&row.result_json){
+    if(row.state==='SUBMITTED'&&row.attempt_plan_json&&row.result_json){
       try{
-        const plan=JSON.parse(record.plan_json) as {sections:{moduleId:string;questions:unknown[]}[]};
+        const plan=JSON.parse(row.attempt_plan_json) as {sections:{moduleId:string;questions:unknown[]}[]};
         const grade=JSON.parse(row.result_json) as {sections:{moduleId:string;scorePct:number}[]};
         if(Array.isArray(plan.sections)&&Array.isArray(grade.sections)){
           let sum=0,total=0,valid=true;

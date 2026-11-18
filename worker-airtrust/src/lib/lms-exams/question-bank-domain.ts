@@ -142,10 +142,17 @@ export function editQuestionDraft(current: QuestionRevision,
       Object.keys(changes).some(k => !contentKeys.includes(k as keyof QuestionContent))) {
     deny('INVALID_EDIT_REQUEST');
   }
-  const updated: QuestionContent = { ...cloneContent(current), ...changes };
+  // Wire PATCH may explicitly clear legacy optional difficulty with null;
+  // absence means keep current value. Never allow null to be persisted.
+  const clearingDifficulty = Object.prototype.hasOwnProperty.call(changes,'difficulty') &&
+    (changes as {difficulty?:unknown}).difficulty === null;
+  const updated: QuestionContent = { ...cloneContent(current), ...changes,
+    ...(clearingDifficulty ? {difficulty:undefined} : {}) };
   validContent(updated);
+  // Spreading current last would resurrect a difficulty removed by this PATCH.
+  const {difficulty: _oldDifficulty, ...base} = current;
   return validateQuestionRevision({
-    ...current, ...cloneContent(updated), lastEditedBy: editor,
+    ...base, ...cloneContent(updated), lastEditedBy: editor,
   });
 }
 export function reviewQuestionDraft(current: QuestionRevision, reviewer: string): QuestionRevision {

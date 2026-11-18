@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {
- createQuestionDraft,reviewQuestionDraft,publishReviewedQuestion,
+ createQuestionDraft,editQuestionDraft,reviewQuestionDraft,publishReviewedQuestion,
  verifyPublishedQuestion,validateQuestionRevision,
 } from '../../lib/lms-exams/question-bank-domain';
 
@@ -28,6 +28,16 @@ describe('Banco de avaliações — compatibilidade de dificuldade',()=>{
   expect(await verifyPublishedQuestion(published)).toBe(true);
   expect(()=>validateQuestionRevision({...published,difficulty:'BASICA'})).not.toThrow();
   expect(await verifyPublishedQuestion({...published,difficulty:'BASICA'})).toBe(false);
+ });
+ it('limpa um nível previamente cadastrado via PATCH explícito, sem deixar null no hash',()=>{
+  const draft=createQuestionDraft({tenantId:6,courseId:15,questionId:'q4'},
+    {...content,difficulty:'AVANCADA'},'u1');
+  const updated=editQuestionDraft(draft,{difficulty:null} as unknown as
+    Parameters<typeof editQuestionDraft>[1],'u1');
+  expect(updated.difficulty).toBeUndefined();
+  expect(Object.hasOwn(updated,'difficulty')).toBe(false);
+  const unchanged=editQuestionDraft(draft,{prompt:'Novo enunciado'},'u1');
+  expect(unchanged.difficulty).toBe('AVANCADA');
  });
  it('rejeita dificuldade fora dos três níveis',()=>{
   expect(()=>createQuestionDraft({tenantId:6,courseId:15,questionId:'q3'},

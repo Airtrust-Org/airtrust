@@ -5,6 +5,7 @@
  */
 import React,{useCallback,useEffect,useState} from 'react';
 import {API_BASE_URL,fetchWithAuth} from '../../../config/api';
+import {normalizeQuestionDifficulty,difficultyForPatch} from './examDifficulty';
 
 type Choice={id:string;text:string};
 type Content={
@@ -109,7 +110,7 @@ export default function QuestionBankAdmin({
         if(action==='save'){
           if(current.revision.status!=='DRAFT')throw Error('VERSION_FROZEN');
           result=await req<Stored>(path,'PATCH',{
-            expectedEditVersion:current.editVersion,changes:form,
+            expectedEditVersion:current.editVersion,changes:{...form,difficulty:difficultyForPatch(form.difficulty)},
           });
         }else if(action==='fork'){
           if(current.revision.status!=='PUBLISHED')throw Error('VERSION_NOT_PUBLISHED');
@@ -184,7 +185,7 @@ export default function QuestionBankAdmin({
             <label className="text-sm">Nível de dificuldade
               <select className="mt-1 w-full rounded border p-2" value={form.difficulty||''}
                 aria-label="Nível de dificuldade da questão" disabled={frozen||busy}
-                onChange={e=>update('difficulty',e.target.value as Content['difficulty'])}>
+                onChange={e=>update('difficulty',normalizeQuestionDifficulty(e.target.value))}>
                 <option value="">Não classificada (legado)</option>
                 <option value="BASICA">Básica</option>
                 <option value="INTERMEDIARIA">Intermediária</option>
