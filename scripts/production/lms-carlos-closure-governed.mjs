@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { assertAllowedProductionBaseUrl, extractAccessToken, fetchJson, login } from '../smoke-auth-common.mjs';
+import { summarizeEnrollment } from '../validation/lms-enrollment-readonly-review-helpers.mjs';
 
 const TARGETS = Object.freeze([{ id: 577, course: 23, total: 28 }, { id: 703, course: 55, total: 84 }]);
 const API = assertAllowedProductionBaseUrl(process.env.PROD_API_BASE_URL || 'https://api.airtrust.online');
@@ -20,7 +21,7 @@ const upper = x => String(x ?? '').trim().toUpperCase();
 export function validateTarget(data, target) {
   const status = upper(data.status);
   const progress = Number(data.progresso_bruto ?? data.progresso_pct);
-  const scorm = data.scorm_progresso ?? {};
+  const scorm = summarizeEnrollment(data).scorm;
   const readiness = data.closure_readiness ?? {};
   const missing = Array.isArray(readiness.missing) ? readiness.missing : [];
   requireProof(Number(data.id) === target.id && Number(data.curso_id) === target.course, 'ENROLLMENT_COURSE_MISMATCH');

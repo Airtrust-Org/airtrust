@@ -4,7 +4,7 @@ import { validateTarget, publicReport } from '../production/lms-carlos-closure-g
 const base = (id = 577, course = 23, total = 28) => ({
   id, curso_id: course, funcionario_id: 82,
   tipo_conteudo: 'scorm', status: 'EM_ANDAMENTO', progresso_pct: 100,
-  scorm_progresso: { lesson_status: 'incomplete', lesson_location: `${total}/${total}` },
+  scorm_progresso: { lesson_status: 'incomplete', cmi_json: JSON.stringify({ 'cmi.core.lesson_location': `${total}/${total}` }) },
   closure_readiness: { code: 'PROGRESS_EVIDENCE_MISSING', last_step_reached: true,
     eligible_for_server_verification: false, missing: ['manifest_required_units', 'terminal_scorm_status'],
     slide_coverage: { total, recorded: total - 6 } },
@@ -14,10 +14,10 @@ test('scopes read-only preflight to exact named enrollment and course', () => {
   assert.equal(x.already_completed, false);
   for (const update of [
     { id: 578 }, { curso_id: 55 }, { status: 'REPROVADO' },
-    { progresso_pct: 99 }, { scorm_progresso: { lesson_status: 'passed', lesson_location: '28/28' } },
+    { progresso_pct: 99 }, { scorm_progresso: { lesson_status: 'passed', cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '28/28' }) } },
     { closure_readiness: { ...base().closure_readiness, last_step_reached: false } },
     { closure_readiness: { ...base().closure_readiness, missing: ['assessment_score'] } },
-    { scorm_progresso: { lesson_status: 'incomplete', lesson_location: '27/28' } },
+    { scorm_progresso: { lesson_status: 'incomplete', cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '27/28' }) } },
     { edition_mismatch: { required: true } },
   ]) assert.throws(() => validateTarget({ ...base(), ...update }, { id: 577, course: 23, total: 28 }), /CARLOS_CLOSURE_/);
 });
