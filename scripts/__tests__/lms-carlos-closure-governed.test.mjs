@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { validateTarget, publicReport } from '../production/lms-carlos-closure-governed.mjs';
+import { validateTarget, publicReport, performCanonicalCompletion } from '../production/lms-carlos-closure-governed.mjs';
 const base = (id = 577, course = 23, total = 28) => ({
   id, curso_id: course, empresa_id: 6, funcionario_id: 82,
   tipo_conteudo: 'scorm', status: 'EM_ANDAMENTO', progresso_pct: 100,
@@ -36,4 +36,36 @@ test('sanitized report is stable, contains no CMI or employee/enrollment IDs', (
   assert.match(report.evidence_hash, /^[a-f0-9]{64}$/);
   assert.equal(report.personal_data, false);
   for (const row of report.rows) { assert.ok(!('id' in row)); assert.ok(!('funcionario_id' in row)); }
+});
+
+test('apply path sends complete administrative observations and verifies committed readback', async () => {
+  const calls = [];
+  const result = await performCanonicalCompletion({
+    api: 'https://api.airtrust.online', token: 'synthetic', id: 703,
+    observations: 'Reconciliacao administrativa aprovada pelo gerente',
+    fetcher: async (url, opts) => {
+      calls.push({url,opts}); return {status:200,json:{success:true}};
+    },
+    readEnrollment: async (token, id) => {
+      assert.equal(token, 'synthetic'); assert.equal(id, 703);
+      return {status:'CONCLUIDO', progresso_pct:100, data_conclusao:'2026-11-18'};
+    },
+  });
+  assert.equal(result.status, 'CONCLUIDO');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/api\/lms\/matriculas\/703\/status$/);
+  assert.equal(calls[0].opts.method, 'PATCH');
+  assert.deepEqual(JSON.parse(calls[0].opts.body), {
+    status:'CONCLUIDO', observacoes:'Reconciliacao administrativa aprovada pelo gerente',
+  });
+  assert.match(calls[0].opts.headers.Authorization, /^Bearer synthetic$/);
+});
+test('apply refuses missing administrative reason, rejected PATCH and absent canonical readback', async () => {
+  const core = { api:'https://api.airtrust.online', token:'synthetic', id:577,
+    observations:'Reconciliacao administrativa de matricula 577',
+    readEnrollment: async () => ({status:'EM_ANDAMENTO',progresso_pct:100}),
+  };
+  await assert.rejects(() => performCanonicalCompletion({...core, observations:''}), /REASON_MISSING/);
+  await assert.rejects(() => performCanonicalCompletion({...core, fetcher:async()=>({status:409,json:{success:false}})}), /CANONICAL_API_REJECTED_409/);
+  await assert.rejects(() => performCanonicalCompletion({...core, fetcher:async()=>({status:200,json:{success:true}})}), /POSTCHECK_FAILED/);
 });

@@ -93,6 +93,22 @@ export function publicReport(rows, writes, mode = MODE) {
     rows: rows.map(x => ({ course: x.course, status: x.status, progress: x.progress, already_completed: x.already_completed })),
     evidence_hash: sha(rows), writes, scorm_changed: false, historical_dates_fabricated: false, personal_data: false };
 }
+// Isolated canonical mutation boundary to exercise the actual PATCH and readback.
+export async function performCanonicalCompletion({token, id, observations,
+  api = API, fetcher = fetchJson, readEnrollment = async (t, enrollmentId) => read(t, `/api/lms/matriculas/${enrollmentId}`)}) {
+  requireProof(Number.isSafeInteger(id) && TARGETS.some(t => t.id === id), 'UNAUTHORIZED_ID');
+  requireProof(typeof observations === 'string' && observations.length >= 10, 'ADMINISTRATIVE_REASON_MISSING');
+  const r = await fetcher(api + `/api/lms/matriculas/${id}/status`, {
+    method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'CONCLUIDO', observacoes: observations }),
+  });
+  requireProof(r.status === 200 && r.json?.success === true, 'CANONICAL_API_REJECTED_' + r.status);
+  const after = await readEnrollment(token, id);
+  requireProof(after.status === 'CONCLUIDO' && Number(after.progresso_pct) === 100 &&
+    Boolean(after.data_conclusao), 'POSTCHECK_FAILED');
+  return after;
+}
+
 async function main() {
   requireProof(process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_REF === 'refs/heads/main', 'MAIN_ONLY');
   requireProof(MAIN === process.env.GITHUB_SHA && /^[a-f0-9]{40}$/.test(PROD), 'SHA_INVALID');
@@ -118,13 +134,7 @@ async function main() {
     const detail = await read(token, `/api/lms/matriculas/${row.id}`);
     requireProof(sha(validateTarget(detail, TARGETS.find(x => x.id === row.id))) === sha(row), 'ROW_CHANGED');
     const observations = [String(detail.observacoes ?? '').trim(), reason].filter(Boolean).join('\n\n');
-    const r = await fetchJson(API + `/api/lms/matriculas/${row.id}/status`, {
-      method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'CONCLUIDO', observacoes }) });
-    requireProof(r.status === 200 && r.json?.success === true, 'CANONICAL_API_REJECTED_' + r.status);
-    const after = await read(token, `/api/lms/matriculas/${row.id}`);
-    requireProof(after.status === 'CONCLUIDO' && Number(after.progresso_pct) === 100 &&
-      Boolean(after.data_conclusao), 'POSTCHECK_FAILED');
+    await performCanonicalCompletion({ token, id: row.id, observations });
     writes++;
     processed.add(row.id);
   }
