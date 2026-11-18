@@ -21,7 +21,8 @@ describe('LmsPlayer SCORM handoff session invalidation', () => {
 
   it('preserves a running SCO for transient refresh failures, not a 409', () => {
     const begin = source.indexOf('// For transient connectivity failures');
-    const end = source.indexOf('} catch {', begin);
+    // Isolate the transient asset-refresh branch; later recovery handlers are unrelated.
+    const end = source.indexOf('} catch (error) {', begin);
     expect(begin).toBeGreaterThan(0);
     expect(end).toBeGreaterThan(begin);
     const transient = source.slice(begin, end);

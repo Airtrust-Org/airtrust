@@ -8,7 +8,7 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import LmsPlayer from '@/react-app/pages/lms/LmsPlayer';
@@ -232,6 +232,41 @@ describe('LmsPlayer — diagnóstico granular de conclusão', () => {
     expect(pending).toHaveTextContent('conclusão ou aprovação válida');
     expect(screen.getByTestId('lms-missing-slide-numbers')).toHaveTextContent('2, 7, 22');
     expect(screen.queryByText('Curso concluído')).not.toBeInTheDocument();
+  });
+
+  it('reabre o iframe e mostra telas faltantes quando pacote SOP não permite recuperação V4 (409)', async () => {
+    matriculaMock = {
+      ...baseMatricula(), progresso_pct: 99,
+      scorm_progresso: { cmi_json: JSON.stringify({ 'cmi.core.lesson_location': '84/84' }) },
+      closure_readiness: {
+        code: 'PROGRESS_EVIDENCE_MISSING',
+        eligible_for_server_verification: false,
+        missing: ['manifest_required_units', 'terminal_scorm_status'],
+        study_coverage: { source: null, verified: false, required_total: 84, recorded: 78 },
+        slide_coverage: { total: 84, recorded: 78, missing_numbers: [1, 2, 3, 4, 5, 6] },
+      },
+    };
+    fetchWithAuthMock.mockImplementation(async (url: string) =>
+      String(url).endsWith('/scorm-missing-interactions-recover')
+        ? { ok: false, status: 409, json: async () => ({ error: 'Não há interações incompletas recuperáveis nesta edição' }) }
+        : { ok: true, json: async () => ({ success: true, data: {} }) });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      renderPlayer();
+      const frame = await frameWindow();
+      const originalUrl = frame?.frameElement?.getAttribute('src');
+      expect(originalUrl).toBeTruthy();
+      expect(screen.getByTestId('lms-missing-slide-numbers')).toHaveTextContent('1, 2, 3, 4, 5, 6');
+      fireEvent.click(screen.getByTestId('lms-recover-missing-scenarios'));
+      await waitFor(() => expect(fetchWithAuthMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/scorm-missing-interactions-recover'))).toBe(true));
+      await waitFor(() => expect(document.querySelector('iframe')?.getAttribute('src'))
+        .toBe(originalUrl), { timeout: 2500 });
+      expect(refetchMatriculaMock).toHaveBeenCalled();
+      expect(screen.getByTestId('lms-missing-slide-numbers')).toHaveTextContent('1, 2, 3, 4, 5, 6');
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   it('não faz reconciliação automática em matrícula de edição incompatível', async () => {
