@@ -7,6 +7,7 @@ const serviceMocks = vi.hoisted(() => ({
   atualizarHistoricoQualificacao: vi.fn(),
   criarHistoricoQualificacao: vi.fn(),
   useTiposQualificacao: vi.fn(),
+  useFuncionariosAtivos: vi.fn(),
 }));
 
 const funcionariosMock = [
@@ -64,11 +65,7 @@ vi.mock('@/react-app/services/qualificacoesService', () => ({
 }));
 
 vi.mock('@/react-app/hooks/qualificacoes/useFuncionariosAtivos', () => ({
-  useFuncionariosAtivos: () => ({
-    data: funcionariosMock,
-    isLoading: false,
-    error: null,
-  }),
+  useFuncionariosAtivos: (...args: unknown[]) => serviceMocks.useFuncionariosAtivos(...args),
 }));
 
 vi.mock('@/react-app/hooks/qualificacoes/useTiposQualificacao', () => ({
@@ -96,6 +93,8 @@ describe('ModalAtribuirQualificacao', () => {
     serviceMocks.atualizarHistoricoQualificacao.mockReset();
     serviceMocks.criarHistoricoQualificacao.mockReset();
     serviceMocks.atualizarHistoricoQualificacao.mockResolvedValue({ id: 77 });
+    serviceMocks.useFuncionariosAtivos.mockReset();
+    serviceMocks.useFuncionariosAtivos.mockReturnValue({ data: funcionariosMock, isLoading: false, error: null });
     serviceMocks.useTiposQualificacao.mockReset();
     serviceMocks.useTiposQualificacao.mockReturnValue({
       data: tiposMock,
@@ -140,6 +139,39 @@ describe('ModalAtribuirQualificacao', () => {
           tipo_treinamento: 'RECORRENTE',
           data_vencimento: '2027-09-03',
         }),
+      );
+    });
+  });
+
+  it('mantém a data editada quando o lookup de funcionários chega depois', async () => {
+    serviceMocks.useFuncionariosAtivos.mockReturnValue({ data: undefined, isLoading: true, error: null });
+    const props = {
+      isOpen: true,
+      onClose: vi.fn(),
+      habilitacao: {
+        id: 77,
+        funcionario_id: 1,
+        qualificacao_id: 10,
+        qualificacao_codigo: 'F1',
+        data_conclusao: '2027-10-31',
+        data_vencimento: '2028-10-31',
+        tipo_treinamento: 'RECORRENTE',
+      },
+    };
+    const { rerender } = render(<ModalAtribuirQualificacao {...props} />);
+    const completionInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(completionInput).toBeTruthy();
+    fireEvent.change(completionInput, { target: { value: '2026-10-31' } });
+    expect(completionInput).toHaveValue('2026-10-31');
+
+    serviceMocks.useFuncionariosAtivos.mockReturnValue({ data: funcionariosMock, isLoading: false, error: null });
+    rerender(<ModalAtribuirQualificacao {...props} />);
+    expect(completionInput).toHaveValue('2026-10-31');
+    fireEvent.click(screen.getByRole('button', { name: '✓ Salvar' }));
+    await waitFor(() => {
+      expect(serviceMocks.atualizarHistoricoQualificacao).toHaveBeenCalledWith(
+        77,
+        expect.objectContaining({ data_conclusao: '2026-10-31' }),
       );
     });
   });
