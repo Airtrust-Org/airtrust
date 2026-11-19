@@ -37,21 +37,33 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
            AND (fcc.data_fim IS NULL OR date(fcc.data_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})))`
       : `AND ${alias}.condicao_id IS NULL`
     : '';
-  const aircraftGuard=(alias:string)=> hasAircraft
-    ? supportsAircraft ? `AND (${alias}.aeronave_modelo IS NULL
-        OR TRIM(${alias}.aeronave_modelo)='' OR EXISTS (
+  const supportsLegacyAircraft=await hasSchemaColumn(db,'funcionarios','aeronave');
+  const legacyAircraft="UPPER(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(f.aeronave,''),' ',''),'/','|'),';','|'),',','|'))";
+  const aircraftGuard=(alias:string)=> !hasAircraft ? '' : `AND (
+      ${alias}.aeronave_modelo IS NULL OR TRIM(${alias}.aeronave_modelo)=''
+      ${supportsAircraft ? `OR EXISTS (
           SELECT 1 FROM funcionarios_aeronaves fa
           JOIN aeronaves a ON a.id=fa.aeronave_id AND a.empresa_id=f.empresa_id
             AND a.deleted_at IS NULL
           WHERE fa.funcionario_id=f.id
             ${aircraftAssignmentTenantGuard}
-            AND fa.ativo=1 AND fa.deleted_at IS NULL
+            AND fa.deleted_at IS NULL AND COALESCE(fa.ativo,1)=1
             AND (fa.data_inicio IS NULL OR date(fa.data_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
             AND (fa.data_fim IS NULL OR date(fa.data_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
             AND UPPER(REPLACE(TRIM(a.modelo),' ',''))=
-                UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ',''))))`
-      : `AND (${alias}.aeronave_modelo IS NULL OR TRIM(${alias}.aeronave_modelo)='')`
-    : '';
+                UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ','')))` : ''}
+      ${supportsLegacyAircraft ? `OR (
+        ${supportsAircraft ? `NOT EXISTS (
+          SELECT 1 FROM funcionarios_aeronaves fax
+          JOIN aeronaves ax ON ax.id=fax.aeronave_id
+            AND ax.empresa_id=f.empresa_id AND ax.deleted_at IS NULL
+          WHERE fax.funcionario_id=f.id
+            ${hasAircraftAssignmentTenant ? 'AND fax.empresa_id=f.empresa_id' : ''}
+            AND fax.deleted_at IS NULL AND COALESCE(fax.ativo,1)=1)` : '1=1'}
+        AND ('|' || ${legacyAircraft} || '|') LIKE
+          '%|' || UPPER(REPLACE(TRIM(${alias}.aeronave_modelo),' ','')) || '|%'
+      )` : ''}
+    )`;
   const priority=(alias:string)=>`(CASE ${alias}.escopo WHEN 'FUNCIONARIO' THEN 5000
     WHEN 'SETOR_FUNCAO' THEN 40 WHEN 'FUNCAO' THEN 30 WHEN 'SETOR' THEN 20
     WHEN 'EMPRESA' THEN 10 ELSE 0 END
