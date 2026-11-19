@@ -127,14 +127,25 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
         await stampLmsEnrollmentEvidenceProfile(db,{empresaId,matriculaId:existing.id,funcionarioId,qualificacaoTipoId:row.qualificacao_tipo_id});
         summary.reactivated+=1;continue;
       }
-      summary.preserved+=1;continue;
+      throw new Error('AUTO_DESIGNACAO_EXISTING_CYCLE_NOT_REUSABLE');
     }
     const matriculaId=await createComplianceEnrollmentAtomic(db,{
       empresaId,funcionarioId,cursoId:courseId,qualificacaoTipoId:row.qualificacao_tipo_id,
       regraId:row.regra_id,origin:'AUTO_DESIGNACAO',operationalDate,usuarioId,
       observacoes:'Matrícula automática: designação de Compliance',
     });
-    if(matriculaId===null){summary.preserved+=1;continue;}
+    if(matriculaId===null){
+      // A rejected atomic insert is not proof of a matrícula. It may be a
+      // policy/tenant change after the preview. Only report preservation if
+      // another request has actually established an active enrollment.
+      const confirmed=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas
+        WHERE empresa_id=? AND curso_id=? AND funcionario_id=? AND deleted_at IS NULL
+        ORDER BY id DESC LIMIT 1`).bind(empresaId,courseId,funcionarioId)
+        .first<{id:number;status:string;deleted_at:string|null}>();
+      if(!hasActiveMatriculaCycle(confirmed))
+        throw new Error('AUTO_DESIGNACAO_ENROLLMENT_NOT_CONFIRMED');
+      summary.preserved+=1;continue;
+    }
     summary.created+=1;
   }
   return summary;
