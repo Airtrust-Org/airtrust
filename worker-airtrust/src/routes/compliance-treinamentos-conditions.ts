@@ -124,7 +124,7 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
       if(hasActiveMatriculaCycle(existing)){summary.preserved+=1;continue;}
       if(canReuseMatriculaCycle(existing)){
         await resetMatriculaForNewCycle(db,{matriculaId:existing.id,dataExpiracao:null,observacoes:'Matrícula automática: designação de Compliance',origin:'AUTO_DESIGNACAO',empresaId});
-        await stampLmsEnrollmentEvidenceProfile(db,{empresaId,matriculaId:existing.id,funcionarioId,qualificacaoTipoId:row.qualificacao_tipo_id});
+        await stampLmsEnrollmentEvidenceProfile(db,{empresaId,matriculaId:existing.id,funcionarioId,qualificacaoTipoId:row.qualificacao_tipo_id,operationalDate});
         summary.reactivated+=1;continue;
       }
       throw new Error('AUTO_DESIGNACAO_EXISTING_CYCLE_NOT_REUSABLE');
