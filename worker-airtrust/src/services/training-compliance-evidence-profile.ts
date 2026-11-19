@@ -257,6 +257,7 @@ export async function stampLmsEnrollmentEvidenceProfile(
     matriculaId: number;
     funcionarioId: number;
     qualificacaoTipoId: number | null;
+    operationalDate?: string;
   },
 ): Promise<string | null> {
   if (!params.qualificacaoTipoId) return null;
@@ -265,6 +266,7 @@ export async function stampLmsEnrollmentEvidenceProfile(
     empresaId: params.empresaId,
     funcionarioId: params.funcionarioId,
     qualificacaoTipoId: params.qualificacaoTipoId,
+    operationalDate: params.operationalDate,
   });
   await db
     .prepare(
