@@ -100,6 +100,8 @@ describe('Tenant-scoped designation enrollment synchronization',()=>{
     expect(writer).toContain("createComplianceEnrollmentAtomic(");
     expect(writer).toContain("operationalDate,usuarioId");
     expect(writer).not.toContain("INSERT INTO lms_matriculas");
+    expect(writer).toContain("AUTO_DESIGNACAO_ENROLLMENT_NOT_CONFIRMED");
+    expect(writer).toContain("AUTO_DESIGNACAO_EXISTING_CYCLE_NOT_REUSABLE");
   });
   it('pre-enrolls future designations while preserving effective dates for Compliance obligations',()=>{
     const code=readFileSync(resolve(process.cwd(),'src/routes/compliance-treinamentos-conditions.ts'),'utf8');
