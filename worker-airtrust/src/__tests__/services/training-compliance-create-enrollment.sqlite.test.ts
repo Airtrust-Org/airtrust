@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteD1Database } from '../helpers/qualification-history-sqlite-d1';
 import { createComplianceEnrollmentAtomic } from '../../services/training-compliance-create-enrollment';
+import { stampLmsEnrollmentEvidenceProfile } from '../../services/training-compliance-evidence-profile';
 
 const databases: SqliteD1Database[] = [];
 afterEach(() => databases.splice(0).forEach(db => db.close()));
@@ -139,6 +140,36 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(count(db,'lms_matriculas')).toBe(1);
   });
 
+  it('stamps the future effective profile on a reusable completed enrollment',async()=>{
+    const db=setup();
+    db.database.exec(`
+      ALTER TABLE funcionarios ADD COLUMN aeronave TEXT;
+      ALTER TABLE lms_matriculas ADD COLUMN updated_at TEXT;
+      CREATE TABLE funcionarios_compliance_condicoes (
+        empresa_id INTEGER,funcionario_id INTEGER,condicao_id INTEGER,ativo INTEGER,
+        deleted_at TEXT,data_inicio TEXT,data_fim TEXT
+      );
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      UPDATE treinamento_requisitos SET condicao_id=10,
+        perfil_competencia='LOSA_OBSERVADOR' WHERE id=91;
+      INSERT INTO funcionarios_compliance_condicoes VALUES(1,1000,10,1,NULL,'2099-01-01',NULL);
+      INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes,status)
+        VALUES(1,56,1000,'synthetic completed cycle','CONCLUIDO');
+    `);
+    const params={empresaId:1,matriculaId:1,funcionarioId:1000,qualificacaoTipoId:100};
+    expect(await stampLmsEnrollmentEvidenceProfile(db.asD1(),params)).toBeNull();
+    expect(await stampLmsEnrollmentEvidenceProfile(db.asD1(),{
+      ...params,operationalDate:'2099-01-01',
+    })).toBe('LOSA_OBSERVADOR');
+    const record=db.database.prepare('SELECT perfil_competencia FROM lms_matriculas WHERE id=1')
+      .get() as {perfil_competencia:string|null};
+    expect(record.perfil_competencia).toBe('LOSA_OBSERVADOR');
+  });
+
   it('supports the deployed legacy aircraft assignment schema without empresa_id for ordinary enrollment', async () => {
     const db = setup();
     db.database.exec(`
@@ -154,6 +185,42 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(count(db, 'lms_matriculas')).toBe(1);
     expect(count(db, 'lms_matricula_ciclos')).toBe(1);
     expect(count(db, 'audit_logs')).toBe(1);
+  });
+
+  it('accepts a legacy-only aircraft designation without normalized assignment', async () => {
+    const db=setup();
+    db.database.exec(`
+      ALTER TABLE funcionarios ADD COLUMN aeronave TEXT;
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      UPDATE funcionarios SET aeronave='AW139' WHERE id=1000;
+      UPDATE treinamento_requisitos SET aeronave_modelo='AW139' WHERE id=91;
+    `);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request({origin:'AUTO_DESIGNACAO'})))
+      .toBeGreaterThan(0);
+    expect(count(db,'lms_matriculas')).toBe(1);
+  });
+
+  it('does not use legacy aircraft fallback when a different normalized aircraft is assigned', async () => {
+    const db=setup();
+    db.database.exec(`
+      ALTER TABLE funcionarios ADD COLUMN aeronave TEXT;
+      CREATE TABLE funcionarios_aeronaves (
+        funcionario_id INTEGER, aeronave_id INTEGER, ativo INTEGER,
+        deleted_at TEXT, data_inicio TEXT, data_fim TEXT
+      );
+      CREATE TABLE aeronaves (id INTEGER, empresa_id INTEGER, modelo TEXT, deleted_at TEXT);
+      UPDATE funcionarios SET aeronave='AW139' WHERE id=1000;
+      UPDATE treinamento_requisitos SET aeronave_modelo='AW139' WHERE id=91;
+      INSERT INTO aeronaves VALUES (30,1,'S76',NULL);
+      INSERT INTO funcionarios_aeronaves VALUES (1000,30,1,NULL,NULL,NULL);
+    `);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),request({origin:'AUTO_DESIGNACAO'})))
+      .toBeNull();
+    expect(count(db,'lms_matriculas')).toBe(0);
   });
 
   it('keeps cross-tenant aircraft denied with the deployed legacy assignment schema', async () => {
