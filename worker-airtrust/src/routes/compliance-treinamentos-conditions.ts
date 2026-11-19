@@ -334,7 +334,7 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     .first<{ funcionario: number; condicao: number }>();
   if (Number(valid?.funcionario) !== 1 || Number(valid?.condicao) !== 1)
     throw new ApiError('Funcionário ou condição fora do tenant', 404);
-  const dataInicio = String(body.data_inicio || '').trim() || new Date().toISOString().slice(0, 10);
+  const dataInicio = String(body.data_inicio || '').trim() || getTodayIsoSaoPaulo();
   const dataFim = String(body.data_fim || '').trim() || null;
   const origem = String(body.origem || 'EMPRESA')
     .trim()
