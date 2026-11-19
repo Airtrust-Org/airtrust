@@ -85,15 +85,28 @@ describe('Compliance requirement save enrollment synchronization', () => {
 
 
 describe('Tenant-scoped designation enrollment synchronization',()=>{
-  it('mutating assignment query includes the same tenant-6 null modality gate as diagnostics',()=>{
+  it('resolves the winning condition rule without a deeply nested effective-requirement predicate',()=>{
     const code=readFileSync(resolve(process.cwd(),'src/routes/compliance-treinamentos-conditions.ts'),'utf8');
     const writer=code.slice(code.indexOf('async function autoEnrollAssignedConditionRequirements'),
-      code.indexOf('async function inspectAssignedConditionEnrollmentContract'));
-    expect(writer).toContain("tr_assigned.modalidade_requerida='EAD' OR (tr_assigned.modalidade_requerida IS NULL AND tr_assigned.empresa_id=6)");
-    expect(writer).toContain("COALESCE(tr_assigned.auto_matricular_ead,0)=1");
-    expect(writer).toContain("Number(row.course_count)!==1");
-    expect(writer).toContain("summary.created+=1");
+      code.indexOf("app.get('/condicoes/catalogos'"));
+    expect(writer).toContain("tr.modalidade_requerida='EAD' OR (tr.modalidade_requerida IS NULL AND tr.empresa_id=6)");
+    expect(writer).toContain("COALESCE(tr.auto_matricular_ead,0)=1");
+    expect(writer).toContain("NOT EXISTS(SELECT 1 FROM treinamento_requisitos higher");
+    expect(writer).toContain('trainingComplianceRuleApplicabilitySql');
+    expect(writer).toContain('trainingComplianceRulePrioritySql');
+    expect(writer).not.toContain('trainingComplianceEffectiveRequirementPredicateSql');
+    expect(writer).toContain("courses.results||[]).length!==1");
     expect(writer).toContain("summary.skipped_valid_evidence+=1");
-    expect(writer).toContain("ensureMatriculaCycle(");
+    expect(writer).toContain("createComplianceEnrollmentAtomic(");
+    expect(writer).toContain("operationalDate,usuarioId");
+    expect(writer).not.toContain("INSERT INTO lms_matriculas");
+  });
+  it('pre-enrolls future designations while preserving effective dates for Compliance obligations',()=>{
+    const code=readFileSync(resolve(process.cwd(),'src/routes/compliance-treinamentos-conditions.ts'),'utf8');
+    const atomic=readFileSync(resolve(process.cwd(),'src/services/training-compliance-create-enrollment.ts'),'utf8');
+    expect(code).toContain('dataInicio>getTodayIsoSaoPaulo()?dataInicio:getTodayIsoSaoPaulo()');
+    expect(atomic).toContain('operationalDate?:string');
+    expect(atomic).toContain('const operationalDate=p.operationalDate || getTodayIsoSaoPaulo()');
+    expect(code).toContain("origin:'AUTO_DESIGNACAO'");
   });
 });
