@@ -678,18 +678,13 @@ export const getHistoricoListHandler = safe(async (c) => {
         renovadas: Number((globalCountsResult as any)?.renovadas || 0),
         planejadas: Number((globalCountsResult as any)?.planejadas || 0),
       };
-    } else {
-      const totalOnlyQuery = `${renewalWindowWithClause}
+    }
+    // Sem stats, o total sai da própria consulta paginada (COUNT(*) OVER ()), evitando
+    // reavaliar a CTE de janela do tenant uma segunda vez (ver `dataQuery`).
+    const totalOnlyQuery = `${renewalWindowWithClause}
       SELECT COUNT(*) as total
       ${baseFromAndJoins}
       WHERE ${whereClause}`;
-
-      const totalOnlyResult = await db
-        .prepare(totalOnlyQuery)
-        .bind(tenantCtx.empresaId, ...params)
-        .first();
-      statsPayload.total = Number((totalOnlyResult as any)?.total || 0);
-    }
 
     // DADOS PAGINADOS
     const fallbackCertificadoDocIdExpr = storageColumns.pastaVirtualHasCertificacaoId
@@ -712,6 +707,7 @@ export const getHistoricoListHandler = safe(async (c) => {
 
     const dataQuery = `${renewalWindowWithClause}
     SELECT 
+      ${includeStats ? '' : 'COUNT(*) OVER () AS __total_count,'}
       qh.id,
       qh.funcionario_id,
       f.nome as funcionario_nome,
@@ -798,10 +794,29 @@ export const getHistoricoListHandler = safe(async (c) => {
     LIMIT ? OFFSET ?`;
 
     const dataParams = [tenantCtx.empresaId, ...params, limitNum, offset];
-    const { results } = await db
+    const { results: rawResults } = await db
       .prepare(dataQuery)
       .bind(...dataParams)
       .all();
+
+    let results = rawResults;
+    if (!includeStats) {
+      const firstRow = (rawResults?.[0] ?? null) as { __total_count?: unknown } | null;
+      if (firstRow) {
+        statsPayload.total = Number(firstRow.__total_count || 0);
+      } else if (pageNum > 1) {
+        // Página fora do intervalo: sem linhas não há total na janela; confirma por contagem.
+        const totalOnlyResult = await db
+          .prepare(totalOnlyQuery)
+          .bind(tenantCtx.empresaId, ...params)
+          .first();
+        statsPayload.total = Number((totalOnlyResult as { total?: unknown } | null)?.total || 0);
+      }
+      results = (rawResults || []).map((row) => {
+        const { __total_count: _ignored, ...rest } = row as Record<string, unknown>;
+        return rest;
+      });
+    }
 
     // H-4: comparação por string ISO evita off-by-one de timezone com Date.getTime()
     // Dia civil de São Paulo (como o Compliance): a data UTC marcaria VENCIDA, entre 21h e 24h BRT,

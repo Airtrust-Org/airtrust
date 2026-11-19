@@ -310,7 +310,7 @@ export function useTreinamentosQuery(enabled: boolean) {
     queryFn: async () => {
       const hojeIso = new Date().toISOString().slice(0, 10);
       const [treinResult, solResult] = await Promise.allSettled([
-        fetchWithAuth(`${API_BASE}/qualificacoes/historico?status=PLANEJADA&limit=50`, {
+        fetchWithAuth(`${API_BASE}/qualificacoes/historico?status=PLANEJADA&limit=50&stats=false`, {
           headers: getHeaders(),
         }),
         fetchWithAuth(`${API_BASE}/treinamentos/solicitacoes?status=AGENDADA`, {
