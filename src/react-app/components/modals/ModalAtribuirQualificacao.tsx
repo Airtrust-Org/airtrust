@@ -203,7 +203,6 @@ export function ModalAtribuirQualificacao({
   }, [
     isOpen,
     defaultFuncionarioId,
-    instrutoresCadastrados,
     habilitacao?.id,
     habilitacao?.funcionario_id,
     habilitacao?.qualificacao_codigo,
@@ -213,6 +212,23 @@ export function ModalAtribuirQualificacao({
     habilitacao?.observacoes,
     habilitacao?.tipo_treinamento,
   ]);
+
+  // Late arrival of the employee lookup must never restore the original date
+  // over a date the operator has already edited in this modal.
+  useEffect(() => {
+    if (!isOpen || !habilitacao?.instrutor) return;
+    const target = String(habilitacao.instrutor).trim().toLowerCase();
+    const match = instrutoresCadastrados.find((instrutor) =>
+      [instrutor.nome, instrutor.matricula].some(
+        (value) => String(value || '').trim().toLowerCase() === target,
+      ),
+    );
+    if (match) {
+      setForm((prev) =>
+        prev.instrutor_id === String(match.id) ? prev : { ...prev, instrutor_id: String(match.id) },
+      );
+    }
+  }, [isOpen, habilitacao?.id, habilitacao?.instrutor, instrutoresCadastrados]);
 
   useEffect(() => {
     if (!habilitacao?.qualificacao_codigo || todosTipos.length === 0) {
