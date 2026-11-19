@@ -52,13 +52,24 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload.data as T;
 }
 
+// Compliance operational dates follow the company's São Paulo calendar, not UTC.
+// At 21:00–23:59 BRT, toISOString() already points to tomorrow.
+export function todayComplianceIso(referenceDate: Date = new Date()): string {
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(referenceDate);
+  const value = (kind: string) => dateParts.find((part) => part.type === kind)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
 export function TrainingComplianceConditionsEditor() {
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
   const [cargoFilterId, setCargoFilterId] = useState<number | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [conditionId, setConditionId] = useState<number | null>(null);
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => todayComplianceIso());
   const [endDate, setEndDate] = useState('');
   const [reference, setReference] = useState('');
   const [reason, setReason] = useState('');

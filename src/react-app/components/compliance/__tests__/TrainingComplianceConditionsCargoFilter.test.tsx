@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TrainingComplianceConditionsEditor } from '../TrainingComplianceConditionsEditor';
+import { TrainingComplianceConditionsEditor, todayComplianceIso } from '../TrainingComplianceConditionsEditor';
 
 const { fetchWithAuthMock, toastMock } = vi.hoisted(() => ({
   fetchWithAuthMock: vi.fn(),
@@ -18,6 +18,13 @@ function renderEditor() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(<QueryClientProvider client={client}><TrainingComplianceConditionsEditor /></QueryClientProvider>);
 }
+
+describe('Compliance designation operational date', () => {
+  it('does not roll over to tomorrow at 21:24 Brazil time when UTC is already next day', () => {
+    expect(todayComplianceIso(new Date('2026-11-19T00:24:00.000Z'))).toBe('2026-11-18');
+    expect(todayComplianceIso(new Date('2026-11-19T03:00:00.000Z'))).toBe('2026-11-19');
+  });
+});
 
 describe('Compliance designation catalog and optional job filter', () => {
   beforeEach(() => {
