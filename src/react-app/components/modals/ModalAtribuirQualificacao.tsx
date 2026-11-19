@@ -49,6 +49,8 @@ interface Funcionario {
   is_instrutor?: number | boolean;
 }
 
+const EMPTY_FUNCIONARIOS: Funcionario[] = [];
+
 function normalizeTipoTreinamentoForm(
   value?: string | null,
 ): 'INICIAL' | 'RECORRENTE' | 'SEMESTRAL' {
@@ -108,7 +110,7 @@ export function ModalAtribuirQualificacao({
   });
 
   const {
-    data: funcionariosData = [],
+    data: funcionariosData = EMPTY_FUNCIONARIOS,
     isLoading: loadingFuncionarios,
     error: errorFuncionarios,
   } = useFuncionariosAtivos(isOpen);
