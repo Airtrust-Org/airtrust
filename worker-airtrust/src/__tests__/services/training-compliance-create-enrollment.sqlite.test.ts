@@ -113,6 +113,32 @@ describe('Compliance atomic enrollment, policy and tenant guards (SQLite D1)', (
     expect(await createComplianceEnrollmentAtomic(db.asD1(),request())).toBeGreaterThan(0);
   });
 
+  it('provisions a future designation immediately, with tenant and effective-date guards intact',async()=>{
+    const db=setup();
+    db.database.exec(`
+      CREATE TABLE funcionarios_compliance_condicoes (
+        empresa_id INTEGER,funcionario_id INTEGER,condicao_id INTEGER,ativo INTEGER,
+        deleted_at TEXT,data_inicio TEXT,data_fim TEXT
+      );
+      UPDATE treinamento_requisitos SET condicao_id=10 WHERE id=91;
+      INSERT INTO funcionarios_compliance_condicoes
+        VALUES (1,1000,10,1,NULL,'2099-01-01',NULL);
+    `);
+    const immediate=request({origin:'AUTO_DESIGNACAO'});
+    // The obligation is not effective today, but its future enrollment may be
+    // prepared now when the explicit designation begins.
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),immediate)).toBeNull();
+    const prepared=await createComplianceEnrollmentAtomic(db.asD1(),
+      request({origin:'AUTO_DESIGNACAO',operationalDate:'2099-01-01'}));
+    expect(prepared).toBeGreaterThan(0);
+    expect(count(db,'lms_matriculas')).toBe(1);
+    expect(count(db,'lms_matricula_ciclos')).toBe(1);
+    expect(count(db,'audit_logs')).toBe(1);
+    expect(await createComplianceEnrollmentAtomic(db.asD1(),
+      request({origin:'AUTO_DESIGNACAO',operationalDate:'2099-01-01'}))).toBeNull();
+    expect(count(db,'lms_matriculas')).toBe(1);
+  });
+
   it('supports the deployed legacy aircraft assignment schema without empresa_id for ordinary enrollment', async () => {
     const db = setup();
     db.database.exec(`
