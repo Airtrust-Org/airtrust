@@ -11,15 +11,14 @@ import {
 } from '../middleware/employee-sector-access';
 import {
   canReuseMatriculaCycle,
-  ensureMatriculaCycle,
   hasActiveMatriculaCycle,
   resetMatriculaForNewCycle,
 } from '../services/lms-matricula-cycle';
+import { createComplianceEnrollmentAtomic } from '../services/training-compliance-create-enrollment';
 import { stampLmsEnrollmentEvidenceProfile } from '../services/training-compliance-evidence-profile';
 import { classifyComplianceEnrollmentFailure } from '../services/training-compliance-rule-enrollment';
 import { runDesignationEnrollmentWithDiagnostics } from '../services/training-compliance-assignment-diagnostics';
 import {
-  trainingComplianceEffectiveRequirementPredicateSql,
   trainingComplianceRuleApplicabilitySql,
   trainingComplianceRulePrioritySql,
   TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE,
@@ -79,25 +78,48 @@ async function ensureSchema(db: D1Database) {
 }
 
 type AutoEnrollmentSummary={created:number;reactivated:number;preserved:number;skipped_valid_evidence:number;unavailable_course:number};
-async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:number,funcionarioId:number,condicaoId:number):Promise<AutoEnrollmentSummary>{
+async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:number,funcionarioId:number,condicaoId:number,operationalDate:string,usuarioId?:string):Promise<AutoEnrollmentSummary>{
   const summary={created:0,reactivated:0,preserved:0,skipped_valid_evidence:0,unavailable_course:0};
-  const predicate=trainingComplianceEffectiveRequirementPredicateSql({ruleAlias:'tr_effective',employeeAlias:'f',qualificationExpr:'qt.id',empresaExpr:'f.empresa_id',requireAutoEnrollment:true});
-  const operationalDate=getTodayIsoSaoPaulo();
+  // Resolve the effective rule in a separate, narrow query. The former
+  // correlated effective-requirement expression could exceed D1's SQL depth
+  // limit and leave the durable designation without a confirmed enrollment.
+  // Evaluate upcoming designations at their start date for immediate provisioning.
+  const applies=trainingComplianceRuleApplicabilitySql('tr','f');
+  const higherApplies=trainingComplianceRuleApplicabilitySql('higher','f');
+  const priority=trainingComplianceRulePrioritySql('tr');
+  const higherPriority=trainingComplianceRulePrioritySql('higher');
   const {results}=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
-    SELECT qt.id qualificacao_tipo_id,qt.validade,MIN(lc.id) course_id,COUNT(DISTINCT lc.id) course_count
-    FROM funcionarios f JOIN qualificacoes_tipos qt ON qt.empresa_id=f.empresa_id AND qt.ativo=1 AND qt.deleted_at IS NULL
-    LEFT JOIN lms_cursos lc ON lc.empresa_id=f.empresa_id AND lc.qualificacao_tipo_id=qt.id AND lc.ativo=1 AND lc.publicado=1 AND lc.deleted_at IS NULL
-    WHERE f.id=? AND f.empresa_id=? AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
+    SELECT tr.id regra_id,tr.qualificacao_tipo_id,qt.validade
+    FROM funcionarios f
+    JOIN treinamento_requisitos tr ON tr.empresa_id=f.empresa_id
+    JOIN qualificacoes_tipos qt ON qt.id=tr.qualificacao_tipo_id AND qt.empresa_id=tr.empresa_id
+      AND qt.ativo=1 AND qt.deleted_at IS NULL
+    WHERE f.id=? AND f.empresa_id=? AND f.ativo=1 AND f.deleted_at IS NULL
+      AND tr.condicao_id=? AND tr.ativo=1 AND tr.deleted_at IS NULL
+      AND tr.obrigatoriedade='OBRIGATORIA'
+      AND COALESCE(tr.auto_matricular_ead,0)=1
+      AND (tr.modalidade_requerida='EAD' OR (tr.modalidade_requerida IS NULL AND tr.empresa_id=6))
       AND UPPER(TRIM(COALESCE(qt.categoria,''))) IN ('EAD','TREINAMENTO EAD')
-      AND EXISTS(SELECT 1 FROM treinamento_requisitos tr_assigned WHERE tr_assigned.empresa_id=f.empresa_id AND tr_assigned.qualificacao_tipo_id=qt.id AND tr_assigned.condicao_id=? AND tr_assigned.obrigatoriedade='OBRIGATORIA' AND COALESCE(tr_assigned.auto_matricular_ead,0)=1 AND (tr_assigned.modalidade_requerida='EAD' OR (tr_assigned.modalidade_requerida IS NULL AND tr_assigned.empresa_id=6)) AND tr_assigned.ativo=1 AND tr_assigned.deleted_at IS NULL)
-      AND ${predicate}
-    GROUP BY qt.id,qt.validade ORDER BY qt.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId).all<{qualificacao_tipo_id:number;validade:number|null;course_id:number|null;course_count:number}>();
+      AND (tr.vigencia_inicio IS NULL OR date(tr.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND (tr.vigencia_fim IS NULL OR date(tr.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+      AND ${applies}
+      AND NOT EXISTS(SELECT 1 FROM treinamento_requisitos higher
+        WHERE higher.empresa_id=tr.empresa_id AND higher.qualificacao_tipo_id=tr.qualificacao_tipo_id
+          AND higher.id<>tr.id AND higher.ativo=1 AND higher.deleted_at IS NULL
+          AND (higher.vigencia_inicio IS NULL OR date(higher.vigencia_inicio)<=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND (higher.vigencia_fim IS NULL OR date(higher.vigencia_fim)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})
+          AND ${higherApplies}
+          AND (${higherPriority}>${priority} OR (${higherPriority}=${priority} AND higher.id>tr.id)))
+    ORDER BY tr.qualificacao_tipo_id,tr.id`).bind(operationalDate,funcionarioId,empresaId,condicaoId)
+    .all<{regra_id:number;qualificacao_tipo_id:number;validade:number|null}>();
   for(const row of results||[]){
-    if(Number(row.course_count)!==1||!row.course_id){summary.unavailable_course+=1;continue;}
+    const courses=await db.prepare(`SELECT id FROM lms_cursos WHERE empresa_id=? AND qualificacao_tipo_id=? AND ativo=1 AND publicado=1 AND deleted_at IS NULL ORDER BY id LIMIT 2`).bind(empresaId,row.qualificacao_tipo_id).all<{id:number}>();
+    if((courses.results||[]).length!==1){summary.unavailable_course+=1;continue;}
+    const courseId=Number(courses.results[0].id);
     const valid=await db.prepare(`WITH ${TRAINING_COMPLIANCE_OPERATIONAL_DATE_CTE}
       SELECT 1 ok FROM qualificacoes_historico qh JOIN qualificacoes_tipos qt ON qt.id=? AND qt.empresa_id=? WHERE qh.empresa_id=? AND qh.funcionario_id=? AND qh.deleted_at IS NULL AND (qh.qualificacao_id=qt.id OR UPPER(TRIM(COALESCE(qh.qualificacao_codigo,'')))=UPPER(TRIM(qt.codigo))) AND UPPER(COALESCE(qh.status,'')) NOT IN ('CANCELADO','CANCELADA','PLANEJADO','PLANEJADA') AND ((qh.data_vencimento IS NOT NULL AND date(qh.data_vencimento)>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL}) OR (qh.data_vencimento IS NULL AND qt.validade IS NULL AND qh.data_conclusao IS NOT NULL) OR (qh.data_vencimento IS NULL AND (${sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade')}) IS NOT NULL AND qh.data_conclusao IS NOT NULL AND ${sqlAddMonthsClamped('qh.data_conclusao', sqlEffectiveValidityMonths('qh.validade_meses', 'qt.codigo', 'qt.validade'))}>=${TRAINING_COMPLIANCE_OPERATIONAL_DATE_SQL})) LIMIT 1`).bind(operationalDate,row.qualificacao_tipo_id,empresaId,empresaId,funcionarioId).first<{ok:number}>();
     if(valid?.ok){summary.skipped_valid_evidence+=1;continue;}
-    const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,row.course_id,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
+    const existing=await db.prepare(`SELECT id,status,deleted_at FROM lms_matriculas WHERE empresa_id=? AND curso_id=? AND funcionario_id=? ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END,id DESC LIMIT 1`).bind(empresaId,courseId,funcionarioId).first<{id:number;status:string;deleted_at:string|null}>();
     if(existing){
       if(hasActiveMatriculaCycle(existing)){summary.preserved+=1;continue;}
       if(canReuseMatriculaCycle(existing)){
@@ -107,12 +129,13 @@ async function autoEnrollAssignedConditionRequirements(db:D1Database,empresaId:n
       }
       summary.preserved+=1;continue;
     }
-    try{
-      const inserted=await db.prepare(`INSERT INTO lms_matriculas(empresa_id,curso_id,funcionario_id,observacoes) VALUES(?,?,?,'Matrícula automática: designação de Compliance')`).bind(empresaId,row.course_id,funcionarioId).run();
-      const matriculaId=Number(inserted.meta.last_row_id||0); if(!matriculaId) throw new Error('AUTO_DESIGNACAO_MATRICULA_NOT_CREATED');
-      const cycleId=await ensureMatriculaCycle(db,{matriculaId,origin:'AUTO_DESIGNACAO',empresaId}); if(!cycleId) throw new Error('AUTO_DESIGNACAO_CYCLE_NOT_CREATED');
-      await stampLmsEnrollmentEvidenceProfile(db,{empresaId,matriculaId,funcionarioId,qualificacaoTipoId:row.qualificacao_tipo_id}); summary.created+=1;
-    }catch(error){const m=error instanceof Error?error.message:String(error);if(m.includes('UNIQUE constraint failed')&&m.includes('lms_matriculas')){summary.preserved+=1;continue;}throw error;}
+    const matriculaId=await createComplianceEnrollmentAtomic(db,{
+      empresaId,funcionarioId,cursoId:courseId,qualificacaoTipoId:row.qualificacao_tipo_id,
+      regraId:row.regra_id,origin:'AUTO_DESIGNACAO',operationalDate,usuarioId,
+      observacoes:'Matrícula automática: designação de Compliance',
+    });
+    if(matriculaId===null){summary.preserved+=1;continue;}
+    summary.created+=1;
   }
   return summary;
 }
@@ -358,7 +381,9 @@ app.post('/condicoes/atribuicoes', requireRole('admin', 'manager'), async (c) =>
     ...extrairUsuarioAuditoria(c),
   });
   const {autoEnrollment,autoEnrollmentWarning}=await runDesignationEnrollmentWithDiagnostics(
-    () => autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId),
+    () => autoEnrollAssignedConditionRequirements(db,empresaId,funcionarioId,condicaoId,
+      dataInicio>getTodayIsoSaoPaulo()?dataInicio:getTodayIsoSaoPaulo(),
+      String(extrairUsuarioAuditoria(c).usuario_id||'')),
     () => inspectAssignedConditionEnrollmentContract(db,empresaId,funcionarioId,condicaoId),
     (phase,error) => console.error('[TRAINING_COMPLIANCE] Falha em designação:',{
       phase,code:classifyComplianceEnrollmentFailure(error),
