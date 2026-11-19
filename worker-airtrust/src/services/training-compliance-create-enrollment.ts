@@ -10,7 +10,8 @@ import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
 export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
   empresaId:number; funcionarioId:number; cursoId:number; qualificacaoTipoId:number;
   regraId:number; observacoes:string; usuarioId?:string;
-  origin:'CARGO_COMPLIANCE'|'COMPLIANCE_RULE_SAVE'|'REQUISITO_PENDENTE_QSMS';
+  origin:'CARGO_COMPLIANCE'|'COMPLIANCE_RULE_SAVE'|'REQUISITO_PENDENTE_QSMS'|'AUTO_DESIGNACAO';
+  operationalDate?:string;
 }):Promise<number|null> {
   if (!(await hasSchemaTable(db,'audit_logs')) || !(await hasSchemaTable(db,'lms_matricula_ciclos')))
     throw new Error('COMPLIANCE_ATOMIC_SCHEMA_MISSING');
@@ -62,7 +63,9 @@ export async function createComplianceEnrollmentAtomic(db:D1Database, p:{
     OR (${alias}.escopo='SETOR_FUNCAO' AND ${alias}.setor_id=f.setor_id AND ${alias}.funcao_id=f.funcao_id)
     OR (${alias}.escopo='FUNCIONARIO' AND ${alias}.funcionario_id=f.id))`;
   const hasProfile=await hasSchemaColumn(db,'lms_matriculas','perfil_competencia');
-  const operationalDate=getTodayIsoSaoPaulo();
+  // A future designation may provision an LMS seat now without making today's
+  // Compliance obligation effective. Validate policy as of the assignment start.
+  const operationalDate=p.operationalDate || getTodayIsoSaoPaulo();
   const profile=hasProfile ? await resolveEffectiveTrainingComplianceProfile(db,{
     empresaId:p.empresaId,funcionarioId:p.funcionarioId,qualificacaoTipoId:p.qualificacaoTipoId,
     operationalDate,
