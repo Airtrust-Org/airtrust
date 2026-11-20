@@ -530,7 +530,7 @@ export async function getDashboardAlerts(
       a.person.nome.localeCompare(b.person.nome) ||
       a.rule.qualificacao_tipo_id - b.rule.qualificacao_tipo_id,
     );
-    const alertasLms: AlertaCritico[] = pending.slice(0, 30).map(({ person, rule }, idx) => {
+    const alertasLms: AlertaCritico[] = pending.slice(0, 30).map(({ person, rule }, idx): AlertaCritico => {
       const missingQualification = rule.evidencia_pendente_motivo === 'QUALIFICACAO_AUSENTE';
       const statusLabel = missingQualification ? 'conclusão sem qualificação vinculada'
         : rule.status_compliance === 'VENCIDO' ? 'vencido'
