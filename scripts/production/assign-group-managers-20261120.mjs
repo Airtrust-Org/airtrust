@@ -75,7 +75,7 @@ export async function main(){
   check(response.status===201&&response.json?.success===true,'ASSIGNMENT_HTTP_'+response.status);
   const enrollment=response.json?.data?.auto_enrollment;
   const warning=response.json?.data?.auto_enrollment_warning;
-  check(enrollment!==null&&(!warning||warning==='UNMAPPED_MANDATORY_QUALIFICATION'),'ASSIGNMENT_ENROLLMENT_WARNING');
+  check(enrollment&&typeof enrollment==='object'&&(!warning||warning==='UNMAPPED_MANDATORY_QUALIFICATION'),'ASSIGNMENT_ENROLLMENT_WARNING');
   deferred+=Number(enrollment?.unavailable_course||0);
   created+=Number(enrollment?.created||0);
   preserved+=Number(enrollment?.preserved||0);
