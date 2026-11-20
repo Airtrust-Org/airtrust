@@ -263,7 +263,11 @@ export default function Funcionarios() {
     const nextParams = new URLSearchParams(searchParams);
     if (funcaoFilter) nextParams.set('funcao', funcaoFilter);
     else nextParams.delete('funcao');
-    setSearchParams(nextParams, { replace: true });
+    // Do not navigate when the URL is already synchronized: otherwise this
+    // effect can keep replacing the current location and refetching the list.
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
   }, [funcaoFilter, searchParams, setSearchParams]);
 
   const modelosAeronaveOptions = useMemo(() => {
