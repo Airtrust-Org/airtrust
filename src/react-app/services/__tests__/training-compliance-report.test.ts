@@ -71,3 +71,15 @@ describe('training compliance intelligent report', () => {
     expect(narrative).toContain('2 pendência(s) estão marcadas como críticas');
   });
 });
+
+
+describe('Compliance F-03 — mensagem de integridade do certificado', () => {
+  it('explica a qualificação não vinculada sem tratar como curso nunca realizado', () => {
+    expect(complianceStatusLabel({
+      ...baseRow,
+      status_compliance: 'NAO_REALIZADO',
+      evidencia_pendente_validacao: true,
+      evidencia_pendente_motivo: 'QUALIFICACAO_AUSENTE',
+    })).toBe('Conclusão EAD sem qualificação vinculada');
+  });
+});
