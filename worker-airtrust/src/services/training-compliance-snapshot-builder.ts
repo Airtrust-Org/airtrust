@@ -17,7 +17,7 @@ import {
   type TrainingComplianceScope,
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
-import { getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { getTodayIsoSaoPaulo, getQualificacoesAlertaDias } from '../utils/qualificacoes-alerta-config';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { trainingComplianceEvidenceIsRealizedBy, trainingComplianceIsoDay } from './training-compliance-enrollment-policy';
 
@@ -587,7 +587,7 @@ export function computeRequirement(
   rule: Rule,
   historyItems: Evidence[] | undefined,
   lmsItems: Evidence[] | undefined,
-  options?: { today?: string; realizedCutoff?: string },
+  options?: { today?: string; realizedCutoff?: string; thresholdDiasVencendo?: number },
 ) {
   // Vencimento é classificado pela data operacional (America/Sao_Paulo): a data UTC adianta o
   // "hoje" entre 21h e 24h BRT e marcava VENCIDO, nessas horas, um item que ainda vence hoje.
@@ -664,7 +664,7 @@ export function computeRequirement(
     if (!data_validade) {
       status_compliance = 'CONFORME';
     } else {
-      const classification = classificarStatusPorVencimento(data_validade, today);
+      const classification = classificarStatusPorVencimento(data_validade, today, options?.thresholdDiasVencendo ?? 30);
       dias_para_vencer = diasEntreDatas(data_validade, today);
       status_compliance =
         classification === 'VENCIDA'
@@ -848,7 +848,8 @@ export async function buildSnapshot(
     employees = employees.filter((employee) => employee.id === targetFilter.funcionarioId);
   }
   // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
-  const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today) };
+  const thresholdDiasVencendo = await getQualificacoesAlertaDias(db, empresaId);
+  const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today), thresholdDiasVencendo };
 
   const people = employees.map((employee) => {
     const resolved = resolvedRules(rules, employee);
