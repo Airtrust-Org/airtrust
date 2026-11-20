@@ -162,6 +162,43 @@ describe('computeRequirement — referência de data America/Sao_Paulo', () => {
   });
 });
 
+describe('computeRequirement — conclusão LMS qualificante sem histórico vivo (F-03)', () => {
+  it('não declara CONFORME quando matrícula concluída perdeu sua qualificação', () => {
+    const result = computeRequirement(
+      rule({ validade_fonte: 'MODELO' }),
+      [],
+      [lms('CONCLUIDO', '2026-06-01', { qualificacao_integridade_pendente: true })],
+      { today: '2026-06-15' },
+    );
+    expect(result.status_compliance).toBe('NAO_REALIZADO');
+    expect(result.evidencia_pendente_validacao).toBe(true);
+    expect(result.evidencia_pendente_motivo).toBe('QUALIFICACAO_AUSENTE');
+    expect(result.lms_status).toBe('CONCLUIDO');
+  });
+
+  it('mantém qualificação histórica independente e válida como evidência legítima', () => {
+    const result = computeRequirement(
+      rule({ validade_fonte: 'MODELO' }),
+      [history('2026-05-10', '2027-05-10')],
+      [lms('CONCLUIDO', '2026-06-01', { qualificacao_integridade_pendente: true })],
+      { today: '2026-06-15' },
+    );
+    expect(result.status_compliance).toBe('CONFORME');
+    expect(result.evidencia_origem).toBe('QUALIFICACAO');
+    expect(result.evidencia_pendente_validacao).toBe(false);
+  });
+
+  it('preserva a evidência de curso não qualificante (sem exigência de histórico LMS)', () => {
+    const result = computeRequirement(
+      rule({ validade_fonte: 'MODELO' }),
+      [],
+      [lms('CONCLUIDO', '2026-06-01')],
+      { today: '2026-06-15' },
+    );
+    expect(result.status_compliance).toBe('CONFORME');
+  });
+});
+
 describe('computeRequirement — oráculo de status', () => {
   const noon = (iso: string) => {
     vi.useFakeTimers();
