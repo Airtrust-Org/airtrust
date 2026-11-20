@@ -656,6 +656,45 @@ describe('Wrapper SCORM real (execução em jsdom) — REVIEW_MODE nunca chama o
     });
   }
 
+  it('consulta no slide posterior não sobrescreve backup nem restaura ponto falso', async()=>{
+    const key='airtrust:scorm:resume:42:0';
+    const saved=JSON.stringify({schema_version:2,matricula_id:42,ciclo_id:0,
+      location:'4/20',progress_pct:20});
+    const values=new Map<string,string>();
+    vi.stubGlobal('localStorage',{
+      getItem:(k:string)=>values.get(k)??null,
+      setItem:(k:string,v:string)=>{values.set(k,v);},
+      removeItem:(k:string)=>{values.delete(k);},
+      clear:()=>values.clear(),
+    });
+    values.set(key,saved);
+    const fetchMock=mockOkFetch();
+    vi.stubGlobal('fetch',fetchMock);
+    const html=buildLaunchPage({
+      matriculaId:42,cicloId:0,numeroCiclo:1,titulo:'Curso teste',
+      launchUrl:'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl:null,token:'test-token',isScorm2004:false,
+      initialCmiJson:JSON.stringify({'cmi.core.lesson_location':'4/20'}),
+      hasResumeState:true,reviewMode:true,
+    });
+    new Function(extractWrapperScript(html))();
+    const api=g.window.API as Record<string,(...args:unknown[])=>unknown>;
+    api.LMSSetValue('cmi.core.lesson_location','14/20');
+    api.LMSCommit();
+    expect(values.get(key)).toBe(saved);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const normal=buildLaunchPage({
+      matriculaId:42,cicloId:0,numeroCiclo:1,titulo:'Curso teste',
+      launchUrl:'https://api.airtrust.online/lms/scorm/assets/1/2/pkg/index.html',
+      commitUrl:'https://api.airtrust.online/api/lms/scorm/commit/42',token:'test-token',
+      isScorm2004:false,initialCmiJson:'{}',hasResumeState:false,reviewMode:false,
+    });
+    new Function(extractWrapperScript(normal))();
+    expect(values.get(key)).toBe(saved);
+    expect((g.window.API as Record<string,(...args:unknown[])=>unknown>).LMSGetValue('cmi.core.lesson_location')).toBe('4/20');
+    vi.unstubAllGlobals();
+  });
+
   it('em modo revisão, o pacote sinalizando status=passed no bootstrap nunca chama o endpoint de commit', async () => {
     const fetchMock = mockOkFetch();
     vi.stubGlobal('fetch', fetchMock);

@@ -955,10 +955,6 @@ app.get('/course-assets/:cursoId/thumbnail', async (c) => {
 
 app.get('/scorm/launch/:matricula_id', async (c) => {
   const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
-  // In-progress learners must be able to consult the course while taking an
-  // independent exam. Read-only must be enforced by the Worker launch wrapper,
-  // not merely by a cosmetic flag in React.
-  const requestedReadOnly = c.req.query('review') === '1';
 
   const empresaId = getEmpresaIdOptional(c) || Number(payload.empresa_id ?? 0);
   if (!empresaId) {
@@ -1030,7 +1026,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   }
 
   const launchUrl = `/api/lms/scorm/assets/${matricula.empresa_id}/${matricula.curso_id}/${resolvedLaunchFile}`;
-  const reviewMode = requestedReadOnly || matricula.status === 'CONCLUIDO';
+  const reviewMode = c.req.query('review') === '1' || matricula.status === 'CONCLUIDO';
   const commitUrl = reviewMode ? null : '/api/lms/matriculas/scorm/commit';
 
   // Versão SCORM: 1.2 ou 2004
@@ -1424,7 +1420,7 @@ ${buildScormLocationHelpersScript()}
     matriculaId,
     cicloId,
     numeroCiclo,
-    strictCursor,
+    strictCursor, reviewMode,
   })}
 
   var SCORM_DIAG = (function(){ try { return /[?&]scorm_diag=1(&|$)/.test(window.location.search); } catch(e) { return false; } })();

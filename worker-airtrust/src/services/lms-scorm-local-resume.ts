@@ -11,6 +11,9 @@ export interface ResumeStorageScriptConfig {
   numeroCiclo: number;
   /** FORMATIVE (F5) course: without package-owned suspend_data no backup is applied. */
   strictCursor?: boolean;
+  /** A consultation session must never read, migrate, write or clear writable
+   * enrollment-local cursors. Controlled by the Worker launch endpoint. */
+  reviewMode?: boolean;
 }
 
 export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string {
@@ -19,11 +22,13 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
   var CICLO_ID = ${cfg.cicloId};
   var NUMERO_CICLO = ${cfg.numeroCiclo};
   var STRICT_CURSOR = ${cfg.strictCursor ? 'true' : 'false'};
+  var LOCAL_RESUME_READ_ONLY = ${cfg.reviewMode ? 'true' : 'false'};
   var LEGACY_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID);
   var LOCAL_RESUME_KEY = MATRICULA_ID == null ? null : 'airtrust:scorm:resume:' + String(MATRICULA_ID) + ':' + String(CICLO_ID);
 
   function readLocalResumeBackup() {
-    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return null;
+    // Reading can migrate a legacy key: no reads or migrations in review.
+    if (LOCAL_RESUME_READ_ONLY || !LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return null;
 
     try {
       var raw = localStorage.getItem(LOCAL_RESUME_KEY);
@@ -90,7 +95,7 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
   }
 
   function clearLocalResumeBackup() {
-    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
+    if (LOCAL_RESUME_READ_ONLY || !LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
 
     try {
       localStorage.removeItem(LOCAL_RESUME_KEY);
@@ -113,7 +118,7 @@ export function buildResumeStorageScript(cfg: ResumeStorageScriptConfig): string
   }
 
   function writeLocalResumeBackup(reason) {
-    if (!LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
+    if (LOCAL_RESUME_READ_ONLY || !LOCAL_RESUME_KEY || typeof localStorage === 'undefined') return;
     var location = getScormLocation();
     var marker = parseLocationMarker(location);
     if (!marker || marker.current <= 1) return;

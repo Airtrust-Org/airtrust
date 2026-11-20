@@ -31,6 +31,41 @@ describe('LMS SCORM Local Resume fail-closed behavior', () => {
     vi.restoreAllMocks();
   });
 
+  it('consulta não lê, migra, modifica nem limpa o backup da sessão gravável', () => {
+    const key='airtrust:scorm:resume:123:456';
+    const legacy='airtrust:scorm:resume:123';
+    const initial=JSON.stringify({schema_version:2,matricula_id:123,ciclo_id:456,
+      location:'4/20',progress_pct:20});
+    localStorage.setItem(key,initial);
+    localStorage.setItem(legacy,JSON.stringify({location:'6/20'}));
+    const script=buildResumeStorageScript({
+      matriculaId:123,cicloId:456,numeroCiclo:1,reviewMode:true,
+    });
+    const run=new Function(script+[
+      'function getScormLocation(){return "14/20";}',
+      'function parseLocationMarker(v){return {current:Number(v.split("/")[0]),total:20};}',
+      'return {read:readLocalResumeBackup,write:writeLocalResumeBackup,clear:clearLocalResumeBackup};',
+    ].join('\n'))() as {read:()=>unknown;write:(reason:string)=>void;clear:()=>void};
+    expect(run.read()).toBeNull();
+    run.write('exam-consultation');
+    run.clear();
+    expect(localStorage.getItem(key)).toBe(initial);
+    expect(localStorage.getItem(legacy)).toBe(JSON.stringify({location:'6/20'}));
+    const normal=buildResumeStorageScript({matriculaId:123,cicloId:456,numeroCiclo:1});
+    const readNormal=new Function(normal+'; return readLocalResumeBackup();') as ()=>{location:string};
+    expect(readNormal().location).toBe('4/20');
+  });
+
+  it('consulta sem backup nunca migra legado para chave gravável', () => {
+    const legacy='airtrust:scorm:resume:123';
+    localStorage.setItem(legacy,JSON.stringify({location:'14/20'}));
+    const script=buildResumeStorageScript({matriculaId:123,cicloId:456,numeroCiclo:1,reviewMode:true});
+    const result=new Function(script+'; return readLocalResumeBackup();')();
+    expect(result).toBeNull();
+    expect(localStorage.getItem('airtrust:scorm:resume:123:456')).toBeNull();
+    expect(localStorage.getItem(legacy)).not.toBeNull();
+  });
+
   it('migra do legado para a nova chave quando for ciclo 1', () => {
     localStorage.setItem('airtrust:scorm:resume:123', JSON.stringify({ location: '22/40' }));
     
