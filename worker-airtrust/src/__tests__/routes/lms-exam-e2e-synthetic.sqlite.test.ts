@@ -490,6 +490,7 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
     const payload=await r.json() as any;
     expect(payload.data).toMatchObject({page:1,limit:1,total:1,pages:1});
     expect(payload.data.items[0]).toMatchObject({
+      attemptId:opened.body.data.attemptId,
       cursoId:26,cursoTitulo:'Treinamento sintético de teste',matriculaId:10,
       alunoNome:'Aluno sintético',scorePct:70,passed:true,attemptNo:1,
     });

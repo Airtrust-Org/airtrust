@@ -49,6 +49,39 @@ describe('Gestão de Avaliações, responsividade e transparência',()=>{
   expect(screen.getAllByRole('link',{name:'Vincular prova'})[0].getAttribute('href'))
     .toBe('/lms/admin/provas/26');
  });
+ it('nunca disponibiliza CSV parcial quando nova tentativa desloca uma página e duplica ID',async()=>{
+  const pageItems=(ids:string[])=>ids.map((attemptId,i)=>({
+    ...attempt,attemptId,matriculaId:200+i,alunoNome:'Aluno '+attemptId,
+  }));
+  const first=pageItems(Array.from({length:25},(_,i)=>'id-'+(50-i)));
+  const shifted=pageItems(Array.from({length:25},(_,i)=>'id-'+(26-i)));
+  let pageRequests=0;
+  fetchMock.mockImplementation(async url=>{
+    if(String(url).includes('/admin/overview'))return ok(overview);
+    if(String(url).includes('/admin/resultados')){
+      pageRequests++;
+      if(pageRequests<3)return ok({page:1,limit:25,total:50,pages:2,items:first});
+      return ok({page:2,limit:25,total:50,pages:2,items:shifted});
+    }
+    throw Error('Unexpected URL '+url);
+  });
+  const confirm=vi.spyOn(window,'confirm').mockReturnValue(true);
+  const blob=vi.fn(()=> 'blob:fake');
+  const originalUrlCreator=Object.getOwnPropertyDescriptor(URL,'createObjectURL');
+  Object.defineProperty(URL,'createObjectURL',{configurable:true,value:blob});
+  renderPage();
+  await waitFor(()=>expect(screen.getAllByText('CRM Sintético').length).toBeGreaterThanOrEqual(1));
+  fireEvent.click(screen.getByRole('button',{name:'Resultados e notas'}));
+  await screen.findByRole('button',{name:'Exportar filtro completo'});
+  await waitFor(()=>expect(screen.getAllByText('Aluno id-50').length).toBeGreaterThanOrEqual(1));
+  fireEvent.click(screen.getByRole('button',{name:'Exportar filtro completo'}));
+  await screen.findByText(/Nenhum CSV parcial foi disponibilizado/);
+  expect(pageRequests).toBe(3);
+  expect(blob).not.toHaveBeenCalled();
+  if(originalUrlCreator)Object.defineProperty(URL,'createObjectURL',originalUrlCreator);
+  else Reflect.deleteProperty(URL,'createObjectURL');
+  confirm.mockRestore();
+ });
  it('apresenta resultado, detalhamento autorizado e não expõe respostas',async()=>{
   renderPage();
   await waitFor(()=>expect(screen.getAllByText('CRM Sintético').length).toBeGreaterThanOrEqual(1));

@@ -124,12 +124,12 @@ routes.get('/resultados',async c=>{
   const [count,records]=await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS total'+from).bind(...params)
       .first<{total:number}>(),
-    c.env.DB.prepare('SELECT a.curso_id,c.titulo,a.matricula_id,a.exam_id,a.exam_version,'+
+    c.env.DB.prepare('SELECT a.id AS attempt_id,a.curso_id,c.titulo,a.matricula_id,a.exam_id,a.exam_version,'+
       'a.attempt_no,a.state,a.passed,a.started_at,a.submitted_at,a.result_json,'+
       'f.nome AS aluno_nome,p.plan_json'+from+
       ' ORDER BY a.started_at DESC,a.id DESC LIMIT ? OFFSET ?')
       .bind(...params,limit,(page-1)*limit)
-      .all<{curso_id:number;titulo:string|null;matricula_id:number;exam_id:string;
+      .all<{attempt_id:string;curso_id:number;titulo:string|null;matricula_id:number;exam_id:string;
         exam_version:number;attempt_no:number;state:string;passed:number|null;
         started_at:string;submitted_at:string|null;result_json:string|null;
         aluno_nome:string|null;plan_json:string|null}>(),
@@ -138,6 +138,7 @@ routes.get('/resultados',async c=>{
     page,limit,total:count?.total||0,
     pages:Math.ceil((count?.total||0)/limit),
     items:(records.results||[]).map(row=>({
+      attemptId:row.attempt_id,
       cursoId:row.curso_id,cursoTitulo:row.titulo||null,matriculaId:row.matricula_id,
       alunoNome:row.aluno_nome||null,examId:row.exam_id,version:row.exam_version,
       attemptNo:row.attempt_no,state:row.state,

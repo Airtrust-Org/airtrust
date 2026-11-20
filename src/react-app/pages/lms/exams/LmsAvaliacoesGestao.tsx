@@ -6,12 +6,13 @@ import AppLayout from '../../../components/AppLayout';
 import {ExamPageHeader,ExamEmpty,examPage,examCard,examInput,examPrimary,examSecondary,examSmall} from './examUi';
 import {fetchWithAuth} from '../../../config/api';
 import {buildExamResultsCsv} from './examReportCsv';
+import {ExamExportIntegrity} from './examExportIntegrity';
 
 type Course={id:number;titulo:string;tipo_conteudo:string;scorm_assessment_policy:string|null;publicado:number;activePackageSha256:string|null;activeExamId:string|null;activeExamVersion:number|null};
 type Plan={cursoId:number;examId:string;version:number;title:string|null;questionCount:number|null;publishedAt:string};
 type Binding={cursoId:number;examId:string;version:number;packageSha256:string;createdAt:string};
 type QuestionCount={curso_id:number;status:string;total:number};
-type Attempt={cursoId:number;matriculaId:number;examId:string;version:number;attemptNo:number;
+type Attempt={attemptId?:string;cursoId:number;matriculaId:number;examId:string;version:number;attemptNo:number;
  state:string;passed:boolean|null;scorePct:number|null;alunoNome:string|null;startedAt:string;submittedAt:string|null};
 type Overview={courses:Course[];questionCounts:QuestionCount[];plans:Plan[];bindings:Binding[];
  totals:{attempts:number;passed:number;failed:number;inProgress:number};
@@ -96,24 +97,26 @@ export default function LmsAvaliacoesGestao(){
   if(!window.confirm('Exportar '+report.total+' tentativas dos filtros atuais? O CSV pode conter dados pessoais de alunos.'))return;
   setExporting(true);setReportError('');
   try{
-   const all:ReportRow[]=[];
-   for(let page=1;page<=report.pages;page++){
-    const query=new URLSearchParams({page:String(page),limit:'25',resultado:resultFilter,
+   const snapshot=new ExamExportIntegrity<ReportRow>(report.total,report.pages,25);
+   const pageQuery=(page:number)=>new URLSearchParams({page:String(page),limit:'25',resultado:resultFilter,
       ...(course!=='todos'?{cursoId:course}:{}),...(debouncedSearch?{busca:debouncedSearch}:{})});
-    const response=await fetchWithAuth('/api/lms/exams/admin/resultados?'+query.toString(),{cache:'no-store'});
+   const getPage=async(page:number):Promise<Report>=>{
+    const response=await fetchWithAuth('/api/lms/exams/admin/resultados?'+pageQuery(page).toString(),{cache:'no-store'});
     const body=await response.json() as ReportEnvelope;
-    if(!response.ok||!body.success||!body.data||body.data.page!==page)
-      throw Error('Falha ao carregar todas as páginas.');
-    all.push(...body.data.items);
+    if(!response.ok||!body.success||!body.data)throw Error('EXAM_EXPORT_FETCH_FAILED');
+    return body.data;
+   };
+   for(let page=1;page<=report.pages;page++){
+    snapshot.add(await getPage(page));
    }
-   if(all.length!==report.total)throw Error('O conjunto de resultados mudou. Atualize e tente novamente.');
-   const csv=buildExamResultsCsv(all);
+   snapshot.checkFinalPage(await getPage(1));
+   const csv=buildExamResultsCsv([...snapshot.items()]);
    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
    const link=document.createElement('a');
    link.href=url;link.download='airtrust-avaliacoes-filtro-completo.csv';
    document.body.appendChild(link);link.click();link.remove();
    window.setTimeout(()=>URL.revokeObjectURL(url),1500);
-  }catch{setReportError('A exportação não foi concluída. Nenhum arquivo parcial foi disponibilizado.');}
+  }catch{setReportError('Os resultados mudaram durante a exportação ou não puderam ser confirmados. Nenhum CSV parcial foi disponibilizado. Atualize e tente novamente.');}
   finally{setExporting(false);}
  };
  const exportReportPage=()=>{
