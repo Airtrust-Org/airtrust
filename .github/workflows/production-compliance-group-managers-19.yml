@@ -1,0 +1,126 @@
+name: Production Compliance Group Managers 19
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Reviewed main SHA
+        required: true
+        type: string
+      mode:
+        required: true
+        type: choice
+        options: [dry-run, apply]
+      confirmation:
+        required: true
+        type: string
+      reviewed_dry_run_run_id:
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  statuses: read
+concurrency:
+  group: production-compliance-designations-tenant6
+  cancel-in-progress: false
+jobs:
+  d1_group_managers:
+    name: Governed D1 Compliance group-manager assignments
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      E2E_EMAIL: ${{ secrets.PROD_SMOKE_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GROUP_MANAGERS_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      GROUP_MANAGERS_CONFIRMATION: ${{ inputs.confirmation }}
+      PROD_API_BASE_URL: https://api.airtrust.online
+    steps:
+      - name: Check exact candidate and explicit mode
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main && "$GROUP_MANAGERS_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ && "$GITHUB_SHA" == "$GROUP_MANAGERS_EXPECTED_SHA" ]] || exit 1
+          if [[ "$MODE" == dry-run ]]; then
+            [[ "$GROUP_MANAGERS_CONFIRMATION" == GROUP_MANAGERS_19_DRY_RUN ]] || exit 1
+          elif [[ "$MODE" == apply ]]; then
+            [[ "$GROUP_MANAGERS_CONFIRMATION" == ASSIGN_GROUP_MANAGERS_19_TENANT6_NO_EMAIL ]] || exit 1
+          else exit 1; fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker-airtrust/package-lock.json
+      - run: npm --prefix worker-airtrust ci
+      - name: Verify eight official release gates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/verify-release-gates.mjs
+      - name: Verify secrets and production target
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$E2E_EMAIL" && -n "$E2E_PASSWORD" ]] || exit 1
+          [[ "$E2E_EMAIL" != *staging.airtrust.invalid* ]] || exit 1
+      - name: Verify reviewed same-SHA dry-run
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED: ${{ inputs.reviewed_dry_run_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED" =~ ^[1-9][0-9]*$ ]] || exit 1
+          meta="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED")"
+          [[ "$(jq -r .name <<<"$meta")" == 'Production Compliance Group Managers 19' ]] || exit 1
+          [[ "$(jq -r .conclusion <<<"$meta")" == success && "$(jq -r .head_sha <<<"$meta")" == "$GITHUB_SHA" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/reviewed"
+          gh run download "$REVIEWED" --repo "$GITHUB_REPOSITORY" --name "group-managers-dry-run-$GITHUB_SHA" --dir "$RUNNER_TEMP/reviewed"
+          f="$RUNNER_TEMP/reviewed/result.json"
+          test -s "$f"
+          [[ "$(jq -r .mode "$f")" == dry-run && "$(jq -r .sha "$f")" == "$GITHUB_SHA" ]] || exit 1
+          [[ "$(jq -r .employee_count "$f")" == 19 && "$(jq -r .condition_id "$f")" == 36 ]] || exit 1
+          hash="$(jq -r .state_hash "$f")"
+          [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          echo "GROUP_MANAGERS_REVIEWED_HASH=$hash" >> "$GITHUB_ENV"
+      - name: Capture D1 Time Travel recovery point
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: worker-airtrust
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npx wrangler d1 time-travel info airtrust-db --env production --timestamp="$ts" > "$RUNNER_TEMP/group-managers-recovery.txt"
+          test -s "$RUNNER_TEMP/group-managers-recovery.txt"
+          echo "D1_TIME_TRAVEL_RECOVERY_UTC=$ts" >> "$GITHUB_STEP_SUMMARY"
+      - name: Assign nineteen employees through audited application API
+        env:
+          MODE: ${{ inputs.mode }}
+          GROUP_MANAGERS_REPORT: ${{ runner.temp }}/result.json
+        run: |
+          set -euo pipefail
+          node --check scripts/production/assign-group-managers-20261120.mjs
+          node scripts/production/assign-group-managers-20261120.mjs "$MODE"
+          test -s "$GROUP_MANAGERS_REPORT"
+          if [[ "$MODE" == apply ]]; then
+            jq -e '.postconditions_verified==true and .active_assignments==19 and .email_sent==false' "$GROUP_MANAGERS_REPORT" >/dev/null
+          fi
+      - name: Publish sanitized evidence
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/result.json
+        run: |
+          test -s "$REPORT" || exit 0
+          jq '{mode,sha,empresa_id,condition_id,employee_count,initial_active_assignments,state_hash,mutated,active_assignments,enrollments_created,enrollments_preserved,enrollments_reactivated,deferred_unpublished_course_enrollments,training_enrollments_fully_available,unpublished_course_ids,postconditions_verified,email_sent}' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload sanitized evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: group-managers-${{ inputs.mode }}-${{ github.sha }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30

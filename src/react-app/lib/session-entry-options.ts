@@ -28,7 +28,7 @@ export function sessionEntryOptions(available: readonly SessionRole[]): SessionE
   const options: SessionEntryOption[] = [];
   if (roles.has('GESTOR')) {
     options.push({
-      id: 'manager', role: 'GESTOR', label: 'Gestor',
+      id: 'manager', role: 'GESTOR', label: 'Administrador Operacional',
       description: 'Gestão operacional da empresa e dos setores autorizados.',
     });
   }
