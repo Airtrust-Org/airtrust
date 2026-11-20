@@ -103,6 +103,8 @@ type Evidence = {
   lms_status?: string | null;
   progresso_pct?: number | null;
   modalidade?: string | null;
+  /** Matrícula concluída sem histórico de qualificação ativo e vinculado. */
+  qualificacao_integridade_pendente?: boolean;
   // undefined = schema anterior a 0519 (compatibilidade de rollout); null = evidência sem perfil gravado.
   perfil_competencia?: string | null;
 };
@@ -490,17 +492,38 @@ export async function loadLmsEvidence(
   const matriculaCols = await columnSet(db, 'lms_matriculas');
   const hasProfile = matriculaCols.has('perfil_competencia');
   const profileSelect = hasProfile ? 'm.perfil_competencia' : 'NULL';
+  const courseCols = await columnSet(db, 'lms_cursos');
+  const qualificationCols = await columnSet(db, 'qualificacoes_historico');
+  // Nunca considerar um histórico ausente/excluído como prova de qualificação.
+  const canValidateLink = matriculaCols.has('qualificacao_historico_id') &&
+    ['id', 'empresa_id', 'funcionario_id', 'qualificacao_id', 'deleted_at', 'data_conclusao']
+      .every((column) => qualificationCols.has(column));
+  const qualificationJoin = canValidateLink
+    ? `LEFT JOIN qualificacoes_historico qh_link
+         ON qh_link.id = m.qualificacao_historico_id
+        AND qh_link.empresa_id = m.empresa_id
+        AND qh_link.funcionario_id = m.funcionario_id
+        AND qh_link.qualificacao_id = c.qualificacao_tipo_id
+        AND qh_link.deleted_at IS NULL
+        AND qh_link.data_conclusao IS NOT NULL`
+    : '';
+  const qualificationSelect = canValidateLink ? 'qh_link.id' : 'NULL';
+  const qualifiesOnCompletion = courseCols.has('gerar_qualificacao_ao_concluir')
+    ? 'c.gerar_qualificacao_ao_concluir' : '0';
   const { results } = await withD1Retry(() =>
     db
       .prepare(
         `SELECT m.id, m.funcionario_id, c.qualificacao_tipo_id AS tipo_id,
               m.status, m.progresso_pct, m.data_conclusao, m.updated_at, c.titulo, 'EAD' AS modalidade,
-              ${profileSelect} AS perfil_competencia
+              ${profileSelect} AS perfil_competencia,
+              ${qualifiesOnCompletion} AS gerar_qualificacao,
+              ${qualificationSelect} AS qualificacao_vinculada_id
          FROM lms_matriculas m
          JOIN lms_cursos c
            ON c.id = m.curso_id
           AND c.empresa_id = m.empresa_id
           AND c.deleted_at IS NULL
+         ${qualificationJoin}
         WHERE m.empresa_id = ?
           AND m.deleted_at IS NULL
           AND c.qualificacao_tipo_id IS NOT NULL
@@ -519,6 +542,8 @@ export async function loadLmsEvidence(
         titulo: string | null;
         modalidade: string | null;
         perfil_competencia: string | null;
+        gerar_qualificacao: number | null;
+        qualificacao_vinculada_id: number | null;
       }>(),
   );
   for (const row of results || []) {
@@ -535,6 +560,10 @@ export async function loadLmsEvidence(
       lms_status: row.status,
       progresso_pct: row.progresso_pct,
       modalidade: row.modalidade || 'EAD',
+      qualificacao_integridade_pendente:
+        String(row.status || '').toUpperCase() === 'CONCLUIDO' &&
+        Number(row.gerar_qualificacao) === 1 &&
+        !asPositiveInt(row.qualificacao_vinculada_id),
       perfil_competencia: hasProfile ? row.perfil_competencia || null : undefined,
     });
     map.set(key, bucket);
@@ -605,7 +634,14 @@ export function computeRequirement(
     evidenceMatchesCompetencyProfile(rule.perfil_competencia, item),
   );
   const completedLmsForProfile = lmsForProfile.filter(
-    (item) => String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' && trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff),
+    (item) => !item.qualificacao_integridade_pendente &&
+      String(item.lms_status || '').toUpperCase() === 'CONCLUIDO' &&
+      trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff),
+  );
+  const brokenQualifyingCompletion = lmsForProfile.some((item) =>
+    item.qualificacao_integridade_pendente &&
+    trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade) &&
+    trainingComplianceEvidenceIsRealizedBy(item.data_realizacao, realizedCutoff),
   );
   const compatibleHistory = historyForProfile.filter((item) =>
     trainingComplianceEvidenceMeetsRequiredModality(rule.modalidade_requerida, item.modalidade),
@@ -689,6 +725,8 @@ export function computeRequirement(
   const evidenceReviewReason =
     invalidValidityConfig ? 'REGRA_VALIDADE' :
     invalidEvidenceExpiry ? 'DATA_VENCIMENTO' :
+    brokenQualifyingCompletion && (status_compliance === 'NAO_REALIZADO' || status_compliance === 'VENCIDO')
+      ? 'QUALIFICACAO_AUSENTE' :
     // An older expired proof must not allow auto-enrollment while a later
     // malformed completion for this same profile/modality remains unresolved.
     malformedRealization && (status_compliance === 'NAO_REALIZADO' || status_compliance === 'VENCIDO')

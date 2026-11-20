@@ -43,6 +43,7 @@ import {
 import { FORMATIVE_PROFILE } from '../lib/lms/lms-scorm-formative-profile';
 import { parseStoredScormValidation } from '../lib/lms/lms-scorm-package-filename';
 import { validateScormPackageQuality, type ScormQualityGateResult } from '../lib/lms/lms-scorm-quality-gate';
+import { hasLmsExamSchema, isLmsExamSurfaceEnabled } from '../lib/lms-exams/lms-exam-activation';
 import { preflightDirectFormativeReplacement, readAlreadyActiveExternalReplacement, readAlreadyActiveFormativeReplacement, replaceValidatedExternalScorm, replaceValidatedFormativeScorm } from '../lib/lms/lms-scorm-direct-replacement';
 import {
   abortF5StreamedIntake,
@@ -393,6 +394,7 @@ app.post('/:id/scorm-replace',
     const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId: candidate.packageId, userId: actorId(c),
+      examRuntimeEnabled: resolvedExternalExam && await learnerExamRuntimeReady(c, empresaId),
       confirm: {
         cursoId, packageSha256: candidate.packageSha256,
         acknowledgeInProgress: preflight.impact.inProgress,
@@ -719,6 +721,13 @@ async function readSmallJson(c: Context<{ Bindings: Env }>, limit: number, label
   try { return JSON.parse(raw); } catch { throw new ApiError(`${label} inválido`, 400); }
 }
 
+/** EXTERNAL editions complete only through the learner exam runtime: it must be
+ * enabled for this tenant (and, in production, backed by the 0571/0572 schema). */
+async function learnerExamRuntimeReady(c: Context<{ Bindings: Env }>, empresaId: number): Promise<boolean> {
+  if (!isLmsExamSurfaceEnabled(c.env, 'learner', empresaId)) return false;
+  return c.env.ENVIRONMENT !== 'production' || await hasLmsExamSchema(c.env.DB);
+}
+
 function actorId(c: Context<{ Bindings: Env }>): number | null {
   return Number((c.get as (key: string) => unknown)('userId')) || null;
 }
@@ -755,6 +764,7 @@ app.post('/:id/scorm-package-versions/:packageId/replace-direct',
     const replaceArgs = {
       db: c.env.DB, bucket: c.env.BUCKET, empresaId, cursoId,
       packageId, userId: actorId(c), confirm: body.data.confirm,
+      examRuntimeEnabled: externalExam && await learnerExamRuntimeReady(c, empresaId),
     };
     const data = resolved.certification_profile === FORMATIVE_PROFILE
       ? await replaceValidatedFormativeScorm(replaceArgs)

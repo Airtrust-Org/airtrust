@@ -4,7 +4,8 @@
  * Only the enrollment's own learner passes (admins cannot sit the exam for them).
  */
 import { EFFECTIVE_ASSESSMENT_POLICY_SQL } from '../../lib/lms/lms-effective-assessment-policy';
-import {validExamAttemptPolicy,type ExamAttemptPolicy} from '../../lib/lms-exams/question-bank-domain';
+import {type ExamAttemptPolicy} from '../../lib/lms-exams/question-bank-domain';
+import {loadBoundExamAttemptPolicy} from '../../lib/lms-exams/exam-edition-binding';
 import {
   buildPersistedScormClosureReadiness, isStudyCompleteAwaitingExam,
   type ScormClosureReadiness,
@@ -83,19 +84,11 @@ export async function loadExamGate(
     cursoId: row.curso_id, matriculaId: row.id,
     cicloId: row.active_lms_cycle_id, packageSha256: pkg.package_sha256,
   };
-  const binding = await db.prepare(
-    'SELECT p.plan_json FROM lms_exam_edition_bindings b JOIN lms_exam_plans p '+
-    'ON p.empresa_id=b.empresa_id AND p.curso_id=b.curso_id AND p.exam_id=b.exam_id '+
-    'AND p.version=b.exam_version AND p.plan_sha256=b.plan_sha256 '+
-    'WHERE b.empresa_id=? AND b.curso_id=? AND b.package_sha256=? LIMIT 1'
-  ).bind(ids.empresaId, row.curso_id, pkg.package_sha256).first<{plan_json:string}>();
-  if (!binding) return none('NOT_AVAILABLE');
-  let attemptPolicy:ExamAttemptPolicy;
-  try {
-    const data=JSON.parse(binding.plan_json) as {attemptPolicy?:unknown};
-    if(!validExamAttemptPolicy(data.attemptPolicy))return none('NOT_AVAILABLE');
-    attemptPolicy=data.attemptPolicy;
-  } catch { return none('NOT_AVAILABLE'); }
+  // Same contract as the EXTERNAL activation guard (exam-edition-binding.ts).
+  const attemptPolicy: ExamAttemptPolicy | null = await loadBoundExamAttemptPolicy(db, {
+    empresaId: ids.empresaId, cursoId: row.curso_id, packageSha256: pkg.package_sha256,
+  });
+  if (!attemptPolicy) return none('NOT_AVAILABLE');
 
   const stats = await db.prepare(
     "SELECT COUNT(CASE WHEN state='SUBMITTED' THEN 1 END) AS used, " +

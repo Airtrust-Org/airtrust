@@ -45,6 +45,11 @@ describe('EAD renewal in legacy scheduler fallback', () => {
       matriculaId: 42, empresaId: 6, origin: 'AUTO_RENOVACAO',
     }));
     expect(ensureMatriculaCycle).not.toHaveBeenCalled();
+    // Descoberta da renovação em D0 não significa que o aluno recebeu
+    // prazo de conclusão vencendo em D0.
+    expect(resetMatriculaForNewCycle).toHaveBeenCalledWith(db, expect.objectContaining({
+      dataExpiracao: null,
+    }));
     expect(prepare).toHaveBeenCalledTimes(1);
   });
 
@@ -57,6 +62,23 @@ describe('EAD renewal in legacy scheduler fallback', () => {
       matriculaId: 42, empresaId: 6, origin: 'AUTO_RENOVACAO',
     });
     expect(resetMatriculaForNewCycle).not.toHaveBeenCalled();
+  });
+
+  it('cria matrícula nova sem vencimento fictício e preserva o histórico anterior', async () => {
+    const insertBind = vi.fn((..._values: unknown[]) => ({
+      run: async () => ({ meta: { last_row_id: 88 } }),
+    }));
+    const db = {
+      prepare: vi.fn((query: string) => query.includes('INSERT INTO lms_matriculas')
+        ? { bind: insertBind }
+        : { bind: () => ({ first: async () => null }) }),
+    } as unknown as D1Database;
+    const result = await ensureEadRenewalMatriculaForRow(db, renewal);
+    expect(result).toEqual({ matriculaId: 88, created: true, active: true });
+    expect(insertBind).toHaveBeenCalledWith(6, 22, 9, null);
+    expect(ensureMatriculaCycle).toHaveBeenCalledWith(db, {
+      matriculaId: 88, empresaId: 6, origin: 'AUTO_RENOVACAO',
+    });
   });
 
   it('uses the same cycle repair in the legacy scheduler instead of skipping existing enrollments', () => {
