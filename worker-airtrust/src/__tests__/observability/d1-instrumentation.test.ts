@@ -102,6 +102,63 @@ describe('instrumentD1', () => {
       await expect(instrumentD1(db).prepare('X').first()).rejects.toThrow('D1_ERROR');
     });
     expect(stats.roundTrips).toBe(1);
+    expect(stats.statements).toBe(1);
+    expect(stats.unmeteredStatements).toBe(1);
+  });
+
+  it('batch rejeitado conta todos os statements como sem medição e repassa o erro original', async () => {
+    const { db } = fakeDb();
+    const failure = new Error('D1_BATCH_ERROR');
+    db.batch.mockRejectedValueOnce(failure);
+    const stats = createD1RequestStats();
+    const wrapped = instrumentD1(db);
+    await runWithD1Stats(stats, async () => {
+      await expect(
+        wrapped.batch([wrapped.prepare('A'), wrapped.prepare('B'), wrapped.prepare('C')] as never),
+      ).rejects.toBe(failure);
+    });
+    expect(stats.statements).toBe(3);
+    expect(stats.unmeteredStatements).toBe(3);
+    expect(stats.rowsRead).toBe(0);
+  });
+
+  it('soma rows_read/rows_written do meta de all/run/batch e conta first/raw/exec como sem medição', async () => {
+    const { db, stmt } = fakeDb();
+    const meta = (rowsRead: number, rowsWritten: number) => ({
+      success: true,
+      results: [],
+      meta: { rows_read: rowsRead, rows_written: rowsWritten },
+    });
+    stmt.all.mockResolvedValueOnce(meta(1000, 0) as never);
+    stmt.run.mockResolvedValueOnce(meta(40, 3) as never);
+    db.batch.mockResolvedValueOnce([meta(500, 2), meta(250, 0)] as never);
+    const stats = createD1RequestStats();
+    const wrapped = instrumentD1(db);
+
+    await runWithD1Stats(stats, async () => {
+      await wrapped.prepare('A').all();
+      await wrapped.prepare('B').run();
+      await wrapped.batch([wrapped.prepare('C'), wrapped.prepare('D')] as never);
+      await wrapped.prepare('E').first();
+      await wrapped.prepare('F').raw();
+      await wrapped.exec('PRAGMA x');
+    });
+
+    expect(stats.rowsRead).toBe(1790);
+    expect(stats.rowsWritten).toBe(5);
+    expect(stats.unmeteredStatements).toBe(3);
+  });
+
+  it('resultado sem meta numérico não quebra nem soma: vira statement sem medição', async () => {
+    const { db, stmt } = fakeDb();
+    stmt.all.mockResolvedValueOnce({ success: true, results: [], meta: { rows_read: 'x' } } as never);
+    const stats = createD1RequestStats();
+    await runWithD1Stats(stats, async () => {
+      const out = await instrumentD1(db).prepare('A').all();
+      expect(out).toEqual({ success: true, results: [], meta: { rows_read: 'x' } });
+    });
+    expect(stats.rowsRead).toBe(0);
+    expect(stats.unmeteredStatements).toBe(1);
   });
 
   it('fora de uma requisição não conta nem altera o comportamento', async () => {
@@ -163,6 +220,23 @@ describe('worker entrypoint D1 metrics', () => {
     expect(await res.text()).toBe('ok');
     expect(payload).toMatchObject({ route: '/api/x/:id', d1_round_trips: 2, d1_statements: 2 });
     expect(typeof payload.d1_ms).toBe('number');
+  });
+
+  it('emite d1_rows_read/d1_rows_written/d1_unmetered_statements na métrica HTTP', async () => {
+    const { db, stmt } = fakeDb();
+    stmt.all.mockResolvedValueOnce({
+      results: [],
+      success: true,
+      meta: { rows_read: 4321, rows_written: 0 },
+    } as never);
+    const { res, payload } = await runRequest(envWith(db));
+    expect(res.status).toBe(200);
+    expect(payload).toMatchObject({
+      d1_round_trips: 2,
+      d1_rows_read: 4321,
+      d1_rows_written: 0,
+      d1_unmetered_statements: 1,
+    });
   });
 
   it('mantém a identidade de c.env.DB entre requisições e isola contagens concorrentes', async () => {
