@@ -15,7 +15,7 @@ import type { Context } from 'hono';
 import type { Env } from '../../types';
 import { auth } from '../../middleware/auth';
 import { getTenantContext } from '../../middleware/tenant';
-import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo } from '../../utils/qualificacoes-alerta-config';
+import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo, getQualificacoesAlertaDias } from '../../utils/qualificacoes-alerta-config';
 import { buildCurrentOperationalQualificationPredicate } from '../../lib/qualificacoes/operational-qualification-predicates';
 import {
   appendEmployeeSectorFilter,
@@ -69,14 +69,15 @@ router.get(
     const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
     const todaySql = operationalTodaySql();
+    const thresholdDays = await getQualificacoesAlertaDias(db, tenantCtx.empresaId);
 
     // Resumo geral
     const resumo = await db
       .prepare(
         `SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN ${vencimentoExpr} IS NULL OR (julianday(${vencimentoExpr}) >= ${todaySql} AND julianday(${vencimentoExpr}) - ${todaySql} > 30) THEN 1 ELSE 0 END) as validas,
-        SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) - ${todaySql} <= 30 AND julianday(${vencimentoExpr}) >= ${todaySql} THEN 1 ELSE 0 END) as vencendo,
+        SUM(CASE WHEN ${vencimentoExpr} IS NULL OR (julianday(${vencimentoExpr}) >= ${todaySql} AND julianday(${vencimentoExpr}) - ${todaySql} > ${thresholdDays}) THEN 1 ELSE 0 END) as validas,
+        SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) - ${todaySql} <= ${thresholdDays} AND julianday(${vencimentoExpr}) >= ${todaySql} THEN 1 ELSE 0 END) as vencendo,
         SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) < ${todaySql} THEN 1 ELSE 0 END) as vencidas
       FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
@@ -119,6 +120,7 @@ router.get(
     const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
     const todaySql = operationalTodaySql();
+    const thresholdDays = await getQualificacoesAlertaDias(db, tenantCtx.empresaId);
 
     const { results } = await db
       .prepare(
@@ -129,8 +131,8 @@ router.get(
         qt.categoria,
         COUNT(*) as total,
         SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) < ${todaySql} THEN 1 ELSE 0 END) as vencidas,
-        SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) - ${todaySql} <= 30 AND julianday(${vencimentoExpr}) >= ${todaySql} THEN 1 ELSE 0 END) as vencendo,
-        SUM(CASE WHEN ${vencimentoExpr} IS NULL OR julianday(${vencimentoExpr}) - ${todaySql} > 30 THEN 1 ELSE 0 END) as validas
+        SUM(CASE WHEN ${vencimentoExpr} IS NOT NULL AND julianday(${vencimentoExpr}) - ${todaySql} <= ${thresholdDays} AND julianday(${vencimentoExpr}) >= ${todaySql} THEN 1 ELSE 0 END) as vencendo,
+        SUM(CASE WHEN ${vencimentoExpr} IS NULL OR julianday(${vencimentoExpr}) - ${todaySql} > ${thresholdDays} THEN 1 ELSE 0 END) as validas
       FROM qualificacoes_historico qh
       JOIN funcionarios f ON f.id = qh.funcionario_id
       LEFT JOIN qualificacoes_tipos qt ON qt.id = qh.qualificacao_id
@@ -199,7 +201,7 @@ router.get(
 
 /**
  * GET /renovacoes-pendentes
- * Qualificações que estão vencendo (próximos 30 dias)
+ * Qualificações que estão vencendo (janela configurada por empresa)
  */
 router.get(
   '/renovacoes-pendentes',
@@ -214,6 +216,7 @@ router.get(
     const currentQualificationPredicate = buildCurrentOperationalQualificationPredicate('qh');
     const vencimentoExpr = getQualificacoesVencimentoExpr('qh', 'qt');
     const todaySql = operationalTodaySql();
+    const thresholdDays = await getQualificacoesAlertaDias(db, tenantCtx.empresaId);
     const limit = parseBoundedLimit(c.req.query('limit'));
 
     const { results } = await db
@@ -236,7 +239,7 @@ router.get(
         AND qh.empresa_id = f.empresa_id
         AND ${scopeConditions.join(' AND ')}
         AND ${vencimentoExpr} IS NOT NULL
-        AND julianday(${vencimentoExpr}) - ${todaySql} <= 30
+        AND julianday(${vencimentoExpr}) - ${todaySql} <= ${thresholdDays}
         AND julianday(${vencimentoExpr}) >= ${todaySql}
       ORDER BY date(${vencimentoExpr}) ASC
       LIMIT ?`,
