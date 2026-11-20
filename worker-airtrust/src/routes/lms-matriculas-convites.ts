@@ -8,6 +8,8 @@ import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employ
 import { logAudit } from '../utils/db';
 import { maskTrainingContact } from '../services/training-communication-history';
 import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
+import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { buildCurrentOperationalQualificationPredicate } from '../lib/qualificacoes/operational-qualification-predicates';
 import {
   reserveTrainingAlert,
   commitTrainingAlertReservation,
@@ -359,7 +361,7 @@ type AlertableEnrollment = {
   telefone: string | null;
 };
 
-async function loadAlertableEnrollments(
+export async function loadAlertableEnrollments(
   db: D1Database,
   empresaId: number,
   ids: number[],
@@ -368,6 +370,22 @@ async function loadAlertableEnrollments(
 ) {
   const placeholders = ids.map(() => '?').join(',');
   const scope = employeeSectorSql(access, 'f');
+  // Matricula pendente != obrigacao pendente: nao cobrar treinamento ja
+  // comprovado em qualificacoes_historico para o mesmo funcionario/tipo.
+  // Emprega a mesma validade dinamica e o mesmo predicado de status vigente
+  // do dashboard, inclusive quando o historico nao guarda data_vencimento.
+  const vigente = buildCurrentOperationalQualificationPredicate('qh');
+  const vencimento = getQualificacoesVencimentoExpr('qh', 'qth');
+  const qualificadoAtualmente = `NOT EXISTS (
+    SELECT 1 FROM qualificacoes_historico qh
+    JOIN qualificacoes_tipos qth ON qth.id=qh.qualificacao_id
+      AND qth.empresa_id=qh.empresa_id AND qth.deleted_at IS NULL
+    WHERE qh.empresa_id=m.empresa_id AND qh.funcionario_id=m.funcionario_id
+      AND qh.qualificacao_id=c.qualificacao_tipo_id
+      AND ${vigente}
+      AND date(qh.data_conclusao)<=date(?)
+      AND date(${vencimento})>=date(?)
+  )`;
   return db.prepare(
     `SELECT m.id,m.funcionario_id,m.curso_id,c.qualificacao_tipo_id,m.data_expiracao,m.status,
             c.titulo AS curso_titulo,f.email,f.telefone
@@ -380,8 +398,9 @@ async function loadAlertableEnrollments(
         AND f.deleted_at IS NULL AND COALESCE(f.ativo,1)=1
         AND UPPER(COALESCE(NULLIF(TRIM(f.status),''),'ATIVO'))='ATIVO'
         AND ${eadOnly ? "UPPER(TRIM(COALESCE(c.categoria, qt.categoria, ''))) IN ('EAD','TREINAMENTO EAD')" : '1=1'}
+        AND ${eadOnly ? qualificadoAtualmente : '1=1'}
         AND ${scope.clause}`,
-  ).bind(empresaId, ...ids, ...scope.bindings).all<AlertableEnrollment>();
+  ).bind(empresaId, ...ids, ...(eadOnly ? [getTodayIsoSaoPaulo(), getTodayIsoSaoPaulo()] : []), ...scope.bindings).all<AlertableEnrollment>();
 }
 
 function alertIdentity(row: AlertableEnrollment) {
