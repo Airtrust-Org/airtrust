@@ -943,6 +943,40 @@ export default function LmsPlayer() {
         return;
       }
 
+      // A suspended mobile tab can outlive the short-lived HttpOnly capability.
+      // Only the authenticated parent can renew it; the SCO never sees a bearer.
+      if (
+        event.data && typeof event.data === 'object' &&
+        event.data.type === 'lms:asset-session-refresh-request' &&
+        event.data.matriculaId === id &&
+        typeof event.data.requestId === 'number' &&
+        Number.isSafeInteger(event.data.requestId) &&
+        !effectiveReviewMode
+      ) {
+        const source = iframeRef.current?.contentWindow;
+        if (!source) return;
+        const requestId = event.data.requestId;
+        void authorizeScormAssetSession({
+          matriculaId: id,
+          expectedHandoffId: activeHandoffId,
+          timeoutMs: 8_000,
+        }).then((response) => {
+          if (iframeRef.current?.contentWindow !== source) return;
+          source.postMessage({
+            type: 'lms:asset-session-refresh-response', matriculaId: id,
+            requestId, ok: response.ok,
+          }, launchOrigin);
+          if (response.status === 409) void refetchMatricula();
+        }).catch(() => {
+          if (iframeRef.current?.contentWindow !== source) return;
+          source.postMessage({
+            type: 'lms:asset-session-refresh-response', matriculaId: id,
+            requestId, ok: false,
+          }, launchOrigin);
+        });
+        return;
+      }
+
       if (
         event.data &&
         typeof event.data === 'object' &&
@@ -1082,7 +1116,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
+  }, [effectiveReviewMode, id, activeHandoffId, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;
