@@ -1,23 +1,37 @@
-import { DatabaseSync } from 'node:sqlite';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadLmsEvidence } from '../../services/training-compliance-snapshot-builder';
 
 // SQLite real com adaptador D1 mínimo: prova do JOIN e do isolamento por tenant,
 // sem fabricar matrículas, provas, certificados nem históricos de produção.
-function sqliteD1(sqlite: DatabaseSync): D1Database {
-  const prepared = (sql: string, args: Array<string | number | null> = []) => ({
-    bind: (...params: Array<string | number | null>) => prepared(sql, params),
-    first: async () => sqlite.prepare(sql).get(...args) ?? null,
-    all: async () => ({ results: sqlite.prepare(sql).all(...args) }),
-  });
+function sqliteD1(path: string): D1Database {
+  const literal = (value: string | number | null) => value === null ? 'NULL'
+    : typeof value === 'number' ? String(value)
+    : "'" + value.replaceAll("'", "''") + "'";
+  const prepared = (sql: string, args: Array<string | number | null> = []) => {
+    const actual = sql.replace(/\\?/g, () => literal(args.shift() ?? null));
+    const read = () => {
+      const output = execFileSync('sqlite3', ['-json', path, actual], { encoding: 'utf8' }).trim();
+      return output ? JSON.parse(output) as Array<Record<string, unknown>> : [];
+    };
+    return {
+      bind: (...values: Array<string | number | null>) => prepared(sql, values),
+      first: async () => read()[0] ?? null,
+      all: async () => ({ results: read() }),
+    };
+  };
   return { prepare: (sql: string) => prepared(sql) } as unknown as D1Database;
 }
 
 describe('F-03 — matriz Compliance exige histórico ativo para conclusão LMS qualificante', () => {
   it('rejeita vínculo ausente, excluído e cross-tenant; aceita vínculo correto e curso não qualificante', async () => {
-    const sqlite = new DatabaseSync(':memory:');
+    const dir = mkdtempSync(join(tmpdir(), 'airtrust-f03-'));
+    const dbPath = join(dir, 'fixture.sqlite');
     try {
-      sqlite.exec(`
+      const schema = `
         CREATE TABLE lms_cursos (id INTEGER, empresa_id INTEGER, qualificacao_tipo_id INTEGER,
           gerar_qualificacao_ao_concluir INTEGER, titulo TEXT, deleted_at TEXT);
         CREATE TABLE lms_matriculas (id INTEGER, empresa_id INTEGER, curso_id INTEGER,
@@ -43,8 +57,9 @@ describe('F-03 — matriz Compliance exige histórico ativo para conclusão LMS 
           (5,6,11,1,NULL,'CONCLUIDO',100,'2026-11-01',NULL,'2026-11-01',NULL,NULL),
           (6,7,12,1,103,'CONCLUIDO',100,'2026-11-01',NULL,'2026-11-01',NULL,NULL),
           (7,6,10,1,104,'CONCLUIDO',100,'2026-11-01',NULL,'2026-11-01',NULL,NULL);
-      `);
-      const map = await loadLmsEvidence(sqliteD1(sqlite), 6);
+      `;
+      execFileSync('sqlite3', [dbPath, schema], { encoding: 'utf8' });
+      const map = await loadLmsEvidence(sqliteD1(dbPath), 6);
       const byId = new Map((map.get('1:20') || []).map((item) => [item.origem_id, item]));
       expect(byId.size).toBe(6); // tenant 7 não participa
       for (const id of [1, 2, 4, 7]) {
@@ -55,7 +70,7 @@ describe('F-03 — matriz Compliance exige histórico ativo para conclusão LMS 
       }
       expect(byId.has(6)).toBe(false);
     } finally {
-      sqlite.close();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
