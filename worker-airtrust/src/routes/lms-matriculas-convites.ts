@@ -8,7 +8,7 @@ import { employeeSectorSql, getEmployeeSectorAccess } from '../middleware/employ
 import { logAudit } from '../utils/db';
 import { maskTrainingContact } from '../services/training-communication-history';
 import { readSameDayTrainingAlerts, SameDayTrainingAlerts } from '../services/training-alert-same-day';
-import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo } from '../utils/qualificacoes-alerta-config';
+import { getQualificacoesVencimentoExpr, getTodayIsoSaoPaulo, getQualificacoesAlertaDias } from '../utils/qualificacoes-alerta-config';
 import { buildCurrentOperationalQualificationPredicate } from '../lib/qualificacoes/operational-qualification-predicates';
 import {
   reserveTrainingAlert,
@@ -370,6 +370,7 @@ export async function loadAlertableEnrollments(
 ) {
   const placeholders = ids.map(() => '?').join(',');
   const scope = employeeSectorSql(access, 'f');
+  const alertaDias = eadOnly ? await getQualificacoesAlertaDias(db, empresaId) : 0;
   // Matricula pendente != obrigacao pendente: nao cobrar treinamento ja
   // comprovado em qualificacoes_historico para o mesmo funcionario/tipo.
   // Emprega a mesma validade dinamica e o mesmo predicado de status vigente
@@ -384,7 +385,7 @@ export async function loadAlertableEnrollments(
       AND qh.qualificacao_id=c.qualificacao_tipo_id
       AND ${vigente}
       AND date(qh.data_conclusao)<=date(?)
-      AND date(${vencimento})>=date(?)
+      AND date(${vencimento})>date(?, '+' || ? || ' days')
   )`;
   return db.prepare(
     `SELECT m.id,m.funcionario_id,m.curso_id,c.qualificacao_tipo_id,m.data_expiracao,m.status,
@@ -400,7 +401,7 @@ export async function loadAlertableEnrollments(
         AND ${eadOnly ? "UPPER(TRIM(COALESCE(c.categoria, qt.categoria, ''))) IN ('EAD','TREINAMENTO EAD')" : '1=1'}
         AND ${eadOnly ? qualificadoAtualmente : '1=1'}
         AND ${scope.clause}`,
-  ).bind(empresaId, ...ids, ...(eadOnly ? [getTodayIsoSaoPaulo(), getTodayIsoSaoPaulo()] : []), ...scope.bindings).all<AlertableEnrollment>();
+  ).bind(empresaId, ...ids, ...(eadOnly ? [getTodayIsoSaoPaulo(), getTodayIsoSaoPaulo(), alertaDias] : []), ...scope.bindings).all<AlertableEnrollment>();
 }
 
 function alertIdentity(row: AlertableEnrollment) {

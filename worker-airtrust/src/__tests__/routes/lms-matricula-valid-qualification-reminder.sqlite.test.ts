@@ -9,11 +9,14 @@ function dbAdapter(sqlite: DatabaseSync): D1Database {
   const statement = (sql: string, bindings: (number | string)[] = []) => ({
     bind: (...next: (number | string)[]) => statement(sql, next),
     all: async () => ({ results: sqlite.prepare(sql).all(...bindings) }),
+    first: async () => sqlite.prepare(sql).get(...bindings) ?? null,
   });
   return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
 }
 function seed(db: DatabaseSync) {
   db.exec(`
+    CREATE TABLE empresas_config(empresa_id INTEGER, dias_alerta_vencimento INTEGER);
+    INSERT INTO empresas_config VALUES(6,30);
     CREATE TABLE funcionarios(id INTEGER, empresa_id INTEGER, nome TEXT, email TEXT, telefone TEXT, ativo INTEGER, status TEXT, deleted_at TEXT);
     CREATE TABLE lms_cursos(id INTEGER, empresa_id INTEGER, titulo TEXT, categoria TEXT, qualificacao_tipo_id INTEGER, deleted_at TEXT);
     CREATE TABLE lms_matriculas(id INTEGER, empresa_id INTEGER, funcionario_id INTEGER, curso_id INTEGER, data_expiracao TEXT, status TEXT, deleted_at TEXT);
@@ -46,6 +49,25 @@ describe('LMS lembrete vs qualificação válida', () => {
       try { seed(db); db.exec(change); const result = await loadAlertableEnrollments(dbAdapter(db),6,[1332],access,true); expect(result.results.map(row=>row.id)).toEqual([1332]); }
       finally { db.close(); }
     }
+  });
+  it('preserva lembretes de renovação quando certificado vence em até 30 dias', async () => {
+    const db = new Sqlite(':memory:');
+    try {
+      seed(db);
+      db.exec("UPDATE qualificacoes_historico SET data_vencimento=date('now','+15 days') WHERE id=7524");
+      const result = await loadAlertableEnrollments(dbAdapter(db),6,[1332],access,true);
+      expect(result.results.map(row=>row.id)).toEqual([1332]);
+    } finally { db.close(); }
+  });
+  it('respeita janela de alerta configurada por empresa', async () => {
+    const db = new Sqlite(':memory:');
+    try {
+      seed(db);
+      db.exec("UPDATE qualificacoes_historico SET data_vencimento=date('now','+45 days') WHERE id=7524");
+      expect((await loadAlertableEnrollments(dbAdapter(db),6,[1332],access,true)).results).toHaveLength(0);
+      db.exec('UPDATE empresas_config SET dias_alerta_vencimento=60 WHERE empresa_id=6');
+      expect((await loadAlertableEnrollments(dbAdapter(db),6,[1332],access,true)).results).toHaveLength(1);
+    } finally { db.close(); }
   });
   it('não alerta matrícula cancelada ou excluída; convite inicial conserva política anterior', async () => {
     const db = new Sqlite(':memory:');
