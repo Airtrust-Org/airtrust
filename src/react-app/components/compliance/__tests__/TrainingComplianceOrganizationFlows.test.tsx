@@ -105,6 +105,10 @@ describe('Training Compliance organization flows', () => {
     expect(screen.getByRole('option', { name: 'Coordenador de Voo' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Mecânico' })).not.toBeInTheDocument();
     expect(screen.getByText(/2 preservada\(s\)/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Exibir treinamentos')).toHaveValue('applicable');
+    expect(screen.queryByText('PBN')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Exibir treinamentos'), { target: { value: 'all' } });
+    expect(screen.getByText('PBN')).toBeInTheDocument();
     expect(screen.getByText('Sem regra')).toBeInTheDocument();
 
     const crmRow = screen.getByText('CRM Periódico').closest('tr')!;
