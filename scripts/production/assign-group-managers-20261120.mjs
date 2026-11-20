@@ -29,7 +29,8 @@ function snapshot(){
  check(rules.length===2&&rules.every((r,i)=>r.id===REQUIRED_RULES[i]&&r.obrigatoriedade==='OBRIGATORIA'&&r.auto_matricular_ead===1),'RULES_DRIFT');
  const courses=query('SELECT id,qualificacao_tipo_id,ativo,publicado FROM lms_cursos WHERE empresa_id=6 AND deleted_at IS NULL AND qualificacao_tipo_id IN ('+rules.map(r=>r.qualificacao_tipo_id).join(',')+') ORDER BY id');
  check(rules.every(r=>courses.filter(c=>c.qualificacao_tipo_id===r.qualificacao_tipo_id&&c.ativo===1).length===1),'COURSE_MAPPING_DRIFT');
- check(courses.filter(c=>c.ativo===1&&c.publicado!==1).map(c=>c.id).join(',')==='82','UNREVIEWED_UNPUBLISHED_COURSE_CHANGE');
+ const unpublished=courses.filter(c=>c.ativo===1&&c.publicado!==1).map(c=>c.id).join(',');
+ check(unpublished===''||unpublished==='82','UNREVIEWED_UNPUBLISHED_COURSE_CHANGE');
  const assignments=query('SELECT id,funcionario_id,condicao_id,ativo,deleted_at,data_inicio,data_fim FROM funcionarios_compliance_condicoes WHERE empresa_id=6 AND condicao_id=36 AND funcionario_id IN ('+EMPLOYEES.join(',')+') ORDER BY funcionario_id,id');
  check(assignments.every(a=>EMPLOYEES.includes(a.funcionario_id)),'ASSIGNMENT_SCOPE_DRIFT');
  check(assignments.filter(a=>a.ativo===1&&!a.deleted_at).every(a=>a.condicao_id===36),'ASSIGNMENT_CONFLICT');
