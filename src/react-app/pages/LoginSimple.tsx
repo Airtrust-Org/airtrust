@@ -51,7 +51,7 @@ const DEV_PROFILES = [
     color: 'bg-purple-100 text-purple-700 hover:bg-purple-200',
   },
   {
-    label: 'Gestor',
+    label: 'Administrador Operacional',
     email: QUICK_LOGIN_GESTOR_EMAIL,
     password: QUICK_LOGIN_GESTOR_PASSWORD,
     color: 'bg-blue-100 text-blue-700 hover:bg-blue-200',

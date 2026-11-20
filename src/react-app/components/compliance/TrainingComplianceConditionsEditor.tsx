@@ -23,6 +23,10 @@ type Employee = {
   funcao_nome?: string | null;
 };
 
+function complianceDesignationLabel(code: string, name: string): string {
+  return code === 'GESTOR' ? 'Grupo de Gestores' : name;
+}
+
 type Assignment = {
   id: number;
   funcionario_id: number;
@@ -352,7 +356,7 @@ export function TrainingComplianceConditionsEditor() {
                 <optgroup key={type} label={type}>
                   {conditions.map((condition) => (
                     <option key={condition.id} value={condition.id}>
-                      {condition.nome}
+                      {complianceDesignationLabel(condition.codigo, condition.nome)}
                     </option>
                   ))}
                 </optgroup>
@@ -420,7 +424,7 @@ export function TrainingComplianceConditionsEditor() {
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-800">
-                  {assignment.funcionario_nome} · {assignment.condicao_nome}
+                  {assignment.funcionario_nome} · {complianceDesignationLabel(assignment.condicao_codigo, assignment.condicao_nome)}
                 </p>
                 <p className="text-xs text-slate-500">
                   {assignment.tipo}

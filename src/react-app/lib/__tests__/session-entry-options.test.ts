@@ -17,7 +17,7 @@ describe('login — entradas operacionais por grupo', () => {
   it('GESTOR pode escolher entre gestão e modo Aluno / Instrutor', () => {
     expect(sessionEntryOptions(['GESTOR', 'INSTRUTOR', 'ALUNO']).map(({ id, role, label }) =>
       ({ id, role, label }))).toEqual([
-      { id: 'manager', role: 'GESTOR', label: 'Gestor' },
+      { id: 'manager', role: 'GESTOR', label: 'Administrador Operacional' },
       { id: 'learning', role: 'INSTRUTOR', label: 'Aluno / Instrutor' },
     ]);
   });
