@@ -79,6 +79,7 @@ export function TrainingComplianceConditionsEditor() {
   const [newDescription, setNewDescription] = useState('');
   const [newReference, setNewReference] = useState('');
   const [editingConditionId, setEditingConditionId] = useState<number | null>(null);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null);
 
   const catalogs = useQuery({
     queryKey: ['training-compliance', 'condition-catalogs'],
@@ -167,7 +168,7 @@ export function TrainingComplianceConditionsEditor() {
         showToast.warning('Designação registrada, mas não há um único curso EAD publicado e vinculado.');
       else if(result.auto_enrollment_warning)
         showToast.warning('Designação registrada com pendência: matrícula automática não confirmada; reconciliação necessária.');
-      setReason(''); await invalidate();
+      setReason(''); setEditingAssignmentId(null); await invalidate();
     },
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao atribuir condição'),
@@ -213,6 +214,26 @@ export function TrainingComplianceConditionsEditor() {
     onError: (error) =>
       showToast.error(error instanceof Error ? error.message : 'Erro ao criar condição'),
   });
+
+  const beginEditAssignment = (assignment: Assignment) => {
+    setEditingAssignmentId(assignment.id);
+    setCargoFilterId(null);
+    setEmployeeId(assignment.funcionario_id);
+    setConditionId(assignment.condicao_id);
+    setStartDate(assignment.data_inicio || todayComplianceIso());
+    setEndDate(assignment.data_fim || '');
+    setReference(assignment.referencia_normativa || '');
+    setReason(assignment.justificativa || '');
+  };
+  const cancelEditAssignment = () => {
+    setEditingAssignmentId(null);
+    setEmployeeId(null);
+    setConditionId(null);
+    setStartDate(todayComplianceIso());
+    setEndDate('');
+    setReference('');
+    setReason('');
+  };
 
   const beginEditCondition = (condition: Condition) => {
     setEditingConditionId(condition.id);
@@ -305,6 +326,7 @@ export function TrainingComplianceConditionsEditor() {
             Funcionário
             <select
               value={employeeId ?? ''}
+              disabled={editingAssignmentId !== null}
               onChange={(e) => setEmployeeId(e.target.value ? Number(e.target.value) : null)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
@@ -321,6 +343,7 @@ export function TrainingComplianceConditionsEditor() {
             Condição
             <select
               value={conditionId ?? ''}
+              disabled={editingAssignmentId !== null}
               onChange={(e) => setConditionId(e.target.value ? Number(e.target.value) : null)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
@@ -374,14 +397,15 @@ export function TrainingComplianceConditionsEditor() {
             />
           </label>
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex justify-end gap-2">
+          {editingAssignmentId ? <button type="button" onClick={cancelEditAssignment} className="rounded-lg border px-3 py-2 text-sm">Cancelar edição</button> : null}
           <button
             type="button"
             onClick={() => assign.mutate()}
             disabled={assign.isPending}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" /> Atribuir condição/designação
+            <Plus className="h-4 w-4" /> {editingAssignmentId ? 'Salvar designação existente' : 'Atribuir condição/designação'}
           </button>
         </div>
       </section>
@@ -408,6 +432,7 @@ export function TrainingComplianceConditionsEditor() {
                   <p className="mt-1 text-xs text-slate-600">{assignment.justificativa}</p>
                 ) : null}
               </div>
+              <button type="button" onClick={() => beginEditAssignment(assignment)} aria-label={`Editar atribuição de ${assignment.funcionario_nome}: ${assignment.condicao_nome}`} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
               <button
                 type="button"
                 onClick={() => remove.mutate(assignment.id)}
