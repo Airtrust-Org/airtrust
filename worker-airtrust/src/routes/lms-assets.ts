@@ -25,6 +25,8 @@ import {
   buildScormQueuedCommitScript,
   buildScormCommitDeadlineScript,
   buildScormTerminalLockScript,
+  buildScormAssetSessionRefreshScript,
+  buildScormExpiredSessionRetryBranchScript,
 } from '../services/lms-scorm-wrapper-runtime';
 import { generateJWT, verifyJWT } from '../utils/security';
 import { getEmpresaIdOptional } from '../utils/tenant-resolution';
@@ -1434,10 +1436,7 @@ ${buildScormLocationHelpersScript()}
     }
   }
 
-  function postToParent(message) {
-    if (!window.parent || window.parent === window) return;
-    window.parent.postMessage(message, PARENT_ORIGIN === 'null' ? '*' : PARENT_ORIGIN);
-  }
+${buildScormAssetSessionRefreshScript()}
 
   var statusHideTimer = null;
   function setStatus(text, active, persistent) {
@@ -2068,6 +2067,7 @@ ${buildScormCommitDeadlineScript()}
         }
       };
 
+${buildScormExpiredSessionRetryBranchScript()}
       try {
         response.clone().json().then(function(json) {
           handleNonOkResponse(json);

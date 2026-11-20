@@ -39,3 +39,24 @@ export async function authorizeScormAssetSession(params: {
     params.signal?.removeEventListener('abort', abort);
   }
 }
+
+/** Reject any cross-origin, wrong-frame, cross-enrollment or replay-shaped renewal. */
+export function validScormAssetRefreshRequest(input: {
+  data: unknown;
+  source: MessageEventSource | null;
+  expectedSource: MessageEventSource | null;
+  origin: string;
+  expectedOrigin: string;
+  matriculaId: number;
+  reviewMode: boolean;
+}): number | null {
+  if (input.reviewMode || input.origin !== input.expectedOrigin ||
+      !input.source || input.source !== input.expectedSource ||
+      !input.data || typeof input.data !== 'object' || Array.isArray(input.data)) return null;
+  const message = input.data as Record<string, unknown>;
+  return message.type === 'lms:asset-session-refresh-request' &&
+    message.matriculaId === input.matriculaId &&
+    typeof message.requestId === 'number' &&
+    Number.isSafeInteger(message.requestId) && message.requestId > 0
+    ? message.requestId : null;
+}
