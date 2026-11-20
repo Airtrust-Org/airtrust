@@ -5,6 +5,7 @@
 
 import type { D1Database } from '@cloudflare/workers-types';
 import { hasSchemaTable } from '../utils/db-schema';
+import { buildSnapshot } from './training-compliance-snapshot-builder';
 import type {
   DashboardMetrics,
   AlertaCritico,
@@ -506,82 +507,56 @@ export async function getDashboardAlerts(
       }),
     );
 
-    // Alertas de cursos LMS obrigatórios não concluídos
-    let alertasLms: AlertaCritico[] = [];
-    try {
-      const lmsResults = await db
-        .prepare(
-          `SELECT
-             rc.id,
-             f.id as tripulante_id,
-             f.nome as tripulante_nome,
-             f.matricula as tripulante_matricula,
-             c.id as curso_id,
-             c.titulo as curso_titulo,
-             COALESCE(m.status, 'NAO_MATRICULADO') as status_matricula,
-             m.data_expiracao as prazo_conclusao
-           FROM requisitos_compliance rc
-           JOIN lms_cursos c ON CAST(c.id AS TEXT) = rc.referencia AND c.deleted_at IS NULL
-           JOIN funcionarios f ON f.empresa_id = rc.empresa_id
-             AND f.funcao = rc.funcao
-             AND f.deleted_at IS NULL
-             AND UPPER(COALESCE(NULLIF(TRIM(f.status), ''), 'ATIVO')) = 'ATIVO'
-           LEFT JOIN lms_matriculas m ON m.curso_id = c.id
-             AND m.funcionario_id = f.id
-             AND m.deleted_at IS NULL
-             AND m.status NOT IN ('CANCELADO', 'REPROVADO')
-           WHERE rc.empresa_id = ?
-             AND ${employeeScope.clause}
-             AND rc.deleted_at IS NULL
-             AND rc.tipo_recurso = 'curso_lms'
-             AND rc.obrigatorio = 1
-             AND COALESCE(m.status, 'NAO_MATRICULADO') != 'CONCLUIDO'
-           ORDER BY f.nome, c.titulo
-           LIMIT 30`,
+    // Fonte única: usar o mesmo motor de aplicabilidade/evidência do
+    // Compliance de Treinamentos. O cadastro legado requisitos_compliance
+    // NÃO representa requisitos efetivos e gerava alertas falsos para gestores.
+    // Coalescência somente in-flight, sem cache positivo persistente.
+    const snapshot = await buildSnapshot(
+      db, empresaId, resolveDashboardAccess(access), undefined, { coalesce: true },
+    );
+    const pending = snapshot.people.flatMap((person) =>
+      person.requisitos
+        .filter((rule) =>
+          rule.obrigatoriedade === 'OBRIGATORIA' &&
+          Number(rule.auto_matricular_ead) === 1 &&
+          ['NAO_REALIZADO', 'VENCIDO', 'EM_ANDAMENTO'].includes(rule.status_compliance),
         )
-        .bind(empresaId, ...employeeScope.bindings)
-        .all();
-
-      alertasLms = (lmsResults.results || []).map((row: Record<string, unknown>, idx: number) => {
-        const status = String(row.status_matricula || 'NAO_MATRICULADO');
-        const venceu =
-          row.prazo_conclusao &&
-          String(row.prazo_conclusao) < new Date().toISOString().slice(0, 10);
-        const criticidade: AlertaCritico['criticidade'] = venceu
-          ? 'ALTA'
-          : status === 'NAO_MATRICULADO'
-            ? 'MEDIA'
-            : 'BAIXA';
-        const statusLabel =
-          status === 'NAO_MATRICULADO'
-            ? 'não matriculado'
-            : status === 'EM_ANDAMENTO'
-              ? 'em andamento'
-              : status;
-        return {
-          id: 100000 + idx,
-          tipo: 'lms_curso_pendente' as AlertaCritico['tipo'],
-          criticidade,
-          mensagem: `Curso obrigatório "${row.curso_titulo}" — ${statusLabel}`,
-          tripulanteId: row.tripulante_id ? Number(row.tripulante_id) : undefined,
-          tripulanteNome: row.tripulante_nome ? String(row.tripulante_nome) : undefined,
-          tripulanteMatricula: row.tripulante_matricula
-            ? String(row.tripulante_matricula)
-            : undefined,
-          acaoRecomendada: status === 'NAO_MATRICULADO' ? 'Matricular no curso' : 'Concluir curso',
-          urlAcao: `/lms/cursos/${row.curso_id}`,
-          createdAt: new Date().toISOString(),
-        };
-      });
-    } catch {
-      // tabela requisitos_compliance pode não existir em ambientes antigos
-    }
+        .map((rule) => ({ person, rule })),
+    );
+    const severity = (status: string) =>
+      status === 'VENCIDO' ? 0 : status === 'NAO_REALIZADO' ? 1 : 2;
+    pending.sort((a, b) =>
+      severity(a.rule.status_compliance) - severity(b.rule.status_compliance) ||
+      a.person.nome.localeCompare(b.person.nome) ||
+      a.rule.qualificacao_tipo_id - b.rule.qualificacao_tipo_id,
+    );
+    const alertasLms: AlertaCritico[] = pending.slice(0, 30).map(({ person, rule }, idx): AlertaCritico => {
+      const missingQualification = rule.evidencia_pendente_motivo === 'QUALIFICACAO_AUSENTE';
+      const statusLabel = missingQualification ? 'conclusão sem qualificação vinculada'
+        : rule.status_compliance === 'VENCIDO' ? 'vencido'
+        : rule.status_compliance === 'EM_ANDAMENTO' ? 'em andamento' : 'não realizado';
+      return {
+        id: 100000 + idx,
+        tipo: 'lms_curso_pendente',
+        criticidade: rule.status_compliance === 'VENCIDO' ? 'ALTA'
+          : rule.status_compliance === 'NAO_REALIZADO' ? 'MEDIA' : 'BAIXA',
+        mensagem: `Treinamento obrigatório "${rule.qualificacao_tipo_nome || rule.curso_ead_titulo || 'Sem título'}" — ${statusLabel}`,
+        tripulanteId: person.id,
+        tripulanteNome: person.nome,
+        tripulanteMatricula: person.matricula || undefined,
+        acaoRecomendada: missingQualification ? 'Revisar vínculo de qualificação'
+          : rule.status_compliance === 'EM_ANDAMENTO' ? 'Concluir treinamento'
+          : 'Verificar requisito e matrícula',
+        urlAcao: '/treinamentos/compliance',
+        createdAt: new Date().toISOString(),
+      };
+    });
 
     const alertas = [...alertasQual, ...alertasLms];
     return alertas;
   } catch (error) {
     console.error('[DASHBOARD] Erro ao buscar alertas:', error);
-    return [];
+    throw error;
   }
 }
 

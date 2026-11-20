@@ -150,10 +150,6 @@ const IntegracoesSigvoos = lazyWithRetry(
   () => import('./pages/Configuracoes/Integracoes/Sigvoos'),
   'IntegracoesSigvoos',
 );
-const ComplianceSettings = lazyWithRetry(
-  () => import('./pages/ComplianceSettings').then((m) => ({ default: m.ComplianceSettings })),
-  'ComplianceSettings',
-);
 const VerificarCertificado = lazyWithRetry(
   () => import('./pages/VerificarCertificado'),
   'VerificarCertificado',
@@ -792,11 +788,7 @@ export default function App() {
                     />
                     <Route
                       path="/configuracoes/compliance"
-                      element={
-                        <ProtectedRoute>
-                          <ComplianceSettings />
-                        </ProtectedRoute>
-                      }
+                      element={<Navigate to="/treinamentos/compliance" replace />}
                     />
                     {/* Treinamentos integrado em qualificações */}
                     <Route

@@ -23,5 +23,8 @@ describe('MatrizTreinamento canonical compliance boundary', () => {
     expect(appSource).toContain('path="/treinamentos/compliance"');
     expect(appSource).toContain('path="/compliance-treinamentos"');
     expect(appSource).toContain('to="/treinamentos/compliance" replace');
+    expect(appSource).toContain('path="/configuracoes/compliance"');
+    expect(appSource).not.toContain('ComplianceSettings />');
+    expect(appSource).not.toContain("import('./pages/ComplianceSettings')");
   });
 });
