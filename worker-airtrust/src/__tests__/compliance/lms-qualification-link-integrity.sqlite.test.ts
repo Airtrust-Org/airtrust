@@ -12,7 +12,7 @@ function sqliteD1(path: string): D1Database {
     : typeof value === 'number' ? String(value)
     : "'" + value.replaceAll("'", "''") + "'";
   const prepared = (sql: string, args: Array<string | number | null> = []) => {
-    const actual = sql.replace(/\\?/g, () => literal(args.shift() ?? null));
+    const actual = sql.replace(/[?]/g, () => literal(args.shift() ?? null));
     const read = () => {
       const output = execFileSync('sqlite3', ['-json', path, actual], { encoding: 'utf8' }).trim();
       return output ? JSON.parse(output) as Array<Record<string, unknown>> : [];
