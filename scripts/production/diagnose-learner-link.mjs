@@ -65,6 +65,19 @@ async function main(){
     if(r.status!==200||r.json?.success!==true)throw Error('READONLY_HTTP_'+r.status);
     return r.json.data;
   }
+  // Read-only reproduction of the staff page with every accessible sector selected.
+  // This uses the same query parameters as the browser; never log staff details.
+  const authHeaders={Authorization:'Bearer '+token};
+  const sectorResult=await fetchJson(base+'/api/setores',{headers:authHeaders});
+  if(sectorResult.status!==200||sectorResult.json?.success!==true||
+      !Array.isArray(sectorResult.json?.data))throw Error('SECTOR_LOOKUP_HTTP_'+sectorResult.status);
+  const sectorIds=[...new Set(sectorResult.json.data.map(row=>Number(row.id)).filter(id=>Number.isInteger(id)&&id>0))];
+  const query=new URLSearchParams({page:'1',limit:'50',search:'',status:'ativo'});
+  sectorIds.forEach(id=>query.append('setor_id',String(id)));
+  const staffWithAllSectors=await fetchJson(base+'/api/funcionarios?'+query.toString(),{headers:authHeaders,timeoutMs:20000});
+  if(staffWithAllSectors.status!==200||staffWithAllSectors.json?.success!==true||
+      !Array.isArray(staffWithAllSectors.json?.data))throw Error('STAFF_ALL_SECTORS_HTTP_'+staffWithAllSectors.status);
+  const sectorProbe={accessible_sector_count:sectorIds.length,staff_all_sectors_http:staffWithAllSectors.status};
   const users=await get('/api/admin/usuarios');
   if(!Array.isArray(users))throw Error('USER_LIST_INVALID');
   const candidates=users.filter(u=>Number(u.empresa_id)===6&&Number(u.active)===1&&matches(u.nome,'Yngrid'));
@@ -86,7 +99,7 @@ async function main(){
   const permissions=await get('/api/admin/usuarios/'+Number(user.id)+'/permissoes');
   if(!Array.isArray(permissions))throw Error('PERMISSION_LIST_INVALID');
   const report=assessLearnerIdentity({users,staff:[...staffMap.values()],access:enterpriseAccess[0],permissions,tenantId:6,target:'Yngrid'});
-  const output={...report,source_sha:process.env.GITHUB_SHA,production_sha:expected,mode:'read-only',pii_emitted:false,user_or_employee_mutated:false};
+  const output={...report,...sectorProbe,source_sha:process.env.GITHUB_SHA,production_sha:expected,mode:'read-only',pii_emitted:false,user_or_employee_mutated:false};
   const file=String(process.env.IDENTITY_RESULT_FILE||'');
   if(!file)throw Error('RESULT_FILE_REQUIRED');
   writeFileSync(file,JSON.stringify(output,null,2)+'\n',{mode:0o600});
