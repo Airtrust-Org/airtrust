@@ -52,7 +52,7 @@ describe('F-06 — alertas do Dashboard usam requisitos canônicos', () => {
       employees: [], rules: [],
     } as unknown as Awaited<ReturnType<typeof buildSnapshot>>);
 
-    const access = { mode: 'all' as const, setorIds: [], funcionarioId: null };
+    const access = { mode: 'all' as const, setorIds: [] as [], funcionarioId: null };
     const rows = await getDashboardAlerts(emptyQualificationDb(), 6, access);
     expect(buildSnapshot).toHaveBeenCalledWith(
       expect.anything(), 6, access, undefined, { coalesce: true },
