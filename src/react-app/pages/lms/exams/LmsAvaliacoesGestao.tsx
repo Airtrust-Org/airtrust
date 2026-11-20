@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {BookOpen,ClipboardList,RefreshCw,Search,ShieldAlert} from 'lucide-react';
 import AppLayout from '../../../components/AppLayout';
+import {ExamPageHeader,ExamEmpty,examPage,examCard,examInput,examPrimary,examSecondary,examSmall} from './examUi';
 import {fetchWithAuth} from '../../../config/api';
 import {buildExamResultsCsv} from './examReportCsv';
 
@@ -19,8 +20,8 @@ type Envelope={success:boolean;code?:string;data?:Overview};
 type ReportRow=Attempt&{cursoTitulo:string|null};
 type Report={page:number;limit:number;total:number;pages:number;items:ReportRow[]};
 type ReportEnvelope={success:boolean;code?:string;data?:Report};
-const panel='rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900';
-const control='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white';
+const panel=examCard;
+const control=examSecondary;
 const datetime=(s:string|null)=>s?new Date(s.includes('T')?s:s.replace(' ','T')+'Z').toLocaleString('pt-BR'):'—';
 
 export default function LmsAvaliacoesGestao(){
@@ -33,11 +34,15 @@ export default function LmsAvaliacoesGestao(){
  const [course,setCourse]=useState('todos');
  const [resultFilter,setResultFilter]=useState('todos');
  const [resultSearch,setResultSearch]=useState('');
+ const [debouncedSearch,setDebouncedSearch]=useState('');
+ const [exporting,setExporting]=useState(false);
+ const [selectedAttempt,setSelectedAttempt]=useState<ReportRow|null>(null);
  const [resultPage,setResultPage]=useState(1);
  const [reportRefresh,setReportRefresh]=useState(0);
  const [report,setReport]=useState<Report|null>(null);
  const [reportLoading,setReportLoading]=useState(false);
  const [reportError,setReportError]=useState('');
+ useEffect(()=>{const t=window.setTimeout(()=>setDebouncedSearch(resultSearch.trim()),400);return()=>window.clearTimeout(t);},[resultSearch]);
  useEffect(()=>{
   if(tab!=='resultados'||!data)return;
   let active=true;
@@ -45,24 +50,24 @@ export default function LmsAvaliacoesGestao(){
   const query=new URLSearchParams({
     page:String(resultPage),limit:'25',resultado:resultFilter,
     ...(course!=='todos'?{cursoId:course}:{}),
-    ...(resultSearch.trim()?{busca:resultSearch.trim()}:{}),
+    ...(debouncedSearch?{busca:debouncedSearch}:{}),
   });
   void fetchWithAuth('/api/lms/exams/admin/resultados?'+query.toString(),{cache:'no-store'})
     .then(async response=>{
       const body=await response.json() as ReportEnvelope;
       if(!response.ok||!body.success||!body.data)throw Error(body.code||'EXAM_REPORT_UNAVAILABLE');
       if(active)setReport(body.data);
-    }).catch(e=>{if(active)setReportError((e as Error).message);})
+    }).catch(()=>{if(active)setReportError('Não foi possível carregar os resultados. Tente novamente.');})
     .finally(()=>{if(active)setReportLoading(false);});
   return()=>{active=false;};
- },[tab,data,course,resultFilter,resultSearch,resultPage,reportRefresh]);
+ },[tab,data,course,resultFilter,debouncedSearch,resultPage,reportRefresh]);
  const load=useCallback(async()=>{
   setLoading(true);setError('');
   try{
    const response=await fetchWithAuth('/api/lms/exams/admin/overview',{cache:'no-store'});
    const value=await response.json() as Envelope;
    if(!response.ok||!value.success||!value.data)throw Error(value.code||'Falha ao consultar avaliações');
-   setData(value.data);
+   setData(value.data);setSelectedAttempt(null);
   }catch(e){setData(null);setError((e as Error).message);}
   finally{setLoading(false);}
  },[]);
@@ -85,6 +90,32 @@ export default function LmsAvaliacoesGestao(){
  const published=data?.questionCounts.filter(q=>q.status==='PUBLISHED').reduce((n,q)=>n+q.total,0)||0;
  const submitted=(data?.totals.passed||0)+(data?.totals.failed||0);
  const score=submitted?Math.round((data?.totals.passed||0)/submitted*100)+'%':'—';
+ const exportAllFiltered=async()=>{
+  if(!report?.total||exporting)return;
+  if(report.pages>200){setReportError('O filtro excede 5.000 registros. Refine os filtros antes de exportar.');return;}
+  if(!window.confirm('Exportar '+report.total+' tentativas dos filtros atuais? O CSV pode conter dados pessoais de alunos.'))return;
+  setExporting(true);setReportError('');
+  try{
+   const all:ReportRow[]=[];
+   for(let page=1;page<=report.pages;page++){
+    const query=new URLSearchParams({page:String(page),limit:'25',resultado:resultFilter,
+      ...(course!=='todos'?{cursoId:course}:{}),...(debouncedSearch?{busca:debouncedSearch}:{})});
+    const response=await fetchWithAuth('/api/lms/exams/admin/resultados?'+query.toString(),{cache:'no-store'});
+    const body=await response.json() as ReportEnvelope;
+    if(!response.ok||!body.success||!body.data||body.data.page!==page)
+      throw Error('Falha ao carregar todas as páginas.');
+    all.push(...body.data.items);
+   }
+   if(all.length!==report.total)throw Error('O conjunto de resultados mudou. Atualize e tente novamente.');
+   const csv=buildExamResultsCsv(all);
+   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+   const link=document.createElement('a');
+   link.href=url;link.download='airtrust-avaliacoes-filtro-completo.csv';
+   document.body.appendChild(link);link.click();link.remove();
+   window.setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch{setReportError('A exportação não foi concluída. Nenhum arquivo parcial foi disponibilizado.');}
+  finally{setExporting(false);}
+ };
  const exportReportPage=()=>{
   if(!report?.items.length)return;
   const csv=buildExamResultsCsv(report.items.map(a=>({...a,cursoTitulo:a.cursoTitulo||names.get(a.cursoId)||null})));
@@ -94,15 +125,9 @@ export default function LmsAvaliacoesGestao(){
   document.body.appendChild(link);link.click();link.remove();
   window.setTimeout(()=>URL.revokeObjectURL(url),1500);
  };
- return <AppLayout><main className="mx-auto max-w-7xl space-y-6 p-4 pb-14 md:p-7">
-  <header className="flex flex-wrap items-start justify-between gap-3">
-   <div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Treinamentos / Gestão</p>
-    <h1 className="mt-1 text-2xl font-bold md:text-3xl">Gestão de Avaliações</h1>
-    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Crie provas, organize bancos de questões, vincule edições de EAD e acompanhe notas e aprovações.</p>
-   </div>
-   <button type="button" className={control+' inline-flex items-center gap-2'} disabled={loading}
-    onClick={()=>void load()}><RefreshCw className="h-4 w-4"/>Atualizar</button>
-  </header>
+ return <AppLayout><div className={examPage}>
+  <ExamPageHeader title="Gestão de Avaliações" description="Crie e organize provas, vincule edições autorizadas de EAD e acompanhe resultados."
+    actions={<button type="button" className={examSecondary} disabled={loading} onClick={()=>void load()}><RefreshCw className="h-4 w-4" aria-hidden/> Atualizar</button>}/>
   {loading&&<p role="status">Carregando avaliações...</p>}
   {error&&<p role="alert" className="rounded-xl border border-amber-400 p-4 text-sm">
    <strong>Dados indisponíveis.</strong> {error==='QUESTION_BANK_NOT_ACTIVATED'?'Módulo ainda não habilitado para esta empresa.':error}
@@ -110,18 +135,18 @@ export default function LmsAvaliacoesGestao(){
   {data&&<>
    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
     {[
-     ['Provas publicadas',data.plans.length],['Edições vinculadas',data.bindings.length],
-     ['Questões publicadas',published],['Tentativas',data.totals.attempts],['Taxa de aprovação',score],
+     ['Provas exibidas',data.plans.length],['Vínculos exibidos',data.bindings.length],
+     ['Questões exibidas',published],['Tentativas',data.totals.attempts],['Aprovação (submetidas)',score],
     ].map(([label,value])=><div className={panel} key={label}>
      <strong className="block text-2xl font-bold tabular-nums">{value}</strong>
-     <span className="text-xs text-slate-600 dark:text-slate-300">{label}</span>
+     <span className={examSmall}>{label}{label==='Aprovação (submetidas)'&&submitted?' · '+data.totals.passed+' / '+submitted:''}</span>
     </div>)}
    </div>
    <nav aria-label="Seções de avaliações" className="flex flex-wrap gap-2 border-b pb-3">
     {([
      ['provas','Provas e bancos de questões'],['resultados','Resultados e notas'],['ajuda','Como funciona'],
     ] as const).map(([id,label])=><button type="button" key={id} aria-pressed={tab===id}
-     className={'rounded-lg px-4 py-2 text-sm font-medium '+(tab===id?'bg-blue-700 text-white':'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')}
+     className={'min-h-11 rounded-lg px-4 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary '+(tab===id?'bg-primary-800 text-white':'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')}
      onClick={()=>setTab(id)}>{label}</button>)}
    </nav>
    {tab==='provas'&&<section className={panel}>
@@ -130,64 +155,76 @@ export default function LmsAvaliacoesGestao(){
       <p className="text-sm text-slate-600 dark:text-slate-300">Selecione um curso para criar questões, montar a prova e vinculá-la à edição de EAD.</p></div>
      <Link className={control} to="/lms/admin/cursos">Configurar cursos EAD</Link>
     </div>
-    <div className="mb-4 flex flex-wrap gap-3">
-     <label className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/>
+    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+     <label className="relative min-w-0"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/>
       <span className="sr-only">Buscar curso</span>
-      <input className={control+' w-full pl-9'} value={search} onChange={e=>setSearch(e.target.value)}
+      <input className={examInput+' pl-9'} value={search} onChange={e=>setSearch(e.target.value)}
        placeholder="Buscar treinamento pelo nome ou número"/></label>
-     <select aria-label="Filtrar cursos" className={control} value={filter}
+     <select aria-label="Filtrar cursos" className={examInput+" sm:w-auto"} value={filter}
       onChange={e=>setFilter(e.target.value as typeof filter)}>
       <option value="todos">Todos</option><option value="vinculados">Com prova na edição atual</option>
       <option value="sem-vinculo">Sem prova na edição atual</option>
      </select>
     </div>
     {(data.coursesTruncated||data.plansTruncated)&&<p role="status" className="text-sm text-amber-700">Catálogo parcial: o servidor aplicou limite de resultados.</p>}
-    <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm">
+    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left text-sm">
      <thead className="border-b text-xs uppercase text-slate-500"><tr>
       <th className="py-3 pr-3">Treinamento</th><th>Questões</th><th>Provas</th><th>Situação</th><th className="text-right">Ação</th>
      </tr></thead>
      <tbody className="divide-y dark:divide-slate-800">{visible.map(({c,published,draft,plans,binds})=><tr key={c.id}>
       <td className="py-3 pr-3"><strong className="block">{c.titulo}</strong>
        <small className="text-slate-500">Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</small></td>
-      <td>{published} publicada(s)<small className="block text-slate-500">{draft} em preparação</small></td>
-      <td>{plans.length} plano(s){plans[0]&&<small className="block text-slate-500">{plans[0].title||plans[0].examId}</small>}</td>
+      <td>{published} publicada(s)<small className="block text-slate-500 dark:text-slate-400">{draft} em preparação</small></td>
+      <td>{plans.length} plano(s){plans[0]&&<small className="block text-slate-500 dark:text-slate-400">{plans[0].title||plans[0].examId}</small>}</td>
       <td>{c.activeExamId?
         <span className="font-medium text-emerald-700">Prova da edição atual: {c.activeExamId} v{c.activeExamVersion}</span>:
         !c.activePackageSha256?'Sem edição SCORM ativa':
         binds.length>0?'Prova vinculada somente a outra edição':
         plans.length?'Prova publicada — vínculo com edição atual pendente':'Prova final não configurada'}
-       <small className="block text-slate-500">Política do SCORM: {c.scorm_assessment_policy||'Não definida'} · a exigência externa depende da edição homologada</small></td>
+       <small className="block text-slate-500 dark:text-slate-400">Política do SCORM: {c.scorm_assessment_policy||'Não definida'} · a exigência externa depende da edição homologada</small></td>
       <td className="text-right"><Link to={'/lms/admin/provas/'+c.id}
-       className="inline-block whitespace-nowrap rounded-lg bg-blue-700 px-3 py-2 text-white">
+       className={examPrimary}>
        {c.activeExamId?'Gerenciar':plans.length?'Vincular prova':'Configurar prova'}</Link></td>
      </tr>)}</tbody>
     </table>{visible.length===0&&<p className="py-8 text-center text-slate-600">Nenhum curso encontrado.</p>}</div>
+    <div className="space-y-3 md:hidden" aria-label="Treinamentos e situação das provas">
+     {visible.map(({c,published,draft,plans,binds})=><article key={c.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <h3 className="font-semibold text-slate-900 dark:text-white">{c.titulo}</h3>
+      <p className={examSmall+' mt-1'}>Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</p>
+      <p className="mt-3 text-sm font-semibold">{c.activeExamId?'Prova ativa nesta edição':!c.activePackageSha256?'Sem edição ativa':binds.length?'Vínculo em outra edição':plans.length?'Plano publicado — vínculo pendente':'Prova não configurada'}</p>
+      <p className={examSmall+' mt-1'}>{published} questões publicadas · {draft} em preparação</p>
+      <Link to={'/lms/admin/provas/'+c.id} className={examPrimary+' mt-3 w-full'}>{c.activeExamId?'Gerenciar prova':plans.length?'Vincular prova':'Configurar prova'}</Link>
+     </article>)}
+     {visible.length===0&&<ExamEmpty title="Nenhum treinamento encontrado" details="Altere a busca ou o filtro."/>}
+    </div>
    </section>}
    {tab==='resultados'&&<section className={panel}>
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
      <div><h2 className="text-lg font-semibold">Resultados das avaliações externas</h2>
       <p className="text-sm text-slate-600">Notas de provas submetidas; não confundir com progresso do SCORM.</p></div>
      <div className="flex flex-wrap gap-2">
-      <select aria-label="Filtrar por treinamento" className={control} value={course}
-        onChange={e=>{setCourse(e.target.value);setResultPage(1);}}>
+      <select aria-label="Filtrar por treinamento" className={examInput} value={course}
+        onChange={e=>{setCourse(e.target.value);setResultPage(1);setSelectedAttempt(null);}}>
        <option value="todos">Todos os treinamentos</option>
        {rows.map(({c})=><option key={c.id} value={c.id}>{c.titulo}</option>)}
       </select>
-      <select aria-label="Filtrar por resultado" className={control} value={resultFilter}
-        onChange={e=>{setResultFilter(e.target.value);setResultPage(1);}}>
+      <select aria-label="Filtrar por resultado" className={examInput} value={resultFilter}
+        onChange={e=>{setResultFilter(e.target.value);setResultPage(1);setSelectedAttempt(null);}}>
        <option value="todos">Todos os resultados</option>
        <option value="aprovado">Aprovados</option>
        <option value="reprovado">Reprovados</option>
        <option value="andamento">Em andamento</option>
       </select>
-      <button type="button" className={control} disabled={!report?.items.length||reportLoading}
+      <button type="button" className={control} disabled={!report?.items.length||reportLoading||exporting}
         onClick={exportReportPage}>Exportar página CSV</button>
+      <button type="button" className={examPrimary} disabled={!report?.total||reportLoading||exporting}
+        onClick={()=>void exportAllFiltered()}>{exporting?'Preparando exportação...':'Exportar filtro completo'}</button>
      </div>
     </div>
     <label className="block pb-3 text-sm">
      <span className="sr-only">Buscar aluno, treinamento ou prova</span>
-     <input className={control+' w-full'} value={resultSearch}
-       onChange={e=>{setResultSearch(e.target.value);setResultPage(1);}}
+     <input className={examInput} value={resultSearch}
+       onChange={e=>{setResultSearch(e.target.value);setResultPage(1);setSelectedAttempt(null);}}
        maxLength={80} placeholder="Buscar aluno, treinamento ou prova"/>
     </label>
     {reportLoading&&<p role="status" className="py-2 text-sm">Consultando resultados...</p>}
@@ -195,12 +232,13 @@ export default function LmsAvaliacoesGestao(){
       Relatório indisponível: {reportError}
       <button className="ml-3 underline" type="button" onClick={()=>setReportRefresh(n=>n+1)}>Tentar novamente</button>
     </div>}
-    <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm">
+    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left text-sm">
      <thead className="border-b text-xs uppercase text-slate-500"><tr><th className="py-3">Treinamento / Prova</th>
       <th>Aluno / Matrícula</th><th>Tentativa</th><th>Nota</th><th>Resultado</th><th>Data</th></tr></thead>
      <tbody className="divide-y dark:divide-slate-800">{attempts.map((a,i)=><tr key={[a.matriculaId,a.examId,a.version,a.attemptNo,i].join(':')}>
       <td className="py-3"><strong className="block">{a.cursoTitulo||names.get(a.cursoId)||'Curso #'+a.cursoId}</strong>
-       <small className="text-slate-500">{a.examId} v{a.version}</small></td>
+       <small className="text-slate-500">{a.examId} v{a.version}</small>
+       <button className="mt-1 block min-h-10 text-sm font-medium text-primary-800 underline dark:text-primary-100" type="button" onClick={()=>setSelectedAttempt(a)}>Detalhar tentativa</button></td>
       <td><strong className="block">{a.alunoNome||"Aluno não identificado"}</strong><small className="text-slate-500">Matrícula #{a.matriculaId}</small></td><td>{a.attemptNo}</td>
       <td>{a.scorePct===null?'—':a.scorePct.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%'}</td>
       <td>{a.state==='IN_PROGRESS'?'Em andamento':a.passed?'Aprovado':'Reprovado'}</td>
@@ -208,6 +246,27 @@ export default function LmsAvaliacoesGestao(){
      </tr>)}</tbody></table>
      {!reportLoading&&!reportError&&attempts.length===0&&<p className="py-8 text-center text-slate-600">Nenhuma tentativa registrada.</p>}
     </div>
+    <div className="space-y-3 md:hidden" aria-label="Resultados de provas">
+      {attempts.map(a=><article key={[a.matriculaId,a.examId,a.version,a.attemptNo].join(':')} className="rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-700">
+        <h3 className="font-semibold">{a.cursoTitulo||names.get(a.cursoId)||'Curso #'+a.cursoId}</h3>
+        <p className="mt-1">{a.alunoNome||'Aluno não identificado'} · matrícula #{a.matriculaId}</p>
+        <p className="mt-2 font-medium">{a.state==='IN_PROGRESS'?'Em andamento':a.passed?'Aprovado':'Reprovado'} · {a.scorePct===null?'Sem nota':a.scorePct.toLocaleString('pt-BR')+'%'}</p>
+        <p className={examSmall+' mt-1'}>{datetime(a.submittedAt||a.startedAt)}</p>
+        <button className="mt-2 min-h-11 font-medium text-primary-800 underline dark:text-primary-100" type="button" onClick={()=>setSelectedAttempt(a)}>Detalhar tentativa</button>
+      </article>)}
+    </div>
+    {selectedAttempt&&<section aria-label="Detalhes da tentativa" className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex justify-between gap-3"><h3 className="font-semibold">Tentativa {selectedAttempt.attemptNo} · {selectedAttempt.alunoNome||'Aluno não identificado'}</h3>
+        <button type="button" className={control} onClick={()=>setSelectedAttempt(null)}>Fechar</button></div>
+      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div><dt className="font-medium">Treinamento</dt><dd>{selectedAttempt.cursoTitulo||'Curso #'+selectedAttempt.cursoId}</dd></div>
+        <div><dt className="font-medium">Prova e versão</dt><dd>{selectedAttempt.examId} · v{selectedAttempt.version}</dd></div>
+        <div><dt className="font-medium">Matrícula</dt><dd>#{selectedAttempt.matriculaId}</dd></div>
+        <div><dt className="font-medium">Resultado</dt><dd>{selectedAttempt.state==='IN_PROGRESS'?'Em andamento':selectedAttempt.passed?'Aprovado':'Reprovado'}</dd></div>
+        <div><dt className="font-medium">Nota global</dt><dd>{selectedAttempt.scorePct===null?'Pendente':selectedAttempt.scorePct+'%'}</dd></div>
+        <div><dt className="font-medium">Registro</dt><dd>{datetime(selectedAttempt.submittedAt||selectedAttempt.startedAt)}</dd></div>
+      </dl><p className="mt-3 text-xs text-slate-600 dark:text-slate-400">O detalhamento não revela respostas nem gabaritos. Critérios por módulo permanecem no plano versionado.</p>
+    </section>}
     {report&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span role="status">{report.total} tentativa(s) no filtro · Página {report.page} de {Math.max(report.pages,1)}</span>
       <div className="flex gap-2">
@@ -236,5 +295,5 @@ export default function LmsAvaliacoesGestao(){
     </div>
    </section>}
   </>}
- </main></AppLayout>;
+ </div></AppLayout>;
 }

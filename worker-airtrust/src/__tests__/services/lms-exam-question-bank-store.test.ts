@@ -78,15 +78,15 @@ describe('LMS exam question bank private storage boundary',()=>{
   it('lists metadata only, without selecting answer bank data',async()=>{
     const f=fakeDb([],[{
       question_key:'q1',revision:1,status:'DRAFT',
-      updated_at:'2026-10-20 20:00:00',
+      updated_at:'2026-10-20 20:00:00',prompt_preview:'Qual procedimento?',module_id:'m1',topic_id:'t1',difficulty:'BASICA',
     }]);
     const list=await listAdminQuestions(f.db,admin());
     expect(list).toEqual([{
       questionId:'q1',revision:1,status:'DRAFT',
-      updatedAt:'2026-10-20 20:00:00',
+      updatedAt:'2026-10-20 20:00:00',promptPreview:'Qual procedimento?',moduleId:'m1',topicId:'t1',difficulty:'BASICA',
     }]);
-    expect(f.calls[0].sql).not.toMatch(/content_json|correct_choice|explanation/i);
-    expect(f.calls[0].params).toEqual([6,100]);
+    expect(f.calls[0].sql).not.toMatch(/SELECT\s+content_json\b|correct_choice|correctChoiceId|explanation/i);
+    expect(f.calls[0].params).toEqual([6,100,0]);
   });
   it('optimistic edit uses tenant and version in UPDATE; mismatch fails',async()=>{
     const updated={...draft,prompt:'Reescrita',lastEditedBy:'u22'};

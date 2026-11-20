@@ -332,7 +332,9 @@ routes.get('/cursos/:cursoId/questoes-publicadas',async c=>{
 });
 routes.get('/cursos/:cursoId/questoes',async c=>{
   const a=actor(c,c.req.param('cursoId'));
-  const items=await listAdminQuestions(c.env.DB,a);
+  const raw=c.req.query('offset')||'0';
+  if(!/^(0|[1-9][0-9]{0,5})$/.test(raw))throw new QuestionStoreError('EXAM_PAGINATION_INVALID');
+  const items=await listAdminQuestions(c.env.DB,a,Number(raw));
   return c.json({success:true,data:items});
 });
 routes.post('/cursos/:cursoId/questoes',async c=>{

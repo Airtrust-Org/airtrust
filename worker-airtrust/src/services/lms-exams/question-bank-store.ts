@@ -137,20 +137,30 @@ export async function getAdminQuestion(db:D1Database,actor:QuestionAdminActor,
   questionId:string,revision:number):Promise<StoredQuestion> {
   return fetchRevision(db,actor,questionId,revision);
 }
-export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor):Promise<readonly {
+export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor,offset=0):Promise<readonly {
   questionId:string;revision:number;status:string;updatedAt:string;
+  promptPreview:string;moduleId:string;topicId:string;difficulty:string|null;
 }[]> {
   const {scope}=actorScope(actor);
-  // Fail-closed listing: answer and content_json are NEVER selected.
+  if(!Number.isSafeInteger(offset)||offset<0||offset>100000)deny('EXAM_PAGINATION_INVALID');
+  // Only individual display fields are extracted. Never SELECT the content_json
+  // value (which also contains the private correctChoiceId and explanation).
   const result=await db.prepare(
-    'SELECT question_key,revision,status,updated_at FROM lms_exam_question_revisions '+
-    'WHERE empresa_id=? AND curso_id=? ORDER BY question_key,revision DESC LIMIT 500'
-  ).bind(scope.empresaId,scope.cursoId).all<{
+    "SELECT question_key,revision,status,updated_at,"+
+    "substr(json_extract(content_json,'$.prompt'),1,180) AS prompt_preview,"+
+    "json_extract(content_json,'$.moduleId') AS module_id,"+
+    "json_extract(content_json,'$.topicId') AS topic_id,"+
+    "json_extract(content_json,'$.difficulty') AS difficulty "+
+    'FROM lms_exam_question_revisions WHERE empresa_id=? AND curso_id=? '+
+    'ORDER BY question_key,revision DESC LIMIT 500 OFFSET ?'
+  ).bind(scope.empresaId,scope.cursoId,offset).all<{
     question_key:string;revision:number;status:string;updated_at:string;
+    prompt_preview:string|null;module_id:string|null;topic_id:string|null;difficulty:string|null;
   }>();
   return (result.results||[]).map(row=>({
     questionId:row.question_key,revision:row.revision,status:row.status,
-    updatedAt:row.updated_at,
+    updatedAt:row.updated_at,promptPreview:row.prompt_preview||'',
+    moduleId:row.module_id||'',topicId:row.topic_id||'',difficulty:row.difficulty||null,
   }));
 }
 /**
@@ -160,7 +170,7 @@ export async function listAdminQuestions(db:D1Database,actor:QuestionAdminActor)
 export async function listPublishedExamQuestions(db:D1Database,actor:QuestionAdminActor,offset:number):
 Promise<Readonly<{items:readonly {
  questionId:string;revision:number;moduleId:string;topicId:string;prompt:string;
- sourceSha256:string;contentSha256:string;
+ sourceSha256:string;contentSha256:string;choices:readonly {id:string;text:string}[];
  difficulty?:'BASICA'|'INTERMEDIARIA'|'AVANCADA';
 }[];nextOffset:number|null}>> {
   const {scope}=actorScope(actor);
@@ -180,6 +190,9 @@ Promise<Readonly<{items:readonly {
     }
     return {questionId:q.questionId,revision:q.revision,moduleId:q.moduleId,
       topicId:q.topicId,prompt:q.prompt,sourceSha256:q.sourceSha256,
+      // Editor-only, verified PUBLISHED question. The public exam preview
+      // includes choice text but NEVER sends correctChoiceId or explanations.
+      choices:q.choices.map(choice=>({id:choice.id,text:choice.text})),
       contentSha256:q.contentSha256 as string,...(q.difficulty?{difficulty:q.difficulty}:{})};
   }));
   return {items,nextOffset:all.length>100?offset+100:null};
