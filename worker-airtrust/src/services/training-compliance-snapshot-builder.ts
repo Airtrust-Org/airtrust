@@ -17,7 +17,7 @@ import {
   type TrainingComplianceScope,
 } from './training-compliance-rule-engine';
 import { buildQualificationEvidenceProfileSql } from './training-compliance-evidence-profile';
-import { getTodayIsoSaoPaulo, getQualificacoesAlertaDias } from '../utils/qualificacoes-alerta-config';
+import { getTodayIsoSaoPaulo, getQualificacoesAlertaDias, DEFAULT_QUALIFICACOES_ALERTA_DIAS } from '../utils/qualificacoes-alerta-config';
 import { calcularDataVencimento } from '../utils/qualificacoes-expiration';
 import { trainingComplianceEvidenceIsRealizedBy, trainingComplianceIsoDay } from './training-compliance-enrollment-policy';
 
@@ -777,6 +777,7 @@ type SnapshotSources = {
   rules: Awaited<ReturnType<typeof loadRules>>;
   historyMap: Awaited<ReturnType<typeof loadQualificationEvidence>>;
   lmsMap: Awaited<ReturnType<typeof loadLmsEvidence>>;
+  thresholdDiasVencendo: number;
 };
 
 // #2078: a tela de Compliance dispara varios endpoints ao mesmo tempo e cada um
@@ -787,14 +788,29 @@ type SnapshotSources = {
 // (sem TTL, sem cache pos-conclusao): cada requisicao posterior le dados novos.
 const _inFlightSnapshotSources = new WeakMap<D1Database, Map<string, Promise<SnapshotSources>>>();
 
+async function readComplianceExpiryAlertWindow(db: D1Database, empresaId: number): Promise<number> {
+  try {
+    return await getQualificacoesAlertaDias(db, empresaId);
+  } catch (error) {
+    // Fixtures/instâncias históricas sem empresas_config conservam o padrão
+    // de 30 dias já existente. Erros de D1 (capacity, timeouts, permissões)
+    // NÃO são convertidos silenciosamente em valores padrão.
+    if (/no such table: empresas_config(?:\\b|$)/i.test(String(error))) {
+      return DEFAULT_QUALIFICACOES_ALERTA_DIAS;
+    }
+    throw error;
+  }
+}
+
 async function loadSnapshotSources(db: D1Database, empresaId: number, today: string): Promise<SnapshotSources> {
-  const [allEmployees, rules, historyMap, lmsMap] = await Promise.all([
+  const [allEmployees, rules, historyMap, lmsMap, thresholdDiasVencendo] = await Promise.all([
     loadEmployees(db, empresaId, today),
     loadRules(db, empresaId, today),
     loadQualificationEvidence(db, empresaId),
     loadLmsEvidence(db, empresaId),
+    readComplianceExpiryAlertWindow(db, empresaId),
   ]);
-  return { allEmployees, rules, historyMap, lmsMap };
+  return { allEmployees, rules, historyMap, lmsMap, thresholdDiasVencendo };
 }
 
 export function loadSnapshotSourcesCoalesced(
@@ -834,7 +850,7 @@ export async function buildSnapshot(
   options?: { coalesce?: boolean },
 ) {
   const today = getTodayIsoSaoPaulo();
-  const { allEmployees, rules, historyMap, lmsMap } = options?.coalesce
+  const { allEmployees, rules, historyMap, lmsMap, thresholdDiasVencendo } = options?.coalesce
     ? await loadSnapshotSourcesCoalesced(db, empresaId, today)
     : await loadSnapshotSources(db, empresaId, today);
   let employees = filterEmployeesByAccess(allEmployees, access);
@@ -848,7 +864,6 @@ export async function buildSnapshot(
     employees = employees.filter((employee) => employee.id === targetFilter.funcionarioId);
   }
   // Datas de referência calculadas uma vez por snapshot, não por par funcionário×requisito.
-  const thresholdDiasVencendo = await getQualificacoesAlertaDias(db, empresaId);
   const dateOptions = { today, realizedCutoff: resolveRealizedCutoff(today), thresholdDiasVencendo };
 
   const people = employees.map((employee) => {
