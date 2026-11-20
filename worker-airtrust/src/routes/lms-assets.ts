@@ -1028,7 +1028,6 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   const launchUrl = `/api/lms/scorm/assets/${matricula.empresa_id}/${matricula.curso_id}/${resolvedLaunchFile}`;
   const reviewMode = c.req.query('review') === '1' || matricula.status === 'CONCLUIDO';
   const commitUrl = reviewMode ? null : '/api/lms/matriculas/scorm/commit';
-
   // Versão SCORM: 1.2 ou 2004
   const isScorm2004 = matricula.scorm_versao === '2004';
   const progressoScorm = await db
