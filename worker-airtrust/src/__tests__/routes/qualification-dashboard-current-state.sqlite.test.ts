@@ -143,6 +143,22 @@ describe('qualification dashboard current-state contract', () => {
     expect(result).toBe('0,1,0');
   });
 
+  it('utiliza a janela configurada por empresa, não um limite global de 30 dias', () => {
+    const stats = source('../../routes/qualificacoes/estatisticas.ts');
+    expect(stats).toContain('getQualificacoesAlertaDias(db, tenantCtx.empresaId)');
+    expect(stats).toContain('> ${thresholdDays}');
+    expect(stats).toContain('<= ${thresholdDays}');
+    const dir = mkdtempSync(join(tmpdir(), 'airtrust-qual-alert-window-'));
+    tempDirs.push(dir);
+    const db = join(dir, 'threshold.sqlite');
+    // O mesmo vencimento é regular para uma empresa com 14 dias de alerta,
+    // e "vencendo" quando sua configuração permite 60 dias.
+    const sql = "SELECT " +
+      "julianday('2027-01-10')-julianday('2026-12-20') <= 14, " +
+      "julianday('2027-01-10')-julianday('2026-12-20') <= 60";
+    expect(execFileSync('sqlite3', ['-csv', db, sql], { encoding: 'utf8' }).trim()).toBe('0,1');
+  });
+
   it('mantém as três superfícies de dashboard/estatísticas alinhadas ao contrato canônico', () => {
     const dashboard = source('../../routes/dashboard.ts');
     const service = source('../../services/dashboardService.ts');
