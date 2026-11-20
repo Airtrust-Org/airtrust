@@ -28,7 +28,7 @@ import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/complianc
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {shouldAutoOpenExternalExam} from './lmsExamAction';
-import { authorizeScormAssetSession } from './scormAssetSessionDeadline';
+import { authorizeScormAssetSession, validScormAssetRefreshRequest } from './scormAssetSessionDeadline';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -944,6 +944,38 @@ export default function LmsPlayer() {
         return;
       }
 
+      // A suspended mobile tab can outlive the short-lived HttpOnly capability.
+      // Only the authenticated parent can renew it; the SCO never sees a bearer.
+      const requestId = validScormAssetRefreshRequest({
+        data: event.data, source: event.source,
+        expectedSource: iframeRef.current?.contentWindow ?? null,
+        origin: event.origin, expectedOrigin: launchOrigin,
+        matriculaId: id, reviewMode: effectiveReviewMode,
+      });
+      if (requestId !== null) {
+        const source = iframeRef.current?.contentWindow;
+        if (!source) return;
+        void authorizeScormAssetSession({
+          matriculaId: id,
+          expectedHandoffId: activeHandoffId,
+          timeoutMs: 8_000,
+        }).then((response) => {
+          if (iframeRef.current?.contentWindow !== source) return;
+          source.postMessage({
+            type: 'lms:asset-session-refresh-response', matriculaId: id,
+            requestId, ok: response.ok,
+          }, launchOrigin);
+          if (response.status === 409) void refetchMatricula();
+        }).catch(() => {
+          if (iframeRef.current?.contentWindow !== source) return;
+          source.postMessage({
+            type: 'lms:asset-session-refresh-response', matriculaId: id,
+            requestId, ok: false,
+          }, launchOrigin);
+        });
+        return;
+      }
+
       if (
         event.data &&
         typeof event.data === 'object' &&
@@ -1083,7 +1115,7 @@ export default function LmsPlayer() {
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [effectiveReviewMode, id, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
+  }, [effectiveReviewMode, id, activeHandoffId, launchOrigin, navigate, refetchMatricula, queryClient, closureReadiness?.slide_coverage?.recorded]);
 
   async function startVerifiedNewEdition() {
     if (!newEditionRequired || !editionMismatch || !isTenantAdmin || startingNewEdition) return;

@@ -650,3 +650,72 @@ export function buildScormTerminalLockScript(): string {
   }
 `;
 }
+
+/** Scoped-cookie renewal handshake after mobile tab suspension. */
+export function buildScormAssetSessionRefreshScript(): string {
+  return `
+  function postToParent(message) {
+    if (!window.parent || window.parent === window) return;
+    window.parent.postMessage(message, PARENT_ORIGIN === 'null' ? '*' : PARENT_ORIGIN);
+  }
+
+  // A mobile browser may suspend the parent renewal interval while the SCO
+  // remains open. Request a new enrollment-scoped HttpOnly cookie without
+  // receiving an auth bearer; only the original parent window may acknowledge.
+  var assetRefreshRequestId = 0;
+  function refreshExpiredAssetSession() {
+    if (PREVIEW_MODE || REVIEW_MODE || MATRICULA_ID == null || window.parent === window) {
+      return Promise.resolve(false);
+    }
+    var requestId = ++assetRefreshRequestId;
+    return new Promise(function(resolve) {
+      var settled = false;
+      var timer;
+      function finish(ok) {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        window.removeEventListener('message', onRefreshResponse);
+        resolve(ok);
+      }
+      function onRefreshResponse(event) {
+        if (event.source !== window.parent ||
+            (PARENT_ORIGIN !== '*' && event.origin !== PARENT_ORIGIN)) return;
+        var message = event.data;
+        if (!message || message.type !== 'lms:asset-session-refresh-response' ||
+            message.matriculaId !== MATRICULA_ID || message.requestId !== requestId) return;
+        finish(message.ok === true);
+      }
+      window.addEventListener('message', onRefreshResponse);
+      timer = window.setTimeout(function() { finish(false); }, 9_000);
+      postToParent({ type: 'lms:asset-session-refresh-request',
+        matriculaId: MATRICULA_ID, requestId: requestId });
+    });
+  }
+
+`;
+}
+
+/** Retry only an expired capability, never an evidence or edition rejection. */
+export function buildScormExpiredSessionRetryBranchScript(): string {
+  return `
+      // Retry the SAME saved payload and original explicit completion intent
+      // once, only after the authenticated parent has renewed the scoped
+      // capability. Other 409s (cycle/edition/evidence) remain fail-closed.
+      if (status === 409 && currentAttempt === 0) {
+        return response.clone().json().catch(function() { return null; }).then(function(json) {
+          if (!json || json.code !== 'ASSET_SESSION_INVALID') {
+            handleNonOkResponse(json);
+            return response;
+          }
+          setStatus('Renovando sessão para registrar a conclusão...', true, true);
+          return refreshExpiredAssetSession().then(function(refreshed) {
+            if (refreshed) return commit(data, currentAttempt + 1, eventType);
+            handleNonOkResponse(json);
+            return response;
+          });
+        });
+      }
+
+`;
+}
