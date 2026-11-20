@@ -28,7 +28,7 @@ import { invalidateTrainingEvidenceProjections } from '@/react-app/lib/complianc
 import { formatMinutes } from '../../components/lms/lmsUi';
 import { describeScormClosureMissing } from './lmsScormClosureReasons';
 import {shouldAutoOpenExternalExam} from './lmsExamAction';
-import { authorizeScormAssetSession } from './scormAssetSessionDeadline';
+import { authorizeScormAssetSession, validScormAssetRefreshRequest } from './scormAssetSessionDeadline';
 import {
   parseGranularDiagnostic,
   type LmsGranularDiagnostic,
@@ -945,17 +945,15 @@ export default function LmsPlayer() {
 
       // A suspended mobile tab can outlive the short-lived HttpOnly capability.
       // Only the authenticated parent can renew it; the SCO never sees a bearer.
-      if (
-        event.data && typeof event.data === 'object' &&
-        event.data.type === 'lms:asset-session-refresh-request' &&
-        event.data.matriculaId === id &&
-        typeof event.data.requestId === 'number' &&
-        Number.isSafeInteger(event.data.requestId) &&
-        !effectiveReviewMode
-      ) {
+      const requestId = validScormAssetRefreshRequest({
+        data: event.data, source: event.source,
+        expectedSource: iframeRef.current?.contentWindow ?? null,
+        origin: event.origin, expectedOrigin: launchOrigin,
+        matriculaId: id, reviewMode: effectiveReviewMode,
+      });
+      if (requestId !== null) {
         const source = iframeRef.current?.contentWindow;
         if (!source) return;
-        const requestId = event.data.requestId;
         void authorizeScormAssetSession({
           matriculaId: id,
           expectedHandoffId: activeHandoffId,
