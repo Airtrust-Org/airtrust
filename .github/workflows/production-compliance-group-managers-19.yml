@@ -25,8 +25,8 @@ concurrency:
   group: production-compliance-designations-tenant6
   cancel-in-progress: false
 jobs:
-  group_managers:
-    name: Governed Compliance group-manager assignments
+  d1_group_managers:
+    name: Governed D1 Compliance group-manager assignments
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
