@@ -36,9 +36,11 @@ async function login(page: Page, password: string) {
 
 /** Marca a opcao por texto; aguarda o servidor confirmar o salvamento (UI trava durante o PUT). */
 async function choose(page: Page, n: number, text: 'Certa' | 'Errada') {
-  const group = page.getByRole('group', { name: new RegExp(`Pergunta ${n}\\?`) });
-  await group.getByLabel(text, { exact: true }).check();
-  await expect(group.getByLabel(text, { exact: true })).toBeChecked();
+  // A prova mostra apenas a questão selecionada, mas preserva todas as respostas.
+  await page.getByRole('button', { name: new RegExp(`^Ir para questão ${n}(?: |$)`) }).click();
+  const region = page.getByRole('region', { name: `Questão ${n}` });
+  await region.getByRole('radio', { name: text, exact: true }).check();
+  await expect(region.getByRole('radio', { name: text, exact: true })).toBeChecked();
   await expect(page.getByRole('status').filter({ hasText: 'Resposta salva.' })).toBeVisible();
 }
 async function sendExam(page: Page) {
@@ -169,7 +171,8 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await expect(page.getByText('Estudo concluído.')).toBeVisible();
   await page.getByRole('button', { name: 'Iniciar prova' }).click();
   await expect(page.getByRole('form', { name: 'Tentativa 1' })).toBeVisible();
-  await expect(page.getByRole('radio')).toHaveCount(20);
+  await expect(page.getByRole('radio')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: 'Selecionar questão' }).getByRole('button')).toHaveCount(10);
 
   // 3) responde 3 questoes, consulta o conteudo (consulta permitida) e retoma sem perder respostas
   for (const n of [1, 2, 3]) await choose(page, n, 'Certa');
@@ -179,7 +182,8 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   await expect(page.getByRole('button', { name: 'Retomar prova' })).toBeVisible();
   await page.getByRole('button', { name: 'Retomar prova' }).click();
   for (const n of [1, 2, 3]) {
-    await expect(page.getByRole('group', { name: new RegExp(`Pergunta ${n}\\?`) }).getByLabel('Certa', { exact: true })).toBeChecked();
+    await page.getByRole('button', { name: new RegExp(`^Ir para questão ${n}(?: |$)`) }).click();
+    await expect(page.getByRole('region', { name: `Questão ${n}` }).getByRole('radio', { name: 'Certa' })).toBeChecked();
   }
   ev = await evidence(page);
   expect(ev.attempts).toEqual([{ attempt_no: 1, state: 'IN_PROGRESS', passed: null }]);
@@ -189,7 +193,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   for (const n of [7, 8, 9, 10]) await choose(page, n, 'Errada');
   await sendExam(page);
   await expect(page.getByText('Não aprovado', { exact: true })).toBeVisible();
-  await expect(page.getByText('Parte 1: 60% — abaixo do mínimo')).toBeVisible();
+  await expect(page.getByText(/Módulo .*\(parte 1\): 60% — mínimo 70% — abaixo do mínimo/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Concluir treinamento' })).toHaveCount(0);
   ev = await evidence(page);
   expect(ev.attempts).toEqual([{ attempt_no: 1, state: 'SUBMITTED', passed: 0 }]);
@@ -205,7 +209,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
   for (let n = 1; n <= 10; n++) await choose(page, n, 'Certa');
   await sendExam(page);
   await expect(page.getByText('Aprovado', { exact: true })).toBeVisible();
-  await expect(page.getByText('Parte 1: 100% — atingiu o mínimo')).toBeVisible();
+  await expect(page.getByText(/Módulo .*\(parte 1\): 100% — mínimo 70% — atingiu o mínimo/)).toBeVisible();
   ev = await evidence(page);
   expect(ev.attempts).toEqual([
     { attempt_no: 1, state: 'SUBMITTED', passed: 0 },
@@ -217,8 +221,7 @@ test('prova LMS: estudo -> reprova -> nova tentativa -> aprova -> finalizar -> c
 
   // 6) finalizar pelo endpoint canonico -> CONCLUIDO + qualificacao + certificado
   await page.getByRole('button', { name: 'Concluir treinamento' }).click();
-  await expect(page).toHaveURL(/\/lms(\/|$)/);
-  await expect(page.getByRole('heading', { name: 'Meus treinamentos', exact: true })).toBeVisible();
+  await expect(page.getByText('Conclusão confirmada pelo LMS')).toBeVisible();
   await waitForApiQuiet();
   await expect.poll(async () => (await evidence(page)).matricula.status).toBe('CONCLUIDO');
   await expect.poll(async () => (await evidence(page)).historico[0]?.numero_certificado ?? null, { timeout: 15_000 }).toBeTruthy();
