@@ -125,6 +125,24 @@ describe('qualification dashboard current-state contract', () => {
     expect(output).toBe('7,3,2,2');
   });
 
+  it('preserva o vencimento na data civil de São Paulo em todas as estatísticas', () => {
+    const stats = source('../../routes/qualificacoes/estatisticas.ts');
+    expect(stats).toContain('getTodayIsoSaoPaulo()');
+    expect(stats).toContain('const todaySql = operationalTodaySql()');
+    expect(stats).not.toContain("julianday('now')");
+
+    // Uma data de vencimento é inclusiva: hoje não é vencido.
+    // Esse SELECT reproduz a expressão SQL usada nas consultas da rota.
+    const dir = mkdtempSync(join(tmpdir(), 'airtrust-qual-civil-date-'));
+    tempDirs.push(dir);
+    const db = join(dir, 'fixture.sqlite');
+    const sql = "SELECT julianday('2026-11-20') < julianday('2026-11-20'), " +
+      "julianday('2026-11-20') >= julianday('2026-11-20'), " +
+      "CAST(julianday('2026-11-20') - julianday('2026-11-20') AS INTEGER)";
+    const result = execFileSync('sqlite3', ['-csv', db, sql], { encoding: 'utf8' }).trim();
+    expect(result).toBe('0,1,0');
+  });
+
   it('mantém as três superfícies de dashboard/estatísticas alinhadas ao contrato canônico', () => {
     const dashboard = source('../../routes/dashboard.ts');
     const service = source('../../services/dashboardService.ts');
