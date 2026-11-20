@@ -287,8 +287,8 @@ app.put('/condicoes/:id', requireRole('admin'), async (c) => {
     'SELECT id FROM compliance_condicoes WHERE empresa_id=? AND codigo=? AND id<>? AND ativo=1 AND deleted_at IS NULL LIMIT 1',
   ).bind(empresaId, codigo, id).first();
   if (duplicate) throw new ApiError('Já existe condição com esse código', 409);
-  const descricao = String(body.descricao ?? before.descricao ?? '').trim() || null;
-  const referencia = String(body.referencia_normativa ?? before.referencia_normativa ?? '').trim() || null;
+  const descricao = String(Object.prototype.hasOwnProperty.call(body, 'descricao') ? (body.descricao ?? '') : (before.descricao ?? '')).trim() || null;
+  const referencia = String(Object.prototype.hasOwnProperty.call(body, 'referencia_normativa') ? (body.referencia_normativa ?? '') : (before.referencia_normativa ?? '')).trim() || null;
   await db.prepare(
     "UPDATE compliance_condicoes SET codigo=?,nome=?,tipo=?,descricao=?,referencia_normativa=?,updated_at=datetime('now') WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL",
   ).bind(codigo, nome, tipo, descricao, referencia, id, empresaId).run();
@@ -319,9 +319,27 @@ app.delete('/condicoes/:id', requireRole('admin'), async (c) => {
   ).bind(empresaId, id, empresaId, id).first<{ regras: number; atribuicoes: number }>();
   if (Number(usage?.regras || 0) > 0 || Number(usage?.atribuicoes || 0) > 0)
     throw new ApiError('Designação em uso: remova primeiro as regras e atribuições ativas vinculadas', 409);
-  await db.prepare(
-    "UPDATE compliance_condicoes SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL",
+  // Recheck references within the mutation itself to prevent a concurrent assignment
+  // or rule insert between the preliminary usage check and this soft delete.
+  const deletion = await db.prepare(
+    `UPDATE compliance_condicoes
+      SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now')
+      WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM treinamento_requisitos r
+          WHERE r.empresa_id=compliance_condicoes.empresa_id
+            AND r.condicao_id=compliance_condicoes.id
+            AND r.ativo=1 AND r.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM funcionarios_compliance_condicoes a
+          WHERE a.empresa_id=compliance_condicoes.empresa_id
+            AND a.condicao_id=compliance_condicoes.id
+            AND a.ativo=1 AND a.deleted_at IS NULL
+        )`,
   ).bind(id, empresaId).run();
+  if (Number(deletion.meta.changes || 0) !== 1)
+    throw new ApiError('Designação alterada ou vinculada durante a exclusão; atualize e tente novamente', 409);
   await registrarAuditoria({
     db, tabela: 'compliance_condicoes', acao: 'DELETE', registro_id: id,
     dados_anteriores: before, ...extrairUsuarioAuditoria(c),
