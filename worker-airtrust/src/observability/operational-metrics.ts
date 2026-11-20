@@ -108,7 +108,14 @@ export function emitHttpMetric(input: {
   method: string;
   status: number;
   latencyMs: number;
-  d1?: { roundTrips: number; statements: number; dbMs: number };
+  d1?: {
+    roundTrips: number;
+    statements: number;
+    dbMs: number;
+    rowsRead?: number;
+    rowsWritten?: number;
+    unmeteredStatements?: number;
+  };
 }): void {
   emitOperationalMetric({
     event: 'operational_metric',
@@ -124,6 +131,11 @@ export function emitHttpMetric(input: {
           d1_round_trips: input.d1.roundTrips,
           d1_statements: input.d1.statements,
           d1_ms: Math.max(0, Math.round(input.d1.dbMs)),
+          // Linhas lidas/escritas segundo o `meta` do D1 (#2227). `d1_rows_read` é um piso:
+          // first/raw/exec não devolvem meta e entram em `d1_unmetered_statements`.
+          d1_rows_read: Math.max(0, Math.round(input.d1.rowsRead ?? 0)),
+          d1_rows_written: Math.max(0, Math.round(input.d1.rowsWritten ?? 0)),
+          d1_unmetered_statements: Math.max(0, Math.round(input.d1.unmeteredStatements ?? 0)),
         }
       : {}),
   });

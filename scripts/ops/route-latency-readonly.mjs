@@ -167,7 +167,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
 
     // Cada metrica candidata e consultada isoladamente (uma calculation por query), pois combinar
     // calculations sobre chaves ausentes zera o resultado.
-    const metricKeys = names.filter((n) => /wallTime|cpuTime|duration|latency|^d1_(round_trips|statements|ms)$/i.test(n)).slice(0, 12);
+    const metricKeys = names.filter((n) => /wallTime|cpuTime|duration|latency|^d1_(round_trips|statements|ms|rows_read|rows_written)$/i.test(n)).slice(0, 16);
     log(`\nmetricas candidatas: ${metricKeys.join(', ')}`);
     for (const key of metricKeys) {
       const merged = new Map();

@@ -16,10 +16,52 @@ export interface D1RequestStats {
   roundTrips: number;
   statements: number;
   dbMs: number;
+  /** Soma de `meta.rows_read` dos statements que devolvem metadados (all/run/batch). */
+  rowsRead: number;
+  /** Soma de `meta.rows_written` dos mesmos statements. */
+  rowsWritten: number;
+  /**
+   * Statements sem `meta` (first/raw/exec não devolvem metadados no D1): `rowsRead` é, portanto,
+   * um piso e este contador diz quanto da requisição ficou fora da medição.
+   */
+  unmeteredStatements: number;
 }
 
 export function createD1RequestStats(): D1RequestStats {
-  return { roundTrips: 0, statements: 0, dbMs: 0 };
+  return { roundTrips: 0, statements: 0, dbMs: 0, rowsRead: 0, rowsWritten: 0, unmeteredStatements: 0 };
+}
+
+function readRowsMeta(value: unknown): { rowsRead: number; rowsWritten: number } | null {
+  if (value === null || typeof value !== 'object') return null;
+  const meta = (value as { meta?: unknown }).meta;
+  if (meta === null || typeof meta !== 'object') return null;
+  const { rows_read: rowsRead, rows_written: rowsWritten } = meta as {
+    rows_read?: unknown;
+    rows_written?: unknown;
+  };
+  if (typeof rowsRead !== 'number' || !Number.isFinite(rowsRead)) return null;
+  return {
+    rowsRead,
+    rowsWritten: typeof rowsWritten === 'number' && Number.isFinite(rowsWritten) ? rowsWritten : 0,
+  };
+}
+
+/** Somente observabilidade: nunca lança nem altera o resultado devolvido ao chamador. */
+function recordRows(stats: D1RequestStats, name: string, result: unknown): void {
+  try {
+    const items = name === 'batch' && Array.isArray(result) ? result : [result];
+    for (const item of items) {
+      const rows = name === 'first' || name === 'raw' || name === 'exec' ? null : readRowsMeta(item);
+      if (rows) {
+        stats.rowsRead += rows.rowsRead;
+        stats.rowsWritten += rows.rowsWritten;
+      } else {
+        stats.unmeteredStatements += 1;
+      }
+    }
+  } catch {
+    stats.unmeteredStatements += 1;
+  }
 }
 
 const requestStats = new AsyncLocalStorage<D1RequestStats>();
@@ -49,7 +91,12 @@ function timed(target: object, method: (...args: unknown[]) => unknown, name: st
       finish();
       throw error;
     }
-    return Promise.resolve(result).finally(finish);
+    return Promise.resolve(result)
+      .then((value) => {
+        recordRows(stats, name, value);
+        return value;
+      })
+      .finally(finish);
   };
 }
 
