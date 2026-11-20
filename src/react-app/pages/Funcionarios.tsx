@@ -11,6 +11,7 @@ import { useAuth } from '@/react-app/hooks/useAuth';
 import { useTablePreferences } from '@/react-app/hooks/useTablePreferences';
 import { useSearchParams } from 'react-router-dom';
 import ManagerAlertCenter from './funcionarios/ManagerAlertCenter';
+import { reconcileEmployeeSectorFilters } from './funcionarios/reconcileEmployeeSectorFilters';
 
 interface ModeloAeronave {
   id: number;
@@ -146,28 +147,28 @@ export default function Funcionarios() {
     [setoresOrdenados],
   );
 
-  // Setor selections are persisted across sessions and can outlive a role,
-  // tenant or catalog change. Never send stale/out-of-scope IDs to the API:
-  // the backend correctly responds 403 when any requested ID is unauthorized.
-  // Selecting every available sector is semantically the same as no filter.
-  const setorFilterAplicado = useMemo(() => {
-    if (!setoresLoaded) return [];
-    const available = new Set(setorOptions.map((option) => option.value));
-    const validSelected = [...new Set(setorFilter.filter((id) => available.has(id)))];
-    return available.size > 0 && validSelected.length === available.size ? [] : validSelected;
-  }, [setoresLoaded, setorOptions, setorFilter]);
+  const setorReconciliado = useMemo(
+    () =>
+      reconcileEmployeeSectorFilters(
+        setorFilter,
+        setorOptions.map((option) => option.value),
+        setoresLoaded,
+      ),
+    [setorFilter, setorOptions, setoresLoaded],
+  );
+  const setorFilterAplicado = setorReconciliado.applied;
 
+  // Reconcile only after the authorized sector catalog was successfully read.
+  // Prevent stale IDs from provoking a correct 403 on the list endpoint.
   useEffect(() => {
-    if (!setoresLoaded || setorFilter.length === 0) return;
-    const available = new Set(setorOptions.map((option) => option.value));
-    const normalized = [...new Set(setorFilter.filter((id) => available.has(id)))];
+    if (!setoresLoaded) return;
     if (
-      normalized.length !== setorFilter.length ||
-      normalized.some((id, index) => id !== setorFilter[index])
+      setorReconciliado.selected.length !== setorFilter.length ||
+      setorReconciliado.selected.some((id, index) => id !== setorFilter[index])
     ) {
-      updateFilter('setorFilter', normalized);
+      updateFilter('setorFilter', setorReconciliado.selected);
     }
-  }, [setoresLoaded, setorOptions, setorFilter, updateFilter]);
+  }, [setoresLoaded, setorFilter, setorReconciliado, updateFilter]);
 
   const funcoesOrdenadas = useMemo(() => {
     const byNome = new Map<string, Funcao>();
