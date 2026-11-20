@@ -70,6 +70,19 @@ const matrixRows = [
       sem_matricula: 10,
     },
   },
+  {
+    qualificacao_tipo_id: 201,
+    qualificacao_tipo_codigo: 'MNT-UNASSIGNED',
+    qualificacao_tipo_nome: 'Treinamento não atribuído',
+    efetiva: null,
+    direta: null,
+    impacto: {
+      pessoas: 12, atingidas_neste_nivel: 12, override_mais_especifico: 0,
+      com_requisito: 0, sem_requisito: 12, conformes: 0,
+      vencendo: 0, vencidos: 0, nunca_realizados: 0,
+      em_andamento: 0, matriculados: 0, sem_matricula: 12,
+    },
+  },
 ];
 
 describe('Training Compliance organization flows', () => {
@@ -105,7 +118,12 @@ describe('Training Compliance organization flows', () => {
     expect(screen.getByRole('option', { name: 'Coordenador de Voo' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Mecânico' })).not.toBeInTheDocument();
     expect(screen.getByText(/2 preservada\(s\)/)).toBeInTheDocument();
-    expect(screen.getByText('Sem regra')).toBeInTheDocument();
+    expect(screen.getByLabelText('Exibir treinamentos')).toHaveValue('applicable');
+    expect(screen.getByText('PBN')).toBeInTheDocument();
+    expect(screen.queryByText('Treinamento não atribuído')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Exibir treinamentos'), { target: { value: 'all' } });
+    expect(screen.getByText('Treinamento não atribuído')).toBeInTheDocument();
+    expect(screen.getAllByText('Sem regra')).toHaveLength(2);
 
     const crmRow = screen.getByText('CRM Periódico').closest('tr')!;
     fireEvent.change(within(crmRow).getByRole('combobox'), { target: { value: 'OBRIGATORIA' } });

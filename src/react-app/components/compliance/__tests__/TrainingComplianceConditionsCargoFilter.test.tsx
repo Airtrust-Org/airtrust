@@ -45,6 +45,8 @@ describe('Compliance designation catalog and optional job filter', () => {
         });
       }
       if (url === '/api/compliance-treinamentos/condicoes/atribuicoes' && !init) return ok([]);
+      if (url === '/api/compliance-treinamentos/condicoes/10' && init?.method === 'PUT') return ok({ id: 10 });
+      if (url === '/api/compliance-treinamentos/condicoes/11' && init?.method === 'DELETE') return ok({});
       if (url === '/api/compliance-treinamentos/condicoes/atribuicoes' && init?.method === 'POST') {
         return ok({ id: 800, auto_enrollment: null, auto_enrollment_warning: null });
       }
@@ -76,6 +78,25 @@ describe('Compliance designation catalog and optional job filter', () => {
     const payload = JSON.parse(String((post?.[1] as RequestInit)?.body));
     expect(payload).toMatchObject({ funcionario_id: 100, condicao_id: 10 });
     expect(payload).not.toHaveProperty('funcao_id');
+  });
+
+  it('edits and deletes catalog conditions via scoped endpoints', async () => {
+    renderEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Membro da CIPA / representante NR-05' }));
+    expect(screen.getByDisplayValue('MEMBRO_CIPA')).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue('Membro da CIPA / representante NR-05'), { target: { value: 'Membro da CIPA atualizado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/condicoes/10',
+      expect.objectContaining({ method: 'PUT' }),
+    ));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir Auditor comportamental designado' }));
+    await waitFor(() => expect(fetchWithAuthMock).toHaveBeenCalledWith(
+      '/api/compliance-treinamentos/condicoes/11',
+      expect.objectContaining({ method: 'DELETE' }),
+    ));
+    confirm.mockRestore();
   });
 
   it('clears a prior employee when switching job filters, preventing wrong designation', async () => {

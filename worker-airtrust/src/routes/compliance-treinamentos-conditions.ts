@@ -267,6 +267,86 @@ app.post('/condicoes', requireRole('admin'), async (c) => {
   return c.json({ success: true, data: { id } }, 201);
 });
 
+app.put('/condicoes/:id', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  await ensureSchema(db);
+  const id = positiveInt(c.req.param('id'));
+  if (!id) throw new ApiError('ID inválido', 400);
+  const before = await db.prepare(
+    'SELECT * FROM compliance_condicoes WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL',
+  ).bind(id, empresaId).first<Record<string, unknown>>();
+  if (!before) throw new ApiError('Condição não encontrada', 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const codigo = String(body.codigo ?? before.codigo).trim().toUpperCase().replace(/[^A-Z0-9_]+/g, '_');
+  const nome = String(body.nome ?? before.nome).trim();
+  const tipo = String(body.tipo ?? before.tipo).trim().toUpperCase();
+  if (!codigo || !nome || !CONDITION_TYPES.includes(tipo as (typeof CONDITION_TYPES)[number]))
+    throw new ApiError('Código, nome e tipo de condição válidos são obrigatórios', 400);
+  const duplicate = await db.prepare(
+    'SELECT id FROM compliance_condicoes WHERE empresa_id=? AND codigo=? AND id<>? AND ativo=1 AND deleted_at IS NULL LIMIT 1',
+  ).bind(empresaId, codigo, id).first();
+  if (duplicate) throw new ApiError('Já existe condição com esse código', 409);
+  const descricao = String(Object.prototype.hasOwnProperty.call(body, 'descricao') ? (body.descricao ?? '') : (before.descricao ?? '')).trim() || null;
+  const referencia = String(Object.prototype.hasOwnProperty.call(body, 'referencia_normativa') ? (body.referencia_normativa ?? '') : (before.referencia_normativa ?? '')).trim() || null;
+  await db.prepare(
+    "UPDATE compliance_condicoes SET codigo=?,nome=?,tipo=?,descricao=?,referencia_normativa=?,updated_at=datetime('now') WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL",
+  ).bind(codigo, nome, tipo, descricao, referencia, id, empresaId).run();
+  await registrarAuditoria({
+    db, tabela: 'compliance_condicoes', acao: 'UPDATE', registro_id: id,
+    dados_anteriores: before,
+    dados_novos: { codigo, nome, tipo, descricao, referencia_normativa: referencia },
+    ...extrairUsuarioAuditoria(c),
+  });
+  return c.json({ success: true, data: { id } });
+});
+
+app.delete('/condicoes/:id', requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const empresaId = getEmpresaId(c);
+  await ensureSchema(db);
+  const id = positiveInt(c.req.param('id'));
+  if (!id) throw new ApiError('ID inválido', 400);
+  const before = await db.prepare(
+    'SELECT * FROM compliance_condicoes WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL',
+  ).bind(id, empresaId).first<Record<string, unknown>>();
+  if (!before) throw new ApiError('Condição não encontrada', 404);
+  // A condition in use must not silently lose mandatory requirements or employee assignments.
+  const usage = await db.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM treinamento_requisitos WHERE empresa_id=? AND condicao_id=? AND ativo=1 AND deleted_at IS NULL) regras,
+       (SELECT COUNT(*) FROM funcionarios_compliance_condicoes WHERE empresa_id=? AND condicao_id=? AND ativo=1 AND deleted_at IS NULL) atribuicoes`,
+  ).bind(empresaId, id, empresaId, id).first<{ regras: number; atribuicoes: number }>();
+  if (Number(usage?.regras || 0) > 0 || Number(usage?.atribuicoes || 0) > 0)
+    throw new ApiError('Designação em uso: remova primeiro as regras e atribuições ativas vinculadas', 409);
+  // Recheck references within the mutation itself to prevent a concurrent assignment
+  // or rule insert between the preliminary usage check and this soft delete.
+  const deletion = await db.prepare(
+    `UPDATE compliance_condicoes
+      SET ativo=0,deleted_at=datetime('now'),updated_at=datetime('now')
+      WHERE id=? AND empresa_id=? AND ativo=1 AND deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM treinamento_requisitos r
+          WHERE r.empresa_id=compliance_condicoes.empresa_id
+            AND r.condicao_id=compliance_condicoes.id
+            AND r.ativo=1 AND r.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM funcionarios_compliance_condicoes a
+          WHERE a.empresa_id=compliance_condicoes.empresa_id
+            AND a.condicao_id=compliance_condicoes.id
+            AND a.ativo=1 AND a.deleted_at IS NULL
+        )`,
+  ).bind(id, empresaId).run();
+  if (Number(deletion.meta.changes || 0) !== 1)
+    throw new ApiError('Designação alterada ou vinculada durante a exclusão; atualize e tente novamente', 409);
+  await registrarAuditoria({
+    db, tabela: 'compliance_condicoes', acao: 'DELETE', registro_id: id,
+    dados_anteriores: before, ...extrairUsuarioAuditoria(c),
+  });
+  return c.json({ success: true });
+});
+
 /**
  * A designation may create a mandatory Compliance obligation even when no
  * course-enrollment policy exists. Report this explicit mismatch instead of
