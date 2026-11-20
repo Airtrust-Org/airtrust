@@ -48,7 +48,7 @@ async function adminToken(){
  }
  check(Number(decodeJwtPayload(token)?.empresa_id)===EMPRESA,'TENANT_MISMATCH');
  const me=await fetchJson(API+'/api/auth/me',{headers:{Authorization:'Bearer '+token}});
- check(me.status===200&&me.json?.success===true&&['admin','administrador','manager','gestor'].includes(String(me.json.data?.role||'').toLowerCase()),'ADMIN_DENIED');
+ check(me.status===200&&me.json?.success===true&&['admin','administrador'].includes(String(me.json.data?.role||'').toLowerCase()),'ADMIN_DENIED');
  return token;
 }
 function report(o){
