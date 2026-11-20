@@ -12,7 +12,13 @@ const EMPRESA=6, CONDITION=36;
 const EMPLOYEES=[33,75,111,118,134,137,138,146,147,148,174,175,176,177,181,186,187,189,191];
 const REQUIRED_RULES=[668,669];
 const check=(value,code)=>{if(!value)throw Error(code)};
-const digest=(value)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export const digest=(value)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export function validateEffectiveRules(rules, today) {
+ check(/^\d{4}-\d{2}-\d{2}$/.test(today),'INVALID_OPERATIONAL_DATE');
+ check(rules.length===2&&rules.every((r,i)=>r.id===REQUIRED_RULES[i]&&r.obrigatoriedade==='OBRIGATORIA'&&r.auto_matricular_ead===1),'RULES_DRIFT');
+ check(rules.every(r=>(!r.vigencia_inicio||r.vigencia_inicio.slice(0,10)<=today)&&(!r.vigencia_fim||r.vigencia_fim.slice(0,10)>=today)),'RULE_NOT_EFFECTIVE');
+}
+
 function query(sql){
   check(/^SELECT\b/i.test(sql.trim())&&!/\b(?:UPDATE|DELETE|INSERT|ALTER|DROP|CREATE|ATTACH|PRAGMA)\b/i.test(sql),'READ_ONLY_REQUIRED');
   const r=spawnSync('npx',['wrangler','d1','execute','airtrust-db','--env','production','--remote','--json','--command',sql],{cwd:new URL('../../worker-airtrust/',import.meta.url),encoding:'utf8',timeout:60000,maxBuffer:1000000});
@@ -25,8 +31,9 @@ function snapshot(){
  check(c.length===1&&c[0].codigo==='GESTOR'&&c[0].tipo==='DESIGNACAO'&&c[0].ativo===1&&!c[0].deleted_at,'DESIGNATION_DRIFT');
  const employees=query('SELECT id,empresa_id,ativo,status,deleted_at FROM funcionarios WHERE empresa_id=6 AND id IN ('+EMPLOYEES.join(',')+') ORDER BY id');
  check(employees.length===19&&employees.every((e,i)=>e.id===EMPLOYEES[i]&&e.ativo===1&&e.status==='ATIVO'&&!e.deleted_at),'EMPLOYEE_SCOPE_DRIFT');
- const rules=query('SELECT id,qualificacao_tipo_id,ativo,obrigatoriedade,auto_matricular_ead FROM treinamento_requisitos WHERE empresa_id=6 AND condicao_id=36 AND ativo=1 AND deleted_at IS NULL ORDER BY id');
- check(rules.length===2&&rules.every((r,i)=>r.id===REQUIRED_RULES[i]&&r.obrigatoriedade==='OBRIGATORIA'&&r.auto_matricular_ead===1),'RULES_DRIFT');
+ const rules=query('SELECT * FROM treinamento_requisitos WHERE empresa_id=6 AND condicao_id=36 AND ativo=1 AND deleted_at IS NULL ORDER BY id');
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ validateEffectiveRules(rules,today);
  const courses=query('SELECT id,qualificacao_tipo_id,ativo,publicado FROM lms_cursos WHERE empresa_id=6 AND deleted_at IS NULL AND qualificacao_tipo_id IN ('+rules.map(r=>r.qualificacao_tipo_id).join(',')+') ORDER BY id');
  check(rules.every(r=>courses.filter(c=>c.qualificacao_tipo_id===r.qualificacao_tipo_id&&c.ativo===1).length===1),'COURSE_MAPPING_DRIFT');
  const unpublished=courses.filter(c=>c.ativo===1&&c.publicado!==1).map(c=>c.id).join(',');
