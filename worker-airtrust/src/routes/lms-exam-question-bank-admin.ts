@@ -155,11 +155,20 @@ routes.get('/overview',async c=>{
   const tenant=getEmpresaId(c);
   const [courseRows,questionRows,planRows,bindingRows,totalsRow,attemptRows]=await Promise.all([
     c.env.DB.prepare(
-      'SELECT id,titulo,tipo_conteudo,scorm_assessment_policy,publicado '+
-      'FROM lms_cursos WHERE empresa_id=? AND ativo=1 AND deleted_at IS NULL '+
-      'ORDER BY titulo COLLATE NOCASE LIMIT 250'
+      'SELECT c.id,c.titulo,c.tipo_conteudo,c.scorm_assessment_policy,c.publicado,'+
+      'p.package_sha256 AS activePackageSha256,'+
+      'b.exam_id AS activeExamId,b.exam_version AS activeExamVersion '+
+      'FROM lms_cursos c LEFT JOIN lms_scorm_package_versions p ON p.id=('+
+      'SELECT v.id FROM lms_scorm_package_versions v WHERE v.empresa_id=c.empresa_id '+
+      "AND v.curso_id=c.id AND v.status='ACTIVE' "+
+      'ORDER BY v.uploaded_at DESC,v.id DESC LIMIT 1) '+
+      'LEFT JOIN lms_exam_edition_bindings b ON b.empresa_id=c.empresa_id '+
+      'AND b.curso_id=c.id AND b.package_sha256=p.package_sha256 '+
+      'WHERE c.empresa_id=? AND c.ativo=1 AND c.deleted_at IS NULL '+
+      'ORDER BY c.titulo COLLATE NOCASE LIMIT 250'
     ).bind(tenant).all<{id:number;titulo:string;tipo_conteudo:string;
-      scorm_assessment_policy:string|null;publicado:number}>(),
+      scorm_assessment_policy:string|null;publicado:number;
+      activePackageSha256:string|null;activeExamId:string|null;activeExamVersion:number|null}>(),
     c.env.DB.prepare(
       'SELECT curso_id,status,COUNT(DISTINCT question_key) AS total FROM lms_exam_question_revisions '+
       'WHERE empresa_id=? GROUP BY curso_id,status'

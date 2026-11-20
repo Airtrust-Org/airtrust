@@ -187,7 +187,12 @@ export default function LmsProva(): React.ReactElement {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6" aria-labelledby="prova-titulo">
       <h1 id="prova-titulo" className="mb-1 text-xl font-bold text-slate-900 dark:text-white">Prova final</h1>
-      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+      <p className="mb-4 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+        <a href={'/lms/player/' + matriculaId + '?review=1&source=exam'}
+          target="_blank" rel="noopener noreferrer" className="underline"
+          aria-label="Consultar o conteúdo do treinamento em outra aba, sem alterar a prova">
+          Consultar conteúdo em outra aba (somente leitura)
+        </a>
         <Link to={`/lms/player/${matriculaId}`} className="underline">Voltar ao treinamento</Link>
       </p>
       {error ? <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}

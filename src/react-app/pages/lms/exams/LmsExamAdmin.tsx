@@ -160,12 +160,13 @@ export default function LmsExamAdmin():React.ReactElement {
     }
     if(selectedRows.length!==total){setError('As questões selecionadas não são únicas.');return;}
     setSelected(Object.fromEntries(selectedRows.map(q=>[q.questionId,q.revision])));
-    setMinimums(old=>{
-      const next={...old};
-      for(const q of selectedRows)next[q.moduleId]=next[q.moduleId]||'80';
-      return next;
-    });
-    setMessage(total+' questões selecionadas. Confira módulos e critérios antes de publicar.');
+    // A course's normative minimum can be 70%, 80%, or module-specific.
+    // Never invent an 80% minimum during composition: the administrator
+    // must enter and explicitly approve the correct policy for each module.
+    setMinimums(old=>Object.fromEntries(
+      Object.entries(old).filter(([moduleId])=>selectedRows.some(q=>q.moduleId===moduleId))
+    ));
+    setMessage(total+' questões selecionadas. Defina a nota mínima autorizada de cada módulo antes de publicar.');
   }
   function buildPlan(){
     if(!edition||edition.boundExamId||edition.status==='SUPERSEDED'||!sha.test(packageSha))throw Error('EDIÇÃO_INDISPONÍVEL');

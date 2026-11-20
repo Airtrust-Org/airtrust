@@ -42,6 +42,28 @@ describe('Administração de provas por edição',()=>{
     expect(screen.queryByText('SEGREDO')).toBeNull();
     expect(mocked.mock.calls.some(([url])=>String(url).includes('questoes-publicadas'))).toBe(true);
   });
+  it('seleção por dificuldade não inventa nota mínima de 80% para curso de 70%',async()=>{
+    mocked.mockImplementation(async url=>{
+      if(String(url).endsWith('/edicoes'))return ok({editions:versions});
+      if(String(url).endsWith('/cursos/26/provas'))return ok({items:[],hasMore:false});
+      if(String(url).includes('/aptidao?'))return ok({
+        packageSha256:pkg,status:'ACTIVE',assessmentMode:'EXTERNAL',
+        workerApprovalRequired:true,canBind:true,boundExamId:null,boundExamVersion:null,reason:null,
+      });
+      if(String(url).includes('/questoes-publicadas?'))return ok({
+        items:[{...publishedQuestions[0],difficulty:'BASICA'}],nextOffset:null,
+      });
+      return new Response(JSON.stringify({success:false,code:'UNEXPECTED'}),{status:422});
+    });
+    renderPage();
+    await screen.findByText('Questão de segurança?',{exact:false});
+    fireEvent.change(screen.getByLabelText('Quantidade BASICA'),{target:{value:'1'}});
+    fireEvent.click(screen.getByRole('button',{name:'Selecionar questões'}));
+    const minimum=screen.getByLabelText('Nota mínima de m1') as HTMLInputElement;
+    expect(minimum.value).toBe('');
+    expect(screen.getAllByRole('status').some(el=>el.textContent?.includes('nota mínima autorizada'))).toBe(true);
+  });
+
   it('exige nota mínima e confirmação editorial antes de publicar plano; não vincula automaticamente',async()=>{
     renderPage();
     await screen.findByText('Questão de segurança?',{exact:false});

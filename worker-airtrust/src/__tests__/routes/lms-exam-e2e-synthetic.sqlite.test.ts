@@ -408,7 +408,10 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
     expect(r.status).toBe(200);
     const payload=await r.json() as any;
     expect(payload.data.courses).toHaveLength(1);
-    expect(payload.data.courses[0]).toMatchObject({id:26,titulo:'Treinamento sintético de teste'});
+    expect(payload.data.courses[0]).toMatchObject({
+      id:26,titulo:'Treinamento sintético de teste',
+      activePackageSha256:null,activeExamId:null,activeExamVersion:null,
+    });
     expect(payload.data.questionCounts).toEqual([{curso_id:26,status:'PUBLISHED',total:10}]);
     expect(payload.data.plans[0]).toMatchObject({cursoId:26,examId:'exam1',version:1,questionCount:10});
     expect(payload.data.bindings).toHaveLength(1);
@@ -416,6 +419,21 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
     expect(payload.data.attempts).toHaveLength(0);
     expect(JSON.stringify(payload)).not.toMatch(LEAK);
     expect(count(db,'SELECT COUNT(*) n FROM lms_exam_question_revisions')).toBe(10);
+  });
+  it('distingue vínculo antigo de prova vinculada à edição ACTIVE, sem confundir o gestor',async()=>{
+    const db=overviewDb();
+    await publishExam(db);
+    // The originally bound edition is still VALIDATED and is NOT a live learner edition.
+    const before=(await (await admin(db,base+'/admin/overview')).json() as any).data.courses[0];
+    expect(before).toMatchObject({activePackageSha256:null,activeExamId:null});
+    db.exec("UPDATE lms_scorm_package_versions SET status='ACTIVE' WHERE empresa_id=6 AND id='p1'");
+    const after=(await (await admin(db,base+'/admin/overview')).json() as any).data.courses[0];
+    expect(after).toMatchObject({activePackageSha256:PKG,activeExamId:'exam1',activeExamVersion:1});
+    db.exec("UPDATE lms_scorm_package_versions SET status='SUPERSEDED' WHERE empresa_id=6 AND id='p1'");
+    const old=(await (await admin(db,base+'/admin/overview')).json() as any).data.courses[0];
+    expect(old).toMatchObject({activePackageSha256:null,activeExamId:null});
+    const other=await as(db,TENANT_B_ADMIN,7,'ADMIN',base+'/admin/overview');
+    expect((await other.json() as any).data.courses).toHaveLength(0);
   });
   it('nega acesso do aluno e não expõe dados de outra empresa',async()=>{
     const db=overviewDb();

@@ -6,7 +6,7 @@ import AppLayout from '../../../components/AppLayout';
 import {fetchWithAuth} from '../../../config/api';
 import {buildExamResultsCsv} from './examReportCsv';
 
-type Course={id:number;titulo:string;tipo_conteudo:string;scorm_assessment_policy:string|null;publicado:number};
+type Course={id:number;titulo:string;tipo_conteudo:string;scorm_assessment_policy:string|null;publicado:number;activePackageSha256:string|null;activeExamId:string|null;activeExamVersion:number|null};
 type Plan={cursoId:number;examId:string;version:number;title:string|null;questionCount:number|null;publishedAt:string};
 type Binding={cursoId:number;examId:string;version:number;packageSha256:string;createdAt:string};
 type QuestionCount={curso_id:number;status:string;total:number};
@@ -79,7 +79,7 @@ export default function LmsAvaliacoesGestao(){
  },[data]);
  const visible=rows.filter(r=>
   (r.c.titulo.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))||String(r.c.id).includes(search))&&
-  (filter==='todos'||(filter==='vinculados'?r.binds.length>0:r.binds.length===0)));
+  (filter==='todos'||(filter==='vinculados'?!!r.c.activeExamId:!r.c.activeExamId)));
  const attempts=report?.items||[];
  const names=new Map(data?.courses.map(c=>[c.id,c.titulo])||[]);
  const published=data?.questionCounts.filter(q=>q.status==='PUBLISHED').reduce((n,q)=>n+q.total,0)||0;
@@ -127,7 +127,7 @@ export default function LmsAvaliacoesGestao(){
    {tab==='provas'&&<section className={panel}>
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
      <div><h2 className="text-lg font-semibold">Avaliações por treinamento</h2>
-      <p className="text-sm text-slate-600 dark:text-slate-300">Selecione um curso para montar uma prova com o seu banco de questões.</p></div>
+      <p className="text-sm text-slate-600 dark:text-slate-300">Selecione um curso para criar questões, montar a prova e vinculá-la à edição de EAD.</p></div>
      <Link className={control} to="/lms/admin/cursos">Configurar cursos EAD</Link>
     </div>
     <div className="mb-4 flex flex-wrap gap-3">
@@ -137,8 +137,8 @@ export default function LmsAvaliacoesGestao(){
        placeholder="Buscar treinamento pelo nome ou número"/></label>
      <select aria-label="Filtrar cursos" className={control} value={filter}
       onChange={e=>setFilter(e.target.value as typeof filter)}>
-      <option value="todos">Todos</option><option value="vinculados">Com prova vinculada</option>
-      <option value="sem-vinculo">Sem prova vinculada</option>
+      <option value="todos">Todos</option><option value="vinculados">Com prova na edição atual</option>
+      <option value="sem-vinculo">Sem prova na edição atual</option>
      </select>
     </div>
     {(data.coursesTruncated||data.plansTruncated)&&<p role="status" className="text-sm text-amber-700">Catálogo parcial: o servidor aplicou limite de resultados.</p>}
@@ -151,11 +151,15 @@ export default function LmsAvaliacoesGestao(){
        <small className="text-slate-500">Curso #{c.id} · {c.publicado?'Publicado':'Não publicado'}</small></td>
       <td>{published} publicada(s)<small className="block text-slate-500">{draft} em preparação</small></td>
       <td>{plans.length} plano(s){plans[0]&&<small className="block text-slate-500">{plans[0].title||plans[0].examId}</small>}</td>
-      <td>{binds.length?'Prova externa vinculada':plans.length?'Publicada — vínculo pendente':'Sem prova externa'}
-       <small className="block text-slate-500">SCORM: {c.scorm_assessment_policy||'Não definido'}</small></td>
+      <td>{c.activeExamId?
+        <span className="font-medium text-emerald-700">Prova da edição atual: {c.activeExamId} v{c.activeExamVersion}</span>:
+        !c.activePackageSha256?'Sem edição SCORM ativa':
+        binds.length>0?'Prova vinculada somente a outra edição':
+        plans.length?'Prova publicada — vínculo com edição atual pendente':'Prova final não configurada'}
+       <small className="block text-slate-500">Política do SCORM: {c.scorm_assessment_policy||'Não definida'} · a exigência externa depende da edição homologada</small></td>
       <td className="text-right"><Link to={'/lms/admin/provas/'+c.id}
        className="inline-block whitespace-nowrap rounded-lg bg-blue-700 px-3 py-2 text-white">
-       {plans.length?'Gerenciar':'Criar prova'}</Link></td>
+       {c.activeExamId?'Gerenciar':plans.length?'Vincular prova':'Configurar prova'}</Link></td>
      </tr>)}</tbody>
     </table>{visible.length===0&&<p className="py-8 text-center text-slate-600">Nenhum curso encontrado.</p>}</div>
    </section>}

@@ -955,6 +955,10 @@ app.get('/course-assets/:cursoId/thumbnail', async (c) => {
 
 app.get('/scorm/launch/:matricula_id', async (c) => {
   const payload = await authenticateLmsAssetRequest(c.env, c.req.raw);
+  // In-progress learners must be able to consult the course while taking an
+  // independent exam. Read-only must be enforced by the Worker launch wrapper,
+  // not merely by a cosmetic flag in React.
+  const requestedReadOnly = c.req.query('review') === '1';
 
   const empresaId = getEmpresaIdOptional(c) || Number(payload.empresa_id ?? 0);
   if (!empresaId) {
@@ -1026,7 +1030,8 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
   }
 
   const launchUrl = `/api/lms/scorm/assets/${matricula.empresa_id}/${matricula.curso_id}/${resolvedLaunchFile}`;
-  const commitUrl = '/api/lms/matriculas/scorm/commit';
+  const reviewMode = requestedReadOnly || matricula.status === 'CONCLUIDO';
+  const commitUrl = reviewMode ? null : '/api/lms/matriculas/scorm/commit';
 
   // Versão SCORM: 1.2 ou 2004
   const isScorm2004 = matricula.scorm_versao === '2004';
@@ -1088,7 +1093,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     progressoScorm?.cmi_json ?? null,
     progressoScorm?.suspend_data ?? null,
     isScorm2004,
-    matricula.status === 'CONCLUIDO',
+    reviewMode,
     navigationBookmark,
     { persisted: progressoScorm, reviewEditionMismatch: Boolean(mismatch), formativeCourse },
   );
@@ -1151,7 +1156,7 @@ app.get('/scorm/launch/:matricula_id', async (c) => {
     hasResumeState,
     strictCursor: formativeCourse,
     assetCacheBuster: Date.now().toString(36),
-    reviewMode: matricula.status === 'CONCLUIDO',
+    reviewMode,
     legacyS76Rc3FinalButton: s76Rc3Active,
   });
 

@@ -303,6 +303,7 @@ export default function LmsPlayer() {
   refetchMatriculaRef.current = refetchMatricula;
   const { data: curso } = useLmsCurso(matricula?.curso_id ?? 0);
   const reviewParam = searchParams.get('review') === '1';
+  const examConsultation = reviewParam && searchParams.get('source') === 'exam';
   const effectiveReviewMode = reviewParam || matricula?.status === 'CONCLUIDO';
   const persistedLocation = readLocationFromCmiJson(
     (matricula?.scorm_progresso as { cmi_json?: string | null } | null | undefined)?.cmi_json,
@@ -1603,9 +1604,16 @@ export default function LmsPlayer() {
           <div>
             <p className="text-xs font-medium text-blue-300">Modo consulta — somente leitura</p>
             <p className="text-[10px] text-blue-400/70">
-              Você está visualizando um curso já concluído. O progresso não será alterado.
+              {examConsultation
+                ? 'Consulta durante a prova final: esta aba não altera o progresso nem a tentativa.'
+                : 'Você está consultando o treinamento. O progresso não será alterado.'}
             </p>
           </div>
+          {examConsultation && (
+            <a href={'/lms/provas/' + id} className="ml-auto rounded border border-blue-500/60 px-3 py-1.5 text-xs text-white hover:bg-blue-800">
+              Voltar à prova
+            </a>
+          )}
         </div>
       )}
 

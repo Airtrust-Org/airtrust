@@ -90,6 +90,18 @@ describe('Prova final do aluno', () => {
     expect(calls()).toContain('POST /api/lms/matriculas/10/finalizar');
   });
 
+  it('permite consulta simultânea sem mutar a tentativa da prova', async()=>{
+    mocked.mockResolvedValueOnce(ok(state('READY')));
+    renderPage();
+    const link=screen.getByRole('link',{name:/Consultar o conteúdo do treinamento em outra aba/});
+    expect(link.getAttribute('href')).toBe('/lms/player/10?review=1&source=exam');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.getAttribute('rel')).toContain('noreferrer');
+    await screen.findByRole('button',{name:'Iniciar prova'});
+    expect(calls()).toEqual(['GET /api/lms/exams/matriculas/10/prova']);
+  });
+
   it('ambiente sem a prova ativada mostra mensagem clara', async () => {
     mocked.mockResolvedValueOnce(fail('EXAM_RUNTIME_NOT_ACTIVATED', 503));
     renderPage();
