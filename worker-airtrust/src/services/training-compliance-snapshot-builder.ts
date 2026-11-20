@@ -795,7 +795,7 @@ async function readComplianceExpiryAlertWindow(db: D1Database, empresaId: number
     // Fixtures/instâncias históricas sem empresas_config conservam o padrão
     // de 30 dias já existente. Erros de D1 (capacity, timeouts, permissões)
     // NÃO são convertidos silenciosamente em valores padrão.
-    if (/no such table: empresas_config(?:\\b|$)/i.test(String(error))) {
+    if (String(error).toLowerCase().includes('no such table: empresas_config')) {
       return DEFAULT_QUALIFICACOES_ALERTA_DIAS;
     }
     throw error;
