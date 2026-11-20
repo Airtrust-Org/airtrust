@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readAlreadyActiveExternalReplacement, replaceValidatedExternalScorm } from '../../lib/lms/lms-scorm-direct-replacement';
 
-const mocks = vi.hoisted(() => ({ evaluate: vi.fn(), commit: vi.fn(), head: vi.fn() }));
+const mocks = vi.hoisted(() => ({ evaluate: vi.fn(), commit: vi.fn(), head: vi.fn(), boundPolicy: vi.fn() }));
+vi.mock('../../lib/lms-exams/exam-edition-binding', () => ({
+  loadBoundExamAttemptPolicy: mocks.boundPolicy,
+}));
+const ATTEMPT_POLICY = { maxAttempts: 3, retryDelayMinutes: 0, timeLimitMinutes: null };
 vi.mock('../../lib/lms/lms-scorm-formative-service', async (original) => ({
   ...(await original<typeof import('../../lib/lms/lms-scorm-formative-service')>()),
   evaluateFormativeActivation: mocks.evaluate,
@@ -45,6 +49,7 @@ const params = (overrides: Record<string, unknown> = {}) => ({
   bucket: { head: mocks.head } as unknown as R2Bucket,
   empresaId: 6, cursoId: 84, packageId: 'candidate', userId: 42,
   confirm: { cursoId: 84, packageSha256: SHA, acknowledgeInProgress: 0 },
+  examRuntimeEnabled: true,
   ...overrides,
 });
 
@@ -53,6 +58,45 @@ describe('admin EXTERNAL content-only SCORM replacement', () => {
     mocks.evaluate.mockReset().mockResolvedValue(plan());
     mocks.commit.mockReset().mockResolvedValue(true);
     mocks.head.mockReset().mockResolvedValue({ key: 'index.html' });
+    mocks.boundPolicy.mockReset().mockResolvedValue(ATTEMPT_POLICY);
+  });
+
+  it('refuses to activate an EXTERNAL edition with no exam bound to its exact SHA (learners would be stuck)', async () => {
+    mocks.boundPolicy.mockResolvedValue(null);
+    await expect(replaceValidatedExternalScorm(params())).rejects.toMatchObject({
+      statusCode: 409, code: 'SCORM_EXTERNAL_EXAM_NOT_BOUND',
+    });
+    expect(mocks.boundPolicy).toHaveBeenCalledWith(expect.anything(),
+      { empresaId: 6, cursoId: 84, packageSha256: SHA });
+    expect(mocks.head).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('refuses to activate an EXTERNAL edition when the learner exam runtime is disabled for the tenant', async () => {
+    await expect(replaceValidatedExternalScorm(params({ examRuntimeEnabled: false }))).rejects.toMatchObject({
+      statusCode: 409, code: 'SCORM_EXTERNAL_EXAM_RUNTIME_DISABLED',
+    });
+    expect(mocks.boundPolicy).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the binding lookup errors', async () => {
+    mocks.boundPolicy.mockRejectedValue(new Error('D1_UNAVAILABLE'));
+    await expect(replaceValidatedExternalScorm(params())).rejects.toThrow('D1_UNAVAILABLE');
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it('does not require an AirTrust exam for scored-in-SCO editions', async () => {
+    const p = plan();
+    mocks.evaluate.mockResolvedValue({ ...p, row: {
+      ...p.row, validation_result_json: JSON.stringify({
+        ...quality, authoringReview: { externalExam: false, reviewed: true, privateRelease: false },
+      }),
+    } });
+    mocks.boundPolicy.mockResolvedValue(null);
+    const result = await replaceValidatedExternalScorm(params({ examRuntimeEnabled: false }), 'SCORM');
+    expect(result).toEqual(expect.objectContaining({ examMode: 'SCORM', status: 'ACTIVE' }));
+    expect(mocks.boundPolicy).not.toHaveBeenCalled();
   });
 
   it('activates the exact validated SHA without signed external attestation and retains SCORED exam policy', async () => {
