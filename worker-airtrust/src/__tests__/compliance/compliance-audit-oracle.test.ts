@@ -88,6 +88,23 @@ function lms(
 
 afterEach(() => vi.useRealTimers());
 
+describe('Compliance F-07 — janela de vencimento configurável por empresa', () => {
+  it('classifica a mesma qualificação como CONFORME ou VENCENDO conforme os dias de alerta', () => {
+    const requisito = rule({ validade_fonte: 'EVIDENCIA' });
+    const evidence = history('2026-11-01', '2026-12-11'); // 21 dias a partir de 20/11
+    const shortWindow = computeRequirement(requisito, [evidence], [], {
+      today: '2026-11-20', thresholdDiasVencendo: 14,
+    });
+    const longWindow = computeRequirement(requisito, [evidence], [], {
+      today: '2026-11-20', thresholdDiasVencendo: 60,
+    });
+    expect(shortWindow.status_compliance).toBe('CONFORME');
+    expect(longWindow.status_compliance).toBe('VENCENDO');
+    expect(shortWindow.dias_para_vencer).toBe(21);
+    expect(longWindow.dias_para_vencer).toBe(21);
+  });
+});
+
 describe('computeRequirement — referência de data America/Sao_Paulo', () => {
   it('às 22:30 BRT (01:30Z do dia seguinte) um vencimento "hoje" ainda é válido (dias=0, VENCENDO)', () => {
     // 2026-11-02 22:30 em São Paulo == 2026-11-03T01:30:00Z
