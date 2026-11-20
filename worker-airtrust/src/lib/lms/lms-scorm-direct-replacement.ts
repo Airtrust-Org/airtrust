@@ -15,6 +15,7 @@ import { reclassifyLegacyFormativeCandidate } from './lms-scorm-legacy-formative
 import { commitCertifiedScormActivation } from './lms-scorm-package-activation';
 import { parseStoredScormValidation, readScormUploadFilename } from './lms-scorm-package-filename';
 import type { ScormQualityGateResult } from './lms-scorm-quality-gate';
+import { loadBoundExamAttemptPolicy } from '../lms-exams/exam-edition-binding';
 
 export type DirectReplacementConfirmation = {
   cursoId?: unknown;
@@ -150,10 +151,40 @@ export async function readAlreadyActiveExternalReplacement(params: {
   };
 }
 
+/**
+ * An EXTERNAL edition certifies only through a sealed AirTrust exam attempt of
+ * the active cycle/edition. Activating it without a usable exam (or with the
+ * learner exam runtime disabled for the tenant) leaves every learner stuck in
+ * EXTERNAL_ASSESSMENT_PENDING with no path to completion. Bind the exam to the
+ * VALIDATED candidate SHA first (allowed by the exam admin), then activate.
+ * The current ACTIVE edition is never touched by a rejection here.
+ */
+async function assertExternalEditionExamReady(
+  params: { db: D1Database; empresaId: number; cursoId: number; examRuntimeEnabled: boolean },
+  packageSha256: string,
+): Promise<void> {
+  if (params.examRuntimeEnabled !== true) {
+    throw new ApiError(
+      'A avaliação externa não está habilitada para esta empresa; a edição EXTERNAL não pode ser ativada. Treinamento atual preservado.',
+      409, 'SCORM_EXTERNAL_EXAM_RUNTIME_DISABLED');
+  }
+  const policy = await loadBoundExamAttemptPolicy(params.db, {
+    empresaId: params.empresaId, cursoId: params.cursoId, packageSha256,
+  });
+  if (!policy) {
+    throw new ApiError(
+      'Publique e vincule a prova desta edição (mesmo SHA-256) em Gestão de Avaliações antes de ativá-la. Treinamento atual preservado.',
+      409, 'SCORM_EXTERNAL_EXAM_NOT_BOUND');
+  }
+}
+
 export async function replaceValidatedExternalScorm(params: {
   db: D1Database; bucket: R2Bucket; empresaId: number; cursoId: number;
   packageId: string; userId: number | null;
   confirm: DirectReplacementConfirmation | undefined;
+  /** Learner exam runtime enabled for this tenant (isLmsExamSurfaceEnabled).
+   * Required: an EXTERNAL edition is only completable through that runtime. */
+  examRuntimeEnabled: boolean;
 }, mode: 'EXTERNAL' | 'SCORM' = 'EXTERNAL') {
   if (!Number.isSafeInteger(params.userId) || Number(params.userId) <= 0) {
     throw new ApiError('Somente um administrador autenticado pode substituir conteúdo', 403, 'SCORM_REPLACE_ADMIN_REQUIRED');
@@ -229,6 +260,7 @@ export async function replaceValidatedExternalScorm(params: {
     throw new ApiError('Confirme o curso e o SHA-256 exatos do pacote', 409, 'ACTIVATION_CONFIRMATION_REQUIRED');
   }
   assertActivationConfirmation(preflight, row, params.cursoId, params.confirm);
+  if (mode === 'EXTERNAL') await assertExternalEditionExamReady(params, row.package_sha256);
   if (!await params.bucket.head(row.r2_prefix + row.launch_file)) {
     throw new ApiError('Arquivo principal da edição não está disponível', 409, 'SCORM_REPLACE_ASSETS_MISSING');
   }

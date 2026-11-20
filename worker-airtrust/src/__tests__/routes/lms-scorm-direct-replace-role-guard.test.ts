@@ -50,6 +50,20 @@ describe('SCORM direct replacement administrator role boundary', () => {
     expect(route).toContain('acknowledgeInProgress: preflight.impact.inProgress');
   });
 
+  it('both EXTERNAL activation routes pass the tenant learner exam runtime readiness, never a client flag', () => {
+    const upload = source.slice(source.indexOf("app.post('/:id/scorm-replace'"),
+      source.indexOf("app.get('/:id/scorm-package-versions'"));
+    const direct = source.slice(source.indexOf("app.post('/:id/scorm-package-versions/:packageId/replace-direct'"),
+      source.indexOf("app.post('/:id/scorm-package-versions/:packageId/activate'"));
+    expect(upload).toContain('examRuntimeEnabled: resolvedExternalExam && await learnerExamRuntimeReady(c, empresaId)');
+    expect(direct).toContain('examRuntimeEnabled: externalExam && await learnerExamRuntimeReady(c, empresaId)');
+    const helper = source.slice(source.indexOf('async function learnerExamRuntimeReady('),
+      source.indexOf('function actorId('));
+    expect(helper).toContain("isLmsExamSurfaceEnabled(c.env, 'learner', empresaId)");
+    expect(helper).toContain('await hasLmsExamSchema(c.env.DB)');
+    expect(source).not.toMatch(/examRuntimeEnabled:\s*(true|body\.|c\.req)/);
+  });
+
   it('rejects a GESTOR with an explicit editing grant before the replacement handler can run', async () => {
     const app = new Hono<{ Bindings: Env; Variables: { userRole: string } }>();
     app.onError(errorHandler);
