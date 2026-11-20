@@ -84,6 +84,7 @@ export function TrainingComplianceOrganizationEditor() {
   const [setorId, setSetorId] = useState<number | null>(null);
   const [funcaoId, setFuncaoId] = useState<number | null>(null);
   const [aeronaveModelo, setAeronaveModelo] = useState<string>('');
+  const [visibility, setVisibility] = useState<'applicable' | 'all'>('applicable');
   const [sort, setSort] = useState<TableSortState<MatrixSortKey>>({
     key: 'training',
     direction: 'asc',
@@ -167,13 +168,13 @@ export function TrainingComplianceOrganizationEditor() {
   });
   const sortedMatrix = useMemo(
     () =>
-      sortComplianceRows(matrix.data || [], sort, (row, key) => {
+      sortComplianceRows((matrix.data || []).filter((row) => visibility === 'all' || row.impacto.com_requisito > 0 || (row.direta !== null && row.direta.obrigatoriedade !== 'NAO_APLICA')), sort, (row, key) => {
         if (key === 'training') return row.qualificacao_tipo_nome;
         if (key === 'rule') return row.efetiva?.obrigatoriedade;
         if (key === 'impact') return row.impacto.atingidas_neste_nivel;
         return row.direta?.obrigatoriedade || 'HERDAR';
       }),
-    [matrix.data, sort],
+    [matrix.data, sort, visibility],
   );
 
   return (
@@ -255,6 +256,19 @@ export function TrainingComplianceOrganizationEditor() {
         </div>
       ) : null}
       {setorId ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm font-medium text-slate-600" htmlFor="compliance-matrix-visibility">Exibir treinamentos</label>
+          <select id="compliance-matrix-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as 'applicable' | 'all')} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="applicable">Aplicáveis à seleção</option>
+            <option value="all">Catálogo completo (configurar novas regras)</option>
+          </select>
+          <span className="text-xs text-slate-500">{sortedMatrix.length} treinamento(s) exibido(s)</span>
+        </div>
+      ) : null}
+      {setorId && sortedMatrix.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">Nenhum treinamento aplicável nesta seleção. Use Catálogo completo para configurar uma nova regra.</p>
+      ) : null}
+      {setorId ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
@@ -311,13 +325,13 @@ export function TrainingComplianceOrganizationEditor() {
                   </td>
                   <td className="min-w-[260px] px-3 py-3 text-xs text-slate-600">
                     <div className="font-medium text-slate-800">
-                      Afeta {row.impacto.atingidas_neste_nivel} de {row.impacto.pessoas} pessoa(s)
+                      {row.impacto.com_requisito > 0 ? `Exigido para ${row.impacto.com_requisito} de ${row.impacto.pessoas} pessoa(s)` : `Sem requisito vigente · ${row.impacto.atingidas_neste_nivel} pessoa(s) poderiam receber nova regra`}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className="rounded-full bg-slate-100 px-2 py-0.5">
                         {row.impacto.matriculados} matriculada(s)
                       </span>
-                      {row.impacto.sem_matricula > 0 ? (
+                      {row.impacto.com_requisito > 0 && row.impacto.sem_matricula > 0 ? (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
                           {row.impacto.sem_matricula} sem matrícula
                         </span>
