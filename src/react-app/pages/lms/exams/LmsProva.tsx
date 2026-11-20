@@ -77,15 +77,18 @@ export default function LmsProva(): React.ReactElement {
   const [completionConfirmed,setCompletionConfirmed] = useState(false);
   const sendRef=useRef<HTMLButtonElement>(null);
   const dialogRef=useRef<HTMLDivElement>(null);
+  const previousConfirming=useRef(false);
   useEffect(()=>{
     if(confirming){
       const first=dialogRef.current?.querySelector('button');
       first?.focus();
-    }else if(sendRef.current&&attempt?.state==='IN_PROGRESS'){
-      // A dismissed confirmation must restore keyboard focus to the initiator.
-      sendRef.current.focus();
+    }else if(previousConfirming.current){
+      // Restore focus only on closing the confirmation; never steal focus
+      // from the first question when an exam attempt is first started.
+      sendRef.current?.focus();
     }
-  },[confirming,attempt?.state]);
+    previousConfirming.current=confirming;
+  },[confirming]);
   useEffect(()=>{
     if(attempt?.state!=='IN_PROGRESS'||!attempt.expiresAt)return;
     setNow(Date.now());

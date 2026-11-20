@@ -237,6 +237,7 @@ describe('Prova final do aluno', () => {
     mocked.mockResolvedValueOnce(ok(attempt(),201));
     fireEvent.click(await screen.findByRole('button',{name:'Iniciar prova'}));
     expect(await screen.findByText('0 de 2 questões respondidas')).toBeTruthy();
+    expect(document.activeElement).not.toBe(screen.getByRole('button',{name:'Enviar prova'}));
     expect(screen.getByRole('progressbar',{name:'Progresso de respostas'})).toBeTruthy();
     expect(screen.getByText('Questão 1. Primeira?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'Próxima questão'}));
