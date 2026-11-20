@@ -214,10 +214,12 @@ function isMatriculaUniqueConstraintError(error: unknown): boolean {
   return message.includes('UNIQUE constraint failed') && message.includes('lms_matriculas');
 }
 
-function buildRenewalExpirationDate(): string {
-  const expiration = new Date();
-  expiration.setUTCDate(expiration.getUTCDate() + LMS_RENOVACAO_EAD_JANELA_DIAS);
-  return expiration.toISOString().slice(0, 10);
+function buildRenewalExpirationDate(): string | null {
+  // F-10: a janela de descoberta (hoje = dia do vencimento) NÃO é um prazo
+  // de conclusão. Enquanto não existir prazo explícito aprovado para este
+  // contrato, não inventar um vencimento "hoje" para a matrícula recém-criada.
+  // A qualificação vencida continua sendo VENCIDA no Compliance.
+  return null;
 }
 
 async function ensureExistingRenewalMatricula(

@@ -14,7 +14,7 @@ import { createStructuredConsole } from '../utils/logger';
 import { processarEventosParaModulo } from '../shared/handlers';
 import { CANCELLED_STATUS_VALUES, sqlStatusNotEqualsAny } from '../lib/status/status-codes';
 import { getQualificacoesVencimentoExpr } from '../utils/qualificacoes-alerta-config';
-import { ensureEadRenewalMatriculaForRow } from './resilient/ead-renewal';
+import { ensureEadRenewalMatriculaForRow, LMS_RENOVACAO_EAD_JANELA_DIAS } from './resilient/ead-renewal';
 import {
   getSigvoosConfig,
   syncSigvoosForFrms,
@@ -31,7 +31,7 @@ import { isControleVoosShadowModeEnabledForEmpresa } from '../lib/frms/controle-
 import { cleanupExpiredRefreshTokens } from '../services/auth-refresh-token';
 import { getModuleAlertSettings, renderAlertTemplate } from '../services/module-alert-settings';
 
-export const LMS_RENOVACAO_EAD_JANELA_DIAS = 0;
+export { LMS_RENOVACAO_EAD_JANELA_DIAS };
 
 export function buildQualificacoesEadRenovacaoAutomaticaQuery() {
   const vencExpr = getQualificacoesVencimentoExpr();
