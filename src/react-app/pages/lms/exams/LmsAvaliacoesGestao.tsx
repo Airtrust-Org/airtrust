@@ -18,7 +18,7 @@ type Overview={courses:Course[];questionCounts:QuestionCount[];plans:Plan[];bind
  totals:{attempts:number;passed:number;failed:number;inProgress:number};
  attempts:Attempt[];attemptsTruncated:boolean;coursesTruncated:boolean;plansTruncated:boolean};
 type Envelope={success:boolean;code?:string;data?:Overview};
-type ReportRow=Attempt&{cursoTitulo:string|null};
+type ReportRow=Attempt&{cursoTitulo:string|null;sections?:{moduleId:string;scorePct:number;minScorePct:number}[]};
 type Report={page:number;limit:number;total:number;pages:number;items:ReportRow[]};
 type ReportEnvelope={success:boolean;code?:string;data?:Report};
 const panel=examCard;
@@ -268,7 +268,17 @@ export default function LmsAvaliacoesGestao(){
         <div><dt className="font-medium">Resultado</dt><dd>{selectedAttempt.state==='IN_PROGRESS'?'Em andamento':selectedAttempt.passed?'Aprovado':'Reprovado'}</dd></div>
         <div><dt className="font-medium">Nota global</dt><dd>{selectedAttempt.scorePct===null?'Pendente':selectedAttempt.scorePct+'%'}</dd></div>
         <div><dt className="font-medium">Registro</dt><dd>{datetime(selectedAttempt.submittedAt||selectedAttempt.startedAt)}</dd></div>
-      </dl><p className="mt-3 text-xs text-slate-600 dark:text-slate-400">O detalhamento não revela respostas nem gabaritos. Critérios por módulo permanecem no plano versionado.</p>
+      </dl>
+      {selectedAttempt.sections?.length?<div className="mt-4">
+        <h4 className="font-semibold">Desempenho por módulo</h4>
+        <ul className="mt-2 grid gap-2 sm:grid-cols-2">{selectedAttempt.sections.map(section=>
+          <li key={section.moduleId} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+            <strong>{section.moduleId}</strong>
+            <p>Nota {section.scorePct}% · mínimo {section.minScorePct}%</p>
+          </li>)}
+        </ul>
+      </div>:null}
+      <p className="mt-3 text-xs text-slate-600 dark:text-slate-400">Notas e critérios extraídos do plano imutável da tentativa. Nenhuma resposta ou gabarito é exposto.</p>
     </section>}
     {report&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span role="status">{report.total} tentativa(s) no filtro · Página {report.page} de {Math.max(report.pages,1)}</span>

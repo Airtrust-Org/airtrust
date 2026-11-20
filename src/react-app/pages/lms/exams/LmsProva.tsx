@@ -17,7 +17,7 @@ type ExamQuestion = { questionId: string; prompt: string; choices: Choice[] };
 type Section = { moduleId: string; questions: ExamQuestion[] };
 type Result = {
   passed: boolean; answered: number; unanswered: number; expired?: boolean;
-  sections: { moduleId: string; scorePct: number; passed: boolean }[];
+  sections: { moduleId: string; scorePct: number; passed: boolean; minScorePct?:number|null }[];
 };
 type Attempt = {
   attemptId: string; attemptNo: number; state: 'IN_PROGRESS' | 'SUBMITTED';
@@ -352,7 +352,7 @@ export default function LmsProva(): React.ReactElement {
           {attempt.result.expired ? <p role="alert" className="mb-2 text-sm">Tempo esgotado: esta tentativa foi encerrada sem aprovação.</p> : null}
           <ul className="mb-3 list-disc pl-5 text-sm">
             {attempt.result.sections.map((s, i) => (
-              <li key={s.moduleId}>Parte {i + 1}: {s.scorePct}% — {attempt.result?.expired ? 'tentativa encerrada por tempo' : s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
+              <li key={s.moduleId}>Módulo {s.moduleId} (parte {i+1}): {s.scorePct}% — mínimo {s.minScorePct===undefined||s.minScorePct===null?'não informado':s.minScorePct+'%'} — {attempt.result?.expired ? 'tentativa encerrada por tempo' : s.passed ? 'atingiu o mínimo' : 'abaixo do mínimo'}</li>
             ))}
           </ul>
           {attempt.result.unanswered > 0 ? <p className="mb-3 text-sm">Questões sem resposta: {attempt.result.unanswered}.</p> : null}

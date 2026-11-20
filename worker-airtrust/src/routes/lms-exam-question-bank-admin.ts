@@ -90,6 +90,24 @@ function scoreForReport(planText:string|null,resultText:string|null):number|null
   }catch{return null;}
 }
 
+/** Per-module score and normative threshold are read-only and derived solely
+ * from the signed attempt's immutable plan; no question keys or responses. */
+function sectionsForReport(planText:string|null,resultText:string|null):{
+ moduleId:string;scorePct:number;minScorePct:number;
+}[]{
+ if(scoreForReport(planText,resultText)===null)return [];
+ try{
+  const plan=JSON.parse(planText as string) as {sections:{moduleId:string;minScorePct:number}[]};
+  const result=JSON.parse(resultText as string) as {sections:{moduleId:string;scorePct:number}[]};
+  return plan.sections.map(section=>{
+   const score=result.sections.find(r=>r.moduleId===section.moduleId);
+   if(!score||!Number.isInteger(section.minScorePct)||section.minScorePct<1||
+      section.minScorePct>100||!Number.isFinite(score.scorePct))return null;
+   return {moduleId:section.moduleId,scorePct:score.scorePct,minScorePct:section.minScorePct};
+  }).filter((x):x is {moduleId:string;scorePct:number;minScorePct:number}=>x!==null);
+ }catch{return [];}
+}
+
 /** Paged assessment results, never answer keys. Auth/ADMIN/tenant is checked above. */
 routes.get('/resultados',async c=>{
   const pageRaw=c.req.query('page')||'1',limitRaw=c.req.query('limit')||'25';
@@ -144,6 +162,7 @@ routes.get('/resultados',async c=>{
       attemptNo:row.attempt_no,state:row.state,
       passed:row.passed===null?null:row.passed===1,
       scorePct:row.state==='SUBMITTED'?scoreForReport(row.plan_json,row.result_json):null,
+      sections:row.state==='SUBMITTED'?sectionsForReport(row.plan_json,row.result_json):[],
       startedAt:row.started_at,submittedAt:row.submitted_at,
     })),
   }});

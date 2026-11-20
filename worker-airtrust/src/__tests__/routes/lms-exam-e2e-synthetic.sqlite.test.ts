@@ -494,6 +494,9 @@ describe('Gestão de Avaliações — visão central administrativa',()=>{
       cursoId:26,cursoTitulo:'Treinamento sintético de teste',matriculaId:10,
       alunoNome:'Aluno sintético',scorePct:70,passed:true,attemptNo:1,
     });
+    expect(payload.data.items[0].sections[0]).toMatchObject({
+      moduleId:expect.any(String),scorePct:expect.any(Number),minScorePct:expect.any(Number),
+    });
     expect(JSON.stringify(payload)).not.toMatch(LEAK);
     const failed=await (await admin(db,base+'/admin/resultados?resultado=reprovado')).json() as any;
     expect(failed.data.items).toHaveLength(0);
