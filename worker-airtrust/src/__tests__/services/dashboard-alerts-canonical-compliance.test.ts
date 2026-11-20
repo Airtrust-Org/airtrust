@@ -58,9 +58,9 @@ describe('F-06 — alertas do Dashboard usam requisitos canônicos', () => {
       expect.anything(), 6, access, undefined, { coalesce: true },
     );
     expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.tripulanteId)).toEqual([42, 43]);
-    expect(rows[0].mensagem).toContain('Treinamento obrigatório');
-    expect(rows[1].mensagem).toContain('conclusão sem qualificação vinculada');
+    expect(rows.map((r) => r.tripulanteId)).toEqual([43, 42]);
+    expect(rows[1].mensagem).toContain('Treinamento obrigatório');
+    expect(rows[0].mensagem).toContain('conclusão sem qualificação vinculada');
     expect(rows.every((r) => r.urlAcao === '/treinamentos/compliance')).toBe(true);
     const code = readFileSync(decodeURIComponent(new URL('../../services/dashboardService.ts', import.meta.url).pathname), 'utf8');
     expect(code.slice(code.indexOf('export async function getDashboardAlerts('),
