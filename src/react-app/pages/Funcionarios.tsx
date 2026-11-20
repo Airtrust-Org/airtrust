@@ -40,7 +40,7 @@ function normalizeAeronaveLabel(value?: string): string {
 }
 
 export default function Funcionarios() {
-  const { token } = useAuth();
+  const { token, empresaAtualId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // ── Filtros persistentes (localStorage por usuário) ──
@@ -128,6 +128,8 @@ export default function Funcionarios() {
   const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
   const [setoresLoaded, setSetoresLoaded] = useState(false);
+  const [setoresError, setSetoresError] = useState(false);
+  const [setoresRefreshKey, setSetoresRefreshKey] = useState(0);
   const [roleOptionsDiscovered, setRoleOptionsDiscovered] = useState<string[]>([]);
   const [stats, setStats] = useState<{
     total: number;
@@ -235,22 +237,36 @@ export default function Funcionarios() {
   }, [token]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setSetoresLoaded(false);
+    setSetoresError(false);
+    setSetores([]);
     const loadSetores = async () => {
-      setSetoresLoaded(false);
       try {
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        const response = await fetch(`${API_BASE_URL}/setores`, { headers, cache: 'no-cache' });
-        if (!response.ok) return;
+        const response = await fetch(`${API_BASE_URL}/setores`, {
+          headers,
+          cache: 'no-cache',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Setores HTTP ${response.status}`);
         const payload = await response.json();
-        setSetores(Array.isArray(payload?.data) ? payload.data : []);
+        if (payload?.success !== true || !Array.isArray(payload.data)) {
+          throw new Error('Catálogo de setores inválido');
+        }
+        if (controller.signal.aborted) return;
+        setSetores(payload.data);
         setSetoresLoaded(true);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error('Erro ao carregar setores:', error);
+        setSetoresError(true);
       }
     };
-    loadSetores();
-  }, [token]);
+    void loadSetores();
+    return () => controller.abort();
+  }, [token, empresaAtualId, setoresRefreshKey]);
 
   useEffect(() => {
     const nextFuncao = searchParams.get('funcao') ?? '';
@@ -419,6 +435,25 @@ export default function Funcionarios() {
 
         {/* Content */}
         <div className="p-4">
+          {setorFilter.length > 0 && !setoresLoaded ? (
+            <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              {setoresError ? (
+                <>
+                  Não foi possível validar os setores selecionados. Nenhum funcionário foi exibido
+                  para evitar apresentar resultados fora do filtro.
+                  <button
+                    type="button"
+                    className="ml-3 rounded border border-amber-600 px-3 py-1 font-semibold"
+                    onClick={() => setSetoresRefreshKey((value) => value + 1)}
+                  >
+                    Tentar novamente
+                  </button>
+                </>
+              ) : (
+                'Validando os setores selecionados...'
+              )}
+            </div>
+          ) : (
           <ListaFuncionarios
             termoBusca={searchTerm}
             statusFilter={statusFilter}
@@ -433,6 +468,7 @@ export default function Funcionarios() {
             showModalNovoFuncionario={showModalNovoFuncionario}
             onCloseModalNovoFuncionario={() => setShowModalNovoFuncionario(false)}
           />
+          )}
         </div>
       </div>
     </AppLayout>
