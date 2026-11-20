@@ -123,7 +123,7 @@ describe('Training Compliance organization flows', () => {
     expect(screen.queryByText('Treinamento não atribuído')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Exibir treinamentos'), { target: { value: 'all' } });
     expect(screen.getByText('Treinamento não atribuído')).toBeInTheDocument();
-    expect(screen.getByText('Sem regra')).toBeInTheDocument();
+    expect(screen.getAllByText('Sem regra')).toHaveLength(2);
 
     const crmRow = screen.getByText('CRM Periódico').closest('tr')!;
     fireEvent.change(within(crmRow).getByRole('combobox'), { target: { value: 'OBRIGATORIA' } });
