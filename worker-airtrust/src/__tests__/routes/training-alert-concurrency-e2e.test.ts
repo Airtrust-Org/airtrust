@@ -139,6 +139,7 @@ beforeEach(() => {
       valor TEXT,
       cores_tema TEXT
     );
+    ALTER TABLE empresas_config ADD COLUMN dias_alerta_vencimento INTEGER;
 
     ALTER TABLE funcionarios ADD COLUMN email TEXT;
     ALTER TABLE funcionarios ADD COLUMN telefone TEXT;
