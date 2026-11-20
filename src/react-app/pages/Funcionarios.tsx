@@ -126,6 +126,7 @@ export default function Funcionarios() {
   const [modelosAeronave, setModelosAeronave] = useState<ModeloAeronave[]>([]);
   const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
+  const [setoresLoaded, setSetoresLoaded] = useState(false);
   const [roleOptionsDiscovered, setRoleOptionsDiscovered] = useState<string[]>([]);
   const [stats, setStats] = useState<{
     total: number;
@@ -144,6 +145,29 @@ export default function Funcionarios() {
     () => setoresOrdenados.map((setor) => ({ value: String(setor.id), label: setor.nome })),
     [setoresOrdenados],
   );
+
+  // Setor selections are persisted across sessions and can outlive a role,
+  // tenant or catalog change. Never send stale/out-of-scope IDs to the API:
+  // the backend correctly responds 403 when any requested ID is unauthorized.
+  // Selecting every available sector is semantically the same as no filter.
+  const setorFilterAplicado = useMemo(() => {
+    if (!setoresLoaded) return [];
+    const available = new Set(setorOptions.map((option) => option.value));
+    const validSelected = [...new Set(setorFilter.filter((id) => available.has(id)))];
+    return available.size > 0 && validSelected.length === available.size ? [] : validSelected;
+  }, [setoresLoaded, setorOptions, setorFilter]);
+
+  useEffect(() => {
+    if (!setoresLoaded || setorFilter.length === 0) return;
+    const available = new Set(setorOptions.map((option) => option.value));
+    const normalized = [...new Set(setorFilter.filter((id) => available.has(id)))];
+    if (
+      normalized.length !== setorFilter.length ||
+      normalized.some((id, index) => id !== setorFilter[index])
+    ) {
+      updateFilter('setorFilter', normalized);
+    }
+  }, [setoresLoaded, setorOptions, setorFilter, updateFilter]);
 
   const funcoesOrdenadas = useMemo(() => {
     const byNome = new Map<string, Funcao>();
@@ -211,6 +235,7 @@ export default function Funcionarios() {
 
   useEffect(() => {
     const loadSetores = async () => {
+      setSetoresLoaded(false);
       try {
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -218,6 +243,7 @@ export default function Funcionarios() {
         if (!response.ok) return;
         const payload = await response.json();
         setSetores(Array.isArray(payload?.data) ? payload.data : []);
+        setSetoresLoaded(true);
       } catch (error) {
         console.error('Erro ao carregar setores:', error);
       }
@@ -394,7 +420,7 @@ export default function Funcionarios() {
             funcaoFilter={funcaoFilter}
             aeronaveFilter={aeronaveFilter}
             quinzenaFilter={quinzenaFilter}
-            setorFilter={setorFilter}
+            setorFilter={setorFilterAplicado}
             configColunasAberto={configColunasAberto}
             onToggleConfigColunas={() => setConfigColunasAberto((prev) => !prev)}
             onStatsChange={setStats}
