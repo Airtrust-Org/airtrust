@@ -80,7 +80,8 @@ function timed(target: object, method: (...args: unknown[]) => unknown, name: st
     if (!stats) return method.apply(target, args);
     const startedAt = performance.now();
     stats.roundTrips += 1;
-    stats.statements += name === 'batch' && Array.isArray(args[0]) ? args[0].length : 1;
+    const statementCount = name === 'batch' && Array.isArray(args[0]) ? args[0].length : 1;
+    stats.statements += statementCount;
     const finish = () => {
       stats.dbMs += performance.now() - startedAt;
     };
@@ -88,14 +89,23 @@ function timed(target: object, method: (...args: unknown[]) => unknown, name: st
     try {
       result = method.apply(target, args);
     } catch (error) {
+      stats.unmeteredStatements += statementCount;
       finish();
       throw error;
     }
     return Promise.resolve(result)
-      .then((value) => {
-        recordRows(stats, name, value);
-        return value;
-      })
+      .then(
+        (value) => {
+          recordRows(stats, name, value);
+          return value;
+        },
+        (error: unknown) => {
+          // Chamada rejeitada não devolve meta: o statement já foi contado e precisa aparecer
+          // como sem medição. O erro original é repassado intacto.
+          stats.unmeteredStatements += statementCount;
+          throw error;
+        },
+      )
       .finally(finish);
   };
 }

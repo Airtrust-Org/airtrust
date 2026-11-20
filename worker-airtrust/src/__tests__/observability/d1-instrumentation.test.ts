@@ -102,6 +102,24 @@ describe('instrumentD1', () => {
       await expect(instrumentD1(db).prepare('X').first()).rejects.toThrow('D1_ERROR');
     });
     expect(stats.roundTrips).toBe(1);
+    expect(stats.statements).toBe(1);
+    expect(stats.unmeteredStatements).toBe(1);
+  });
+
+  it('batch rejeitado conta todos os statements como sem medição e repassa o erro original', async () => {
+    const { db } = fakeDb();
+    const failure = new Error('D1_BATCH_ERROR');
+    db.batch.mockRejectedValueOnce(failure);
+    const stats = createD1RequestStats();
+    const wrapped = instrumentD1(db);
+    await runWithD1Stats(stats, async () => {
+      await expect(
+        wrapped.batch([wrapped.prepare('A'), wrapped.prepare('B'), wrapped.prepare('C')] as never),
+      ).rejects.toBe(failure);
+    });
+    expect(stats.statements).toBe(3);
+    expect(stats.unmeteredStatements).toBe(3);
+    expect(stats.rowsRead).toBe(0);
   });
 
   it('soma rows_read/rows_written do meta de all/run/batch e conta first/raw/exec como sem medição', async () => {
