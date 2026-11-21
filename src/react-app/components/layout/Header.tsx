@@ -284,7 +284,6 @@ export const Header: React.FC = () => {
             </div>
 
             <nav
-              role="none"
               className="flex flex-col gap-1 p-3"
               aria-label="Navegação principal móvel"
             >
