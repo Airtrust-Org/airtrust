@@ -96,7 +96,17 @@ async function openCourseEditor(page: Page, course: QaCourse) {
   const card = page.locator('article').filter({ hasText: course.title });
   await expect(card).toHaveCount(1, { timeout: 30_000 });
   await expect(card).toBeVisible();
-  await card.getByRole('button', { name: 'Editar' }).click();
+  // Fail closed with an actionable RBAC diagnostic rather than timing out
+  // on a hidden mutation button. Never alter the QA user's grants here.
+  const edit = card.getByRole('button', { name: 'Editar', exact: true });
+  if (await edit.count() !== 1) {
+    const managementRestricted = await card.getByText(/restrit/i).count();
+    throw new Error(
+      'QA_SCORM_COURSE_EDIT_ACTION_NOT_VISIBLE' +
+      ':restricted_hint=' + Number(managementRestricted > 0),
+    );
+  }
+  await edit.click();
 
   await expect(
     page.getByRole('heading', { name: `Refinando ${course.title}` }),
