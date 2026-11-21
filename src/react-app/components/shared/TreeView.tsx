@@ -95,7 +95,7 @@ function TreeNodeComponent({
   return (
     <>
       {/* Current Node */}
-      <div
+      <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
         className={`
           flex items-center justify-between py-2 px-3 rounded-lg border transition-all duration-200
           ${node.type === 'folder' 

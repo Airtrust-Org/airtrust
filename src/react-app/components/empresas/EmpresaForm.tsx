@@ -959,7 +959,7 @@ export function EmpresaForm({
                 >
                   Carregar Template Padrão
                 </button>
-                <button onClick={() => setShowTemplateEditor(false)}>
+                <button aria-label="Fechar" onClick={() => setShowTemplateEditor(false)}>
                   <X size={20} className="text-gray-400" />
                 </button>
               </div>

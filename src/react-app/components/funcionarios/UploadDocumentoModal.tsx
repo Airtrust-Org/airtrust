@@ -282,7 +282,7 @@ export default function UploadDocumentoModal({
               <p className="text-sm text-slate-500 dark:text-slate-400">PDF entre 1 KB e 10 MB</p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={handleClose}
             className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
             disabled={uploading}
@@ -379,7 +379,7 @@ export default function UploadDocumentoModal({
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Arquivo PDF <span className="text-red-500">*</span>
             </label>
-            <div
+            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               onClick={() => fileInputRef.current?.click()}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition ${file ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-slate-300 hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'}`}
             >

@@ -51,7 +51,7 @@ export default function PainelRevisoes({ escalaId, onClose, onComparar, onVerCom
               : 'Todas as publicações desta escala'}
           </p>
         </div>
-        <button
+        <button aria-label="Fechar"
           type="button"
           onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"

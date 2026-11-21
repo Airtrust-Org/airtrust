@@ -157,7 +157,7 @@ export default function UploadDocumentos({
               <p className="font-semibold text-gray-900 truncate">{arquivo.name}</p>
               <p className="text-sm text-gray-500">{(arquivo.size / 1024).toFixed(2)} KB</p>
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={() => setArquivo(null)}
               className="text-red-600 hover:text-red-800 flex-shrink-0"
             >

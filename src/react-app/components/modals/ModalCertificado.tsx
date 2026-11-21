@@ -720,7 +720,7 @@ export function ModalCertificado({
               {qualificacao.qualificacao_nome}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
             <X size={24} />
           </button>
         </div>

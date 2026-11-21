@@ -127,7 +127,7 @@ export const SimuladoresCard = ({
   };
 
   return (
-    <div
+    <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
       className={`
         bg-white dark:bg-slate-900
         rounded-lg 

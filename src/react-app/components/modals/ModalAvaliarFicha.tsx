@@ -468,7 +468,7 @@ export default function ModalAvaliarFicha({
               ) : null}
               Finalizar
             </button>
-            <button
+            <button aria-label="Fechar"
               onClick={onClose}
               disabled={salvando}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"

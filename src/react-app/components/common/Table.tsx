@@ -60,7 +60,7 @@ export function Table<T extends Record<string, any>>({
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {data.map((item, index) => (
-            <tr
+            <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={index}
               onClick={() => onRowClick?.(item)}
               className={onRowClick ? 'hover:bg-gray-50 cursor-pointer' : ''}

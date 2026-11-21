@@ -653,7 +653,7 @@ export default function SolicitacoesTreinamentoPage() {
           ) : (
             <div className="divide-y divide-slate-100">
               {(solicitacoes as Solicitacao[]).map((item) => (
-                <div
+                <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={item.id}
                   className="flex cursor-pointer items-start gap-4 px-5 py-4 hover:bg-slate-50"
                   onClick={() => setDetailItem(item)}

@@ -199,7 +199,7 @@ export default function ConfiguracaoCertificado() {
             <div className={styles.modalContent}>
               <div className={styles.modalHeader}>
                 <h3>✏️ Editar Template - {empresaSelecionada?.nome}</h3>
-                <button onClick={() => setShowModal(false)} className={styles.closeBtn}>
+                <button aria-label="Fechar" onClick={() => setShowModal(false)} className={styles.closeBtn}>
                   <X size={24} />
                 </button>
               </div>

@@ -855,7 +855,7 @@ export default function ImportarCertificacoes({
               Importe certificações usando arquivo CSV com validação avançada
             </p>
           </div>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+          <button aria-label="Fechar" onClick={handleClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
             <X className="w-6 h-6" />
           </button>
         </div>

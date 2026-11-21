@@ -72,7 +72,7 @@ export function AlertWidget({ alerts, isLoading, compact = false }: AlertWidgetP
                 : 'bg-blue-50';
 
           return (
-            <div
+            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={alerta.id}
               className={`px-4 py-2.5 hover:${criticColor} cursor-pointer transition-colors flex items-center justify-between gap-3 group text-xs`}
               onClick={() => navigate(`/qualificacoes?funcionario_id=${alerta.tripulanteId}`)}

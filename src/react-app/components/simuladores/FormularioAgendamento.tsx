@@ -222,7 +222,7 @@ export default function FormularioAgendamento({
           </p>
         </div>
         {onCancelar && (
-          <button
+          <button aria-label="Fechar"
             onClick={onCancelar}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >

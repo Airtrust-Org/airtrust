@@ -365,7 +365,7 @@ export const GlobalTable: React.FC<GlobalTableProps> = ({
               const rowStyles = rowStatus ? statusStyles[rowStyleKey] : null;
 
               return (
-                <tr
+                <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={`${String(item[idKey] || index)}`}
                   className={`hover:bg-neutral-50 transition-colors ${
                     rowStyles ? `${rowStyles.background} ${rowStyles.border}` : ''

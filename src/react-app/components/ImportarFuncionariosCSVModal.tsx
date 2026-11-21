@@ -280,7 +280,7 @@ export default function ImportarFuncionariosCSVModal({
       <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Importar Funcionários</h2>
-          <button
+          <button aria-label="Fechar"
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >

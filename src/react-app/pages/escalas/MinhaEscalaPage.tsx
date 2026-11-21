@@ -254,7 +254,7 @@ export default function MinhaEscalaPage() {
 
         {/* Month Navigation */}
         <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <button
+          <button aria-label="Mês anterior"
             onClick={prevMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -282,7 +282,7 @@ export default function MinhaEscalaPage() {
               </span>
             )}
           </div>
-          <button
+          <button aria-label="Próximo mês"
             onClick={nextMonth}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >

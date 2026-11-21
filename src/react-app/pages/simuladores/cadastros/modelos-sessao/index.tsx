@@ -1197,21 +1197,21 @@ export default function ModelosSessaoPage({ embedded = false, onBack }: ModelosS
                           ))}
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <button
+                          <button aria-label="Recolher"
                             onClick={() => moverManobra(idx, 'up')}
                             disabled={idx === 0}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronUp className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Expandir"
                             onClick={() => moverManobra(idx, 'down')}
                             disabled={idx === manobrasSelecionadas.length - 1}
                             className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded disabled:opacity-30"
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Fechar"
                             onClick={() => removerManobra(m.manobra_id)}
                             className="p-1 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 rounded"
                           >

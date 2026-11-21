@@ -134,7 +134,7 @@ export default function ModalEditarQualificacaoSimples({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-semibold text-gray-900">Editar Qualificação</h2>
-          <button type="button" onClick={onFechar} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button aria-label="Fechar" type="button" onClick={onFechar} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>

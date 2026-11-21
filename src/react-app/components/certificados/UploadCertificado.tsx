@@ -129,7 +129,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">Upload de Certificado</h2>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
             disabled={uploading}
@@ -141,7 +141,7 @@ export default function UploadCertificado({ qualificacaoId, onSuccess, onClose }
         {/* Body */}
         <div className="p-6">
           {/* Drag & Drop Area */}
-          <div
+          <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
             className={`
               border-2 border-dashed rounded-lg p-8
               ${dragActive ? 'border-primary bg-primary/10' : 'border-gray-300'}

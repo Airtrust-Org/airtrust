@@ -99,7 +99,7 @@ export const TableTemplate: React.FC<TableTemplateProps> = ({
           </thead>
           <tbody>
             {sortedData.map((row, idx) => (
-              <tr
+              <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={idx}
                 onClick={() => onRowClick?.(row)}
                 className={onRowClick ? styles.clickable : ''}

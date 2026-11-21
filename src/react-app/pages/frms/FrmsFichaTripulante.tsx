@@ -1073,7 +1073,7 @@ export default function FrmsFichaTripulante() {
                     {selectedExplanationDate.slice(5, 7)}/{selectedExplanationDate.slice(0, 4)}
                   </p>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={() => setSelectedExplanationDate(null)}
                   className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700"

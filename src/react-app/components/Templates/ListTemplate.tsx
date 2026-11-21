@@ -34,7 +34,7 @@ export const ListTemplate: React.FC<ListTemplateProps> = ({
       <div className={styles.list}>
         {items.length > 0 ? (
           items.map((item) => (
-            <div
+            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
               key={item.id}
               className={`${styles.listItem} ${onItemClick ? styles.clickable : ''}`}
               onClick={() => onItemClick?.(item)}

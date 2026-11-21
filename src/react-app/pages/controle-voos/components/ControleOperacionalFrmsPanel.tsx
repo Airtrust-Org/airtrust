@@ -107,7 +107,7 @@ function CrewRow({ voo, membro }: { voo: CvFrmsFlightDispatchItem; membro: CvFrm
 
   return (
     <>
-      <tr
+      <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
         className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
         onClick={() => setExpanded((v) => !v)}
         data-testid={`frms-gate-row-${voo.voo_id}-${membro.funcionario_id}`}

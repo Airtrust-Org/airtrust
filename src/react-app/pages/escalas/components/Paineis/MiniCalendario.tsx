@@ -70,13 +70,13 @@ export default function MiniCalendario({
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 w-full max-w-[240px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
+        <button aria-label="Mês anterior" onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
           <ChevronLeft className="w-4 h-4 text-gray-500" />
         </button>
         <span className="text-xs font-semibold text-gray-700">
           {MESES_CURTOS[mes - 1]} {ano}
         </span>
-        <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
+        <button aria-label="Próximo mês" onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">
           <ChevronRight className="w-4 h-4 text-gray-500" />
         </button>
       </div>

@@ -500,7 +500,7 @@ export function UsuariosAdminContent({ embedded = false }: { embedded?: boolean 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             {!embedded && (
-              <button type="button"
+              <button aria-label="Voltar" type="button"
                 onClick={() => navigate('/configuracoes')}
                 className="p-2 rounded-lg hover:bg-slate-100 transition"
               >
@@ -972,7 +972,7 @@ function ModalCriarUsuario({
             <UserPlus className="h-5 w-5 text-primary" />
             Novo Usuário
           </h2>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -1236,7 +1236,7 @@ function ModalEditarUsuario({
             <Pencil className="h-5 w-5 text-primary" />
             Editar Usuário
           </h2>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -1459,7 +1459,7 @@ function ModalPermissoes({
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
@@ -1906,7 +1906,7 @@ function ModalPerfis({ onClose }: { onClose: () => void }) {
                 Editar
               </button>
             )}
-            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
+            <button aria-label="Fechar" type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition">
               <X className="h-5 w-5 text-slate-500" />
             </button>
           </div>
@@ -2305,7 +2305,7 @@ function ModalResetSenha({
               {usuario.nome} · {usuario.email}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
             <X className="h-5 w-5" />
           </button>
         </div>

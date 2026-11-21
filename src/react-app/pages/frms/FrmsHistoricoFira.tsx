@@ -375,14 +375,14 @@ export default function FrmsHistoricoFira() {
               {total} registro{total !== 1 ? 's' : ''} · página {page} de {totalPages}
             </span>
             <div className="flex items-center gap-2">
-              <button
+              <button aria-label="Anterior"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <button
+              <button aria-label="Próximo"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"

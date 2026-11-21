@@ -1833,7 +1833,7 @@ export default function ModalNovaSessao({
                 : 'Configure a sessão e as manobras serão carregadas automaticamente'}
             </p>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="p-2 hover:bg-slate-100 rounded-lg transition"
             disabled={loading}

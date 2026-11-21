@@ -222,7 +222,7 @@ export default function ConfigurarFiltros({
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold">Adicionar Filtro</h2>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setModalAberto(false)}
                 className="text-gray-400 hover:text-gray-600"
               >

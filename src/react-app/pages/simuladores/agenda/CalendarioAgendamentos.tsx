@@ -818,7 +818,7 @@ export default function CalendarioAgendamentos() {
         (agendamento.examinador_id != null && agendamento.examinador_id > 0) ||
         !!agendamento.examinador_nome;
       return (
-        <div
+        <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
           className={`${cores.bg} ${
             cores.border
           } border-l-4 rounded-r px-2 py-1 mb-1 cursor-pointer hover:shadow-sm transition-shadow text-xs ${
@@ -862,7 +862,7 @@ export default function CalendarioAgendamentos() {
     }
 
     return (
-      <div
+      <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
         className={`${cores.bg} ${cores.border} border-l-4 rounded-r-lg p-3 mb-2 cursor-pointer hover:shadow-md transition-shadow`}
         onClick={handleClick}
       >
@@ -932,7 +932,7 @@ export default function CalendarioAgendamentos() {
             const eventos = agendamentosPorDia.get(dateKey) || [];
 
             return (
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={index}
                 onClick={() => handleNovaSessaoNaData(day)}
                 className={`min-h-[120px] border-b border-r border-slate-100 p-2 dark:border-slate-800 ${
@@ -1005,7 +1005,7 @@ export default function CalendarioAgendamentos() {
             const eventos = agendamentosPorDia.get(dateKey) || [];
 
             return (
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 key={index}
                 onClick={() => handleNovaSessaoNaData(day)}
                 className={`border-r border-slate-100 p-3 last:border-r-0 dark:border-slate-800 ${

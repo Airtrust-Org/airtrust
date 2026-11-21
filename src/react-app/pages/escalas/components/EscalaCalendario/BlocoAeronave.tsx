@@ -344,7 +344,7 @@ export default function BlocoAeronave({
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
-                <button
+                <button aria-label="Excluir"
                   type="button"
                   onClick={() => onRemoverAlocacao?.(linha.id, nomeExibido)}
                   className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"

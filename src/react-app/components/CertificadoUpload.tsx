@@ -169,7 +169,7 @@ export default function CertificadoUpload({
                 <p className="text-sm text-gray-500">{formatFileSize(file.size)}</p>
               </div>
             </div>
-            <button
+            <button aria-label="Fechar"
               onClick={handleRemoveFile}
               disabled={uploading}
               className="text-gray-400 hover:text-red-600 disabled:opacity-50"

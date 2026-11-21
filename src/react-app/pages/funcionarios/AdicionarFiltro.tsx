@@ -26,7 +26,7 @@ export default function AdicionarFiltro({ onClose, filtrosAtivos, onAdicionar }:
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-bold">Adicionar Filtro</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button aria-label="Fechar" onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="w-6 h-6" />
           </button>
         </div>

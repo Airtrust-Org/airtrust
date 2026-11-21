@@ -206,7 +206,7 @@ export default function ModalLicenca({
           <h2 className="text-xl font-semibold text-gray-900">
             {mode === 'create' ? 'Nova Licença' : 'Editar Licença'}
           </h2>
-          <button onClick={handleFechar} className="rounded-lg p-1 hover:bg-gray-100" type="button">
+          <button aria-label="Fechar" onClick={handleFechar} className="rounded-lg p-1 hover:bg-gray-100" type="button">
             <X className="h-5 w-5 text-gray-500" />
           </button>
         </div>

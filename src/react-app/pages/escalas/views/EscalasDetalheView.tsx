@@ -1046,7 +1046,7 @@ export default function EscalasDetalheView() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
                 Quinzenas — {escalaAtual?.ano}
               </h3>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setPainelQuinzenas(false)}
                 className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
               >
@@ -1578,7 +1578,7 @@ export default function EscalasDetalheView() {
                 <div className="p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Disponibilidade</h3>
-                    <button
+                    <button aria-label="Fechar"
                       onClick={() => setPainelAberto(null)}
                       className="rounded p-1 hover:bg-gray-100 dark:hover:bg-slate-800"
                     >
@@ -1619,7 +1619,7 @@ export default function EscalasDetalheView() {
                 <div className="p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Carga de Trabalho</h3>
-                    <button
+                    <button aria-label="Fechar"
                       onClick={() => setPainelAberto(null)}
                       className="rounded p-1 hover:bg-gray-100 dark:hover:bg-slate-800"
                     >
@@ -1968,7 +1968,7 @@ export default function EscalasDetalheView() {
                     FDP / Limite de Fadiga — {MESES[(escalaAtual?.mes ?? 1) - 1]} {escalaAtual?.ano}
                   </h2>
                 </div>
-                <button
+                <button aria-label="Fechar"
                   onClick={() => setFdpModalAberto(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
                 >

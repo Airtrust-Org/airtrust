@@ -115,7 +115,7 @@ export default function ConfigurarColunasQualificacoes({
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Configurar Colunas</h3>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
           >

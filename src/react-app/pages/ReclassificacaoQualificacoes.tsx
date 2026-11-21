@@ -393,7 +393,7 @@ export default function ReclassificacaoQualificacoes() {
                         </button>
                         <div className="max-h-24 overflow-y-auto space-y-1">
                           {suggestionsByHistorico[historicoId]?.map((s) => (
-                            <div
+                            <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                               key={s.id}
                               className="cursor-pointer px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
                               onClick={() =>

@@ -245,7 +245,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
             {sessaoId ? 'Editar Sessão' : 'Nova Sessão'}
           </h3>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
@@ -396,7 +396,7 @@ export default function SessaoModal({ isOpen, onClose, onSalvar, sessaoId }: Ses
                   </select>
 
                   {formData.participantes.length > 1 && (
-                    <button
+                    <button aria-label="Excluir"
                       type="button"
                       onClick={() => removerParticipante(index)}
                       className="text-red-600 hover:text-red-700"

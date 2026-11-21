@@ -147,7 +147,7 @@ export default function AdvancedCombobox({
         
         {/* Clear button */}
         {value && !disabled && !loading && (
-          <button
+          <button aria-label="Fechar"
             type="button"
             onClick={handleClearSelection}
             className="absolute inset-y-0 right-8 flex items-center pr-2 hover:text-gray-700"

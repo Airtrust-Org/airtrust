@@ -171,7 +171,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
           <h2 className="text-xl font-semibold">
             {templateEdit ? 'Editar Modelo' : 'Criar Modelo de Sessão'}
           </h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -263,7 +263,7 @@ export const CriarTemplateModal: React.FC<CriarTemplateModalProps> = ({
 
                   return (
                     <div key={manobra.id} className="border-b border-gray-100 last:border-b-0">
-                      <div
+                      <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                         onClick={() => toggleManobra(manobra)}
                         className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                           incluida ? 'bg-primary/10 border-l-4 border-primary' : ''

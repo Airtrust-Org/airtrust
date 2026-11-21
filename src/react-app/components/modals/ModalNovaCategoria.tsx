@@ -68,7 +68,7 @@ export function ModalNovaCategoria({ isOpen, onClose, onSave, categoria }: Props
           <h2 className="text-xl font-bold">
             {categoria?.id ? 'Editar Categoria' : 'Nova Categoria'}
           </h2>
-          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-5 w-5" />
           </button>
         </div>

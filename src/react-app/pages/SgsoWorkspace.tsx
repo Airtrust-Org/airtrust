@@ -836,7 +836,7 @@ export default function Sgso() {
                   ) : (
                     <div className="space-y-3">
                       {relatosFiltrados.map((r) => (
-                        <div
+                        <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                           key={r.id}
                           onClick={() => navigate(`/sgso/relatos/${r.id}`)}
                           className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"

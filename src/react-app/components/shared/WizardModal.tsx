@@ -60,7 +60,7 @@ export function WizardModal({
               <p className="text-sm text-gray-600 mt-1">{description}</p>
             )}
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >

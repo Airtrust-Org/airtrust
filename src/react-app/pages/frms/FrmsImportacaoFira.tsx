@@ -924,7 +924,7 @@ export default function FrmsImportacaoFira() {
           {/* ── STEP 1: Upload ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}

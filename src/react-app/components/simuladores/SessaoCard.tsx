@@ -275,7 +275,7 @@ export default function SessaoCard({ sessao, onEdit, onDelete, onVerFichas }: Se
         >
           <MessageCircle size={14} />
         </button>
-        <button
+        <button aria-label="Excluir"
           onClick={() => onDelete?.(sessao.id)}
           className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition"
         >

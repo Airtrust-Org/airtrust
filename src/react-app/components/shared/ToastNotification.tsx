@@ -81,7 +81,7 @@ export function ToastNotification({ toast, onRemove }: ToastNotificationProps) {
         <div className="flex-1 text-sm text-gray-700">
           {toast.message}
         </div>
-        <button
+        <button aria-label="Fechar"
           onClick={handleClose}
           className="text-gray-400 hover:text-gray-600 transition-colors"
         >

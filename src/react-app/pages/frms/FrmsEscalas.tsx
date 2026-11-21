@@ -133,7 +133,7 @@ function EscalaFormModal({ tripulanteId, escala, onClose, onSaved }: FormModalPr
           <h2 className="text-base font-bold text-gray-900">
             {isEdit ? 'Editar Escala' : 'Nova Escala Quinzenal'}
           </h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>

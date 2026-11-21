@@ -675,7 +675,7 @@ export function DataTable<T extends { id?: string | number }>({
                 if (!row) return null;
 
                 return (
-                  <tr
+                  <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                     key={row.id || virtualRow.index}
                     className={`absolute left-0 transition-colors hover:bg-slate-50 ${
                       onRowClick ? 'cursor-pointer' : ''
@@ -717,7 +717,7 @@ export function DataTable<T extends { id?: string | number }>({
           ) : (
             <tbody className="divide-y divide-slate-200 bg-white">
               {displayData.map((row, index) => (
-                <tr
+                <tr tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   key={row.id || index}
                   className={`transition-colors hover:bg-slate-50 ${
                     onRowClick ? 'cursor-pointer' : ''

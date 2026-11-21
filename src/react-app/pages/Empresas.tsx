@@ -168,13 +168,13 @@ export default function Empresas() {
                       <div className={classHelpers.muted}>{empresa.cnpj || '-'}</div>
                     </td>
                     <td className=" py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
+                      <button aria-label="Editar"
                         onClick={() => setSelectedEmpresa(empresa)}
                         className="text-primary hover:text-blue-900 mr-3"
                       >
                         <Edit className="h-4 w-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900">
+                      <button aria-label="Excluir" className="text-red-600 hover:text-red-900">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
@@ -191,7 +191,7 @@ export default function Empresas() {
             <h2 className="text-2xl font-bold text-neutral-900">
               Configuração: {selectedEmpresa.nome}
             </h2>
-            <button
+            <button aria-label="Fechar"
               onClick={() => setSelectedEmpresa(null)}
               className="text-neutral-500 hover:text-neutral-700"
             >
@@ -274,7 +274,7 @@ export default function Empresas() {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full max-h-96 overflow-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-neutral-900">✏️ Editar Template</h3>
-              <button
+              <button aria-label="Fechar"
                 onClick={() => setShowTemplateModal(false)}
                 className="text-neutral-500 hover:text-neutral-700"
               >

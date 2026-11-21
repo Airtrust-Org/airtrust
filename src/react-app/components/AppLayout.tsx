@@ -583,7 +583,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   </span>
                 )}
               </div>
-              <div
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                 className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                 title={`${user?.nome || t('layout.user.default')} — Clique para sair`}
                 onClick={logout}

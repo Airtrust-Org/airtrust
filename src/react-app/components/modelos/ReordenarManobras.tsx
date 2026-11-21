@@ -53,6 +53,8 @@ function SortableItem({ manobra }: { manobra: Manobra }) {
       }`}
     >
       <button
+        type="button"
+        aria-label="Reordenar manobra (arraste ou use as setas do teclado)"
         {...attributes}
         {...listeners}
         className="cursor-grab active:cursor-grabbing touch-none"

@@ -272,7 +272,7 @@ export default function FrmsFadigaAcumulada() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <button
+            <button aria-label="Voltar"
               onClick={() => navigate('/frms')}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             >

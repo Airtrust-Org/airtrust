@@ -1151,7 +1151,7 @@ export default function IntegracoesEdApp() {
                   {mappingTarget.identificador_sigvoos || 'Sem identificador'}
                 </p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => {
                   if (savingMapping) return;

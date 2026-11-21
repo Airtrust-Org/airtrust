@@ -294,14 +294,14 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                             }
                             className="border border-fuchsia-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-fuchsia-300 bg-white"
                           />
-                          <button
+                          <button aria-label="Confirmar"
                             onClick={() => salvar(mes, 1)}
                             disabled={savingKey === key1}
                             className="p-1.5 bg-fuchsia-500 text-white rounded-lg hover:bg-fuchsia-600 disabled:opacity-50"
                           >
                             <Check className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Fechar"
                             onClick={() => cancelarEdicao(mes, 1)}
                             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
                           >
@@ -361,14 +361,14 @@ function AbaQuinzenas({ ano, setAno }: { ano: number; setAno: (a: number) => voi
                             }
                             className="border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white"
                           />
-                          <button
+                          <button aria-label="Confirmar"
                             onClick={() => salvar(mes, 2)}
                             disabled={savingKey === key2}
                             className="p-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
                           >
                             <Check className="w-4 h-4" />
                           </button>
-                          <button
+                          <button aria-label="Fechar"
                             onClick={() => cancelarEdicao(mes, 2)}
                             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
                           >

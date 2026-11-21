@@ -578,7 +578,7 @@ function ContentDropzone({
                 {file.type || 'Arquivo binário'} · {formatFileSize(file.size)}
               </p>
             </div>
-            <button
+            <button aria-label="Fechar"
               type="button"
               onClick={() => pick(null)}
               className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
@@ -931,7 +931,7 @@ function CourseDrawer({
                     Abrir player
                   </Button>
                 ) : null}
-                <button
+                <button aria-label="Fechar"
                   type="button"
                   onClick={safeClose}
                   disabled={isSaving}
@@ -1886,7 +1886,7 @@ function CourseCard({
                   Matrículas
                 </Link>
                 {canDeleteCourse ? (
-                  <button
+                  <button aria-label="Excluir"
                     type="button"
                     onClick={() => onStartDelete(curso.id)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"

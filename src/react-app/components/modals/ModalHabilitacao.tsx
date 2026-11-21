@@ -264,7 +264,7 @@ export function ModalHabilitacao({ isOpen, onClose, onSave, habilitacao }: Props
           <h2 className="text-xl font-bold">
             {habilitacao?.id ? 'Editar Habilitação' : 'Nova Habilitação'}
           </h2>
-          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-5 w-5" />
           </button>
         </div>

@@ -831,7 +831,7 @@ function SectorSelectionModal({
               Selecione os setores. Cada gestor recebe apenas o PDF do setor ao qual está vinculado.
             </p>
           </div>
-          <button
+          <button aria-label="Fechar"
             type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"

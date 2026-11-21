@@ -570,7 +570,7 @@ const BackupRestorePage = () => {
                   </td>
                   <td className="py-3  text-neutral-600">{item.usuario}</td>
                   <td className="py-3 ">
-                    <button className="text-neutral-400 hover:text-red-600 p-1">
+                    <button aria-label="Excluir" className="text-neutral-400 hover:text-red-600 p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

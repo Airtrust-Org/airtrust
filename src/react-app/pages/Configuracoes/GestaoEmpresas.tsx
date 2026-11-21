@@ -477,7 +477,7 @@ export function GestaoEmpresas() {
                 </p>
               </div>
 
-              <button
+              <button aria-label="Fechar"
                 onClick={fecharModal}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
               >

@@ -883,7 +883,7 @@ export default function ModalFuncionario({
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
             {funcionario ? 'Editar' : 'Novo'} Funcionário
           </h2>
-          <button type="button"
+          <button aria-label="Fechar" type="button"
             onClick={onFechar}
             className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
           >

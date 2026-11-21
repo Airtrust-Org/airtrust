@@ -1065,7 +1065,7 @@ export function TrainingComplianceIntelligence({
                 <h3 className="font-semibold text-slate-900">Enviar cobrança de treinamento</h3>
                 <p className="mt-1 text-sm text-slate-500">Revise o alcance e escolha os canais.</p>
               </div>
-              <button
+              <button aria-label="Fechar"
                 type="button"
                 onClick={() => { setNoticeOpen(false); setReenviarHoje(false); }}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"

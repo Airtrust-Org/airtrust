@@ -223,7 +223,7 @@ function LmsHistoricoEdAppContent({ canManage }: { canManage: boolean }) {
                   className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
                 {q && (
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => handleSearch('')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >

@@ -2965,7 +2965,7 @@ export default function FichaDetalhe() {
                       assinaturas não serão alterados.
                     </p>
                   </div>
-                  <button
+                  <button aria-label="Fechar"
                     onClick={() => setModalSolicitarEdicao(false)}
                     disabled={enviandoEdicao}
                     className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"

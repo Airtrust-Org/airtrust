@@ -159,7 +159,7 @@ export default function AssinaturaModal({
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Fechar"
             onClick={onClose}
             className="text-white hover:bg-white/20 rounded-lg p-2 transition"
           >

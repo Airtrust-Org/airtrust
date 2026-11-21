@@ -244,7 +244,7 @@ export default function PastaVirtualGeral() {
                   <Download size={16} />
                   Baixar
                 </button>
-                <button
+                <button aria-label="Excluir"
                   onClick={() => handleDelete(arquivo)}
                   className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >

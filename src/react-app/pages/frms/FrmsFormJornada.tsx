@@ -254,7 +254,7 @@ export default function FrmsFormJornada({
               <p className="text-sm text-primary font-medium mt-0.5">{tripulanteNome}</p>
             )}
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
+          <button aria-label="Fechar" type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
